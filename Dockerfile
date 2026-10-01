@@ -23,6 +23,7 @@ RUN cargo build --release -p motile-auth \
 
 # ---------- runtime ----------
 FROM debian:bookworm-slim
+LABEL org.opencontainers.image.source=https://github.com/motileapp/motile
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
