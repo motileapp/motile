@@ -1,8 +1,8 @@
 name: Release
 
-# Builds the host and the auth server for Linux and publishes them as a GitHub release. The
-# installer downloads the host from the latest release, and motile.app runs the auth server
-# from it.
+# Builds the host and the auth server for Linux and the Mac app, and publishes them as a GitHub
+# release. The installer downloads the host from the latest release, motile.app runs the auth
+# server from it, and the download button on motile.app fetches the app from it.
 on:
   push:
     tags: ["v*"]
@@ -54,3 +54,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes artifacts/*.tar.gz
+
+  mac:
+    uses: ./.github/workflows/mac.yml
+
+  attach-mac:
+    needs: [publish, mac]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Motile
+      - name: Attach the app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" Motile.zip --repo "$GITHUB_REPOSITORY" --clobber

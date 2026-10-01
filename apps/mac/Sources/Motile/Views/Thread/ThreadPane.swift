@@ -121,7 +121,8 @@ struct ThreadPane: View {
                 }
                 .foregroundStyle(Color.themePrimary)
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+        .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
             Text("?")

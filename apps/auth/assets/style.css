@@ -45,7 +45,7 @@ header nav a:hover { color: var(--fg); }
 .button:hover { border-color: var(--muted); }
 .button.primary { background: var(--primary); color: var(--primary-fg); border-color: transparent; }
 .button.primary:hover { filter: brightness(1.08); }
-.note { margin-top: 0.9rem; font-size: 0.85rem; color: var(--muted); }
+.hero .note { margin-top: 0.9rem; font-size: 0.85rem; }
 .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
 .step { padding: 1.25rem 1.25rem 1.4rem; border: 1px solid var(--border); border-radius: 0.875rem; background: var(--card); }
 .step b { display: block; font-weight: 600; }

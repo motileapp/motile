@@ -162,16 +162,40 @@ final class RowTextView: NSTextView {
     override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric) }
 }
 
-/// Scrolls code sideways, and hands vertical scrolling to the transcript.
-final class SidewaysScrollView: NSScrollView {
+/// Shows code that is wider than the column and moves it sideways under the pointer. It is a
+/// plain clipping view rather than a scroll view: a scroll view inside the transcript's own
+/// doesn't redraw what the transcript scrolls into view.
+final class SidewaysClipView: NSView {
+    private weak var content: NSView?
+    private var contentWidth: CGFloat = 0
+    private var offset: CGFloat = 0
+
+    override var isFlipped: Bool { true }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func setContent(_ view: NSView, size: NSSize) {
+        content = view
+        contentWidth = size.width
+        offset = min(offset, max(0, contentWidth - bounds.width))
+        view.frame = NSRect(x: -offset, y: 0, width: size.width, height: size.height)
+    }
+
     override func scrollWheel(with event: NSEvent) {
+        let overflow = contentWidth - bounds.width
         let sideways = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
-        let canScroll = (documentView?.frame.width ?? 0) > contentView.bounds.width
-        if sideways && canScroll {
-            super.scrollWheel(with: event)
-        } else {
+        guard sideways, overflow > 0, let content else {
             nextResponder?.scrollWheel(with: event)
+            return
         }
+        offset = min(max(0, offset - event.scrollingDeltaX), overflow)
+        content.frame.origin.x = -offset
     }
 }
 

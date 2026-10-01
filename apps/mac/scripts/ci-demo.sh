@@ -67,7 +67,7 @@ if [ -s "$WORK/token" ]; then
     HOST_PID=$!
 fi
 
-for _ in $(seq 1 300); do
+for _ in $(seq 1 600); do
     kill -0 "$APP_PID" 2>/dev/null || break
     sleep 1
 done

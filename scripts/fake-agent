@@ -7,6 +7,7 @@ Some prompts get a reply made up on the spot instead:
 
 - "long reply with a lot of code": ten large code blocks streamed in small pieces.
 - "rate limiter": a turn with thinking, tool calls and a reply that uses most of Markdown.
+- "huge transcript": four hundred messages with code and tool calls, for a very long thread.
 
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
 answers with FAKE_AGENT_TITLE. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
@@ -39,6 +40,8 @@ def title_answer():
         title = "Add API Rate Limiting"
     if "long reply" in message:
         title = "Long Reply With Code"
+    if "huge transcript" in message:
+        title = "Four Hundred Steps"
     return {"title": os.environ.get("FAKE_AGENT_TITLE", title), "needsRefinement": "fix this" in message}
 
 
@@ -209,6 +212,20 @@ def rate_limiter():
     turn.text(RATE_LIMITER_REPLY)
     turn.done()
 
+
+def huge_transcript():
+    """Hundreds of short messages, code blocks and tool calls, as fast as they can be written."""
+    turn = Turn("00000000-0000-4000-8000-00000000f00d", piece=4000, pause=0)
+    for n in range(1, 401):
+        turn.text(f"Step {n}: `step_{n}` doubles its input and adds one.\n\n```rust\nfn step_{n}(input: u32) -> u32 {{\n    let doubled = input * 2;\n    doubled + 1\n}}\n```\n")
+        turn.tool("Bash", {"command": f"cargo test step_{n}"}, f"test step_{n} ... ok", seconds=0)
+    turn.text("All 400 steps are in place and their tests pass.")
+    turn.done()
+
+
+if "huge transcript" in prompt.lower():
+    huge_transcript()
+    sys.exit(0)
 
 if "long reply with a lot of code" in prompt:
     long_reply()

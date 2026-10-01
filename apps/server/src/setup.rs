@@ -130,8 +130,14 @@ fn is_root() -> bool {
     unsafe { libc::getuid() == 0 }
 }
 
+/// The name of the user running this, from the user database rather than the environment, which
+/// isn't always set.
 fn user_name() -> String {
-    std::env::var("USER").or_else(|_| std::env::var("LOGNAME")).unwrap_or_else(|_| "root".to_string())
+    let entry = unsafe { libc::getpwuid(libc::getuid()) };
+    if entry.is_null() {
+        return std::env::var("USER").unwrap_or_else(|_| "root".to_string());
+    }
+    unsafe { std::ffi::CStr::from_ptr((*entry).pw_name) }.to_string_lossy().into_owned()
 }
 
 fn has_systemd() -> bool {

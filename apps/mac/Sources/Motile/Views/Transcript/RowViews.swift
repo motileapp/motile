@@ -186,14 +186,14 @@ final class UserRowView: RowView {
     override func layout(width: CGFloat) -> CGFloat {
         let padding: CGFloat = 14
         let widest = max(120, width * 0.8) - padding * 2
-        var textHeight = text.height(forWidth: widest)
-        // Shrink the bubble to the text when the text is narrower than the widest it may be.
-        let used = ceil(text.layoutManager?.usedRect(for: text.textContainer!).width ?? widest)
+        // The bubble is as wide as its text, up to the widest it may be.
+        let natural = text.content.boundingRect(
+            with: NSSize(width: widest, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
         let attachmentsWidth = hasAttachments ? min(widest, attachments.intrinsicContentSize.width) : 0
-        let textWidth = min(widest, max(used, attachmentsWidth, 12))
-        if textWidth < widest {
-            textHeight = text.height(forWidth: textWidth)
-        }
+        let textWidth = min(widest, max(ceil(natural.width) + 2, attachmentsWidth, 12))
+        let textHeight = text.height(forWidth: textWidth)
         let attachmentsHeight: CGFloat = hasAttachments ? 22 : 0
         let bubbleSize = NSSize(width: textWidth + padding * 2, height: textHeight + 20 + attachmentsHeight)
         bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
@@ -240,7 +240,7 @@ final class CodeRowView: RowView {
 
     private let surface = SurfaceView()
     private let language = label(Theme.smallMono, Theme.secondary)
-    private let scroll = SidewaysScrollView()
+    private let scroll = SidewaysClipView()
     private let text = RowTextView.make(wraps: false)
     private var copyButton: IconButton!
     private var code = ""
@@ -262,14 +262,7 @@ final class CodeRowView: RowView {
         copyButton = IconButton(symbolName: "doc.on.doc", tooltip: "Copy code") { [weak self] in self?.copy() }
         surface.addSubview(copyButton)
 
-        scroll.drawsBackground = false
-        scroll.hasHorizontalScroller = true
-        scroll.hasVerticalScroller = false
-        scroll.horizontalScrollElasticity = .automatic
-        scroll.verticalScrollElasticity = .none
-        scroll.scrollerStyle = .overlay
-        scroll.autohidesScrollers = true
-        scroll.documentView = text
+        scroll.addSubview(text)
         surface.addSubview(scroll)
         text.onSelect = { [weak self] in
             guard let self else { return }
@@ -320,8 +313,8 @@ final class CodeRowView: RowView {
         scroll.frame = NSRect(x: 0, y: Self.headerHeight, width: width, height: bodyHeight + Self.bottomPadding)
         let advance = Theme.codeFont.maximumAdvancement.width
         let textWidth = max(width - 28, CGFloat(widestLine) * advance + 8)
-        text.frame = NSRect(x: 0, y: 0, width: textWidth + 28, height: bodyHeight)
         text.textContainerInset = NSSize(width: 14, height: 0)
+        scroll.setContent(text, size: NSSize(width: textWidth + 28, height: bodyHeight))
         return height + 14
     }
 
@@ -351,6 +344,7 @@ final class ToolRowView: RowView {
     private var detailText: (() -> NSAttributedString)?
     private var hasDetail = false
     private var loadedDetail = false
+    private var running = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -399,7 +393,8 @@ final class ToolRowView: RowView {
             text.append(NSAttributedString(string: tool.target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
             title.attributedStringValue = text
             title.lineBreakMode = .byTruncatingTail
-            if tool.status == .running { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
+            running = tool.status == .running
+            if running { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
             hasDetail = tool.hasDetail
             detailText = { tool.detail() }
         case .thinking(let thought):
@@ -408,6 +403,7 @@ final class ToolRowView: RowView {
                 string: "Thought",
                 attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.secondary]
             )
+            running = false
             spinner.stopAnimation(nil)
             hasDetail = thought.length > 0
             detailText = { thought }
@@ -425,7 +421,7 @@ final class ToolRowView: RowView {
         spinner.frame = NSRect(x: 30 + titleWidth + 6, y: 5, width: 16, height: 16)
         chevron.isHidden = !hasDetail
         chevron.image = symbol(expanded ? "chevron.down" : "chevron.right", size: 9, weight: .semibold)
-        chevron.frame = NSRect(x: 30 + titleWidth + (spinner.isHidden ? 4 : 26), y: 5, width: 14, height: 16)
+        chevron.frame = NSRect(x: 30 + titleWidth + (running ? 26 : 2), y: 5, width: 14, height: 16)
 
         detailSurface.isHidden = !expanded
         guard expanded else { return Self.rowHeight }

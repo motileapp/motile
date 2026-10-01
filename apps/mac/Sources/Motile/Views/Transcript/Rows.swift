@@ -370,6 +370,17 @@ enum Typesetter {
             }
         }
 
+        // A table's last row has no spacing of its own; what follows it brings the gap.
+        let paras = json.objects("paras")
+        for (index, para) in paras.enumerated().dropFirst() where para.string("kind") != "cell" && paras[index - 1].string("kind") == "cell" {
+            guard let range = clamp(para.int("start"), para.int("len")),
+                let current = result.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle,
+                let style = current.mutableCopy() as? NSMutableParagraphStyle
+            else { continue }
+            style.paragraphSpacingBefore = 12
+            result.addAttribute(.paragraphStyle, value: style, range: range)
+        }
+
         for run in json["runs"] as? [[NSNumber]] ?? [] {
             guard run.count == 3, let range = clamp(run[0].intValue, run[1].intValue) else { continue }
             let style = run[2].intValue

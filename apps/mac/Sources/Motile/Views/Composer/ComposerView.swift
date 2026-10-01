@@ -161,7 +161,8 @@ struct ComposerView: View {
         } label: {
             control(store.composerModel?.name ?? "No agent")
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(models.isEmpty)
@@ -184,7 +185,8 @@ struct ComposerView: View {
             } label: {
                 control(effortLabel(store.composerEffort ?? ""))
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+        .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
         }
@@ -217,7 +219,8 @@ struct ComposerView: View {
         } label: {
             control(store.composerPlan ? "Plan" : store.composerAccess.label, symbol: store.composerPlan ? "list.bullet.clipboard" : store.composerAccess.symbol)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail)

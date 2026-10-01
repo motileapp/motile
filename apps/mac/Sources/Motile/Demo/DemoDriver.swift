@@ -57,6 +57,8 @@ private final class Demo {
     }
 
     private func shoot(_ name: String) async {
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
         await wait(0.7)
         guard let window else { return }
         let process = Process()
@@ -135,7 +137,29 @@ private final class Demo {
         let scrolling = StallMonitor()
         await scrollTranscript()
         results.append(responsive("a long reply is scrolled", scrolling.longestMilliseconds))
+        scrollTranscript(to: 0.45)
         await shoot("08-long-reply")
+
+        // A very long thread: built, then opened again from the cache and scrolled.
+        store.startNewThread()
+        send("Make a huge transcript.")
+        await expect("a very long thread is built", within: 180) { turnEnded }
+        let huge = store.selectedThread?.id ?? ""
+        let rowCount = store.transcript.rows.count
+        store.select(.thread(first))
+        await wait(1)
+        let opening = StallMonitor()
+        let began = Date()
+        store.select(.thread(huge))
+        await expect("a thread of \(rowCount) rows opens again from the cache") { store.transcript.rows.count == rowCount }
+        let opened = Int(Date().timeIntervalSince(began) * 1000)
+        results.append(responsive("a thread of \(rowCount) rows opens (in \(opened) ms)", opening.longestMilliseconds))
+        await wait(0.5)
+        let hugeScrolling = StallMonitor()
+        await scrollTranscript()
+        results.append(responsive("a thread of \(rowCount) rows is scrolled", hugeScrolling.longestMilliseconds))
+        scrollTranscript(to: 0.5)
+        await shoot("09-huge-thread")
 
         // Marking the first thread done moves it to the Done shelf.
         UserDefaults.standard.set(true, forKey: "sidebar.doneExpanded")
@@ -143,15 +167,15 @@ private final class Demo {
         await wait(0.5)
         store.setDone([first], done: true)
         await expect("a thread marked done is listed as done") { store.doneThreads.map(\.id) == [first] }
-        await shoot("09-done")
+        await shoot("10-done")
 
         NSApp.appearance = NSAppearance(named: .darkAqua)
-        await shoot("10-dark-thread")
+        await shoot("11-dark-thread")
         store.setDone([first], done: false)
         await expect("a thread marked undone is active again") { store.doneThreads.isEmpty }
         store.startNewThread()
         store.draft = "Why is the sync slow on large threads?"
-        await shoot("11-dark-new-thread")
+        await shoot("12-dark-new-thread")
         store.draft = ""
         finish()
     }
@@ -162,20 +186,28 @@ private final class Demo {
         "\(stall < 1000 ? "PASS" : "FAIL") the window stays responsive while \(what) — longest stall \(stall) ms"
     }
 
-    /// Scrolls the transcript to the top and back down in steps, as a person reading it would.
-    private func scrollTranscript() async {
+    private var transcriptScrollView: NSScrollView? {
         func scrollViews(in view: NSView) -> [NSScrollView] {
             ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
         }
-        guard let content = window?.contentView else { return }
-        let tallest = scrollViews(in: content).max {
+        guard let content = window?.contentView else { return nil }
+        return scrollViews(in: content).max {
             ($0.documentView?.frame.height ?? 0) < ($1.documentView?.frame.height ?? 0)
         }
-        guard let scrollView = tallest, let document = scrollView.documentView else { return }
+    }
+
+    /// Puts the transcript at a fraction of its height: 0 is the top, 1 the end.
+    private func scrollTranscript(to fraction: Double) {
+        guard let scrollView = transcriptScrollView, let document = scrollView.documentView else { return }
         let bottom = max(0, document.frame.height - scrollView.contentView.bounds.height)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: bottom * fraction))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    /// Scrolls the transcript to the top and back down in steps, as a person reading it would.
+    private func scrollTranscript() async {
         for step in [1.0, 0.8, 0.6, 0.4, 0.2, 0.0, 0.25, 0.5, 0.75, 1.0] {
-            scrollView.contentView.scroll(to: NSPoint(x: 0, y: bottom * step))
-            scrollView.reflectScrolledClipView(scrollView.contentView)
+            scrollTranscript(to: step)
             await wait(0.15)
         }
     }

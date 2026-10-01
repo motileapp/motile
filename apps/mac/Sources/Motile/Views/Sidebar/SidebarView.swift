@@ -214,7 +214,7 @@ private struct ThreadStatus: View {
         } else if thread.needsApproval {
             label("Approval", "questionmark.circle", Color.themeWarning)
         } else if thread.unread {
-            label("Done", "checkmark.circle", Color.themeSuccess)
+            label("Unread", "circle.fill", Color.themePrimary)
         } else {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 Text(Time.ago(thread.updatedAt, now: context.date.timeIntervalSince1970))

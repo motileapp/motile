@@ -87,6 +87,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+    if !matches!(cli.command, CliCommand::Run { .. }) {
+        // Piped into `head`, a command should end quietly rather than panic on the closed pipe.
+        unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+    }
     match cli.command {
         CliCommand::Setup { token, auth_url, name, yes, no_service } => {
             let options = setup::Options { token, auth_url, name, assume_defaults: yes, skip_service: no_service };
