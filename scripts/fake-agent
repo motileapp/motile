@@ -33,8 +33,13 @@ delay = float(os.environ.get("FAKE_AGENT_DELAY", "0.02"))
 def title_answer():
     if prompt.startswith("Regenerate"):
         return {"title": os.environ.get("FAKE_AGENT_REFINED_TITLE", "Refined From Transcript"), "needsRefinement": False}
-    vague = "fix this" in prompt.split("User message:")[-1].lower()
-    return {"title": os.environ.get("FAKE_AGENT_TITLE", "Use an F-String in Greet"), "needsRefinement": vague}
+    message = prompt.split("User message:")[-1].lower()
+    title = "Use an F-String in Greet"
+    if "rate limiter" in message:
+        title = "Add API Rate Limiting"
+    if "long reply" in message:
+        title = "Long Reply With Code"
+    return {"title": os.environ.get("FAKE_AGENT_TITLE", title), "needsRefinement": "fix this" in message}
 
 
 if "--json-schema" in sys.argv:

@@ -1,0 +1,68 @@
+name: Mac
+
+# Builds the Mac app, walks it through a demo against a real auth server and host on the runner,
+# and keeps the app and the screenshots as artifacts.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/mac/**
+      - crates/**
+      - apps/server/**
+      - apps/auth/**
+      - scripts/**
+      - Cargo.lock
+      - .github/workflows/mac.yml
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+          rustup update stable --no-self-update
+          rustup default stable
+
+      # First, because it is quick and says at once whether the Swift code is sound.
+      - name: Compile the app
+        working-directory: apps/mac
+        run: swift build -c release --target Motile
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the core, the host and the auth server
+        run: cargo build --release -p motile-core -p motile-server -p motile-auth
+
+      - name: Bundle the app
+        run: apps/mac/scripts/build-app.sh
+
+      - name: Demo
+        run: apps/mac/scripts/ci-demo.sh
+
+      - name: Zip the app
+        if: always()
+        run: ditto -c -k --keepParent apps/mac/build/Motile.app Motile.zip
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Motile
+          path: Motile.zip
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: apps/mac/screenshots

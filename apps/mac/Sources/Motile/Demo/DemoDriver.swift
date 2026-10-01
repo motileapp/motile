@@ -1,0 +1,243 @@
+import AppKit
+
+/// A scripted walk through the app, used by CI to take screenshots and to check that the window
+/// stays responsive. Runs only when `MOTILE_DEMO=1`.
+///
+/// It expects an auth server that allows the dev login. Once signed in it writes the install
+/// token to `MOTILE_DEMO_TOKEN_FILE`; `scripts/ci-demo.sh` picks it up and starts a host with it,
+/// whose agent is `scripts/fake-agent`.
+enum DemoDriver {
+    private static var started = false
+
+    static func startIfRequested(store: AppStore) {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["MOTILE_DEMO"] == "1", !started else { return }
+        started = true
+        let output = URL(fileURLWithPath: environment["MOTILE_DEMO_OUTPUT"] ?? NSTemporaryDirectory())
+        try? FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        Task { @MainActor in
+            let demo = Demo(store: store, output: output, environment: environment)
+            await demo.run()
+            NSApp.terminate(nil)
+        }
+    }
+}
+
+@MainActor
+private final class Demo {
+    let store: AppStore
+    let output: URL
+    let environment: [String: String]
+    var results: [String] = []
+
+    init(store: AppStore, output: URL, environment: [String: String]) {
+        self.store = store
+        self.output = output
+        self.environment = environment
+    }
+
+    private var window: NSWindow? {
+        NSApp.windows.first { $0.isVisible && $0.canBecomeMain }
+    }
+
+    private func wait(_ seconds: Double) async {
+        try? await Task.sleep(for: .seconds(seconds))
+    }
+
+    /// Waits until the condition holds, and records whether it did.
+    @discardableResult
+    private func expect(_ what: String, within seconds: Double = 30, _ condition: () -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(seconds)
+        while !condition(), Date() < deadline {
+            await wait(0.1)
+        }
+        let passed = condition()
+        results.append("\(passed ? "PASS" : "FAIL") \(what)")
+        return passed
+    }
+
+    private func shoot(_ name: String) async {
+        await wait(0.7)
+        guard let window else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-o", "-l\(window.windowNumber)", output.appendingPathComponent("\(name).png").path]
+        try? process.run()
+        process.waitUntilExit()
+    }
+
+    private var turnEnded: Bool {
+        guard let last = store.transcript.rows.last, case .turnEnd = last.kind else { return false }
+        return !store.activity.running
+    }
+
+    private func send(_ text: String) {
+        store.draft = text
+        store.send()
+    }
+
+    func run() async {
+        await wait(2)
+        window?.setFrame(NSRect(x: 60, y: 60, width: 1280, height: 840), display: true)
+        await expect("an unlinked Mac is shown the sign-in screen") { store.ready && !store.account.signedIn }
+        await shoot("01-sign-in")
+
+        store.devSignIn(email: "demo@motile.app")
+        let signedIn = await expect("signing in leads to the install command") { store.account.signedIn && store.enrollToken != nil }
+        guard signedIn else { return finish() }
+        await shoot("02-connect-host")
+
+        // The install command's token goes to the script, which starts the host with it.
+        if let file = environment["MOTILE_DEMO_TOKEN_FILE"], let command = store.enrollToken?.command {
+            let token = command.split(separator: " ").last.map(String.init) ?? ""
+            try? token.write(toFile: file, atomically: true, encoding: .utf8)
+        }
+        let connected = await expect("the host appears once the install command has run", within: 90) {
+            store.hosts.first?.state == .connected
+        }
+        guard connected else { return finish() }
+        await shoot("03-add-project")
+
+        guard let host = store.hosts.first else { return finish() }
+        store.addProject(hostID: host.id, path: environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory())
+        await expect("a folder on the host becomes a project") { store.project(store.newThread.projectID) != nil }
+        store.draft = "Add a rate limiter to the API"
+        await shoot("04-new-thread")
+
+        store.send()
+        await expect("sending the first message opens a thread") { store.selectedThread != nil }
+        await wait(1.2)
+        await shoot("05-working")
+        let streaming = StallMonitor()
+        await expect("the turn runs to its end", within: 60) { turnEnded }
+        results.append(responsive("a reply streams", streaming.longestMilliseconds))
+        let kinds = store.transcript.rows.map(\.kindName)
+        results.append("\(kinds.contains("code") && kinds.contains("tool") && kinds.contains("prose") ? "PASS" : "FAIL") the transcript has prose, code and tool calls — \(kinds.count) rows")
+        await expect("the thread gets a generated title") { store.selectedThread?.title == "Add API Rate Limiting" }
+        let first = store.selectedThread?.id ?? ""
+        await shoot("06-thread")
+
+        // A thread that ends asking for permission.
+        store.startNewThread()
+        store.setAccess(.supervised)
+        send("Change greet.py to use an f-string, run it, and summarize the change in a table.")
+        await expect("a supervised turn ends asking for approval", within: 60) { turnEnded && store.selectedThread?.needsApproval == true }
+        await shoot("07-approval")
+
+        // A long reply full of code, to see that the window keeps up.
+        store.startNewThread()
+        store.setAccess(.full)
+        send("Give me a long reply with a lot of code.")
+        await wait(0.5)
+        let longStreaming = StallMonitor()
+        await expect("a long reply arrives whole", within: 90) { turnEnded }
+        results.append(responsive("a long reply streams", longStreaming.longestMilliseconds))
+        let scrolling = StallMonitor()
+        await scrollTranscript()
+        results.append(responsive("a long reply is scrolled", scrolling.longestMilliseconds))
+        await shoot("08-long-reply")
+
+        // Marking the first thread done moves it to the Done shelf.
+        UserDefaults.standard.set(true, forKey: "sidebar.doneExpanded")
+        store.select(.thread(first))
+        await wait(0.5)
+        store.setDone([first], done: true)
+        await expect("a thread marked done is listed as done") { store.doneThreads.map(\.id) == [first] }
+        await shoot("09-done")
+
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        await shoot("10-dark-thread")
+        store.setDone([first], done: false)
+        await expect("a thread marked undone is active again") { store.doneThreads.isEmpty }
+        store.startNewThread()
+        store.draft = "Why is the sync slow on large threads?"
+        await shoot("11-dark-new-thread")
+        store.draft = ""
+        finish()
+    }
+
+    private func responsive(_ what: String, _ stall: Int) -> String {
+        // A runner's virtual display can hold the main thread by itself, so only a real freeze
+        // fails; the number is reported either way.
+        "\(stall < 1000 ? "PASS" : "FAIL") the window stays responsive while \(what) — longest stall \(stall) ms"
+    }
+
+    /// Scrolls the transcript to the top and back down in steps, as a person reading it would.
+    private func scrollTranscript() async {
+        func scrollViews(in view: NSView) -> [NSScrollView] {
+            ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
+        }
+        guard let content = window?.contentView else { return }
+        let tallest = scrollViews(in: content).max {
+            ($0.documentView?.frame.height ?? 0) < ($1.documentView?.frame.height ?? 0)
+        }
+        guard let scrollView = tallest, let document = scrollView.documentView else { return }
+        let bottom = max(0, document.frame.height - scrollView.contentView.bounds.height)
+        for step in [1.0, 0.8, 0.6, 0.4, 0.2, 0.0, 0.25, 0.5, 0.75, 1.0] {
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: bottom * step))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+            await wait(0.15)
+        }
+    }
+
+    private func finish() {
+        let report = results.joined(separator: "\n") + "\n"
+        print(report)
+        try? report.write(to: output.appendingPathComponent("checks.txt"), atomically: true, encoding: .utf8)
+    }
+}
+
+extension RowModel {
+    var kindName: String {
+        switch kind {
+        case .user: "user"
+        case .prose: "prose"
+        case .code: "code"
+        case .tool: "tool"
+        case .thinking: "thinking"
+        case .error: "error"
+        case .turnEnd: "turn_end"
+        }
+    }
+}
+
+/// Times how long the main thread takes to get to a piece of work, over and over. A long wait is
+/// what the user sees as the window freezing.
+final class StallMonitor: @unchecked Sendable {
+    private let lock = NSLock()
+    private var longest = 0.0
+    private var stopped = false
+
+    init() {
+        Thread.detachNewThread { [weak self] in
+            while let self, !self.isStopped {
+                let asked = Date()
+                let ran = DispatchSemaphore(value: 0)
+                DispatchQueue.main.async { ran.signal() }
+                ran.wait()
+                self.record(Date().timeIntervalSince(asked))
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
+    }
+
+    private var isStopped: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopped
+    }
+
+    private func record(_ wait: TimeInterval) {
+        lock.lock()
+        longest = max(longest, wait)
+        lock.unlock()
+    }
+
+    /// The longest wait so far, in milliseconds. Reading it ends the measuring.
+    var longestMilliseconds: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        stopped = true
+        return Int(longest * 1000)
+    }
+}

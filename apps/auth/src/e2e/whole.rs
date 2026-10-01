@@ -266,7 +266,7 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     assert_eq!(highlighted.count(), 2, "code that streamed in arrives highlighted");
 
     app.until("the thread has its generated title", |app| {
-        app.threads[&thread_id].thread.title == "Use an F-String in Greet"
+        app.threads[&thread_id].thread.title == "Add API Rate Limiting"
     })
     .await;
     app.until("the thread is at rest", |app| !app.threads[&thread_id].thread.running).await;
