@@ -23,10 +23,10 @@ let package = Package(
             name: "Motile",
             dependencies: ["CMotileCore"],
             path: "Sources/Motile",
-            swiftSettings: [.swiftLanguageVersion(.v5)],
             linkerSettings: [
                 .unsafeFlags(["-L", coreFolder, "-lmotile_core"] + coreLinkFlags)
             ]
         ),
-    ]
+    ],
+    swiftLanguageVersions: [.v5]
 )
