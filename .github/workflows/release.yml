@@ -1,0 +1,56 @@
+name: Release
+
+# Builds the host and the auth server for Linux and publishes them as a GitHub release. The
+# installer downloads the host from the latest release, and motile.app runs the auth server
+# from it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sudo apt-get update && sudo apt-get install -y musl-tools
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release -p motile-server -p motile-auth --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          tar -czf motile-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release motile
+          tar -czf motile-auth-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release motile-auth
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.target }}
+          path: "*.tar.gz"
+
+  publish:
+    needs: linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes artifacts/*.tar.gz
