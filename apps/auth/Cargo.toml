@@ -1,0 +1,28 @@
+[package]
+name = "motile-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+motile-protocol = { workspace = true, features = ["auth-client"] }
+axum = { version = "0.8", features = ["macros"] }
+base64 = "0.23"
+chrono = { version = "0.4", features = ["serde"] }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "macros", "migrate", "chrono", "uuid"] }
+tokio.workspace = true
+tower-http = { version = "0.7", features = ["trace", "set-header"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+motile-core.workspace = true
+motile-server.workspace = true
+iroh.workspace = true
+tempfile.workspace = true

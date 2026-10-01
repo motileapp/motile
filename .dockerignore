@@ -1,0 +1,8 @@
+.git
+.github
+.env
+**/target
+apps/mac
+docs
+fixtures
+scripts

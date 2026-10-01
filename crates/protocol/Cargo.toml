@@ -1,0 +1,21 @@
+[package]
+name = "motile-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+# The HTTP client for the auth server, used by the host server and the client core.
+auth-client = ["dep:reqwest", "dep:anyhow", "dep:rustls"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+sha2.workspace = true
+ed25519-dalek = "2"
+getrandom = "0.3"
+tokio = { version = "1", features = ["io-util"] }
+reqwest = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+anyhow = { workspace = true, optional = true }

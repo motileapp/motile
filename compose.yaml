@@ -1,0 +1,15 @@
+# Local Postgres for development and tests: docker compose up -d
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: motile
+      POSTGRES_PASSWORD: motile
+      POSTGRES_DB: motile
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres:/var/lib/postgresql
+
+volumes:
+  postgres:

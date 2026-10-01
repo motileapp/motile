@@ -1,0 +1,152 @@
+//! Where the agent CLIs are and the environment to run them in. A service starts with a bare
+//! `PATH`, so the user's login shell is asked for its environment.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::time::Duration;
+
+use motile_protocol::wire::{Agent, AgentInfo, ModelInfo};
+use tokio::process::Command;
+
+use super::executable_name;
+use super::models::{claude_models, codex_models};
+
+#[derive(Clone)]
+pub struct Environment {
+    pub variables: HashMap<String, String>,
+    executables: HashMap<Agent, PathBuf>,
+    versions: HashMap<Agent, String>,
+    models: Vec<ModelInfo>,
+}
+
+impl Environment {
+    pub async fn resolve() -> Self {
+        let variables = shell_environment().await;
+        let mut executables = HashMap::new();
+        let mut versions = HashMap::new();
+        for agent in [Agent::Claude, Agent::Codex] {
+            let Some(path) = locate(agent, &variables) else { continue };
+            let Some(version) = version(&path, &variables).await else { continue };
+            executables.insert(agent, path);
+            versions.insert(agent, version);
+        }
+        let models = installed_models(&variables, &executables);
+        Self { variables, executables, versions, models }
+    }
+
+    /// Skips the lookup, for tests that stand in for the agents.
+    pub fn fixed(variables: HashMap<String, String>, executables: HashMap<Agent, PathBuf>) -> Self {
+        let versions = executables.keys().map(|agent| (*agent, "test".to_string())).collect();
+        let models = installed_models(&variables, &executables);
+        Self { variables, executables, versions, models }
+    }
+
+    pub fn executable(&self, agent: Agent) -> Option<&Path> {
+        self.executables.get(&agent).map(PathBuf::as_path)
+    }
+
+    pub fn hostname() -> String {
+        let mut buffer = [0u8; 256];
+        let result = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
+        if result != 0 {
+            return "host".to_string();
+        }
+        let length = buffer.iter().position(|byte| *byte == 0).unwrap_or(buffer.len());
+        String::from_utf8_lossy(&buffer[..length]).into_owned()
+    }
+
+    pub fn agents(&self) -> Vec<AgentInfo> {
+        [Agent::Claude, Agent::Codex]
+            .into_iter()
+            .map(|agent| AgentInfo { agent, version: self.versions.get(&agent).cloned() })
+            .collect()
+    }
+
+    pub fn models(&self) -> &[ModelInfo] {
+        &self.models
+    }
+}
+
+fn installed_models(variables: &HashMap<String, String>, executables: &HashMap<Agent, PathBuf>) -> Vec<ModelInfo> {
+    let mut models = Vec::new();
+    if executables.contains_key(&Agent::Claude) {
+        models.extend(claude_models());
+    }
+    if executables.contains_key(&Agent::Codex) {
+        let home = variables.get("HOME").map(String::as_str).unwrap_or_default();
+        models.extend(codex_models(Path::new(home)));
+    }
+    models
+}
+
+fn override_variable(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "MOTILE_CLAUDE_PATH",
+        Agent::Codex => "MOTILE_CODEX_PATH",
+    }
+}
+
+fn locate(agent: Agent, variables: &HashMap<String, String>) -> Option<PathBuf> {
+    if let Ok(path) = std::env::var(override_variable(agent)) {
+        return is_executable(Path::new(&path)).then(|| PathBuf::from(path));
+    }
+    let name = executable_name(agent);
+    let home = variables.get("HOME").cloned().unwrap_or_default();
+    let on_path = variables.get("PATH").map(String::as_str).unwrap_or_default().split(':').map(PathBuf::from);
+    let usual = [format!("{home}/.local/bin"), "/usr/local/bin".to_string(), format!("{home}/.bun/bin")];
+    on_path.chain(usual.into_iter().map(PathBuf::from)).map(|folder| folder.join(name)).find(|path| is_executable(path))
+}
+
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata().is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
+async fn version(executable: &Path, variables: &HashMap<String, String>) -> Option<String> {
+    let mut command = Command::new(executable);
+    command.arg("--version").env_clear().envs(variables);
+    let output = run(command, Duration::from_secs(10)).await?;
+    output.lines().next().map(|line| line.trim().to_string())
+}
+
+async fn shell_environment() -> HashMap<String, String> {
+    const START: &str = "__MOTILE_ENV_START__";
+    const END: &str = "__MOTILE_ENV_END__";
+
+    let mut variables: HashMap<String, String> = std::env::vars().collect();
+    let shell = variables.get("SHELL").filter(|shell| !shell.is_empty()).cloned().unwrap_or_else(login_shell);
+    let mut command = Command::new(shell);
+    command.args(["-ilc", &format!("printf '{START}'; env; printf '{END}'")]);
+    let Some(output) = run(command, Duration::from_secs(5)).await else { return variables };
+    let Some(listing) = output.split_once(START).and_then(|(_, rest)| rest.split_once(END)).map(|(listing, _)| listing)
+    else {
+        return variables;
+    };
+    for line in listing.lines() {
+        let Some((name, value)) = line.split_once('=') else { continue };
+        variables.insert(name.to_string(), value.to_string());
+    }
+    variables
+}
+
+fn login_shell() -> String {
+    let passwd = std::fs::read_to_string("/etc/passwd").unwrap_or_default();
+    let uid = unsafe { libc::getuid() }.to_string();
+    let shell = passwd
+        .lines()
+        .map(|line| line.split(':').collect::<Vec<_>>())
+        .find(|fields| fields.get(2) == Some(&uid.as_str()));
+    shell
+        .and_then(|fields| fields.get(6).map(|shell| shell.to_string()))
+        .filter(|shell| !shell.is_empty())
+        .unwrap_or_else(|| "/bin/sh".to_string())
+}
+
+/// Stdout of a short-lived process, or `None` if it failed or took too long.
+async fn run(mut command: Command, timeout: Duration) -> Option<String> {
+    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
+    let child = command.spawn().ok()?;
+    let output = tokio::time::timeout(timeout, child.wait_with_output()).await.ok()?.ok()?;
+    output.status.success().then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}

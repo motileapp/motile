@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Stand-in for the `claude` and `codex` CLIs, for tests and screenshots.
+
+By default it replays a recorded transcript: FAKE_AGENT_FIXTURE names a .jsonl file recorded with
+`claude -p --output-format stream-json --verbose --include-partial-messages` or `codex exec --json`.
+Some prompts get a reply made up on the spot instead:
+
+- "long reply with a lot of code": ten large code blocks streamed in small pieces.
+- "rate limiter": a turn with thinking, tool calls and a reply that uses most of Markdown.
+
+Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
+answers with FAKE_AGENT_TITLE. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
+per call.
+"""
+import json
+import os
+import sys
+import time
+
+if "--version" in sys.argv:
+    print("2.1.284 (Claude Code, fake)")
+    sys.exit(0)
+
+prompt = sys.stdin.read()
+arguments_file = os.environ.get("FAKE_AGENT_ARGUMENTS_FILE")
+if arguments_file:
+    with open(arguments_file, "a") as f:
+        f.write(json.dumps(sys.argv[1:]) + "\n")
+
+delay = float(os.environ.get("FAKE_AGENT_DELAY", "0.02"))
+
+
+def title_answer():
+    if prompt.startswith("Regenerate"):
+        return {"title": os.environ.get("FAKE_AGENT_REFINED_TITLE", "Refined From Transcript"), "needsRefinement": False}
+    vague = "fix this" in prompt.split("User message:")[-1].lower()
+    return {"title": os.environ.get("FAKE_AGENT_TITLE", "Use an F-String in Greet"), "needsRefinement": vague}
+
+
+if "--json-schema" in sys.argv:
+    print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "structured_output": title_answer()}))
+    sys.exit(0)
+
+if "--output-last-message" in sys.argv:
+    path = sys.argv[sys.argv.index("--output-last-message") + 1]
+    with open(path, "w") as f:
+        json.dump(title_answer(), f)
+    sys.exit(0)
+
+
+def emit(event, pause=0.0):
+    sys.stdout.write(json.dumps(event) + "\n")
+    sys.stdout.flush()
+    if pause:
+        time.sleep(pause)
+
+
+class Turn:
+    """Writes Claude Code's stream-json for a scripted turn."""
+
+    def __init__(self, session_id, piece=24, pause=0.01):
+        self.messages = 0
+        self.piece = piece
+        self.pause = pause
+        emit({"type": "system", "subtype": "init", "session_id": session_id})
+
+    def _start(self):
+        self.messages += 1
+        message_id = f"msg_{self.messages:04d}"
+        emit({"type": "stream_event", "event": {"type": "message_start", "message": {"id": message_id}}})
+        return message_id
+
+    def thinking(self, seconds):
+        message_id = self._start()
+        block = {"type": "thinking", "thinking": ""}
+        emit({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": block}})
+        time.sleep(seconds)
+        emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}})
+        return message_id
+
+    def text(self, text):
+        message_id = self._start()
+        block = {"type": "text", "text": ""}
+        emit({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": block}})
+        for start in range(0, len(text), self.piece):
+            delta = {"type": "text_delta", "text": text[start:start + self.piece]}
+            emit({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": delta}}, self.pause)
+        emit({"type": "assistant", "message": {"id": message_id, "content": [{"type": "text", "text": text}]}})
+        emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}})
+
+    def tool(self, name, tool_input, output, seconds=0.25, is_error=False):
+        message_id = self._start()
+        tool_id = f"toolu_{self.messages:04d}"
+        block = {"type": "tool_use", "id": tool_id, "name": name, "input": {}}
+        emit({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": block}})
+        block = dict(block, input=tool_input)
+        emit({"type": "assistant", "message": {"id": message_id, "content": [block]}})
+        emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}}, seconds)
+        result = {"type": "tool_result", "tool_use_id": tool_id, "content": output, "is_error": is_error}
+        emit({"type": "user", "message": {"content": [result]}})
+
+    def done(self):
+        emit({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 1, "total_cost_usd": 0.0412,
+              "permission_denials": []})
+
+
+def long_reply():
+    function = "\n".join(
+        f"    if value % {n + 2} == 0:\n        total += compute(value, {n})  # step {n}\n        log(f\"step {n}: {{total}}\")"
+        for n in range(40)
+    )
+    blocks = [
+        f"Part {part} of the change:\n\n```python\ndef handle_{part}(value):\n    total = 0\n{function}\n    return total\n```\n"
+        for part in range(1, 11)
+    ]
+    turn = Turn("00000000-0000-4000-8000-00000000beef", piece=48, pause=0.003)
+    turn.text("Here is the whole change, file by file.\n\n" + "\n".join(blocks) + "\nThat is everything.")
+    turn.done()
+
+
+RATE_LIMITER_RS = '''use std::time::{Duration, Instant};
+
+/// A token bucket: `capacity` requests at once, refilled at `per_second`.
+pub struct RateLimiter {
+    capacity: f64,
+    tokens: f64,
+    per_second: f64,
+    refilled: Instant,
+}
+
+impl RateLimiter {
+    pub fn new(capacity: u32, per_second: f64) -> Self {
+        Self { capacity: capacity as f64, tokens: capacity as f64, per_second, refilled: Instant::now() }
+    }
+
+    /// Takes one token, or says how long to wait for the next.
+    pub fn check(&mut self) -> Result<(), Duration> {
+        let elapsed = self.refilled.elapsed().as_secs_f64();
+        self.tokens = (self.tokens + elapsed * self.per_second).min(self.capacity);
+        self.refilled = Instant::now();
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            return Ok(());
+        }
+        Err(Duration::from_secs_f64((1.0 - self.tokens) / self.per_second))
+    }
+}'''
+
+RATE_LIMITER_REPLY = f'''The API now limits each client to **20 requests per second**, with bursts of up to 60. Limited requests get `429 Too Many Requests` and a `Retry-After` header.
+
+## What changed
+
+- `src/rate_limit.rs` is new: a token bucket per client key.
+- `src/middleware.rs` checks the bucket before the handler runs.
+- The limits come from `RATE_LIMIT_BURST` and `RATE_LIMIT_PER_SECOND`, so they can change without a deploy.
+
+```rust
+{RATE_LIMITER_RS}
+```
+
+The middleware keys clients by API token, and by address when there is none:
+
+```typescript
+export async function rateLimit(request: Request, next: Handler): Promise<Response> {{
+  const key = request.headers.get("authorization") ?? clientAddress(request);
+  const wait = limiter.check(key);
+  if (wait === null) return next(request);
+
+  return new Response("Too many requests", {{
+    status: 429,
+    headers: {{ "retry-after": String(Math.ceil(wait / 1000)) }},
+  }});
+}}
+```
+
+## How it behaves
+
+| Client sends | Result |
+| --- | --- |
+| 20 requests per second, steadily | All pass |
+| 60 at once, then nothing for 3 s | All pass, bucket refills |
+| 100 at once | 60 pass, 40 get `429` with `Retry-After: 1` |
+
+1. All 14 tests pass, including three new ones for the bucket.
+2. I didn't touch the websocket endpoint; it has no limit yet.
+
+> The bucket lives in memory, so each instance limits separately. With three instances a client can reach 60 requests per second in total.
+'''
+
+
+def rate_limiter():
+    turn = Turn("00000000-0000-4000-8000-00000000cafe")
+    turn.thinking(0.6)
+    turn.text("I'll look at how requests reach the handlers first.")
+    turn.tool("Grep", {"pattern": "fn handle_request", "path": "src"}, "src/server.rs:41:pub async fn handle_request(")
+    turn.tool("Read", {"file_path": "/srv/api/src/middleware.rs"}, "1\tuse crate::server::Handler;\n2\t\n3\tpub mod auth;\n4\tpub mod logging;\n")
+    turn.text("There is a middleware chain already, so the limiter fits in as one more link.")
+    turn.tool("Write", {"file_path": "/srv/api/src/rate_limit.rs", "content": RATE_LIMITER_RS}, "File created successfully at: /srv/api/src/rate_limit.rs")
+    edit = {"file_path": "/srv/api/src/middleware.rs", "old_string": "pub mod auth;\npub mod logging;",
+            "new_string": "pub mod auth;\npub mod logging;\npub mod rate_limit;"}
+    turn.tool("Edit", edit, "The file /srv/api/src/middleware.rs has been updated successfully.")
+    tests = "running 14 tests\ntest rate_limit::tests::burst_is_allowed ... ok\ntest rate_limit::tests::refills_over_time ... ok\ntest rate_limit::tests::says_how_long_to_wait ... ok\n\ntest result: ok. 14 passed; 0 failed; finished in 0.42s"
+    turn.tool("Bash", {"command": "cargo test --quiet", "description": "Run the tests"}, tests, seconds=0.8)
+    turn.text(RATE_LIMITER_REPLY)
+    turn.done()
+
+
+if "long reply with a lot of code" in prompt:
+    long_reply()
+    sys.exit(0)
+
+if "rate limiter" in prompt.lower():
+    rate_limiter()
+    sys.exit(0)
+
+fixture = os.environ.get("FAKE_AGENT_FIXTURE") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "edit-and-run.jsonl"
+)
+with open(fixture) as f:
+    for line in f:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        time.sleep(delay)

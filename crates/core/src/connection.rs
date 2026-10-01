@@ -1,0 +1,162 @@
+//! One connection to a host, and how long it took to get.
+
+use std::net::SocketAddr;
+use std::path::Path;
+use std::str::FromStr;
+use std::time::{Duration, Instant};
+
+use anyhow::{Context, bail};
+use iroh::endpoint::{ConnectionError, RecvStream, presets};
+use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
+use motile_protocol::ALPN;
+use motile_protocol::frame::{read_frame, write_frame};
+use motile_protocol::identity::DeviceKey;
+use motile_protocol::wire::{Message, Request};
+use serde::Serialize;
+
+/// A host's key, optionally with an address to reach it at directly: `key` or `key@ip:port`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HostAddr {
+    pub key: String,
+    pub direct: Option<SocketAddr>,
+}
+
+impl FromStr for HostAddr {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> anyhow::Result<Self> {
+        let (key, direct) = match text.split_once('@') {
+            Some((key, addr)) => (key, Some(addr.parse().context("The host's address should be ip:port.")?)),
+            None => (text, None),
+        };
+        if EndpointId::from_str(key).is_err() {
+            bail!("{key} isn't a host key.");
+        }
+        Ok(Self { key: key.to_string(), direct })
+    }
+}
+
+impl HostAddr {
+    fn endpoint_addr(&self) -> anyhow::Result<EndpointAddr> {
+        let addr = EndpointAddr::new(EndpointId::from_str(&self.key)?);
+        Ok(match self.direct {
+            Some(direct) => addr.with_ip_addr(direct),
+            None => addr,
+        })
+    }
+}
+
+/// `local_only` skips relays and address lookup, so hosts must be given with an address.
+pub async fn bind(key: &DeviceKey, local_only: bool) -> anyhow::Result<Endpoint> {
+    let builder = match local_only {
+        true => Endpoint::builder(presets::Minimal),
+        false => Endpoint::builder(presets::N0),
+    };
+    let secret_key = SecretKey::from_bytes(&key.to_bytes());
+    builder.secret_key(secret_key).bind().await.context("The network endpoint couldn't be opened.")
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PathKind {
+    Relay,
+    Direct,
+}
+
+/// The code a host closes with when the device isn't allowed on it.
+pub const REFUSED: u32 = 403;
+
+pub struct Closed {
+    /// The host turned this device away; dialing again won't help until that changes.
+    pub refused: bool,
+    pub reason: String,
+}
+
+#[derive(Clone)]
+pub struct Connection {
+    inner: iroh::endpoint::Connection,
+    /// The connection only works while its endpoint is alive.
+    _endpoint: Endpoint,
+    pub dialed: Instant,
+    pub connect_time: Duration,
+}
+
+impl Connection {
+    pub async fn dial(endpoint: &Endpoint, host: &HostAddr) -> anyhow::Result<Self> {
+        let dialed = Instant::now();
+        let inner =
+            endpoint.connect(host.endpoint_addr()?, ALPN).await.map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        Ok(Self { inner, _endpoint: endpoint.clone(), dialed, connect_time: dialed.elapsed() })
+    }
+
+    /// The path data is sent on right now, and its round-trip time.
+    pub fn path(&self) -> Option<(PathKind, Duration)> {
+        let paths = self.inner.paths();
+        let selected = paths.iter().find(|path| path.is_selected())?;
+        let kind = if selected.is_relay() { PathKind::Relay } else { PathKind::Direct };
+        Some((kind, selected.rtt()))
+    }
+
+    pub fn path_events(&self) -> iroh::endpoint::PathEventStream {
+        self.inner.path_events()
+    }
+
+    /// Resolves when the connection is gone, with why.
+    pub async fn closed(&self) -> Closed {
+        match self.inner.closed().await {
+            ConnectionError::ApplicationClosed(close) => Closed {
+                refused: close.error_code == REFUSED.into(),
+                reason: String::from_utf8_lossy(&close.reason).into_owned(),
+            },
+            other => Closed { refused: false, reason: other.to_string() },
+        }
+    }
+
+    pub fn close(&self) {
+        self.inner.close(0u32.into(), b"bye");
+    }
+
+    pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
+        let (mut send, mut recv) = self.inner.open_bi().await?;
+        write_frame(&mut send, request).await?;
+        send.finish()?;
+        read_frame(&mut recv).await?.context("The host closed the stream without answering.")
+    }
+
+    /// For `Subscribe` and `Open`: every message until the stream is dropped.
+    pub async fn follow(&self, request: &Request) -> anyhow::Result<Follow> {
+        let (mut send, recv) = self.inner.open_bi().await?;
+        write_frame(&mut send, request).await?;
+        send.finish()?;
+        Ok(Follow { recv })
+    }
+
+    /// Sends a file to the host and returns its path there.
+    pub async fn upload(&self, path: &Path) -> anyhow::Result<String> {
+        let name = path.file_name().and_then(|name| name.to_str()).context("The attachment needs a file name.")?;
+        let mut file =
+            tokio::fs::File::open(path).await.with_context(|| format!("{} can't be read.", path.display()))?;
+        let size = file.metadata().await?.len();
+
+        let (mut send, mut recv) = self.inner.open_bi().await?;
+        write_frame(&mut send, &Request::Upload { name: name.to_string(), size }).await?;
+        tokio::io::copy(&mut file, &mut send).await?;
+        send.finish()?;
+        match read_frame(&mut recv).await?.context("The host closed the stream without answering.")? {
+            Message::Uploaded { path } => Ok(path),
+            Message::Error { message } => bail!("{message}"),
+            other => bail!("Unexpected answer to an upload: {other:?}"),
+        }
+    }
+}
+
+pub struct Follow {
+    recv: RecvStream,
+}
+
+impl Follow {
+    /// `None` when the host ended the stream.
+    pub async fn next(&mut self) -> anyhow::Result<Option<Message>> {
+        Ok(read_frame(&mut self.recv).await?)
+    }
+}
