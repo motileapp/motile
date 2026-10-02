@@ -126,14 +126,14 @@ private final class Demo {
         await shoot("06-thread")
 
         // Opening tool calls shows what they did.
-        let opened = store.transcript.rows.filter { row in
+        let toolRows = store.transcript.rows.filter { row in
             guard case .tool(let tool) = row.kind else { return false }
             return tool.verb == "Edited" || tool.verb == "Ran"
         }
-        for row in opened { transcriptView?.rowToggledExpansion(id: row.id) }
+        for row in toolRows { transcriptView?.rowToggledExpansion(id: row.id) }
         scrollTranscript(to: 0.12)
         await shoot("06-tool-details")
-        for row in opened { transcriptView?.rowToggledExpansion(id: row.id) }
+        for row in toolRows { transcriptView?.rowToggledExpansion(id: row.id) }
 
         // A thread that ends asking for permission.
         store.startNewThread()
