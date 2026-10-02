@@ -1,6 +1,6 @@
 # Motile
 
-The command center for coding agents, open source. [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and Codex run on machines you own; a native app drives them from wherever you are.
+The command center for coding agents. [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and Codex run on machines you own; a native app drives them from wherever you are. Open source under the MIT license.
 
 ![A thread in Motile](docs/screenshots/thread.png)
 

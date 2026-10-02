@@ -1,10 +1,10 @@
 ## What is this?
 
-Motile is the command center for coding agents, and it is open source. The agents (Claude Code
-and Codex) run on machines the user owns, called hosts. Native apps drive them: an app connects
-straight to its hosts over [iroh](https://www.iroh.computer), which needs no open ports, and
-keeps a local copy of every thread so it opens where it was left. There is no local mode; an app
-always talks to a host.
+Motile is the open-source command center for coding agents. The agents (Claude Code and Codex)
+run on machines the user owns, called hosts. Native apps drive them: an app connects straight to
+its hosts over [iroh](https://www.iroh.computer), which needs no open ports, and keeps a local
+copy of every thread so it opens where it was left. There is no local mode; an app always talks
+to a host.
 
 These programs make it up, plus the code the apps share:
 
