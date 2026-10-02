@@ -4,6 +4,7 @@
 #   scripts/build-app.sh [--open]
 #
 # MOTILE_AUTH_URL, if set, becomes the auth server the app signs in with (default https://auth.motile.app).
+# MOTILE_SIGN_IDENTITY, if set, is the Developer ID certificate the app is signed with.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -62,6 +63,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-codesign --force --deep --sign - "$APP" >/dev/null
+if [ -n "${MOTILE_SIGN_IDENTITY:-}" ]; then
+    codesign --force --options runtime --timestamp --sign "$MOTILE_SIGN_IDENTITY" "$APP"
+else
+    codesign --force --deep --sign - "$APP" >/dev/null
+fi
 echo "✓ Built apps/mac/$APP"
 if [ "${1:-}" = "--open" ]; then open "$APP"; fi

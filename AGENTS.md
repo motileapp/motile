@@ -189,7 +189,9 @@ the recorded output in `fixtures/` or makes up a turn, depending on the prompt.
 
 Pushing a tag `v*` runs the `Release` workflow, which publishes the host and the auth server for
 Linux and the Mac app as a GitHub release. The installer and the download button always fetch
-the latest release.
+the latest release. The app in a release is signed with the Developer ID certificate and
+notarized, using the repository's `APPLE_*` secrets; running the `Mac` workflow by hand with
+`sign` does the same without a release.
 
 Unbind builds the `Marketing`, `Web` and `Auth` services from `main` and deploys them on every
 push that touches their files.

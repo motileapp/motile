@@ -57,6 +57,9 @@ jobs:
 
   mac:
     uses: ./.github/workflows/mac.yml
+    with:
+      sign: true
+    secrets: inherit
 
   attach-mac:
     needs: [publish, mac]

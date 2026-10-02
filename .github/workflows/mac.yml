@@ -14,7 +14,16 @@ on:
       - Cargo.lock
       - .github/workflows/mac.yml
   workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign and notarize the app
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      sign:
+        type: boolean
+        default: false
 
 concurrency:
   group: mac-${{ github.ref }}
@@ -45,11 +54,43 @@ jobs:
       - name: Build the core, the host and the auth server
         run: cargo build --release -p motile-core -p motile-server -p motile-auth
 
+      - name: Import the signing certificate
+        if: inputs.sign
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          echo "MOTILE_SIGN_IDENTITY=Developer ID Application" >> "$GITHUB_ENV"
+
       - name: Bundle the app
         run: apps/mac/scripts/build-app.sh
 
       - name: Demo
         run: apps/mac/scripts/ci-demo.sh
+
+      - name: Notarize the app
+        if: inputs.sign
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          echo "$APPLE_API_KEY" > "$RUNNER_TEMP/api-key.p8"
+          CREDENTIALS=(--key "$RUNNER_TEMP/api-key.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
+          ditto -c -k --keepParent apps/mac/build/Motile.app "$RUNNER_TEMP/notarize.zip"
+          SUBMISSION="$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${CREDENTIALS[@]}" --wait --output-format json | jq -r .id)"
+          xcrun notarytool log "$SUBMISSION" "${CREDENTIALS[@]}"
+          xcrun stapler staple apps/mac/build/Motile.app
+          spctl --assess --type execute --verbose apps/mac/build/Motile.app
 
       - name: Zip the app
         if: always()
