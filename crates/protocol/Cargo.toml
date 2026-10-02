@@ -7,6 +7,8 @@ license.workspace = true
 [features]
 # The HTTP client for the auth server, used by the host server and the client core.
 auth-client = ["dep:reqwest", "dep:anyhow", "dep:rustls"]
+# The relays the apps and the hosts use.
+iroh = ["dep:iroh"]
 
 [dependencies]
 serde.workspace = true
@@ -19,3 +21,4 @@ tokio = { version = "1", features = ["io-util"] }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 anyhow = { workspace = true, optional = true }
+iroh = { workspace = true, optional = true }

@@ -9,7 +9,7 @@ license.workspace = true
 crate-type = ["rlib", "staticlib"]
 
 [dependencies]
-motile-protocol = { workspace = true, features = ["auth-client"] }
+motile-protocol = { workspace = true, features = ["auth-client", "iroh"] }
 anyhow.workspace = true
 futures-lite.workspace = true
 iroh.workspace = true

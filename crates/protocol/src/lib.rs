@@ -6,6 +6,8 @@ pub mod auth_api;
 pub mod auth_client;
 pub mod frame;
 pub mod identity;
+#[cfg(feature = "iroh")]
+pub mod relay;
 #[cfg(feature = "auth-client")]
 pub mod tls;
 pub mod wire;

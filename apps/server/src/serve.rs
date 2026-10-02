@@ -33,7 +33,7 @@ pub struct BindOptions {
 pub async fn bind(key: &DeviceKey, options: &BindOptions) -> anyhow::Result<Endpoint> {
     let builder = match options.local_only {
         true => Endpoint::builder(presets::Minimal),
-        false => Endpoint::builder(presets::N0),
+        false => Endpoint::builder(presets::N0).relay_mode(motile_protocol::relay::relay_mode()),
     };
     let mut builder = builder.secret_key(SecretKey::from_bytes(&key.to_bytes())).alpns(vec![ALPN.to_vec()]);
     if let Some(port) = options.port {

@@ -9,7 +9,7 @@ name = "motile"
 path = "src/main.rs"
 
 [dependencies]
-motile-protocol = { workspace = true, features = ["auth-client"] }
+motile-protocol = { workspace = true, features = ["auth-client", "iroh"] }
 anyhow.workspace = true
 clap.workspace = true
 iroh.workspace = true

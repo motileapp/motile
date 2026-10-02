@@ -50,7 +50,7 @@ impl HostAddr {
 pub async fn bind(key: &DeviceKey, local_only: bool) -> anyhow::Result<Endpoint> {
     let builder = match local_only {
         true => Endpoint::builder(presets::Minimal),
-        false => Endpoint::builder(presets::N0),
+        false => Endpoint::builder(presets::N0).relay_mode(motile_protocol::relay::relay_mode()),
     };
     let secret_key = SecretKey::from_bytes(&key.to_bytes());
     builder.secret_key(secret_key).bind().await.context("The network endpoint couldn't be opened.")
