@@ -6,8 +6,10 @@ By default it replays a recorded transcript: FAKE_AGENT_FIXTURE names a .jsonl f
 of a turn of `codex app-server`.
 With `--input-format stream-json` the prompt is the first JSON line on stdin, as Claude Code reads
 it, and the process stays until stdin closes. A prompt written while a turn runs is read after the
-turn's next tool call and repeated on stdout; one that comes later gets a turn of its own. Some
-prompts get a reply made up on the spot instead:
+turn's next tool call and repeated on stdout; one written with priority `now` while a reply streams
+stops the reply, with a result that says so, and is answered in a turn of its own, as Claude Code
+does. A prompt that comes once the turn has ended gets a turn of its own. Some prompts get a reply
+made up on the spot instead:
 
 - "long reply with a lot of code": steps with code inside a list, then ten large code blocks,
   streamed in small pieces.
@@ -24,7 +26,7 @@ prompts get a reply made up on the spot instead:
 - "show the screenshot": a turn that writes `screenshot.png` in its folder and shows it in the reply.
 
 Called as `app-server` it is Codex: it answers the requests that start a thread and its turns,
-takes a prompt written while a turn runs after the turn's next tool call, and stops a turn when
+takes a prompt steered into a running turn after the turn's next tool call, and stops a turn when
 asked. There "run greet.py" asks before each of the two under the `untrusted` approval policy,
 "which color" asks its question, and "plan the hello" presents a plan and carries it out when told
 to implement it.
@@ -102,6 +104,21 @@ def take_waiting():
     return taken
 
 
+def steer_waiting():
+    """A prompt written with priority `now`, which stops a reply that streams."""
+    if prompts.empty() or prompts.queue[0] is None or prompts.queue[0].get("priority") != "now":
+        return None
+    return prompts.get()
+
+
+class Preempted(Exception):
+    """The turn was stopped for the prompt it was given, which gets a turn of its own."""
+
+    def __init__(self, message, session_id):
+        self.message = message
+        self.session_id = session_id
+
+
 def read_prompt():
     if "--input-format" not in sys.argv:
         return sys.stdin.read()
@@ -152,6 +169,7 @@ class Turn:
     messages = 0
 
     def __init__(self, session_id, piece=24, pause=0.01):
+        self.session_id = session_id
         self.piece = piece
         self.pause = pause
         # What the user said while the turn worked.
@@ -177,6 +195,11 @@ class Turn:
         block = {"type": "text", "text": ""}
         emit({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": block}})
         for start in range(0, len(text), self.piece):
+            steer = steer_waiting()
+            if steer:
+                emit({"type": "assistant", "message": {"id": message_id, "content": [{"type": "text", "text": text[:start]}]}})
+                self.done(terminal_reason="aborted_streaming")
+                raise Preempted(steer, self.session_id)
             delta = {"type": "text_delta", "text": text[start:start + self.piece]}
             emit({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": delta}}, self.pause)
         emit({"type": "assistant", "message": {"id": message_id, "content": [{"type": "text", "text": text}]}})
@@ -210,9 +233,9 @@ class Turn:
             sys.exit(0)
         return answer["response"]["response"]
 
-    def done(self):
+    def done(self, terminal_reason="completed"):
         emit({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 1, "total_cost_usd": 0.0412,
-              "permission_denials": []})
+              "permission_denials": [], "terminal_reason": terminal_reason})
 
 
 def long_reply():
@@ -495,6 +518,10 @@ class Codex:
                 record({method: params})
                 emit({"id": message["id"], "result": {"turn": {"id": self.turn_id(), "status": "inProgress"}}})
                 self.prompts.put(params)
+            if method == "turn/steer":
+                record({method: params})
+                emit({"id": message["id"], "result": {"turnId": params["expectedTurnId"]}})
+                self.prompts.put(params)
             if method == "turn/interrupt":
                 emit({"id": message["id"], "result": {}})
                 self.stopping.set()
@@ -691,7 +718,13 @@ def replay_fixture():
 
 def answer(prompt):
     scripted = next((turn for words, turn in SCRIPTED.items() if words in prompt.lower()), replay_fixture)
-    scripted()
+    try:
+        scripted()
+    except Preempted as preempted:
+        turn = Turn(preempted.session_id)
+        said = take(preempted.message)
+        turn.text("I stopped there. You also said: " + said)
+        turn.done()
 
 
 answer(prompt)

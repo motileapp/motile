@@ -89,7 +89,7 @@ On the server, `motile status` shows its account, agents and service, `motile lo
 
 - **Devices**: every app and every server has an ed25519 key, which is also its iroh address. Signing in links an app's key to your account; the install command links a server's. A server asks the auth server which apps belong to its account and accepts only those.
 - **A turn** is one run of the agent's CLI: `claude -p --output-format stream-json …` or `codex app-server`, resumed with the agent's own session. The server turns both outputs into the same transcript items.
-- **Follow-ups**: a message sent while the agent works waits in a queue on your server. The agent gets it after its next tool call and carries on in the same turn. Until then it can be sent at once or taken back.
+- **Follow-ups**: a message sent while the agent works waits in a queue on your server until the turn ends, then starts the next one. Until then it can be taken back, or sent now: the agent takes it at once and carries on in the same turn.
 - **Sync**: every transcript item carries the revision that last changed it. An app asks for what changed after the revision it has, so opening a thread it already knows costs almost nothing, however long the thread is.
 - **Streaming**: the server holds a reply's text until a block of it is finished, and passes blocks on a few times a second, so text doesn't flicker in word by word.
 - **Rendering**: the core parses Markdown, highlights code, groups tool calls and folds finished turns, and sends the app rows that are ready to draw. While a reply streams, only the rows that changed are sent, and code is highlighted incrementally.

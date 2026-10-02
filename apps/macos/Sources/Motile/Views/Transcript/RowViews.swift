@@ -408,8 +408,8 @@ final class UserRowView: RowView {
     override func clearSelection() { text.clearSelection() }
 }
 
-/// A message that waits for the agent: what it says, when the agent gets it, and the buttons that
-/// send it now or take it back. It stands where the user's messages do, outlined instead of filled.
+/// A message that waits for the agent: what it says, how it waits, and the buttons that send it
+/// now or take it back. It stands where the user's messages do, outlined instead of filled.
 final class QueuedRowView: RowView {
     /// The strip under the message, down to the bubble's edge, that holds the status and the buttons.
     static let footHeight: CGFloat = 34
@@ -440,7 +440,7 @@ final class QueuedRowView: RowView {
         bubble.addSubview(status)
         sendButton = RowButton(
             title: "Send now",
-            tooltip: "Give it to the agent without waiting",
+            tooltip: "Have the agent take it at once, in the turn that runs",
             insets: NSEdgeInsets(top: 3, left: 2, bottom: 7, right: 2)
         ) { [weak self] in
             guard let self else { return }

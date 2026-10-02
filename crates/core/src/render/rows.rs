@@ -104,7 +104,7 @@ pub enum RowKind {
     Queued {
         text: String,
         attachments: Vec<String>,
-        /// When the agent gets it.
+        /// How it waits: queued, held, or being given to the agent.
         status: &'static str,
         /// The agent is being given it, so it can no longer be sent now or taken back.
         sending: bool,
@@ -405,28 +405,25 @@ impl Transcript {
     }
 }
 
-/// The queued messages as rows, each saying when the agent gets it.
+/// The queued messages as rows, each saying how it waits.
 fn queued_rows(queued: &[Queued]) -> Vec<Row> {
-    let busy = queued.iter().any(|message| message.sending);
-    let next = queued.iter().position(|message| !message.held && !message.sending).filter(|_| !busy);
-    let status = |index: usize, message: &Queued| match (message.sending, message.held) {
+    let status = |message: &Queued| match (message.sending, message.held) {
         (true, _) => "Sending…",
-        (false, true) => "Not sent yet",
-        (false, false) if next == Some(index) => "Sends after the next tool call",
-        (false, false) => "Sends after the message above",
+        (false, true) => "Held",
+        (false, false) => "Queued",
     };
-    let row = |(index, message): (usize, &Queued)| Row {
+    let row = |message: &Queued| Row {
         id: format!("queued/{}", message.id),
         item: message.id.clone(),
         nested: false,
         kind: RowKind::Queued {
             text: message.text.clone(),
             attachments: message.attachments.iter().map(|path| file_name(path).to_string()).collect(),
-            status: status(index, message),
+            status: status(message),
             sending: message.sending,
         },
     };
-    queued.iter().enumerate().map(row).collect()
+    queued.iter().map(row).collect()
 }
 
 /// The rows to show for the items: each turn's, one turn after the other.
@@ -1206,7 +1203,7 @@ mod tests {
     }
 
     #[test]
-    fn queued_messages_are_the_last_rows_and_say_when_the_agent_gets_them() {
+    fn queued_messages_are_the_last_rows_and_say_how_they_wait() {
         let message = |id: &str, held, sending| Queued {
             id: id.into(),
             text: "Also this".into(),
@@ -1227,16 +1224,13 @@ mod tests {
         let waiting = vec![message("m1", true, false), message("m2", false, false), message("m3", false, false)];
         let splice = transcript.set_queued(waiting).unwrap();
         assert_eq!((splice.start, splice.remove, splice.rows.len()), (1, 0, 3));
-        assert_eq!(
-            statuses(&transcript),
-            ["Not sent yet", "Sends after the next tool call", "Sends after the message above"]
-        );
+        assert_eq!(statuses(&transcript), ["Held", "Queued", "Queued"]);
         let first = &transcript.rows()[1];
         assert_eq!((first.id.as_str(), first.item.as_str()), ("queued/m1", "m1"));
         assert!(matches!(&first.kind, RowKind::Queued { attachments, .. } if attachments == &["notes.txt"]));
 
         transcript.set_queued(vec![message("m2", false, true), message("m3", false, false)]);
-        assert_eq!(statuses(&transcript), ["Sending…", "Sends after the message above"]);
+        assert_eq!(statuses(&transcript), ["Sending…", "Queued"]);
 
         // What the agent says next goes above the messages that still wait.
         transcript.upsert(assistant("b", 1, "Still working."), true);

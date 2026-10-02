@@ -54,3 +54,26 @@ struct IconOnlyButton: View {
         .help(help)
     }
 }
+
+/// A button in the window's toolbar. It lights up as a rounded rectangle, like a row of the
+/// sidebar, and the buttons touch: the space seen between them is theirs.
+struct ToolbarButton: View {
+    static let margin: CGFloat = 2
+    static let width: CGFloat = 28 + 2 * margin
+
+    let symbol: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        IconOnlyButton(
+            symbol: symbol,
+            help: help,
+            size: Self.width - 2 * Self.margin,
+            symbolSize: 15,
+            radius: 7,
+            inset: EdgeInsets(top: Self.margin, leading: Self.margin, bottom: Self.margin, trailing: Self.margin),
+            action: action
+        )
+    }
+}

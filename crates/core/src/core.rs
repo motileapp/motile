@@ -694,6 +694,7 @@ impl Core {
                     open.unrendered.clear();
                     open.unsaved.clear();
                 }
+                self.cache.set_activity(thread_id, &activity);
                 let (queued, event) = activity_changed(thread_id, &mut open.transcript, activity);
                 if reset {
                     self.cache.clear_items(thread_id);
@@ -745,6 +746,7 @@ impl Core {
                 if !activity.running {
                     open.transcript.end_streaming();
                 }
+                self.cache.set_activity(thread_id, &activity);
                 let (queued, event) = activity_changed(thread_id, &mut open.transcript, activity);
                 if let Some(queued) = queued {
                     self.emit_rows(thread_id, false, queued);
@@ -952,7 +954,8 @@ impl Core {
         }
         let server =
             self.servers.iter().find(|server| server.device.public_key == server_id).ok_or("That server is gone.")?;
-        let cwd = server.threads.get(thread_id).map(|thread| thread.cwd.clone()).unwrap_or_default();
+        let thread = server.threads.get(thread_id).cloned();
+        let cwd = thread.as_ref().map(|thread| thread.cwd.clone()).unwrap_or_default();
         let link = server.link.clone();
 
         let mut items = self.cache.items(thread_id);
@@ -965,6 +968,15 @@ impl Core {
             && let Some(earlier) = transcript.prepend(items)
         {
             self.emit_rows(thread_id, false, earlier);
+        }
+        // What the agent was last seen doing, until the server says what it does now.
+        if let Some(thread) = thread {
+            let activity = restored_activity(&thread, self.cache.activity(thread_id));
+            let (queued, event) = activity_changed(thread_id, &mut transcript, activity);
+            if let Some(queued) = queued {
+                self.emit_rows(thread_id, false, queued);
+            }
+            self.emit(event);
         }
 
         let open = OpenThread {
@@ -1056,6 +1068,21 @@ fn reply(sink: &EventSink, id: u64, result: Result<Value, String>) {
     sink(Event::Reply { id, ok, value });
 }
 
+/// What to show before the server answers. The cached activity dates from when the thread was
+/// last open here, so the thread's flags, which the list keeps current, have the last word.
+fn restored_activity(thread: &Thread, cached: Option<Activity>) -> Activity {
+    if !thread.running && !thread.monitoring {
+        return Activity::default();
+    }
+    let mut activity = cached.unwrap_or_default();
+    activity.running = thread.running;
+    activity.monitoring = thread.monitoring;
+    if !thread.needs_approval {
+        activity.approvals.clear();
+    }
+    activity
+}
+
 /// A turn ended after the user last looked. A thread never opened here doesn't nag.
 fn is_unread(thread: &Thread, seen_at: Option<f64>) -> bool {
     match (thread.turn_ended_at, seen_at) {
@@ -1106,5 +1133,58 @@ mod tests {
     fn query_values_are_decoded() {
         assert_eq!(percent_decode("a%20b+c%2Fd"), "a b c/d");
         assert_eq!(percent_decode("100%"), "100%");
+    }
+
+    fn thread(running: bool, monitoring: bool, needs_approval: bool) -> Thread {
+        Thread {
+            id: "t".into(),
+            title: String::new(),
+            project_id: "p".into(),
+            cwd: "/srv".into(),
+            agent: motile_protocol::wire::Agent::Claude,
+            model: None,
+            effort: None,
+            access: motile_protocol::wire::Access::Full,
+            plan: false,
+            created_at: 1.0,
+            updated_at: 2.0,
+            done_at: None,
+            undone_at: None,
+            running,
+            monitoring,
+            needs_approval,
+            turn_ended_at: None,
+            rev: 3,
+        }
+    }
+
+    fn approval() -> motile_protocol::wire::Approval {
+        motile_protocol::wire::Approval { id: "a".into(), tool_name: "Bash".into(), input: "{}".into() }
+    }
+
+    #[test]
+    fn an_idle_thread_restores_no_activity() {
+        let cached = Activity { running: true, started_at: Some(5.0), ..Activity::default() };
+        assert_eq!(restored_activity(&thread(false, false, false), Some(cached)), Activity::default());
+    }
+
+    #[test]
+    fn a_working_thread_restores_its_start_and_the_approval_still_waiting() {
+        let cached =
+            Activity { running: true, started_at: Some(5.0), approvals: vec![approval()], ..Activity::default() };
+        let restored = restored_activity(&thread(true, false, true), Some(cached.clone()));
+        assert_eq!(restored, cached);
+    }
+
+    #[test]
+    fn an_approval_answered_since_no_longer_waits() {
+        let cached = Activity { running: true, approvals: vec![approval()], ..Activity::default() };
+        assert!(restored_activity(&thread(true, false, false), Some(cached)).approvals.is_empty());
+    }
+
+    #[test]
+    fn a_monitoring_thread_never_opened_here_restores_from_its_flags() {
+        let restored = restored_activity(&thread(false, true, false), None);
+        assert_eq!(restored, Activity { monitoring: true, ..Activity::default() });
     }
 }

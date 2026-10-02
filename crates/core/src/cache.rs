@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use motile_protocol::auth_api::Me;
-use motile_protocol::wire::{Item, Project, ServerInfo, Thread};
+use motile_protocol::wire::{Activity, Item, Project, ServerInfo, Thread};
 use rusqlite::{Connection, OptionalExtension, params};
 
 const SCHEMA: &str = "
@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS threads (
     seen_at REAL,
     -- The transcript revision the items below are complete up to.
     synced_rev INTEGER NOT NULL DEFAULT 0,
+    -- What the agent was last seen doing, while the thread was open here.
+    activity TEXT,
     PRIMARY KEY (server_id, id)
 );
 CREATE TABLE IF NOT EXISTS items (
@@ -65,6 +67,7 @@ impl Cache {
         connection.pragma_update(None, "synchronous", "NORMAL")?;
         rename_hosts(&connection)?;
         connection.execute_batch(SCHEMA)?;
+        add_activity(&connection)?;
         Ok(connection)
     }
 
@@ -155,10 +158,7 @@ impl Cache {
             return Vec::new();
         };
         let threads = rows.flatten().filter_map(|(text, seen_at)| {
-            let mut thread: Thread = serde_json::from_str(&text).ok()?;
-            // Whether it is running is only known once the server says so.
-            thread.running = false;
-            thread.monitoring = false;
+            let thread: Thread = serde_json::from_str(&text).ok()?;
             Some(CachedThread { thread, seen_at })
         });
         threads.collect()
@@ -206,6 +206,22 @@ impl Cache {
 
     pub fn set_seen(&self, thread_id: &str, at: f64) {
         let _ = self.connection().execute("UPDATE threads SET seen_at = ?2 WHERE id = ?1", params![thread_id, at]);
+    }
+
+    pub fn activity(&self, thread_id: &str) -> Option<Activity> {
+        let text: Option<String> = self
+            .connection()
+            .query_row("SELECT activity FROM threads WHERE id = ?1", [thread_id], |row| row.get(0))
+            .optional()
+            .ok()
+            .flatten()
+            .flatten();
+        serde_json::from_str(&text?).ok()
+    }
+
+    pub fn set_activity(&self, thread_id: &str, activity: &Activity) {
+        let text = serde_json::to_string(activity).unwrap_or_default();
+        let _ = self.connection().execute("UPDATE threads SET activity = ?2 WHERE id = ?1", params![thread_id, text]);
     }
 
     pub fn synced_rev(&self, thread_id: &str) -> u64 {
@@ -278,6 +294,18 @@ fn rename_hosts(connection: &Connection) -> rusqlite::Result<()> {
     )
 }
 
+/// A cache written by 0.1.8 or older has no activity column.
+fn add_activity(connection: &Connection) -> rusqlite::Result<()> {
+    let present: Option<i64> = connection
+        .query_row("SELECT 1 FROM pragma_table_info('threads') WHERE name = 'activity'", [], |row| row.get(0))
+        .optional()?;
+    if present.is_some() {
+        return Ok(());
+    }
+    connection.execute("ALTER TABLE threads ADD COLUMN activity TEXT", [])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,5 +343,31 @@ mod tests {
             threads.iter().map(|cached| (cached.thread.id.as_str(), cached.seen_at)).collect::<Vec<_>>(),
             [("t", Some(5.0))]
         );
+        assert_eq!(cache.activity("t"), None);
+    }
+
+    #[test]
+    fn a_thread_keeps_what_its_agent_was_doing() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(&dir.path().join("cache.sqlite")).unwrap();
+        let mut thread: Thread = serde_json::from_str(
+            r#"{"id": "t", "title": "T", "project_id": "p", "cwd": "/srv", "agent": "claude", "model": null,
+            "effort": null, "access": "full", "plan": false, "created_at": 1.0, "updated_at": 2.0, "done_at": null,
+            "undone_at": null, "running": false, "monitoring": true, "needs_approval": false, "turn_ended_at": null,
+            "rev": 3}"#,
+        )
+        .unwrap();
+        cache.set_threads("s", std::slice::from_ref(&thread));
+        let activity = Activity { monitoring: true, started_at: Some(2.0), ..Activity::default() };
+        cache.set_activity("t", &activity);
+
+        assert!(cache.threads("s")[0].thread.monitoring);
+        assert_eq!(cache.activity("t"), Some(activity.clone()));
+
+        // The list replacing the thread keeps the activity; a change to the thread does too.
+        thread.title = "Renamed".into();
+        cache.set_threads("s", std::slice::from_ref(&thread));
+        cache.upsert_thread("s", &thread);
+        assert_eq!(cache.activity("t"), Some(activity));
     }
 }

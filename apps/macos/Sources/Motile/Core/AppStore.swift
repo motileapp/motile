@@ -690,6 +690,13 @@ final class AppStore {
         core.send("mark_seen", ["thread_id": thread.id])
     }
 
+    /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft
+    /// opens at once, with more the panel asks which.
+    func newThread() {
+        guard projects.count > 1 else { return startNewThread(in: projects.first) }
+        openPanel(.projects)
+    }
+
     /// Opens a new draft. It and the one that was open stay in the sidebar until they are sent or
     /// discarded.
     func startNewThread(in project: Project? = nil) {
@@ -831,7 +838,7 @@ final class AppStore {
         request(thread.serverID, answer)
     }
 
-    /// Gives the agent a queued message without waiting for its next tool call.
+    /// Gives the agent a queued message now, in the turn that runs.
     func sendNow(queued messageID: String) {
         guard let thread = selectedThread else { return }
         request(thread.serverID, ["type": "send_queued", "thread_id": thread.id, "message_id": messageID])

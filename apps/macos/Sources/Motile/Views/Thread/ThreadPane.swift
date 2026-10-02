@@ -45,15 +45,13 @@ struct ThreadPane: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 if let thread = store.selectedThread {
-                    ToolbarGlass {
-                        ToolbarGlassButton(
-                            symbol: thread.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
-                            help: thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)"
-                        ) {
-                            store.toggleDone()
-                        }
-                        .disabled(thread.busy)
+                    ToolbarButton(
+                        symbol: thread.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
+                        help: thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)"
+                    ) {
+                        store.toggleDone()
                     }
+                    .disabled(thread.busy)
                 }
             }
             .withoutSystemGlass()

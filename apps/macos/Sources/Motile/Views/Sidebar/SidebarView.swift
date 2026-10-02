@@ -2,11 +2,14 @@ import SwiftUI
 
 /// The space between the rows' highlights, and around each one: it looks empty but is the row's.
 private let rowGap = 2.0
-private let rowMargin = EdgeInsets(top: rowGap / 2, leading: 10, bottom: rowGap / 2, trailing: 10)
+private let rowMargin = EdgeInsets(top: rowGap / 2, leading: SidebarView.rowInset, bottom: rowGap / 2, trailing: SidebarView.rowInset)
 
 /// The drafts, then every active thread on every server in one list, with the ones marked done on
 /// a shelf at the bottom.
 struct SidebarView: View {
+    /// How far the rows' highlights stay from the sidebar's edges.
+    static let rowInset: CGFloat = 10
+
     @Environment(AppStore.self) private var store
     @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
     @State private var renaming: ThreadInfo?
@@ -140,7 +143,7 @@ private struct ThreadMenu: View {
 }
 
 /// An active thread: its project and what it is doing on the first line, its title on the second,
-/// its project's branch and its agent on the third.
+/// its project's branch, its server and its agent on the third.
 private struct ThreadRow: View {
     @Environment(AppStore.self) private var store
     let thread: ThreadInfo
@@ -160,9 +163,6 @@ private struct ThreadRow: View {
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .layoutPriority(1)
-                if store.servers.count > 1, let server = store.server(thread.serverID) {
-                    ServerLabel(server: server)
-                }
                 Spacer(minLength: 6)
                 if hovering && !thread.busy {
                     IconOnlyButton(symbol: "checkmark", help: "Mark done", size: 22, symbolSize: 12) {
@@ -188,6 +188,9 @@ private struct ThreadRow: View {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 6)
+                if store.servers.count > 1, let server = store.server(thread.serverID) {
+                    ServerLabel(server: server)
+                }
                 AgentIcon(agent: thread.agent, size: 12)
             }
             .foregroundStyle(.tertiary)

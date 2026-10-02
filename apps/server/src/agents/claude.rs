@@ -1,10 +1,11 @@
 //! `claude -p --input-format stream-json --output-format stream-json --verbose
 //! --include-partial-messages --replay-user-messages --permission-prompt-tool stdio`. Prompts are
 //! written to stdin one JSON line each, and the process stays for as long as stdin is open or
-//! something it started is still running. A prompt written while it works is read after its next
-//! tool call, or when the turn has ended; it repeats the prompt on stdout when it does. It asks on
-//! stdout before a tool call that needs approval and reads the answer from stdin, where it also
-//! takes changed settings.
+//! something it started is still running. A prompt written once the turn has ended starts the
+//! next one. One written with priority `now` while it works is taken at once: what the turn runs
+//! moves to the background, or the turn is stopped, with a result that says so, and the prompt is
+//! answered next. It repeats a prompt on stdout when it takes it. It asks on stdout before a tool
+//! call that needs approval and reads the answer from stdin, where it also takes changed settings.
 
 use std::collections::HashMap;
 
@@ -38,8 +39,6 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
         "--verbose",
         "--include-partial-messages",
         "--replay-user-messages",
-        "--append-system-prompt",
-        super::SHOWING_MEDIA,
         "--permission-prompt-tool",
         "stdio",
         // Lets a thread be given full access while its process runs.
@@ -58,11 +57,18 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
     if let Some(session_id) = turn.session_id {
         arguments.extend(["--resume".to_string(), session_id.to_string()]);
     }
+    arguments.extend(["--append-system-prompt".to_string(), super::instructions(turn)]);
     arguments
 }
 
 pub fn input(prompt: &str, id: &str) -> String {
     format!("{}\n", json!({"type": "user", "uuid": id, "message": {"role": "user", "content": prompt}}))
+}
+
+pub fn steer(prompt: &str, id: &str) -> String {
+    let message = json!({"role": "user", "content": prompt});
+    let line = json!({"type": "user", "uuid": id, "message": message, "priority": "now", "origin": {"kind": "human"}});
+    format!("{line}\n")
 }
 
 fn leaves_plan_mode(approval: &Approval) -> bool {
@@ -287,7 +293,12 @@ fn parse_result(object: &Value) -> AgentEvent {
         is_error: object["is_error"].as_bool().unwrap_or(object["subtype"] != "success"),
         stopped: false,
     };
-    AgentEvent::Completed { summary, result_text: object["result"].as_str().map(String::from) }
+    let reason = object["terminal_reason"].as_str().unwrap_or_default();
+    AgentEvent::Completed {
+        summary,
+        result_text: object["result"].as_str().map(String::from),
+        preempted: matches!(reason, "aborted_streaming" | "aborted_tools"),
+    }
 }
 
 fn content_text(content: &Value) -> String {
@@ -391,6 +402,20 @@ mod tests {
         assert_eq!(line.matches('\n').count(), 1);
         let message: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(message["message"]["content"], "first\nsecond \"quoted\"");
+    }
+
+    #[test]
+    fn a_prompt_sent_now_is_taken_at_once_and_a_reply_stopped_for_it_says_so() {
+        let line: Value = serde_json::from_str(&steer("Also this", "m1")).unwrap();
+        assert_eq!(
+            (&line["uuid"], &line["priority"], &line["origin"]["kind"]),
+            (&json!("m1"), &json!("now"), &json!("human"))
+        );
+        let mut parser = Parser::default();
+        let stopped = r#"{"type":"result","subtype":"success","is_error":false,"terminal_reason":"aborted_streaming"}"#;
+        assert!(matches!(parser.parse(stopped)[..], [AgentEvent::Completed { preempted: true, .. }]));
+        let ended = r#"{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed"}"#;
+        assert!(matches!(parser.parse(ended)[..], [AgentEvent::Completed { preempted: false, .. }]));
     }
 
     #[test]

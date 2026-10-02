@@ -1,9 +1,9 @@
 //! `codex app-server`: JSON-RPC over stdin and stdout, one message a line. The process is asked
 //! to initialize, to start or resume the thread, and to start a turn; what the turn does comes
 //! back as notifications. It asks before a command or an edit that needs approval and waits for
-//! the answer. A prompt written while a turn runs joins that turn after its next tool call, and
-//! comes back as an item when it does. A plan is presented when its turn has ended, and carried
-//! out in a turn of its own.
+//! the answer. A prompt steered into a running turn joins it after its next tool call, and comes
+//! back as an item when it does; one that comes once the turn has ended starts the next turn. A
+//! plan is presented when its turn has ended, and carried out in a turn of its own.
 
 use std::collections::HashMap;
 
@@ -36,10 +36,16 @@ fn turn_params(thread_id: &str, prompt: &str, id: &str) -> Value {
     json!({"threadId": thread_id, "input": [{"type": "text", "text": prompt}], "clientUserMessageId": id})
 }
 
-/// A prompt for a process that is there: a running turn takes it, an ended one is followed by
-/// a new turn.
+/// A prompt for a process whose turn has ended; it starts the next one.
 pub fn input(thread_id: &str, prompt: &str, id: &str) -> String {
     line(json!({"id": format!("message:{id}"), "method": "turn/start", "params": turn_params(thread_id, prompt, id)}))
+}
+
+/// A prompt for the turn that runs, which takes it after its next tool call.
+pub fn steer(thread_id: &str, turn_id: &str, prompt: &str, id: &str) -> String {
+    let mut params = turn_params(thread_id, prompt, id);
+    params["expectedTurnId"] = json!(turn_id);
+    line(json!({"id": format!("message:{id}"), "method": "turn/steer", "params": params}))
 }
 
 pub fn stop(thread_id: &str, turn_id: &str) -> String {
@@ -146,7 +152,7 @@ impl Parser {
             "approvalPolicy": approval_policy,
             "sandbox": sandbox,
             "approvalsReviewer": reviewer,
-            "developerInstructions": super::SHOWING_MEDIA,
+            "developerInstructions": super::instructions(turn),
         });
         if let Some(model) = turn.model {
             thread["model"] = json!(model);
@@ -243,7 +249,7 @@ impl Parser {
         let failed = turn["status"] == "failed";
         let summary = TurnSummary { is_error: failed, ..Default::default() };
         let result_text = turn["error"]["message"].as_str().map(String::from);
-        let mut events = vec![AgentEvent::Completed { summary, result_text }];
+        let mut events = vec![AgentEvent::Completed { summary, result_text, preempted: false }];
         events.extend(self.plan_approval());
         events
     }
@@ -493,6 +499,16 @@ mod tests {
     }
 
     #[test]
+    fn a_prompt_sent_now_steers_the_turn_that_runs() {
+        let request: Value = serde_json::from_str(&steer("thread1", "turn1", "Also this", "m2")).unwrap();
+        assert_eq!(request["method"], "turn/steer");
+        assert_eq!(request["params"]["threadId"], "thread1");
+        assert_eq!(request["params"]["expectedTurnId"], "turn1");
+        assert_eq!(request["params"]["clientUserMessageId"], "m2");
+        assert_eq!(request["params"]["input"][0]["text"], "Also this");
+    }
+
+    #[test]
     fn a_prompt_the_turn_took_and_a_turn_that_follows_are_reported() {
         let mut parser = parser(turn(Access::Full, false));
         let taken = r#"{"method":"item/started","params":{"item":{"type":"userMessage","id":"u","clientId":"m2"}}}"#;
@@ -503,7 +519,9 @@ mod tests {
         assert_eq!(parser.parse(started), vec![turn.clone(), AgentEvent::Thinking { active: true }]);
         let ended = parser.parse(r#"{"method":"turn/completed","params":{"turn":{"id":"turn1","status":"failed","error":{"message":"Out of credits"}}}}"#);
         let summary = TurnSummary { is_error: true, ..Default::default() };
-        assert_eq!(ended, vec![AgentEvent::Completed { summary, result_text: Some("Out of credits".to_string()) }]);
+        let completed =
+            AgentEvent::Completed { summary, result_text: Some("Out of credits".to_string()), preempted: false };
+        assert_eq!(ended, vec![completed]);
         assert_eq!(parser.parse(started), vec![AgentEvent::Woke, turn, AgentEvent::Thinking { active: true }]);
     }
 

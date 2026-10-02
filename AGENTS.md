@@ -85,10 +85,11 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   waits for the app's answer, which is also how its questions to the user are answered and its
   plan is approved. Claude Code is also told when the thread's model, effort or access change;
   Codex takes them when its next process starts. A message sent while a turn runs is queued:
-  the agent is given it after its next tool call, or when the turn ends, and it joins the
-  transcript when the agent says it has read it. A queued message can be sent at once or taken
-  back, and the ones a stopped turn leaves behind wait until they are sent. The queue is only
-  in memory. Claude Code's process stays after a turn while something it started is still
+  it waits until the turn ends and starts the next one, and it joins the transcript when the
+  agent says it has read it. A queued message can be sent now, which the running turn takes at
+  once (Claude Code moves what it runs to the background or stops its reply for it, Codex takes
+  it after its next tool call), or taken back, and the ones a stopped turn leaves behind wait
+  until they are sent. The queue is only in memory. Claude Code's process stays after a turn while something it started is still
   running (a monitor, a background shell): the thread is then `monitoring`, the process takes
   the next messages itself, and it starts turns of its own when what it watches reports.
 - `pacing.rs` says how much of a streamed reply is finished. The hub passes text on in finished
@@ -143,8 +144,8 @@ Rust library for tests.
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
   are one row, a finished turn's work folds behind one, as does what the agent did before a
   message it took mid-turn, an image or a video is a row that knows its size before the file
-  is there, and the messages that wait for the agent are the last rows, each saying when the
-  agent gets it).
+  is there, and the messages that wait for the agent are the last rows, each saying how it
+  waits).
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
   terminal.
 
@@ -247,9 +248,9 @@ the recorded output in `fixtures/` or makes up a turn, depending on the prompt. 
 "watch the deploy" it stays after its turn, as Claude Code does while it monitors, asked to
 "run greet.py" under supervised access it asks before each tool call, and asked to "show the
 screenshot" it makes an image and shows it. "Which color" has it
-ask the user a question, and "plan the hello" present a plan to approve. A message it is given
-while it works is read after its next tool call, as both agents do, and "run greet.py" ends
-its reply with it.
+ask the user a question, and "plan the hello" present a plan to approve. A message sent now
+while it works is read after its next tool call, as both agents do, or stops a reply that
+streams, as Claude Code does; "run greet.py" ends its reply with it.
 
 ## Releasing and deploying
 

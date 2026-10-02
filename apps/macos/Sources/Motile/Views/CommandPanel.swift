@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// The panel that opens over the window to start a thread, open one, or run a command, all from
-/// the keyboard. ⌘N opens it on the projects, ⌘P on the threads and ⌘K on the commands.
+/// the keyboard. ⌘N and the new-thread button open it on the projects when there is more than
+/// one, ⌘P on the threads and ⌘K on the commands.
 struct CommandPanel: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openSettings) private var openSettings
@@ -176,8 +177,15 @@ struct CommandPanel: View {
         return item.title.localizedCaseInsensitiveContains(query) || item.detail.localizedCaseInsensitiveContains(query)
     }
 
+    /// The projects, the one the open thread works in first, then by when a thread last started.
+    private var projects: [Project] {
+        let recent = store.recentProjects
+        guard let current = store.composerProject else { return recent }
+        return [current] + recent.filter { $0.id != current.id }
+    }
+
     private var projectItems: [PanelItem] {
-        store.recentProjects.enumerated().map { position, project in
+        projects.enumerated().map { position, project in
             let server = store.server(project.serverID)?.name ?? ""
             return PanelItem(
                 id: "project-\(project.id)",

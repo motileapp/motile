@@ -3,9 +3,9 @@
 //! sent to everyone with the thread open. Claude Code's process is talked to while it runs: it
 //! asks before a tool call that needs approval and is told the thread's changed settings. It
 //! outlives the turn while it monitors something: it then takes the next prompts itself, and
-//! starts turns of its own. A message sent while a turn runs is queued, and the agent is given
-//! it after its next tool call, so it carries on in the same turn. Codex's process is asked for
-//! the thread and its turn, and answered what it asks, in the same way.
+//! starts turns of its own. A message sent while a turn runs is queued until the turn ends, when
+//! it starts the next one; sent now, the agent takes it at once, in the turn that runs. Codex's
+//! process is asked for the thread and its turn, and answered what it asks, in the same way.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -314,7 +314,8 @@ impl Hub {
         self.announce_approvals(live)
     }
 
-    /// Gives the agent a queued message without waiting for its next tool call.
+    /// Gives the agent a queued message now: the turn that runs takes it at once, an idle
+    /// process starts its next turn with it.
     pub async fn send_queued(self: &Arc<Self>, thread_id: &str, message_id: &str) -> anyhow::Result<()> {
         let mut threads = self.threads.lock().await;
         let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
@@ -326,17 +327,19 @@ impl Hub {
             let queued = live.queued.remove(index);
             return self.start_next_turn(live, queued);
         };
-        let idle = run.received_result;
+        if !run.received_result {
+            if !live.steer(index) {
+                bail!("The agent can't take it yet.");
+            }
+            return Ok(());
+        }
         if !live.give(index) {
             // The agent's process takes no more; the message starts the next turn.
             live.queued[index].held = false;
             live.send_activity();
             return Ok(());
         }
-        if idle {
-            self.resume(live)?;
-        }
-        Ok(())
+        self.resume(live)
     }
 
     /// Takes a queued message back.
@@ -633,7 +636,7 @@ impl Hub {
     /// What the process does once its turn has ended: take the next message that waits, exit,
     /// keep working in the background, or monitor.
     fn rest(&self, live: &mut Live) -> anyhow::Result<()> {
-        let Some(run) = &live.run else { return Ok(()) };
+        let Some(run) = live.run.as_ref().filter(|run| run.received_result) else { return Ok(()) };
         // What the agent asks once its turn has ended, it stays to hear the answer to.
         if !live.activity.approvals.is_empty() {
             return Ok(());
@@ -805,18 +808,17 @@ impl Hub {
                 call.output = Some(output);
                 call.status = if is_error { ToolStatus::Failed } else { ToolStatus::Succeeded };
                 live.upsert(store, id, ItemKind::Tool { call })?;
-                live.hand_over();
             }
             AgentEvent::Tool { call } => {
                 live.set_thinking(false);
-                let finished = call.status != ToolStatus::Running;
                 live.upsert(store, call.id.clone(), ItemKind::Tool { call })?;
-                if finished {
-                    live.hand_over();
-                }
             }
-            AgentEvent::Completed { mut summary, result_text } => {
+            AgentEvent::Completed { mut summary, result_text, preempted } => {
                 live.set_thinking(false);
+                // A turn stopped for the message it was given goes on with it.
+                if preempted && live.steering() {
+                    return Ok(());
+                }
                 if let Some(run) = &mut live.run {
                     run.received_result = true;
                     run.turn_id = None;
@@ -980,8 +982,14 @@ impl Live {
         index.context("That message is no longer waiting.")
     }
 
-    /// Gives the agent the first message that waits for its turn, unless it still has one to
-    /// take or waits for an answer itself. `false` when nothing was given.
+    /// A message was sent now to the turn that runs, and the agent hasn't taken it yet.
+    fn steering(&self) -> bool {
+        let stopped = self.run.as_ref().is_some_and(|run| run.interrupted.load(Ordering::Relaxed));
+        !stopped && self.queued.iter().any(|queued| queued.sending)
+    }
+
+    /// Gives the idle process the first message that waits, unless it still has one to take or
+    /// waits for an answer itself. `false` when nothing was given.
     fn hand_over(&mut self) -> bool {
         if self.queued.iter().any(|queued| queued.sending) || !self.activity.approvals.is_empty() {
             return false;
@@ -996,16 +1004,37 @@ impl Live {
         line.is_some_and(|line| self.write(line))
     }
 
-    /// Writes the queued message to the agent's process. `false` when it takes no more.
+    /// Writes the queued message to the idle process, which starts its next turn with it.
+    /// `false` when it takes no more.
     fn give(&mut self, index: usize) -> bool {
         let queued = &self.queued[index];
         if !self.write_prompt(&prompt(&queued.text, &queued.attachments), &queued.id) {
             return false;
         }
+        self.note_given(index);
+        true
+    }
+
+    /// Writes the queued message to the turn that runs, which takes it at once. `false` when the
+    /// agent can't take it.
+    fn steer(&mut self, index: usize) -> bool {
+        let queued = &self.queued[index];
+        let thread = &self.stored.thread;
+        let turn_id = self.run.as_ref().and_then(|run| run.turn_id.as_deref());
+        let session_id = self.stored.session_id.as_deref();
+        let line =
+            agents::steer(thread.agent, session_id, turn_id, &prompt(&queued.text, &queued.attachments), &queued.id);
+        if !line.is_some_and(|line| self.write(line)) {
+            return false;
+        }
+        self.note_given(index);
+        true
+    }
+
+    fn note_given(&mut self, index: usize) {
         self.queued[index].sending = true;
         self.queued[index].held = false;
         self.send_activity();
-        true
     }
 
     /// Writes a line to the process's stdin. `false` when it takes no more.

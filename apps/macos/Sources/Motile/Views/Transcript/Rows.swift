@@ -222,7 +222,7 @@ struct FoldContent {
 struct QueuedContent {
     let text: NSAttributedString
     let attachments: [String]
-    /// When the agent gets it.
+    /// How it waits: queued, held, or being given to the agent.
     let status: String
     /// The agent is being given it, so it can no longer be sent now or taken back.
     let sending: Bool

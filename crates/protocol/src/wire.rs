@@ -170,8 +170,8 @@ pub enum Request {
         since: u64,
     },
     /// Starts a turn, in `thread_id` or in a thread created from `new_thread`. While a turn is
-    /// running the message is queued: the agent is given it after its next tool call, or when
-    /// the turn ends. An agent that is only monitoring gets it right away.
+    /// running the message is queued until the turn ends, when it starts the next one. An agent
+    /// that is only monitoring gets it right away.
     Send {
         thread_id: Option<String>,
         new_thread: Option<NewThread>,

@@ -98,7 +98,7 @@ struct ComposerView: View {
         guard let server = store.composerServer else { return "Ask anything" }
         if server.state != .connected { return "Waiting for \(server.name) to connect…" }
         if server.models.isEmpty && server.known { return "Install Claude Code or Codex on \(server.name) to start" }
-        if store.activity.running { return "Send a follow-up; the agent gets it after its next tool call" }
+        if store.activity.running { return "Send a follow-up; it waits for the agent's turn to end" }
         return "Ask anything, or describe what to build"
     }
 

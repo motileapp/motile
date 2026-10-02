@@ -34,8 +34,13 @@ struct MotileApp: App {
                 Button("Check for Updates…") { store.updater.check(asked: true) }
             }
             CommandGroup(replacing: .newItem) {
-                Button("New Thread…") { store.openPanel(.projects) }
+                Button("New Thread…") { store.newThread() }
                     .keyboardShortcut("n")
+                Button(store.composerProject.map { "New Thread in “\($0.name)”" } ?? "New Thread in This Project") {
+                    store.startNewThread(in: store.composerProject)
+                }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(store.composerProject == nil)
                 Button("Go to Thread…") { store.openPanel(.threads) }
                     .keyboardShortcut("p")
                 Button("Commands…") { store.openPanel(.commands) }
@@ -153,41 +158,102 @@ struct MainView: View {
     @Environment(AppStore.self) private var store
     @AppStorage(MainView.sidebarHiddenKey) private var sidebarHidden = false
     @AppStorage("sidebar.width") private var sidebarWidth = 280.0
+    /// Where the toolbar's buttons begin in the window, past the window's own buttons.
+    @State private var toolbarStart: CGFloat = 0
 
     var body: some View {
         @Bindable var store = store
         GeometryReader { window in
             let widest = min(Self.sidebarWidths.upperBound, Double(window.size.width) - 1 - Self.threadMinWidth)
             let widths = Self.sidebarWidths.lowerBound...max(Self.sidebarWidths.lowerBound, widest)
+            let shownWidth = min(widths.upperBound, max(widths.lowerBound, sidebarWidth))
             HStack(spacing: 0) {
                 if !sidebarHidden {
                     SidebarView()
-                        .frame(width: min(widths.upperBound, max(widths.lowerBound, sidebarWidth)))
+                        .frame(width: shownWidth)
                     SidebarDivider(width: $sidebarWidth, widths: widths)
                         .zIndex(1)
                 }
                 ThreadPane(titleInset: sidebarHidden ? 240 : 20)
             }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                ToolbarGlass {
-                    ToolbarGlassButton(symbol: "sidebar.left", help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
-                        sidebarHidden.toggle()
-                    }
-                    ToolbarGlassButton(symbol: "folder.badge.plus", help: "Add a project") {
-                        store.showsFolderPicker = true
-                    }
-                    ToolbarGlassButton(symbol: "square.and.pencil", help: "New thread") {
-                        store.startNewThread()
-                    }
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    sidebarButtons
+                        .frame(width: sidebarHidden ? nil : buttonsWidth(endingWith: shownWidth))
+                        .background(alignment: .leading) { ToolbarStart(x: $toolbarStart) }
                 }
+                .withoutSystemGlass()
             }
-            .withoutSystemGlass()
         }
         .onDrop(of: [UTType.fileURL] + ImageFiles.attachable, isTargeted: $store.dropTargeted) { providers in
             store.attach(dropped: providers)
             return true
+        }
+    }
+
+    /// The last button ends where the sidebar's rows do.
+    private func buttonsWidth(endingWith sidebarWidth: CGFloat) -> CGFloat {
+        let end = sidebarWidth - SidebarView.rowInset + ToolbarButton.margin
+        return max(3 * ToolbarButton.width, end - toolbarStart)
+    }
+
+    /// The sidebar's button stays at the start, as sidebar buttons do; the others go to the end
+    /// of the sidebar while it is shown.
+    private var sidebarButtons: some View {
+        HStack(spacing: 0) {
+            ToolbarButton(symbol: "sidebar.left", help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
+                sidebarHidden.toggle()
+            }
+            if !sidebarHidden {
+                Spacer(minLength: 0)
+            }
+            ToolbarButton(symbol: "folder.badge.plus", help: "Add a project") {
+                store.showsFolderPicker = true
+            }
+            ToolbarButton(symbol: "square.and.pencil", help: "New thread (⌘N). ⇧-click starts one in this project") {
+                guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true else { return store.newThread() }
+                store.startNewThread(in: store.composerProject)
+            }
+        }
+    }
+}
+
+/// Reports where its leading edge is in the window, also after full screen moves the toolbar.
+private struct ToolbarStart: NSViewRepresentable {
+    @Binding var x: CGFloat
+
+    func makeNSView(context: Context) -> StartView { StartView() }
+
+    func updateNSView(_ view: StartView, context: Context) {
+        view.report = { start in
+            guard start != x else { return }
+            x = start
+        }
+    }
+
+    final class StartView: NSView {
+        var report: (CGFloat) -> Void = { _ in }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self)
+            guard let window else { return }
+            for name in [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification] {
+                NotificationCenter.default.addObserver(self, selector: #selector(measure), name: name, object: window)
+            }
+            measure()
+        }
+
+        override func layout() {
+            super.layout()
+            measure()
+        }
+
+        @objc private func measure() {
+            DispatchQueue.main.async { [self] in
+                guard window != nil else { return }
+                report(convert(bounds, to: nil).minX)
+            }
         }
     }
 }

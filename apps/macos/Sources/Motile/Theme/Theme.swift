@@ -29,7 +29,7 @@ enum Theme {
     static let bubble = dynamic(hex(0xf1f1f3), hex(0x2d2d30))
     static let codeBackground = dynamic(hex(0xf6f6f7), hex(0x222224))
     /// Over the blurred backdrop of the window: nearly opaque, so only a hint of it comes through.
-    static let glassTint = dynamic(hex(0xfcfcfc, alpha: 0.86), hex(0x18181a, alpha: 0.86))
+    static let glassTint = dynamic(hex(0xfcfcfc, alpha: 0.9), hex(0x18181a, alpha: 0.9))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
     static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
     static let border = dynamic(hex(0x000000, alpha: 0.09), white(0.09))

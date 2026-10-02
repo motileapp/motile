@@ -12,9 +12,27 @@ use std::collections::HashMap;
 
 use motile_protocol::wire::{Access, Agent, Approval, ToolCall, TurnSummary};
 
-/// Told to every agent, so that it shows what it made instead of naming a file.
-pub const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedding it in your reply as a \
+const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedding it in your reply as a \
      Markdown image with the absolute path of the file, like ![what it shows](/path/to/file.png).";
+
+/// Told to an agent when it starts: where it runs, and that it shows what it made instead of
+/// naming a file. Claude Code knows its own model and effort; Codex is told them.
+pub fn instructions(turn: &Turn) -> String {
+    let harness = match turn.agent {
+        Agent::Claude => "Claude Code",
+        Agent::Codex => "Codex",
+    };
+    let mut text = format!("In case you're asked: you are running in Motile through the {harness} harness");
+    if turn.agent == Agent::Codex {
+        if let Some(model) = turn.model {
+            text += &format!(", as {model}");
+        }
+        if let Some(effort) = turn.effort {
+            text += &format!(" with {effort} reasoning effort");
+        }
+    }
+    text + ". No need to mention this otherwise. " + SHOWING_MEDIA
+}
 
 /// The agents present a plan with this tool call; allowing it has the plan carried out.
 pub const PLAN_TOOL: &str = "ExitPlanMode";
@@ -64,6 +82,8 @@ pub enum AgentEvent {
     Completed {
         summary: TurnSummary,
         result_text: Option<String>,
+        /// The turn was stopped for a message the agent was given, which it answers next.
+        preempted: bool,
     },
     /// A tool call the turn waits with until the user has allowed or refused it.
     Approval(Approval),
@@ -133,12 +153,21 @@ pub fn opening(agent: Agent, prompt: &str, id: &str) -> String {
     }
 }
 
-/// A prompt for a process that is there already. `id` comes back in `Taken` when the agent was
-/// working. `None` while the agent's own session isn't known yet.
+/// A prompt for a process whose turn has ended; it starts the next one. `id` comes back in
+/// `Taken`. `None` while the agent's own session isn't known yet.
 pub fn input(agent: Agent, session_id: Option<&str>, prompt: &str, id: &str) -> Option<String> {
     match agent {
         Agent::Claude => Some(claude::input(prompt, id)),
         Agent::Codex => Some(codex::input(session_id?, prompt, id)),
+    }
+}
+
+/// A prompt for a process whose turn runs, to take at once. `None` while the turn it is for
+/// isn't known yet.
+pub fn steer(agent: Agent, session_id: Option<&str>, turn_id: Option<&str>, prompt: &str, id: &str) -> Option<String> {
+    match agent {
+        Agent::Claude => Some(claude::steer(prompt, id)),
+        Agent::Codex => Some(codex::steer(session_id?, turn_id?, prompt, id)),
     }
 }
 
