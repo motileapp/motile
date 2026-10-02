@@ -46,6 +46,8 @@ cat > "$PROJECT/favicon.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0f766e"/><path d="M9 20l5-9 4 6 2-3 3 6z" fill="#fff"/></svg>
 SVG
 git -C "$PROJECT" init -q -b main 2>/dev/null || true
+git -C "$PROJECT" -c user.name=Demo -c user.email=demo@motile.app add -A && git -C "$PROJECT" -c user.name=Demo -c user.email=demo@motile.app commit -q -m "Start" || true
+git -C "$PROJECT" branch release 2>/dev/null || true
 
 echo "▸ Starting the app…"
 defaults delete app.motile.mac >/dev/null 2>&1 || true

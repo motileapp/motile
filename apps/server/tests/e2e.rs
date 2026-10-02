@@ -1119,6 +1119,113 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
     assert_eq!(next(&mut list).await, Message::Projects { projects: Vec::new() });
 }
 
+fn git(folder: &Path, arguments: &[&str]) {
+    let output = std::process::Command::new("git")
+        .args(arguments)
+        .current_dir(folder)
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "git {arguments:?}: {}", String::from_utf8_lossy(&output.stderr));
+}
+
+async fn branches(connection: &Connection, project_id: &str) -> Vec<(String, bool, bool, bool)> {
+    let request = Request::Branches { project_id: project_id.to_string() };
+    let Message::Branches { branches } = connection.request(&request).await.unwrap() else {
+        panic!("expected branches")
+    };
+    branches.into_iter().map(|branch| (branch.name, branch.current, branch.default, branch.remote)).collect()
+}
+
+async fn switch(connection: &Connection, project_id: &str, branch: &str, create: bool) -> Message {
+    let request = Request::SwitchBranch { project_id: project_id.to_string(), branch: branch.to_string(), create };
+    connection.request(&request).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_projects_branches_are_listed_switched_and_created() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.2").await;
+    let connection = harness.connect().await;
+    let origin = harness.dir.path().join("origin");
+    std::fs::create_dir_all(&origin).unwrap();
+    git(&origin, &["init", "-q", "-b", "main"]);
+    std::fs::write(origin.join("README"), "one").unwrap();
+    git(&origin, &["add", "."]);
+    git(&origin, &["commit", "-q", "-m", "one"]);
+    git(&origin, &["switch", "-q", "-c", "fix/typo"]);
+    std::fs::write(origin.join("README"), "two").unwrap();
+    git(&origin, &["commit", "-q", "-am", "two"]);
+    git(&origin, &["switch", "-q", "main"]);
+    let repository = harness.dir.path().join("repository");
+    git(harness.dir.path(), &["clone", "-q", "origin", "repository"]);
+    git(&repository, &["switch", "-q", "-c", "feature/login"]);
+
+    let path = repository.to_string_lossy().into_owned();
+    assert_eq!(connection.request(&Request::AddProject { path }).await.unwrap(), Message::Ok);
+    let project = projects_now(&connection).await.remove(0);
+    assert_eq!(project.branch.as_deref(), Some("feature/login"));
+
+    // The checked-out branch leads, the default follows, and a branch only on the remote is last.
+    let name = |name: &str, current, default, remote| (name.to_string(), current, default, remote);
+    assert_eq!(
+        branches(&connection, &project.id).await,
+        [
+            name("feature/login", true, false, false),
+            name("main", false, true, false),
+            name("fix/typo", false, false, true)
+        ]
+    );
+
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    assert_eq!(switch(&connection, &project.id, "main", false).await, Message::Ok);
+    let Message::Projects { projects } = next(&mut list).await else { panic!("expected the projects") };
+    assert_eq!(projects[0].branch.as_deref(), Some("main"));
+
+    // Switching to a remote's branch makes the local one.
+    assert_eq!(switch(&connection, &project.id, "fix/typo", false).await, Message::Ok);
+    assert_eq!(std::fs::read_to_string(repository.join("README")).unwrap(), "two");
+    assert!(branches(&connection, &project.id).await.contains(&name("fix/typo", true, false, false)));
+
+    assert_eq!(switch(&connection, &project.id, "feature/pay", true).await, Message::Ok);
+    assert_eq!(branches(&connection, &project.id).await[0], name("feature/pay", true, false, false));
+    assert!(matches!(switch(&connection, &project.id, "feature/pay", true).await, Message::Error { .. }));
+    assert!(matches!(switch(&connection, &project.id, "no such", true).await, Message::Error { .. }));
+
+    // A change that the switch would lose stops it, in git's words.
+    std::fs::write(repository.join("README"), "three").unwrap();
+    let Message::Error { message } = switch(&connection, &project.id, "main", false).await else {
+        panic!("a switch that loses a change is refused")
+    };
+    assert!(message.contains("README") && message.contains("overwritten"), "{message}");
+    git(&repository, &["checkout", "-q", "README"]);
+
+    // Not while an agent works in the project.
+    let new_thread = NewThread {
+        project_id: project.id.clone(),
+        agent: Agent::Claude,
+        model: None,
+        effort: None,
+        access: AgentAccess::Supervised,
+        plan: false,
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Look at the README").await;
+    let Message::Error { message } = switch(&connection, &project.id, "main", false).await else {
+        panic!("a switch while an agent works is refused")
+    };
+    assert!(message.contains("working"), "{message}");
+    connection.request(&Request::Stop { thread_id }).await.unwrap();
+
+    let plain = harness.folder("plain");
+    assert_eq!(connection.request(&Request::AddProject { path: plain }).await.unwrap(), Message::Ok);
+    let plain = projects_now(&connection).await.into_iter().find(|project| project.branch.is_none()).unwrap();
+    let request = Request::Branches { project_id: plain.id };
+    assert!(matches!(connection.request(&request).await.unwrap(), Message::Error { .. }));
+}
+
 async fn projects_now(connection: &Connection) -> Vec<Project> {
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     let Message::Welcome { projects, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };

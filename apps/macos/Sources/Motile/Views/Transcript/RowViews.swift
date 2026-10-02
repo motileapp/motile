@@ -903,8 +903,7 @@ final class TurnEndRowView: RowView {
     }
 }
 
-/// Shown under the transcript while the agent is at work, waits for an approval, or monitors
-/// what it left running.
+/// Shown under the transcript while the agent is at work or waits for an approval.
 final class WorkingView: FlippedView {
     /// Digits of one width, so the line doesn't change size with every second.
     private static let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
@@ -925,12 +924,12 @@ final class WorkingView: FlippedView {
     func update(_ activity: Activity) {
         self.activity = activity
         let waiting = !activity.approvals.isEmpty
-        isHidden = !activity.busy
+        isHidden = !activity.running
         shine.sweeps = activity.running && !waiting
         timer?.invalidate()
         timer = nil
         guard activity.running, !waiting else {
-            if activity.busy { show(waiting ? "Waiting for your approval" : "Monitoring") }
+            if activity.running { show("Waiting for your approval") }
             return
         }
         refresh()
@@ -951,7 +950,9 @@ final class WorkingView: FlippedView {
     private func show(_ words: String) {
         text.stringValue = words
         shine.stringValue = words
-        text.frame = NSRect(x: 0, y: 3, width: text.intrinsicContentSize.width, height: 18)
+        // Measured from the words themselves: the label's own measure can lag a step behind.
+        let width = ceil((words as NSString).size(withAttributes: [.font: Self.font]).width) + 8
+        text.frame = NSRect(x: 0, y: 3, width: width, height: 18)
         shine.frame = text.frame
     }
 }

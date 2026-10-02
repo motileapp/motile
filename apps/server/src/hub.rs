@@ -30,7 +30,7 @@ use crate::agents::environment::Environment;
 use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name};
 use crate::media::MediaStore;
 use crate::store::{Store, StoredProject, StoredThread, TitleSource};
-use crate::{icons, pacing, title};
+use crate::{git, icons, pacing, title};
 
 const UPDATES_BUFFER: usize = 4096;
 const ROOT_BYPASS_REFUSAL: &str = "cannot be used with root/sudo privileges";
@@ -524,6 +524,35 @@ impl Hub {
         self.store.save_project_icon(project)?;
         self.announce_projects(&projects);
         Ok(())
+    }
+
+    /// The branches of the project's repository. The project is announced again too, since the
+    /// branch may have been switched in a terminal.
+    pub async fn branches(&self, project_id: &str) -> anyhow::Result<Message> {
+        let path = self.project_path(project_id).await?;
+        let branches = git::branches(&path, &self.environment).await?;
+        self.announce_projects(&self.projects.lock().await);
+        Ok(Message::Branches { branches })
+    }
+
+    /// Checks a branch out in the project's folder, which every thread of the project works in.
+    pub async fn switch_branch(&self, project_id: &str, branch: &str, create: bool) -> anyhow::Result<()> {
+        let path = self.project_path(project_id).await?;
+        let threads = self.threads.lock().await;
+        let working = threads.values().any(|live| live.stored.thread.project_id == project_id && live.activity.running);
+        drop(threads);
+        if working {
+            bail!("An agent is working in this project. Switch branches when it has finished.");
+        }
+        git::switch(&path, &self.environment, branch, create).await?;
+        self.announce_projects(&self.projects.lock().await);
+        Ok(())
+    }
+
+    async fn project_path(&self, project_id: &str) -> anyhow::Result<String> {
+        let projects = self.projects.lock().await;
+        let project = projects.iter().find(|project| project.id == project_id);
+        Ok(project.context("That project is no longer on the server.")?.path.clone())
     }
 
     fn announce_projects(&self, stored: &[StoredProject]) {
@@ -1189,7 +1218,7 @@ fn projects(stored: &[StoredProject]) -> Vec<Project> {
         id: stored.id.clone(),
         path: stored.path.clone(),
         name: file_name(&stored.path).to_string(),
-        branch: git_branch(&stored.path),
+        branch: git::current_branch(&stored.path),
         icon: stored.icon.as_deref().and_then(icons::version),
         created_at: stored.created_at,
     };
@@ -1211,22 +1240,6 @@ fn refresh_icon(store: &Store, project: &mut StoredProject) {
     project.icon_chosen = false;
     if let Err(error) = store.save_project_icon(project) {
         tracing::error!(project_id = project.id, "couldn't save a project's icon: {error:#}");
-    }
-}
-
-/// The branch checked out in the folder, read from git's own files.
-fn git_branch(path: &str) -> Option<String> {
-    let dot_git = Path::new(path).join(".git");
-    // In a worktree `.git` is a file that points at the real folder.
-    let git_dir = match std::fs::read_to_string(&dot_git) {
-        Ok(pointer) => Path::new(path).join(pointer.trim().strip_prefix("gitdir:")?.trim()),
-        Err(_) => dot_git,
-    };
-    let head = std::fs::read_to_string(git_dir.join("HEAD")).ok()?;
-    let head = head.trim();
-    match head.strip_prefix("ref: refs/heads/") {
-        Some(branch) => Some(branch.to_string()),
-        None => Some(head.chars().take(7).collect()),
     }
 }
 

@@ -75,6 +75,8 @@ final class AppStore {
     var iconProject: Project?
     /// Files are being dragged over the window.
     var dropTargeted = false
+    /// The branch picker under the composer is open.
+    var showsBranches = false
     private(set) var panel: PanelPage?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
@@ -335,6 +337,11 @@ final class AppStore {
         servers.first { $0.id == id }
     }
 
+    /// The project the composer's thread works in, or the one the open draft would start in.
+    var composerProject: Project? {
+        project(selectedThread?.projectID ?? selectedDraft?.projectID)
+    }
+
     /// The server the composer is talking to: the open thread's, or the open draft's project's.
     var composerServer: Server? {
         if let thread = selectedThread { return server(thread.serverID) }
@@ -578,6 +585,37 @@ final class AppStore {
                 let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
                 guard let project = self.projects.first(where: { $0.serverID == serverID && $0.path == trimmed }) else { return }
                 self.setNewThreadProject(project.id)
+            }
+        }
+    }
+
+    // MARK: Branches
+
+    /// Whether a turn is running in the project, which is when its branch can't be switched.
+    func isWorking(in project: Project) -> Bool {
+        threads.values.contains { $0.projectID == project.id && $0.running }
+    }
+
+    /// Whether the project's server is new enough to list and switch branches.
+    func canSwitchBranches(of project: Project) -> Bool {
+        project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 3
+    }
+
+    func listBranches(of project: Project, done: @escaping (Result<[Branch], CoreBridge.CoreError>) -> Void) {
+        let request: JSON = ["type": "branches", "project_id": project.id]
+        core.send("request", ["server_id": project.serverID, "request": request]) { result in
+            done(result.map { $0.objects("branches").map { Branch(json: $0) } })
+        }
+    }
+
+    /// Checks the branch out in the project's folder, making it first if asked to. `done` gets
+    /// what went wrong, if anything.
+    func switchBranch(of project: Project, to name: String, create: Bool, done: @escaping (String?) -> Void) {
+        let request: JSON = ["type": "switch_branch", "project_id": project.id, "branch": name, "create": create]
+        core.send("request", ["server_id": project.serverID, "request": request]) { result in
+            switch result {
+            case .success: done(nil)
+            case .failure(let error): done(error.message)
             }
         }
     }

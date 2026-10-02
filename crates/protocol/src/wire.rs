@@ -231,6 +231,18 @@ pub enum Request {
         #[serde(default)]
         icons: bool,
     },
+    /// The branches of the project's repository. `Branches` answers.
+    Branches {
+        project_id: String,
+    },
+    /// Checks the branch out in the project's folder, where all the project's threads work. With
+    /// `create` the branch is made first, from what is checked out.
+    SwitchBranch {
+        project_id: String,
+        branch: String,
+        #[serde(default)]
+        create: bool,
+    },
     /// The file's bytes follow on the same stream.
     Upload {
         name: String,
@@ -267,6 +279,16 @@ pub struct Project {
     #[serde(default)]
     pub icon: Option<String>,
     pub created_at: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Branch {
+    pub name: String,
+    pub current: bool,
+    /// The one the remote starts new work from.
+    pub default: bool,
+    /// Only on the remote so far. Switching to it makes the local branch.
+    pub remote: bool,
 }
 
 /// A model an agent on the server can run, and the choices it offers.
@@ -373,6 +395,10 @@ pub enum Message {
         folders: Vec<String>,
         #[serde(default)]
         files: Vec<String>,
+    },
+    /// Local branches first, then the ones only on the remote.
+    Branches {
+        branches: Vec<Branch>,
     },
     Uploaded {
         path: String,

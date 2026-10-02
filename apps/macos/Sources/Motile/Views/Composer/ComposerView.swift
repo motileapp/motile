@@ -3,14 +3,28 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Where messages are written: the text, and under it the model, the reasoning effort and how
-/// much the agent may do without asking.
+/// much the agent may do without asking. A strip above says when the agent is monitoring, and
+/// one below says where the thread works: the server, the folder and the branch.
 struct ComposerView: View {
     @Environment(AppStore.self) private var store
     @State private var textHeight: CGFloat = ComposerTextView.minimumHeight
 
     var body: some View {
+        VStack(spacing: 0) {
+            if store.selectedThread != nil, store.activity.monitoring {
+                monitoringStrip
+            }
+            box
+            if let project = store.composerProject {
+                ContextStrip(project: project, server: store.server(project.serverID))
+            }
+        }
+        .frame(maxWidth: Theme.contentWidth)
+    }
+
+    private var box: some View {
         @Bindable var store = store
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             if let thread = store.selectedThread, thread.isDone {
                 doneBanner(thread)
             }
@@ -38,16 +52,46 @@ struct ComposerView: View {
                 controls(compact: true)
             }
         }
-        .frame(maxWidth: Theme.contentWidth)
         .background {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
                 .fill(Color.themeComposer)
                 .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
         }
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
                 .stroke(store.dropTargeted ? Color.themePrimary : Color.themeStrongBorder, lineWidth: store.dropTargeted ? 2 : 1)
         )
+    }
+
+    static let radius: CGFloat = 22
+
+    private var monitoringStrip: some View {
+        HStack(spacing: 0) {
+            Circle()
+                .fill(Color.themeText)
+                .frame(width: 6, height: 6)
+                .padding(.leading, 14)
+                .padding(.trailing, 8)
+            Text("Monitoring")
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.themeText)
+            Spacer(minLength: 8)
+            Button {
+                store.stop()
+            } label: {
+                Text("Stop")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Color.themeSecondary)
+                    .padding(.horizontal, 9)
+                    .frame(height: 24)
+                    .padding(ComposerStrip.margin)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverHighlight(radius: 7, inset: ComposerStrip.margin)
+            .help("Stop monitoring (⌘.)")
+        }
+        .modifier(ComposerStrip(edge: .top))
     }
 
     private var placeholder: String {
@@ -279,7 +323,7 @@ struct ComposerView: View {
     @ViewBuilder private var primaryButtons: some View {
         let running = store.activity.running && store.selectedThread != nil
         let sends = !running || store.canSend
-        if store.activity.busy && store.selectedThread != nil {
+        if running {
             Button {
                 store.stop()
             } label: {
@@ -292,7 +336,7 @@ struct ComposerView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(running ? "Stop (⌘.)" : "Stop monitoring (⌘.)")
+            .help("Stop (⌘.)")
         }
         if sends {
             Button {

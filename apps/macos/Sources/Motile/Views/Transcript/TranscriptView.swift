@@ -162,8 +162,9 @@ final class TranscriptView: FlippedView, RowOwner {
 
     /// Whether the line that says the agent is at work shows under the rows. The row that ends
     /// a turn replaces it right away, a moment before the server says that the agent stopped.
+    /// An agent that only monitors is shown by the composer instead.
     private var showsWorking: Bool {
-        guard activity.busy else { return false }
+        guard activity.running else { return false }
         return endOfRunningTurn == nil || rows.last?.id != endOfRunningTurn
     }
 

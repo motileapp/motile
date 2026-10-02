@@ -81,6 +81,7 @@ struct Server: Equatable, Identifiable {
     let home: String
     /// The version of the server's program.
     let version: String
+    let protocolVersion: Int
     let models: [ModelInfo]
     /// The agents installed on the server, with their versions.
     let agents: [Agent: String]
@@ -99,6 +100,7 @@ struct Server: Equatable, Identifiable {
         known = info != nil
         home = info?.string("home") ?? ""
         version = info?.string("version") ?? ""
+        protocolVersion = (info?["protocol"] as? NSNumber)?.intValue ?? 0
         models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
         var installed: [Agent: String] = [:]
         for agent in info?.objects("agents") ?? [] {
@@ -106,6 +108,25 @@ struct Server: Equatable, Identifiable {
             installed[kind] = version
         }
         agents = installed
+    }
+}
+
+/// A branch of a project's repository.
+struct Branch: Equatable, Identifiable {
+    let name: String
+    let current: Bool
+    /// The one the remote starts new work from.
+    let isDefault: Bool
+    /// Only on the remote so far.
+    let remote: Bool
+
+    var id: String { name }
+
+    init(json: JSON) {
+        name = json.string("name")
+        current = json.bool("current")
+        isDefault = json.bool("default")
+        remote = json.bool("remote")
     }
 }
 

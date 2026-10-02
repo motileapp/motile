@@ -114,6 +114,9 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 - `icons.rs` finds a project's icon in its folder (a favicon, icon or logo file, also in the
   `apps` and `packages` of a workspace). The path is kept with the project; the user can pick
   another image instead.
+- `git.rs` lists the branches of a project's folder and switches or creates one there, with the
+  `git` program. A project is one folder, so its branch is the branch of all its threads; it
+  refuses while an agent is working in the project.
 - `media.rs` keeps the images and videos agents show. An agent shows one by writing a Markdown
   image that points at a file on the server; the agents are told so when they start. The server
   copies the file then, named by its contents, and the item says what it shows and how large it
@@ -159,6 +162,9 @@ Rust library for tests.
   message is a row under the line that says the agent is working, with the buttons that send
   it now or take it back.
 - `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
+  `Views/Composer/ComposerStrips.swift` is the strips against the composer's top and bottom:
+  that the agent is monitoring, and the server, folder and branch the thread works in, with the
+  branch picker.
   `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P, and `Views/Shared` holds the
   window's glass surface, the hover highlight and the agents' and projects' icons.
 - `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that

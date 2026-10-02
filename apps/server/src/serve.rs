@@ -132,6 +132,10 @@ impl Server {
             Request::SetProjectIcon { project_id, path } => {
                 hub.set_project_icon(&project_id, path).await.map(|_| Message::Ok)
             }
+            Request::Branches { project_id } => hub.branches(&project_id).await,
+            Request::SwitchBranch { project_id, branch, create } => {
+                hub.switch_branch(&project_id, &branch, create).await.map(|_| Message::Ok)
+            }
             Request::ListDir { path, icons } => files::list_dir(path.as_deref(), &hub.server_info().home, icons),
             Request::Upload { name, size } => {
                 let saved = files::receive_upload(&mut recv, &self.attachments, &name, size).await;

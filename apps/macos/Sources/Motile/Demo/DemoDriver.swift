@@ -280,6 +280,17 @@ private final class Demo {
         await expect("the agent reports what it watched and is done") { turnEnds == 3 && store.selectedThread?.busy == false }
         await shoot("07-monitored")
 
+        // The branch under the composer opens the picker, and a branch made there is checked out
+        // on the server.
+        store.showsBranches = true
+        await wait(1)
+        await shoot("07-branches")
+        store.showsBranches = false
+        if let project = store.composerProject {
+            store.switchBranch(of: project, to: "demo/strips", create: true) { _ in }
+        }
+        await expect("a branch made from the picker is checked out") { store.composerProject?.branch == "demo/strips" }
+
         // An image the agent shows is fetched from the server and drawn in the reply.
         store.startNewThread()
         send("Show the screenshot of the landing page.")

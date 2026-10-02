@@ -4,6 +4,8 @@
 //!     cargo run -p motile-core --example drive -- /tmp/motile-app http://localhost:3000
 //!     {"id": 1, "type": "dev_sign_in", "email": "you@example.com"}
 //!     {"id": 2, "type": "create_enroll_token"}
+//!     {"id": 3, "type": "request", "server_id": "…", "request": {"type": "branches", "project_id": "…"}}
+//!     {"id": 4, "type": "request", "server_id": "…", "request": {"type": "switch_branch", "project_id": "…", "branch": "main"}}
 
 use std::io::BufRead;
 use std::sync::Arc;

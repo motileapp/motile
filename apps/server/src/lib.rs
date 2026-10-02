@@ -2,6 +2,7 @@ pub mod access;
 pub mod agents;
 pub mod config;
 pub mod files;
+pub mod git;
 pub mod hub;
 pub mod icons;
 pub mod media;
