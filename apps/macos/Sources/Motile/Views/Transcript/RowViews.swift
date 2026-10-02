@@ -8,8 +8,9 @@ protocol RowHost: AnyObject {
     /// Opens or closes a group or a fold, whose rows the core adds and removes.
     func toggleRow(id: String)
     func isExpanded(id: String) -> Bool
-    func allow(_ denials: [Denial])
     func copyReply(endingAt rowID: String)
+    /// Hands over the file of an image or a video, or nothing when it can't be had.
+    func media(id: String, done: @escaping (URL?) -> Void)
 }
 
 /// A filled, rounded rectangle whose colours follow the appearance.
@@ -46,6 +47,12 @@ final class SurfaceView: FlippedView {
         guard let onClick else { return super.mouseDown(with: event) }
         onClick()
     }
+
+    /// A clickable surface keeps the arrow, also when it floats over text.
+    override func resetCursorRects() {
+        guard onClick != nil else { return }
+        addCursorRect(bounds, cursor: .arrow)
+    }
 }
 
 private func label(_ font: NSFont, _ color: NSColor) -> NSTextField {
@@ -60,6 +67,78 @@ private func label(_ font: NSFont, _ color: NSColor) -> NSTextField {
 private func symbol(_ name: String, size: CGFloat = 12, weight: NSFont.Weight = .regular) -> NSImage? {
     let configuration = NSImage.SymbolConfiguration(pointSize: size, weight: weight)
     return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration)
+}
+
+/// A bright copy of a label, laid over it and seen only through a soft band that sweeps across.
+final class ShimmerLabel: NSTextField {
+    private static let bandWidth: CGFloat = 72
+    private static let period: CFTimeInterval = 2.2
+
+    private let band = CAGradientLayer()
+
+    var sweeps = false {
+        didSet { restart() }
+    }
+
+    override var frame: NSRect {
+        didSet {
+            guard frame.size != oldValue.size else { return }
+            restart()
+        }
+    }
+
+    static func make(_ font: NSFont) -> ShimmerLabel {
+        let field = ShimmerLabel(labelWithString: "")
+        field.font = font
+        field.textColor = Theme.text
+        field.lineBreakMode = .byTruncatingTail
+        field.maximumNumberOfLines = 1
+        field.setAccessibilityElement(false)
+
+        let alphas: [CGFloat] = [0, 0.12, 0.55, 1, 0.55, 0.12, 0]
+        field.band.colors = alphas.map { NSColor.black.withAlphaComponent($0).cgColor }
+        field.band.locations = [0, 0.15, 0.35, 0.5, 0.65, 0.85, 1]
+        field.band.startPoint = CGPoint(x: 0, y: 0.5)
+        field.band.endPoint = CGPoint(x: 1, y: 0.5)
+        field.wantsLayer = true
+        field.layer?.mask = field.band
+        return field
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        restart()
+    }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        restart()
+    }
+
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        restart()
+    }
+
+    private func restart() {
+        band.removeAllAnimations()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        band.frame = NSRect(x: -Self.bandWidth, y: 0, width: Self.bandWidth, height: bounds.height)
+        CATransaction.commit()
+        guard sweeps, window != nil, !isHiddenOrHasHiddenAncestor else { return }
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+
+        let sweep = CABasicAnimation(keyPath: "position.x")
+        sweep.fromValue = -Self.bandWidth / 2
+        sweep.toValue = bounds.width + Self.bandWidth / 2
+        sweep.duration = Self.period
+        sweep.repeatCount = .infinity
+        // Every sweep starts on the same beat, so labels move together and a restart doesn't show.
+        let now = band.convertTime(CACurrentMediaTime(), from: nil)
+        sweep.beginTime = now - now.truncatingRemainder(dividingBy: Self.period)
+        band.add(sweep, forKey: "sweep")
+    }
 }
 
 /// A borderless button with an SF Symbol and, optionally, a title. It lights up under the
@@ -146,10 +225,12 @@ class RowView: FlippedView {
             return CodeRowView.height(lines: content.lineCount)
         case .tool, .thinking, .group, .fold:
             return ToolRowView.rowHeight
+        case .media(let content):
+            return MediaRowView.height(content, width: width)
         case .error(let text):
             return estimatedTextHeight(text.length, width: width - 40) + 34
-        case .turnEnd(let end):
-            return end.denials.isEmpty ? 46 : 110 + CGFloat(end.denials.count) * 20
+        case .turnEnd:
+            return TurnEndRowView.height
         }
     }
 
@@ -164,6 +245,7 @@ class RowView: FlippedView {
         case .prose: return ProseRowView()
         case .code: return CodeRowView()
         case .tool, .thinking, .group, .fold: return ToolRowView()
+        case .media: return MediaRowView()
         case .error: return ErrorRowView()
         case .turnEnd: return TurnEndRowView()
         }
@@ -175,6 +257,7 @@ class RowView: FlippedView {
         case .prose: return "prose"
         case .code: return "code"
         case .tool, .thinking, .group, .fold: return "tool"
+        case .media: return "media"
         case .error: return "error"
         case .turnEnd: return "turnEnd"
         }
@@ -291,7 +374,8 @@ final class ProseRowView: RowView {
 
 /// The top of a code box: the language, and a button that copies the code.
 final class CodeHeader: FlippedView {
-    static let height: CGFloat = 32
+    private static let buttonInset: CGFloat = 4
+    static let height = IconButton.side + buttonInset * 2
 
     private let language = label(Theme.smallMono, Theme.secondary)
     private var copyButton: IconButton!
@@ -313,8 +397,8 @@ final class CodeHeader: FlippedView {
 
     func place(_ frame: NSRect) {
         self.frame = frame
-        language.frame = NSRect(x: 14, y: 9, width: max(0, frame.width - 60), height: 15)
-        copyButton.frame = NSRect(x: frame.width - IconButton.side - 4, y: 2, width: IconButton.side, height: IconButton.side)
+        language.frame = NSRect(x: 14, y: 11, width: max(0, frame.width - 60), height: 15)
+        copyButton.frame = NSRect(x: frame.width - IconButton.side - Self.buttonInset, y: Self.buttonInset, width: IconButton.side, height: IconButton.side)
     }
 
     private func copy() {
@@ -413,8 +497,8 @@ final class ToolRowView: RowView {
     private let header = SurfaceView()
     private let icon = NSImageView()
     private let title = label(NSFont.systemFont(ofSize: 13), Theme.secondary)
+    private let shine = ShimmerLabel.make(NSFont.systemFont(ofSize: 13))
     private let chevron = NSImageView()
-    private let spinner = NSProgressIndicator()
     private let detailSurface = SurfaceView()
     private let detail = RowTextView.make()
     private var detailText: (() -> NSAttributedString)?
@@ -432,13 +516,10 @@ final class ToolRowView: RowView {
         icon.imageScaling = .scaleNone
         header.addSubview(icon)
         header.addSubview(title)
+        header.addSubview(shine)
         chevron.contentTintColor = Theme.tertiary
         chevron.imageScaling = .scaleNone
         header.addSubview(chevron)
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.isDisplayedWhenStopped = false
-        header.addSubview(spinner)
 
         detailSurface.fill = Theme.codeBackground
         detailSurface.radius = 8
@@ -468,45 +549,50 @@ final class ToolRowView: RowView {
         switch row.kind {
         case .tool(let tool):
             icon.image = symbol(tool.symbol)
-            setTitle(tool.verb, target: tool.target, failed: tool.status == .failed)
             running = tool.status == .running
+            setTitle(tool.verb, target: tool.target, failed: tool.status == .failed)
             hasDetail = tool.hasDetail
             detailText = { tool.detail() }
         case .thinking(let thought):
             icon.image = symbol("brain")
-            setTitle("Thought")
             running = false
+            setTitle("Thought")
             hasDetail = thought.length > 0
             detailText = { thought }
         case .group(let group):
             icon.image = symbol(ToolContent.symbol(for: group.icon))
-            setTitle(group.title, target: group.target, failed: group.failed)
             running = group.running
+            setTitle(group.title, target: group.target, failed: group.failed)
             hasDetail = true
             detailText = nil
             open = group.open
         case .fold(let fold):
             icon.image = symbol("clock")
-            setTitle(fold.label)
             running = false
+            setTitle(fold.label)
             hasDetail = true
             detailText = nil
             open = fold.open
         default:
             break
         }
-        if running { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
+        shine.sweeps = running
     }
 
+    /// A running call's title is all muted, so the band shows on every part of it.
     private func setTitle(_ words: String, target: String = "", failed: Bool = false) {
         let text = NSMutableAttributedString(
             string: target.isEmpty ? words : words + " ",
             attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.secondary]
         )
-        let targetColor = failed ? Theme.danger : Theme.prose
+        let targetColor = failed ? Theme.danger : running ? Theme.secondary : Theme.prose
         text.append(NSAttributedString(string: target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
         title.attributedStringValue = text
         title.lineBreakMode = .byTruncatingTail
+        guard running else { return }
+        text.addAttribute(.foregroundColor, value: Theme.text, range: NSRange(location: 0, length: text.length))
+        shine.attributedStringValue = text
+        shine.lineBreakMode = .byTruncatingTail
     }
 
     override func layout(width: CGFloat) -> CGFloat {
@@ -518,10 +604,10 @@ final class ToolRowView: RowView {
         icon.frame = NSRect(x: 6, y: 5, width: 16, height: 16)
         let titleWidth = min(title.intrinsicContentSize.width + 4, width - 60)
         title.frame = NSRect(x: 30, y: 4, width: titleWidth, height: 18)
-        spinner.frame = NSRect(x: 30 + titleWidth + 6, y: 5, width: 16, height: 16)
+        shine.frame = title.frame
         chevron.isHidden = !hasDetail
         chevron.image = symbol(open ?? expanded ? "chevron.down" : "chevron.right", size: 9, weight: .semibold)
-        chevron.frame = NSRect(x: 30 + titleWidth + (running ? 26 : 2), y: 5, width: 14, height: 16)
+        chevron.frame = NSRect(x: 30 + titleWidth + 2, y: 5, width: 14, height: 16)
 
         detailSurface.isHidden = !expanded
         guard expanded else { return Self.rowHeight }
@@ -582,14 +668,11 @@ final class ErrorRowView: RowView {
 /// The line that closes a turn: how long it took, a way to copy the reply and, when the agent
 /// was refused a tool, the choice to allow it.
 final class TurnEndRowView: RowView {
+    static let height: CGFloat = 47
+
     private let summary = label(Theme.smallFont, Theme.tertiary)
     private var copyButton: IconButton!
     private let rule = SurfaceView()
-    private let approval = SurfaceView()
-    private let approvalTitle = label(NSFont.systemFont(ofSize: 12, weight: .semibold), Theme.warning)
-    private let approvalList = RowTextView.make()
-    private let allowButton = NSButton(title: "Allow and continue", target: nil, action: nil)
-    private var denials: [Denial] = []
     private var folded = false
 
     override init(frame: NSRect) {
@@ -606,18 +689,6 @@ final class TurnEndRowView: RowView {
         addSubview(copyButton)
         rule.fill = Theme.border
         addSubview(rule)
-
-        approval.fill = Theme.warningBackground
-        approval.radius = 10
-        addSubview(approval)
-        approvalTitle.stringValue = "Waiting for your approval"
-        approval.addSubview(approvalTitle)
-        approval.addSubview(approvalList)
-        allowButton.bezelStyle = .rounded
-        allowButton.controlSize = .regular
-        allowButton.target = self
-        allowButton.action = #selector(allow)
-        approval.addSubview(allowButton)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -628,85 +699,67 @@ final class TurnEndRowView: RowView {
         summary.stringValue = end.label
         folded = end.folded
         summary.isHidden = folded
-        denials = end.denials
-        approval.isHidden = denials.isEmpty
-        let lines = denials.map { "\($0.toolName)  \($0.summary)" }.joined(separator: "\n")
-        approvalList.content = Typesetter.mono(lines, color: Theme.text)
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        var y: CGFloat = 2
-        if !denials.isEmpty {
-            let inner = width - 28
-            let listHeight = approvalList.height(forWidth: inner)
-            approvalTitle.frame = NSRect(x: 14, y: 12, width: inner, height: 16)
-            approvalList.frame = NSRect(x: 14, y: 34, width: inner, height: listHeight)
-            allowButton.sizeToFit()
-            allowButton.frame.origin = NSPoint(x: 12, y: 34 + listHeight + 10)
-            let height = 34 + listHeight + 10 + allowButton.frame.height + 12
-            approval.frame = NSRect(x: 0, y: y, width: width, height: height)
-            y += height + 10
-        }
+        let y: CGFloat = 2
         let summaryWidth = folded ? 0 : min(summary.intrinsicContentSize.width + 4, width - 40)
         summary.frame = NSRect(x: 0, y: y + 3, width: summaryWidth, height: 16)
         copyButton.frame = NSRect(x: folded ? -6 : summaryWidth + 4, y: y - 3, width: IconButton.side, height: IconButton.side)
         rule.frame = NSRect(x: 0, y: y + 30, width: width, height: 1)
-        return y + 30 + 1 + 14
+        return Self.height
     }
-
-    @objc private func allow() {
-        host?.allow(denials)
-    }
-
-    override func clearSelection() { approvalList.clearSelection() }
 }
 
-/// Shown under the transcript while the agent is at work.
+/// Shown under the transcript while the agent is at work, waits for an approval, or monitors
+/// what it left running.
 final class WorkingView: FlippedView {
-    private let dot = SurfaceView()
-    private let text = label(NSFont.systemFont(ofSize: 13), Theme.secondary)
+    /// Digits of one width, so the line doesn't change size with every second.
+    private static let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+
+    private let text = label(WorkingView.font, Theme.secondary)
+    private let shine = ShimmerLabel.make(WorkingView.font)
     private var timer: Timer?
     private var activity = Activity()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        dot.fill = Theme.working
-        dot.radius = 3.5
-        dot.frame = NSRect(x: 2, y: 9, width: 7, height: 7)
-        addSubview(dot)
-        text.frame = NSRect(x: 18, y: 3, width: 300, height: 18)
         addSubview(text)
+        addSubview(shine)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     func update(_ activity: Activity) {
         self.activity = activity
-        isHidden = !activity.running
+        let waiting = !activity.approvals.isEmpty
+        isHidden = !activity.busy
+        shine.sweeps = activity.running && !waiting
         timer?.invalidate()
         timer = nil
-        dot.layer?.removeAllAnimations()
-        guard activity.running else { return }
+        guard activity.running, !waiting else {
+            if activity.busy { show(waiting ? "Waiting for your approval" : "Monitoring") }
+            return
+        }
         refresh()
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-
-        let pulse = CABasicAnimation(keyPath: "opacity")
-        pulse.fromValue = 1
-        pulse.toValue = 0.25
-        pulse.duration = 0.8
-        pulse.autoreverses = true
-        pulse.repeatCount = .infinity
-        dot.layer?.add(pulse, forKey: "pulse")
     }
 
     private func refresh() {
         let verb = activity.thinking ? "Thinking" : "Working"
         guard let started = activity.startedAt else {
-            text.stringValue = "\(verb)…"
+            show("\(verb)…")
             return
         }
-        text.stringValue = "\(verb) for \(Time.elapsed(since: started))"
+        show("\(verb) for \(Time.elapsed(since: started))")
+    }
+
+    private func show(_ words: String) {
+        text.stringValue = words
+        shine.stringValue = words
+        text.frame = NSRect(x: 0, y: 3, width: text.intrinsicContentSize.width, height: 18)
+        shine.frame = text.frame
     }
 }

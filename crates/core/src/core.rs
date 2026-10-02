@@ -23,6 +23,7 @@ use crate::api::{AccountView, Command, Config, Event, HostView, ProjectView, Thr
 use crate::cache::Cache;
 use crate::connection::{HostAddr, bind};
 use crate::link::{Link, LinkEvent, State, Status};
+use crate::media::{self, MediaCache};
 use crate::render::highlight::{self, Spans};
 use crate::render::rows::{Splice, Transcript, Uncoloured};
 
@@ -32,6 +33,8 @@ const FIRST_ITEMS: usize = 30;
 const RENDER_EVERY: Duration = Duration::from_millis(33);
 const SAVE_EVERY: Duration = Duration::from_secs(1);
 const TICK: Duration = Duration::from_secs(2);
+/// How often the app is told how far a download is.
+const PROGRESS_EVERY: Duration = Duration::from_millis(200);
 /// How many ticks pass between account checks when nobody is waiting for a host.
 const ACCOUNT_CHECK_TICKS: u64 = 30;
 
@@ -61,6 +64,7 @@ enum Input {
     SignedIn { id: u64, result: Result<Me, String> },
     Highlighted { thread_id: String, row_id: String, para: Option<usize>, code: String, spans: Spans },
     IconFetched { host_id: String },
+    MediaFetched { id: String, result: Result<String, String> },
     Render,
     Tick,
     Stop,
@@ -107,6 +111,9 @@ struct Core {
     ticks: u64,
     /// The icon files that have been asked for, so none is asked for twice.
     icons_asked: HashSet<String>,
+    media: Arc<MediaCache>,
+    /// The commands waiting for each image or video that is being fetched.
+    media_waiting: HashMap<String, Vec<u64>>,
 }
 
 /// Starts the core on the current tokio runtime.
@@ -139,6 +146,8 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
     let mut core = Core {
         auth: AuthClient::new(&config.auth_url),
         me: cache.account().unwrap_or_default(),
+        media: Arc::new(MediaCache::new(config.data_dir.join("media"))),
+        media_waiting: HashMap::new(),
         config,
         sink,
         inputs: inputs.clone(),
@@ -218,6 +227,12 @@ impl Core {
             Input::IconFetched { host_id } => {
                 let projects = self.cache.projects(&host_id);
                 self.emit_projects(&host_id, projects);
+            }
+            Input::MediaFetched { id, result } => {
+                let answer = result.map(|path| json!({ "path": path }));
+                for waiting in self.media_waiting.remove(&id).unwrap_or_default() {
+                    self.reply(waiting, answer.clone());
+                }
             }
             Input::Render => self.render(),
             Input::Stop => {}
@@ -392,6 +407,7 @@ impl Core {
         self.sync_hosts();
         self.open.clear();
         self.cache.clear();
+        self.media.clear();
         if let Some(endpoint) = self.endpoint.take() {
             tokio::spawn(async move { endpoint.close().await });
         }
@@ -560,6 +576,46 @@ impl Core {
         });
     }
 
+    /// Answers with where the image or video is on this device, fetching it first if it isn't.
+    fn find_media(&mut self, id: u64, host_id: &str, media_id: String) {
+        if let Some(file) = self.media.get(&media_id) {
+            return self.reply(id, Ok(json!({ "path": file.to_string_lossy() })));
+        }
+        if let Some(waiting) = self.media_waiting.get_mut(&media_id) {
+            return waiting.push(id);
+        }
+        let Some(unfinished) = self.media.unfinished(&media_id) else {
+            return self.reply(id, Err("That isn't the name of an image or a video.".to_string()));
+        };
+        let link = match self.link(host_id) {
+            Ok(link) => link,
+            Err(error) => return self.reply(id, Err(error)),
+        };
+        self.media_waiting.insert(media_id.clone(), vec![id]);
+        let (cache, inputs, sink) = (self.media.clone(), self.inputs.clone(), self.sink.clone());
+        tokio::spawn(async move {
+            let mut told = Instant::now();
+            let progress = |received, size| {
+                if told.elapsed() < PROGRESS_EVERY {
+                    return;
+                }
+                told = Instant::now();
+                sink(Event::MediaProgress { id: media_id.clone(), received, size });
+            };
+            let fetched = async {
+                link.media(&media_id, &unfinished, progress).await?;
+                let file = media::finish(&unfinished)?;
+                cache.trim(media::LIMIT);
+                anyhow::Ok(file.to_string_lossy().into_owned())
+            };
+            let result = fetched.await.map_err(error_text);
+            if result.is_err() {
+                let _ = std::fs::remove_file(&unfinished);
+            }
+            let _ = inputs.send(Input::MediaFetched { id: media_id, result });
+        });
+    }
+
     fn thread_view(&self, host_id: &str, thread: &Thread) -> ThreadView {
         ThreadView {
             unread: is_unread(thread, self.cache.seen_at(&thread.id)),
@@ -631,6 +687,7 @@ impl Core {
         let Some(open) = self.open.get_mut(thread_id) else { return };
         match message {
             Message::Opened { reset, activity } => {
+                let waiting = activity.approvals.iter().map(|approval| open.transcript.waiting(approval)).collect();
                 open.live = false;
                 if reset {
                     open.transcript.clear();
@@ -640,7 +697,7 @@ impl Core {
                     self.cache.clear_items(thread_id);
                     self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows: Vec::new() });
                 }
-                self.emit(Event::Activity { thread_id: thread_id.to_string(), activity });
+                self.emit(Event::Activity { thread_id: thread_id.to_string(), activity, waiting });
             }
             Message::Items { items } => {
                 let live = open.live;
@@ -683,7 +740,8 @@ impl Core {
                 if !activity.running {
                     open.transcript.end_streaming();
                 }
-                self.emit(Event::Activity { thread_id: thread_id.to_string(), activity });
+                let waiting = activity.approvals.iter().map(|approval| open.transcript.waiting(approval)).collect();
+                self.emit(Event::Activity { thread_id: thread_id.to_string(), activity, waiting });
             }
             Message::Error { message } => {
                 self.open.remove(thread_id);
@@ -853,6 +911,17 @@ impl Core {
                     let set = link.request(&Request::SetProjectIcon { project_id, path }).await;
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
+            }
+            Command::Media { host_id, id: media_id } => self.find_media(id, &host_id, media_id),
+            Command::Storage => {
+                let (media, sink) = (self.media.clone(), self.sink.clone());
+                tokio::task::spawn_blocking(move || {
+                    reply(&sink, id, Ok(json!({ "media_bytes": media.size(), "media_limit": media::LIMIT })));
+                });
+            }
+            Command::ClearMedia => {
+                self.media.clear();
+                self.reply(id, Ok(json!({})));
             }
             Command::Highlight { thread_id, row_ids } => {
                 self.highlight(&thread_id, &row_ids);

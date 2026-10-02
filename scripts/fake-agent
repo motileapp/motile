@@ -3,31 +3,58 @@
 
 By default it replays a recorded transcript: FAKE_AGENT_FIXTURE names a .jsonl file recorded with
 `claude -p --output-format stream-json --verbose --include-partial-messages` or `codex exec --json`.
-Some prompts get a reply made up on the spot instead:
+With `--input-format stream-json` the prompt is the first JSON line on stdin, as Claude Code reads
+it. Some prompts get a reply made up on the spot instead:
 
 - "long reply with a lot of code": steps with code inside a list, then ten large code blocks,
   streamed in small pieces.
 - "rate limiter": a turn with thinking, tool calls and a reply that uses most of Markdown.
 - "huge transcript": four hundred messages with code and tool calls, for a very long thread.
+- "watch the deploy": a turn that starts a monitor. The process then stays, as Claude Code's does:
+  it answers the prompts it is given, and FAKE_AGENT_WATCH seconds after the last one it says what
+  the monitor saw and exits.
+- "run greet.py": a turn that edits a file and runs it. With `--permission-mode default` it asks
+  before each of the two and waits for the answer on stdin.
+- "which color": a turn that asks the user a question and goes on with the answer.
+- "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
+- "show the screenshot": a turn that writes `screenshot.png` in its folder and shows it in the reply.
 
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
 answers with FAKE_AGENT_TITLE. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
-per call.
+per call, and the settings it was told to change while it ran, one JSON object each.
 """
 import json
 import os
+import queue
+import struct
 import sys
+import threading
 import time
+import zlib
 
 if "--version" in sys.argv:
     print("2.1.284 (Claude Code, fake)")
     sys.exit(0)
 
-prompt = sys.stdin.read()
+
+def read_prompt():
+    if "--input-format" not in sys.argv:
+        return sys.stdin.read()
+    line = sys.stdin.readline()
+    return json.loads(line)["message"]["content"] if line.strip() else ""
+
+
+prompt = read_prompt()
 arguments_file = os.environ.get("FAKE_AGENT_ARGUMENTS_FILE")
-if arguments_file:
-    with open(arguments_file, "a") as f:
-        f.write(json.dumps(sys.argv[1:]) + "\n")
+
+
+def record(what):
+    if arguments_file:
+        with open(arguments_file, "a") as f:
+            f.write(json.dumps(what) + "\n")
+
+
+record(sys.argv[1:])
 
 delay = float(os.environ.get("FAKE_AGENT_DELAY", "0.02"))
 
@@ -43,6 +70,10 @@ def title_answer():
         title = "Long Reply With Code"
     if "huge transcript" in message:
         title = "Four Hundred Steps"
+    if "watch the deploy" in message:
+        title = "Watch the Deploy"
+    if "show the screenshot" in message:
+        title = "Screenshot of the Landing Page"
     return {"title": os.environ.get("FAKE_AGENT_TITLE", title), "needsRefinement": "fix this" in message}
 
 
@@ -67,14 +98,15 @@ def emit(event, pause=0.0):
 class Turn:
     """Writes Claude Code's stream-json for a scripted turn."""
 
+    messages = 0
+
     def __init__(self, session_id, piece=24, pause=0.01):
-        self.messages = 0
         self.piece = piece
         self.pause = pause
         emit({"type": "system", "subtype": "init", "session_id": session_id})
 
     def _start(self):
-        self.messages += 1
+        Turn.messages += 1
         message_id = f"msg_{self.messages:04d}"
         emit({"type": "stream_event", "event": {"type": "message_start", "message": {"id": message_id}}})
         return message_id
@@ -97,7 +129,8 @@ class Turn:
         emit({"type": "assistant", "message": {"id": message_id, "content": [{"type": "text", "text": text}]}})
         emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}})
 
-    def tool(self, name, tool_input, output, seconds=0.25, is_error=False):
+    def tool(self, name, tool_input, output, seconds=0.25, is_error=False, ask=False):
+        """Makes the tool call, after asking when `ask` is set. Says whether it was made."""
         message_id = self._start()
         tool_id = f"toolu_{self.messages:04d}"
         block = {"type": "tool_use", "id": tool_id, "name": name, "input": {}}
@@ -105,8 +138,23 @@ class Turn:
         block = dict(block, input=tool_input)
         emit({"type": "assistant", "message": {"id": message_id, "content": [block]}})
         emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}}, seconds)
+        answer = self._answer(name, tool_input, tool_id) if ask else {"behavior": "allow"}
+        allowed = answer["behavior"] == "allow"
+        if not allowed:
+            output, is_error = "The user refused this.", True
+        if callable(output):
+            output = output(answer)
         result = {"type": "tool_result", "tool_use_id": tool_id, "content": output, "is_error": is_error}
         emit({"type": "user", "message": {"content": [result]}})
+        return allowed
+
+    def _answer(self, name, tool_input, tool_id):
+        request = {"subtype": "can_use_tool", "tool_name": name, "input": tool_input, "tool_use_id": tool_id}
+        emit({"type": "control_request", "request_id": f"request_{self.messages:04d}", "request": request})
+        answer = sys.stdin.readline()
+        if not answer:
+            sys.exit(0)
+        return json.loads(answer)["response"]["response"]
 
     def done(self):
         emit({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 1, "total_cost_usd": 0.0412,
@@ -242,6 +290,141 @@ def huge_transcript():
     turn.text("All 400 steps are in place and their tests pass.")
     turn.done()
 
+
+def watch_the_deploy():
+    session_id = "00000000-0000-4000-8000-00000000d00d"
+
+    def background(tasks):
+        emit({"type": "system", "subtype": "background_tasks_changed", "tasks": tasks})
+
+    turn = Turn(session_id)
+    command = "until curl -sf https://api.example.com/health; do sleep 5; done; echo healthy"
+    turn.tool("Monitor", {"command": command, "description": "deploy status"},
+              "Monitor started (task b1). You will be notified on each event.")
+    background([{"task_id": "b1", "task_type": "local_bash", "description": "deploy status"}])
+    turn.text("The deploy is rolling out. I'm watching it and will tell you when it is healthy.")
+    turn.done()
+
+    lines = queue.Queue()
+    threading.Thread(target=lambda: [lines.put(line) for line in sys.stdin], daemon=True).start()
+    while True:
+        try:
+            line = lines.get(timeout=float(os.environ.get("FAKE_AGENT_WATCH", "2")))
+        except queue.Empty:
+            break
+        message = json.loads(line)
+        if message["type"] == "control_request":
+            record(message["request"])
+            continue
+        said = message["message"]["content"]
+        turn = Turn(session_id)
+        turn.text(f"Still rolling out; 2 of 3 services are up. You said: {said}")
+        turn.done()
+
+    background([])
+    turn = Turn(session_id)
+    turn.text("The deploy finished: all 3 services are healthy.")
+    turn.done()
+
+
+def run_greet():
+    asks = "default" in sys.argv
+    turn = Turn("00000000-0000-4000-8000-00000000a5c0")
+    turn.text("I'll switch `greet` to an f-string and run it.")
+    edit = {"file_path": "/srv/api/greet.py", "old_string": 'return "Hello, " + name + "!"',
+            "new_string": 'return f"Hello, {name}!"'}
+    edited = turn.tool("Edit", edit, "The file /srv/api/greet.py has been updated successfully.", ask=asks)
+    ran = edited and turn.tool("Bash", {"command": "python3 greet.py", "description": "Run greet.py"},
+                               "Hello, world!", ask=asks)
+    if ran:
+        turn.text("`greet` uses an f-string now, and running it prints `Hello, world!`.")
+    elif edited:
+        turn.text("`greet` uses an f-string now. I didn't run it.")
+    else:
+        turn.text("I left `greet.py` as it was.")
+    turn.done()
+
+
+def which_color():
+    turn = Turn("00000000-0000-4000-8000-0000000c0102")
+    options = [{"label": "Red", "description": "Stands out on the page"},
+               {"label": "Blue", "description": "Matches the rest of the app"}]
+    question = {"question": "Which color should the button be?", "header": "Color", "options": options,
+                "multiSelect": False}
+    chosen = {}
+
+    def answered(answer):
+        chosen.update(answer["updatedInput"]["answers"])
+        return "Your questions have been answered."
+
+    if turn.tool("AskUserQuestion", {"questions": [question]}, answered, ask=True):
+        turn.text(f"The button will be {chosen[question['question']].lower()}.")
+    else:
+        turn.text("I'll leave the button as it is.")
+    turn.done()
+
+
+def plan_hello():
+    turn = Turn("00000000-0000-4000-8000-00000000b1a0")
+    turn.tool("Read", {"file_path": "/srv/api/hello.py"}, "1\tdef main():\n2\t    pass\n")
+    plan = "## Add a greeting\n\n1. Add `hello()` to `hello.py`, which prints the greeting.\n2. Call it from `main()`.\n3. Run the file to see it.\n"
+    mode = {}
+
+    def approved(answer):
+        mode.update(answer["updatedPermissions"][0])
+        return "User has approved your plan. You can now start coding."
+
+    if turn.tool("ExitPlanMode", {"plan": plan}, approved, ask=True):
+        turn.tool("Write", {"file_path": "/srv/api/hello.py", "content": 'def hello():\n    print("Hello!")\n'},
+                  "File created successfully at: /srv/api/hello.py")
+        turn.text(f"`hello()` is in place. I worked in {mode['mode']} mode.")
+    else:
+        turn.text("I'll keep planning. What should change?")
+    turn.done()
+
+
+def png(width, height):
+    """A picture of that size: a page with a bar across its top."""
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    bar = b"\x00" + bytes((36, 99, 235)) * width
+    page = b"\x00" + bytes((244, 245, 247)) * width
+    rows = b"".join(bar if row < height // 6 else page for row in range(height))
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+
+
+def show_screenshot():
+    turn = Turn("00000000-0000-4000-8000-0000000005c7")
+    path = os.path.join(os.getcwd(), "screenshot.png")
+    with open(path, "wb") as f:
+        f.write(png(960, 600))
+    command = "npx playwright screenshot http://localhost:3000 screenshot.png"
+    turn.tool("Bash", {"command": command, "description": "Take a screenshot"}, "Saved screenshot.png", seconds=0.1)
+    turn.text(f"Here is the page as it looks now:\n\n![The landing page]({path})\n\nThe header is in place.")
+    turn.done()
+
+
+if "show the screenshot" in prompt.lower():
+    show_screenshot()
+    sys.exit(0)
+
+if "run greet.py" in prompt.lower():
+    run_greet()
+    sys.exit(0)
+
+if "which color" in prompt.lower():
+    which_color()
+    sys.exit(0)
+
+if "plan the hello" in prompt.lower():
+    plan_hello()
+    sys.exit(0)
+
+if "watch the deploy" in prompt.lower():
+    watch_the_deploy()
+    sys.exit(0)
 
 if "huge transcript" in prompt.lower():
     huge_transcript()

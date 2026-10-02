@@ -14,6 +14,9 @@ struct ComposerView: View {
             if let thread = store.selectedThread, thread.isDone {
                 doneBanner(thread)
             }
+            if store.selectedThread != nil, !store.activity.approvals.isEmpty {
+                approvals
+            }
             if !store.attachments.isEmpty {
                 attachments
             }
@@ -30,22 +33,10 @@ struct ComposerView: View {
             .padding(.horizontal, 14)
             .padding(.top, 12)
 
-            HStack(spacing: 2) {
-                modelMenu
-                effortMenu
-                accessMenu
-                Spacer(minLength: 8)
-                IconOnlyButton(symbol: "paperclip", help: "Attach files", size: 30, symbolSize: 15) {
-                    chooseFiles()
-                }
-                .foregroundStyle(Color.themeSecondary)
-                .padding(.trailing, 6)
-                HStack(spacing: 8) {
-                    primaryButtons
-                }
+            ViewThatFits(in: .horizontal) {
+                controls(compact: false)
+                controls(compact: true)
             }
-            .padding(.leading, 7)
-            .padding([.trailing, .bottom, .top], 8)
         }
         .frame(maxWidth: Theme.contentWidth)
         .background {
@@ -84,6 +75,44 @@ struct ComposerView: View {
         .padding(.top, 12)
     }
 
+    /// The tool calls the agent waits with: each is allowed or refused, and one that asks
+    /// questions is answered.
+    private var approvals: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Waiting for you")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.themeWarning)
+            ForEach(store.activity.approvals) { approval in
+                if approval.questions.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: approval.symbol)
+                            .foregroundStyle(Color.themeSecondary)
+                        Text(approval.title)
+                            .fontWeight(.medium)
+                        Text(approval.target)
+                            .font(.system(size: 12, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        Button(approval.refuseLabel) { store.answer(approval, allow: false) }
+                            .buttonStyle(.bordered)
+                        Button(approval.allowLabel) { store.answer(approval, allow: true) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    .controlSize(.small)
+                } else {
+                    QuestionsView(approval: approval)
+                        .id(approval.id)
+                }
+            }
+        }
+        .font(.system(size: 12.5))
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: Theme.warningBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding([.horizontal, .top], 10)
+    }
+
     private var attachments: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
@@ -97,8 +126,8 @@ struct ComposerView: View {
                         }
                     }
                     .font(.system(size: 12))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
+                    .padding(.leading, 9)
+                    .padding([.vertical, .trailing], 5)
                     .background(Color.themeBubble, in: Capsule())
                 }
             }
@@ -107,7 +136,28 @@ struct ComposerView: View {
         .padding(.top, 12)
     }
 
-    private func control(_ title: String, symbol: String? = nil, agent: Agent? = nil) -> some View {
+    /// The row under the text. When it is too narrow for all of it, the model and the access
+    /// are only their icons. The space between its controls and around them is their margins,
+    /// so each takes clicks up to the next one and to the composer's edges.
+    private func controls(compact: Bool) -> some View {
+        HStack(spacing: 0) {
+            modelMenu(compact: compact)
+            effortMenu
+            accessMenu(compact: compact)
+            Spacer(minLength: 10)
+            IconOnlyButton(symbol: "paperclip", help: "Attach files", size: 30, symbolSize: 15, inset: Self.margin(trailing: 4)) {
+                chooseFiles()
+            }
+            .foregroundStyle(Color.themeSecondary)
+            primaryButtons
+        }
+    }
+
+    private static func margin(leading: CGFloat = 1, trailing: CGFloat = 1) -> EdgeInsets {
+        EdgeInsets(top: 8, leading: leading, bottom: 8, trailing: trailing)
+    }
+
+    private func control(_ title: String?, symbol: String? = nil, agent: Agent? = nil, margin: EdgeInsets) -> some View {
         HStack(spacing: 6) {
             if let agent {
                 AgentIcon(agent: agent, size: 14)
@@ -116,9 +166,11 @@ struct ComposerView: View {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .medium))
             }
-            Text(title)
-                .font(.system(size: 12.5, weight: .medium))
-                .lineLimit(1)
+            if let title {
+                Text(title)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .lineLimit(1)
+            }
             Image(systemName: "chevron.down")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(Color.themeTertiary)
@@ -126,6 +178,7 @@ struct ComposerView: View {
         .foregroundStyle(Color.themeSecondary)
         .padding(.horizontal, 9)
         .frame(height: 30)
+        .padding(margin)
         .contentShape(Rectangle())
     }
 
@@ -144,15 +197,18 @@ struct ComposerView: View {
         }
     }
 
-    @ViewBuilder private var modelMenu: some View {
+    @ViewBuilder private func modelMenu(compact: Bool) -> some View {
         let models = store.composerModels
+        let current = store.composerModel
+        let name = current?.name ?? "No agent"
+        let margin = Self.margin(leading: 7)
         Menu {
             ForEach(Agent.allCases, id: \.self) { agent in
                 let ofAgent = models.filter { $0.agent == agent }
                 if !ofAgent.isEmpty {
                     Section(agent.name) {
                         ForEach(ofAgent) { model in
-                            choice(model.name, image: agent.menuLogo, chosen: model.id == store.composerModel?.id) {
+                            choice(model.name, image: agent.menuLogo, chosen: model.id == current?.id) {
                                 store.setModel(model)
                             }
                         }
@@ -160,14 +216,15 @@ struct ComposerView: View {
                 }
             }
         } label: {
-            control(store.composerModel?.name ?? "No agent", agent: store.composerModel?.agent)
+            control(compact && current != nil ? nil : name, agent: current?.agent, margin: margin)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .hoverHighlight(radius: 9)
+        .hoverHighlight(radius: 9, inset: margin)
         .disabled(models.isEmpty)
+        .help(name)
     }
 
     @ViewBuilder private var effortMenu: some View {
@@ -179,13 +236,13 @@ struct ComposerView: View {
                     }
                 }
             } label: {
-                control(effortLabel(store.composerEffort ?? ""))
+                control(effortLabel(store.composerEffort ?? ""), margin: Self.margin())
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .hoverHighlight(radius: 9)
+            .hoverHighlight(radius: 9, inset: Self.margin())
         }
     }
 
@@ -197,8 +254,9 @@ struct ComposerView: View {
         }
     }
 
-    private var accessMenu: some View {
-        Menu {
+    private func accessMenu(compact: Bool) -> some View {
+        let label = store.composerPlan ? "Plan" : store.composerAccess.label
+        return Menu {
             ForEach(Access.allCases) { access in
                 choice(access.label, image: NSImage(systemSymbolName: access.symbol, accessibilityDescription: nil), chosen: access == store.composerAccess) {
                     store.setAccess(access)
@@ -208,19 +266,20 @@ struct ComposerView: View {
             Divider()
             Toggle("Plan mode", isOn: Binding(get: { store.composerPlan }, set: { store.setPlan($0) }))
         } label: {
-            control(store.composerPlan ? "Plan" : store.composerAccess.label, symbol: store.composerPlan ? "list.bullet.clipboard" : store.composerAccess.symbol)
+            control(compact ? nil : label, symbol: store.composerPlan ? "list.bullet.clipboard" : store.composerAccess.symbol, margin: Self.margin())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .hoverHighlight(radius: 9)
+        .hoverHighlight(radius: 9, inset: Self.margin())
         .help(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail)
     }
 
     @ViewBuilder private var primaryButtons: some View {
         let running = store.activity.running && store.selectedThread != nil
-        if running {
+        let sends = !running || store.canSend
+        if store.activity.busy && store.selectedThread != nil {
             Button {
                 store.stop()
             } label: {
@@ -229,11 +288,13 @@ struct ComposerView: View {
                     .frame(width: 10, height: 10)
                     .frame(width: 30, height: 30)
                     .background(Color.themeDanger.opacity(0.9), in: Circle())
+                    .padding(Self.margin(leading: 4, trailing: sends ? 4 : 8))
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Stop (⌘.)")
+            .help(running ? "Stop (⌘.)" : "Stop monitoring (⌘.)")
         }
-        if !running || store.canSend {
+        if sends {
             Button {
                 store.send()
             } label: {
@@ -243,6 +304,8 @@ struct ComposerView: View {
                     .frame(width: 30, height: 30)
                     .background(Color.themePrimary, in: Circle())
                     .opacity(store.canSend ? 1 : 0.4)
+                    .padding(Self.margin(leading: 4, trailing: 8))
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!store.canSend)
@@ -261,7 +324,23 @@ struct ComposerView: View {
 
 /// The composer's text: grows with what is typed, sends on Return, and takes dropped files.
 struct ComposerTextView: NSViewRepresentable {
-    static let minimumHeight: CGFloat = 44
+    static let font = NSFont.systemFont(ofSize: 14)
+    static let paragraphStyle: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = 3
+        return style
+    }()
+    static let verticalInset: CGFloat = 4
+    /// Two lines, so the composer only grows when a third one starts.
+    static let minimumHeight: CGFloat = {
+        let storage = NSTextStorage(string: "1\n2", attributes: [.font: font, .paragraphStyle: paragraphStyle])
+        let layout = NSLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: NSSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
+        layout.addTextContainer(container)
+        layout.ensureLayout(for: container)
+        return ceil(layout.usedRect(for: container).height) + verticalInset * 2
+    }()
     static let maximumHeight: CGFloat = 220
 
     @Binding var text: String
@@ -295,10 +374,10 @@ struct ComposerTextView: NSViewRepresentable {
         view.isRichText = false
         view.allowsUndo = true
         view.drawsBackground = false
-        view.font = NSFont.systemFont(ofSize: 14)
+        view.font = Self.font
         view.textColor = Theme.text
         view.insertionPointColor = Theme.text
-        view.textContainerInset = NSSize(width: 0, height: 4)
+        view.textContainerInset = NSSize(width: 0, height: Self.verticalInset)
         view.textContainer?.lineFragmentPadding = 2
         view.isVerticallyResizable = true
         view.isHorizontallyResizable = false
@@ -308,15 +387,11 @@ struct ComposerTextView: NSViewRepresentable {
         view.isAutomaticDashSubstitutionEnabled = false
         view.isAutomaticTextReplacementEnabled = false
         view.isAutomaticSpellingCorrectionEnabled = false
-        view.defaultParagraphStyle = {
-            let style = NSMutableParagraphStyle()
-            style.lineSpacing = 3
-            return style
-        }()
+        view.defaultParagraphStyle = Self.paragraphStyle
         view.typingAttributes = [
-            .font: NSFont.systemFont(ofSize: 14),
+            .font: Self.font,
             .foregroundColor: Theme.text,
-            .paragraphStyle: view.defaultParagraphStyle ?? NSParagraphStyle.default,
+            .paragraphStyle: Self.paragraphStyle,
         ]
         view.onSubmit = onSubmit
         view.onFiles = onFiles
@@ -403,7 +478,7 @@ final class ComposerNSTextView: NSTextView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty, !placeholder.isEmpty else { return }
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: Theme.tertiary]
+        let attributes: [NSAttributedString.Key: Any] = [.font: ComposerTextView.font, .foregroundColor: Theme.tertiary]
         let origin = NSPoint(x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0), y: textContainerInset.height)
         (placeholder as NSString).draw(at: origin, withAttributes: attributes)
     }

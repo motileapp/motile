@@ -97,6 +97,8 @@ enum Theme {
     /// The widest the transcript and the composer get.
     static let contentWidth: CGFloat = 768
     static let contentPadding: CGFloat = 24
+    /// The invisible area that takes the drag around a line that resizes.
+    static let resizeGrab: CGFloat = 17
 }
 
 extension Color {

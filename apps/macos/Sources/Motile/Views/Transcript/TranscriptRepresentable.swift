@@ -10,7 +10,6 @@ struct TranscriptRepresentable: NSViewRepresentable {
         let view = TranscriptView()
         let store = store
         view.bottomInset = bottomInset
-        view.onAllow = { store.allow($0) }
         view.onNeedHighlight = { rowIDs in
             guard let threadID = store.transcript.threadID else { return }
             store.core.send("highlight", ["thread_id": threadID, "row_ids": rowIDs])
@@ -19,6 +18,7 @@ struct TranscriptRepresentable: NSViewRepresentable {
             guard let threadID = store.transcript.threadID else { return }
             store.core.send("toggle_row", ["thread_id": threadID, "row_id": rowID])
         }
+        view.onNeedMedia = { id, done in store.media(id, done: done) }
         let hooks = TranscriptModel.Hooks(
             reset: { [weak view] rows in view?.reset(rows: rows) },
             splice: { [weak view] start, remove, rows in view?.splice(start: start, remove: remove, rows: rows) },

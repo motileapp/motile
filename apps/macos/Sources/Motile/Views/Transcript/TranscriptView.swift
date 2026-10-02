@@ -7,24 +7,32 @@ import AppKit
 /// what is on screen. When heights above the viewport turn out different from their estimates,
 /// the scroll position is corrected in the same pass, so nothing on screen moves.
 final class TranscriptView: FlippedView, RowHost {
-    var onAllow: (([Denial]) -> Void)?
     /// Rows that came into view with code that isn't highlighted.
     var onNeedHighlight: (([String]) -> Void)?
     var onToggleRow: ((String) -> Void)?
+    /// A row needs the file of an image or a video; it is called back with it.
+    var onNeedMedia: ((String, @escaping (URL?) -> Void) -> Void)?
 
     /// Room left under the last row for what floats over the transcript's end.
     var bottomInset: CGFloat = 0 {
         didSet {
             guard bottomInset != oldValue else { return }
             updateVisible()
-            jumpButton.frame.origin.y = bounds.height - bottomInset - 20
+            jumpButton.frame.origin.y = jumpButtonY
         }
     }
 
-    private static let topPadding: CGFloat = 20
+    /// Right above the inset, where the transcript starts to fade.
+    private var jumpButtonY: CGFloat { bounds.height - bottomInset - 32 }
+
+    /// Room above the first row, which the transcript fades out in.
+    static let topPadding: CGFloat = 20
     private static let overscan: CGFloat = 400
     private static let pooledPerKind = 10
-    private static let workingHeight: CGFloat = 30
+    /// As tall as the row that ends a turn, which takes the working line's place.
+    private static let workingHeight = TurnEndRowView.height
+    /// How close to the end a scroll has to come for the view to follow the end again.
+    private static let pinDistance: CGFloat = 30
 
     private let scrollView = NSScrollView()
     private let document = FlippedView()
@@ -44,9 +52,17 @@ final class TranscriptView: FlippedView, RowHost {
     private var expanded: Set<String> = []
     private var requestedHighlight: Set<String> = []
     private var activity = Activity()
+    /// The row that ended the turn the host still reports as running.
+    private var endOfRunningTurn: String?
 
-    /// Whether the view follows the end of the transcript as it grows.
+    /// Whether the view follows the end of the transcript as it grows. It then rests on the end
+    /// whenever the user isn't scrolling.
     private var pinned = true
+    /// Whether the user's fingers, or the momentum they gave it, are moving the viewport.
+    private var userScrolling = false
+    /// Where the end was when the user pulled the viewport past it; the scroll view bounces
+    /// back to there by itself.
+    private var bounceEnd: CGFloat?
     private var updating = false
     /// Where the viewport was after the last scroll, to tell which way the next one goes.
     private var lastScrollY: CGFloat = 0
@@ -105,6 +121,18 @@ final class TranscriptView: FlippedView, RowHost {
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(userScrollBegan),
+            name: NSScrollView.willStartLiveScrollNotification,
+            object: scrollView
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(userScrollEnded),
+            name: NSScrollView.didEndLiveScrollNotification,
+            object: scrollView
+        )
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -126,15 +154,25 @@ final class TranscriptView: FlippedView, RowHost {
 
     private var viewportHeight: CGFloat { scrollView.contentView.bounds.height }
 
+    /// Where the viewport's top is when it shows the end.
+    private var endY: CGFloat { max(0, document.frame.height - viewportHeight) }
+
+    /// Whether the line that says the agent is at work shows under the rows. The row that ends
+    /// a turn replaces it right away, a moment before the host says that the agent stopped.
+    private var showsWorking: Bool {
+        guard activity.busy else { return false }
+        return endOfRunningTurn == nil || rows.last?.id != endOfRunningTurn
+    }
+
     private var contentHeight: CGFloat {
-        let workingHeight = activity.running ? Self.workingHeight : 0
+        let workingHeight = showsWorking ? Self.workingHeight : 0
         return Self.topPadding + (offsets.last ?? 0) + workingHeight + bottomInset + 16
     }
 
     override func layout() {
         super.layout()
         scrollView.frame = bounds
-        jumpButton.frame.origin = NSPoint(x: ((bounds.width - 32) / 2).rounded(), y: bounds.height - bottomInset - 20)
+        jumpButton.frame.origin = NSPoint(x: ((bounds.width - 32) / 2).rounded(), y: jumpButtonY)
         guard bounds.width != layoutWidth else {
             updateVisible()
             return
@@ -189,9 +227,9 @@ final class TranscriptView: FlippedView, RowHost {
         return Anchor(id: rows[index].id, delta: top - offsets[index])
     }
 
-    private var animates: Bool {
-        activity.running && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    }
+    private var reducesMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    private var animates: Bool { activity.running && !reducesMotion }
 
     // MARK: Content
 
@@ -206,8 +244,9 @@ final class TranscriptView: FlippedView, RowHost {
         expanded.removeAll()
         requestedHighlight.removeAll()
         stale.removeAll()
+        endOfRunningTurn = nil
         stopGlide()
-        pinned = true
+        pin()
         updateVisible()
     }
 
@@ -217,6 +256,10 @@ final class TranscriptView: FlippedView, RowHost {
         let opening = toggled.flatMap { $0.id == new.first?.id ? $0 : nil }
         let anchor = opening ?? currentAnchor()
         let range = start..<(start + remove)
+        // The host has the message now: its row takes the place of the copy shown while it
+        // travelled, and as a first guess its height.
+        let sentHeight = hasPending && new.contains(where: \.isUser) ? heights.last : nil
+        if sentHeight != nil { removePending() }
 
         // A row that is replaced by one with the same id keeps its view and, as a first guess,
         // its height: it is usually the same row with more text.
@@ -229,7 +272,12 @@ final class TranscriptView: FlippedView, RowHost {
             fresh.formUnion(new.filter { known[$0.id] == nil && !$0.isUser }.map(\.id))
         }
         rows.replaceSubrange(range, with: new)
-        heights.replaceSubrange(range, with: new.map { known[$0.id] ?? RowView.estimatedHeight($0, width: columnWidth) })
+        if activity.running, let last = rows.last, case .turnEnd = last.kind, kept.contains(last.id) {
+            endOfRunningTurn = last.id
+        }
+        heights.replaceSubrange(range, with: new.map { row in
+            known[row.id] ?? (row.isUser ? sentHeight : nil) ?? RowView.estimatedHeight(row, width: columnWidth)
+        })
         measured.replaceSubrange(range, with: [Bool](repeating: false, count: new.count))
         offsets = []
         recomputeOffsets(from: 0)
@@ -250,7 +298,7 @@ final class TranscriptView: FlippedView, RowHost {
             let wasPinned = pinned
             pinned = false
             updateVisible(anchor: anchor)
-            pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < 30
+            pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < Self.pinDistance
             jumpButton.isHidden = pinned || rows.isEmpty
         } else {
             updateVisible(anchor: anchor)
@@ -261,30 +309,34 @@ final class TranscriptView: FlippedView, RowHost {
 
     /// Shows a message at the end before the host has confirmed it, or takes it away again.
     func setPending(_ row: RowModel?) {
-        if hasPending {
-            let last = rows.count - 1
-            recycle(rows[last].id)
-            rows.removeLast()
-            heights.removeLast()
-            measured.removeLast()
-            hasPending = false
-        }
+        removePending()
         if let row {
             rows.append(row)
             heights.append(RowView.estimatedHeight(row, width: columnWidth))
             measured.append(false)
             hasPending = true
-            pinned = true
+            pin()
         }
         offsets = []
         recomputeOffsets(from: 0)
         updateVisible()
     }
 
+    private func removePending() {
+        guard hasPending else { return }
+        recycle(rows[rows.count - 1].id)
+        rows.removeLast()
+        heights.removeLast()
+        measured.removeLast()
+        hasPending = false
+    }
+
     func setActivity(_ activity: Activity) {
+        if !activity.running || activity.startedAt != self.activity.startedAt { endOfRunningTurn = nil }
         self.activity = activity
         working.update(activity)
-        updateVisible()
+        updateVisible(follows: false)
+        land()
     }
 
     /// The row's code has been highlighted; shows the colours if the row is on screen.
@@ -293,8 +345,15 @@ final class TranscriptView: FlippedView, RowHost {
     }
 
     func scrollToEnd() {
-        pinned = true
+        pin()
         updateVisible()
+    }
+
+    /// Follows the end from now on, whatever the user was doing with the viewport.
+    private func pin() {
+        pinned = true
+        userScrolling = false
+        bounceEnd = nil
     }
 
     // MARK: Rows on screen
@@ -350,24 +409,54 @@ final class TranscriptView: FlippedView, RowHost {
         case is ProseRowView: "prose"
         case is CodeRowView: "code"
         case is ToolRowView: "tool"
+        case is MediaRowView: "media"
         case is ErrorRowView: "error"
         default: "turnEnd"
         }
     }
 
-    /// The user scrolled. Scrolling up, by however little, stops following the end; coming back
-    /// near the end follows it again. The viewport itself is left where they put it.
+    /// The user scrolled. Scrolling up, by however little, stops following the end; coming down
+    /// near the end follows it again. The way back from a bounce past an edge is neither.
     @objc private func scrolled() {
         guard !updating else { return }
-        let clip = scrollView.contentView.bounds
-        let fromEnd = contentHeight - clip.maxY
-        if clip.minY < lastScrollY - 0.5, fromEnd > 1 {
+        let y = scrollView.contentView.bounds.minY
+        let end = endY
+        let rising = y < lastScrollY - 0.5
+        let falling = y > lastScrollY + 0.5
+        // A window made taller also leaves the viewport past the end, without moving it.
+        if falling, y > end + 0.5 { bounceEnd = end }
+        let bouncing = y < 0 || (bounceEnd.map { y > $0 - 0.5 } ?? false)
+        if rising, !bouncing, y < end - 1 {
             pinned = false
-        } else if fromEnd < 30 {
+        } else if !rising, end - y < Self.pinDistance {
             pinned = true
         }
-        lastScrollY = clip.minY
+        if let settled = bounceEnd, y < settled + 0.5 { bounceEnd = nil }
+        lastScrollY = y
         updateVisible(anchor: viewportAnchor(), follows: false)
+        land()
+    }
+
+    @objc private func userScrollBegan() {
+        userScrolling = true
+        stopGlide()
+    }
+
+    @objc private func userScrollEnded() {
+        userScrolling = false
+        land()
+    }
+
+    /// Brings a view that follows the end to rest on it, once the user has let go of it.
+    private func land() {
+        guard pinned, !userScrolling else { return }
+        let distance = endY - scrollView.contentView.bounds.minY
+        guard distance > 0.5 else { return }
+        guard distance < viewportHeight, !reducesMotion else {
+            updateVisible()
+            return
+        }
+        startGlide()
     }
 
     /// Makes the views for the rows in and near the viewport, measures the ones that need it,
@@ -417,6 +506,7 @@ final class TranscriptView: FlippedView, RowHost {
         position(anchor: anchor, follows: follows)
 
         working.frame = NSRect(x: x, y: Self.topPadding + (offsets.last ?? 0) + 2, width: width, height: Self.workingHeight)
+        working.isHidden = !showsWorking
         jumpButton.isHidden = pinned || rows.isEmpty
         if !pendingHighlight.isEmpty {
             let ids = pendingHighlight
@@ -432,15 +522,20 @@ final class TranscriptView: FlippedView, RowHost {
         if document.frame.height != height || document.frame.width != bounds.width {
             document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: height)
         }
-        let toEnd = pinned && follows
-        var target = clip.bounds.minY
+        let end = height - viewportHeight
+        let current = clip.bounds.minY
+        // Past an edge the scroll view is bouncing back by itself; moving it then makes it shake.
+        guard current > -0.5, bounceEnd == nil || current < end + 0.5 else { return }
+        // While the user scrolls, the viewport is theirs.
+        let toEnd = pinned && follows && !userScrolling
+        var target = current
         if toEnd {
-            target = height - viewportHeight
+            target = end
         } else if let anchor, let index = rows.firstIndex(where: { $0.id == anchor.id }) {
             target = offsets[index] + anchor.delta + Self.topPadding
         }
-        target = max(0, min(target, height - viewportHeight))
-        let distance = target - clip.bounds.minY
+        target = max(0, min(target, end))
+        let distance = target - current
         guard abs(distance) > 0.5 else { return }
         // A streaming reply pushes the end down a block at a time; the viewport glides after it.
         if toEnd, animates || glide != nil, distance > 0, distance < viewportHeight {
@@ -456,6 +551,7 @@ final class TranscriptView: FlippedView, RowHost {
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         lastScrollY = y
+        bounceEnd = nil
         updating = wasUpdating
     }
 
@@ -473,8 +569,8 @@ final class TranscriptView: FlippedView, RowHost {
 
     private func glideStep() {
         let y = scrollView.contentView.bounds.minY
-        let remaining = max(0, document.frame.height - viewportHeight) - y
-        guard pinned, remaining > 0.5 else {
+        let remaining = endY - y
+        guard pinned, !userScrolling, remaining > 0.5 else {
             stopGlide()
             return
         }
@@ -497,7 +593,7 @@ final class TranscriptView: FlippedView, RowHost {
         let wasPinned = pinned
         pinned = false
         updateVisible(anchor: anchor)
-        pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < 30
+        pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < Self.pinDistance
         jumpButton.isHidden = pinned || rows.isEmpty
     }
 
@@ -509,7 +605,10 @@ final class TranscriptView: FlippedView, RowHost {
 
     func isExpanded(id: String) -> Bool { expanded.contains(id) }
 
-    func allow(_ denials: [Denial]) { onAllow?(denials) }
+    func media(id: String, done: @escaping (URL?) -> Void) {
+        guard let onNeedMedia else { return done(nil) }
+        onNeedMedia(id, done)
+    }
 
     /// Copies the reply that ends at the given row: every stretch of prose and code back to the
     /// user's message.

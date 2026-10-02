@@ -38,6 +38,11 @@ impl DataDir {
         self.0.join("attachments")
     }
 
+    /// The copies of the images and videos that threads show.
+    pub fn media(&self) -> PathBuf {
+        self.0.join("media")
+    }
+
     /// The account's apps, as the auth server last listed them.
     pub fn account_keys(&self) -> PathBuf {
         self.0.join("account-keys.json")

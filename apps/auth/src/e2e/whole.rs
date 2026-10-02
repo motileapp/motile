@@ -101,7 +101,7 @@ impl App {
             }
             Event::Activity { activity, .. } => self.running = activity.running,
             Event::ThreadError { message, .. } => panic!("a thread couldn't be opened: {message}"),
-            Event::Restored | Event::Reply { .. } | Event::HostUpdate { .. } => {}
+            Event::Restored | Event::Reply { .. } | Event::HostUpdate { .. } | Event::MediaProgress { .. } => {}
         }
     }
 
@@ -151,7 +151,7 @@ async fn run_host(data: &DataDir, endpoint: iroh::Endpoint, key: DeviceKey) {
     ]);
     let executables = HashMap::from([(Agent::Claude, fake_agent.clone()), (Agent::Codex, fake_agent)]);
     let environment = Environment::fixed(variables, executables);
-    let hub = Hub::new(Store::open(&data.database()).unwrap(), environment).unwrap();
+    let hub = Hub::new(Store::open(&data.database()).unwrap(), data.media(), environment).unwrap();
 
     let account = data.account().expect("setup linked the host");
     let access =
@@ -168,6 +168,7 @@ fn kinds(app: &App) -> Vec<&'static str> {
         RowKind::Code { .. } => "code",
         RowKind::Tool { .. } => "tool",
         RowKind::Thinking { .. } => "thinking",
+        RowKind::Media { .. } => "media",
         RowKind::Group { .. } => "group",
         RowKind::Fold { .. } => "fold",
         RowKind::Error { .. } => "error",
@@ -253,7 +254,7 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     let send = Command::Send {
         host_id: host.id.clone(),
         thread_id: None,
-        new_thread: Some(new_thread),
+        new_thread: Some(new_thread.clone()),
         text: "Add a rate limiter to the API".into(),
         files: Vec::new(),
     };
@@ -310,6 +311,33 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     app.ask(Command::ToggleRow { thread_id: thread_id.clone(), row_id: fold }).await.unwrap();
     app.until("the fold has closed", |app| app.rows.len() == 8).await;
     let before = app.rows.clone();
+
+    // An image the agent shows has its size before the file is here. The file is fetched from
+    // the host when it is asked for, and kept.
+    let send = Command::Send {
+        host_id: host.id.clone(),
+        thread_id: None,
+        new_thread: Some(new_thread),
+        text: "Show the screenshot".into(),
+        files: Vec::new(),
+    };
+    let showing = app.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
+    app.ask(Command::OpenThread { host_id: host.id.clone(), thread_id: showing }).await.unwrap();
+    app.until("the image is shown", |app| app.turn_ended() && kinds(app).contains(&"media")).await;
+    assert_eq!(kinds(&app), ["user", "fold", "prose", "media", "prose", "turn_end"]);
+    let RowKind::Media { media, width, height, size, alt, name, .. } = app.rows[3].kind.clone() else {
+        panic!("the reply shows an image")
+    };
+    assert_eq!((width, height), (Some(960), Some(600)));
+    assert_eq!((alt.as_str(), name.as_str()), ("The landing page", "screenshot.png"));
+    let screenshot = std::fs::read(project_folder.join("screenshot.png")).unwrap();
+    let find = || Command::Media { host_id: host.id.clone(), id: media.clone() };
+    let fetched = app.ask(find()).await.unwrap()["path"].as_str().unwrap().to_string();
+    assert!(Path::new(&fetched).starts_with(&app_data));
+    assert_eq!(std::fs::read(&fetched).unwrap(), screenshot);
+    let storage = app.ask(Command::Storage).await.unwrap();
+    assert_eq!((storage["media_bytes"].as_u64(), storage["media_limit"].as_u64()), (Some(size), Some(2_000_000_000)));
+
     app.handle.stop();
     host_endpoint.close().await;
     let mut reopened = App::start(&app_data, &auth.base, host_port);
@@ -328,6 +356,12 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
         .await
         .unwrap();
     reopened.until("the code is highlighted again", |app| app.rows == before).await;
+
+    // The image is here without the host, until the copies on this device are cleared.
+    assert_eq!(reopened.ask(find()).await.unwrap()["path"], fetched.as_str());
+    reopened.ask(Command::ClearMedia).await.unwrap();
+    assert_eq!(reopened.ask(Command::Storage).await.unwrap()["media_bytes"], 0);
+    assert!(reopened.ask(find()).await.is_err());
 
     // Signing out makes the device a stranger and empties the app.
     let old_key = reopened.account.device_key.clone();

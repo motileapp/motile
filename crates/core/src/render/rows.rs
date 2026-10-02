@@ -8,7 +8,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use motile_protocol::wire::{Denial, Item, ItemKind, ToolCall, ToolStatus};
+use motile_protocol::wire::{Approval, Item, ItemKind, ToolCall, ToolStatus};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -55,6 +55,19 @@ pub enum RowKind {
     Thinking {
         text: String,
     },
+    /// An image or a video the reply shows. The app asks the core for the file `media` names.
+    Media {
+        media: String,
+        video: bool,
+        /// In pixels, for an image: the row has its size before the file is there.
+        width: Option<u32>,
+        height: Option<u32>,
+        size: u64,
+        /// What the agent said it shows.
+        alt: String,
+        /// The file's name where the agent made it.
+        name: String,
+    },
     /// Tool calls that followed one another, as one row.
     Group {
         /// What they did, "Read 3 files and ran 2 commands", or while the turn runs, what the
@@ -81,7 +94,6 @@ pub enum RowKind {
         cost_usd: Option<f64>,
         is_error: bool,
         stopped: bool,
-        denials: Vec<Denial>,
         /// The turn's fold says how long it took, so this row doesn't.
         folded: bool,
     },
@@ -101,6 +113,41 @@ pub struct Tool {
     pub input: String,
     pub input_language: String,
     pub output: Option<String>,
+}
+
+/// The tool call Claude Code presents its plan with. Allowing it lets the agent carry the plan out.
+const PLAN_TOOL: &str = "ExitPlanMode";
+/// The tool call Claude Code asks the user questions with.
+const QUESTION_TOOL: &str = "AskUserQuestion";
+
+/// A tool call the turn waits with until the user has answered it.
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct Waiting {
+    pub id: String,
+    pub icon: &'static str,
+    /// What is asked for: the tool, or what to do with a plan.
+    pub title: String,
+    /// What the tool acts on: the command, the file.
+    pub target: String,
+    /// What the buttons that allow and refuse it say.
+    pub allow: &'static str,
+    pub refuse: &'static str,
+    /// The questions the agent asks with it; allowing it takes an answer to each.
+    pub questions: Vec<Question>,
+}
+
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct Question {
+    pub text: String,
+    pub options: Vec<Choice>,
+    /// More than one option can be chosen.
+    pub multiple: bool,
+}
+
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct Choice {
+    pub label: String,
+    pub detail: String,
 }
 
 pub struct Splice {
@@ -147,6 +194,24 @@ impl Transcript {
 
     pub fn clear(&mut self) {
         *self = Self::new(&self.cwd);
+    }
+
+    pub fn waiting(&self, approval: &Approval) -> Waiting {
+        let call = ToolCall {
+            id: approval.id.clone(),
+            name: approval.tool_name.clone(),
+            input: approval.input.clone(),
+            output: None,
+            status: ToolStatus::Running,
+        };
+        let tool = describe(&call, &self.cwd);
+        let (title, target, allow, refuse) = match approval.tool_name.as_str() {
+            PLAN_TOOL => ("The plan is ready".to_string(), String::new(), "Implement", "Keep planning"),
+            QUESTION_TOOL => ("The agent has a question".to_string(), String::new(), "Answer", "Skip"),
+            _ => (tool.name, tool.target, "Allow", "Refuse"),
+        };
+        let input: Value = serde_json::from_str(&approval.input).unwrap_or_default();
+        Waiting { id: approval.id.clone(), icon: tool.icon, title, target, allow, refuse, questions: questions(&input) }
     }
 
     /// Fills an empty transcript with stored items, in order.
@@ -296,15 +361,19 @@ fn present<'a>(items: &'a [Item], rendered: &'a [Vec<Row>], opened: &HashSet<Str
     let mut shown = Vec::new();
     let mut start = 0;
     while start < items.len() {
-        let next_message = (start + 1..items.len()).find(|&index| matches!(items[index].kind, ItemKind::User { .. }));
-        let end = next_message.unwrap_or(items.len());
+        let next_turn = (start + 1..items.len()).find(|&index| {
+            matches!(items[index].kind, ItemKind::User { .. })
+                || matches!(items[index - 1].kind, ItemKind::TurnEnd { .. })
+        });
+        let end = next_turn.unwrap_or(items.len());
         present_turn(&items[start..end], &rendered[start..end], opened, &mut shown);
         start = end;
     }
     shown
 }
 
-/// A turn is the user's message and what the agent did until the next one.
+/// A turn is the user's message and what the agent did until it ended, or what an agent that
+/// monitors did when it went back to work by itself.
 fn present_turn<'a>(
     items: &'a [Item],
     rendered: &'a [Vec<Row>],
@@ -366,7 +435,31 @@ fn present_turn<'a>(
 }
 
 fn is_work(item: &Item) -> bool {
-    matches!(item.kind, ItemKind::Tool { .. } | ItemKind::Thinking { .. })
+    match &item.kind {
+        ItemKind::Tool { call } => call.name != PLAN_TOOL,
+        ItemKind::Thinking { .. } => true,
+        _ => false,
+    }
+}
+
+fn questions(input: &Value) -> Vec<Question> {
+    let text = |value: &Value| value.as_str().unwrap_or_default().to_string();
+    let asked = input["questions"].as_array().map(Vec::as_slice).unwrap_or_default();
+    asked
+        .iter()
+        .map(|question| {
+            let options = question["options"].as_array().map(Vec::as_slice).unwrap_or_default();
+            let options = options
+                .iter()
+                .map(|option| Choice { label: text(&option["label"]), detail: text(&option["description"]) })
+                .collect();
+            Question {
+                text: text(&question["question"]),
+                options,
+                multiple: question["multiSelect"].as_bool().unwrap_or(false),
+            }
+        })
+        .collect()
 }
 
 fn folded(row: &Row) -> Row {
@@ -439,6 +532,8 @@ fn counted(kind: &str, count: usize) -> String {
         "search" => format!("Searched {}", of("time", "times")),
         "web" => format!("Used the web {}", of("time", "times")),
         "agent" => format!("Ran {}", of("agent", "agents")),
+        "question" => format!("Asked {}", of("question", "questions")),
+        "watch" => format!("Started {}", of("watch", "watches")),
         "todo" => "Updated the plan".to_string(),
         _ => format!("Used {}", of("tool", "tools")),
     }
@@ -458,6 +553,11 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
         }
         ItemKind::Assistant { text } => render_markdown(item, text, streaming),
         ItemKind::Thinking { text } => vec![row(0, RowKind::Thinking { text: text.clone() })],
+        // A plan is read like a reply, not opened like a tool call.
+        ItemKind::Tool { call } if call.name == PLAN_TOOL => {
+            let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
+            render_markdown(item, input["plan"].as_str().unwrap_or_default(), streaming)
+        }
         ItemKind::Tool { call } => vec![row(0, RowKind::Tool { tool: describe(call, cwd) })],
         ItemKind::Error { message } => vec![row(0, RowKind::Error { message: message.clone() })],
         ItemKind::TurnEnd { summary } => vec![row(
@@ -467,7 +567,6 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
                 cost_usd: summary.cost_usd,
                 is_error: summary.is_error,
                 stopped: summary.stopped,
-                denials: summary.denials.clone(),
                 folded: false,
             },
         )],
@@ -475,7 +574,8 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
 }
 
 fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<String, Incremental>>) -> Vec<Row> {
-    let blocks = markdown::parse(text);
+    let shown: Vec<&str> = item.media.iter().map(|media| media.src.as_str()).collect();
+    let blocks = markdown::parse_showing(text, &shown);
     let mut rows = Vec::with_capacity(blocks.len());
     for (index, block) in blocks.into_iter().enumerate() {
         let id = format!("{}/{index}", item.id);
@@ -490,6 +590,18 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
             Block::Code { language, code } => {
                 let spans = colour(&id, &language, &code, &mut streaming);
                 RowKind::Code { language, code, spans }
+            }
+            Block::Image { src, alt } => {
+                let Some(media) = item.media.iter().find(|media| media.src == src) else { continue };
+                RowKind::Media {
+                    media: media.id.clone(),
+                    video: media.video,
+                    width: media.width,
+                    height: media.height,
+                    size: media.size,
+                    alt,
+                    name: file_name(&src).to_string(),
+                }
             }
         };
         rows.push(Row { id, item: item.id.clone(), nested: false, kind });
@@ -591,6 +703,16 @@ fn describe(call: &ToolCall, cwd: &str) -> Tool {
         "Task" | "Agent" => {
             ("agent", verb("Running an agent:", "Ran an agent:"), text("description"), text("prompt"), String::new())
         }
+        PLAN_TOOL => ("todo", verb("Proposing", "Proposed"), "a plan".to_string(), String::new(), String::new()),
+        QUESTION_TOOL => {
+            let asked = input["questions"][0]["question"].as_str().unwrap_or_default().to_string();
+            ("question", verb("Asking", "Asked"), asked, String::new(), String::new())
+        }
+        "Monitor" => {
+            let watched = Some(text("description")).filter(|description| !description.is_empty());
+            let target = watched.unwrap_or_else(|| first_line(&text("command")));
+            ("watch", verb("Starting to watch", "Started watching"), target, text("command"), "bash".to_string())
+        }
         "TodoWrite" => {
             let todos = input["todos"].as_array().map(Vec::as_slice).unwrap_or_default();
             let lines: Vec<String> = todos
@@ -634,7 +756,7 @@ mod tests {
     use super::*;
 
     fn item(id: &str, seq: u64, kind: ItemKind) -> Item {
-        Item { id: id.to_string(), seq, rev: seq + 1, created_at: 0.0, kind }
+        Item { id: id.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), kind }
     }
 
     fn assistant(id: &str, seq: u64, text: &str) -> Item {
@@ -648,6 +770,40 @@ mod tests {
 
     fn apply(rows: &mut Vec<Row>, splice: Splice) {
         rows.splice(splice.start..splice.start + splice.remove, splice.rows);
+    }
+
+    #[test]
+    fn an_image_the_host_kept_is_a_row_with_its_size_and_any_other_is_a_link() {
+        use motile_protocol::wire::Media;
+        let mut reply = assistant("a", 0, "Done:\n\n![The page](/tmp/shots/page.png)\n\n![Gone](/tmp/gone.png)");
+        let kept = Media {
+            id: "abc.png".into(),
+            src: "/tmp/shots/page.png".into(),
+            video: false,
+            size: 2048,
+            width: Some(640),
+            height: Some(400),
+        };
+        reply.media = vec![kept];
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![reply]);
+
+        let rows = transcript.rows();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(
+            rows[1].kind,
+            RowKind::Media {
+                media: "abc.png".into(),
+                video: false,
+                width: Some(640),
+                height: Some(400),
+                size: 2048,
+                alt: "The page".into(),
+                name: "page.png".into(),
+            }
+        );
+        assert!(matches!(&rows[2].kind, RowKind::Prose { prose } if prose.text == "Gone" && prose.links.len() == 1));
+        assert_eq!(serde_json::to_value(&rows[1]).unwrap()["kind"], "media");
     }
 
     #[test]
@@ -853,6 +1009,32 @@ mod tests {
     }
 
     #[test]
+    fn what_a_monitoring_agent_does_later_is_a_turn_of_its_own() {
+        let summary = motile_protocol::wire::TurnSummary::default();
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![
+            item("u", 0, ItemKind::User { text: "Watch the deploy".into(), attachments: Vec::new() }),
+            call(
+                "t1",
+                1,
+                "Monitor",
+                serde_json::json!({"command": "./status", "description": "deploy"}),
+                ToolStatus::Succeeded,
+            ),
+            assistant("a1", 2, "Watching."),
+            item("e1", 3, ItemKind::TurnEnd { summary: summary.clone() }),
+            call("t2", 4, "Bash", serde_json::json!({"command": "./logs"}), ToolStatus::Succeeded),
+            assistant("a2", 5, "It is healthy."),
+            item("e2", 6, ItemKind::TurnEnd { summary }),
+            call("t3", 7, "Bash", serde_json::json!({"command": "./logs"}), ToolStatus::Running),
+        ]);
+        assert_eq!(
+            outline(&transcript),
+            ["user", "fold", "Watching.", "end folded", "fold", "It is healthy.", "end folded", "Running ./logs"]
+        );
+    }
+
+    #[test]
     fn a_turn_with_one_message_or_an_error_is_shown_as_it_is() {
         let summary = motile_protocol::wire::TurnSummary::default();
         let mut short = Transcript::new("");
@@ -875,6 +1057,45 @@ mod tests {
     }
 
     #[test]
+    fn a_tool_call_that_waits_for_approval_is_worded_like_the_others() {
+        let transcript = Transcript::new("/srv/api");
+        let input = serde_json::json!({"file_path": "/srv/api/greet.py", "old_string": "a", "new_string": "b"});
+        let approval = Approval { id: "r1".into(), tool_name: "Edit".into(), input: input.to_string() };
+        let waiting = transcript.waiting(&approval);
+        assert_eq!((waiting.id.as_str(), waiting.title.as_str(), waiting.target.as_str()), ("r1", "Edit", "greet.py"));
+        assert_eq!((waiting.allow, waiting.refuse, waiting.questions.len()), ("Allow", "Refuse", 0));
+
+        let options =
+            serde_json::json!([{"label": "Red", "description": "Warm"}, {"label": "Blue", "description": "Calm"}]);
+        let input =
+            serde_json::json!({"questions": [{"question": "Which color?", "options": options, "multiSelect": true}]});
+        let approval = Approval { id: "r2".into(), tool_name: "AskUserQuestion".into(), input: input.to_string() };
+        let waiting = transcript.waiting(&approval);
+        let question = &waiting.questions[0];
+        assert_eq!((waiting.allow, question.text.as_str(), question.multiple), ("Answer", "Which color?", true));
+        assert_eq!(question.options[1], Choice { label: "Blue".into(), detail: "Calm".into() });
+
+        let approval = Approval { id: "r3".into(), tool_name: "ExitPlanMode".into(), input: "{}".into() };
+        let waiting = transcript.waiting(&approval);
+        assert_eq!(
+            (waiting.title.as_str(), waiting.allow, waiting.refuse),
+            ("The plan is ready", "Implement", "Keep planning")
+        );
+    }
+
+    #[test]
+    fn a_plan_is_shown_as_prose_and_not_put_away_with_the_tool_calls() {
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![
+            item("u", 0, ItemKind::User { text: "Plan it".into(), attachments: Vec::new() }),
+            call("t1", 1, "Read", serde_json::json!({"file_path": "a.rs"}), ToolStatus::Succeeded),
+            call("t2", 2, "ToolSearch", serde_json::json!({"query": "select:ExitPlanMode"}), ToolStatus::Succeeded),
+            call("p", 3, "ExitPlanMode", serde_json::json!({"plan": "Add `hello`."}), ToolStatus::Running),
+        ]);
+        assert_eq!(outline(&transcript), ["user", "[Read 1 file and used 1 tool]", "Add hello."]);
+    }
+
+    #[test]
     fn tool_calls_are_worded_for_a_person() {
         let running = tool("Bash", serde_json::json!({"command": "cargo test\ncargo clippy"}), ToolStatus::Running);
         assert_eq!((running.verb.as_str(), running.target.as_str()), ("Running", "cargo test …"));
@@ -887,6 +1108,14 @@ mod tests {
         let edited = tool("Edit", edit, ToolStatus::Succeeded);
         assert_eq!((edited.target.as_str(), edited.input.as_str()), ("/etc/hosts", "-a\n-b\n+c"));
         assert_eq!(edited.input_language, "diff");
+
+        let monitor = serde_json::json!({"command": "tail -f deploy.log", "description": "deploy log"});
+        let watching = tool("Monitor", monitor, ToolStatus::Succeeded);
+        assert_eq!(
+            (watching.verb.as_str(), watching.target.as_str(), watching.icon),
+            ("Started watching", "deploy log", "watch")
+        );
+        assert_eq!(watching.input, "tail -f deploy.log");
 
         let mcp = tool("mcp__linear__get_issue", serde_json::json!({"id": "UNB-1"}), ToolStatus::Failed);
         assert_eq!((mcp.verb.as_str(), mcp.target.as_str()), ("Used", "linear: get_issue"));

@@ -157,6 +157,7 @@ impl Cache {
             let mut thread: Thread = serde_json::from_str(&text).ok()?;
             // Whether it is running is only known once the host says so.
             thread.running = false;
+            thread.monitoring = false;
             Some(CachedThread { thread, seen_at })
         });
         threads.collect()

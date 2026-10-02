@@ -6,8 +6,11 @@ use std::sync::Mutex;
 use motile_protocol::wire::{Access, Agent, Item, Thread};
 use rusqlite::{Connection, OptionalExtension, params};
 
-const MIGRATIONS: &[&str] =
-    &[include_str!("../migrations/0001_init.sql"), include_str!("../migrations/0002_project_icons.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_init.sql"),
+    include_str!("../migrations/0002_project_icons.sql"),
+    include_str!("../migrations/0003_media.sql"),
+];
 
 pub struct Store {
     connection: Mutex<Connection>,
@@ -110,6 +113,7 @@ impl Store {
                     done_at: row.get(13)?,
                     undone_at: row.get(16)?,
                     running: false,
+                    monitoring: false,
                     needs_approval: row.get(14)?,
                     turn_ended_at: row.get(15)?,
                     rev: rev as u64,
@@ -167,6 +171,24 @@ impl Store {
     pub fn delete_thread(&self, thread_id: &str) -> rusqlite::Result<()> {
         self.connection().execute("DELETE FROM threads WHERE id = ?1", [thread_id])?;
         Ok(())
+    }
+
+    pub fn save_media(&self, thread_id: &str, media_id: &str) -> rusqlite::Result<()> {
+        self.connection()
+            .execute("INSERT OR IGNORE INTO media (thread_id, id) VALUES (?1, ?2)", [thread_id, media_id])?;
+        Ok(())
+    }
+
+    pub fn media_of(&self, thread_id: &str) -> rusqlite::Result<Vec<String>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare("SELECT id FROM media WHERE thread_id = ?1")?;
+        let ids = statement.query_map([thread_id], |row| row.get(0))?;
+        ids.collect()
+    }
+
+    /// Whether any thread still shows the file.
+    pub fn shows_media(&self, media_id: &str) -> rusqlite::Result<bool> {
+        self.connection().query_row("SELECT EXISTS (SELECT 1 FROM media WHERE id = ?1)", [media_id], |row| row.get(0))
     }
 
     pub fn load_projects(&self) -> rusqlite::Result<Vec<StoredProject>> {

@@ -182,6 +182,8 @@ struct ThreadInfo: Equatable, Identifiable {
     var doneAt: Double?
     let undoneAt: Double?
     let running: Bool
+    /// The turn is over, but the agent still watches something it left running.
+    let monitoring: Bool
     let needsApproval: Bool
     let turnEndedAt: Double?
     let unread: Bool
@@ -202,12 +204,16 @@ struct ThreadInfo: Equatable, Identifiable {
         doneAt = json.optionalDouble("done_at")
         undoneAt = json.optionalDouble("undone_at")
         running = json.bool("running")
+        monitoring = json.bool("monitoring")
         needsApproval = json.bool("needs_approval")
         turnEndedAt = json.optionalDouble("turn_ended_at")
         unread = json.bool("unread")
     }
 
     var isDone: Bool { doneAt != nil }
+
+    /// The agent's process is still there, working or monitoring.
+    var busy: Bool { running || monitoring }
 
     /// Active threads keep their place when something happens in them; only coming back from
     /// done moves one to the top.
@@ -216,37 +222,69 @@ struct ThreadInfo: Equatable, Identifiable {
 
 struct Activity: Equatable {
     var running = false
+    var monitoring = false
     var thinking = false
     var startedAt: Double?
+    /// The tool calls the running turn waits with until they are allowed or refused.
+    var approvals: [Approval] = []
+
+    var busy: Bool { running || monitoring }
 
     init() {}
 
-    init(json: JSON) {
+    init(json: JSON, waiting: [JSON]) {
         running = json.bool("running")
+        monitoring = json.bool("monitoring")
         thinking = json.bool("thinking")
         startedAt = json.optionalDouble("started_at")
+        approvals = waiting.map { Approval(json: $0) }
     }
 }
 
-struct Denial {
-    let toolName: String
-    let toolUseID: String
-    let input: String
+/// A tool call the turn waits with until the user has answered it.
+struct Approval: Equatable, Identifiable {
+    let id: String
+    /// What is asked for: the tool, or what to do with a plan.
+    let title: String
+    /// What the tool acts on: the command, the file.
+    let target: String
+    let symbol: String
+    /// What the buttons that allow and refuse it say.
+    let allowLabel: String
+    let refuseLabel: String
+    /// The questions the agent asks with it; allowing it takes an answer to each.
+    let questions: [Question]
 
     init(json: JSON) {
-        toolName = json.string("tool_name")
-        toolUseID = json.string("tool_use_id")
-        input = json.string("input")
+        id = json.string("id")
+        title = json.string("title")
+        target = json.string("target")
+        symbol = ToolContent.symbol(for: json.string("icon"))
+        allowLabel = json.string("allow")
+        refuseLabel = json.string("refuse")
+        questions = json.objects("questions").map { Question(json: $0) }
+    }
+}
+
+struct Question: Equatable, Identifiable {
+    struct Choice: Equatable, Identifiable {
+        let label: String
+        let detail: String
+
+        var id: String { label }
     }
 
-    var json: JSON { ["tool_name": toolName, "tool_use_id": toolUseID, "input": input] }
+    let text: String
+    let options: [Choice]
+    /// More than one option can be chosen.
+    let multiple: Bool
 
-    /// What the agent wanted to do, in a line.
-    var summary: String {
-        let object = (try? JSONSerialization.jsonObject(with: Data(input.utf8))) as? JSON ?? [:]
-        if let command = object["command"] as? String { return command }
-        if let path = object["file_path"] as? String { return path }
-        return toolName
+    var id: String { text }
+
+    init(json: JSON) {
+        text = json.string("text")
+        options = json.objects("options").map { Choice(label: $0.string("label"), detail: $0.string("detail")) }
+        multiple = json.bool("multiple")
     }
 }
 

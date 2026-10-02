@@ -19,7 +19,15 @@ pub const LINK: u32 = 16;
 #[derive(Clone, PartialEq, Debug)]
 pub enum Block {
     Prose(Prose),
-    Code { language: String, code: String },
+    Code {
+        language: String,
+        code: String,
+    },
+    /// An image the app has a file for. It stands on its own, after the text it was written in.
+    Image {
+        src: String,
+        alt: String,
+    },
 }
 
 #[derive(Serialize, Clone, PartialEq, Debug, Default)]
@@ -103,7 +111,13 @@ struct CodeBlock {
 }
 
 #[derive(Default)]
-struct Builder {
+struct Builder<'a> {
+    /// The images that become blocks, by where they point. Any other image is a link.
+    shown: &'a [&'a str],
+    /// The shown image being read: where it points, and its description so far.
+    image: Option<(String, String)>,
+    /// Shown images waiting for the text around them to end.
+    images: Vec<(String, String)>,
     blocks: Vec<Block>,
     prose: Prose,
     /// The length of `prose.text` in UTF-16 units.
@@ -123,8 +137,13 @@ struct Builder {
 }
 
 pub fn parse(markdown: &str) -> Vec<Block> {
+    parse_showing(markdown, &[])
+}
+
+/// Like `parse`, with the images that point at one of `shown` as blocks of their own.
+pub fn parse_showing(markdown: &str, shown: &[&str]) -> Vec<Block> {
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
-    let mut builder = Builder::default();
+    let mut builder = Builder { shown, ..Builder::default() };
     for event in Parser::new_ext(markdown, options) {
         builder.event(event);
     }
@@ -135,7 +154,7 @@ fn utf16_len(text: &str) -> u32 {
     text.encode_utf16().count() as u32
 }
 
-impl Builder {
+impl Builder<'_> {
     fn top_level(&self) -> bool {
         self.lists.is_empty() && self.quotes == 0 && self.table.is_none()
     }
@@ -221,8 +240,23 @@ impl Builder {
 
     fn close(&mut self) {
         let Some((start, kind)) = self.open_para.take() else { return };
-        self.push_plain("\n");
-        self.prose.paras.push(Para { start, len: self.length - start, kind });
+        // A paragraph that only held shown images leaves no empty line behind.
+        let only_images = self.length == start && !self.images.is_empty() && self.table.is_none();
+        if !only_images {
+            self.push_plain("\n");
+            self.prose.paras.push(Para { start, len: self.length - start, kind });
+        }
+        self.place_images();
+    }
+
+    /// Ends the prose here and puts the shown images after it. A table is finished first.
+    fn place_images(&mut self) {
+        if self.images.is_empty() || self.table.is_some() {
+            return;
+        }
+        self.flush_prose();
+        let images = std::mem::take(&mut self.images);
+        self.blocks.extend(images.into_iter().map(|(src, alt)| Block::Image { src, alt }));
     }
 
     /// Ends the prose block here if it has grown long and nothing is open around it.
@@ -254,6 +288,14 @@ impl Builder {
             match event {
                 Event::Text(text) => code.code.push_str(&text),
                 Event::End(TagEnd::CodeBlock) => self.end_code_block(),
+                _ => {}
+            }
+            return;
+        }
+        if let Some((_, alt)) = &mut self.image {
+            match event {
+                Event::Text(text) | Event::Code(text) => alt.push_str(&text),
+                Event::End(TagEnd::Image) => self.images.extend(self.image.take()),
                 _ => {}
             }
             return;
@@ -358,6 +400,9 @@ impl Builder {
             Tag::Emphasis => self.italic += 1,
             Tag::Strong => self.bold += 1,
             Tag::Strikethrough => self.strike += 1,
+            Tag::Image { dest_url, .. } if self.shown.contains(&&*dest_url) => {
+                self.image = Some((dest_url.to_string(), String::new()));
+            }
             Tag::Link { dest_url, .. } | Tag::Image { dest_url, .. } => {
                 self.ensure_open();
                 self.links.push((self.length, dest_url.to_string()));
@@ -405,6 +450,7 @@ impl Builder {
             }
             TagEnd::Table => {
                 self.table = None;
+                self.place_images();
                 self.maybe_split();
             }
             TagEnd::Emphasis => self.italic = self.italic.saturating_sub(1),
@@ -445,6 +491,7 @@ impl Builder {
         // A code block still being streamed has no closing fence yet.
         self.end_code_block();
         self.flush_prose();
+        self.place_images();
         self.blocks
     }
 }
@@ -615,6 +662,26 @@ mod tests {
             assert!(utf16_len(&prose.text) < 2 * SPLIT_AFTER);
             assert_eq!(prose.paras.last().map(|para| para.start + para.len), Some(utf16_len(&prose.text)));
         }
+    }
+
+    #[test]
+    fn shown_images_stand_on_their_own_after_the_text_they_were_in() {
+        let image = |src: &str, alt: &str| Block::Image { src: src.into(), alt: alt.into() };
+        let markdown = "Here it is:\n\n![The page](/tmp/a.png)\n\nSee ![inline](b.png) and ![a link](c.png).\n\n\
+                        - ![in a list](/tmp/a.png)\n- next\n\n| A |\n|---|\n| ![cell](b.png) |\n\nEnd";
+        let blocks = parse_showing(markdown, &["/tmp/a.png", "b.png"]);
+
+        assert_eq!(prose(&blocks, 0).text, "Here it is:");
+        assert_eq!(blocks[1], image("/tmp/a.png", "The page"));
+        assert_eq!(prose(&blocks, 2).text, "See  and a link.");
+        assert_eq!(prose(&blocks, 2).links, vec![Link { start: 9, len: 6, url: "c.png".into() }]);
+        assert_eq!(blocks[3], image("b.png", "inline"));
+        assert_eq!(prose(&blocks, 4).text, "•\t");
+        assert_eq!(blocks[5], image("/tmp/a.png", "in a list"));
+        assert_eq!(prose(&blocks, 6).text, "•\tnext\nA\n");
+        assert_eq!(blocks[7], image("b.png", "cell"));
+        assert_eq!(prose(&blocks, 8).text, "End");
+        assert_eq!(blocks.len(), 9);
     }
 
     #[test]

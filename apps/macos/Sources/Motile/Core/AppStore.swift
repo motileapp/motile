@@ -47,6 +47,12 @@ struct HostUpdate: Equatable {
     var restarting = false
 }
 
+/// What the images and videos fetched from the hosts take on this Mac, and what they may take.
+struct MediaStorage: Equatable {
+    let used: Int64
+    let limit: Int64
+}
+
 struct UndoNotice: Equatable {
     let threadIDs: [String]
     let text: String
@@ -84,14 +90,16 @@ final class AppStore {
     private(set) var selection: Selection = .draft("")
     private(set) var activity = Activity()
     private(set) var transcriptIsEmpty = true
-    /// The draft whose first message is on its way to the host.
-    private(set) var sendingDraftID: String?
+    /// The drafts whose first message is on its way to the host.
+    private(set) var sendingDraftIDs: Set<String> = []
     var errorMessage: String?
     private(set) var threadDrafts: [ThreadDraft] = []
     /// What the open draft said when it was opened, if it said anything. Its row in the sidebar
     /// shows this, so the sidebar doesn't change while the draft is being written.
     private(set) var openedDraftPreview: String?
     private(set) var undo: UndoNotice?
+    /// Unknown until Settings asks for it.
+    private(set) var mediaStorage: MediaStorage?
     private var drafts: [String: String] = [:]
     private var attachmentsByKey: [String: [String]] = [:]
 
@@ -104,6 +112,8 @@ final class AppStore {
     @ObservationIgnored private let defaults = UserDefaults.standard
     /// The thread that was open when the app was last closed, until it has been opened again.
     @ObservationIgnored private var lastSelection: String?
+    /// The draft the app opened by itself. It is dropped if it is left empty.
+    @ObservationIgnored private var landingDraftID: String?
 
     init() {
         loadPreferences()
@@ -168,6 +178,13 @@ final class AppStore {
             return { [weak self] in
                 self?.hostUpdates[hostID]?.fraction = total.flatMap { $0 > 0 ? received / $0 : nil }
             }
+        case "media_progress":
+            let (id, received, size) = (event.string("id"), event.double("received"), event.double("size"))
+            guard size > 0 else { return nil }
+            return {
+                let progress: [String: Any] = ["id": id, "fraction": received / size]
+                NotificationCenter.default.post(name: .mediaProgress, object: nil, userInfo: progress)
+            }
         case "rows":
             let threadID = event.string("thread_id")
             let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
@@ -189,7 +206,7 @@ final class AppStore {
             }
         case "activity":
             let threadID = event.string("thread_id")
-            let activity = Activity(json: event.object("activity") ?? [:])
+            let activity = Activity(json: event.object("activity") ?? [:], waiting: event.objects("waiting"))
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
                 if self.activity != activity { self.activity = activity }
@@ -207,7 +224,7 @@ final class AppStore {
         let wasSignedIn = self.account.signedIn
         self.account = account
         if wasSignedIn && !account.signedIn {
-            startNewThread()
+            openEmptyDraft()
             enrollToken = nil
         }
     }
@@ -233,7 +250,7 @@ final class AppStore {
         threads = threads.filter { $0.value.hostID != hostID }
         for thread in new { threads[thread.id] = thread }
         if case .thread(let id) = selection, threads[id] == nil {
-            startNewThread()
+            openEmptyDraft()
         }
         restoreSelection()
     }
@@ -248,7 +265,7 @@ final class AppStore {
 
     private func removeThread(_ id: String) {
         threads[id] = nil
-        if selection == .thread(id) { startNewThread() }
+        if selection == .thread(id) { openEmptyDraft() }
     }
 
     private func apply(projects new: [Project], hostID: String) {
@@ -279,14 +296,12 @@ final class AppStore {
         return threadDrafts.first { $0.id == id }
     }
 
-    /// The drafts worth listing: the ones with something in them, newest first. The open one is
-    /// listed as it was when it was opened.
+    /// Every draft that isn't being sent, newest first. The open one is listed as it was when it
+    /// was opened.
     var listedDrafts: [ListedDraft] {
-        threadDrafts.reversed().compactMap { draft -> ListedDraft? in
-            if selection == .draft(draft.id) {
-                return openedDraftPreview.map { ListedDraft(draft: draft, preview: $0) }
-            }
-            return preview(of: draft).map { ListedDraft(draft: draft, preview: $0) }
+        threadDrafts.reversed().filter { !sendingDraftIDs.contains($0.id) }.map { draft -> ListedDraft in
+            let written = selection == .draft(draft.id) ? openedDraftPreview : preview(of: draft)
+            return ListedDraft(draft: draft, preview: written ?? "New thread")
         }
     }
 
@@ -373,8 +388,8 @@ final class AppStore {
         drafts = defaults.dictionary(forKey: "drafts") as? [String: String] ?? [:]
         lastSelection = defaults.string(forKey: "selection")
         let saved = defaults.data(forKey: "threadDrafts").flatMap { try? JSONDecoder().decode([ThreadDraft].self, from: $0) }
-        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil }
-        let opened = threadDrafts.first { $0.id == lastSelection } ?? addDraft()
+        threadDrafts = saved ?? []
+        let opened = threadDrafts.first { $0.id == lastSelection } ?? emptyDraft()
         selection = .draft(opened.id)
         openedDraftPreview = preview(of: opened)
     }
@@ -392,6 +407,15 @@ final class AppStore {
         draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
         threadDrafts.append(draft)
         saveThreadDrafts()
+        return draft
+    }
+
+    /// A draft with nothing in it: one that is already there, or a new one that is dropped again
+    /// if it is left empty.
+    private func emptyDraft() -> ThreadDraft {
+        if let empty = threadDrafts.last(where: { preview(of: $0) == nil && !sendingDraftIDs.contains($0.id) }) { return empty }
+        let draft = addDraft()
+        landingDraftID = draft.id
         return draft
     }
 
@@ -475,7 +499,7 @@ final class AppStore {
         attachmentsByKey = [:]
         threadDrafts = []
         defaults.removeObject(forKey: "drafts")
-        startNewThread()
+        openEmptyDraft()
         core.send("sign_out")
     }
 
@@ -594,8 +618,10 @@ final class AppStore {
         }
         let left = selectedDraft
         selection = new
-        // A draft nothing was written in is not kept.
-        if let left, preview(of: left) == nil, left.id != sendingDraftID { removeDraft(left.id) }
+        if let left, left.id == landingDraftID {
+            landingDraftID = nil
+            if preview(of: left) == nil, !sendingDraftIDs.contains(left.id) { removeDraft(left.id) }
+        }
         openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
         activity = Activity()
         transcriptIsEmpty = true
@@ -616,12 +642,17 @@ final class AppStore {
         core.send("mark_seen", ["thread_id": thread.id])
     }
 
-    /// Opens a thread that is yet to be written: the open draft while it is still empty, or a new
-    /// one. A draft with something in it is left as it is, in the sidebar.
+    /// Opens a new draft. It and the one that was open stay in the sidebar until they are sent or
+    /// discarded.
     func startNewThread(in project: Project? = nil) {
-        let reusable = selectedDraft.map { preview(of: $0) == nil && $0.id != sendingDraftID } ?? false
-        if !reusable { select(.draft(addDraft().id)) }
+        landingDraftID = nil
+        select(.draft(addDraft().id))
         if let project { setNewThreadProject(project.id) }
+    }
+
+    /// Where the app goes when what was open is gone.
+    private func openEmptyDraft() {
+        select(.draft(emptyDraft().id))
     }
 
     func setNewThreadProject(_ id: String?) {
@@ -631,11 +662,14 @@ final class AppStore {
     func discard(_ draft: ThreadDraft) {
         let wasOpen = selection == .draft(draft.id)
         removeDraft(draft.id)
-        if wasOpen { startNewThread() }
+        guard wasOpen else { return }
+        if let next = threadDrafts.last(where: { !sendingDraftIDs.contains($0.id) }) { return select(.draft(next.id)) }
+        if let next = activeThreads.first { return select(.thread(next.id)) }
+        openEmptyDraft()
     }
 
     var canSend: Bool {
-        guard sendingDraftID == nil, let host = composerHost, host.state == .connected else { return false }
+        guard !sendingDraftIDs.contains(draftKey), let host = composerHost, host.state == .connected else { return false }
         if selectedThread == nil && project(selectedDraft?.projectID) == nil { return false }
         return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
@@ -665,8 +699,7 @@ final class AppStore {
             if let effort = composerEffort { settings["effort"] = effort }
             command["host_id"] = project.hostID
             command["new_thread"] = settings
-            sendingDraftID = draft.id
-            openedDraftPreview = nil
+            sendingDraftIDs.insert(draft.id)
             activity = Activity.starting
             transcript.setActivity(activity)
         }
@@ -678,7 +711,7 @@ final class AppStore {
 
         core.send("send", command) { [weak self] result in
             guard let self else { return }
-            if existing == nil { self.sendingDraftID = nil }
+            if existing == nil { self.sendingDraftIDs.remove(key) }
             switch result {
             case .failure(let error):
                 // The message goes back to where it was written, wherever the app is now.
@@ -711,14 +744,42 @@ final class AppStore {
         core.send("mark_seen", ["thread_id": id])
     }
 
+    // MARK: Images and videos
+
+    /// The file of an image or a video the open thread shows. The core fetches it from the
+    /// thread's host if this Mac doesn't have it.
+    func media(_ id: String, done: @escaping (URL?) -> Void) {
+        guard let thread = selectedThread else { return done(nil) }
+        core.send("media", ["host_id": thread.hostID, "id": id]) { result in
+            guard case .success(let value) = result, let path = value["path"] as? String else { return done(nil) }
+            done(URL(fileURLWithPath: path))
+        }
+    }
+
+    func refreshMediaStorage() {
+        core.send("storage") { [weak self] result in
+            guard case .success(let value) = result else { return }
+            let bytes = { (key: String) in (value[key] as? NSNumber)?.int64Value ?? 0 }
+            self?.mediaStorage = MediaStorage(used: bytes("media_bytes"), limit: bytes("media_limit"))
+        }
+    }
+
+    /// Removes the images and videos kept on this Mac. The hosts still have them.
+    func clearMedia() {
+        core.send("clear_media") { [weak self] _ in self?.refreshMediaStorage() }
+    }
+
     func stop() {
         guard let thread = selectedThread else { return }
         request(thread.hostID, ["type": "stop", "thread_id": thread.id])
     }
 
-    func allow(_ denials: [Denial]) {
+    /// Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by
+    /// question, when the call asks questions.
+    func answer(_ approval: Approval, allow: Bool, answers: [String: String] = [:]) {
         guard let thread = selectedThread else { return }
-        request(thread.hostID, ["type": "allow", "thread_id": thread.id, "denials": denials.map(\.json)])
+        let answer: JSON = ["type": "answer", "thread_id": thread.id, "approval_id": approval.id, "allow": allow, "answers": answers]
+        request(thread.hostID, answer)
     }
 
     func rename(_ thread: ThreadInfo, to title: String) {
@@ -769,9 +830,10 @@ final class AppStore {
         update(thread, ["plan": plan]) { $0.plan = plan }
     }
 
-    /// Marks threads done or brings them back. A thread that is working can't be marked done.
+    /// Marks threads done or brings them back. A thread that is working or monitoring can't be
+    /// marked done.
     func setDone(_ ids: [String], done: Bool, fromSidebar: Bool = false) {
-        let changed = ids.compactMap { threads[$0] }.filter { $0.isDone != done && !(done && $0.running) }
+        let changed = ids.compactMap { threads[$0] }.filter { $0.isDone != done && !(done && $0.busy) }
         guard !changed.isEmpty else { return }
         // Leaving the thread that was just put away, for the next one that is still active.
         if done, fromSidebar, case .thread(let open) = selection, changed.contains(where: { $0.id == open }) {
@@ -779,7 +841,7 @@ final class AppStore {
             let position = active.firstIndex { $0.id == open } ?? 0
             let remaining = active.filter { thread in !changed.contains { $0.id == thread.id } }
             let next = remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)]
-            if let next { select(.thread(next.id)) } else { startNewThread() }
+            if let next { select(.thread(next.id)) } else { openEmptyDraft() }
         }
         let now = Date().timeIntervalSince1970
         for thread in changed {

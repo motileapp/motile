@@ -10,6 +10,7 @@ final class RowModel {
         case code(CodeContent)
         case tool(ToolContent)
         case thinking(NSAttributedString)
+        case media(MediaContent)
         case group(GroupContent)
         case fold(FoldContent)
         case error(NSAttributedString)
@@ -45,6 +46,8 @@ final class RowModel {
             kind = .tool(ToolContent(json: json))
         case "thinking":
             kind = .thinking(Typesetter.plain(json.string("text"), color: Theme.secondary, size: 13))
+        case "media":
+            kind = .media(MediaContent(json: json))
         case "group":
             kind = .group(GroupContent(json: json))
         case "fold":
@@ -143,6 +146,8 @@ struct ToolContent {
         case "search": "magnifyingglass"
         case "web": "globe"
         case "agent": "person.2"
+        case "watch": "eye"
+        case "question": "questionmark.bubble"
         case "todo": "checklist"
         default: "wrench.and.screwdriver"
         }
@@ -206,7 +211,6 @@ struct TurnEnd {
     let costUSD: Double?
     let isError: Bool
     let stopped: Bool
-    let denials: [Denial]
     /// The turn's fold says how long it took, so the end of the turn doesn't.
     let folded: Bool
 
@@ -215,7 +219,6 @@ struct TurnEnd {
         costUSD = json.optionalDouble("cost_usd")
         isError = json.bool("is_error")
         stopped = json.bool("stopped")
-        denials = json.objects("denials").map { Denial(json: $0) }
         folded = json.bool("folded")
     }
 

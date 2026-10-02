@@ -13,10 +13,12 @@ use motile_protocol::ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{Message, Request};
+use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::access::Access;
 use crate::hub::{Hub, ListSubscription, ThreadSubscription};
+use crate::media::MediaStore;
 use crate::{files, update};
 
 const NOT_LINKED: u32 = 403;
@@ -101,6 +103,7 @@ impl Server {
         let reply = match request {
             Request::Subscribe => return follow_list(send, hub.subscribe().await).await,
             Request::UpdateHost => return update_host(send, hub).await,
+            Request::Media { id } => return send_media(send, &hub.media, &id).await,
             Request::Open { thread_id, since } => match hub.open(&thread_id, since).await {
                 Ok(subscription) => return follow_thread(send, subscription).await,
                 Err(error) => Err(error),
@@ -108,7 +111,9 @@ impl Server {
             Request::Send { thread_id, new_thread, text, attachments } => {
                 hub.send(thread_id, new_thread, text, attachments).await.map(|thread_id| Message::Sent { thread_id })
             }
-            Request::Allow { thread_id, denials } => hub.allow(&thread_id, denials).await.map(|_| Message::Ok),
+            Request::Answer { thread_id, approval_id, allow, answers } => {
+                hub.answer(&thread_id, &approval_id, allow, answers).await.map(|_| Message::Ok)
+            }
             Request::Stop { thread_id } => {
                 hub.stop(&thread_id).await;
                 Ok(Message::Ok)
@@ -180,6 +185,21 @@ async fn update_host(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     tracing::info!("updated; starting the new host");
     tokio::time::sleep(RESTART_AFTER).await;
     update::request_restart(program);
+    Ok(())
+}
+
+async fn send_media(mut send: SendStream, media: &MediaStore, id: &str) -> anyhow::Result<()> {
+    let (file, size) = match media.open(id).await {
+        Ok(opened) => opened,
+        Err(error) => {
+            write_frame(&mut send, &Message::Error { message: format!("{error:#}") }).await?;
+            send.finish()?;
+            return Ok(());
+        }
+    };
+    write_frame(&mut send, &Message::Media { size }).await?;
+    tokio::io::copy(&mut file.take(size), &mut send).await?;
+    send.finish()?;
     Ok(())
 }
 

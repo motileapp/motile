@@ -46,6 +46,20 @@ struct SettingsView: View {
                     }
                 }
 
+                SettingsSection("Storage") {
+                    SettingsRow {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Images and videos")
+                            Text(storageDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } trailing: {
+                        Button("Clear") { store.clearMedia() }
+                            .disabled((store.mediaStorage?.used ?? 0) == 0)
+                    }
+                }
+
                 if store.account.signedIn {
                     hosts
                     projects
@@ -54,6 +68,17 @@ struct SettingsView: View {
             .padding(20)
         }
         .frame(width: 520, height: 560)
+        .onAppear { store.refreshMediaStorage() }
+    }
+
+    /// The hosts keep every image and video; the ones on this Mac only make threads open with them.
+    private var storageDescription: String {
+        guard let storage = store.mediaStorage else { return "Kept on this Mac so threads open with them" }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowsNonnumericFormatting = false
+        let (used, limit) = (formatter.string(fromByteCount: storage.used), formatter.string(fromByteCount: storage.limit))
+        return "\(used) of \(limit) on this Mac. Your hosts keep them all."
     }
 
     private var hosts: some View {

@@ -72,26 +72,36 @@ final class DecoratingLayoutManager: NSLayoutManager {
         forCharacterRange charRange: NSRange,
         color: NSColor
     ) {
-        guard color === Typesetter.inlineCodeBackground else {
-            super.fillBackgroundRectArray(rectArray, count: rectCount, forCharacterRange: charRange, color: color)
-            return
-        }
-        // The rects reach down into the space between the lines; the background stays on the line.
-        let inText = charRange.location < (textStorage?.length ?? 0)
-        let style = inText ? textStorage?.attribute(.paragraphStyle, at: charRange.location, effectiveRange: nil) as? NSParagraphStyle : nil
-        let lineSpacing = style?.lineSpacing ?? 0
-        color.setFill()
-        for index in 0..<rectCount {
-            var rect = rectArray[index]
-            rect.size.height -= lineSpacing
-            NSBezierPath(roundedRect: rect.insetBy(dx: -2, dy: 1), xRadius: 4, yRadius: 4).fill()
-        }
+        // Inline code's background is drawn in `drawBackground`.
+        guard color !== Typesetter.inlineCodeBackground else { return }
+        super.fillBackgroundRectArray(rectArray, count: rectCount, forCharacterRange: charRange, color: color)
     }
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         guard let storage = textStorage, glyphsToShow.length > 0 else { return }
         let characters = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+
+        storage.enumerateAttribute(.backgroundColor, in: characters) { value, range, _ in
+            guard (value as? NSColor) === Typesetter.inlineCodeBackground,
+                let font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
+            else { return }
+            let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let unselected = NSRange(location: NSNotFound, length: 0)
+            Typesetter.inlineCodeBackground.setFill()
+            // A line's rect is as tall as the line and the space under it, which the last line
+            // doesn't have. The font's height around the baseline is the same on every line.
+            enumerateLineFragments(forGlyphRange: glyphs) { line, _, container, lineGlyphs, _ in
+                guard let onLine = lineGlyphs.intersection(glyphs), onLine.length > 0 else { return }
+                let baseline = line.minY + self.location(forGlyphAt: onLine.location).y
+                let top = (baseline - font.ascender).rounded()
+                let bottom = (baseline - font.descender).rounded()
+                self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
+                    let box = NSRect(x: rect.minX - 2, y: top, width: rect.width + 4, height: bottom - top)
+                    NSBezierPath(roundedRect: box.offsetBy(dx: origin.x, dy: origin.y), xRadius: 4, yRadius: 4).fill()
+                }
+            }
+        }
 
         storage.enumerateAttribute(.motileQuote, in: characters) { value, range, _ in
             guard let depth = (value as? NSNumber)?.intValue, depth > 0 else { return }
@@ -296,6 +306,21 @@ final class RowTextView: NSTextView {
 
     override func scrollWheel(with event: NSEvent) {
         nextResponder?.scrollWheel(with: event)
+    }
+
+    // What floats over the text, like the jump button, keeps its own cursor.
+    override func mouseMoved(with event: NSEvent) {
+        guard isUnderPointer(event) else { return }
+        super.mouseMoved(with: event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        guard isUnderPointer(event) else { return }
+        super.cursorUpdate(with: event)
+    }
+
+    private func isUnderPointer(_ event: NSEvent) -> Bool {
+        window?.contentView?.hitTest(event.locationInWindow)?.isDescendant(of: self) ?? false
     }
 
     // The transcript decides the size; the text view must not grow itself to fit.

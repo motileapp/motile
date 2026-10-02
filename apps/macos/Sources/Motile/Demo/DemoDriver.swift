@@ -102,6 +102,14 @@ private final class Demo {
         return !store.activity.running
     }
 
+    private var turnEnds: Int {
+        let ends = store.transcript.rows.filter { row in
+            guard case .turnEnd = row.kind else { return false }
+            return true
+        }
+        return ends.count
+    }
+
     private func send(_ text: String) {
         store.draft = text
         store.send()
@@ -181,12 +189,71 @@ private final class Demo {
         for row in toolRows { transcriptView?.rowToggledExpansion(id: row.id) }
         await toggle(fold, "the open fold")
 
-        // A thread that ends asking for permission.
+        // A supervised agent asks before it changes or runs something, and the turn waits.
         store.startNewThread()
         store.setAccess(.supervised)
-        send("Change greet.py to use an f-string, run it, and summarize the change in a table.")
-        await expect("a supervised turn ends asking for approval", within: 60) { turnEnded && store.selectedThread?.needsApproval == true }
+        send("Change greet.py to use an f-string, then run greet.py.")
+        await expect("a supervised turn waits for approval before a tool call") {
+            store.selectedThread?.needsApproval == true && store.activity.approvals.first?.title == "Edit"
+        }
         await shoot("07-approval")
+        if let edit = store.activity.approvals.first { store.answer(edit, allow: true) }
+        await expect("an allowed tool call runs, and the next one asks") { store.activity.approvals.first?.title == "Bash" }
+        if let bash = store.activity.approvals.first { store.answer(bash, allow: false) }
+        await expect("a refused tool call is left out, and the turn ends") {
+            turnEnded && store.selectedThread?.needsApproval == false
+        }
+        await shoot("07-answered")
+
+        // A question the agent asks is answered in place, and the turn goes on with the answer.
+        store.startNewThread()
+        send("Which color should the button be? Ask me.")
+        await expect("a question the agent asks is shown with its options") {
+            store.activity.approvals.first?.questions.first?.options.count == 2
+        }
+        await shoot("07-question")
+        if let asked = store.activity.approvals.first, let question = asked.questions.first {
+            store.answer(asked, allow: true, answers: [question.text: "Blue"])
+        }
+        await expect("the agent goes on with the answer") { turnEnded }
+
+        // A plan is approved in place: the thread leaves plan mode and the agent carries it out.
+        store.startNewThread()
+        store.setAccess(.full)
+        store.setPlan(true)
+        send("Plan the hello function.")
+        await expect("a finished plan waits to be implemented") { store.activity.approvals.first?.allowLabel == "Implement" }
+        await shoot("07-plan")
+        if let plan = store.activity.approvals.first { store.answer(plan, allow: true) }
+        await expect("an approved plan is carried out, and the thread leaves plan mode") {
+            turnEnded && store.selectedThread?.plan == false
+        }
+
+        // An agent that keeps watching after its turn: it takes a message meanwhile, and says by
+        // itself what it saw.
+        store.startNewThread()
+        store.setAccess(.full)
+        store.setPlan(false)
+        send("Watch the deploy and tell me when it is healthy.")
+        await expect("an agent that watches something is shown as monitoring") {
+            store.selectedThread?.monitoring == true && store.activity.monitoring
+        }
+        await shoot("07-monitoring")
+        send("How far is it?")
+        await expect("a message sent to a monitoring agent is answered right away") { turnEnds == 2 && store.activity.monitoring }
+        await expect("the agent reports what it watched and is done") { turnEnds == 3 && store.selectedThread?.busy == false }
+        await shoot("07-monitored")
+
+        // An image the agent shows is fetched from the host and drawn in the reply.
+        store.startNewThread()
+        send("Show the screenshot of the landing page.")
+        await expect("an image the agent shows is a row of its reply") {
+            turnEnded && store.transcript.rows.contains { $0.kindName == "media" }
+        }
+        await wait(1)
+        store.refreshMediaStorage()
+        await expect("the image is fetched from the host and kept on this Mac") { (store.mediaStorage?.used ?? 0) > 0 }
+        await shoot("07-image")
 
         // A long reply full of code, to see that the window keeps up.
         store.startNewThread()
@@ -194,8 +261,10 @@ private final class Demo {
         send("Give me a long reply with a lot of code.")
         await wait(0.5)
         let longStreaming = StallMonitor()
+        await scrollByHandWhileStreaming()
         await expect("a long reply arrives whole", within: 90) { turnEnded }
         results.append(responsive("a long reply streams", longStreaming))
+        pullPastEnd()
         let scrolling = StallMonitor()
         await scrollTranscript()
         results.append(responsive("a long reply is scrolled", scrolling))
@@ -264,16 +333,32 @@ private final class Demo {
         store.attach([URL(fileURLWithPath: "/tmp/motile-demo/api/greet.py")])
         await shoot("12-dark-new-thread")
 
-        // Leaving a new thread that has something written in it keeps it, in the sidebar.
+        // Every new thread stays in the sidebar as a draft until it is sent or discarded.
         store.select(.thread(first))
         await expect("a new thread that was written but not sent is listed as a draft") { store.listedDrafts.count == 1 }
         store.startNewThread()
+        store.startNewThread()
+        await expect("new threads opened one after the other are each listed as a draft") { store.listedDrafts.count == 3 }
         await shoot("12-dark-draft")
-        if let listed = store.listedDrafts.first { store.select(.draft(listed.id)) }
+        if let written = store.listedDrafts.last { store.select(.draft(written.id)) }
         await expect("the draft opens with what was written in it") { store.draft.hasPrefix("Why is the sync slow") && store.attachments.count == 1 }
-        if let draft = store.selectedDraft { store.discard(draft) }
-        await expect("a discarded draft is gone") { store.listedDrafts.isEmpty && store.draft.isEmpty }
+        for listed in store.listedDrafts { store.discard(listed.draft) }
+        await expect("discarded drafts are gone, and a thread is open instead") { store.listedDrafts.isEmpty && store.selectedThread != nil }
+
+        // The smallest window with the widest sidebar: the sidebar gives way to the thread.
+        UserDefaults.standard.set(420.0, forKey: "sidebar.width")
+        store.select(.thread(first))
+        window?.setFrame(NSRect(x: 60, y: 60, width: 780, height: 600), display: true)
+        await wait(0.5)
+        await expect("the thread fits in the smallest window") { transcriptFitsWindow }
+        await shoot("13-smallest-window")
         finish()
+    }
+
+    private var transcriptFitsWindow: Bool {
+        guard let transcript = transcriptView, let content = window?.contentView else { return false }
+        let frame = transcript.convert(transcript.bounds, to: content)
+        return frame.minX >= 0 && frame.maxX <= content.bounds.maxX + 0.5
     }
 
     private func responsive(_ what: String, _ monitor: StallMonitor) -> String {
@@ -328,6 +413,40 @@ private final class Demo {
         }
     }
 
+    /// Scrolls as a hand on a trackpad does while a reply streams: up, back down to just above
+    /// the end, held there, and let go.
+    private func scrollByHandWhileStreaming() async {
+        guard let scrollView = transcriptScrollView, let document = scrollView.documentView else { return }
+        let clip = scrollView.contentView
+        let end = { max(0, document.frame.height - clip.bounds.height) }
+        var waited = 0.0
+        while end() < 300, !turnEnded, waited < 30 {
+            await wait(0.1)
+            waited += 0.1
+        }
+        NotificationCenter.default.post(name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
+        clip.scroll(to: NSPoint(x: 0, y: max(0, end() - 200)))
+        let held = max(0, end() - 10)
+        clip.scroll(to: NSPoint(x: 0, y: held))
+        await wait(1)
+        let stayed = abs(clip.bounds.minY - held) < 1
+        results.append("\(stayed ? "PASS" : "FAIL") the transcript stays where it is scrolled to while a reply streams under it")
+        NotificationCenter.default.post(name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
+        await expect("let go near the end, the transcript follows the reply again", within: 5) { clip.bounds.minY > held + 5 }
+    }
+
+    /// Pulls the viewport past the end, where the bounce of a trackpad takes it.
+    private func pullPastEnd() {
+        guard let scrollView = transcriptScrollView, let document = scrollView.documentView else { return }
+        let clip = scrollView.contentView
+        let end = max(0, document.frame.height - clip.bounds.height)
+        clip.setBoundsOrigin(NSPoint(x: 0, y: end + 40))
+        let stayed = abs(clip.bounds.minY - (end + 40)) < 1
+        results.append("\(stayed ? "PASS" : "FAIL") the transcript lets the scroll view bounce past its end")
+        clip.scroll(to: NSPoint(x: 0, y: end))
+        scrollView.reflectScrolledClipView(clip)
+    }
+
     private func finish() {
         let report = results.joined(separator: "\n") + "\n"
         print(report)
@@ -343,6 +462,7 @@ extension RowModel {
         case .code: "code"
         case .tool: "tool"
         case .thinking: "thinking"
+        case .media: "media"
         case .group: "group"
         case .fold: "fold"
         case .error: "error"

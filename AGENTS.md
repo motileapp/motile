@@ -80,12 +80,18 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 ### apps/server (the host)
 
 - `hub.rs` is the live state of every thread. A turn is one run of the agent's CLI; its events
-  are applied there, saved, and sent to every app that has the thread open.
+  are applied there, saved, and sent to every app that has the thread open. Claude Code's
+  process is talked to over its stdin while it runs: it asks before a tool call that needs
+  approval and waits for the app's answer, which is also how its questions to the user are
+  answered and its plan is approved, and it is told when the thread's model, effort or access
+  change. It stays after a turn while something it started is still running (a monitor,
+  a background shell): the thread is then `monitoring`, the process takes the next messages
+  itself, and it starts turns of its own when what it watches reports.
 - `pacing.rs` says how much of a streamed reply is finished. The hub passes text on in finished
   blocks (a paragraph, a list item, a line of code), not token by token.
 - `agents/` builds the command for a turn and parses its output: `claude.rs` for
-  `claude -p --output-format stream-json`, `codex.rs` for `codex exec --json`. Both become the
-  same `AgentEvent`s. `models.rs` lists Claude's models by hand; Codex's are read from its cache.
+  `claude -p --input-format stream-json --output-format stream-json --permission-prompt-tool
+  stdio`, `codex.rs` for `codex exec --json`. Both become the same `AgentEvent`s. `models.rs` lists Claude's models by hand; Codex's are read from its cache.
 - `store.rs` is SQLite. Every item has a position (`seq`) and the revision that last changed it
   (`rev`); an app asks for what changed after the revision it has.
 - `title.rs` generates thread titles with the thread's own agent.
@@ -96,6 +102,11 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 - `icons.rs` finds a project's icon in its folder (a favicon, icon or logo file, also in the
   `apps` and `packages` of a workspace). The path is kept with the project; the user can pick
   another image instead.
+- `media.rs` keeps the images and videos agents show. An agent shows one by writing a Markdown
+  image that points at a file on the host; the agents are told so when they start. The host
+  copies the file then, named by its contents, and the item says what it shows and how large it
+  is. So a thread shows the same thing after the file has changed or gone. An app asks for the
+  bytes by that name, and the copy goes when the last thread that shows it is deleted.
 - `update.rs` replaces the host's own program with the latest release's and starts it again,
   when an app asks. It refuses while an agent is working.
 - `tests/e2e.rs` runs the host against `scripts/fake-agent` over real iroh connections.
@@ -109,10 +120,14 @@ Rust library for tests.
   arrive on one channel; anything that waits on the network runs in its own task.
 - `link.rs` keeps one host connected and follows its thread list and the open threads.
 - `cache.rs` is the app's SQLite copy of its hosts' threads.
+- `media.rs` is the images and videos the app has fetched from its hosts, as files. They are
+  fetched when a row that shows one is seen, and take at most 2 GB: past that, what was looked
+  at longest ago goes first. The hosts keep them all, so the app can also clear them.
 - `render/` turns transcripts into rows ready to draw: `markdown.rs` (text with style runs, in
   UTF-16 offsets), `highlight.rs` (syntect; streaming code is highlighted incrementally) and
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
-  are one row, and a finished turn's work folds behind one).
+  are one row, a finished turn's work folds behind one, and an image or a video is a row that
+  knows its size before the file is there).
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
   terminal.
 
@@ -125,6 +140,8 @@ Rust library for tests.
   draws as a floating panel.
 - `Views/Transcript/` is the transcript: `TranscriptView.swift` only keeps views for the rows on
   screen, `RowViews.swift` are the rows, `Rows.swift` builds their text off the main thread.
+  `MediaRowView.swift` is the row of an image or a video: images are decoded off the main
+  thread at the size they are shown, and a video is downloaded when it is played.
 - `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
   `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P, and `Views/Shared` holds the
   window's glass surface, the hover highlight and the agents' and projects' icons.
@@ -201,7 +218,11 @@ runs the demo and uploads the app and the screenshots:
     gh run download --name screenshots
 
 `scripts/fake-agent` stands in for Claude Code and Codex in the tests and the demo. It replays
-the recorded output in `fixtures/` or makes up a turn, depending on the prompt.
+the recorded output in `fixtures/` or makes up a turn, depending on the prompt. Asked to
+"watch the deploy" it stays after its turn, as Claude Code does while it monitors, asked to
+"run greet.py" under supervised access it asks before each tool call, and asked to "show the
+screenshot" it makes an image and shows it. "Which color" has it
+ask the user a question, and "plan the hello" present a plan to approve.
 
 ## Releasing and deploying
 

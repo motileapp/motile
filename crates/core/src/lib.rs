@@ -7,4 +7,5 @@ pub mod connection;
 pub mod core;
 pub mod ffi;
 pub mod link;
+pub mod media;
 pub mod render;

@@ -51,17 +51,18 @@ final class TranscriptModel {
     }
 
     func apply(reset: Bool, start: Int, remove: Int, rows new: [RowModel]) {
-        // The host has the message now, so the copy shown while it travelled can go.
-        if pending != nil, new.contains(where: \.isUser) {
-            setPending(nil)
-        }
+        // The host has the message now, so the copy shown while it travelled goes. The view lets
+        // go of its own with these rows, so that the message doesn't move.
+        let sent = pending != nil && new.contains(where: \.isUser)
         if reset {
+            if sent { pending = nil }
             rows = new
             hooks?.reset(new)
             if let pending { hooks?.pending(pending) }
             return
         }
         guard start >= 0, remove >= 0, start + remove <= rows.count else { return }
+        if sent { pending = nil }
         rows.replaceSubrange(start..<(start + remove), with: new)
         hooks?.splice(start, remove, new)
     }

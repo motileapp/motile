@@ -1,6 +1,8 @@
 //! Messages between an app and a host. Every stream starts with one `Request` from the app; the
 //! host answers with one `Message`, or with a stream of them for `Subscribe` and `Open`.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -14,7 +16,7 @@ pub enum Agent {
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Access {
-    /// Tools that need approval end the turn until the user allows them.
+    /// Tools that need approval wait until the user allows or refuses them.
     Supervised,
     AcceptEdits,
     /// The agent decides which routine actions are safe to run without asking.
@@ -45,7 +47,10 @@ pub struct Thread {
     /// When it last came back from being done; active threads sort by this and `created_at`.
     pub undone_at: Option<f64>,
     pub running: bool,
-    /// The last turn ended asking for permission.
+    /// The turn is over, but the agent still watches something it left running.
+    #[serde(default)]
+    pub monitoring: bool,
+    /// A tool call waits for the user to allow or refuse it.
     pub needs_approval: bool,
     /// When the last turn ended, for telling the user about replies they haven't seen.
     pub turn_ended_at: Option<f64>,
@@ -61,8 +66,26 @@ pub struct Item {
     /// The transcript revision that last changed the item.
     pub rev: u64,
     pub created_at: f64,
+    /// The images and videos the item shows.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<Media>,
     #[serde(flatten)]
     pub kind: ItemKind,
+}
+
+/// An image or a video an agent showed. The host keeps the copy it took then, so the thread
+/// shows the same thing after the file has changed or gone.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Media {
+    /// Names the contents, and ends in the file's extension.
+    pub id: String,
+    /// The file as the agent wrote it in its reply.
+    pub src: String,
+    pub video: bool,
+    pub size: u64,
+    /// In pixels, for an image.
+    pub width: Option<u32>,
+    pub height: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -102,14 +125,14 @@ pub struct TurnSummary {
     /// The user stopped the turn.
     #[serde(default)]
     pub stopped: bool,
-    pub denials: Vec<Denial>,
 }
 
-/// A tool call Claude Code refused because nobody had allowed it.
+/// A tool call that waits for the user to allow or refuse it.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct Denial {
+pub struct Approval {
+    pub id: String,
     pub tool_name: String,
-    pub tool_use_id: String,
+    /// The tool's input as JSON text.
     pub input: String,
 }
 
@@ -147,17 +170,22 @@ pub enum Request {
         since: u64,
     },
     /// Starts a turn, in `thread_id` or in a thread created from `new_thread`. While a turn is
-    /// running the message waits and starts the next one.
+    /// running the message waits and starts the next one; an agent that is only monitoring gets
+    /// it right away.
     Send {
         thread_id: Option<String>,
         new_thread: Option<NewThread>,
         text: String,
         attachments: Vec<String>,
     },
-    /// Continues after a turn that ended with denials, with exactly those calls allowed.
-    Allow {
+    /// Allows or refuses a tool call that waits for it; the turn goes on either way. A tool call
+    /// that asks the user questions is allowed with what they chose, by question.
+    Answer {
         thread_id: String,
-        denials: Vec<Denial>,
+        approval_id: String,
+        allow: bool,
+        #[serde(default)]
+        answers: HashMap<String, String>,
     },
     Stop {
         thread_id: String,
@@ -197,6 +225,11 @@ pub enum Request {
     Upload {
         name: String,
         size: u64,
+    },
+    /// The copy the host keeps of an image or a video. `Media` answers, and the bytes follow on
+    /// the same stream.
+    Media {
+        id: String,
     },
     /// Replaces the host's program with the latest release and starts it again. The host answers
     /// with `Updating` while it downloads, then `Ok` just before it restarts.
@@ -248,11 +281,16 @@ pub struct HostInfo {
 }
 
 /// What a thread's agent is doing right now.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
 pub struct Activity {
     pub running: bool,
+    #[serde(default)]
+    pub monitoring: bool,
     pub thinking: bool,
     pub started_at: Option<f64>,
+    /// The running turn stands still until these are answered.
+    #[serde(default)]
+    pub approvals: Vec<Approval>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -317,6 +355,10 @@ pub enum Message {
         received: u64,
         total: Option<u64>,
     },
+    /// `size` bytes of an image or a video follow.
+    Media {
+        size: u64,
+    },
     /// A project's icon: the file's bytes in base64.
     Icon {
         data: String,
@@ -332,8 +374,14 @@ mod tests {
 
     #[test]
     fn items_are_flat_tagged_objects() {
-        let item =
-            Item { id: "a".into(), seq: 3, rev: 7, created_at: 1.0, kind: ItemKind::Assistant { text: "hi".into() } };
+        let item = Item {
+            id: "a".into(),
+            seq: 3,
+            rev: 7,
+            created_at: 1.0,
+            media: Vec::new(),
+            kind: ItemKind::Assistant { text: "hi".into() },
+        };
         let json = serde_json::to_value(&item).unwrap();
 
         assert_eq!(

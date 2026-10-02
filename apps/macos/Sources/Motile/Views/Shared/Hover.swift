@@ -1,14 +1,20 @@
 import SwiftUI
 
-/// Lights up what the pointer is over, and what is selected.
+/// Lights up what the pointer is over, and what is selected. The light is drawn `inset` from the
+/// view's edges: that margin looks empty but is the view's, so neighbours leave no gap to miss.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
+    let inset: EdgeInsets
     @State private var hovering = false
 
     func body(content: Content) -> some View {
         content
-            .background(fill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(fill)
+                    .padding(inset)
+            }
             .onHover { hovering = $0 }
     }
 
@@ -19,17 +25,19 @@ private struct HoverHighlight: ViewModifier {
 }
 
 extension View {
-    func hoverHighlight(radius: CGFloat = 7, selected: Bool = false) -> some View {
-        modifier(HoverHighlight(radius: radius, selected: selected))
+    func hoverHighlight(radius: CGFloat = 7, selected: Bool = false, inset: EdgeInsets = EdgeInsets()) -> some View {
+        modifier(HoverHighlight(radius: radius, selected: selected, inset: inset))
     }
 }
 
 /// A button that is only a symbol, with room around it to hit and a background under the pointer.
+/// The inset is more room to hit, outside the background.
 struct IconOnlyButton: View {
     let symbol: String
     let help: String
     var size: CGFloat = 26
     var symbolSize: CGFloat = 13
+    var inset = EdgeInsets()
     let action: () -> Void
 
     var body: some View {
@@ -37,10 +45,11 @@ struct IconOnlyButton: View {
             Image(systemName: symbol)
                 .font(.system(size: symbolSize, weight: .medium))
                 .frame(width: size, height: size)
+                .padding(inset)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .hoverHighlight(radius: 6)
+        .hoverHighlight(radius: 6, inset: inset)
         .help(help)
     }
 }

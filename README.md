@@ -64,10 +64,13 @@ On the host, `motile status` shows its account, agents and service, `motile logs
 - **Replies** arrive a finished paragraph, list item or line of code at a time. Tool calls that follow one another are one row, such as "Read 3 files and ran 2 commands", which opens into them. Once a turn has ended, what led to its last message folds behind a row like "Worked for 42s"; click it to see everything the agent did.
 - **Mark done** puts a thread away in the Done list at the bottom of the sidebar; **Mark undone** brings it back, and so does sending a message in it. Hover a thread for the button, or press `⇧⌘D`.
 - **Models**: the model menu lists what the host's agents can run. Picking a model picks the agent. A thread stays with its agent but can switch between that agent's models.
-- **Access**: **Supervised** asks before commands and file changes (a turn that was refused a tool ends with an **Allow and continue** button), **Auto-accept edits**, **Auto** and **Full access**. **Plan mode** makes the agent only read and propose.
+- **Access**: **Supervised** asks before commands and file changes (the turn waits until you allow or refuse each one), **Auto-accept edits**, **Auto** and **Full access**. **Plan mode** makes the agent only read and propose; **Implement** on a finished plan lets it carry the plan out.
 - **Updates**: the app offers a new version at the bottom of the sidebar, downloads it there and restarts into it. A host that is behind shows an **Update** button next to its name; it installs the new version and restarts, which it only does while no agent is working.
 - A message sent while a turn is running waits and starts the next turn.
+- **Monitoring**: Claude Code can keep watching something after its turn, such as a deploy or a pull request's checks. The thread then shows **Monitoring**; it answers messages right away and reports by itself when what it watches changes. **Stop** ends the watch.
+- **Questions**: when the agent asks you something with options, pick one or type your own answer, and the turn goes on with it.
 - **Attachments**: drop files anywhere on the window, paste a copied file or image, or use the paperclip. They are uploaded to the host.
+- **Images and videos**: when an agent shows an image or a video in its reply, it appears in the thread. The host keeps a copy of it as it was, so it still shows after the file has changed. Click an image to open it, or a video to play it. Your Mac keeps up to 2 GB of them so threads open with them; **Settings** shows how much that is and can clear it.
 
 | Shortcut | Action |
 | --- | --- |

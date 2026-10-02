@@ -47,7 +47,7 @@ struct MotileApp: App {
                     .disabled(store.selectedThread == nil)
                 Button("Stop") { store.stop() }
                     .keyboardShortcut(".")
-                    .disabled(!store.activity.running)
+                    .disabled(!store.activity.busy)
                 Divider()
                 Button("Add a Project…") { store.showsFolderPicker = true }
                     .disabled(store.hosts.isEmpty)
@@ -147,6 +147,8 @@ struct RootView: View {
 struct MainView: View {
     static let sidebarHiddenKey = "sidebar.hidden"
     private static let sidebarWidths: ClosedRange<Double> = 240...420
+    /// What the sidebar always leaves to the thread, however wide it was dragged.
+    private static let threadMinWidth = 500.0
 
     @Environment(AppStore.self) private var store
     @AppStorage(MainView.sidebarHiddenKey) private var sidebarHidden = false
@@ -154,35 +156,34 @@ struct MainView: View {
 
     var body: some View {
         @Bindable var store = store
-        HStack(spacing: 0) {
-            if !sidebarHidden {
-                SidebarView()
-                    .frame(width: sidebarWidth)
-                SidebarDivider(width: $sidebarWidth, widths: Self.sidebarWidths)
+        GeometryReader { window in
+            let widest = min(Self.sidebarWidths.upperBound, Double(window.size.width) - 1 - Self.threadMinWidth)
+            let widths = Self.sidebarWidths.lowerBound...max(Self.sidebarWidths.lowerBound, widest)
+            HStack(spacing: 0) {
+                if !sidebarHidden {
+                    SidebarView()
+                        .frame(width: min(widths.upperBound, max(widths.lowerBound, sidebarWidth)))
+                    SidebarDivider(width: $sidebarWidth, widths: widths)
+                        .zIndex(1)
+                }
+                ThreadPane(titleInset: sidebarHidden ? 240 : 20)
             }
-            ThreadPane(titleInset: sidebarHidden ? 240 : 20)
         }
         .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                Button {
-                    sidebarHidden.toggle()
-                } label: {
-                    Label(sidebarHidden ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
+            ToolbarItem(placement: .navigation) {
+                ToolbarGlass {
+                    IconOnlyButton(symbol: "sidebar.left", help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)", size: 30, symbolSize: 15, inset: toolbarButtonInset) {
+                        sidebarHidden.toggle()
+                    }
+                    IconOnlyButton(symbol: "folder.badge.plus", help: "Add a project", size: 30, symbolSize: 15, inset: toolbarButtonInset) {
+                        store.showsFolderPicker = true
+                    }
+                    IconOnlyButton(symbol: "square.and.pencil", help: "New thread", size: 30, symbolSize: 15, inset: toolbarButtonInset) {
+                        store.startNewThread()
+                    }
                 }
-                .help(sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)")
-                Button {
-                    store.showsFolderPicker = true
-                } label: {
-                    Label("Add Project", systemImage: "folder.badge.plus")
-                }
-                .help("Add a project")
-                Button {
-                    store.startNewThread()
-                } label: {
-                    Label("New Thread", systemImage: "square.and.pencil")
-                }
-                .help("New thread")
             }
+            .withoutSystemGlass()
         }
         .onDrop(of: [UTType.fileURL] + ImageFiles.attachable, isTargeted: $store.dropTargeted) { providers in
             store.attach(dropped: providers)
@@ -204,7 +205,7 @@ private struct SidebarDivider: View {
             .ignoresSafeArea()
             .overlay {
                 Color.clear
-                    .frame(width: 9)
+                    .frame(width: Theme.resizeGrab)
                     .contentShape(Rectangle())
                     .onHover { inside in
                         if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
@@ -212,7 +213,7 @@ private struct SidebarDivider: View {
                     .gesture(
                         DragGesture(minimumDistance: 1, coordinateSpace: .global)
                             .onChanged { drag in
-                                let start = widthAtStart ?? width
+                                let start = widthAtStart ?? min(widths.upperBound, max(widths.lowerBound, width))
                                 widthAtStart = start
                                 width = min(widths.upperBound, max(widths.lowerBound, start + drag.translation.width))
                             }

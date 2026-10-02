@@ -12,7 +12,7 @@ struct ThreadPane: View {
 
     private var isStart: Bool {
         guard let draft = store.selectedDraft else { return false }
-        return store.transcriptIsEmpty && draft.id != store.sendingDraftID
+        return store.transcriptIsEmpty && !store.sendingDraftIDs.contains(draft.id)
     }
 
     var body: some View {
@@ -25,7 +25,7 @@ struct ThreadPane: View {
                     .mask { transcriptFade }
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
-                    .padding(.top, 24)
+                    .padding(.top, Self.composerGap)
                     .padding(.bottom, 16)
                     .frame(maxWidth: .infinity)
                     .onGeometryChange(for: CGFloat.self) { proxy in
@@ -43,17 +43,23 @@ struct ThreadPane: View {
             ToolbarItem {
                 Spacer()
             }
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 if let thread = store.selectedThread {
-                    Button {
-                        store.toggleDone()
-                    } label: {
-                        Label(thread.isDone ? "Mark Undone" : "Mark Done", systemImage: thread.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle")
+                    ToolbarGlass {
+                        IconOnlyButton(
+                            symbol: thread.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
+                            help: thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)",
+                            size: 30,
+                            symbolSize: 15,
+                            inset: toolbarButtonInset
+                        ) {
+                            store.toggleDone()
+                        }
+                        .disabled(thread.busy)
                     }
-                    .help(thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)")
-                    .disabled(thread.running)
                 }
             }
+            .withoutSystemGlass()
         }
         .sheet(isPresented: $store.showsFolderPicker) {
             if let host = store.composerHost {
@@ -67,16 +73,20 @@ struct ThreadPane: View {
         }
     }
 
-    /// Fades the transcript out where the composer floats over it, so nothing shows through
-    /// around the composer.
+    /// The room above the composer, which the transcript fades out in.
+    private static let composerGap: CGFloat = 24
+
+    /// Fades the transcript out under the top bar, and above the composer, so nothing shows
+    /// through it or around it.
     private var transcriptFade: some View {
-        let fade: CGFloat = 36
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: TranscriptView.topPadding)
             Color.black
             LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: fade)
+                .frame(height: Self.composerGap)
             Color.clear
-                .frame(height: max(0, composerHeight - fade))
+                .frame(height: max(0, composerHeight - Self.composerGap))
         }
     }
 
@@ -156,7 +166,7 @@ struct ThreadPane: View {
 
     private var headline: some View {
         let selected = store.project(store.selectedDraft?.projectID)
-        return HStack(spacing: 12) {
+        return HStack(spacing: Self.headlineWordSpace) {
             Text("Let’s build in")
                 .foregroundStyle(Color.themeSecondary)
             Menu {
@@ -180,16 +190,10 @@ struct ThreadPane: View {
                     Button("Remove “\(project.name)” from Projects") { store.removeProject(project) }
                 }
             } label: {
-                HStack(spacing: 8) {
-                    Text(selected?.name ?? "a project")
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.themeTertiary)
-                        .padding(.leading, -2)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
+                Text(selected?.name ?? "a project")
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
@@ -199,6 +203,9 @@ struct ThreadPane: View {
             // The highlight's margin takes no room, so the words are what is centred.
             .padding(.horizontal, -8)
         }
-        .font(.system(size: 28, weight: .regular))
+        .font(.system(size: Self.headlineSize, weight: .regular))
     }
+
+    private static let headlineSize: CGFloat = 28
+    private static let headlineWordSpace = (" " as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: headlineSize)]).width
 }

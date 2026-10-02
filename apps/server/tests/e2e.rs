@@ -8,7 +8,7 @@ use std::time::Duration;
 use motile_core::connection::{Connection, Follow, HostAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, Item, ItemKind, Message, NewThread, Project, Request, Thread, ThreadChange,
+    Access as AgentAccess, Agent, Approval, Item, ItemKind, Message, NewThread, Project, Request, Thread, ThreadChange,
     ToolStatus, TurnSummary,
 };
 use motile_server::access::Access;
@@ -107,6 +107,13 @@ impl Harness {
         };
         calls.filter(|arguments| !is_title(arguments)).map(|arguments| arguments.join("\n")).collect()
     }
+
+    /// The settings a running agent was told to change.
+    fn recorded_changes(&self) -> Vec<serde_json::Value> {
+        let recorded = std::fs::read_to_string(self.dir.path().join("arguments.txt")).unwrap_or_default();
+        let lines = recorded.lines().filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok());
+        lines.filter(|line| line.is_object()).collect()
+    }
 }
 
 async fn serve(
@@ -120,7 +127,7 @@ async fn serve(
     let executables = HashMap::from([(Agent::Claude, fake_agent.clone()), (Agent::Codex, fake_agent)]);
     let environment = Environment::fixed(variables.clone(), executables);
     let store = Store::open(&dir.path().join("motile.sqlite")).unwrap();
-    let hub = Hub::new(store, environment).unwrap();
+    let hub = Hub::new(store, dir.path().join("media"), environment).unwrap();
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
@@ -184,6 +191,7 @@ async fn update(connection: &Connection, thread_id: &str, change: ThreadChange) 
 struct Transcript {
     items: Vec<Item>,
     running: bool,
+    approvals: Vec<Approval>,
     synced: Option<u64>,
     /// The latest revision seen once live.
     rev: u64,
@@ -201,6 +209,7 @@ impl Transcript {
                     self.resets += 1;
                 }
                 self.running = activity.running;
+                self.approvals = activity.approvals;
             }
             Message::Items { items } => {
                 for item in items {
@@ -233,7 +242,10 @@ impl Transcript {
                 current.push_str(&text);
                 item.rev = rev;
             }
-            Message::Activity { activity } => self.running = activity.running,
+            Message::Activity { activity } => {
+                self.running = activity.running;
+                self.approvals = activity.approvals;
+            }
             other => panic!("unexpected thread update: {other:?}"),
         }
     }
@@ -307,9 +319,7 @@ async fn a_claude_turn_streams_into_the_transcript_and_survives_a_restart() {
     assert_eq!(live.user_texts(), vec!["Use an f-string in greet.py"]);
     assert!(live.texts().last().unwrap().contains("| Change | Why |"));
     assert!(live.tools().contains(&("Edit", ToolStatus::Succeeded)));
-    let summary = live.turn_ends().pop().expect("the turn ends with its summary");
-    assert_eq!(summary.denials.len(), 1);
-    assert_eq!(summary.denials[0].tool_name, "Bash");
+    assert_eq!(live.turn_ends().len(), 1);
     let seqs: Vec<u64> = live.items.iter().map(|item| item.seq).collect();
     assert_eq!(seqs, (0..live.items.len() as u64).collect::<Vec<_>>());
 
@@ -354,6 +364,11 @@ async fn a_codex_turn_shows_its_commands_and_edits() {
     finished_transcript(&connection, &thread_id).await;
     let turns = harness.recorded_turns();
     assert!(turns[1].ends_with("resume\n01a0f557-4a9b-74a0-b330-f6c4d13b2880\n-"), "{}", turns[1]);
+    assert!(
+        turns[1].contains("-c\ndeveloper_instructions=\"You can show the user an image or a video"),
+        "{}",
+        turns[1]
+    );
 }
 
 #[tokio::test]
@@ -501,26 +516,124 @@ async fn a_vague_first_message_is_titled_from_the_transcript_once_the_turn_ends(
 }
 
 #[tokio::test]
-async fn allowing_a_denied_tool_resumes_the_session_with_that_tool_allowed() {
-    let harness = Harness::start("fixtures/edit-and-run.jsonl", "0").await;
+async fn a_tool_call_that_needs_approval_waits_for_the_answer() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     next(&mut list).await;
-    let thread_id = send(&connection, None, new_thread, "Use an f-string in greet.py").await;
-    let transcript = finished_transcript(&connection, &thread_id).await;
-    let denials = transcript.turn_ends().pop().unwrap().denials.clone();
-    let waiting = thread_where(&mut list, |thread| !thread.running && thread.turn_ended_at.is_some()).await;
-    assert!(waiting.needs_approval);
+    let thread_id = send(&connection, None, new_thread, "Use an f-string and run greet.py").await;
+    let answer = |approval_id: String, allow| {
+        let request = Request::Answer { thread_id: thread_id.clone(), approval_id, allow, answers: HashMap::new() };
+        let connection = &connection;
+        async move { connection.request(&request).await }
+    };
 
-    let allow = Request::Allow { thread_id: thread_id.clone(), denials };
-    assert_eq!(connection.request(&allow).await.unwrap(), Message::Ok);
-    let after = finished_transcript(&connection, &thread_id).await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    let edit = first_approval(&mut transcript, &mut follow).await;
+    assert_eq!(edit.tool_name, "Edit");
+    assert!(edit.input.contains("greet.py"));
+    let waiting = thread_where(&mut list, |thread| thread.needs_approval).await;
+    assert!(waiting.running, "the turn stands still, it has not ended");
 
-    assert_eq!(after.user_texts().last().unwrap(), &"I've allowed Bash. Please continue.");
-    let turns = harness.recorded_turns();
-    assert!(turns[1].contains("--resume\n7827b0d8-4806-41c7-812e-540c46fcb36b"), "{}", turns[1]);
-    assert!(turns[1].ends_with("--allowedTools\nBash(python3 greet.py)"), "{}", turns[1]);
+    assert_eq!(answer(edit.id.clone(), true).await.unwrap(), Message::Ok);
+    while transcript.approvals.first().is_none_or(|approval| approval.id == edit.id) {
+        transcript.apply(next(&mut follow).await);
+    }
+    let bash = transcript.approvals[0].clone();
+    assert_eq!(bash.tool_name, "Bash");
+    let twice = answer(edit.id, true).await.unwrap();
+    assert!(matches!(twice, Message::Error { message } if message.contains("no longer waits")));
+
+    assert_eq!(answer(bash.id, false).await.unwrap(), Message::Ok);
+    transcript.follow_until_idle(&mut follow).await;
+    assert_eq!(transcript.tools(), vec![("Edit", ToolStatus::Succeeded), ("Bash", ToolStatus::Failed)]);
+    assert_eq!(transcript.texts().last().unwrap(), &"`greet` uses an f-string now. I didn't run it.");
+    assert!(transcript.approvals.is_empty());
+    let ended = thread_where(&mut list, |thread| !thread.running).await;
+    assert!(!ended.needs_approval);
+    assert_eq!(harness.recorded_turns().len(), 1, "the answers reach the process that asked");
+}
+
+/// Follows the thread until the turn waits with a tool call.
+async fn first_approval(transcript: &mut Transcript, follow: &mut Follow) -> Approval {
+    while transcript.approvals.is_empty() {
+        transcript.apply(next(follow).await);
+    }
+    transcript.approvals[0].clone()
+}
+
+#[tokio::test]
+async fn a_question_the_agent_asks_is_answered_by_the_user() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Which color should the button be? Ask me.").await;
+
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    let asked = first_approval(&mut transcript, &mut follow).await;
+    assert_eq!(asked.tool_name, "AskUserQuestion");
+    let answers = HashMap::from([("Which color should the button be?".to_string(), "Blue".to_string())]);
+    let answer = Request::Answer { thread_id: thread_id.clone(), approval_id: asked.id, allow: true, answers };
+    assert_eq!(connection.request(&answer).await.unwrap(), Message::Ok);
+
+    transcript.follow_until_idle(&mut follow).await;
+    assert_eq!(transcript.texts(), vec!["The button will be blue."]);
+}
+
+#[tokio::test]
+async fn an_approved_plan_is_carried_out_with_the_threads_access() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await.unwrap();
+    let new_thread = NewThread { plan: true, access: AgentAccess::AcceptEdits, ..new_thread };
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, Some(new_thread), "Plan the hello function").await;
+
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    let plan = first_approval(&mut transcript, &mut follow).await;
+    assert_eq!(plan.tool_name, "ExitPlanMode");
+    assert!(thread_where(&mut list, |thread| thread.needs_approval).await.plan);
+    let approve =
+        Request::Answer { thread_id: thread_id.clone(), approval_id: plan.id, allow: true, answers: HashMap::new() };
+    assert_eq!(connection.request(&approve).await.unwrap(), Message::Ok);
+
+    transcript.follow_until_idle(&mut follow).await;
+    assert_eq!(transcript.texts(), vec!["`hello()` is in place. I worked in acceptEdits mode."]);
+    assert!(!thread_where(&mut list, |thread| !thread.running).await.plan, "the thread has left plan mode");
+}
+
+#[tokio::test]
+async fn settings_changed_while_the_agent_is_there_reach_its_process() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "Watch the deploy").await;
+    thread_where(&mut list, |thread| thread.monitoring).await;
+
+    let model = ThreadChange { model: Some("sonnet".into()), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, model).await, Message::Ok);
+    let effort = ThreadChange { effort: Some("high".into()), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, effort).await, Message::Ok);
+    let access = ThreadChange { access: Some(AgentAccess::Full), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, access).await, Message::Ok);
+    thread_where(&mut list, |thread| !thread.monitoring && !thread.running).await;
+
+    assert_eq!(
+        harness.recorded_changes(),
+        vec![
+            serde_json::json!({"subtype": "set_model", "model": "sonnet"}),
+            serde_json::json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": "high"}}),
+            serde_json::json!({"subtype": "set_permission_mode", "mode": "bypassPermissions"}),
+        ]
+    );
+    assert_eq!(harness.recorded_turns().len(), 1);
 }
 
 #[tokio::test]
@@ -561,6 +674,71 @@ async fn a_message_sent_while_a_turn_runs_starts_the_next_turn() {
     let turns = harness.recorded_turns();
     assert_eq!(turns.len(), 2);
     assert!(turns[1].contains("--resume\ne8c19686-947e-4f00-9129-eb7bde33809a"), "{}", turns[1]);
+}
+
+#[tokio::test]
+async fn an_agent_that_monitors_takes_messages_and_wakes_by_itself() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "Watch the deploy").await;
+
+    let monitoring = thread_where(&mut list, |thread| thread.monitoring).await;
+    assert!(!monitoring.running && monitoring.turn_ended_at.is_some());
+    let done = ThreadChange { done: Some(true), ..Default::default() };
+    let refused = update(&connection, &thread_id, done).await;
+    assert!(matches!(refused, Message::Error { message } if message.contains("while it is monitoring")));
+
+    send(&connection, Some(thread_id.clone()), None, "How far is it?").await;
+    thread_where(&mut list, |thread| thread.running).await;
+    thread_where(&mut list, |thread| thread.monitoring).await;
+    let woken = thread_where(&mut list, |thread| thread.running).await;
+    assert!(!woken.monitoring);
+    let ended = thread_where(&mut list, |thread| !thread.running).await;
+    assert!(!ended.monitoring);
+
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(
+        transcript.texts(),
+        vec![
+            "The deploy is rolling out. I'm watching it and will tell you when it is healthy.",
+            "Still rolling out; 2 of 3 services are up. You said: How far is it?",
+            "The deploy finished: all 3 services are healthy.",
+        ]
+    );
+    assert_eq!(transcript.turn_ends().len(), 3);
+    assert_eq!(transcript.tools(), vec![("Monitor", ToolStatus::Succeeded)]);
+    assert!(transcript.errors().is_empty());
+    assert_eq!(harness.recorded_turns().len(), 1, "the process that monitors takes the message");
+}
+
+#[tokio::test]
+async fn stopping_an_agent_that_monitors_ends_the_watch() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "Watch the deploy").await;
+    let monitoring = thread_where(&mut list, |thread| thread.monitoring).await;
+
+    connection.request(&Request::Stop { thread_id: thread_id.clone() }).await.unwrap();
+    let stopped = thread_where(&mut list, |thread| !thread.monitoring).await;
+    assert!(!stopped.running);
+    assert_eq!(stopped.turn_ended_at, monitoring.turn_ended_at);
+
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.texts().len(), 1, "the watch ended before it saw anything");
+    assert_eq!(transcript.turn_ends().len(), 1);
+    assert!(transcript.errors().is_empty());
+
+    send(&connection, Some(thread_id.clone()), None, "What does the note say?").await;
+    finished_transcript(&connection, &thread_id).await;
+    let turns = harness.recorded_turns();
+    assert_eq!(turns.len(), 2);
+    assert!(turns[1].contains("--resume\n00000000-0000-4000-8000-00000000d00d"), "{}", turns[1]);
 }
 
 #[tokio::test]
@@ -630,6 +808,7 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
         first.contains("--permission-mode\nbypassPermissions\n--model\nclaude-opus-5-5\n--effort\nxhigh"),
         "{first}"
     );
+    assert!(first.contains("--append-system-prompt\nYou can show the user an image or a video"), "{first}");
 
     let change = ThreadChange { effort: Some("low".to_string()), plan: Some(true), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, change).await, Message::Ok);
@@ -742,4 +921,47 @@ async fn a_project_without_an_icon_has_none_until_one_appears_in_its_folder() {
     harness.restart().await;
     let connection = harness.connect().await;
     assert!(projects_now(&connection).await.remove(0).icon.is_some());
+}
+
+#[tokio::test]
+async fn an_image_the_agent_shows_is_kept_as_it_was_and_goes_with_its_thread() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Show the screenshot").await;
+
+    // The image arrives with the block that shows it, while the reply is still streaming.
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    while transcript.items.iter().all(|item| item.media.is_empty()) {
+        transcript.apply(next(&mut follow).await);
+    }
+    assert!(transcript.running);
+    transcript.follow_until_idle(&mut follow).await;
+
+    let screenshot = PathBuf::from(harness.folder("project")).join("screenshot.png");
+    let shown = std::fs::read(&screenshot).unwrap();
+    let reply = transcript.items.iter().find(|item| !item.media.is_empty()).unwrap();
+    assert!(matches!(&reply.kind, ItemKind::Assistant { text } if text.ends_with("The header is in place.")));
+    let [media] = &reply.media[..] else { panic!("the reply shows one image: {:?}", reply.media) };
+    assert_eq!((media.src.as_str(), media.video), (screenshot.to_str().unwrap(), false));
+    assert_eq!((media.width, media.height, media.size), (Some(960), Some(600), shown.len() as u64));
+
+    // The agent's file changes; the thread still shows what it showed.
+    std::fs::write(&screenshot, "something else").unwrap();
+    let fetched = harness.dir.path().join("fetched.png");
+    let mut progress = Vec::new();
+    connection.media(&media.id, &fetched, |received, size| progress.push((received, size))).await.unwrap();
+    assert_eq!(std::fs::read(&fetched).unwrap(), shown);
+    assert_eq!(progress.last(), Some(&(media.size, media.size)));
+    assert_eq!(finished_transcript(&connection, &thread_id).await.items, transcript.items);
+
+    let nowhere = connection.media("../motile.sqlite", &fetched, |_, _| {}).await;
+    assert!(nowhere.is_err());
+
+    let kept = harness.dir.path().join("media").join(&media.id);
+    assert!(kept.is_file());
+    let delete = Request::Delete { thread_id: thread_id.clone() };
+    assert_eq!(connection.request(&delete).await.unwrap(), Message::Ok);
+    assert!(!kept.exists());
 }

@@ -14,6 +14,7 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
         (false, Access::Auto) => arguments.push("--approve-for-me".to_string()),
         (false, Access::Full) => arguments.push("--dangerously-bypass-approvals-and-sandbox".to_string()),
     }
+    arguments.extend(["-c".to_string(), format!("developer_instructions=\"{}\"", super::SHOWING_MEDIA)]);
     if let Some(effort) = turn.effort {
         arguments.extend(["-c".to_string(), format!("model_reasoning_effort=\"{effort}\"")]);
     }

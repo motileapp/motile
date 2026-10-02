@@ -1,9 +1,12 @@
 //! The live state of every thread: whether a turn is running, what it has produced so far, and
 //! who is watching. A turn is one run of the agent's CLI; its events are applied here, saved, and
-//! sent to everyone with the thread open.
+//! sent to everyone with the thread open. Claude Code's process is talked to while it runs: it
+//! asks before a tool call that needs approval and is told the thread's changed settings. It
+//! outlives the turn while it monitors something: it then takes the next prompts itself, and
+//! starts turns of its own.
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,15 +17,16 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, Agent, Denial, HostInfo, Item, ItemKind, Message, NewThread, Project, Thread, ThreadChange, ToolCall,
-    ToolStatus, TurnSummary,
+    Activity, Agent, HostInfo, Item, ItemKind, Message, NewThread, Project, Thread, ThreadChange, ToolCall, ToolStatus,
+    TurnSummary,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::{Mutex, broadcast, mpsc};
 
 use crate::agents::environment::Environment;
-use crate::agents::{AgentEvent, Parser, Turn, claude, executable_name};
+use crate::agents::{self, AgentEvent, Background, Parser, Turn, claude, executable_name};
+use crate::media::MediaStore;
 use crate::store::{Store, StoredProject, StoredThread, TitleSource};
 use crate::{icons, pacing, title};
 
@@ -33,6 +37,7 @@ const FLUSH_EVERY: Duration = Duration::from_secs(1);
 
 pub struct Hub {
     store: Store,
+    pub media: MediaStore,
     environment: Environment,
     threads: Mutex<HashMap<String, Live>>,
     /// Locked after `threads` when both are needed.
@@ -42,6 +47,7 @@ pub struct Hub {
 
 struct Live {
     stored: StoredThread,
+    media: MediaStore,
     /// Items the running turn may still change, by id. Everything else is only on disk.
     open: HashMap<String, Item>,
     /// Open items whose latest text isn't on disk yet.
@@ -53,17 +59,21 @@ struct Live {
     activity: Activity,
     updates: broadcast::Sender<Message>,
     run: Option<Run>,
-    /// Prompts sent while a turn was running; they start the next one.
+    /// Prompts sent while the agent was working; they start the next turn.
     queued: Vec<String>,
     title_needs_refinement: bool,
 }
 
 struct Run {
     process_id: u32,
+    /// When the agent last went to work.
     started: Instant,
     interrupted: Arc<AtomicBool>,
+    /// The turn has ended; a process that is still there is idle.
     received_result: bool,
-    allowed_tools: Vec<String>,
+    /// Writes lines to the process's stdin, which closes when this is dropped.
+    input: Option<mpsc::UnboundedSender<String>>,
+    background: Background,
 }
 
 pub struct ListSubscription {
@@ -80,16 +90,20 @@ pub struct ThreadSubscription {
 }
 
 impl Hub {
-    pub fn new(store: Store, environment: Environment) -> anyhow::Result<Arc<Self>> {
+    /// `media_folder` is where the images and videos that threads show are kept.
+    pub fn new(store: Store, media_folder: PathBuf, environment: Environment) -> anyhow::Result<Arc<Self>> {
+        let home = environment.variables.get("HOME").map(String::as_str).unwrap_or_default();
+        let media = MediaStore::new(media_folder, home);
         let threads = store.load_threads()?;
-        let threads = threads.into_iter().map(|stored| (stored.thread.id.clone(), Live::new(stored))).collect();
+        let live = |stored: StoredThread| (stored.thread.id.clone(), Live::new(stored, media.clone()));
+        let threads = threads.into_iter().map(live).collect();
         let mut projects = store.load_projects()?;
         for project in &mut projects {
             refresh_icon(&store, project);
         }
         let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
-        Ok(Arc::new(Self { store, environment, threads: Mutex::new(threads), projects, list_updates }))
+        Ok(Arc::new(Self { store, media, environment, threads: Mutex::new(threads), projects, list_updates }))
     }
 
     pub fn host_info(&self) -> HostInfo {
@@ -126,7 +140,7 @@ impl Hub {
         // An app ahead of the host has a copy from before the host's data was replaced.
         let reset = since > rev;
         let items = self.store.items_since(thread_id, if reset { 0 } else { since })?;
-        Ok(ThreadSubscription { reset, activity: live.activity, items, rev, updates: live.updates.subscribe() })
+        Ok(ThreadSubscription { reset, activity: live.activity.clone(), items, rev, updates: live.updates.subscribe() })
     }
 
     /// Starts a turn and returns the thread it runs in.
@@ -148,7 +162,7 @@ impl Hub {
                 let stored = self.new_thread(new_thread, &text, &attachments).await?;
                 self.store.save_thread(&stored)?;
                 let thread_id = stored.thread.id.clone();
-                threads.insert(thread_id.clone(), Live::new(stored));
+                threads.insert(thread_id.clone(), Live::new(stored, self.media.clone()));
                 (thread_id, true)
             }
             (None, None) => bail!("No thread was given."),
@@ -156,11 +170,13 @@ impl Hub {
         let live = threads.get_mut(&thread_id).context("That thread no longer exists.")?;
         let prompt = prompt(&text, &attachments);
         live.append(&self.store, ItemKind::User { text: text.clone(), attachments })?;
-        if live.stored.thread.running {
-            live.queued.push(prompt);
+        if let Some(run) = &live.run {
+            if !run.received_result || !self.deliver(live, &prompt)? {
+                live.queued.push(prompt);
+            }
             return Ok(thread_id);
         }
-        self.start_turn(live, prompt, Vec::new())?;
+        self.start_turn(live, prompt)?;
         if is_new {
             tokio::spawn(self.clone().title_from_first_message(thread_id.clone(), text));
         }
@@ -194,6 +210,7 @@ impl Hub {
             done_at: None,
             undone_at: None,
             running: false,
+            monitoring: false,
             needs_approval: false,
             turn_ended_at: None,
             rev: 0,
@@ -254,31 +271,45 @@ impl Hub {
         self.announce(&live.stored.thread);
     }
 
-    pub async fn allow(self: &Arc<Self>, thread_id: &str, denials: Vec<Denial>) -> anyhow::Result<()> {
-        if denials.is_empty() {
-            bail!("There is nothing to allow.");
-        }
+    /// Allows or refuses a tool call the running turn waits with. `answers` is what the user chose
+    /// when the call asked them questions.
+    pub async fn answer(
+        &self,
+        thread_id: &str,
+        approval_id: &str,
+        allow: bool,
+        answers: HashMap<String, String>,
+    ) -> anyhow::Result<()> {
         let mut threads = self.threads.lock().await;
         let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
-        if live.stored.thread.running {
-            bail!("This thread is already running a turn.");
+        let waiting = live.activity.approvals.iter().position(|approval| approval.id == approval_id);
+        let approval = live.activity.approvals.remove(waiting.context("The agent no longer waits for that answer.")?);
+        if !live.write(claude::answer(&approval, allow, &answers, live.stored.thread.access)) {
+            bail!("The agent is no longer running.");
         }
-        let mut rules: Vec<String> = denials.iter().map(claude::allow_rule).collect();
-        rules.sort();
-        rules.dedup();
-        let mut names: Vec<&str> = denials.iter().map(|denial| denial.tool_name.as_str()).collect();
-        names.sort();
-        names.dedup();
-        let text = format!("I've allowed {}. Please continue.", names.join(", "));
-        live.append(&self.store, ItemKind::User { text: text.clone(), attachments: Vec::new() })?;
-        self.start_turn(live, text, rules)
+        if allow && claude::leaves_plan_mode(&approval) {
+            live.stored.thread.plan = false;
+        }
+        self.announce_approvals(live)
+    }
+
+    fn announce_approvals(&self, live: &mut Live) -> anyhow::Result<()> {
+        live.stored.thread.needs_approval = !live.activity.approvals.is_empty();
+        self.store.save_thread(&live.stored)?;
+        live.send_activity();
+        self.announce(&live.stored.thread);
+        Ok(())
     }
 
     pub async fn stop(self: &Arc<Self>, thread_id: &str) {
-        let threads = self.threads.lock().await;
-        let Some(run) = threads.get(thread_id).and_then(|live| live.run.as_ref()) else { return };
+        let mut threads = self.threads.lock().await;
+        let Some(run) = threads.get_mut(thread_id).and_then(|live| live.run.as_mut()) else { return };
         run.interrupted.store(true, Ordering::Relaxed);
-        let process_id = run.process_id;
+        run.input = None;
+        self.end_process(thread_id, run.process_id);
+    }
+
+    fn end_process(self: &Arc<Self>, thread_id: &str, process_id: u32) {
         signal(process_id, libc::SIGINT);
 
         // Escalate if the agent ignores the interrupt.
@@ -309,26 +340,36 @@ impl Hub {
             thread.title = title;
             live.stored.title_source = TitleSource::User;
         }
+        // What a process that is still there has to be told; a new one starts with it.
+        let mut told = Vec::new();
         if let Some(model) = change.model {
             thread.model = checked("model", Some(model))?;
+            told.push(claude::model_line(thread.model.as_deref()));
         }
         if let Some(effort) = change.effort {
             thread.effort = checked("effort", Some(effort))?;
+            told.push(claude::effort_line(thread.effort.as_deref()));
         }
-        if let Some(access) = change.access {
-            thread.access = access;
-        }
-        if let Some(plan) = change.plan {
-            thread.plan = plan;
+        let mode_changed = change.access.is_some() || change.plan.is_some();
+        thread.access = change.access.unwrap_or(thread.access);
+        thread.plan = change.plan.unwrap_or(thread.plan);
+        if mode_changed {
+            told.push(claude::access_line(thread.plan, thread.access));
         }
         match change.done {
             Some(true) if thread.running => bail!("A thread can't be marked done while it is working."),
+            Some(true) if thread.monitoring => bail!("A thread can't be marked done while it is monitoring."),
             Some(true) => thread.done_at = thread.done_at.or_else(|| Some(now())),
             Some(false) if thread.done_at.is_some() => {
                 thread.done_at = None;
                 thread.undone_at = Some(now());
             }
             _ => {}
+        }
+        if agents::takes_more_input(thread.agent) {
+            for line in told {
+                live.write(line);
+            }
         }
         self.store.save_thread(&live.stored)?;
         self.announce(&live.stored.thread);
@@ -341,13 +382,19 @@ impl Hub {
         if let Some(run) = &live.run {
             signal(run.process_id, libc::SIGKILL);
         }
+        let shown = self.store.media_of(thread_id)?;
         self.store.delete_thread(thread_id)?;
+        for media_id in shown {
+            if !self.store.shows_media(&media_id)? {
+                self.media.remove(&media_id);
+            }
+        }
         let _ = self.list_updates.send(Message::ThreadDeleted { thread_id: thread_id.to_string() });
         Ok(())
     }
 
     pub async fn any_running(&self) -> bool {
-        self.threads.lock().await.values().any(|live| live.stored.thread.running)
+        self.threads.lock().await.values().any(|live| live.run.is_some())
     }
 
     pub async fn add_project(&self, path: &str) -> anyhow::Result<()> {
@@ -420,16 +467,16 @@ impl Hub {
         let _ = self.list_updates.send(Message::ThreadUpsert { thread: thread.clone() });
     }
 
-    fn start_turn(self: &Arc<Self>, live: &mut Live, prompt: String, allowed_tools: Vec<String>) -> anyhow::Result<()> {
+    fn start_turn(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
         let thread = &live.stored.thread;
+        let agent = thread.agent;
         let turn = Turn {
-            agent: thread.agent,
+            agent,
             model: thread.model.as_deref(),
             effort: thread.effort.as_deref(),
             access: thread.access,
             plan: thread.plan,
             session_id: live.stored.session_id.as_deref(),
-            allowed_tools: &allowed_tools,
         };
         let child = match self.spawn(&turn, &thread.cwd) {
             Ok(child) => child,
@@ -443,28 +490,86 @@ impl Hub {
         };
 
         let interrupted = Arc::new(AtomicBool::new(false));
+        let (input, lines) = mpsc::unbounded_channel();
+        let _ = input.send(agents::input(agent, &prompt));
         live.run = Some(Run {
             process_id: child.id().unwrap_or_default(),
             started: Instant::now(),
             interrupted: interrupted.clone(),
             received_result: false,
-            allowed_tools,
+            input: agents::takes_more_input(agent).then_some(input),
+            background: Background::default(),
         });
+        self.announce_working(live)?;
+
+        let parser = Parser::new(agent);
+        tokio::spawn(self.clone().drive(live.stored.thread.id.clone(), child, lines, parser, interrupted));
+        Ok(())
+    }
+
+    fn announce_working(&self, live: &mut Live) -> anyhow::Result<()> {
         let thread = &mut live.stored.thread;
         thread.running = true;
+        thread.monitoring = false;
         thread.needs_approval = false;
         thread.updated_at = now();
         // New activity brings a done thread back.
         if thread.done_at.take().is_some() {
             thread.undone_at = Some(now());
         }
-        live.activity = Activity { running: true, thinking: false, started_at: Some(now()) };
+        live.activity = Activity { running: true, started_at: Some(now()), ..Activity::default() };
         self.store.save_thread(&live.stored)?;
         live.send_activity();
         self.announce(&live.stored.thread);
+        Ok(())
+    }
 
-        let parser = Parser::new(live.stored.thread.agent);
-        tokio::spawn(self.clone().drive(live.stored.thread.id.clone(), child, prompt, parser, interrupted));
+    /// Gives the prompt to the process that is still there. `false` when it takes no more.
+    fn deliver(&self, live: &mut Live, prompt: &str) -> anyhow::Result<bool> {
+        if !live.write(agents::input(live.stored.thread.agent, prompt)) {
+            return Ok(false);
+        }
+        self.resume(live)?;
+        Ok(true)
+    }
+
+    /// The idle process is at work again.
+    fn resume(&self, live: &mut Live) -> anyhow::Result<()> {
+        let Some(run) = live.run.as_mut().filter(|run| run.received_result) else { return Ok(()) };
+        run.received_result = false;
+        run.started = Instant::now();
+        self.announce_working(live)
+    }
+
+    /// What the process does once its turn has ended: exit, take the prompts that waited, keep
+    /// working in the background, or monitor.
+    fn rest(&self, live: &mut Live) -> anyhow::Result<()> {
+        let Some(run) = &mut live.run else { return Ok(()) };
+        if run.background.is_empty() || run.interrupted.load(Ordering::Relaxed) {
+            run.input = None;
+            return Ok(());
+        }
+        let agents_at_work = run.background.agents > 0;
+        if !live.queued.is_empty() {
+            let prompt = live.queued.join("\n\n");
+            if self.deliver(live, &prompt)? {
+                live.queued.clear();
+                return Ok(());
+            }
+        }
+        if agents_at_work {
+            return Ok(());
+        }
+        let thread = &mut live.stored.thread;
+        thread.running = false;
+        thread.monitoring = true;
+        thread.updated_at = now();
+        thread.turn_ended_at = Some(now());
+        live.activity = Activity { monitoring: true, ..Activity::default() };
+        live.flush(&self.store)?;
+        self.store.save_thread(&live.stored)?;
+        live.send_activity();
+        self.announce(&live.stored.thread);
         Ok(())
     }
 
@@ -497,13 +602,17 @@ impl Hub {
         self: Arc<Self>,
         thread_id: String,
         mut child: Child,
-        prompt: String,
+        mut lines: mpsc::UnboundedReceiver<String>,
         mut parser: Parser,
         interrupted: Arc<AtomicBool>,
     ) {
         if let Some(mut stdin) = child.stdin.take() {
             tokio::spawn(async move {
-                let _ = stdin.write_all(prompt.as_bytes()).await;
+                while let Some(line) = lines.recv().await {
+                    if stdin.write_all(line.as_bytes()).await.is_err() {
+                        return;
+                    }
+                }
             });
         }
         let stderr = child.stderr.take();
@@ -529,13 +638,17 @@ impl Hub {
         self.finish_turn(&thread_id, exit_code, &stderr, interrupted.load(Ordering::Relaxed)).await;
     }
 
-    async fn apply(&self, thread_id: &str, events: Vec<AgentEvent>) {
+    async fn apply(self: &Arc<Self>, thread_id: &str, events: Vec<AgentEvent>) {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
+        let was_running = live.stored.thread.running;
         for event in events {
             if let Err(error) = self.apply_event(live, event) {
                 tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
             }
+        }
+        if was_running && live.stored.thread.monitoring {
+            self.after_turn(live).await;
         }
         if live.last_flush.elapsed() < FLUSH_EVERY {
             return;
@@ -550,6 +663,7 @@ impl Hub {
         let more_text = matches!(
             event,
             AgentEvent::Session { .. }
+                | AgentEvent::Background(_)
                 | AgentEvent::TextStarted { .. }
                 | AgentEvent::TextDelta { .. }
                 | AgentEvent::Text { .. }
@@ -602,15 +716,37 @@ impl Hub {
                 if let Some(run) = &mut live.run {
                     run.received_result = true;
                     summary.duration_ms = Some(run.started.elapsed().as_millis() as u64);
+                    // Claude Code reports a turn the user stopped as one that failed.
+                    if run.interrupted.load(Ordering::Relaxed) {
+                        summary.stopped = true;
+                        summary.is_error = false;
+                    }
                 }
                 if summary.is_error {
                     let message = result_text.filter(|text| !text.is_empty());
                     let message = message.unwrap_or_else(|| "The agent reported an error.".to_string());
                     live.append(store, ItemKind::Error { message })?;
                 }
-                live.stored.thread.needs_approval = !summary.denials.is_empty();
+                live.activity.approvals.clear();
+                live.stored.thread.needs_approval = false;
                 live.append(store, ItemKind::TurnEnd { summary })?;
+                self.rest(live)?;
             }
+            AgentEvent::Approval(approval) => {
+                live.set_thinking(false);
+                live.activity.approvals.push(approval);
+                self.announce_approvals(live)?;
+            }
+            AgentEvent::ApprovalWithdrawn { id } => {
+                live.activity.approvals.retain(|approval| approval.id != id);
+                self.announce_approvals(live)?;
+            }
+            AgentEvent::Background(background) => {
+                if let Some(run) = &mut live.run {
+                    run.background = background;
+                }
+            }
+            AgentEvent::Woke => self.resume(live)?,
             AgentEvent::Failed { message } => {
                 if let Some(run) = &mut live.run {
                     run.received_result = true;
@@ -629,16 +765,20 @@ impl Hub {
             tracing::error!(thread_id, "couldn't save the end of a turn: {error:#}");
         }
         let thread = &mut live.stored.thread;
+        // A thread that was monitoring has told of its turn's end already.
+        if !thread.monitoring {
+            thread.turn_ended_at = Some(now());
+        }
         thread.running = false;
+        thread.monitoring = false;
+        thread.needs_approval = false;
         thread.updated_at = now();
-        thread.turn_ended_at = Some(now());
         live.activity = Activity::default();
         live.open.clear();
 
         if !live.queued.is_empty() {
             let prompt = std::mem::take(&mut live.queued).join("\n\n");
-            let allowed_tools = run.map(|run| run.allowed_tools).unwrap_or_default();
-            if let Err(error) = self.start_turn(live, prompt, allowed_tools) {
+            if let Err(error) = self.start_turn(live, prompt) {
                 tracing::error!(thread_id, "couldn't start the next turn: {error:#}");
             }
             return;
@@ -648,8 +788,12 @@ impl Hub {
         }
         live.send_activity();
         self.announce(&live.stored.thread);
+        self.after_turn(live).await;
+    }
+
+    async fn after_turn(self: &Arc<Self>, live: &mut Live) {
         if std::mem::take(&mut live.title_needs_refinement) && live.stored.title_source == TitleSource::Placeholder {
-            tokio::spawn(self.clone().title_from_transcript(thread_id.to_string()));
+            tokio::spawn(self.clone().title_from_transcript(live.stored.thread.id.clone()));
         }
         // The turn may have switched branches, or made the project an icon.
         let mut projects = self.projects.lock().await;
@@ -661,10 +805,11 @@ impl Hub {
 }
 
 impl Live {
-    fn new(stored: StoredThread) -> Self {
+    fn new(stored: StoredThread, media: MediaStore) -> Self {
         let (updates, _) = broadcast::channel(UPDATES_BUFFER);
         Self {
             stored,
+            media,
             open: HashMap::new(),
             unsaved: HashSet::new(),
             last_flush: Instant::now(),
@@ -691,7 +836,13 @@ impl Live {
     }
 
     fn send_activity(&self) {
-        let _ = self.updates.send(Message::Activity { activity: self.activity });
+        let _ = self.updates.send(Message::Activity { activity: self.activity.clone() });
+    }
+
+    /// Writes a line to the process's stdin. `false` when it takes no more.
+    fn write(&self, line: String) -> bool {
+        let input = self.run.as_ref().and_then(|run| run.input.as_ref());
+        input.is_some_and(|input| input.send(line).is_ok())
     }
 
     fn set_thinking(&mut self, thinking: bool) {
@@ -713,13 +864,13 @@ impl Live {
     fn new_item(&mut self, id: String, kind: ItemKind) -> Item {
         let seq = self.stored.next_seq;
         self.stored.next_seq += 1;
-        Item { id, seq, rev: self.next_rev(), created_at: now(), kind }
+        Item { id, seq, rev: self.next_rev(), created_at: now(), media: Vec::new(), kind }
     }
 
     /// Adds the item, or replaces what the running turn said about it before.
     fn upsert(&mut self, store: &Store, id: String, kind: ItemKind) -> anyhow::Result<()> {
         let rev = self.next_rev();
-        let item = match self.open.get_mut(&id) {
+        let mut item = match self.open.get_mut(&id) {
             Some(item) => {
                 item.kind = kind;
                 item.rev = rev;
@@ -733,10 +884,29 @@ impl Live {
                 item
             }
         };
+        if self.keep_media(store, &id)? {
+            item = self.open[&id].clone();
+        }
         self.unsaved.remove(&id);
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
+    }
+
+    /// Copies the images and videos a reply shows that its item doesn't hold yet. `true` when
+    /// the item holds more now.
+    fn keep_media(&mut self, store: &Store, id: &str) -> anyhow::Result<bool> {
+        let Some(item) = self.open.get_mut(id) else { return Ok(false) };
+        let ItemKind::Assistant { text } = &item.kind else { return Ok(false) };
+        let kept = self.media.capture_new(text, &self.stored.thread.cwd, &item.media);
+        if kept.is_empty() {
+            return Ok(false);
+        }
+        for media in &kept {
+            store.save_media(&self.stored.thread.id, &media.id)?;
+        }
+        item.media.extend(kept);
+        Ok(true)
     }
 
     /// Takes streamed text and passes on the blocks it finishes.
@@ -783,6 +953,14 @@ impl Live {
         let rev = self.next_rev();
         if let Some(item) = self.open.get_mut(&id) {
             item.rev = rev;
+        }
+        // An item that shows something new is sent whole, with what it shows.
+        if self.keep_media(store, &id)? {
+            let item = self.open[&id].clone();
+            self.unsaved.remove(&id);
+            store.save_item(&self.stored.thread.id, &item)?;
+            let _ = self.updates.send(Message::Items { items: vec![item] });
+            return Ok(());
         }
         self.unsaved.insert(id.clone());
         let _ = self.updates.send(Message::TextDelta { id, text, rev });

@@ -64,7 +64,7 @@ done
 if [ -s "$WORK/token" ]; then
     echo "▸ Setting up the host…"
     export MOTILE_DATA_DIR="$WORK/host" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent"
-    export FAKE_AGENT_DELAY=0.03
+    export FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6
     MOTILE_AUTH_URL="$AUTH_URL" "$BIN/motile" setup "$(cat "$WORK/token")" --name studio --no-service --yes
     "$BIN/motile" run --local --port "$HOST_PORT" > "$OUT/host.log" 2>&1 &
     HOST_PID=$!

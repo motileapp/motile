@@ -13,6 +13,7 @@ use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{Message, Request};
 use serde::Serialize;
+use tokio::io::AsyncWriteExt;
 
 /// A host's key, optionally with an address to reach it at directly: `key` or `key@ip:port`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -147,6 +148,32 @@ impl Connection {
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to an upload: {other:?}"),
         }
+    }
+
+    /// Fetches the host's copy of an image or a video into `file`, telling `progress` how many
+    /// of its bytes have arrived.
+    pub async fn media(&self, id: &str, file: &Path, mut progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {
+        let (mut send, mut recv) = self.inner.open_bi().await?;
+        write_frame(&mut send, &Request::Media { id: id.to_string() }).await?;
+        send.finish()?;
+        let size = match read_frame(&mut recv).await?.context("The host closed the stream without answering.")? {
+            Message::Media { size } => size,
+            Message::Error { message } => bail!("{message}"),
+            other => bail!("Unexpected answer to a media request: {other:?}"),
+        };
+
+        let mut output = tokio::fs::File::create(file).await?;
+        let mut buffer = vec![0u8; 64 * 1024];
+        let mut received = 0;
+        while received < size {
+            let wanted = buffer.len().min((size - received) as usize);
+            let read = recv.read(&mut buffer[..wanted]).await?.context("The download was cut off.")?;
+            output.write_all(&buffer[..read]).await?;
+            received += read as u64;
+            progress(received, size);
+        }
+        output.flush().await?;
+        Ok(())
     }
 }
 

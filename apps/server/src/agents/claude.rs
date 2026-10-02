@@ -1,22 +1,51 @@
-//! `claude -p --output-format stream-json --verbose --include-partial-messages`.
+//! `claude -p --input-format stream-json --output-format stream-json --verbose
+//! --include-partial-messages --permission-prompt-tool stdio`. Prompts are written to stdin one
+//! JSON line each, and the process stays for as long as stdin is open or something it started is
+//! still running. It asks on stdout before a tool call that needs approval and reads the answer
+//! from stdin, where it also takes changed settings.
 
-use motile_protocol::wire::{Access, Denial, TurnSummary};
-use serde_json::Value;
+use std::collections::HashMap;
 
-use super::{AgentEvent, Turn};
+use motile_protocol::wire::{Access, Approval, TurnSummary};
+use serde_json::{Value, json};
 
-pub fn arguments(turn: &Turn) -> Vec<String> {
-    let mode = match (turn.plan, turn.access) {
+use super::{AgentEvent, Background, Turn};
+
+/// Background tasks that watch a command: the Monitor tool's and shells left running.
+const WATCH_TASKS: [&str; 4] = ["local_bash", "shell", "monitor", "monitor_mcp"];
+/// Background tasks that are only bookkeeping.
+const IDLE_TASKS: [&str; 2] = ["plan", "dream"];
+
+fn permission_mode(plan: bool, access: Access) -> &'static str {
+    match (plan, access) {
         (true, _) => "plan",
         (false, Access::Supervised) => "default",
         (false, Access::AcceptEdits) => "acceptEdits",
         (false, Access::Auto) => "auto",
         (false, Access::Full) => "bypassPermissions",
-    };
-    let mut arguments: Vec<String> =
-        ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-mode", mode]
-            .map(String::from)
-            .into();
+    }
+}
+
+pub fn arguments(turn: &Turn) -> Vec<String> {
+    let mut arguments: Vec<String> = [
+        "-p",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--include-partial-messages",
+        "--append-system-prompt",
+        super::SHOWING_MEDIA,
+        "--permission-prompt-tool",
+        "stdio",
+        // Lets a thread be given full access while its process runs.
+        "--allow-dangerously-skip-permissions",
+        "--permission-mode",
+        permission_mode(turn.plan, turn.access),
+    ]
+    .map(String::from)
+    .into();
     if let Some(model) = turn.model {
         arguments.extend(["--model".to_string(), model.to_string()]);
     }
@@ -26,24 +55,53 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
     if let Some(session_id) = turn.session_id {
         arguments.extend(["--resume".to_string(), session_id.to_string()]);
     }
-    // Variadic, so it must come last.
-    if !turn.allowed_tools.is_empty() {
-        arguments.push("--allowedTools".to_string());
-        arguments.extend(turn.allowed_tools.iter().cloned());
-    }
     arguments
 }
 
-/// The `--allowedTools` rule that grants exactly the denied call.
-pub fn allow_rule(denial: &Denial) -> String {
-    if denial.tool_name != "Bash" {
-        return denial.tool_name.clone();
+pub fn input(prompt: &str) -> String {
+    format!("{}\n", json!({"type": "user", "message": {"role": "user", "content": prompt}}))
+}
+
+/// The agent presents its plan with this tool call; allowing it lets the agent carry the plan out.
+pub fn leaves_plan_mode(approval: &Approval) -> bool {
+    approval.tool_name == "ExitPlanMode"
+}
+
+/// The line that allows or refuses the tool call the process asked about. `answers` is what the
+/// user chose when the call asked them questions, and `access` what an approved plan is carried
+/// out with.
+pub fn answer(approval: &Approval, allow: bool, answers: &HashMap<String, String>, access: Access) -> String {
+    let mut decision = json!({"behavior": "deny", "message": "The user refused this."});
+    if allow {
+        let mut input: Value = serde_json::from_str(&approval.input).unwrap_or_default();
+        if !answers.is_empty() {
+            input["answers"] = json!(answers);
+        }
+        decision = json!({"behavior": "allow", "updatedInput": input});
     }
-    let input: Value = serde_json::from_str(&denial.input).unwrap_or_default();
-    match input["command"].as_str() {
-        Some(command) => format!("Bash({command})"),
-        None => denial.tool_name.clone(),
+    if allow && leaves_plan_mode(approval) {
+        let mode = json!({"type": "setMode", "mode": permission_mode(false, access), "destination": "session"});
+        decision["updatedPermissions"] = json!([mode]);
     }
+    let response = json!({"subtype": "success", "request_id": approval.id, "response": decision});
+    format!("{}\n", json!({"type": "control_response", "response": response}))
+}
+
+fn control(request: Value) -> String {
+    format!("{}\n", json!({"type": "control_request", "request_id": random_id(), "request": request}))
+}
+
+/// Lines that give a running process the settings of its thread that changed.
+pub fn model_line(model: Option<&str>) -> String {
+    control(json!({"subtype": "set_model", "model": model}))
+}
+
+pub fn effort_line(effort: Option<&str>) -> String {
+    control(json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": effort}}))
+}
+
+pub fn access_line(plan: bool, access: Access) -> String {
+    control(json!({"subtype": "set_permission_mode", "mode": permission_mode(plan, access)}))
 }
 
 #[derive(Default)]
@@ -51,6 +109,8 @@ pub struct Parser {
     message_id: String,
     open_block: Option<(u64, String)>,
     anonymous_blocks: u64,
+    /// The turn has ended; the next one starts in the same process.
+    ended: bool,
 }
 
 impl Parser {
@@ -65,17 +125,32 @@ impl Parser {
             Some("stream_event") => self.parse_stream_event(&object["event"]),
             Some("assistant") => self.parse_assistant(&object["message"]),
             Some("user") => parse_user(&object["message"]),
-            Some("result") => vec![parse_result(&object)],
+            Some("control_request") => parse_control_request(&object),
+            Some("control_cancel_request") => {
+                let id = object["request_id"].as_str().unwrap_or_default().to_string();
+                vec![AgentEvent::ApprovalWithdrawn { id }]
+            }
+            // A resumed session whose monitor was cut off starts by ending a turn nobody took.
+            Some("result") if object["num_turns"] == 0 && object["is_error"] == false => vec![],
+            Some("result") => {
+                self.ended = true;
+                vec![parse_result(&object)]
+            }
             _ => vec![],
         }
     }
 
-    fn parse_system(&self, object: &Value) -> Vec<AgentEvent> {
-        if object["subtype"] != "init" {
-            return vec![];
+    fn parse_system(&mut self, object: &Value) -> Vec<AgentEvent> {
+        match object["subtype"].as_str() {
+            Some("init") => {
+                let session_id = object["session_id"].as_str();
+                let session = session_id.map(|id| AgentEvent::Session { id: id.to_string() });
+                let woke = std::mem::take(&mut self.ended).then_some(AgentEvent::Woke);
+                session.into_iter().chain(woke).collect()
+            }
+            Some("background_tasks_changed") => vec![AgentEvent::Background(background(&object["tasks"]))],
+            _ => vec![],
         }
-        let Some(session_id) = object["session_id"].as_str() else { return vec![] };
-        vec![AgentEvent::Session { id: session_id.to_string() }]
     }
 
     fn block_id(&self, index: u64) -> String {
@@ -178,24 +253,33 @@ fn parse_user(message: &Value) -> Vec<AgentEvent> {
         .collect()
 }
 
+fn background(tasks: &Value) -> Background {
+    let tasks = tasks.as_array().map(Vec::as_slice).unwrap_or_default();
+    let kinds = tasks.iter().map(|task| task["task_type"].as_str().unwrap_or_default());
+    let working: Vec<&str> = kinds.filter(|kind| !IDLE_TASKS.contains(kind)).collect();
+    let watches = working.iter().filter(|kind| WATCH_TASKS.contains(kind)).count();
+    Background { watches, agents: working.len() - watches }
+}
+
+fn parse_control_request(object: &Value) -> Vec<AgentEvent> {
+    let request = &object["request"];
+    if request["subtype"] != "can_use_tool" {
+        return vec![];
+    }
+    let (Some(id), Some(tool_name)) = (object["request_id"].as_str(), request["tool_name"].as_str()) else {
+        return vec![];
+    };
+    let approval =
+        Approval { id: id.to_string(), tool_name: tool_name.to_string(), input: object_json(&request["input"]) };
+    vec![AgentEvent::Approval(approval)]
+}
+
 fn parse_result(object: &Value) -> AgentEvent {
-    let denials = object["permission_denials"].as_array().map(Vec::as_slice).unwrap_or_default();
-    let denials = denials
-        .iter()
-        .filter_map(|denial| {
-            Some(Denial {
-                tool_name: denial["tool_name"].as_str()?.to_string(),
-                tool_use_id: denial["tool_use_id"].as_str().unwrap_or_default().to_string(),
-                input: object_json(&denial["tool_input"]),
-            })
-        })
-        .collect();
     let summary = TurnSummary {
         duration_ms: object["duration_ms"].as_u64(),
         cost_usd: object["total_cost_usd"].as_f64(),
         is_error: object["is_error"].as_bool().unwrap_or(object["subtype"] != "success"),
         stopped: false,
-        denials,
     };
     AgentEvent::Completed { summary, result_text: object["result"].as_str().map(String::from) }
 }
@@ -222,4 +306,84 @@ fn object_json(value: &Value) -> String {
 
 fn random_id() -> String {
     uuid::Uuid::new_v4().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_watch_that_outlives_the_turn_is_reported_and_wakes_the_agent() {
+        let mut parser = Parser::default();
+        let tasks = r#"{"type":"system","subtype":"background_tasks_changed","tasks":[
+            {"task_id":"a","task_type":"local_bash","description":"deploy status"},
+            {"task_id":"b","task_type":"local_agent","description":"review"},
+            {"task_id":"c","task_type":"plan"}]}"#;
+        let init = r#"{"type":"system","subtype":"init","session_id":"s1"}"#;
+        let session = AgentEvent::Session { id: "s1".to_string() };
+
+        assert_eq!(parser.parse(init), vec![session.clone()]);
+        assert_eq!(parser.parse(tasks), vec![AgentEvent::Background(Background { watches: 1, agents: 1 })]);
+        let ended = parser.parse(r#"{"type":"result","subtype":"success","is_error":false}"#);
+        assert!(matches!(ended[..], [AgentEvent::Completed { .. }]));
+        assert_eq!(parser.parse(init), vec![session.clone(), AgentEvent::Woke]);
+        assert_eq!(parser.parse(init), vec![session]);
+    }
+
+    #[test]
+    fn the_empty_turn_a_resumed_session_starts_with_is_left_out() {
+        let mut parser = Parser::default();
+        let empty = r#"{"type":"result","subtype":"success","is_error":false,"num_turns":0,"result":""}"#;
+        let init = r#"{"type":"system","subtype":"init","session_id":"s1"}"#;
+
+        assert_eq!(parser.parse(empty), vec![]);
+        assert_eq!(parser.parse(init), vec![AgentEvent::Session { id: "s1".to_string() }]);
+        let failed = r#"{"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":0}"#;
+        assert!(matches!(parser.parse(failed)[..], [AgentEvent::Completed { .. }]));
+    }
+
+    #[test]
+    fn a_tool_call_that_needs_approval_is_asked_about_and_answered() {
+        let mut parser = Parser::default();
+        let asked = r#"{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool",
+            "tool_name":"Bash","input":{"command":"touch x"},"tool_use_id":"toolu_1"}}"#;
+        let approval = Approval { id: "r1".into(), tool_name: "Bash".into(), input: r#"{"command":"touch x"}"#.into() };
+        assert_eq!(parser.parse(asked), vec![AgentEvent::Approval(approval.clone())]);
+        let withdrawn = r#"{"type":"control_cancel_request","request_id":"r1"}"#;
+        assert_eq!(parser.parse(withdrawn), vec![AgentEvent::ApprovalWithdrawn { id: "r1".into() }]);
+
+        let nothing = HashMap::new();
+        let allowed: Value = serde_json::from_str(&answer(&approval, true, &nothing, Access::Full)).unwrap();
+        assert_eq!(allowed["response"]["request_id"], "r1");
+        assert_eq!(
+            allowed["response"]["response"],
+            json!({"behavior": "allow", "updatedInput": {"command": "touch x"}})
+        );
+        let refused: Value = serde_json::from_str(&answer(&approval, false, &nothing, Access::Full)).unwrap();
+        assert_eq!(refused["response"]["response"]["behavior"], "deny");
+    }
+
+    #[test]
+    fn questions_are_answered_and_an_approved_plan_is_carried_out_with_the_threads_access() {
+        let questions =
+            Approval { id: "r1".into(), tool_name: "AskUserQuestion".into(), input: r#"{"questions":[]}"#.into() };
+        let answers = HashMap::from([("Which color?".to_string(), "Blue".to_string())]);
+        let answered: Value = serde_json::from_str(&answer(&questions, true, &answers, Access::Full)).unwrap();
+        let input = &answered["response"]["response"]["updatedInput"];
+        assert_eq!(input, &json!({"questions": [], "answers": {"Which color?": "Blue"}}));
+
+        let plan =
+            Approval { id: "r2".into(), tool_name: "ExitPlanMode".into(), input: r#"{"plan":"1. Do it"}"#.into() };
+        let approved: Value = serde_json::from_str(&answer(&plan, true, &HashMap::new(), Access::AcceptEdits)).unwrap();
+        let permissions = &approved["response"]["response"]["updatedPermissions"];
+        assert_eq!(permissions, &json!([{"type": "setMode", "mode": "acceptEdits", "destination": "session"}]));
+    }
+
+    #[test]
+    fn a_prompt_is_one_line_of_json() {
+        let line = input("first\nsecond \"quoted\"");
+        assert_eq!(line.matches('\n').count(), 1);
+        let message: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(message["message"]["content"], "first\nsecond \"quoted\"");
+    }
 }

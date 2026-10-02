@@ -96,7 +96,7 @@ struct CommandPanel: View {
                         Text(section.title)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(Color.themeTertiary)
-                            .padding(.horizontal, 10)
+                            .padding(.horizontal, PanelRow.sideMargin + 10)
                             .padding(.top, 10)
                             .padding(.bottom, 4)
                         ForEach(section.items) { item in
@@ -107,7 +107,6 @@ struct CommandPanel: View {
                         }
                     }
                 }
-                .padding(.horizontal, 8)
                 .padding(.bottom, 8)
             }
             .frame(height: min(420, max(90, CGFloat(count) * PanelRow.height + CGFloat(sections.count) * 32 + 10)))
@@ -200,7 +199,7 @@ struct CommandPanel: View {
         (store.activeThreads + store.doneThreads).map { thread in
             let project = store.project(thread.projectID)
             let name = project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
-            let state = thread.isDone ? "done" : thread.running ? "working" : thread.needsApproval ? "needs approval" : Time.ago(thread.updatedAt)
+            let state = thread.isDone ? "done" : thread.needsApproval ? "needs approval" : thread.running ? "working" : thread.monitoring ? "monitoring" : Time.ago(thread.updatedAt)
             return PanelItem(id: "thread-\(thread.id)", title: thread.title, detail: "\(name) · \(state)", icon: .project(project)) {
                 store.select(.thread(thread.id))
             }
@@ -211,7 +210,7 @@ struct CommandPanel: View {
     private var threadCommands: [PanelItem] {
         guard let thread = store.selectedThread else { return [] }
         var items: [PanelItem] = []
-        if thread.running {
+        if thread.busy {
             items.append(PanelItem(id: "stop", title: "Stop the agent", detail: thread.title, icon: .symbol("stop.circle")) { store.stop() })
         } else {
             let done = thread.isDone
@@ -338,6 +337,7 @@ private struct PanelItem: Identifiable {
 
 private struct PanelRow: View {
     static let height: CGFloat = 46
+    static let sideMargin: CGFloat = 8
 
     let item: PanelItem
     let highlighted: Bool
@@ -368,6 +368,7 @@ private struct PanelRow: View {
         .frame(height: Self.height)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .padding(.horizontal, Self.sideMargin)
         .contentShape(Rectangle())
     }
 

@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::connection::PathKind;
 use crate::link::State;
 use crate::render::highlight::Spans;
-use crate::render::rows::Row;
+use crate::render::rows::{Row, Waiting};
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
@@ -97,6 +97,17 @@ pub enum Command {
         #[serde(default)]
         path: Option<String>,
     },
+    /// Answers with the `path` of an image or a video on this device, once it is here: one that
+    /// isn't is fetched from the host, and `media_progress` events say how far that is.
+    Media {
+        host_id: String,
+        id: String,
+    },
+    /// Answers with `media_bytes`, what the fetched images and videos take on this device, and
+    /// `media_limit`, what they may take.
+    Storage,
+    /// Removes the fetched images and videos. The hosts still have them.
+    ClearMedia,
     /// Asks for the highlighting of the code in rows that came without it.
     Highlight {
         thread_id: String,
@@ -141,6 +152,12 @@ pub enum Event {
         received: u64,
         total: Option<u64>,
     },
+    /// How much of an image or a video has arrived from its host.
+    MediaProgress {
+        id: String,
+        received: u64,
+        size: u64,
+    },
     /// Replace `remove` rows at `start` with `rows`. With `reset` the app's rows are dropped first.
     Rows {
         thread_id: String,
@@ -157,6 +174,8 @@ pub enum Event {
     Activity {
         thread_id: String,
         activity: Activity,
+        /// The tool calls the turn waits with, worded for a person.
+        waiting: Vec<Waiting>,
     },
     /// The thread couldn't be opened on its host.
     ThreadError {
