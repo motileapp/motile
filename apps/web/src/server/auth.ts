@@ -9,10 +9,9 @@ const SESSION_COOKIE = "motile_session"
 const SIGN_IN_COOKIE = "motile_sign_in"
 const SIGN_IN_SECONDS = 600
 
-export const authUrl = (process.env.AUTH_URL ?? "https://motile.app").replace(
-  /\/$/,
-  ""
-)
+export const authUrl = (
+  process.env.AUTH_URL ?? "https://auth.motile.app"
+).replace(/\/$/, "")
 export const publicUrl = (
   process.env.PUBLIC_URL ?? "http://localhost:3000"
 ).replace(/\/$/, "")

@@ -1,12 +1,14 @@
 #!/bin/sh
 # Installs the Motile host on this machine and links it to your account:
 #
-#   curl -fsSL __PUBLIC_URL__/install | sh -s -- <token>
+#   curl -fsSL https://motile.app/install.sh | sh -s -- <token>
 #
-# The token comes from the install command the Motile app shows.
+# The token comes from the install command the Motile app shows. MOTILE_AUTH_URL links the host
+# with another auth server than Motile's, and MOTILE_DOWNLOAD_URL downloads it from another place
+# than the latest release.
 set -eu
 
-MOTILE_URL="${MOTILE_URL:-__PUBLIC_URL__}"
+DOWNLOAD_URL="${MOTILE_DOWNLOAD_URL:-https://github.com/motileapp/motile/releases/latest/download}"
 BINARY=/usr/local/bin/motile
 
 fail() {
@@ -44,7 +46,7 @@ main() {
     trap 'rm -rf "$tmp"' EXIT
 
     echo "Downloading Motile…"
-    download "$MOTILE_URL/download/motile-$target.tar.gz" "$tmp/motile.tar.gz" || fail "the download failed"
+    download "$DOWNLOAD_URL/motile-$target.tar.gz" "$tmp/motile.tar.gz" || fail "the download failed"
     tar -xzf "$tmp/motile.tar.gz" -C "$tmp"
     chmod 755 "$tmp/motile"
 
@@ -52,7 +54,7 @@ main() {
     as_root cp "$tmp/motile" "$BINARY.new"
     as_root mv -f "$BINARY.new" "$BINARY"
 
-    MOTILE_AUTH_URL="$MOTILE_URL" "$BINARY" setup "$@"
+    "$BINARY" setup "$@"
 }
 
 main "$@"

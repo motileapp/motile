@@ -1,6 +1,8 @@
 use std::env;
 
-const DEFAULT_RELEASES_URL: &str = "https://github.com/motileapp/motile/releases/latest/download";
+use motile_protocol::DEFAULT_AUTH_URL;
+
+const DEFAULT_INSTALL_URL: &str = "https://motile.app/install.sh";
 
 pub struct Config {
     pub public_url: String,
@@ -12,16 +14,11 @@ pub struct Config {
     pub google_token_url: String,
     /// Lets anyone sign in as any address without Google. For tests and local work only.
     pub dev_login: bool,
-    /// Where `/download/<file>` sends people.
-    pub releases_url: String,
-    /// When set, `/download/<file>` serves files from this folder instead.
-    pub download_dir: Option<String>,
+    /// The installer the install command runs (`apps/marketing/public/install.sh`).
+    pub install_url: String,
     /// The web app's address. Sign-ins it starts end at its `/auth/callback`; without it there
     /// are none.
     pub web_url: Option<String>,
-    /// The built marketing site (`apps/marketing/dist`), served for every address that isn't a
-    /// route.
-    pub marketing_dir: Option<String>,
 }
 
 fn required(name: &str) -> Result<String, String> {
@@ -50,10 +47,8 @@ impl Config {
             google_authorize_url: crate::google::AUTHORIZE_URL.to_string(),
             google_token_url: crate::google::TOKEN_URL.to_string(),
             dev_login: optional("DEV_LOGIN").is_some_and(|value| value == "1"),
-            releases_url: optional("RELEASES_URL").unwrap_or_else(|| DEFAULT_RELEASES_URL.to_string()),
-            download_dir: optional("DOWNLOAD_DIR"),
+            install_url: optional("INSTALL_URL").unwrap_or_else(|| DEFAULT_INSTALL_URL.to_string()),
             web_url: optional("WEB_URL").map(|url| url.trim_end_matches('/').to_string()),
-            marketing_dir: optional("MARKETING_DIR"),
         })
     }
 
@@ -62,7 +57,43 @@ impl Config {
         self.web_url.as_ref().map(|url| format!("{url}/auth/callback"))
     }
 
+    /// The installer links a host with Motile's own auth server unless it is told another.
     pub fn install_command(&self, token: &str) -> String {
-        format!("curl -fsSL {}/install | sh -s -- {token}", self.public_url)
+        if self.public_url == DEFAULT_AUTH_URL {
+            return format!("curl -fsSL {} | sh -s -- {token}", self.install_url);
+        }
+        format!("curl -fsSL {} | MOTILE_AUTH_URL={} sh -s -- {token}", self.install_url, self.public_url)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config(public_url: &str) -> Config {
+        Config {
+            public_url: public_url.into(),
+            database_url: String::new(),
+            port: 0,
+            google_client_id: String::new(),
+            google_client_secret: String::new(),
+            google_authorize_url: String::new(),
+            google_token_url: String::new(),
+            dev_login: false,
+            install_url: DEFAULT_INSTALL_URL.into(),
+            web_url: None,
+        }
+    }
+
+    #[test]
+    fn the_install_command_names_the_auth_server_only_when_it_is_not_motiles() {
+        assert_eq!(
+            config("https://auth.motile.app").install_command("token"),
+            "curl -fsSL https://motile.app/install.sh | sh -s -- token"
+        );
+        assert_eq!(
+            config("https://auth.example.com").install_command("token"),
+            "curl -fsSL https://motile.app/install.sh | MOTILE_AUTH_URL=https://auth.example.com sh -s -- token"
+        );
     }
 }

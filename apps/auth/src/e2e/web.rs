@@ -136,7 +136,7 @@ async fn a_session_adds_hosts_and_removes_devices_of_its_own_account_only(db: Pg
     let host = DeviceKey::generate();
 
     let token: EnrollToken = call(&auth, Method::POST, "/api/enroll-tokens", &ann).await.json().await.unwrap();
-    assert_eq!(token.command, format!("curl -fsSL {}/install | sh -s -- {}", auth.base, token.token));
+    assert!(token.command.ends_with(&format!("sh -s -- {}", token.token)), "{}", token.command);
     auth.client.enroll(&host, &token.token, &LINUX).await.unwrap();
     assert_eq!(names(&me(&auth, &ann).await), vec!["build-box"]);
 

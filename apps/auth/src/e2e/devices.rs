@@ -4,7 +4,7 @@ use motile_protocol::now;
 use reqwest::StatusCode;
 use sqlx::PgPool;
 
-use super::{ANN, Auth, BOB, LINUX, emails, names};
+use super::{ANN, Auth, BOB, INSTALL_URL, LINUX, emails, names};
 
 #[sqlx::test]
 async fn the_install_command_links_one_host_to_the_account(db: PgPool) {
@@ -13,7 +13,8 @@ async fn the_install_command_links_one_host_to_the_account(db: PgPool) {
     let host = DeviceKey::generate();
 
     let token = auth.client.create_enroll_token(&app).await.unwrap();
-    assert_eq!(token.command, format!("curl -fsSL {}/install | sh -s -- {}", auth.base, token.token));
+    let command = format!("curl -fsSL {INSTALL_URL} | MOTILE_AUTH_URL={} sh -s -- {}", auth.base, token.token);
+    assert_eq!(token.command, command);
     assert!(token.expires_at > now());
     let enrolled = auth.client.enroll(&host, &token.token, &LINUX).await.unwrap();
     assert_eq!(enrolled.email, "ann@example.com");

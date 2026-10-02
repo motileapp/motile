@@ -12,7 +12,7 @@ const WEB_FOLDERS = ["public", "../web/public"]
 function mark(canvas, ratio) {
   const size = canvas * ratio
   const offset = Number(((canvas - size) / 2).toFixed(2))
-  return `<path transform="translate(${offset} ${offset}) scale(${size / 24})" d="${MARK}" fill="#fff"/>`
+  return `<path transform="translate(${offset} ${offset}) scale(${Number((size / 24).toFixed(4))})" d="${MARK}" fill="#fff"/>`
 }
 
 const svg = (canvas, body) =>
@@ -29,8 +29,8 @@ const tile = (ratio) =>
 const square = (ratio) =>
   svg(64, `<rect width="64" height="64" fill="${BLACK}"/>${mark(64, ratio)}`)
 
-// A tab shows the favicon at 16 points, so the mark nearly fills its tile.
-const favicon = tile(0.78)
+// A tab shows the favicon at 16 points, so its mark is larger than in the other icons.
+const favicon = tile(0.7)
 
 // An 824-point tile in a 1024-point canvas, as Apple's icon grid has it.
 const mac = svg(

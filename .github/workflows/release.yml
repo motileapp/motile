@@ -2,7 +2,7 @@ name: Release
 
 # Builds the host and the auth server for Linux and the Mac app, and publishes them as a GitHub
 # release. The installer downloads the host from the latest release, and the download button on
-# motile.app fetches the app from it.
+# motile.app links to the app in it.
 on:
   push:
     tags: ["v*"]

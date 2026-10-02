@@ -20,7 +20,7 @@ These are its programs:
 | --- | --- | --- |
 | Motile.app (`apps/mac`) | Your Mac | The interface |
 | `motile` (`apps/server`) | Your Linux machines | Runs the agents, stores the threads, serves your apps |
-| Auth server (`apps/auth`) | [motile.app](https://motile.app) | Signs you in and records which devices are yours. It never sees a thread |
+| Auth server (`apps/auth`) | auth.motile.app | Signs you in and records which devices are yours. It never sees a thread |
 | Web app (`apps/web`) | [app.motile.app](https://app.motile.app) | Lists your hosts and apps, adds a host, removes a device |
 
 Apps for iOS, Android, Windows and Linux are planned. They will share the Rust core the Mac app is built on (`crates/core`).
@@ -46,7 +46,7 @@ Open the app and sign in with Google. This links the Mac to your account.
 With no host yet, the app shows one command. Run it on the Linux machine where the agents should work:
 
 ```sh
-curl -fsSL https://motile.app/install | sh -s -- <token>
+curl -fsSL https://motile.app/install.sh | sh -s -- <token>
 ```
 
 The installer:
@@ -93,10 +93,10 @@ On the host, `motile status` shows its account, agents and service, `motile logs
 
 ## Running your own auth server
 
-The app talks to motile.app by default. To run your own:
+The app and the hosts use auth.motile.app by default. To run your own:
 
 1. Create a Google OAuth client with the redirect URI `https://<your-address>/auth/google/callback`.
-2. Run `motile-auth` (from the release, or `docker build .`, which includes the marketing site) with a Postgres database and these variables:
+2. Run `motile-auth` (from the release, or `docker build .`) with a Postgres database and these variables:
 
    | Variable | Value |
    | --- | --- |
@@ -107,6 +107,7 @@ The app talks to motile.app by default. To run your own:
 
    It listens on `PORT` (3000) and answers `/healthz`.
 3. Build the app for it: `MOTILE_AUTH_URL=https://<your-address> apps/mac/scripts/build-app.sh`.
+   The install command your server hands out already tells the installer to link hosts with your address.
 4. Optionally run the web app (`docker build -f apps/web/Dockerfile .`) with `AUTH_URL=https://<your-address>` and `PUBLIC_URL` set to its own address.
 
 ## Development
@@ -115,7 +116,7 @@ See [AGENTS.md](AGENTS.md) for how the code is laid out and how to run the check
 
 ```
 apps/auth        The auth server
-apps/marketing   The marketing site at motile.app, served by the auth server
+apps/marketing   The marketing site at motile.app, with the installer
 apps/web         The web app at app.motile.app
 apps/server      The host: agents, thread storage, the iroh endpoint, the installer's setup
 apps/mac         The Mac app

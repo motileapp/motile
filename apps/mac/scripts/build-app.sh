@@ -3,7 +3,7 @@
 #
 #   scripts/build-app.sh [--open]
 #
-# MOTILE_AUTH_URL, if set, becomes the auth server the app signs in with (default https://motile.app).
+# MOTILE_AUTH_URL, if set, becomes the auth server the app signs in with (default https://auth.motile.app).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -57,7 +57,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSHighResolutionCapable</key><true/>
     <key>NSSupportsAutomaticTermination</key><false/>
     <key>NSLocalNetworkUsageDescription</key><string>Motile connects straight to your host when it is on the same network.</string>
-    <key>MotileAuthURL</key><string>${MOTILE_AUTH_URL:-https://motile.app}</string>
+    <key>MotileAuthURL</key><string>${MOTILE_AUTH_URL:-https://auth.motile.app}</string>
 </dict>
 </plist>
 PLIST

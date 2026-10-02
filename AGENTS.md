@@ -10,8 +10,8 @@ These programs make it up, plus the code the apps share:
 
 | Program | Where it runs | What it does |
 | --- | --- | --- |
-| Auth server (`apps/auth`) | motile.app | Signs people in with Google, records which devices belong to an account, serves the installer and the marketing site |
-| Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms |
+| Auth server (`apps/auth`) | auth.motile.app | Signs people in with Google, records which devices belong to an account |
+| Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/install.sh` |
 | Web app (`apps/web`) | app.motile.app | Lists an account's hosts and apps, adds hosts, removes devices |
 | Host (`apps/server`, the `motile` binary) | The user's Linux machines | Runs the agents, stores threads in SQLite, serves the account's apps |
 | Mac app (`apps/mac`) | The user's Mac | The interface |
@@ -26,8 +26,9 @@ Production is the `Motile` project on Unbind:
 
 | Service | Address | What it runs |
 | --- | --- | --- |
-| `Motile` | https://motile.app | The auth server and the marketing site, built from `Dockerfile` |
+| `Marketing` | https://motile.app | The marketing site, built from `apps/marketing/Dockerfile` |
 | `Web` | https://app.motile.app | The web app, built from `apps/web/Dockerfile` |
+| `Auth` | https://auth.motile.app | The auth server, built from `Dockerfile` |
 | `Postgres` | | The auth server's database |
 
 ## Repo Structure:
@@ -51,9 +52,9 @@ What the three programs agree on.
   for a web session (`/api/sessions`), install tokens (`/api/enroll-tokens`, `/api/enroll`),
   `/api/me`, removing devices. A caller is a device that signed the request or a session's
   `Bearer` token.
-- `pages.rs` serves `/install` (`assets/install.sh`) and `/download/<file>`, which redirects to
-  the latest GitHub release. Everything that isn't a route is served from `MARKETING_DIR`, the
-  built `apps/marketing`.
+- `config.rs` builds the install command a token comes with. It runs the installer at
+  `INSTALL_URL`, and names this auth server in it unless it is Motile's own.
+- `pages.rs` is the plain page a sign-in that failed ends on.
 - `migrations/` is the schema. Expired sign-ins and tokens are deleted every minute.
 - `e2e/` runs the real router on a fresh database per test, with a fake Google. `e2e/whole.rs`
   runs all three programs together.
@@ -66,8 +67,10 @@ Both use shadcn/ui (preset `b1VlIvUO`: Base UI, neutral colors, Tailwind 4) and 
 system's light or dark appearance. They are one pnpm workspace; add components with
 `pnpm dlx shadcn@latest add <name>` inside the app.
 
-- `apps/marketing` builds to `dist`, which the auth server serves. It ships no JavaScript; React only
-  renders at build time. `scripts/icons.mjs` draws every icon from the mark, for both web
+- `apps/marketing` builds to `dist`, which static-web-server serves in production
+  (`server.toml`). It ships no JavaScript; React only renders at build time.
+  `public/install.sh` is the installer: it downloads the host from the latest release and runs
+  `motile setup`. `scripts/icons.mjs` draws every icon from the mark, for both web
   projects and the Mac app: `pnpm --filter motile-marketing icons`.
 - `apps/web` runs on its own server. `src/server/auth.ts` holds the session: the browser only
   gets an HttpOnly cookie, and the server calls the auth server with the session's token.
@@ -158,19 +161,20 @@ Rust library for tests.
 Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the marketing site and the
 web app. The Mac app needs Xcode 16 or later.
 
-    docker compose up -d                              # Postgres on localhost:5435
-    pnpm install && pnpm --filter motile-marketing build  # the site the auth server serves
-    cargo run -p motile-auth                          # with the variables from .env.example exported
-    pnpm --filter motile-web dev                      # the web app on localhost:3001, with apps/web/.env.example exported
-    cargo run -p motile-server -- run                 # a host, once linked with `motile setup <token>`
-    cargo run -p motile-core --example drive          # the core, driven from a terminal
-    apps/mac/scripts/build-app.sh --open              # on a Mac
+    docker compose up -d                        # Postgres on localhost:5435
+    cargo run -p motile-auth                    # with the variables from .env.example exported
+    pnpm install
+    pnpm --filter motile-marketing dev          # the marketing site on localhost:4321
+    pnpm --filter motile-web dev                # the web app on localhost:3001
+    cargo run -p motile-server -- run           # a host, once linked with `motile setup <token>`
+    cargo run -p motile-core --example drive    # the core, driven from a terminal
+    apps/mac/scripts/build-app.sh --open        # on a Mac
 
 Checks (`cargo test` needs the compose Postgres; it creates a throwaway database per test):
 
     export DATABASE_URL=postgres://motile:motile@localhost:5435/motile
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
-    pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing the marketing site or the web app
+    pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
 
 The Mac app can't be built on Linux. The `Mac` workflow builds it on every push that touches it,
 runs the demo and uploads the app and the screenshots:
@@ -187,8 +191,8 @@ Pushing a tag `v*` runs the `Release` workflow, which publishes the host and the
 Linux and the Mac app as a GitHub release. The installer and the download button always fetch
 the latest release.
 
-Unbind builds the `Motile` and `Web` services from `main` and deploys them on every push that
-touches their files.
+Unbind builds the `Marketing`, `Web` and `Auth` services from `main` and deploys them on every
+push that touches their files.
 
 ## Commit Messages
 

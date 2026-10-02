@@ -73,7 +73,7 @@ final class AppStore {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         let dataDir = environment["MOTILE_DATA_DIR"] ?? support?.appendingPathComponent("Motile").path ?? NSTemporaryDirectory()
         let bundled = Bundle.main.object(forInfoDictionaryKey: "MotileAuthURL") as? String
-        let authURL = environment["MOTILE_AUTH_URL"] ?? bundled.flatMap { $0.isEmpty ? nil : $0 } ?? "https://motile.app"
+        let authURL = environment["MOTILE_AUTH_URL"] ?? bundled.flatMap { $0.isEmpty ? nil : $0 } ?? "https://auth.motile.app"
         var config: JSON = [
             "data_dir": dataDir,
             "auth_url": authURL,

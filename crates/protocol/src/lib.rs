@@ -12,7 +12,7 @@ pub mod wire;
 
 pub const ALPN: &[u8] = b"motile/1";
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const DEFAULT_AUTH_URL: &str = "https://motile.app";
+pub const DEFAULT_AUTH_URL: &str = "https://auth.motile.app";
 /// Where the auth server sends the browser once a sign-in is done; the app owns this scheme.
 pub const APP_REDIRECT: &str = "motile://auth";
 

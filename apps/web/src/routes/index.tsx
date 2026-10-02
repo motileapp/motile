@@ -81,7 +81,7 @@ function Account() {
               </EmptyHeader>
               <EmptyContent>
                 <a
-                  href="https://motile.app/download/Motile.zip"
+                  href="https://github.com/motileapp/motile/releases/latest/download/Motile.zip"
                   className={cn(buttonVariants({ variant: "outline" }))}
                 >
                   Download for macOS

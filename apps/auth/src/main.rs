@@ -16,7 +16,6 @@ use axum::http::HeaderValue;
 use axum::http::header::{REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use axum::routing::{delete, get, post};
 use sqlx::postgres::PgPoolOptions;
-use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
@@ -32,9 +31,7 @@ pub type AppState = Arc<Inner>;
 
 fn router(state: AppState) -> Router {
     let header = |name, value| SetResponseHeaderLayer::if_not_present(name, HeaderValue::from_static(value));
-    let router = Router::new()
-        .route("/install", get(pages::install_script))
-        .route("/download/{file}", get(pages::download))
+    Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/auth/start", get(sign_in::start))
         .route("/auth/google/callback", get(sign_in::google_callback))
@@ -45,15 +42,8 @@ fn router(state: AppState) -> Router {
         .route("/api/me", get(api::me))
         .route("/api/enroll-tokens", post(api::create_enroll_token))
         .route("/api/enroll", post(api::enroll))
-        .route("/api/devices/{public_key}", delete(api::remove_device));
-    let router = match &state.config.marketing_dir {
-        Some(marketing_dir) => {
-            let not_found = ServeFile::new(std::path::Path::new(marketing_dir).join("404.html"));
-            router.fallback_service(ServeDir::new(marketing_dir).not_found_service(not_found))
-        }
-        None => router.fallback(pages::not_found),
-    };
-    router
+        .route("/api/devices/{public_key}", delete(api::remove_device))
+        .fallback(pages::not_found)
         .layer(header(X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header(X_FRAME_OPTIONS, "DENY"))
         .layer(header(REFERRER_POLICY, "no-referrer"))

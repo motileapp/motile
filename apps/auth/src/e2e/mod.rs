@@ -24,6 +24,7 @@ use crate::{Inner, google, router};
 
 const GOOGLE_CLIENT_ID: &str = "google-client";
 const WEB_URL: &str = "https://app.example.com";
+const INSTALL_URL: &str = "https://example.com/install.sh";
 const MAC: DeviceDescription<'static> = DeviceDescription { name: "Ann's Mac", platform: "macos" };
 const LINUX: DeviceDescription<'static> = DeviceDescription { name: "build-box", platform: "linux" };
 
@@ -71,10 +72,8 @@ impl Auth {
             google_authorize_url: google::AUTHORIZE_URL.into(),
             google_token_url: format!("{google_base}/token"),
             dev_login: true,
-            releases_url: "https://releases.example.com/latest".into(),
-            download_dir: None,
+            install_url: INSTALL_URL.into(),
             web_url: Some(WEB_URL.into()),
-            marketing_dir: None,
         };
         configure(&mut config);
         let state = Arc::new(Inner { config, db: db.clone(), http: reqwest::Client::new() });

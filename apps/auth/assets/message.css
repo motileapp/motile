@@ -9,6 +9,6 @@ body {
   body { background: #0b0f10; color: #f8fafa; }
 }
 main { max-width: 32rem; margin: 0 auto; padding: 4rem 1.5rem; }
-a { color: inherit; font-weight: 600; text-decoration: none; }
+b { font-weight: 600; }
 h1 { margin: 2.5rem 0 0; font-size: 1.75rem; letter-spacing: -0.02em; line-height: 1.2; }
 p { margin: 0.75rem 0 0; opacity: 0.7; }
