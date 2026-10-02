@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// Browses the folders of a host to pick the one a project lives in.
+/// Browses the folders of a host to pick the one a project lives in, or an image in a project's
+/// folder to be its icon.
 struct FolderPicker: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let host: Host
+    var iconFor: Project?
     @State private var folder: RemoteFolder?
     @State private var path = ""
     @State private var selected: String?
@@ -12,7 +14,7 @@ struct FolderPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Add a project on \(host.name)")
+            Text(iconFor.map { "Choose an icon for \($0.name)" } ?? "Add a project on \(host.name)")
                 .font(.system(size: 15, weight: .semibold))
                 .padding([.horizontal, .top], 18)
             HStack(spacing: 8) {
@@ -39,14 +41,23 @@ struct FolderPicker: View {
                         .onTapGesture(count: 2) { load(child(name)) }
                         .onTapGesture { selected = name }
                 }
+                ForEach(folder?.files ?? [], id: \.self) { name in
+                    Label(name, systemImage: "photo")
+                        .tag(name)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) { useAsIcon(name) }
+                        .onTapGesture { selected = name }
+                }
             }
             .listStyle(.inset(alternatesRowBackgrounds: true))
             .frame(height: 300)
             .overlay {
                 if let error {
                     Text(error).foregroundStyle(Color.themeDanger).font(.system(size: 12)).padding()
-                } else if folder?.folders.isEmpty == true {
-                    Text("No folders in here").foregroundStyle(Color.themeTertiary).font(.system(size: 12))
+                } else if let folder, folder.folders.isEmpty, folder.files.isEmpty {
+                    Text(iconFor == nil ? "No folders in here" : "No folders or images in here")
+                        .foregroundStyle(Color.themeTertiary)
+                        .font(.system(size: 12))
                 }
             }
             .padding(.top, 12)
@@ -61,23 +72,36 @@ struct FolderPicker: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Add Project") {
-                    store.addProject(hostID: host.id, path: target)
-                    dismiss()
+                if iconFor == nil {
+                    Button("Add Project") {
+                        store.addProject(hostID: host.id, path: target)
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(target.isEmpty)
+                } else {
+                    Button("Use as Icon") {
+                        if let selectedImage { useAsIcon(selectedImage) }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(selectedImage == nil)
                 }
-                .keyboardShortcut(.defaultAction)
-                .disabled(target.isEmpty)
             }
             .padding(14)
         }
         .frame(width: 520)
-        .onAppear { load(nil) }
+        .onAppear { load(iconFor?.path) }
     }
 
-    /// The folder that would be added: the selected one, or the one being browsed.
+    /// What would be chosen: the selected folder or image, or the folder being browsed.
     private var target: String {
         guard let selected else { return folder?.path ?? path }
         return child(selected)
+    }
+
+    private var selectedImage: String? {
+        guard let selected, folder?.files.contains(selected) == true else { return nil }
+        return selected
     }
 
     private func child(_ name: String) -> String {
@@ -85,8 +109,14 @@ struct FolderPicker: View {
         return base.hasSuffix("/") ? base + name : base + "/" + name
     }
 
+    private func useAsIcon(_ name: String) {
+        guard let iconFor else { return }
+        store.setIcon(of: iconFor, to: child(name))
+        dismiss()
+    }
+
     private func load(_ path: String?) {
-        store.listFolder(hostID: host.id, path: path) { result in
+        store.listFolder(hostID: host.id, path: path, icons: iconFor != nil) { result in
             switch result {
             case .success(let folder):
                 self.folder = folder

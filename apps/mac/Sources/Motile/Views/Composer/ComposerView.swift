@@ -23,7 +23,8 @@ struct ComposerView: View {
                 placeholder: placeholder,
                 focusKey: "\(store.draftKey)#\(store.composerFocus)",
                 onSubmit: { store.send() },
-                onFiles: { store.attach($0) }
+                onFiles: { store.attach($0) },
+                onFileDrag: { store.dropTargeted = $0 }
             )
             .frame(height: textHeight)
             .padding(.horizontal, 14)
@@ -52,16 +53,10 @@ struct ComposerView: View {
                 .fill(Color.themeComposer)
                 .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
         }
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1))
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            for provider in providers {
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    guard let url else { return }
-                    DispatchQueue.main.async { store.attach([url]) }
-                }
-            }
-            return true
-        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(store.dropTargeted ? Color.themePrimary : Color.themeStrongBorder, lineWidth: store.dropTargeted ? 2 : 1)
+        )
     }
 
     private var placeholder: String {
@@ -276,6 +271,8 @@ struct ComposerTextView: NSViewRepresentable {
     let focusKey: String
     let onSubmit: () -> Void
     let onFiles: ([URL]) -> Void
+    /// Files are being dragged over the text, or no longer are.
+    let onFileDrag: (Bool) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
@@ -323,6 +320,7 @@ struct ComposerTextView: NSViewRepresentable {
         ]
         view.onSubmit = onSubmit
         view.onFiles = onFiles
+        view.onFileDrag = onFileDrag
         view.placeholder = placeholder
         view.string = text
         scroll.documentView = view
@@ -339,6 +337,7 @@ struct ComposerTextView: NSViewRepresentable {
         context.coordinator.parent = self
         view.onSubmit = onSubmit
         view.onFiles = onFiles
+        view.onFileDrag = onFileDrag
         if view.placeholder != placeholder {
             view.placeholder = placeholder
             view.needsDisplay = true
@@ -386,6 +385,7 @@ struct ComposerTextView: NSViewRepresentable {
 final class ComposerNSTextView: NSTextView {
     var onSubmit: (() -> Void)?
     var onFiles: (([URL]) -> Void)?
+    var onFileDrag: ((Bool) -> Void)?
     var placeholder = ""
 
     override func keyDown(with event: NSEvent) {
@@ -408,13 +408,58 @@ final class ComposerNSTextView: NSTextView {
         (placeholder as NSString).draw(at: origin, withAttributes: attributes)
     }
 
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        super.readablePasteboardTypes + [.fileURL, .png, .tiff]
+    }
+
     override func paste(_ sender: Any?) {
-        // Files copied in Finder are attached; anything else is pasted as plain text.
-        let urls = NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        guard !urls.isEmpty else {
+        // Files copied in Finder and copied images are attached; anything else is pasted as
+        // plain text.
+        let pasteboard = NSPasteboard.general
+        let urls = Self.files(on: pasteboard)
+        guard urls.isEmpty else {
+            onFiles?(urls)
+            return
+        }
+        guard pasteboard.string(forType: .string) == nil, let image = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) else {
             pasteAsPlainText(sender)
             return
         }
+        let isPNG = pasteboard.data(forType: .png) != nil
+        let onFiles = onFiles
+        DispatchQueue.global(qos: .userInitiated).async {
+            let png = isPNG ? image : NSBitmapImageRep(data: image)?.representation(using: .png, properties: [:])
+            guard let png, let file = ImageFiles.saveForAttaching(png, type: .png) else { return }
+            DispatchQueue.main.async { onFiles?([file]) }
+        }
+    }
+
+    private static func files(on pasteboard: NSPasteboard) -> [URL] {
+        pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    }
+
+    // A file dropped on the text is attached. Left to the text view, its path would be typed.
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard !Self.files(on: sender.draggingPasteboard).isEmpty else { return super.draggingEntered(sender) }
+        onFileDrag?(true)
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard !Self.files(on: sender.draggingPasteboard).isEmpty else { return super.draggingUpdated(sender) }
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onFileDrag?(false)
+        super.draggingExited(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = Self.files(on: sender.draggingPasteboard)
+        guard !urls.isEmpty else { return super.performDragOperation(sender) }
+        onFileDrag?(false)
         onFiles?(urls)
+        return true
     }
 }

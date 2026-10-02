@@ -60,7 +60,7 @@ struct SettingsView: View {
                             }
                             Spacer()
                             Menu("Icon") {
-                                Button("Choose an Image…") { store.chooseIcon(for: project) }
+                                Button("Choose an Image…") { store.iconProject = project }
                                 Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
                             }
                             .fixedSize()

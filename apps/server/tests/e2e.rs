@@ -573,7 +573,7 @@ async fn a_device_outside_the_account_is_refused() {
 
     let closed = tokio::time::timeout(TIMEOUT, stranger.closed()).await.unwrap();
     assert!(closed.refused && closed.reason.contains("isn't linked"), "{}", closed.reason);
-    assert!(stranger.request(&Request::ListDir { path: None }).await.is_err());
+    assert!(stranger.request(&Request::ListDir { path: None, icons: false }).await.is_err());
 }
 
 #[tokio::test]
@@ -636,14 +636,19 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
     let missing = Request::AddProject { path: "/no/such/folder".to_string() };
     assert!(matches!(connection.request(&missing).await.unwrap(), Message::Error { .. }));
 
-    let Message::Dir { folders, .. } = connection
-        .request(&Request::ListDir { path: Some(harness.dir.path().to_string_lossy().into_owned()) })
-        .await
-        .unwrap()
-    else {
-        panic!("expected the folder's contents")
-    };
-    assert_eq!(folders, vec!["repository"]);
+    // Only folders are listed, and the images among the files when an icon is being chosen.
+    std::fs::write(harness.dir.path().join("logo.png"), "png").unwrap();
+    std::fs::write(harness.dir.path().join("notes.txt"), "notes").unwrap();
+    let here = Some(harness.dir.path().to_string_lossy().into_owned());
+    for (icons, images) in [(false, Vec::new()), (true, vec!["logo.png".to_string()])] {
+        let Message::Dir { folders, files, .. } =
+            connection.request(&Request::ListDir { path: here.clone(), icons }).await.unwrap()
+        else {
+            panic!("expected the folder's contents")
+        };
+        assert_eq!(folders, vec!["repository"]);
+        assert_eq!(files, images);
+    }
 
     let remove = Request::RemoveProject { project_id: projects[0].id.clone() };
     assert_eq!(connection.request(&remove).await.unwrap(), Message::Ok);
@@ -674,11 +679,10 @@ async fn a_project_shows_the_icon_in_its_folder_until_another_is_chosen() {
     assert!(project.icon.as_deref().is_some_and(|icon| icon.ends_with(".svg")), "{:?}", project.icon);
     assert_eq!(icon_bytes(&connection, &project.id).await, b"<svg>found</svg>");
 
-    // An image the app sent takes its place.
-    let image = harness.dir.path().join("chosen.png");
+    // Another image on the host takes its place.
+    let image = format!("{folder}/chosen.png");
     std::fs::write(&image, "png bytes").unwrap();
-    let uploaded = connection.upload(&image).await.unwrap();
-    let choose = Request::SetProjectIcon { project_id: project.id.clone(), path: Some(uploaded) };
+    let choose = Request::SetProjectIcon { project_id: project.id.clone(), path: Some(image) };
     assert_eq!(connection.request(&choose).await.unwrap(), Message::Ok);
     let chosen = projects_now(&connection).await.remove(0).icon.unwrap();
     assert!(chosen.ends_with(".png"), "{chosen}");

@@ -209,7 +209,7 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     app.until("the project is listed", |app| app.projects.len() == 1).await;
     assert_eq!(app.projects[0].project.name, "api");
 
-    // Its icon is fetched from the host into a file, and so is one picked on this device.
+    // Its icon is fetched from the host into a file, and so is another image picked on the host.
     app.until("the project's icon arrives", |app| app.projects[0].icon_path.is_some()).await;
     assert_eq!(std::fs::read_to_string(app.projects[0].icon_path.as_ref().unwrap()).unwrap(), "<svg>api</svg>");
     let picked = folder.path().join("picked.png");
@@ -218,7 +218,7 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     let pick = Command::SetProjectIcon {
         host_id: host.id.clone(),
         project_id,
-        file: Some(picked.to_string_lossy().into_owned()),
+        path: Some(picked.to_string_lossy().into_owned()),
     };
     app.ask(pick).await.unwrap();
     app.until("the picked icon arrives", |app| {

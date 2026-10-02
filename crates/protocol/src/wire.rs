@@ -186,9 +186,12 @@ pub enum Request {
         project_id: String,
         path: Option<String>,
     },
-    /// Folders inside `path`, or inside the home folder.
+    /// Folders inside `path`, or inside the home folder. With `icons`, also the files there that
+    /// can be a project's icon.
     ListDir {
         path: Option<String>,
+        #[serde(default)]
+        icons: bool,
     },
     /// The file's bytes follow on the same stream.
     Upload {
@@ -303,6 +306,8 @@ pub enum Message {
         path: String,
         parent: Option<String>,
         folders: Vec<String>,
+        #[serde(default)]
+        files: Vec<String>,
     },
     Uploaded {
         path: String,

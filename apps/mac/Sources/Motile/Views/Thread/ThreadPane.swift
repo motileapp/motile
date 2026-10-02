@@ -62,6 +62,11 @@ struct ThreadPane: View {
                 FolderPicker(host: host)
             }
         }
+        .sheet(item: $store.iconProject) { project in
+            if let host = store.host(project.hostID) {
+                FolderPicker(host: host, iconFor: project)
+            }
+        }
     }
 
     /// Fades the transcript out where the composer floats over it, so nothing shows through
@@ -159,7 +164,7 @@ struct ThreadPane: View {
                 Divider()
                 Button("Add Project…") { store.showsFolderPicker = true }
                 if let project = selected {
-                    Button("Choose an Icon for “\(project.name)”…") { store.chooseIcon(for: project) }
+                    Button("Choose an Icon for “\(project.name)”…") { store.iconProject = project }
                     Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
                     Button("Remove “\(project.name)” from Projects") { store.removeProject(project) }
                 }

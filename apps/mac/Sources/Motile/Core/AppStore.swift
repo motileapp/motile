@@ -56,6 +56,10 @@ final class AppStore {
     private(set) var enrollToken: EnrollToken?
     var showsAddHost = false
     var showsFolderPicker = false
+    /// The project an icon is being chosen for.
+    var iconProject: Project?
+    /// Files are being dragged over the window.
+    var dropTargeted = false
     private(set) var panel: PanelPage?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
@@ -439,8 +443,8 @@ final class AppStore {
 
     // MARK: Projects
 
-    func listFolder(hostID: String, path: String?, done: @escaping (Result<RemoteFolder, CoreBridge.CoreError>) -> Void) {
-        var request: JSON = ["type": "list_dir"]
+    func listFolder(hostID: String, path: String?, icons: Bool = false, done: @escaping (Result<RemoteFolder, CoreBridge.CoreError>) -> Void) {
+        var request: JSON = ["type": "list_dir", "icons": icons]
         if let path { request["path"] = path }
         core.send("request", ["host_id": hostID, "request": request]) { result in
             done(result.map { RemoteFolder(json: $0) })
@@ -463,23 +467,14 @@ final class AppStore {
         request(project.hostID, ["type": "remove_project", "project_id": project.id])
     }
 
-    /// Makes an image on this Mac the project's icon. Without one, the project goes back to the
+    /// Makes an image on the project's host its icon. Without one, the project goes back to the
     /// icon found in its folder.
-    func setIcon(of project: Project, to file: URL?) {
+    func setIcon(of project: Project, to path: String?) {
         var command: JSON = ["host_id": project.hostID, "project_id": project.id]
-        if let file { command["file"] = file.path }
+        if let path { command["path"] = path }
         core.send("set_project_icon", command) { [weak self] result in
             if case .failure(let error) = result { self?.errorMessage = error.message }
         }
-    }
-
-    func chooseIcon(for project: Project) {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.image]
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose an icon for \(project.name)"
-        guard panel.runModal() == .OK, let file = panel.url else { return }
-        setIcon(of: project, to: file)
     }
 
     // MARK: Command panel
@@ -732,6 +727,24 @@ final class AppStore {
     func attach(_ urls: [URL]) {
         for url in urls where url.isFileURL && !attachments.contains(url.path) {
             attachments.append(url.path)
+        }
+    }
+
+    /// Attaches what was dropped on the window: files, and images that aren't files yet.
+    func attach(dropped providers: [NSItemProvider]) {
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url else { return }
+                    DispatchQueue.main.async { self.attach([url]) }
+                }
+                continue
+            }
+            guard let type = ImageFiles.attachable.first(where: { provider.hasItemConformingToTypeIdentifier($0.identifier) }) else { continue }
+            provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+                guard let data, let file = ImageFiles.saveForAttaching(data, type: type) else { return }
+                DispatchQueue.main.async { self.attach([file]) }
+            }
         }
     }
 }

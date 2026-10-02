@@ -836,21 +836,15 @@ impl Core {
                     reply(&sink, id, link.update(report).await.map(|_| json!({})).map_err(error_text));
                 });
             }
-            Command::SetProjectIcon { host_id, project_id, file } => {
+            Command::SetProjectIcon { host_id, project_id, path } => {
                 let link = match self.link(&host_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
-                    let set = async {
-                        let path = match &file {
-                            Some(file) => Some(link.upload(std::path::Path::new(file)).await?),
-                            None => None,
-                        };
-                        link.request(&Request::SetProjectIcon { project_id, path }).await
-                    };
-                    reply(&sink, id, set.await.map(|_| json!({})).map_err(error_text));
+                    let set = link.request(&Request::SetProjectIcon { project_id, path }).await;
+                    reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
             }
             Command::Highlight { thread_id, row_ids } => {

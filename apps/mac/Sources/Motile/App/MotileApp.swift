@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct MotileApp: App {
@@ -149,6 +150,7 @@ struct MainView: View {
     @AppStorage("sidebar.width") private var sidebarWidth = 280.0
 
     var body: some View {
+        @Bindable var store = store
         HStack(spacing: 0) {
             if !sidebarHidden {
                 SidebarView()
@@ -181,6 +183,10 @@ struct MainView: View {
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .modifier(HiddenWindowTitle())
+        .onDrop(of: [UTType.fileURL] + ImageFiles.attachable, isTargeted: $store.dropTargeted) { providers in
+            store.attach(dropped: providers)
+            return true
+        }
     }
 }
 

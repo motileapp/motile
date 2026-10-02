@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The agents' logos, from the marks their makers publish (as collected by Simple Icons).
 enum AgentLogo {
@@ -72,6 +73,25 @@ final class ImageFiles {
         for path in paths where cached(path) == nil {
             Task { _ = await load(path) }
         }
+    }
+
+    /// The kinds of image that can be attached without being a file first.
+    static let attachable: [UTType] = [.png, .jpeg, .tiff, .gif]
+
+    /// Writes a pasted or dropped image to a file, which is what gets attached.
+    static func saveForAttaching(_ data: Data, type: UTType) -> URL? {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("motile-attachments", isDirectory: true)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss.SSS"
+        let name = "Image \(formatter.string(from: Date())).\(type.preferredFilenameExtension ?? "png")"
+        let file = folder.appendingPathComponent(name)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file)
+        } catch {
+            return nil
+        }
+        return file
     }
 
     static func sized(_ image: NSImage, _ side: CGFloat) -> NSImage {

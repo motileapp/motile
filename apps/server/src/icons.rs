@@ -27,7 +27,7 @@ const FOLDERS: [&str; 10] =
 const WORKSPACES: [&str; 2] = ["apps", "packages"];
 const MAX_WORKSPACE_MEMBERS: usize = 24;
 
-fn is_icon(path: &Path) -> bool {
+pub fn is_icon(path: &Path) -> bool {
     let extension = path.extension().and_then(|extension| extension.to_str()).unwrap_or_default().to_lowercase();
     let Ok(metadata) = path.metadata() else { return false };
     EXTENSIONS.contains(&extension.as_str()) && metadata.is_file() && metadata.len() > 0 && metadata.len() <= MAX_ICON

@@ -264,11 +264,14 @@ struct RemoteFolder {
     let path: String
     let parent: String?
     let folders: [String]
+    /// The images in the folder, when an icon is being chosen.
+    let files: [String]
 
     init(json: JSON) {
         path = json.string("path")
         parent = json.optionalString("parent")
         folders = json.strings("folders")
+        files = json.strings("files")
     }
 }
 

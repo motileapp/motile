@@ -89,13 +89,13 @@ pub enum Command {
     UpdateHost {
         host_id: String,
     },
-    /// Makes the image `file` on this device the project's icon. Without `file` the project
+    /// Makes the image at `path` on the host the project's icon. Without `path` the project
     /// goes back to the icon found in its folder.
     SetProjectIcon {
         host_id: String,
         project_id: String,
         #[serde(default)]
-        file: Option<String>,
+        path: Option<String>,
     },
     /// Asks for the highlighting of code rows that came without it.
     Highlight {
