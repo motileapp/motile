@@ -13,7 +13,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::highlight::{self, Incremental, Spans};
-use super::markdown::{self, Block, Prose};
+use super::markdown::{self, Block, ParaKind, Prose};
 
 /// Tool output beyond this is cut; nobody reads more of it in a chat.
 const MAX_OUTPUT_CHARS: usize = 20_000;
@@ -119,8 +119,17 @@ pub struct Transcript {
     rows: Vec<Row>,
     /// The groups and folds that are open, by row id.
     opened: HashSet<String>,
-    /// Highlighters for the code blocks of items that are still streaming, by row id.
+    /// Highlighters for the code blocks of items that are still streaming, by row id, and for
+    /// code inside prose, by row id and paragraph.
     streaming: HashMap<String, Incremental>,
+}
+
+/// Code that came without highlighting: a code row, or the code paragraph `para` of a prose row.
+pub struct Uncoloured {
+    pub row_id: String,
+    pub para: Option<usize>,
+    pub language: String,
+    pub code: String,
 }
 
 impl Transcript {
@@ -224,14 +233,32 @@ impl Transcript {
         self.streaming.clear();
     }
 
-    /// The code blocks among `row_ids` that have no highlighting yet.
-    pub fn unhighlighted(&self, row_ids: &[String]) -> Vec<(String, String, String)> {
-        let wanted = self.rows.iter().filter(|row| row_ids.contains(&row.id));
-        let code = wanted.filter_map(|row| match &row.kind {
-            RowKind::Code { language, code, spans: None } => Some((row.id.clone(), language.clone(), code.clone())),
-            _ => None,
-        });
-        code.collect()
+    /// The code among `row_ids` that has no highlighting yet.
+    pub fn unhighlighted(&self, row_ids: &[String]) -> Vec<Uncoloured> {
+        let mut found = Vec::new();
+        for row in self.rows.iter().filter(|row| row_ids.contains(&row.id)) {
+            match &row.kind {
+                RowKind::Code { language, code, spans: None } => found.push(Uncoloured {
+                    row_id: row.id.clone(),
+                    para: None,
+                    language: language.clone(),
+                    code: code.clone(),
+                }),
+                RowKind::Prose { prose } => {
+                    for (index, para) in prose.paras.iter().enumerate() {
+                        let ParaKind::Pre { language, code, spans: None, .. } = &para.kind else { continue };
+                        found.push(Uncoloured {
+                            row_id: row.id.clone(),
+                            para: Some(index),
+                            language: language.clone(),
+                            code: code.clone(),
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+        found
     }
 
     /// Stores highlighting that was computed elsewhere. `false` if the code changed meanwhile.
@@ -247,6 +274,20 @@ impl Transcript {
             stored = true;
         }
         stored
+    }
+
+    /// Stores the highlighting of code inside prose, and returns the row to show again.
+    pub fn set_para_spans(&mut self, row_id: &str, para: usize, code: &str, spans: Spans) -> Option<Splice> {
+        let row = self.rendered.iter_mut().flatten().find(|row| row.id == row_id)?;
+        let RowKind::Prose { prose } = &mut row.kind else { return None };
+        let ParaKind::Pre { code: current, spans: slot, .. } = &mut prose.paras.get_mut(para)?.kind else {
+            return None;
+        };
+        if current != code {
+            return None;
+        }
+        *slot = Some(spans);
+        self.show()
     }
 }
 
@@ -439,21 +480,37 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
     for (index, block) in blocks.into_iter().enumerate() {
         let id = format!("{}/{index}", item.id);
         let kind = match block {
-            Block::Prose(prose) => RowKind::Prose { prose },
+            Block::Prose(mut prose) => {
+                for (para_index, para) in prose.paras.iter_mut().enumerate() {
+                    let ParaKind::Pre { language, code, spans, .. } = &mut para.kind else { continue };
+                    *spans = colour(&format!("{id}/{para_index}"), language, code, &mut streaming);
+                }
+                RowKind::Prose { prose }
+            }
             Block::Code { language, code } => {
-                let spans = match &mut streaming {
-                    Some(streaming) => {
-                        let highlighter = streaming.entry(id.clone()).or_insert_with(|| Incremental::new(&language));
-                        Some(highlighter.advance(&code))
-                    }
-                    None => highlight::cached(&language, &code),
-                };
+                let spans = colour(&id, &language, &code, &mut streaming);
                 RowKind::Code { language, code, spans }
             }
         };
         rows.push(Row { id, item: item.id.clone(), nested: false, kind });
     }
     rows
+}
+
+/// Highlights streaming code as it grows; other code only if it has been highlighted before.
+fn colour(
+    key: &str,
+    language: &str,
+    code: &str,
+    streaming: &mut Option<&mut HashMap<String, Incremental>>,
+) -> Option<Spans> {
+    match streaming {
+        Some(streaming) => {
+            let highlighter = streaming.entry(key.to_string()).or_insert_with(|| Incremental::new(language));
+            Some(highlighter.advance(code))
+        }
+        None => highlight::cached(language, code),
+    }
 }
 
 fn file_name(path: &str) -> &str {
@@ -628,10 +685,40 @@ mod tests {
         assert!(matches!(&stored.rows()[0].kind, RowKind::Code { spans: None, .. }));
         let wanted = stored.unhighlighted(&["b/0".to_string()]);
         assert_eq!(wanted.len(), 1);
-        let (row_id, language, code) = &wanted[0];
+        let Uncoloured { row_id, para: None, language, code } = &wanted[0] else { panic!("a code row") };
         assert!(stored.set_spans(row_id, code, highlight::highlight(language, code)));
         assert!(stored.unhighlighted(&["b/0".to_string()]).is_empty());
         assert!(!stored.set_spans(row_id, "something else", Spans::default()));
+    }
+
+    fn pre_spans(row: &Row) -> Vec<Option<Spans>> {
+        let RowKind::Prose { prose } = &row.kind else { panic!("expected prose") };
+        let spans = prose.paras.iter().filter_map(|para| match &para.kind {
+            ParaKind::Pre { spans, .. } => Some(spans.clone()),
+            _ => None,
+        });
+        spans.collect()
+    }
+
+    #[test]
+    fn code_inside_a_list_is_highlighted_while_streaming_and_when_asked() {
+        let reply = "1. Run:\n\n   ```rust\n   fn listed_and_never_seen() {}\n   ```\n2. Done";
+        let mut live = Transcript::new("");
+        live.upsert(assistant("a", 0, reply), true);
+        assert!(matches!(&pre_spans(&live.rows()[0])[..], [Some(spans)] if !spans.is_empty()));
+
+        let mut stored = Transcript::new("");
+        stored.load(vec![assistant("b", 0, &reply.replace("listed", "stored"))]);
+        assert_eq!(pre_spans(&stored.rows()[0]), vec![None]);
+        let wanted = stored.unhighlighted(&["b/0".to_string()]);
+        let [Uncoloured { row_id, para: Some(para), language, code }] = &wanted[..] else { panic!("one paragraph") };
+        assert_eq!(code, "fn stored_and_never_seen() {}");
+
+        assert!(stored.set_para_spans(row_id, *para, "changed meanwhile", Spans::default()).is_none());
+        let splice = stored.set_para_spans(row_id, *para, code, highlight::highlight(language, code)).unwrap();
+        assert_eq!((splice.start, splice.remove), (0, 1));
+        assert!(matches!(&pre_spans(&splice.rows[0])[..], [Some(spans)] if !spans.is_empty()));
+        assert!(stored.unhighlighted(&["b/0".to_string()]).is_empty());
     }
 
     #[test]

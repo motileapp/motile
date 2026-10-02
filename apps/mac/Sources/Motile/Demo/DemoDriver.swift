@@ -199,6 +199,8 @@ private final class Demo {
         let scrolling = StallMonitor()
         await scrollTranscript()
         results.append(responsive("a long reply is scrolled", scrolling))
+        scrollTranscript(to: 0)
+        await shoot("08-code-in-a-list")
         scrollTranscript(to: 0.45)
         await shoot("08-long-reply")
 

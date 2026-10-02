@@ -97,7 +97,7 @@ pub enum Command {
         #[serde(default)]
         path: Option<String>,
     },
-    /// Asks for the highlighting of code rows that came without it.
+    /// Asks for the highlighting of the code in rows that came without it.
     Highlight {
         thread_id: String,
         row_ids: Vec<String>,

@@ -8,7 +8,7 @@ import AppKit
 /// the scroll position is corrected in the same pass, so nothing on screen moves.
 final class TranscriptView: FlippedView, RowHost {
     var onAllow: (([Denial]) -> Void)?
-    /// Code rows that came into view without highlighting.
+    /// Rows that came into view with code that isn't highlighted.
     var onNeedHighlight: (([String]) -> Void)?
     var onToggleRow: ((String) -> Void)?
 
@@ -322,7 +322,7 @@ final class TranscriptView: FlippedView, RowHost {
         }
         views[row.id] = view
         stale.insert(row.id)
-        if case .code(let content) = row.kind, !content.highlighted, !requestedHighlight.contains(row.id) {
+        if row.needsHighlight, !requestedHighlight.contains(row.id) {
             requestedHighlight.insert(row.id)
             pendingHighlight.append(row.id)
         }

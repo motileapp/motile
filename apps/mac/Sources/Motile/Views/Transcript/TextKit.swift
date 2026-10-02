@@ -1,8 +1,70 @@
 import AppKit
 import QuartzCore
 
+/// The box around code inside a list or a quote. The text system leaves room for its padding,
+/// so nothing overlaps it; the prose row puts the code's header in the room at its top.
+final class CodeTextBlock: NSTextBlock {
+    private static let marginBottom: CGFloat = 12
+
+    let language: String
+    /// Which code block of the row it is, so that two in a row stay two boxes.
+    let index: Int
+    let indent: CGFloat
+
+    init(language: String, index: Int, indent: CGFloat) {
+        self.language = language
+        self.index = index
+        self.indent = indent
+        super.init()
+        setWidth(indent, type: .absoluteValueType, for: .margin, edge: .minX)
+        setWidth(Self.marginBottom, type: .absoluteValueType, for: .margin, edge: .maxY)
+        setWidth(CodeHeader.height, type: .absoluteValueType, for: .padding, edge: .minY)
+        setWidth(14, type: .absoluteValueType, for: .padding, edge: .minX)
+        setWidth(14, type: .absoluteValueType, for: .padding, edge: .maxX)
+        setWidth(12, type: .absoluteValueType, for: .padding, edge: .maxY)
+    }
+
+    // The text system may archive attributes; what comes back is drawn as a plain block.
+    required init?(coder: NSCoder) {
+        language = ""
+        index = -1
+        indent = 0
+        super.init(coder: coder)
+    }
+
+    // It never changes once made.
+    override func copy(with zone: NSZone? = nil) -> Any { self }
+
+    // The same block typeset again is equal, so streamed text keeps the layout before it.
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? CodeTextBlock else { return false }
+        return other.index == index && other.language == language && other.indent == indent
+    }
+
+    override var hash: Int { index }
+
+    /// The box inside the margins of the block's frame.
+    func box(in frame: NSRect) -> NSRect {
+        NSRect(x: frame.minX + indent, y: frame.minY, width: frame.width - indent, height: frame.height - Self.marginBottom)
+    }
+
+    override func drawBackground(
+        withFrame frameRect: NSRect,
+        in controlView: NSView?,
+        characterRange charRange: NSRange,
+        layoutManager: NSLayoutManager
+    ) {
+        let path = NSBezierPath(roundedRect: box(in: frameRect).insetBy(dx: 0.5, dy: 0.5), xRadius: 10, yRadius: 10)
+        Theme.codeBackground.setFill()
+        path.fill()
+        Theme.border.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+}
+
 /// Draws what attributes alone can't: rounded backgrounds behind inline code, the bar beside a
-/// quote, horizontal rules, and the box around code inside a list.
+/// quote and horizontal rules.
 final class DecoratingLayoutManager: NSLayoutManager {
     override func fillBackgroundRectArray(
         _ rectArray: UnsafePointer<NSRect>,
@@ -30,22 +92,6 @@ final class DecoratingLayoutManager: NSLayoutManager {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         guard let storage = textStorage, glyphsToShow.length > 0 else { return }
         let characters = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
-
-        storage.enumerateAttribute(.motilePre, in: characters) { value, range, _ in
-            guard value != nil else { return }
-            // The whole paragraph's box, even when only part of it is being drawn.
-            let paragraph = (storage.string as NSString).paragraphRange(for: range)
-            let glyphs = glyphRange(forCharacterRange: paragraph, actualCharacterRange: nil)
-            var box = NSRect.null
-            enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in box = box.union(rect) }
-            guard !box.isNull, let style = storage.attribute(.paragraphStyle, at: paragraph.location, effectiveRange: nil) as? NSParagraphStyle else {
-                return
-            }
-            let left = style.headIndent - 10
-            let frame = NSRect(x: box.minX + left, y: box.minY - 5, width: box.width - left, height: box.height + 10)
-            Theme.codeBackground.setFill()
-            NSBezierPath(roundedRect: frame.offsetBy(dx: origin.x, dy: origin.y), xRadius: 7, yRadius: 7).fill()
-        }
 
         storage.enumerateAttribute(.motileQuote, in: characters) { value, range, _ in
             guard let depth = (value as? NSNumber)?.intValue, depth > 0 else { return }
@@ -207,6 +253,35 @@ final class RowTextView: NSTextView {
         context.setFillColor(CGColor(gray: 0, alpha: 1))
         context.fill(CGRect(x: 0, y: CGFloat(rows) - opaqueTop, width: 1, height: opaqueTop))
         return context.makeImage()
+    }
+
+    /// Where each code block's box is in the view, with its language and its code.
+    func codeBoxes() -> [(frame: NSRect, language: String, code: String)] {
+        guard let storage = textStorage, let layout = layoutManager else { return [] }
+        var boxes: [(frame: NSRect, language: String, code: String)] = []
+        storage.enumerateAttribute(.motileCode, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            guard let block = value as? CodeTextBlock else { return }
+            let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let frame = layout.boundsRect(for: block, glyphRange: glyphs)
+                .offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
+            var code = Self.withLineBreaks((storage.string as NSString).substring(with: range))
+            if code.hasSuffix("\n") { code.removeLast() }
+            boxes.append((frame: block.box(in: frame), language: block.language, code: code))
+        }
+        return boxes
+    }
+
+    /// Lines broken inside a paragraph are joined by line separators, which other apps don't
+    /// take for line breaks.
+    static func withLineBreaks(_ text: String) -> String {
+        text.replacingOccurrences(of: "\u{2028}", with: "\n")
+    }
+
+    override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
+        guard super.writeSelection(to: pboard, types: types) else { return false }
+        guard let text = pboard.string(forType: .string), text.contains("\u{2028}") else { return true }
+        pboard.setString(Self.withLineBreaks(text), forType: .string)
+        return true
     }
 
     func clearSelection() {

@@ -4,6 +4,8 @@
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use serde::Serialize;
 
+use super::highlight::Spans;
+
 /// A prose block is closed at the next top-level boundary once it is this long, so that no
 /// single row of the transcript is expensive to lay out.
 const SPLIT_AFTER: u32 = 4000;
@@ -62,9 +64,14 @@ pub enum ParaKind {
     Quote {
         depth: u8,
     },
-    /// A code block inside a list or a quote.
+    /// A code block inside a list or a quote. Its lines are joined by line separators.
     Pre {
         depth: u8,
+        language: String,
+        #[serde(skip)]
+        code: String,
+        /// `None` until the code has been highlighted, like a code row's.
+        spans: Option<Spans>,
     },
     Rule,
     Cell {
@@ -422,8 +429,14 @@ impl Builder {
             self.blocks.push(Block::Code { language: block.language, code: block.code });
             return;
         }
+        // An item that starts with code still shows its marker, on a line of its own.
+        if self.pending_marker.is_some() {
+            self.ensure_open();
+            self.close();
+        }
         let depth = self.lists.len() as u8 + self.quotes;
-        self.open(ParaKind::Pre { depth });
+        let code = block.code.clone();
+        self.open(ParaKind::Pre { depth, language: block.language, code, spans: None });
         self.push_plain(&block.code.replace('\n', "\u{2028}"));
         self.close();
     }
@@ -529,11 +542,48 @@ mod tests {
                 &ParaKind::Quote { depth: 1 },
                 &ParaKind::Rule,
                 &ParaKind::ListItem { depth: 1, marker: true, quote: 0 },
-                &ParaKind::Pre { depth: 1 },
+                &ParaKind::Pre { depth: 1, language: "sh".into(), code: "ls -la".into(), spans: None },
             ]
         );
         assert!(prose.text.ends_with("ls -la"));
         assert_eq!(blocks.len(), 1, "code inside a list stays in the prose");
+    }
+
+    #[test]
+    fn code_inside_a_list_keeps_its_lines_and_the_numbering_goes_on() {
+        let blocks = parse(
+            "1. Delete it:
+
+   ```sh
+   sudo rm a
+   rm -rf b
+   ```
+
+   Then check.
+2. Done",
+        );
+        let prose = prose(&blocks, 0);
+
+        assert_eq!(prose.text, "1.\tDelete it:\nsudo rm a\u{2028}rm -rf b\nThen check.\n2.\tDone");
+        let code = &prose.paras[1];
+        assert_eq!(utf16_slice(&prose.text, code.start, code.len), "sudo rm a\u{2028}rm -rf b\n");
+        assert!(matches!(&code.kind, ParaKind::Pre { code, .. } if code == "sudo rm a\nrm -rf b"));
+        assert_eq!(prose.paras[2].kind, ParaKind::ListItem { depth: 1, marker: false, quote: 0 });
+    }
+
+    #[test]
+    fn an_item_that_starts_with_code_keeps_its_marker_outside_the_code() {
+        let blocks = parse(
+            "1. ```sh
+   ls
+   ```
+2. next",
+        );
+        let prose = prose(&blocks, 0);
+
+        assert_eq!(prose.text, "1.\t\nls\n2.\tnext");
+        assert_eq!(prose.paras[0].kind, ParaKind::ListItem { depth: 1, marker: true, quote: 0 });
+        assert!(matches!(&prose.paras[1].kind, ParaKind::Pre { language, .. } if language == "sh"));
     }
 
     #[test]

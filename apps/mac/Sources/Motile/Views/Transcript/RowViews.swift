@@ -140,7 +140,7 @@ class RowView: FlippedView {
         switch row.kind {
         case .user(let text, let attachments):
             return estimatedTextHeight(text.length, width: width * 0.75) + 43 + (attachments.isEmpty ? 0 : 24)
-        case .prose(let text):
+        case .prose(let text, _):
             return estimatedTextHeight(text.length, width: width) + 9
         case .code(let content):
             return CodeRowView.height(lines: content.lineCount)
@@ -239,6 +239,7 @@ final class UserRowView: RowView {
 
 final class ProseRowView: RowView {
     private let text = RowTextView.make()
+    private var headers: [CodeHeader] = []
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -253,7 +254,7 @@ final class ProseRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .prose(let content) = row.kind else { return }
+        guard case .prose(let content, _) = row.kind else { return }
         text.content = content
     }
 
@@ -261,6 +262,7 @@ final class ProseRowView: RowView {
         let before = text.frame.size
         let height = text.height(forWidth: width)
         text.frame = NSRect(x: 0, y: 3, width: width, height: height)
+        placeHeaders()
         if fadesGrowth, before.width == width, before.height > 0, height > before.height + 1 {
             text.fadeIn(below: before.height)
         }
@@ -268,24 +270,76 @@ final class ProseRowView: RowView {
         return height + 9
     }
 
+    /// Puts the language and a copy button in the top of every code box.
+    private func placeHeaders() {
+        let boxes = text.codeBoxes()
+        while headers.count < boxes.count {
+            let header = CodeHeader()
+            text.addSubview(header)
+            headers.append(header)
+        }
+        for (index, header) in headers.enumerated() {
+            header.isHidden = index >= boxes.count
+            guard index < boxes.count else { continue }
+            let box = boxes[index]
+            header.show(language: box.language, code: box.code)
+            header.place(NSRect(x: box.frame.minX, y: box.frame.minY, width: box.frame.width, height: CodeHeader.height))
+        }
+    }
+
     override func clearSelection() { text.clearSelection() }
 }
 
+/// The top of a code box: the language, and a button that copies the code.
+final class CodeHeader: FlippedView {
+    static let height: CGFloat = 32
+
+    private let language = label(Theme.smallMono, Theme.secondary)
+    private var copyButton: IconButton!
+    private var code = ""
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addSubview(language)
+        copyButton = IconButton(symbolName: "doc.on.doc", tooltip: "Copy code") { [weak self] in self?.copy() }
+        addSubview(copyButton)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func show(language: String, code: String) {
+        self.language.stringValue = language.isEmpty ? "text" : language
+        self.code = code
+    }
+
+    func place(_ frame: NSRect) {
+        self.frame = frame
+        language.frame = NSRect(x: 14, y: 9, width: max(0, frame.width - 60), height: 15)
+        copyButton.frame = NSRect(x: frame.width - IconButton.side - 4, y: 2, width: IconButton.side, height: IconButton.side)
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+        copyButton.set(symbolName: "checkmark")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.copyButton.set(symbolName: "doc.on.doc")
+        }
+    }
+}
+
 final class CodeRowView: RowView {
-    private static let headerHeight: CGFloat = 32
     private static let bottomPadding: CGFloat = 12
 
     private let surface = SurfaceView()
-    private let language = label(Theme.smallMono, Theme.secondary)
+    private let header = CodeHeader()
     private let scroll = SidewaysClipView()
     private let text = RowTextView.make(wraps: false)
-    private var copyButton: IconButton!
-    private var code = ""
     private var lines = 1
     private var widestLine = 0
 
     static func height(lines: Int) -> CGFloat {
-        headerHeight + CGFloat(lines) * Theme.codeLineHeight + bottomPadding + 14
+        CodeHeader.height + CGFloat(lines) * Theme.codeLineHeight + bottomPadding + 14
     }
 
     override init(frame: NSRect) {
@@ -294,10 +348,7 @@ final class CodeRowView: RowView {
         surface.stroke = Theme.border
         surface.radius = 10
         addSubview(surface)
-        surface.addSubview(language)
-
-        copyButton = IconButton(symbolName: "doc.on.doc", tooltip: "Copy code") { [weak self] in self?.copy() }
-        surface.addSubview(copyButton)
+        surface.addSubview(header)
 
         scroll.addSubview(text)
         surface.addSubview(scroll)
@@ -312,9 +363,8 @@ final class CodeRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .code(let content) = row.kind else { return }
-        code = content.code
         lines = content.lineCount
-        language.stringValue = content.language.isEmpty ? "text" : content.language
+        header.show(language: content.language, code: content.code)
         text.content = content.attributed
         widestLine = Self.columns(of: content.code)
     }
@@ -343,25 +393,15 @@ final class CodeRowView: RowView {
 
     override func layout(width: CGFloat) -> CGFloat {
         let bodyHeight = CGFloat(lines) * Theme.codeLineHeight
-        let height = Self.headerHeight + bodyHeight + Self.bottomPadding
+        let height = CodeHeader.height + bodyHeight + Self.bottomPadding
         surface.frame = NSRect(x: 0, y: 4, width: width, height: height)
-        language.frame = NSRect(x: 14, y: 9, width: width - 60, height: 15)
-        copyButton.frame = NSRect(x: width - IconButton.side - 4, y: 2, width: IconButton.side, height: IconButton.side)
-        scroll.frame = NSRect(x: 0, y: Self.headerHeight, width: width, height: bodyHeight + Self.bottomPadding)
+        header.place(NSRect(x: 0, y: 0, width: width, height: CodeHeader.height))
+        scroll.frame = NSRect(x: 0, y: CodeHeader.height, width: width, height: bodyHeight + Self.bottomPadding)
         let advance = Theme.codeFont.maximumAdvancement.width
         let textWidth = max(width - 28, CGFloat(widestLine) * advance + 8)
         text.textContainerInset = NSSize(width: 14, height: 0)
         scroll.setContent(text, size: NSSize(width: textWidth + 28, height: bodyHeight))
         return height + 14
-    }
-
-    private func copy() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(code, forType: .string)
-        copyButton.set(symbolName: "checkmark")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            self?.copyButton.set(symbolName: "doc.on.doc")
-        }
     }
 
     override func clearSelection() { text.clearSelection() }

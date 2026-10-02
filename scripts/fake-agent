@@ -5,7 +5,8 @@ By default it replays a recorded transcript: FAKE_AGENT_FIXTURE names a .jsonl f
 `claude -p --output-format stream-json --verbose --include-partial-messages` or `codex exec --json`.
 Some prompts get a reply made up on the spot instead:
 
-- "long reply with a lot of code": ten large code blocks streamed in small pieces.
+- "long reply with a lot of code": steps with code inside a list, then ten large code blocks,
+  streamed in small pieces.
 - "rate limiter": a turn with thinking, tool calls and a reply that uses most of Markdown.
 - "huge transcript": four hundred messages with code and tool calls, for a very long thread.
 
@@ -121,8 +122,27 @@ def long_reply():
         f"Part {part} of the change:\n\n```python\ndef handle_{part}(value):\n    total = 0\n{function}\n    return total\n```\n"
         for part in range(1, 11)
     ]
+    steps = """Try it first:
+
+1. **Install it** (on the host):
+
+   ```sh
+   pip install -e .
+   python -m handlers --check      # or HANDLERS_CHECK=1 if that's set
+   ```
+
+   The check reads `handlers.toml`. Run it as the user who owns the checkout.
+2. **Call one handler**:
+
+   ```python
+   from handlers import handle_1
+   assert handle_1(6) > 0
+   ```
+3. Read the change below.
+
+"""
     turn = Turn("00000000-0000-4000-8000-00000000beef", piece=48, pause=0.003)
-    turn.text("Here is the whole change, file by file.\n\n" + "\n".join(blocks) + "\nThat is everything.")
+    turn.text(steps + "Here is the whole change, file by file.\n\n" + "\n".join(blocks) + "\nThat is everything.")
     turn.done()
 
 

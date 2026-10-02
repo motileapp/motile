@@ -5,7 +5,8 @@ import AppKit
 final class RowModel {
     enum Kind {
         case user(text: NSAttributedString, attachments: [String])
-        case prose(NSAttributedString)
+        /// `uncoloured` when code inside it still waits for highlighting.
+        case prose(NSAttributedString, uncoloured: Bool)
         case code(CodeContent)
         case tool(ToolContent)
         case thinking(NSAttributedString)
@@ -36,7 +37,8 @@ final class RowModel {
         case "user":
             kind = .user(text: Typesetter.plain(json.string("text"), color: Theme.text), attachments: json.strings("attachments"))
         case "prose":
-            kind = .prose(Typesetter.prose(json))
+            let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
+            kind = .prose(Typesetter.prose(json), uncoloured: uncoloured)
         case "code":
             kind = .code(CodeContent(language: json.string("language"), code: json.string("code"), spans: json["spans"] as? [NSNumber]))
         case "tool":
@@ -64,9 +66,18 @@ final class RowModel {
     /// The plain text of the row, for copying a whole reply.
     var plainText: String? {
         switch kind {
-        case .prose(let text): text.string
+        case .prose(let text, _): RowTextView.withLineBreaks(text.string)
         case .code(let content): "```\(content.language)\n\(content.code)\n```"
         default: nil
+        }
+    }
+
+    /// The row has code that came without highlighting.
+    var needsHighlight: Bool {
+        switch kind {
+        case .code(let content): !content.highlighted
+        case .prose(_, let uncoloured): uncoloured
+        default: false
         }
     }
 
@@ -226,8 +237,8 @@ extension NSAttributedString.Key {
     static let motileQuote = NSAttributedString.Key("motile.quote")
     /// The paragraph is a horizontal rule.
     static let motileRule = NSAttributedString.Key("motile.rule")
-    /// The paragraph is a code block inside a list or a quote, and gets a background.
-    static let motilePre = NSAttributedString.Key("motile.pre")
+    /// The paragraph is a code block inside a list or a quote; the value is its `CodeTextBlock`.
+    static let motileCode = NSAttributedString.Key("motile.code")
 }
 
 /// Turns the core's rows into attributed strings. Safe to call from any thread.
@@ -300,16 +311,20 @@ enum Typesetter {
             string: code,
             attributes: [.font: Theme.codeFont, .foregroundColor: Theme.text, .paragraphStyle: codeStyle]
         )
-        let length = result.length
+        colour(result, spans: spans, in: NSRange(location: 0, length: result.length))
+        return result
+    }
+
+    /// Colours the code in `range` with its spans, which count from the start of the range.
+    private static func colour(_ text: NSMutableAttributedString, spans: [NSNumber], in range: NSRange) {
         var index = 0
         while index + 2 < spans.count {
-            let range = NSRange(location: spans[index].intValue, length: spans[index + 1].intValue)
+            let span = NSRange(location: range.location + spans[index].intValue, length: spans[index + 1].intValue)
             let color = spans[index + 2].intValue
             index += 3
-            guard range.location + range.length <= length, color > 0, color < Theme.syntax.count else { continue }
-            result.addAttribute(.foregroundColor, value: Theme.syntax[color], range: range)
+            guard NSMaxRange(span) <= NSMaxRange(range), color > 0, color < Theme.syntax.count else { continue }
+            text.addAttribute(.foregroundColor, value: Theme.syntax[color], range: span)
         }
-        return result
     }
 
     static func prose(_ json: JSON) -> NSAttributedString {
@@ -324,6 +339,7 @@ enum Typesetter {
         }
 
         var tables: [Int: NSTextTable] = [:]
+        var codeBlocks = 0
         var headingRanges: [(NSRange, NSFont)] = []
         for para in json.objects("paras") {
             // The last paragraph has no line break; its style still has to reach the end.
@@ -364,18 +380,20 @@ enum Typesetter {
                     range: range
                 )
             case "pre":
+                let block = CodeTextBlock(language: para.string("language"), index: codeBlocks, indent: CGFloat(para.int("depth")) * 22)
+                codeBlocks += 1
                 let style = NSMutableParagraphStyle()
                 style.minimumLineHeight = Theme.codeLineHeight
                 style.maximumLineHeight = Theme.codeLineHeight
-                style.paragraphSpacing = 10
-                style.paragraphSpacingBefore = 4
-                style.headIndent = CGFloat(para.int("depth")) * 22 + 10
-                style.firstLineHeadIndent = style.headIndent
-                style.tailIndent = -10
+                style.lineBreakMode = .byCharWrapping
+                style.defaultTabInterval = 4 * 7.5
+                style.tabStops = []
+                style.textBlocks = [block]
                 result.addAttributes(
-                    [.paragraphStyle: style, .font: Theme.codeFont, .foregroundColor: Theme.text, .motilePre: NSNumber(value: true)],
+                    [.paragraphStyle: style, .font: Theme.codeFont, .foregroundColor: Theme.text, .motileCode: block],
                     range: range
                 )
+                colour(result, spans: para["spans"] as? [NSNumber] ?? [], in: range)
             case "rule":
                 let style = NSMutableParagraphStyle()
                 style.paragraphSpacing = 10

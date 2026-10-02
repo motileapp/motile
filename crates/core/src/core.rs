@@ -24,7 +24,7 @@ use crate::cache::Cache;
 use crate::connection::{HostAddr, bind};
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::render::highlight::{self, Spans};
-use crate::render::rows::{Splice, Transcript};
+use crate::render::rows::{Splice, Transcript, Uncoloured};
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
 const FIRST_ITEMS: usize = 30;
@@ -59,7 +59,7 @@ enum Input {
     Endpoint { key: String, result: Result<Endpoint, String> },
     AccountChecked { key: String, result: Result<Me, String> },
     SignedIn { id: u64, result: Result<Me, String> },
-    Highlighted { thread_id: String, row_id: String, code: String, spans: Spans },
+    Highlighted { thread_id: String, row_id: String, para: Option<usize>, code: String, spans: Spans },
     IconFetched { host_id: String },
     Render,
     Tick,
@@ -202,10 +202,16 @@ impl Core {
             Input::Endpoint { key, result } => self.endpoint_bound(&key, result),
             Input::AccountChecked { key, result } => self.account_checked(&key, result),
             Input::SignedIn { id, result } => self.signed_in(id, result),
-            Input::Highlighted { thread_id, row_id, code, spans } => {
+            Input::Highlighted { thread_id, row_id, para, code, spans } => {
                 let Some(open) = self.open.get_mut(&thread_id) else { return };
-                if open.transcript.set_spans(&row_id, &code, spans.clone()) {
-                    self.emit(Event::Spans { thread_id, row_id, spans });
+                let Some(para) = para else {
+                    if open.transcript.set_spans(&row_id, &code, spans.clone()) {
+                        self.emit(Event::Spans { thread_id, row_id, spans });
+                    }
+                    return;
+                };
+                if let Some(splice) = open.transcript.set_para_spans(&row_id, para, &code, spans) {
+                    self.emit_rows(&thread_id, false, splice);
                 }
             }
             Input::IconFetched { host_id } => {
@@ -918,11 +924,11 @@ impl Core {
 
     fn highlight(&self, thread_id: &str, row_ids: &[String]) {
         let Some(open) = self.open.get(thread_id) else { return };
-        for (row_id, language, code) in open.transcript.unhighlighted(row_ids) {
+        for Uncoloured { row_id, para, language, code } in open.transcript.unhighlighted(row_ids) {
             let (inputs, thread_id) = (self.inputs.clone(), thread_id.to_string());
             tokio::task::spawn_blocking(move || {
                 let spans = highlight::highlight(&language, &code);
-                let _ = inputs.send(Input::Highlighted { thread_id, row_id, code, spans });
+                let _ = inputs.send(Input::Highlighted { thread_id, row_id, para, code, spans });
             });
         }
     }
