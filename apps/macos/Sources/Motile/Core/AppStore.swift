@@ -145,6 +145,9 @@ final class AppStore {
             errorMessage = "Motile couldn't start. Its data folder may not be writable."
         }
         if environment["MOTILE_DEMO"] != "1" { updater.start() }
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.markOpenThreadSeen()
+        }
     }
 
     // MARK: Events
@@ -257,15 +260,19 @@ final class AppStore {
         if case .thread(let id) = selection, threads[id] == nil {
             openEmptyDraft()
         }
+        markOpenThreadSeen()
         restoreSelection()
     }
 
     private func upsert(_ thread: ThreadInfo) {
         threads[thread.id] = thread
-        // A reply that arrives while the thread is open has been seen.
-        if thread.unread, selection == .thread(thread.id), NSApp.isActive {
-            core.send("mark_seen", ["thread_id": thread.id])
-        }
+        markOpenThreadSeen()
+    }
+
+    /// A reply in the open thread has been seen once Motile is in front.
+    private func markOpenThreadSeen() {
+        guard NSApp.isActive, let thread = selectedThread, thread.unread else { return }
+        core.send("mark_seen", ["thread_id": thread.id])
     }
 
     private func removeThread(_ id: String) {

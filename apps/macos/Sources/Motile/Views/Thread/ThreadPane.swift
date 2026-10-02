@@ -46,12 +46,9 @@ struct ThreadPane: View {
             ToolbarItem(placement: .primaryAction) {
                 if let thread = store.selectedThread {
                     ToolbarGlass {
-                        IconOnlyButton(
+                        ToolbarGlassButton(
                             symbol: thread.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
-                            help: thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)",
-                            size: 30,
-                            symbolSize: 15,
-                            inset: toolbarButtonInset
+                            help: thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)"
                         ) {
                             store.toggleDone()
                         }

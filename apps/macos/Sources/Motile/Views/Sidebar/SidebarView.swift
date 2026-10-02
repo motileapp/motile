@@ -267,7 +267,7 @@ private struct DraftRow: View {
                         Text("Draft")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .foregroundStyle(Color.themeWarning)
+                    .foregroundStyle(Color.themeSecondary)
                 }
             }
             .foregroundStyle(.secondary)
@@ -445,7 +445,7 @@ private struct ThreadStatus: View {
                 }
             }
         } else if thread.monitoring {
-            label("Monitoring", Color.themeSecondary) {
+            label("Monitoring", Color.themeText) {
                 symbol("eye")
             }
         } else if thread.unread {

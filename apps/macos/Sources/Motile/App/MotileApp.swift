@@ -172,13 +172,13 @@ struct MainView: View {
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 ToolbarGlass {
-                    IconOnlyButton(symbol: "sidebar.left", help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)", size: 30, symbolSize: 15, inset: toolbarButtonInset) {
+                    ToolbarGlassButton(symbol: "sidebar.left", help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
                         sidebarHidden.toggle()
                     }
-                    IconOnlyButton(symbol: "folder.badge.plus", help: "Add a project", size: 30, symbolSize: 15, inset: toolbarButtonInset) {
+                    ToolbarGlassButton(symbol: "folder.badge.plus", help: "Add a project") {
                         store.showsFolderPicker = true
                     }
-                    IconOnlyButton(symbol: "square.and.pencil", help: "New thread", size: 30, symbolSize: 15, inset: toolbarButtonInset) {
+                    ToolbarGlassButton(symbol: "square.and.pencil", help: "New thread") {
                         store.startNewThread()
                     }
                 }

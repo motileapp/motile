@@ -21,15 +21,15 @@ enum Theme {
 
     private static func white(_ alpha: CGFloat) -> NSColor { NSColor(srgbRed: 1, green: 1, blue: 1, alpha: alpha) }
 
-    // Surfaces
-    static let background = dynamic(hex(0xfcfcfc), hex(0x0f0f10))
-    static let raised = dynamic(hex(0xffffff), hex(0x1a1a1c))
+    // Surfaces. The dark ones stay clear of gray level 16, where some monitors flicker.
+    static let background = dynamic(hex(0xfcfcfc), hex(0x19191a))
+    static let raised = dynamic(hex(0xffffff), hex(0x242426))
     /// The composer lies on the window's surface, so in the dark it only lightens what is there.
     static let composer = dynamic(hex(0xffffff), white(0.04))
-    static let bubble = dynamic(hex(0xf1f1f3), hex(0x232326))
-    static let codeBackground = dynamic(hex(0xf6f6f7), hex(0x18181a))
+    static let bubble = dynamic(hex(0xf1f1f3), hex(0x2d2d30))
+    static let codeBackground = dynamic(hex(0xf6f6f7), hex(0x222224))
     /// Over the blurred backdrop of the window: nearly opaque, so only a hint of it comes through.
-    static let glassTint = dynamic(hex(0xfcfcfc, alpha: 0.86), hex(0x0d0d0e, alpha: 0.86))
+    static let glassTint = dynamic(hex(0xfcfcfc, alpha: 0.86), hex(0x18181a, alpha: 0.86))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
     static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
     static let border = dynamic(hex(0x000000, alpha: 0.09), white(0.09))

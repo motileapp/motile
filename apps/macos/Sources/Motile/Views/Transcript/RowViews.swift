@@ -90,6 +90,13 @@ final class ShimmerLabel: NSTextField {
         }
     }
 
+    override var stringValue: String {
+        didSet {
+            guard stringValue != oldValue else { return }
+            restart()
+        }
+    }
+
     static func make(_ font: NSFont) -> ShimmerLabel {
         let field = ShimmerLabel(labelWithString: "")
         field.font = font
@@ -134,7 +141,8 @@ final class ShimmerLabel: NSTextField {
 
         let sweep = CABasicAnimation(keyPath: "position.x")
         sweep.fromValue = -Self.bandWidth / 2
-        sweep.toValue = bounds.width + Self.bandWidth / 2
+        // Across the words, however much room the label has.
+        sweep.toValue = min(bounds.width, intrinsicContentSize.width) + Self.bandWidth / 2
         sweep.duration = Self.period
         sweep.repeatCount = .infinity
         // Every sweep starts on the same beat, so labels move together and a restart doesn't show.
@@ -921,6 +929,13 @@ final class WorkingView: FlippedView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    override var frame: NSRect {
+        didSet {
+            text.frame = NSRect(x: 0, y: 3, width: bounds.width, height: 18)
+            shine.frame = text.frame
+        }
+    }
+
     func update(_ activity: Activity) {
         self.activity = activity
         let waiting = !activity.approvals.isEmpty
@@ -950,9 +965,5 @@ final class WorkingView: FlippedView {
     private func show(_ words: String) {
         text.stringValue = words
         shine.stringValue = words
-        // Measured from the words themselves: the label's own measure can lag a step behind.
-        let width = ceil((words as NSString).size(withAttributes: [.font: Self.font]).width) + 8
-        text.frame = NSRect(x: 0, y: 3, width: width, height: 18)
-        shine.frame = text.frame
     }
 }

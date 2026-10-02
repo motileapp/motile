@@ -37,6 +37,7 @@ struct IconOnlyButton: View {
     let help: String
     var size: CGFloat = 26
     var symbolSize: CGFloat = 13
+    var radius: CGFloat = 6
     var inset = EdgeInsets()
     let action: () -> Void
 
@@ -49,7 +50,7 @@ struct IconOnlyButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .hoverHighlight(radius: 6, inset: inset)
+        .hoverHighlight(radius: radius, inset: inset)
         .help(help)
     }
 }
