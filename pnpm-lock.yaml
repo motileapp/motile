@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  apps/site:
+  apps/marketing:
     dependencies:
       '@astrojs/react':
         specifier: ^7

@@ -74,7 +74,7 @@ impl Auth {
             releases_url: "https://releases.example.com/latest".into(),
             download_dir: None,
             web_url: Some(WEB_URL.into()),
-            site_dir: None,
+            marketing_dir: None,
         };
         configure(&mut config);
         let state = Arc::new(Inner { config, db: db.clone(), http: reqwest::Client::new() });

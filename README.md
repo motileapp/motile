@@ -96,7 +96,7 @@ On the host, `motile status` shows its account, agents and service, `motile logs
 The app talks to motile.app by default. To run your own:
 
 1. Create a Google OAuth client with the redirect URI `https://<your-address>/auth/google/callback`.
-2. Run `motile-auth` (from the release, or `docker build .`, which includes the site) with a Postgres database and these variables:
+2. Run `motile-auth` (from the release, or `docker build .`, which includes the marketing site) with a Postgres database and these variables:
 
    | Variable | Value |
    | --- | --- |
@@ -115,7 +115,7 @@ See [AGENTS.md](AGENTS.md) for how the code is laid out and how to run the check
 
 ```
 apps/auth        The auth server
-apps/site        The site at motile.app, served by the auth server
+apps/marketing   The marketing site at motile.app, served by the auth server
 apps/web         The web app at app.motile.app
 apps/server      The host: agents, thread storage, the iroh endpoint, the installer's setup
 apps/mac         The Mac app

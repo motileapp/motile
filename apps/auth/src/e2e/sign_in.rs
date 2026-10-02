@@ -146,12 +146,12 @@ async fn the_installer_downloads_from_this_server_and_downloads_lead_to_the_rele
 }
 
 #[sqlx::test]
-async fn the_site_is_served_from_its_folder_next_to_the_routes(db: PgPool) {
-    let site = tempfile::tempdir().unwrap();
-    std::fs::write(site.path().join("index.html"), "the home page").unwrap();
-    std::fs::write(site.path().join("404.html"), "the missing page").unwrap();
-    let site_dir = site.path().to_str().unwrap().to_string();
-    let auth = Auth::start_with(db, |config| config.site_dir = Some(site_dir)).await;
+async fn the_marketing_site_is_served_from_its_folder_next_to_the_routes(db: PgPool) {
+    let marketing = tempfile::tempdir().unwrap();
+    std::fs::write(marketing.path().join("index.html"), "the home page").unwrap();
+    std::fs::write(marketing.path().join("404.html"), "the missing page").unwrap();
+    let marketing_dir = marketing.path().to_str().unwrap().to_string();
+    let auth = Auth::start_with(db, |config| config.marketing_dir = Some(marketing_dir)).await;
 
     let home = auth.get(&auth.base).await;
     assert_eq!(home.status(), StatusCode::OK);

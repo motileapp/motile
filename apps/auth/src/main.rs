@@ -46,10 +46,10 @@ fn router(state: AppState) -> Router {
         .route("/api/enroll-tokens", post(api::create_enroll_token))
         .route("/api/enroll", post(api::enroll))
         .route("/api/devices/{public_key}", delete(api::remove_device));
-    let router = match &state.config.site_dir {
-        Some(site_dir) => {
-            let not_found = ServeFile::new(std::path::Path::new(site_dir).join("404.html"));
-            router.fallback_service(ServeDir::new(site_dir).not_found_service(not_found))
+    let router = match &state.config.marketing_dir {
+        Some(marketing_dir) => {
+            let not_found = ServeFile::new(std::path::Path::new(marketing_dir).join("404.html"));
+            router.fallback_service(ServeDir::new(marketing_dir).not_found_service(not_found))
         }
         None => router.fallback(pages::not_found),
     };

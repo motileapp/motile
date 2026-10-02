@@ -4,7 +4,7 @@ FROM node:24-bookworm-slim AS build
 RUN npm install -g pnpm@11.24.0
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/site/package.json apps/site/
+COPY apps/marketing/package.json apps/marketing/
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile --filter motile-web
 COPY apps/web apps/web

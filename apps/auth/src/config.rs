@@ -19,8 +19,9 @@ pub struct Config {
     /// The web app's address. Sign-ins it starts end at its `/auth/callback`; without it there
     /// are none.
     pub web_url: Option<String>,
-    /// The built marketing site (`apps/site/dist`), served for every address that isn't a route.
-    pub site_dir: Option<String>,
+    /// The built marketing site (`apps/marketing/dist`), served for every address that isn't a
+    /// route.
+    pub marketing_dir: Option<String>,
 }
 
 fn required(name: &str) -> Result<String, String> {
@@ -52,7 +53,7 @@ impl Config {
             releases_url: optional("RELEASES_URL").unwrap_or_else(|| DEFAULT_RELEASES_URL.to_string()),
             download_dir: optional("DOWNLOAD_DIR"),
             web_url: optional("WEB_URL").map(|url| url.trim_end_matches('/').to_string()),
-            site_dir: optional("SITE_DIR"),
+            marketing_dir: optional("MARKETING_DIR"),
         })
     }
 

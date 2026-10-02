@@ -1,5 +1,5 @@
-//! The installer script, the downloads, and the page a sign-in that failed ends on. The site
-//! itself is `apps/site`.
+//! The installer script, the downloads, and the page a sign-in that failed ends on. The
+//! marketing site is `apps/marketing`.
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;

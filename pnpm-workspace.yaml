@@ -1,5 +1,5 @@
 packages:
-  - apps/site
+  - apps/marketing
   - apps/web
 allowBuilds:
   esbuild: true

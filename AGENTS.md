@@ -10,8 +10,8 @@ These programs make it up, plus the code the apps share:
 
 | Program | Where it runs | What it does |
 | --- | --- | --- |
-| Auth server (`apps/auth`) | motile.app | Signs people in with Google, records which devices belong to an account, serves the installer and the site |
-| Site (`apps/site`) | motile.app, as static files | The landing page, privacy and terms |
+| Auth server (`apps/auth`) | motile.app | Signs people in with Google, records which devices belong to an account, serves the installer and the marketing site |
+| Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms |
 | Web app (`apps/web`) | app.motile.app | Lists an account's hosts and apps, adds hosts, removes devices |
 | Host (`apps/server`, the `motile` binary) | The user's Linux machines | Runs the agents, stores threads in SQLite, serves the account's apps |
 | Mac app (`apps/mac`) | The user's Mac | The interface |
@@ -26,7 +26,7 @@ Production is the `Motile` project on Unbind:
 
 | Service | Address | What it runs |
 | --- | --- | --- |
-| `Motile` | https://motile.app | The auth server and the site, built from `Dockerfile` |
+| `Motile` | https://motile.app | The auth server and the marketing site, built from `Dockerfile` |
 | `Web` | https://app.motile.app | The web app, built from `apps/web/Dockerfile` |
 | `Postgres` | | The auth server's database |
 
@@ -52,21 +52,21 @@ What the three programs agree on.
   `/api/me`, removing devices. A caller is a device that signed the request or a session's
   `Bearer` token.
 - `pages.rs` serves `/install` (`assets/install.sh`) and `/download/<file>`, which redirects to
-  the latest GitHub release. Everything that isn't a route is served from `SITE_DIR`, the built
-  `apps/site`.
+  the latest GitHub release. Everything that isn't a route is served from `MARKETING_DIR`, the
+  built `apps/marketing`.
 - `migrations/` is the schema. Expired sign-ins and tokens are deleted every minute.
 - `e2e/` runs the real router on a fresh database per test, with a fake Google. `e2e/whole.rs`
   runs all three programs together.
 - `DEV_LOGIN=1` lets anyone sign in as anyone without Google. It exists for tests, the Mac demo
   and local work, and must never be set in production.
 
-### apps/site (Astro, static) and apps/web (TanStack Start)
+### apps/marketing (Astro, static) and apps/web (TanStack Start)
 
 Both use shadcn/ui (preset `b7ClRmfAW`, Base UI, Tailwind 4) and follow the system's light or
 dark appearance. They are one pnpm workspace; add components with
 `pnpm dlx shadcn@latest add <name>` inside the app.
 
-- `apps/site` builds to `dist`, which the auth server serves. It ships no JavaScript; React only
+- `apps/marketing` builds to `dist`, which the auth server serves. It ships no JavaScript; React only
   renders at build time.
 - `apps/web` runs on its own server. `src/server/auth.ts` holds the session: the browser only
   gets an HttpOnly cookie, and the server calls the auth server with the session's token.
@@ -154,11 +154,11 @@ Rust library for tests.
 
 ## Development
 
-Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the site and the web app.
-The Mac app needs Xcode 16 or later.
+Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the marketing site and the
+web app. The Mac app needs Xcode 16 or later.
 
     docker compose up -d                              # Postgres on localhost:5435
-    pnpm install && pnpm --filter motile-site build   # the site the auth server serves
+    pnpm install && pnpm --filter motile-marketing build  # the site the auth server serves
     cargo run -p motile-auth                          # with the variables from .env.example exported
     pnpm --filter motile-web dev                      # the web app on localhost:3001, with apps/web/.env.example exported
     cargo run -p motile-server -- run                 # a host, once linked with `motile setup <token>`
@@ -169,7 +169,7 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
 
     export DATABASE_URL=postgres://motile:motile@localhost:5435/motile
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
-    pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing the site or the web app
+    pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing the marketing site or the web app
 
 The Mac app can't be built on Linux. The `Mac` workflow builds it on every push that touches it,
 runs the demo and uploads the app and the screenshots:
