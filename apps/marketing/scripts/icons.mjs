@@ -21,16 +21,16 @@ const svg = (canvas, body) =>
 /** A rounded tile, for places that show the icon as it is. */
 const tile = (ratio) =>
   svg(
-    64,
-    `<rect width="64" height="64" rx="14.5" fill="${BLACK}"/>${mark(64, ratio)}`
+    32,
+    `<rect width="32" height="32" rx="7.25" fill="${BLACK}"/>${mark(32, ratio)}`
   )
 
 /** A full square, for places that cut their own shape out of it. */
 const square = (ratio) =>
-  svg(64, `<rect width="64" height="64" fill="${BLACK}"/>${mark(64, ratio)}`)
+  svg(32, `<rect width="32" height="32" fill="${BLACK}"/>${mark(32, ratio)}`)
 
-// How much of a tile's width the mark takes up.
-const MARK_IN_TILE = 0.7
+// How much of a tile's width the mark takes up: a margin of 5 on each side of 32.
+const MARK_IN_TILE = 22 / 32
 
 // An 824-point tile in a 1024-point canvas, as Apple's icon grid has it.
 const mac = svg(
