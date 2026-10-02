@@ -115,6 +115,8 @@ pub enum Event {
     Account {
         account: AccountView,
     },
+    /// Everything known from last time has been sent: the account, hosts, projects and threads.
+    Restored,
     Hosts {
         hosts: Vec<HostView>,
     },

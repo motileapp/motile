@@ -139,7 +139,7 @@ class RowView: FlippedView {
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
         case .user(let text, let attachments):
-            return estimatedTextHeight(text.length, width: width * 0.75) + 43 + (attachments.isEmpty ? 0 : 24)
+            return estimatedTextHeight(text.length, width: width * 0.75) + 48 + (attachments.isEmpty ? 0 : 22)
         case .prose(let text, _):
             return estimatedTextHeight(text.length, width: width) + 9
         case .code(let content):
@@ -224,13 +224,12 @@ final class UserRowView: RowView {
         )
         let attachmentsWidth = hasAttachments ? min(widest, attachments.intrinsicContentSize.width) : 0
         let textWidth = min(widest, max(ceil(natural.width) + 2, attachmentsWidth, 12))
-        // The space under the last line isn't part of the text the bubble wraps.
-        let textHeight = text.height(forWidth: textWidth) - Typesetter.plainLineSpacing
+        let textHeight = text.height(forWidth: textWidth)
         let attachmentsHeight: CGFloat = hasAttachments ? 22 : 0
         let bubbleSize = NSSize(width: textWidth + padding * 2, height: textHeight + 20 + attachmentsHeight)
         bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
-        text.frame = NSRect(x: padding, y: 10, width: textWidth, height: textHeight + Typesetter.plainLineSpacing)
-        attachments.frame = NSRect(x: padding, y: 10 + textHeight + 4, width: textWidth, height: 16)
+        text.frame = NSRect(x: padding, y: 10, width: textWidth, height: textHeight)
+        attachments.frame = NSRect(x: padding, y: 10 + textHeight + 6, width: textWidth, height: 16)
         return bubbleSize.height + 14 + 14
     }
 

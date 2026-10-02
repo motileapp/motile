@@ -11,7 +11,8 @@ struct ThreadPane: View {
     var titleInset: CGFloat = 20
 
     private var isStart: Bool {
-        store.selection == .newThread && store.transcriptIsEmpty && !store.sending
+        guard let draft = store.selectedDraft else { return false }
+        return store.transcriptIsEmpty && draft.id != store.sendingDraftID
     }
 
     var body: some View {
@@ -20,14 +21,8 @@ struct ThreadPane: View {
             if isStart {
                 start
             } else {
-                TranscriptRepresentable(store: store, bottomInset: composerHeight + 16)
+                TranscriptRepresentable(store: store, bottomInset: composerHeight)
                     .mask { transcriptFade }
-                if store.transcriptIsEmpty && !store.activity.running {
-                    Text("Send a message to start the conversation.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color.themeTertiary)
-                        .frame(maxHeight: .infinity)
-                }
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
                     .padding(.top, 24)
@@ -85,18 +80,21 @@ struct ThreadPane: View {
         }
     }
 
-    /// The thread's name, drawn in the window's top bar over this pane.
+    /// The thread's project and name, drawn in the window's top bar over this pane.
     private var title: some View {
         GeometryReader { proxy in
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
+                if let projectLine {
+                    HStack(spacing: 6) {
+                        ProjectIcon(project: titleProject, size: 14)
+                        Text(projectLine)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.themeSecondary)
+                    }
+                }
                 Text(store.selectedThread?.title ?? "New thread")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.themeText)
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.themeSecondary)
-                }
             }
             .lineLimit(1)
             .padding(.leading, titleInset)
@@ -108,10 +106,14 @@ struct ThreadPane: View {
         .allowsHitTesting(false)
     }
 
-    private var subtitle: String {
-        guard let thread = store.selectedThread else { return "" }
-        let project = store.project(thread.projectID)
-        let name = project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
+    private var titleProject: Project? {
+        store.project(store.selectedThread?.projectID ?? store.selectedDraft?.projectID)
+    }
+
+    private var projectLine: String? {
+        let project = titleProject
+        let folder = store.selectedThread.map { URL(fileURLWithPath: $0.cwd).lastPathComponent }
+        guard let name = project?.name ?? folder else { return nil }
         guard let branch = project?.branch else { return name }
         return "\(name) · \(branch)"
     }
@@ -133,11 +135,16 @@ struct ThreadPane: View {
                         Label("Add Project", systemImage: "folder.badge.plus")
                     }
                     .controlSize(.large)
-                    .disabled(store.composerHost?.state != .connected)
+                    .disabled(!store.hosts.contains { $0.state == .connected })
                     .padding(.top, 8)
                 }
             } else {
-                headline
+                VStack(spacing: 8) {
+                    headline
+                    if store.hosts.count > 1, let host = store.host(store.project(store.selectedDraft?.projectID)?.hostID) {
+                        HostLabel(host: host, size: 13)
+                    }
+                }
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
             }
@@ -148,11 +155,12 @@ struct ThreadPane: View {
     }
 
     private var headline: some View {
-        let selected = store.project(store.newThread.projectID)
+        let selected = store.project(store.selectedDraft?.projectID)
         return HStack(spacing: 12) {
             Text("Let’s build in")
+                .foregroundStyle(Color.themeSecondary)
             Menu {
-                ForEach(store.projects) { project in
+                ForEach(store.recentProjects) { project in
                     Button {
                         store.setNewThreadProject(project.id)
                     } label: {
@@ -173,7 +181,6 @@ struct ThreadPane: View {
                 }
             } label: {
                 HStack(spacing: 8) {
-                    ProjectIcon(project: selected, size: 24)
                     Text(selected?.name ?? "a project")
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .semibold))
@@ -189,7 +196,7 @@ struct ThreadPane: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .hoverHighlight(radius: 10)
-            // The highlight's margin takes no room, so the words and the icon are what is centred.
+            // The highlight's margin takes no room, so the words are what is centred.
             .padding(.horizontal, -8)
         }
         .font(.system(size: 28, weight: .regular))

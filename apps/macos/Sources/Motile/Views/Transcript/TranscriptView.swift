@@ -17,7 +17,7 @@ final class TranscriptView: FlippedView, RowHost {
         didSet {
             guard bottomInset != oldValue else { return }
             updateVisible()
-            jumpButton.frame.origin.y = bounds.height - bottomInset - 44
+            jumpButton.frame.origin.y = bounds.height - bottomInset - 20
         }
     }
 
@@ -134,7 +134,7 @@ final class TranscriptView: FlippedView, RowHost {
     override func layout() {
         super.layout()
         scrollView.frame = bounds
-        jumpButton.frame.origin = NSPoint(x: ((bounds.width - 32) / 2).rounded(), y: bounds.height - bottomInset - 44)
+        jumpButton.frame.origin = NSPoint(x: ((bounds.width - 32) / 2).rounded(), y: bounds.height - bottomInset - 20)
         guard bounds.width != layoutWidth else {
             updateVisible()
             return

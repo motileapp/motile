@@ -101,7 +101,7 @@ impl App {
             }
             Event::Activity { activity, .. } => self.running = activity.running,
             Event::ThreadError { message, .. } => panic!("a thread couldn't be opened: {message}"),
-            Event::Reply { .. } | Event::HostUpdate { .. } => {}
+            Event::Restored | Event::Reply { .. } | Event::HostUpdate { .. } => {}
         }
     }
 

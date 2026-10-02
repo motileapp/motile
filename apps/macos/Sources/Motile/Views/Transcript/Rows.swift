@@ -280,11 +280,9 @@ enum Typesetter {
         return style
     }()
 
-    static let plainLineSpacing: CGFloat = 5
-
     static func plain(_ text: String, color: NSColor, size: CGFloat = Theme.proseSize) -> NSAttributedString {
         let style = NSMutableParagraphStyle()
-        style.lineSpacing = plainLineSpacing
+        style.lineSpacing = 5
         style.paragraphSpacing = 6
         return NSAttributedString(
             string: text,

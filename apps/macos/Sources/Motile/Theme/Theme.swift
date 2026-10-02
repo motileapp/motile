@@ -50,6 +50,7 @@ enum Theme {
     static let warningBackground = dynamic(hex(0xf59e0b, alpha: 0.1), hex(0xf59e0b, alpha: 0.12))
     static let success = dynamic(hex(0x047857), hex(0x4ade80))
     static let working = dynamic(hex(0x0284c7), hex(0x38bdf8))
+    static let unread = dynamic(hex(0xea580c), hex(0xfb923c))
 
     /// The colours code is highlighted with, by the core's palette index.
     static let syntax: [NSColor] = [
@@ -116,4 +117,5 @@ extension Color {
     static let themeWarning = Color(nsColor: Theme.warning)
     static let themeSuccess = Color(nsColor: Theme.success)
     static let themeWorking = Color(nsColor: Theme.working)
+    static let themeUnread = Color(nsColor: Theme.unread)
 }

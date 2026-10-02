@@ -130,7 +130,7 @@ struct Project: Equatable, Identifiable {
     }
 }
 
-enum Access: String, CaseIterable, Identifiable {
+enum Access: String, CaseIterable, Identifiable, Codable {
     case supervised
     case acceptEdits = "accept_edits"
     case auto

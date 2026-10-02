@@ -178,7 +178,7 @@ struct CommandPanel: View {
     }
 
     private var projectItems: [PanelItem] {
-        store.projects.enumerated().map { position, project in
+        store.recentProjects.enumerated().map { position, project in
             let host = store.host(project.hostID)?.name ?? ""
             return PanelItem(
                 id: "project-\(project.id)",

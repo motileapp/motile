@@ -5,17 +5,26 @@ import Observation
 import UniformTypeIdentifiers
 
 enum Selection: Hashable {
-    case newThread
+    case draft(String)
     case thread(String)
 }
 
-/// What a new thread starts with: the composer's choices before there is a thread to hold them.
-struct NewThreadSettings: Equatable {
+/// A thread that hasn't been sent yet: where it will start and with what. Its text is in `drafts`.
+struct ThreadDraft: Identifiable, Equatable, Codable {
+    var id = UUID().uuidString
     var projectID: String?
     var model: String?
     var effort: String?
     var access: Access = .full
     var plan = false
+}
+
+/// A draft as the sidebar lists it.
+struct ListedDraft: Identifiable {
+    let draft: ThreadDraft
+    let preview: String
+
+    var id: String { draft.id }
 }
 
 /// Where the command panel opens.
@@ -49,7 +58,7 @@ struct UndoNotice: Equatable {
 final class AppStore {
     // Account
     private(set) var account = Account()
-    /// Whether the core has said who is signed in. Until then nothing is shown.
+    /// Whether the core has sent what it remembers from last time. Until then the window is hidden.
     private(set) var ready = false
     private(set) var signingIn = false
     var signInError: String?
@@ -71,15 +80,20 @@ final class AppStore {
     private(set) var threads: [String: ThreadInfo] = [:]
 
     // The open thread
-    private(set) var selection: Selection = .newThread
+    /// Always a draft or a thread; `loadPreferences` opens the first draft.
+    private(set) var selection: Selection = .draft("")
     private(set) var activity = Activity()
     private(set) var transcriptIsEmpty = true
-    private(set) var sending = false
+    /// The draft whose first message is on its way to the host.
+    private(set) var sendingDraftID: String?
     var errorMessage: String?
-    var newThread = NewThreadSettings()
+    private(set) var threadDrafts: [ThreadDraft] = []
+    /// What the open draft said when it was opened, if it said anything. Its row in the sidebar
+    /// shows this, so the sidebar doesn't change while the draft is being written.
+    private(set) var openedDraftPreview: String?
     private(set) var undo: UndoNotice?
-    var drafts: [String: String] = [:]
-    var attachments: [String] = []
+    private var drafts: [String: String] = [:]
+    private var attachmentsByKey: [String: [String]] = [:]
 
     let updater = AppUpdater()
     @ObservationIgnored let core = CoreBridge()
@@ -126,6 +140,11 @@ final class AppStore {
         case "account":
             let account = Account(json: event.object("account") ?? [:])
             return { [weak self] in self?.apply(account) }
+        case "restored":
+            return { [weak self] in
+                self?.ready = true
+                self?.ensureDraftProject()
+            }
         case "hosts":
             let hosts = event.objects("hosts").map { Host(json: $0) }
             return { [weak self] in self?.apply(hosts: hosts) }
@@ -187,9 +206,8 @@ final class AppStore {
     private func apply(_ account: Account) {
         let wasSignedIn = self.account.signedIn
         self.account = account
-        ready = true
         if wasSignedIn && !account.signedIn {
-            select(.newThread)
+            startNewThread()
             enrollToken = nil
         }
     }
@@ -204,7 +222,7 @@ final class AppStore {
             guard let update = hostUpdates[host.id], update.restarting, host.version != update.from else { continue }
             hostUpdates[host.id] = nil
         }
-        ensureNewThreadDefaults()
+        ensureDraftProject()
         // The host has arrived; the install command has done its job.
         if showsAddHost, hosts.count > addHostCount {
             showsAddHost = false
@@ -215,7 +233,7 @@ final class AppStore {
         threads = threads.filter { $0.value.hostID != hostID }
         for thread in new { threads[thread.id] = thread }
         if case .thread(let id) = selection, threads[id] == nil {
-            select(.newThread)
+            startNewThread()
         }
         restoreSelection()
     }
@@ -230,7 +248,7 @@ final class AppStore {
 
     private func removeThread(_ id: String) {
         threads[id] = nil
-        if selection == .thread(id) { select(.newThread) }
+        if selection == .thread(id) { startNewThread() }
     }
 
     private func apply(projects new: [Project], hostID: String) {
@@ -238,7 +256,7 @@ final class AppStore {
         projects.append(contentsOf: new)
         projects.sort { $0.createdAt < $1.createdAt }
         ImageFiles.shared.warm(new.compactMap(\.iconPath))
-        ensureNewThreadDefaults()
+        ensureDraftProject()
     }
 
     // MARK: Lookups
@@ -256,18 +274,53 @@ final class AppStore {
         return threads[id]
     }
 
+    var selectedDraft: ThreadDraft? {
+        guard case .draft(let id) = selection else { return nil }
+        return threadDrafts.first { $0.id == id }
+    }
+
+    /// The drafts worth listing: the ones with something in them, newest first. The open one is
+    /// listed as it was when it was opened.
+    var listedDrafts: [ListedDraft] {
+        threadDrafts.reversed().compactMap { draft -> ListedDraft? in
+            if selection == .draft(draft.id) {
+                return openedDraftPreview.map { ListedDraft(draft: draft, preview: $0) }
+            }
+            return preview(of: draft).map { ListedDraft(draft: draft, preview: $0) }
+        }
+    }
+
+    /// The first line of what was written in a draft, or what is attached to it. Nothing for a
+    /// draft that is still empty.
+    private func preview(of draft: ThreadDraft) -> String? {
+        let text = (drafts[draft.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let line = text.split(separator: "\n").first { return String(line) }
+        guard let files = attachmentsByKey[draft.id] else { return nil }
+        return files.count == 1 ? "1 attachment" : "\(files.count) attachments"
+    }
+
     func project(_ id: String?) -> Project? {
         projects.first { $0.id == id }
+    }
+
+    /// The projects, the one a thread was last started in first. A project without threads
+    /// counts from when it was added.
+    var recentProjects: [Project] {
+        var lastUsed: [String: Double] = [:]
+        for thread in threads.values {
+            lastUsed[thread.projectID] = max(lastUsed[thread.projectID] ?? 0, thread.createdAt)
+        }
+        return projects.sorted { (lastUsed[$0.id] ?? $0.createdAt, $0.id) > (lastUsed[$1.id] ?? $1.createdAt, $1.id) }
     }
 
     func host(_ id: String?) -> Host? {
         hosts.first { $0.id == id }
     }
 
-    /// The host the composer is talking to: the open thread's, or the new thread's project's.
+    /// The host the composer is talking to: the open thread's, or the open draft's project's.
     var composerHost: Host? {
         if let thread = selectedThread { return host(thread.hostID) }
-        return host(project(newThread.projectID)?.hostID) ?? hosts.first
+        return host(project(selectedDraft?.projectID)?.hostID) ?? hosts.first
     }
 
     /// The models the composer offers: an open thread stays with its agent.
@@ -278,63 +331,100 @@ final class AppStore {
     }
 
     var composerModel: ModelInfo? {
-        let id = selectedThread.map { $0.model } ?? newThread.model
+        let id = selectedThread.map { $0.model } ?? selectedDraft?.model
         return composerModels.first { $0.id == id } ?? composerModels.first
     }
 
     var composerEffort: String? {
-        let effort = selectedThread.map { $0.effort } ?? newThread.effort
+        let effort = selectedThread.map { $0.effort } ?? selectedDraft?.effort
         guard let model = composerModel, !model.efforts.isEmpty else { return nil }
         if let effort, model.efforts.contains(effort) { return effort }
         return model.defaultEffort ?? model.efforts.first
     }
 
-    var composerAccess: Access { selectedThread?.access ?? newThread.access }
-    var composerPlan: Bool { selectedThread?.plan ?? newThread.plan }
+    var composerAccess: Access { selectedThread?.access ?? selectedDraft?.access ?? .full }
+    var composerPlan: Bool { selectedThread?.plan ?? selectedDraft?.plan ?? false }
 
+    /// What the composer's text and attachments are kept under: the open draft or thread.
     var draftKey: String {
-        if case .thread(let id) = selection { return id }
-        return "new"
+        switch selection {
+        case .draft(let id), .thread(let id): return id
+        }
     }
 
     var draft: String {
         get { drafts[draftKey] ?? "" }
-        set {
-            drafts[draftKey] = newValue.isEmpty ? nil : newValue
-            defaults.set(drafts, forKey: "drafts")
-        }
+        set { setText(newValue, for: draftKey) }
+    }
+
+    var attachments: [String] {
+        get { attachmentsByKey[draftKey] ?? [] }
+        set { attachmentsByKey[draftKey] = newValue.isEmpty ? nil : newValue }
+    }
+
+    private func setText(_ text: String, for key: String) {
+        drafts[key] = text.isEmpty ? nil : text
+        defaults.set(drafts, forKey: "drafts")
     }
 
     // MARK: Preferences
 
     private func loadPreferences() {
         drafts = defaults.dictionary(forKey: "drafts") as? [String: String] ?? [:]
-        newThread.projectID = defaults.string(forKey: "new.project")
-        newThread.model = defaults.string(forKey: "new.model")
-        newThread.effort = defaults.string(forKey: "new.effort")
-        newThread.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
         lastSelection = defaults.string(forKey: "selection")
+        let saved = defaults.data(forKey: "threadDrafts").flatMap { try? JSONDecoder().decode([ThreadDraft].self, from: $0) }
+        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil }
+        let opened = threadDrafts.first { $0.id == lastSelection } ?? addDraft()
+        selection = .draft(opened.id)
+        openedDraftPreview = preview(of: opened)
     }
 
-    private func savePreferences() {
-        defaults.set(newThread.projectID, forKey: "new.project")
-        defaults.set(newThread.model, forKey: "new.model")
-        defaults.set(newThread.effort, forKey: "new.effort")
-        defaults.set(newThread.access.rawValue, forKey: "new.access")
+    private func saveThreadDrafts() {
+        defaults.set(try? JSONEncoder().encode(threadDrafts), forKey: "threadDrafts")
     }
 
-    /// Keeps the new thread's project and model pointing at things that exist.
-    private func ensureNewThreadDefaults() {
-        if project(newThread.projectID) == nil {
-            newThread.projectID = projects.first?.id
-        }
+    /// A draft that starts with what the last one was set to.
+    private func addDraft() -> ThreadDraft {
+        var draft = ThreadDraft()
+        draft.projectID = defaults.string(forKey: "new.project")
+        draft.model = defaults.string(forKey: "new.model")
+        draft.effort = defaults.string(forKey: "new.effort")
+        draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
+        threadDrafts.append(draft)
+        saveThreadDrafts()
+        return draft
+    }
+
+    /// Changes the open draft, and has the next draft start with the same choices.
+    private func updateDraft(_ change: (inout ThreadDraft) -> Void) {
+        guard let index = threadDrafts.firstIndex(where: { selection == .draft($0.id) }) else { return }
+        change(&threadDrafts[index])
+        let draft = threadDrafts[index]
+        defaults.set(draft.projectID, forKey: "new.project")
+        defaults.set(draft.model, forKey: "new.model")
+        defaults.set(draft.effort, forKey: "new.effort")
+        defaults.set(draft.access.rawValue, forKey: "new.access")
+        saveThreadDrafts()
+    }
+
+    private func removeDraft(_ id: String) {
+        threadDrafts.removeAll { $0.id == id }
+        attachmentsByKey[id] = nil
+        setText("", for: id)
+        saveThreadDrafts()
+    }
+
+    /// Keeps the open draft pointing at a project that exists, once the projects are known.
+    private func ensureDraftProject() {
+        guard ready, let draft = selectedDraft, project(draft.projectID) == nil, let first = projects.first else { return }
+        updateDraft { $0.projectID = first.id }
     }
 
     /// Opens the thread that was open when the app was last closed, once it is known.
     private func restoreSelection() {
         guard let wanted = lastSelection, threads[wanted] != nil else { return }
         lastSelection = nil
-        guard selection == .newThread else { return }
+        guard let draft = selectedDraft, preview(of: draft) == nil else { return }
         select(.thread(wanted))
     }
 
@@ -381,9 +471,11 @@ final class AppStore {
     }
 
     func signOut() {
-        defaults.removeObject(forKey: "drafts")
-        defaults.removeObject(forKey: "selection")
         drafts = [:]
+        attachmentsByKey = [:]
+        threadDrafts = []
+        defaults.removeObject(forKey: "drafts")
+        startNewThread()
         core.send("sign_out")
     }
 
@@ -490,27 +582,27 @@ final class AppStore {
         composerFocus += 1
     }
 
-    func startNewThread(in project: Project) {
-        setNewThreadProject(project.id)
-        select(.newThread)
-    }
-
     // MARK: Threads
 
     func select(_ new: Selection) {
         lastSelection = nil
-        guard new != selection || openThreadID == nil else { return }
+        let reopens = selectedThread != nil && openThreadID == nil
+        guard new != selection || reopens else { return }
         if let open = openThreadID {
             core.send("close_thread", ["thread_id": open])
             openThreadID = nil
         }
+        let left = selectedDraft
         selection = new
+        // A draft nothing was written in is not kept.
+        if let left, preview(of: left) == nil, left.id != sendingDraftID { removeDraft(left.id) }
+        openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
         activity = Activity()
         transcriptIsEmpty = true
-        attachments = []
         guard case .thread(let id) = new, let thread = threads[id] else {
             transcript.begin(threadID: nil)
-            defaults.removeObject(forKey: "selection")
+            defaults.set(draftKey, forKey: "selection")
+            ensureDraftProject()
             return
         }
         open(thread)
@@ -524,18 +616,27 @@ final class AppStore {
         core.send("mark_seen", ["thread_id": thread.id])
     }
 
-    func startNewThread() {
-        select(.newThread)
+    /// Opens a thread that is yet to be written: the open draft while it is still empty, or a new
+    /// one. A draft with something in it is left as it is, in the sidebar.
+    func startNewThread(in project: Project? = nil) {
+        let reusable = selectedDraft.map { preview(of: $0) == nil && $0.id != sendingDraftID } ?? false
+        if !reusable { select(.draft(addDraft().id)) }
+        if let project { setNewThreadProject(project.id) }
     }
 
     func setNewThreadProject(_ id: String?) {
-        newThread.projectID = id
-        savePreferences()
+        updateDraft { $0.projectID = id }
+    }
+
+    func discard(_ draft: ThreadDraft) {
+        let wasOpen = selection == .draft(draft.id)
+        removeDraft(draft.id)
+        if wasOpen { startNewThread() }
     }
 
     var canSend: Bool {
-        guard !sending, let host = composerHost, host.state == .connected else { return false }
-        if selectedThread == nil && project(newThread.projectID) == nil { return false }
+        guard sendingDraftID == nil, let host = composerHost, host.state == .connected else { return false }
+        if selectedThread == nil && project(selectedDraft?.projectID) == nil { return false }
         return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
 
@@ -543,13 +644,14 @@ final class AppStore {
         guard canSend else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let files = attachments
+        let key = draftKey
         var command: JSON = ["text": text, "files": files]
         let existing = selectedThread
         if let thread = existing {
             command["host_id"] = thread.hostID
             command["thread_id"] = thread.id
         } else {
-            guard let project = project(newThread.projectID), let model = composerModel else {
+            guard let draft = selectedDraft, let project = project(draft.projectID), let model = composerModel else {
                 errorMessage = "This host has no agent installed. Install Claude Code or Codex on it and try again."
                 return
             }
@@ -557,16 +659,18 @@ final class AppStore {
                 "project_id": project.id,
                 "agent": model.agent.rawValue,
                 "model": model.id,
-                "access": newThread.access.rawValue,
-                "plan": newThread.plan,
+                "access": draft.access.rawValue,
+                "plan": draft.plan,
             ]
             if let effort = composerEffort { settings["effort"] = effort }
             command["host_id"] = project.hostID
             command["new_thread"] = settings
-            sending = true
+            sendingDraftID = draft.id
+            openedDraftPreview = nil
             activity = Activity.starting
             transcript.setActivity(activity)
         }
+        let hostID = command.string("host_id")
         draft = ""
         attachments = []
         transcript.setPending(text)
@@ -574,26 +678,31 @@ final class AppStore {
 
         core.send("send", command) { [weak self] result in
             guard let self else { return }
-            self.sending = false
+            if existing == nil { self.sendingDraftID = nil }
             switch result {
             case .failure(let error):
+                // The message goes back to where it was written, wherever the app is now.
+                self.setText(text, for: key)
+                self.attachmentsByKey[key] = files.isEmpty ? nil : files
+                self.errorMessage = error.message
+                guard self.draftKey == key else { return }
                 self.transcript.setPending(nil)
                 self.transcriptIsEmpty = self.transcript.isEmpty
                 self.activity = existing == nil ? Activity() : self.activity
                 self.transcript.setActivity(self.activity)
-                self.draft = text
-                self.attachments = files
-                self.errorMessage = error.message
             case .success(let value):
                 guard existing == nil else { return }
-                self.openNewThread(id: value.string("thread_id"))
+                self.openNewThread(id: value.string("thread_id"), hostID: hostID, draftID: key)
             }
         }
     }
 
-    /// Switches to the thread a first message created, keeping the message on screen meanwhile.
-    private func openNewThread(id: String) {
-        guard selection == .newThread, let hostID = project(newThread.projectID)?.hostID else { return }
+    /// Replaces a draft with the thread its first message created. If the draft is still open,
+    /// the thread opens in its place with the message kept on screen.
+    private func openNewThread(id: String, hostID: String, draftID: String) {
+        let wasOpen = selection == .draft(draftID)
+        removeDraft(draftID)
+        guard wasOpen else { return }
         selection = .thread(id)
         openThreadID = id
         defaults.set(id, forKey: "selection")
@@ -624,9 +733,10 @@ final class AppStore {
 
     func setModel(_ model: ModelInfo) {
         guard let thread = selectedThread else {
-            newThread.model = model.id
-            newThread.effort = nil
-            savePreferences()
+            updateDraft {
+                $0.model = model.id
+                $0.effort = nil
+            }
             return
         }
         update(thread, ["model": model.id, "effort": ""]) {
@@ -637,8 +747,7 @@ final class AppStore {
 
     func setEffort(_ effort: String) {
         guard let thread = selectedThread else {
-            newThread.effort = effort
-            savePreferences()
+            updateDraft { $0.effort = effort }
             return
         }
         update(thread, ["effort": effort]) { $0.effort = effort }
@@ -646,8 +755,7 @@ final class AppStore {
 
     func setAccess(_ access: Access) {
         guard let thread = selectedThread else {
-            newThread.access = access
-            savePreferences()
+            updateDraft { $0.access = access }
             return
         }
         update(thread, ["access": access.rawValue]) { $0.access = access }
@@ -655,7 +763,7 @@ final class AppStore {
 
     func setPlan(_ plan: Bool) {
         guard let thread = selectedThread else {
-            newThread.plan = plan
+            updateDraft { $0.plan = plan }
             return
         }
         update(thread, ["plan": plan]) { $0.plan = plan }
@@ -671,7 +779,7 @@ final class AppStore {
             let position = active.firstIndex { $0.id == open } ?? 0
             let remaining = active.filter { thread in !changed.contains { $0.id == thread.id } }
             let next = remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)]
-            select(next.map { .thread($0.id) } ?? .newThread)
+            if let next { select(.thread(next.id)) } else { startNewThread() }
         }
         let now = Date().timeIntervalSince1970
         for thread in changed {

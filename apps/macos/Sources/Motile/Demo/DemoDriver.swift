@@ -137,8 +137,8 @@ private final class Demo {
 
         guard let host = store.hosts.first else { return finish() }
         store.addProject(hostID: host.id, path: environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory())
-        await expect("a folder on the host becomes a project") { store.project(store.newThread.projectID) != nil }
-        await expect("the project's icon is fetched from the host") { store.project(store.newThread.projectID)?.iconPath != nil }
+        await expect("a folder on the host becomes a project") { store.project(store.selectedDraft?.projectID) != nil }
+        await expect("the project's icon is fetched from the host") { store.project(store.selectedDraft?.projectID)?.iconPath != nil }
         store.draft = "Add a rate limiter to the API"
         await shoot("04-new-thread")
 
@@ -263,8 +263,16 @@ private final class Demo {
         store.draft = "Why is the sync slow on large threads?\n\nLook at how the host answers `Open` first:\n- what it reads from SQLite\n- how many items it sends"
         store.attach([URL(fileURLWithPath: "/tmp/motile-demo/api/greet.py")])
         await shoot("12-dark-new-thread")
-        store.attachments = []
-        store.draft = ""
+
+        // Leaving a new thread that has something written in it keeps it, in the sidebar.
+        store.select(.thread(first))
+        await expect("a new thread that was written but not sent is listed as a draft") { store.listedDrafts.count == 1 }
+        store.startNewThread()
+        await shoot("12-dark-draft")
+        if let listed = store.listedDrafts.first { store.select(.draft(listed.id)) }
+        await expect("the draft opens with what was written in it") { store.draft.hasPrefix("Why is the sync slow") && store.attachments.count == 1 }
+        if let draft = store.selectedDraft { store.discard(draft) }
+        await expect("a discarded draft is gone") { store.listedDrafts.isEmpty && store.draft.isEmpty }
         finish()
     }
 

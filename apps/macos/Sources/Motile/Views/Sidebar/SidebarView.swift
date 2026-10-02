@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Every active thread on every host in one list, with the ones marked done on a shelf at the
-/// bottom.
+/// The drafts, then every active thread on every host in one list, with the ones marked done on
+/// a shelf at the bottom.
 struct SidebarView: View {
     @Environment(AppStore.self) private var store
     @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
@@ -19,7 +19,9 @@ struct SidebarView: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
-            threads(active: active, done: done)
+            GeometryReader { list in
+                threads(active: active, done: done, maxDoneHeight: list.size.height / 2)
+            }
         }
         .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Title", text: $newTitle)
@@ -42,9 +44,10 @@ struct SidebarView: View {
         }
     }
 
-    private func threads(active: [ThreadInfo], done: [ThreadInfo]) -> some View {
+    private func threads(active: [ThreadInfo], done: [ThreadInfo], maxDoneHeight: Double) -> some View {
         ScrollView {
             LazyVStack(spacing: 2) {
+                DraftRows(search: search)
                 ForEach(active) { thread in
                     ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 })
                 }
@@ -65,6 +68,7 @@ struct SidebarView: View {
                 if !done.isEmpty {
                     DoneShelf(
                         threads: done,
+                        maxHeight: maxDoneHeight,
                         expanded: search.isEmpty ? $doneExpanded : .constant(true),
                         limit: $doneLimit,
                         rename: beginRename,
@@ -139,6 +143,9 @@ private struct ThreadRow: View {
     let delete: (ThreadInfo) -> Void
     @State private var hovering = false
 
+    private static let sidePadding: CGFloat = 8
+    private static let topPadding: CGFloat = 3
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
@@ -146,11 +153,16 @@ private struct ThreadRow: View {
                 Text(projectName)
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
+                    .layoutPriority(1)
+                if store.hosts.count > 1, let host = store.host(thread.hostID) {
+                    HostLabel(host: host)
+                }
                 Spacer(minLength: 6)
                 if hovering && !thread.running {
                     IconOnlyButton(symbol: "checkmark", help: "Mark done", size: 22, symbolSize: 12) {
                         store.setDone([thread.id], done: true, fromSidebar: true)
                     }
+                    .padding(.trailing, Self.topPadding - Self.sidePadding)
                 } else {
                     ThreadStatus(thread: thread)
                 }
@@ -162,8 +174,8 @@ private struct ThreadRow: View {
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 3)
+        .padding(.horizontal, Self.sidePadding)
+        .padding(.top, Self.topPadding)
         .padding(.bottom, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -174,28 +186,111 @@ private struct ThreadRow: View {
     }
 
     private var projectName: String {
-        let project = store.project(thread.projectID)?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
-        guard store.hosts.count > 1, let host = store.host(thread.hostID) else { return project }
-        return "\(project) · \(host.name)"
+        store.project(thread.projectID)?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
+    }
+}
+
+/// The threads that were written but not sent yet, above the others. They are their own view so
+/// that typing only redraws them.
+private struct DraftRows: View {
+    @Environment(AppStore.self) private var store
+    let search: String
+
+    var body: some View {
+        let listed = store.listedDrafts.filter(matches)
+        if !listed.isEmpty {
+            ForEach(listed) { DraftRow(listed: $0) }
+            Divider()
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+        }
+    }
+
+    private func matches(_ listed: ListedDraft) -> Bool {
+        guard !search.isEmpty else { return true }
+        let project = store.project(listed.draft.projectID)?.name ?? ""
+        return listed.preview.localizedCaseInsensitiveContains(search) || project.localizedCaseInsensitiveContains(search)
+    }
+}
+
+/// A draft: its project on the first line, what was written in it on the second.
+private struct DraftRow: View {
+    @Environment(AppStore.self) private var store
+    let listed: ListedDraft
+    @State private var hovering = false
+
+    var body: some View {
+        let project = store.project(listed.draft.projectID)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                ProjectIcon(project: project, size: 14)
+                Text(project?.name ?? "No project")
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if store.hosts.count > 1, let host = store.host(project?.hostID) {
+                    HostLabel(host: host)
+                }
+                Spacer(minLength: 6)
+                if hovering {
+                    IconOnlyButton(symbol: "xmark", help: "Discard draft", size: 22, symbolSize: 12) {
+                        store.discard(listed.draft)
+                    }
+                } else {
+                    HStack(spacing: 3) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Draft")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(Color.themeWarning)
+                }
+            }
+            .foregroundStyle(.secondary)
+            .frame(height: 22)
+
+            Text(listed.preview)
+                .font(.system(size: 13, weight: .medium))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 3)
+        .padding(.bottom, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .hoverHighlight(radius: 8, selected: store.selection == .draft(listed.id))
+        .onHover { hovering = $0 }
+        .onTapGesture { store.select(.draft(listed.id)) }
+        .contextMenu {
+            Button("Discard Draft", role: .destructive) { store.discard(listed.draft) }
+        }
     }
 }
 
 /// The threads marked done, at the bottom of the sidebar: a line that opens into their list.
 private struct DoneShelf: View {
-    private static let rowHeight: CGFloat = 30
-    private static let maxHeight: CGFloat = 250
+    private static let rowHeight = 30.0
+    private static let minHeight = 250.0
 
     let threads: [ThreadInfo]
+    let maxHeight: Double
     @Binding var expanded: Bool
     @Binding var limit: Int
     let rename: (ThreadInfo) -> Void
     let delete: (ThreadInfo) -> Void
+    @AppStorage("sidebar.doneHeight") private var height = DoneShelf.minHeight
 
     var body: some View {
         let shown = Array(threads.prefix(limit))
         let more = threads.count - shown.count
+        let contentHeight = Double(shown.count + (more > 0 ? 1 : 0)) * (Self.rowHeight + 2) + 4
+        let heights = Self.minHeight...max(Self.minHeight, min(maxHeight, contentHeight))
         VStack(spacing: 0) {
-            Divider()
+            if expanded && heights.lowerBound < heights.upperBound {
+                DoneShelfDivider(height: $height, heights: heights)
+            } else {
+                Divider()
+            }
             Button {
                 expanded.toggle()
             } label: {
@@ -242,9 +337,37 @@ private struct DoneShelf: View {
                     .padding(.horizontal, 10)
                     .padding(.bottom, 4)
                 }
-                .frame(height: min(Self.maxHeight, CGFloat(shown.count + (more > 0 ? 1 : 0)) * (Self.rowHeight + 2) + 4))
+                .frame(height: min(contentHeight, heights.upperBound, max(heights.lowerBound, height)))
             }
         }
+    }
+}
+
+/// The line above the done threads. Dragging it makes their list taller or shorter.
+private struct DoneShelfDivider: View {
+    @Binding var height: Double
+    let heights: ClosedRange<Double>
+    @State private var heightAtStart: Double?
+
+    var body: some View {
+        Divider()
+            .overlay {
+                Color.clear
+                    .frame(height: 9)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .onChanged { drag in
+                                let start = heightAtStart ?? min(heights.upperBound, max(heights.lowerBound, height))
+                                heightAtStart = start
+                                height = min(heights.upperBound, max(heights.lowerBound, start - drag.translation.height))
+                            }
+                            .onEnded { _ in heightAtStart = nil }
+                    )
+            }
     }
 }
 
@@ -257,7 +380,8 @@ private struct DoneRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
+            ProjectIcon(project: store.project(thread.projectID), size: 14)
             Text(thread.title)
                 .font(.system(size: 13))
                 .lineLimit(1)
@@ -293,12 +417,19 @@ private struct ThreadStatus: View {
     var body: some View {
         if thread.running {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                label("Working \(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970))", "circle.dashed", Color.themeWorking)
+                label("Working \(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970))", Color.themeWorking) {
+                    symbol("circle.dashed")
+                }
             }
         } else if thread.needsApproval {
-            label("Approval", "questionmark.circle", Color.themeWarning)
+            label("Approval", Color.themeWarning) {
+                symbol("questionmark.circle")
+            }
         } else if thread.unread {
-            label("Unread", "circle.fill", Color.themePrimary)
+            label("Unread", Color.themeUnread) {
+                Circle()
+                    .frame(width: 6, height: 6)
+            }
         } else {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 Text(Time.ago(thread.updatedAt, now: context.date.timeIntervalSince1970))
@@ -308,15 +439,19 @@ private struct ThreadStatus: View {
         }
     }
 
-    private func label(_ text: String, _ symbol: String, _ color: Color) -> some View {
+    private func label(_ text: String, _ color: Color, @ViewBuilder icon: () -> some View) -> some View {
         HStack(spacing: 3) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
+            icon()
             Text(text)
                 .font(.system(size: 11, weight: .medium))
                 .monospacedDigit()
         }
         .foregroundStyle(color)
+    }
+
+    private func symbol(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 11, weight: .semibold))
     }
 }
 

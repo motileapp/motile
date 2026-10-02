@@ -191,6 +191,7 @@ impl Core {
     fn begin(&mut self) {
         self.emit_account();
         self.sync_hosts();
+        self.emit(Event::Restored);
         self.bind_endpoint();
         self.check_account();
     }

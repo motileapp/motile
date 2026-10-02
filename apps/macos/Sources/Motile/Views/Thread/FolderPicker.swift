@@ -5,16 +5,21 @@ import SwiftUI
 struct FolderPicker: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
-    let host: Host
-    var iconFor: Project?
+    let iconFor: Project?
+    @State private var hostID: String
     @State private var folder: RemoteFolder?
     @State private var path = ""
     @State private var selected: String?
     @State private var error: String?
 
+    init(host: Host, iconFor: Project? = nil) {
+        _hostID = State(initialValue: host.id)
+        self.iconFor = iconFor
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(iconFor.map { "Choose an icon for \($0.name)" } ?? "Add a project on \(host.name)")
+            title
                 .font(.system(size: 15, weight: .semibold))
                 .padding([.horizontal, .top], 18)
             HStack(spacing: 8) {
@@ -74,7 +79,7 @@ struct FolderPicker: View {
                     .keyboardShortcut(.cancelAction)
                 if iconFor == nil {
                     Button("Add Project") {
-                        store.addProject(hostID: host.id, path: target)
+                        store.addProject(hostID: hostID, path: target)
                         dismiss()
                     }
                     .keyboardShortcut(.defaultAction)
@@ -90,7 +95,67 @@ struct FolderPicker: View {
             .padding(14)
         }
         .frame(width: 520)
-        .onAppear { load(iconFor?.path) }
+        .onAppear(perform: start)
+    }
+
+    @ViewBuilder private var title: some View {
+        let name = store.host(hostID)?.name ?? ""
+        if let iconFor {
+            Text("Choose an icon for \(iconFor.name)")
+        } else if store.hosts.count > 1 {
+            HStack(spacing: 6) {
+                Text("Add a project on")
+                Menu {
+                    ForEach(store.hosts) { host in
+                        Button {
+                            show(host)
+                        } label: {
+                            Label(host.state == .connected ? host.name : "\(host.name) (offline)", systemImage: "server.rack")
+                        }
+                        .disabled(host.state != .connected)
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "server.rack")
+                            .font(.system(size: 12, weight: .medium))
+                        Text(name)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color.themeTertiary)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .contentShape(Rectangle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .hoverHighlight(radius: 6)
+                .padding(.horizontal, -6)
+            }
+        } else {
+            Text("Add a project on \(name)")
+        }
+    }
+
+    /// Starts on the given host, or on one that is connected when it isn't.
+    private func start() {
+        if iconFor == nil, store.host(hostID)?.state != .connected,
+           let connected = store.hosts.first(where: { $0.state == .connected }) {
+            hostID = connected.id
+        }
+        load(iconFor?.path)
+    }
+
+    private func show(_ host: Host) {
+        guard host.id != hostID else { return }
+        hostID = host.id
+        folder = nil
+        path = ""
+        selected = nil
+        error = nil
+        load(nil)
     }
 
     /// What would be chosen: the selected folder or image, or the folder being browsed.
@@ -116,7 +181,9 @@ struct FolderPicker: View {
     }
 
     private func load(_ path: String?) {
-        store.listFolder(hostID: host.id, path: path, icons: iconFor != nil) { result in
+        let browsed = hostID
+        store.listFolder(hostID: browsed, path: path, icons: iconFor != nil) { result in
+            guard browsed == hostID else { return }
             switch result {
             case .success(let folder):
                 self.folder = folder

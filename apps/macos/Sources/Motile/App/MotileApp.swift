@@ -118,6 +118,9 @@ struct RootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(GlassBackground())
+        .background(WindowReveal(shown: store.ready || store.errorMessage != nil))
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        .modifier(HiddenWindowTitle())
         .overlay {
             if let page = store.panel {
                 CommandPanel(start: page)
@@ -181,8 +184,6 @@ struct MainView: View {
                 .help("New thread")
             }
         }
-        .toolbarBackground(.hidden, for: .windowToolbar)
-        .modifier(HiddenWindowTitle())
         .onDrop(of: [UTType.fileURL] + ImageFiles.attachable, isTargeted: $store.dropTargeted) { providers in
             store.attach(dropped: providers)
             return true
@@ -218,6 +219,28 @@ private struct SidebarDivider: View {
                             .onEnded { _ in widthAtStart = nil }
                     )
             }
+    }
+}
+
+/// Keeps the window invisible until `shown`, so that the first thing seen is the finished layout.
+private struct WindowReveal: NSViewRepresentable {
+    let shown: Bool
+
+    func makeNSView(context: Context) -> RevealView { RevealView() }
+
+    func updateNSView(_ view: RevealView, context: Context) {
+        guard shown else { return }
+        view.shown = true
+    }
+
+    final class RevealView: NSView {
+        var shown = false {
+            didSet { window?.alphaValue = shown ? 1 : 0 }
+        }
+
+        override func viewDidMoveToWindow() {
+            window?.alphaValue = shown ? 1 : 0
+        }
     }
 }
 
