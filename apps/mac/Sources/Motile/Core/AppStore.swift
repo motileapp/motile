@@ -34,6 +34,7 @@ final class AppStore {
     var signInError: String?
     private(set) var enrollToken: EnrollToken?
     var showsAddHost = false
+    var showsFolderPicker = false
 
     // What the hosts hold
     private(set) var hosts: [Host] = []

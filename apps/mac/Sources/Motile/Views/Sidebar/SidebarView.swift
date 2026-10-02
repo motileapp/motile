@@ -8,10 +8,11 @@ struct SidebarView: View {
     @State private var renaming: ThreadInfo?
     @State private var newTitle = ""
     @State private var deleting: ThreadInfo?
+    @State private var search = ""
 
     var body: some View {
-        let active = store.activeThreads
-        let done = store.doneThreads
+        let active = store.activeThreads.filter(matches)
+        let done = store.doneThreads.filter(matches)
         List(selection: selection) {
             Section {
                 ForEach(active) { thread in
@@ -19,7 +20,7 @@ struct SidebarView: View {
                         .tag(Selection.thread(thread.id))
                 }
                 if active.isEmpty {
-                    Text(done.isEmpty ? "No threads yet" : "No active threads")
+                    Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.themeTertiary)
                         .padding(.vertical, 6)
@@ -28,7 +29,7 @@ struct SidebarView: View {
             }
 
             if !done.isEmpty {
-                Section(isExpanded: $doneExpanded) {
+                Section(isExpanded: search.isEmpty ? $doneExpanded : .constant(true)) {
                     ForEach(done.prefix(doneLimit)) { thread in
                         DoneRow(thread: thread, rename: beginRename, delete: { deleting = $0 })
                             .tag(Selection.thread(thread.id))
@@ -41,11 +42,12 @@ struct SidebarView: View {
                             .selectionDisabled()
                     }
                 } header: {
-                    Text(doneExpanded ? "Done" : "Done (\(done.count))")
+                    Text(doneExpanded || !search.isEmpty ? "Done" : "Done (\(done.count))")
                 }
             }
         }
         .listStyle(.sidebar)
+        .searchable(text: $search, placement: .sidebar, prompt: "Search")
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SidebarFooter()
         }
@@ -85,6 +87,13 @@ struct SidebarView: View {
             get: { store.selection == .newThread ? nil : store.selection },
             set: { if let new = $0 { store.select(new) } }
         )
+    }
+
+    /// Whether the thread's title or project matches what is being searched for.
+    private func matches(_ thread: ThreadInfo) -> Bool {
+        guard !search.isEmpty else { return true }
+        let project = store.project(thread.projectID)?.name ?? ""
+        return thread.title.localizedCaseInsensitiveContains(search) || project.localizedCaseInsensitiveContains(search)
     }
 
     private func beginRename(_ thread: ThreadInfo) {

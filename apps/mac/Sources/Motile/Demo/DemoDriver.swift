@@ -100,6 +100,12 @@ private final class Demo {
         guard connected else { return finish() }
         await shoot("03-add-project")
 
+        store.showsFolderPicker = true
+        await wait(1)
+        await shoot("03-folder-picker")
+        store.showsFolderPicker = false
+        await wait(0.6)
+
         guard let host = store.hosts.first else { return finish() }
         store.addProject(hostID: host.id, path: environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory())
         await expect("a folder on the host becomes a project") { store.project(store.newThread.projectID) != nil }
@@ -118,6 +124,16 @@ private final class Demo {
         await expect("the thread gets a generated title") { store.selectedThread?.title == "Add API Rate Limiting" }
         let first = store.selectedThread?.id ?? ""
         await shoot("06-thread")
+
+        // Opening tool calls shows what they did.
+        let opened = store.transcript.rows.filter { row in
+            guard case .tool(let tool) = row.kind else { return false }
+            return tool.verb == "Edited" || tool.verb == "Ran"
+        }
+        for row in opened { transcriptView?.rowToggledExpansion(id: row.id) }
+        scrollTranscript(to: 0.12)
+        await shoot("06-tool-details")
+        for row in opened { transcriptView?.rowToggledExpansion(id: row.id) }
 
         // A thread that ends asking for permission.
         store.startNewThread()
@@ -174,8 +190,10 @@ private final class Demo {
         store.setDone([first], done: false)
         await expect("a thread marked undone is active again") { store.doneThreads.isEmpty }
         store.startNewThread()
-        store.draft = "Why is the sync slow on large threads?"
+        store.draft = "Why is the sync slow on large threads?\n\nLook at how the host answers `Open` first:\n- what it reads from SQLite\n- how many items it sends"
+        store.attach([URL(fileURLWithPath: "/tmp/motile-demo/api/greet.py")])
         await shoot("12-dark-new-thread")
+        store.attachments = []
         store.draft = ""
         finish()
     }
@@ -184,6 +202,13 @@ private final class Demo {
         // A runner's virtual display can hold the main thread by itself, so only a real freeze
         // fails; the number is reported either way.
         "\(stall < 1000 ? "PASS" : "FAIL") the window stays responsive while \(what) — longest stall \(stall) ms"
+    }
+
+    private var transcriptView: TranscriptView? {
+        func find(in view: NSView) -> TranscriptView? {
+            (view as? TranscriptView) ?? view.subviews.lazy.compactMap(find).first
+        }
+        return window?.contentView.flatMap(find)
     }
 
     private var transcriptScrollView: NSScrollView? {

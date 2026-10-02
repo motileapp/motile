@@ -5,13 +5,13 @@ import SwiftUI
 struct ThreadPane: View {
     @Environment(AppStore.self) private var store
     @State private var composerHeight: CGFloat = 120
-    @State private var pickingFolder = false
 
     private var isStart: Bool {
         store.selection == .newThread && store.transcriptIsEmpty && !store.sending
     }
 
     var body: some View {
+        @Bindable var store = store
         ZStack(alignment: .bottom) {
             Color.themeBackground.ignoresSafeArea()
             if isStart {
@@ -26,7 +26,10 @@ struct ThreadPane: View {
                 }
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
+                    .padding(.top, 24)
                     .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity)
+                    .background(composerBackdrop)
                     .background(
                         GeometryReader { proxy in
                             Color.clear.preference(key: ComposerHeightKey.self, value: proxy.size.height)
@@ -50,11 +53,24 @@ struct ThreadPane: View {
                 }
             }
         }
-        .sheet(isPresented: $pickingFolder) {
+        .sheet(isPresented: $store.showsFolderPicker) {
             if let host = store.composerHost {
                 FolderPicker(host: host)
             }
         }
+    }
+
+    /// Fades the transcript out under the composer, so nothing shows through around it.
+    private var composerBackdrop: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color.themeBackground.opacity(0), location: 0),
+                .init(color: Color.themeBackground, location: 0.45),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .allowsHitTesting(false)
     }
 
     private var subtitle: String {
@@ -77,7 +93,7 @@ struct ThreadPane: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Color.themeSecondary)
                     Button {
-                        pickingFolder = true
+                        store.showsFolderPicker = true
                     } label: {
                         Label("Add Project", systemImage: "folder.badge.plus")
                     }
@@ -108,7 +124,7 @@ struct ThreadPane: View {
                     }
                 }
                 Divider()
-                Button("Add Project…") { pickingFolder = true }
+                Button("Add Project…") { store.showsFolderPicker = true }
                 if let project = store.project(store.newThread.projectID) {
                     Button("Remove “\(project.name)” from Projects") { store.removeProject(project) }
                 }
