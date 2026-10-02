@@ -22,6 +22,7 @@ These are its programs:
 | `motile` (`apps/server`) | Your Linux machines | Runs the agents, stores the threads, serves your apps |
 | Auth server (`apps/auth`) | auth.motile.app | Signs you in and records which devices are yours. It never sees a thread |
 | Web app (`apps/web`) | [app.motile.app](https://app.motile.app) | Lists your hosts and apps, adds a host, removes a device |
+| Marketing site (`apps/marketing`) | [motile.app](https://motile.app) | The landing page, the download and the installer |
 
 Apps for iOS, Android, Windows and Linux are planned. They will share the Rust core the Mac app is built on (`crates/core`).
 
@@ -29,13 +30,7 @@ Apps for iOS, Android, Windows and Linux are planned. They will share the Rust c
 
 ### 1. Install the app
 
-Download **Motile.zip** from [motile.app](https://motile.app) or the [latest release](https://github.com/motileapp/motile/releases/latest), unzip it and move Motile to Applications. It needs an Apple silicon Mac with macOS 14 or later.
-
-The app isn't notarized yet, so macOS refuses to open a copy downloaded with a browser. Clear the quarantine flag once:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Motile.app
-```
+Download **Motile.zip** from [motile.app](https://motile.app) or the [latest release](https://github.com/motileapp/motile/releases/latest), unzip it and move Motile to Applications. It needs an Apple silicon Mac with macOS 14 or later. The app is signed and notarized, and updates itself from then on.
 
 ### 2. Sign in
 
@@ -64,14 +59,15 @@ On the host, `motile status` shows its account, agents and service, `motile logs
 
 ## Using it
 
-- **Projects** are folders on a host. Add one from the sidebar's toolbar or the new thread screen; every thread works in a project. A project is shown with the favicon, icon or logo found in its folder, and you can pick another image in Settings.
+- **Projects** are folders on a host. Add one from the top bar or the new thread screen; every thread works in a project. A project is shown with the favicon, icon or logo found in its folder, and you can choose another image from that folder, on the new thread screen or in Settings.
 - **Threads** are listed in one sidebar across all projects and hosts, each with its project and what it is doing. A thread gets a title generated from its first message. The search field narrows the list by title or project.
+- **Replies** arrive a finished paragraph, list item or line of code at a time. Tool calls that follow one another are one row, such as "Read 3 files and ran 2 commands", which opens into them. Once a turn has ended, what led to its last message folds behind a row like "Worked for 42s"; click it to see everything the agent did.
 - **Mark done** puts a thread away in the Done list at the bottom of the sidebar; **Mark undone** brings it back, and so does sending a message in it. Hover a thread for the button, or press `⇧⌘D`.
 - **Models**: the model menu lists what the host's agents can run. Picking a model picks the agent. A thread stays with its agent but can switch between that agent's models.
 - **Access**: **Supervised** asks before commands and file changes (a turn that was refused a tool ends with an **Allow and continue** button), **Auto-accept edits**, **Auto** and **Full access**. **Plan mode** makes the agent only read and propose.
 - **Updates**: the app offers a new version at the bottom of the sidebar, downloads it there and restarts into it. A host that is behind shows an **Update** button next to its name; it installs the new version and restarts, which it only does while no agent is working.
 - A message sent while a turn is running waits and starts the next turn.
-- Attached files are uploaded to the host.
+- **Attachments**: drop files anywhere on the window, paste a copied file or image, or use the paperclip. They are uploaded to the host.
 
 | Shortcut | Action |
 | --- | --- |
@@ -89,7 +85,8 @@ On the host, `motile status` shows its account, agents and service, `motile logs
 - **Devices**: every app and every host has an ed25519 key, which is also its iroh address. Signing in links an app's key to your account; the install command links a host's. A host asks the auth server which apps belong to its account and accepts only those.
 - **A turn** is one run of the agent's CLI: `claude -p --output-format stream-json …` or `codex exec --json …`, resumed with the agent's own session. The host turns both outputs into the same transcript items.
 - **Sync**: every transcript item carries the revision that last changed it. An app asks for what changed after the revision it has, so opening a thread it already knows costs almost nothing, however long the thread is.
-- **Rendering**: the core parses Markdown and highlights code, and sends the app rows that are ready to draw. While a reply streams, only the rows that changed are sent, and code is highlighted incrementally.
+- **Streaming**: the host holds a reply's text until a block of it is finished, and passes blocks on a few times a second, so text doesn't flicker in word by word.
+- **Rendering**: the core parses Markdown, highlights code, groups tool calls and folds finished turns, and sends the app rows that are ready to draw. While a reply streams, only the rows that changed are sent, and code is highlighted incrementally.
 - **Relays**: when an app and a host can't reach each other directly, iroh's public relays carry the (still encrypted) traffic. Motile doesn't run relays of its own yet.
 - **On the web**: [app.motile.app](https://app.motile.app) shows the hosts and apps on your account and removes the ones you no longer use. It can manage the account, but it isn't a device and can't connect to a host.
 - **Titles** are generated by the thread's own agent (Claude Haiku, or Codex's lightest model). When the first message doesn't say what the thread is about, the title is generated again from the transcript once the first turn has ended.

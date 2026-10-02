@@ -216,10 +216,15 @@ push that touches their files.
 
 ## Commit Messages
 
-A short imperative sentence describing the change, no prefixes:
+Commit messages start with the part of the system they touched, followed by a short imperative
+sentence describing the change:
 
-    Refuse a sign-in code that was started by another app
-    Show the host's round-trip time in the sidebar
+    auth: Refuse a sign-in code that was started by another app
+    mac: Show the host's round-trip time in the sidebar
+    server | core | mac: Stream replies in finished blocks
+
+The parts are the folders in `apps` and `crates`: `auth`, `marketing`, `web`, `server`, `mac`,
+`core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
 
 The title should be concise. Description should explain the work in more detail (only if
 required) while still being concise. Use simple language, do not try to sound smart.
