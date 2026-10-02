@@ -70,8 +70,8 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 - `apps/marketing` builds to `dist`, which static-web-server serves in production
   (`server.toml`). It ships no JavaScript; React only renders at build time.
   `public/install.sh` is the installer: it downloads the host from the latest release and runs
-  `motile setup`. `scripts/icons.mjs` draws every icon from the mark, for both web
-  projects and the Mac app: `pnpm --filter motile-marketing icons`.
+  `motile setup`. `scripts/icons.mjs` draws the icons of both web projects from the
+  mark: `pnpm --filter motile-marketing icons`.
 - `apps/web` runs on its own server. `src/server/auth.ts` holds the session: the browser only
   gets an HttpOnly cookie, and the server calls the auth server with the session's token.
   `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/` starts and
@@ -131,6 +131,8 @@ Rust library for tests.
 - `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
   it is signed by the developer who signed the running one, puts it in its place and restarts.
   A copy that isn't signed with the Developer ID can't update itself.
+- `Resources/AppIcon.icon` is the app icon, made in Icon Composer. `scripts/build-app.sh`
+  compiles it with `actool`, which also draws the flat icon older macOS versions show.
 - `Demo/DemoDriver.swift` walks the app through a scripted demo; `scripts/ci-demo.sh` runs it
   in CI against a real auth server and host and collects screenshots and `checks.txt`.
 
@@ -175,7 +177,7 @@ Rust library for tests.
 ## Development
 
 Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the marketing site and the
-web app. The Mac app needs Xcode 16 or later.
+web app. The Mac app needs Xcode 26 or later.
 
     docker compose up -d                        # Postgres on localhost:5435
     cargo run -p motile-auth                    # with the variables from .env.example exported

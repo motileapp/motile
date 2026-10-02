@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Motile.app into apps/macos/build. Needs Xcode 16 or later and Rust.
+# Builds Motile.app into apps/macos/build. Needs Xcode 26 or later and Rust.
 #
 #   scripts/build-app.sh [--open]
 #
@@ -30,14 +30,11 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/Motile"
 
-ICONSET="$(mktemp -d)/AppIcon.iconset"
-mkdir -p "$ICONSET"
-for size in 16 32 128 256 512; do
-    sips -z $size $size Resources/AppIcon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
-    double=$((size * 2))
-    sips -z $double $double Resources/AppIcon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
-done
-iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+# The Icon Composer icon becomes Assets.car for macOS 26, and AppIcon.icns for the ones before.
+xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" \
+    --platform macosx --target-device mac --minimum-deployment-target 14.0 \
+    --app-icon AppIcon --output-partial-info-plist "$(mktemp)" >/dev/null
+test -f "$APP/Contents/Resources/Assets.car" && test -f "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -52,6 +49,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundleIconName</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>

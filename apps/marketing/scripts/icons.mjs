@@ -1,5 +1,5 @@
-// Draws every icon from the mark: the favicons, touch and home-screen icons of the marketing site
-// and the web app, and the macOS app icon. Run it with `pnpm --filter motile-marketing icons`.
+// Draws the favicons, touch and home-screen icons of the marketing site and the web app from the
+// mark. Run it with `pnpm --filter motile-marketing icons`.
 import { writeFileSync } from "node:fs"
 import sharp from "sharp"
 
@@ -32,18 +32,6 @@ const square = (ratio) =>
 // How much of a tile's width the mark takes up: a margin of 5 on each side of 32.
 const MARK_IN_TILE = 22 / 32
 const MARK_IN_APPLE_TILE = 0.7
-
-// An 824-point tile in a 1024-point canvas, as Apple's icon grid has it.
-const mac = svg(
-  1024,
-  `<defs>
-    <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#333"/><stop offset="1" stop-color="${BLACK}"/></linearGradient>
-    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.22"/><stop offset="1" stop-color="#fff" stop-opacity="0.04"/></linearGradient>
-  </defs>
-  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#fill)"/>
-  <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="url(#edge)" stroke-width="4"/>
-  ${mark(1024, (MARK_IN_APPLE_TILE * 824) / 1024)}`
-)
 
 /** Rasterised at twice the size it is asked for, then scaled down. */
 function png(source, size) {
@@ -104,4 +92,3 @@ for (const folder of WEB_FOLDERS) {
   for (const [name, data] of Object.entries(files))
     writeFileSync(`${folder}/${name}`, data)
 }
-writeFileSync("../macos/Resources/AppIcon.png", await png(mac, 1024))
