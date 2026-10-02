@@ -3,6 +3,7 @@ pub mod agents;
 pub mod config;
 pub mod files;
 pub mod hub;
+pub mod icons;
 pub mod serve;
 pub mod setup;
 pub mod store;

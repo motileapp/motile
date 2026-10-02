@@ -7,7 +7,7 @@ license.workspace = true
 [dependencies]
 motile-protocol = { workspace = true, features = ["auth-client"] }
 axum = { version = "0.8", features = ["macros"] }
-base64 = "0.23"
+base64.workspace = true
 chrono = { version = "0.4", features = ["serde"] }
 reqwest.workspace = true
 serde.workspace = true

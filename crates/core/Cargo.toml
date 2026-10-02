@@ -11,6 +11,7 @@ crate-type = ["rlib", "staticlib"]
 [dependencies]
 motile-protocol = { workspace = true, features = ["auth-client"] }
 anyhow.workspace = true
+base64.workspace = true
 futures-lite.workspace = true
 iroh.workspace = true
 rusqlite.workspace = true

@@ -8,16 +8,18 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use iroh::Endpoint;
 use motile_protocol::auth_api::{Device, DeviceKind, Me};
 use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
-use motile_protocol::wire::{HostInfo, Item, Message, Request, Thread};
+use motile_protocol::wire::{HostInfo, Item, Message, Project, Request, Thread};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-use crate::api::{AccountView, Command, Config, Event, HostView, ThreadView};
+use crate::api::{AccountView, Command, Config, Event, HostView, ProjectView, ThreadView};
 use crate::cache::Cache;
 use crate::connection::{HostAddr, bind};
 use crate::link::{Link, LinkEvent, State, Status};
@@ -58,6 +60,7 @@ enum Input {
     AccountChecked { key: String, result: Result<Me, String> },
     SignedIn { id: u64, result: Result<Me, String> },
     Highlighted { thread_id: String, row_id: String, code: String, spans: Spans },
+    IconFetched { host_id: String },
     Render,
     Tick,
     Stop,
@@ -102,6 +105,8 @@ struct Core {
     watch_hosts: bool,
     render_scheduled: bool,
     ticks: u64,
+    /// The icon files that have been asked for, so none is asked for twice.
+    icons_asked: HashSet<String>,
 }
 
 /// Starts the core on the current tokio runtime.
@@ -148,6 +153,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         watch_hosts: false,
         render_scheduled: false,
         ticks: 0,
+        icons_asked: HashSet::new(),
     };
     // Loading the syntax definitions takes a moment; better now than at the first code block.
     tokio::task::spawn_blocking(|| highlight::highlight("rust", "fn main() {}"));
@@ -201,6 +207,10 @@ impl Core {
                 if open.transcript.set_spans(&row_id, &code, spans.clone()) {
                     self.emit(Event::Spans { thread_id, row_id, spans });
                 }
+            }
+            Input::IconFetched { host_id } => {
+                let projects = self.cache.projects(&host_id);
+                self.emit_projects(&host_id, projects);
             }
             Input::Render => self.render(),
             Input::Stop => {}
@@ -426,7 +436,7 @@ impl Core {
             self.open.retain(|_, open| open.host_id != host_id);
             self.cache.remove_host(&host_id);
             self.emit(Event::Threads { host_id: host_id.clone(), threads: Vec::new() });
-            self.emit(Event::Projects { host_id, projects: Vec::new() });
+            self.emit_projects(&host_id, Vec::new());
         }
 
         let mut added = Vec::new();
@@ -459,7 +469,8 @@ impl Core {
         self.emit_hosts();
         // What the cache remembers of the new hosts, until they answer themselves.
         for (host_id, threads) in added {
-            self.emit(Event::Projects { host_id: host_id.clone(), projects: self.cache.projects(&host_id) });
+            let projects = self.cache.projects(&host_id);
+            self.emit_projects(&host_id, projects);
             self.emit(Event::Threads { host_id, threads });
         }
     }
@@ -500,6 +511,46 @@ impl Core {
     fn link(&self, host_id: &str) -> Result<Arc<Link>, String> {
         let host = self.hosts.iter().find(|host| host.device.public_key == host_id);
         host.and_then(|host| host.link.clone()).ok_or_else(|| "Not connected to that host.".to_string())
+    }
+
+    /// Tells the app about a host's projects, each with its icon if this device has the file.
+    /// Icons it doesn't have yet are fetched, and the projects are told again when they arrive.
+    fn emit_projects(&mut self, host_id: &str, projects: Vec<Project>) {
+        let folder = self.config.data_dir.join("icons");
+        let view = |project: Project| {
+            let file = project.icon.as_ref().map(|icon| folder.join(format!("{}-{icon}", project.id)));
+            let icon_path = file.filter(|file| file.is_file()).map(|file| file.to_string_lossy().into_owned());
+            ProjectView { project, icon_path }
+        };
+        let views: Vec<ProjectView> = projects.into_iter().map(view).collect();
+        for view in views.iter().filter(|view| view.icon_path.is_none()) {
+            self.fetch_icon(host_id, &view.project);
+        }
+        self.emit(Event::Projects { host_id: host_id.to_string(), projects: views });
+    }
+
+    fn fetch_icon(&mut self, host_id: &str, project: &Project) {
+        let Some(icon) = &project.icon else { return };
+        let Ok(link) = self.link(host_id) else { return };
+        let name = format!("{}-{icon}", project.id);
+        if !self.icons_asked.insert(name.clone()) {
+            return;
+        }
+        let folder = self.config.data_dir.join("icons");
+        let (inputs, host_id, project_id) = (self.inputs.clone(), host_id.to_string(), project.id.clone());
+        tokio::spawn(async move {
+            let fetched = async {
+                let request = Request::ProjectIcon { project_id: project_id.clone() };
+                let Message::Icon { data } = link.request(&request).await? else {
+                    bail!("The host didn't answer with an icon.");
+                };
+                save_icon(&folder, &project_id, &name, &BASE64.decode(data)?)
+            };
+            match fetched.await {
+                Ok(()) => drop(inputs.send(Input::IconFetched { host_id })),
+                Err(error) => tracing::debug!(project_id, "couldn't fetch a project's icon: {error:#}"),
+            }
+        });
     }
 
     fn thread_view(&self, host_id: &str, thread: &Thread) -> ThreadView {
@@ -544,11 +595,11 @@ impl Core {
                 self.open.retain(|thread_id, open| open.host_id != host_id || known.contains(thread_id));
                 self.emit_hosts();
                 self.emit(Event::Threads { host_id: host_id.to_string(), threads: views });
-                self.emit(Event::Projects { host_id: host_id.to_string(), projects });
+                self.emit_projects(host_id, projects);
             }
             Message::Projects { projects } => {
                 self.cache.set_projects(host_id, &projects);
-                self.emit(Event::Projects { host_id: host_id.to_string(), projects });
+                self.emit_projects(host_id, projects);
             }
             Message::ThreadUpsert { thread } => {
                 self.cache.upsert_thread(host_id, &thread);
@@ -771,6 +822,23 @@ impl Core {
                     reply(&sink, id, sent.await.map_err(error_text));
                 });
             }
+            Command::SetProjectIcon { host_id, project_id, file } => {
+                let link = match self.link(&host_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let set = async {
+                        let path = match &file {
+                            Some(file) => Some(link.upload(std::path::Path::new(file)).await?),
+                            None => None,
+                        };
+                        link.request(&Request::SetProjectIcon { project_id, path }).await
+                    };
+                    reply(&sink, id, set.await.map(|_| json!({})).map_err(error_text));
+                });
+            }
             Command::Highlight { thread_id, row_ids } => {
                 self.highlight(&thread_id, &row_ids);
                 self.reply(id, Ok(json!({})));
@@ -842,6 +910,24 @@ impl Core {
             });
         }
     }
+}
+
+/// Writes a project's icon where `emit_projects` looks for it, and removes the icons the project
+/// had before.
+fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
+    std::fs::create_dir_all(folder)?;
+    let unfinished = folder.join(format!("{name}.part"));
+    std::fs::write(&unfinished, bytes)?;
+    std::fs::rename(&unfinished, folder.join(name))?;
+    let older = std::fs::read_dir(folder)?.flatten().filter(|entry| {
+        let file = entry.file_name();
+        let file = file.to_string_lossy();
+        file.starts_with(&format!("{project_id}-")) && file != name
+    });
+    for entry in older {
+        let _ = std::fs::remove_file(entry.path());
+    }
+    Ok(())
 }
 
 fn save_streamed(cache: &Cache, thread_id: &str, open: &mut OpenThread) {

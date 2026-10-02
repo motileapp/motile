@@ -649,3 +649,65 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
     assert_eq!(connection.request(&remove).await.unwrap(), Message::Ok);
     assert_eq!(next(&mut list).await, Message::Projects { projects: Vec::new() });
 }
+
+async fn projects_now(connection: &Connection) -> Vec<Project> {
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { projects, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    projects
+}
+
+async fn icon_bytes(connection: &Connection, project_id: &str) -> Vec<u8> {
+    use base64::Engine;
+    let request = Request::ProjectIcon { project_id: project_id.to_string() };
+    let Message::Icon { data } = connection.request(&request).await.unwrap() else { panic!("expected an icon") };
+    base64::engine::general_purpose::STANDARD.decode(data).unwrap()
+}
+
+#[tokio::test]
+async fn a_project_shows_the_icon_in_its_folder_until_another_is_chosen() {
+    let mut harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let folder = harness.folder("project/public");
+    std::fs::write(format!("{folder}/favicon.svg"), "<svg>found</svg>").unwrap();
+
+    let project = harness.project(&connection).await;
+    assert!(project.icon.as_deref().is_some_and(|icon| icon.ends_with(".svg")), "{:?}", project.icon);
+    assert_eq!(icon_bytes(&connection, &project.id).await, b"<svg>found</svg>");
+
+    // An image the app sent takes its place.
+    let image = harness.dir.path().join("chosen.png");
+    std::fs::write(&image, "png bytes").unwrap();
+    let uploaded = connection.upload(&image).await.unwrap();
+    let choose = Request::SetProjectIcon { project_id: project.id.clone(), path: Some(uploaded) };
+    assert_eq!(connection.request(&choose).await.unwrap(), Message::Ok);
+    let chosen = projects_now(&connection).await.remove(0).icon.unwrap();
+    assert!(chosen.ends_with(".png"), "{chosen}");
+    assert_eq!(icon_bytes(&connection, &project.id).await, b"png bytes");
+
+    let not_an_image = Request::SetProjectIcon { project_id: project.id.clone(), path: Some("/etc/hostname".into()) };
+    assert!(matches!(connection.request(&not_an_image).await.unwrap(), Message::Error { .. }));
+
+    // The choice is kept across a restart.
+    harness.restart().await;
+    let connection = harness.connect().await;
+    assert_eq!(projects_now(&connection).await.remove(0).icon, Some(chosen));
+
+    let reset = Request::SetProjectIcon { project_id: project.id.clone(), path: None };
+    assert_eq!(connection.request(&reset).await.unwrap(), Message::Ok);
+    assert_eq!(projects_now(&connection).await.remove(0).icon, project.icon);
+}
+
+#[tokio::test]
+async fn a_project_without_an_icon_has_none_until_one_appears_in_its_folder() {
+    let mut harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let project = harness.project(&connection).await;
+    assert_eq!(project.icon, None);
+    let request = Request::ProjectIcon { project_id: project.id.clone() };
+    assert!(matches!(connection.request(&request).await.unwrap(), Message::Error { .. }));
+
+    std::fs::write(format!("{}/icon.png", project.path), "png").unwrap();
+    harness.restart().await;
+    let connection = harness.connect().await;
+    assert!(projects_now(&connection).await.remove(0).icon.is_some());
+}

@@ -13,6 +13,7 @@ motile-protocol = { path = "crates/protocol" }
 motile-core = { path = "crates/core" }
 motile-server = { path = "apps/server" }
 anyhow = "1"
+base64 = "0.23"
 clap = { version = "4", features = ["derive", "env"] }
 futures-lite = "2"
 hex = "0.4"

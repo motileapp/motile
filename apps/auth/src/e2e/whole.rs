@@ -7,12 +7,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use motile_core::api::{AccountView, Command, Config, Event, HostView, ThreadView};
+use motile_core::api::{AccountView, Command, Config, Event, HostView, ProjectView, ThreadView};
 use motile_core::core::{Handle, start};
 use motile_core::link::State;
 use motile_core::render::rows::{Row, RowKind};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::wire::{Access as AgentAccess, Agent, NewThread, Project, Request, ToolStatus};
+use motile_protocol::wire::{Access as AgentAccess, Agent, NewThread, Request, ToolStatus};
 use motile_server::access::{Access, AccountSource};
 use motile_server::agents::environment::Environment;
 use motile_server::config::DataDir;
@@ -40,7 +40,7 @@ struct App {
     account: AccountView,
     hosts: Vec<HostView>,
     threads: HashMap<String, ThreadView>,
-    projects: Vec<Project>,
+    projects: Vec<ProjectView>,
     rows: Vec<Row>,
     running: bool,
 }
@@ -203,13 +203,32 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     // A project, and a thread in it.
     let project_folder = folder.path().join("api");
     std::fs::create_dir_all(&project_folder).unwrap();
+    std::fs::write(project_folder.join("favicon.svg"), "<svg>api</svg>").unwrap();
     let add = Request::AddProject { path: project_folder.to_string_lossy().into_owned() };
     app.ask(Command::Request { host_id: host.id.clone(), request: add }).await.unwrap();
     app.until("the project is listed", |app| app.projects.len() == 1).await;
-    assert_eq!(app.projects[0].name, "api");
+    assert_eq!(app.projects[0].project.name, "api");
+
+    // Its icon is fetched from the host into a file, and so is one picked on this device.
+    app.until("the project's icon arrives", |app| app.projects[0].icon_path.is_some()).await;
+    assert_eq!(std::fs::read_to_string(app.projects[0].icon_path.as_ref().unwrap()).unwrap(), "<svg>api</svg>");
+    let picked = folder.path().join("picked.png");
+    std::fs::write(&picked, "picked").unwrap();
+    let project_id = app.projects[0].project.id.clone();
+    let pick = Command::SetProjectIcon {
+        host_id: host.id.clone(),
+        project_id,
+        file: Some(picked.to_string_lossy().into_owned()),
+    };
+    app.ask(pick).await.unwrap();
+    app.until("the picked icon arrives", |app| {
+        app.projects[0].icon_path.as_ref().is_some_and(|path| path.ends_with(".png"))
+    })
+    .await;
+    assert_eq!(std::fs::read_to_string(app.projects[0].icon_path.as_ref().unwrap()).unwrap(), "picked");
 
     let new_thread = NewThread {
-        project_id: app.projects[0].id.clone(),
+        project_id: app.projects[0].project.id.clone(),
         agent: Agent::Claude,
         model: None,
         effort: None,
@@ -281,6 +300,7 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     assert!(reopened.account.signed_in);
     assert_eq!(reopened.hosts[0].name, "build-box");
     assert_eq!(reopened.projects.len(), 1);
+    assert!(reopened.projects[0].icon_path.is_some(), "the icon is shown from the cache, without the host");
     reopened.ask(Command::OpenThread { host_id: host.id.clone(), thread_id: thread_id.clone() }).await.unwrap();
     reopened.until("the cached rows are shown", |app| app.rows.len() == before.len()).await;
     reopened

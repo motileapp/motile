@@ -113,6 +113,10 @@ impl Server {
             Request::Delete { thread_id } => hub.delete(&thread_id).await.map(|_| Message::Ok),
             Request::AddProject { path } => hub.add_project(&path).await.map(|_| Message::Ok),
             Request::RemoveProject { project_id } => hub.remove_project(&project_id).await.map(|_| Message::Ok),
+            Request::ProjectIcon { project_id } => hub.project_icon(&project_id).await,
+            Request::SetProjectIcon { project_id, path } => {
+                hub.set_project_icon(&project_id, path).await.map(|_| Message::Ok)
+            }
             Request::ListDir { path } => files::list_dir(path.as_deref(), &hub.host_info().home),
             Request::Upload { name, size } => {
                 let saved = files::receive_upload(&mut recv, &self.attachments, &name, size).await;

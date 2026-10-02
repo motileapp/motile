@@ -176,6 +176,16 @@ pub enum Request {
     RemoveProject {
         project_id: String,
     },
+    /// The bytes of the project's icon.
+    ProjectIcon {
+        project_id: String,
+    },
+    /// Makes the image at `path` on the host the project's icon. `None` goes back to the one
+    /// found in the project's folder.
+    SetProjectIcon {
+        project_id: String,
+        path: Option<String>,
+    },
     /// Folders inside `path`, or inside the home folder.
     ListDir {
         path: Option<String>,
@@ -202,6 +212,10 @@ pub struct Project {
     pub name: String,
     /// The git branch checked out there, if it is a repository.
     pub branch: Option<String>,
+    /// Names the icon's contents: it changes when the icon does, and ends in the file's
+    /// extension. `None` when the project has no icon.
+    #[serde(default)]
+    pub icon: Option<String>,
     pub created_at: f64,
 }
 
@@ -289,6 +303,10 @@ pub enum Message {
     },
     Uploaded {
         path: String,
+    },
+    /// A project's icon: the file's bytes in base64.
+    Icon {
+        data: String,
     },
     Error {
         message: String,

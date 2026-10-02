@@ -6,7 +6,8 @@ use std::sync::Mutex;
 use motile_protocol::wire::{Access, Agent, Item, Thread};
 use rusqlite::{Connection, OptionalExtension, params};
 
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/0001_init.sql")];
+const MIGRATIONS: &[&str] =
+    &[include_str!("../migrations/0001_init.sql"), include_str!("../migrations/0002_project_icons.sql")];
 
 pub struct Store {
     connection: Mutex<Connection>,
@@ -53,6 +54,10 @@ pub struct StoredProject {
     pub id: String,
     pub path: String,
     pub created_at: f64,
+    /// The image the project is shown with, a file on this machine.
+    pub icon: Option<String>,
+    /// The user picked the icon; it isn't looked for in the project's folder again.
+    pub icon_chosen: bool,
 }
 
 fn as_text<T: serde::Serialize>(value: &T) -> String {
@@ -166,16 +171,32 @@ impl Store {
 
     pub fn load_projects(&self) -> rusqlite::Result<Vec<StoredProject>> {
         let connection = self.connection();
-        let mut statement = connection.prepare("SELECT id, path, created_at FROM projects ORDER BY created_at")?;
-        let projects = statement
-            .query_map([], |row| Ok(StoredProject { id: row.get(0)?, path: row.get(1)?, created_at: row.get(2)? }))?;
+        let mut statement =
+            connection.prepare("SELECT id, path, created_at, icon, icon_chosen FROM projects ORDER BY created_at")?;
+        let projects = statement.query_map([], |row| {
+            Ok(StoredProject {
+                id: row.get(0)?,
+                path: row.get(1)?,
+                created_at: row.get(2)?,
+                icon: row.get(3)?,
+                icon_chosen: row.get(4)?,
+            })
+        })?;
         projects.collect()
     }
 
     pub fn add_project(&self, project: &StoredProject) -> rusqlite::Result<()> {
         self.connection().execute(
-            "INSERT INTO projects (id, path, created_at) VALUES (?1, ?2, ?3)",
-            params![project.id, project.path, project.created_at],
+            "INSERT INTO projects (id, path, created_at, icon, icon_chosen) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![project.id, project.path, project.created_at, project.icon, project.icon_chosen],
+        )?;
+        Ok(())
+    }
+
+    pub fn save_project_icon(&self, project: &StoredProject) -> rusqlite::Result<()> {
+        self.connection().execute(
+            "UPDATE projects SET icon = ?2, icon_chosen = ?3 WHERE id = ?1",
+            params![project.id, project.icon, project.icon_chosen],
         )?;
         Ok(())
     }

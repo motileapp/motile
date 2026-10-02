@@ -84,6 +84,14 @@ pub enum Command {
         #[serde(default)]
         files: Vec<String>,
     },
+    /// Makes the image `file` on this device the project's icon. Without `file` the project
+    /// goes back to the icon found in its folder.
+    SetProjectIcon {
+        host_id: String,
+        project_id: String,
+        #[serde(default)]
+        file: Option<String>,
+    },
     /// Asks for the highlighting of code rows that came without it.
     Highlight {
         thread_id: String,
@@ -113,7 +121,7 @@ pub enum Event {
     },
     Projects {
         host_id: String,
-        projects: Vec<Project>,
+        projects: Vec<ProjectView>,
     },
     /// Replace `remove` rows at `start` with `rows`. With `reset` the app's rows are dropped first.
     Rows {
@@ -166,6 +174,14 @@ pub struct HostView {
     pub rtt_ms: Option<u64>,
     /// From the host itself; from the cache until it has connected.
     pub info: Option<HostInfo>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ProjectView {
+    #[serde(flatten)]
+    pub project: Project,
+    /// The project's icon as a file on this device, once it has been fetched from the host.
+    pub icon_path: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

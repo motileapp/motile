@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
     Activity, Agent, Denial, HostInfo, Item, ItemKind, Message, NewThread, Project, Thread, ThreadChange, ToolCall,
@@ -22,7 +24,7 @@ use tokio::sync::{Mutex, broadcast};
 use crate::agents::environment::Environment;
 use crate::agents::{AgentEvent, Parser, Turn, claude, executable_name};
 use crate::store::{Store, StoredProject, StoredThread, TitleSource};
-use crate::title;
+use crate::{icons, title};
 
 const UPDATES_BUFFER: usize = 4096;
 const ROOT_BYPASS_REFUSAL: &str = "cannot be used with root/sudo privileges";
@@ -78,7 +80,11 @@ impl Hub {
     pub fn new(store: Store, environment: Environment) -> anyhow::Result<Arc<Self>> {
         let threads = store.load_threads()?;
         let threads = threads.into_iter().map(|stored| (stored.thread.id.clone(), Live::new(stored))).collect();
-        let projects = Mutex::new(store.load_projects()?);
+        let mut projects = store.load_projects()?;
+        for project in &mut projects {
+            refresh_icon(&store, project);
+        }
+        let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
         Ok(Arc::new(Self { store, environment, threads: Mutex::new(threads), projects, list_updates }))
     }
@@ -346,7 +352,13 @@ impl Hub {
         if projects.iter().any(|project| project.path == path) {
             return Ok(());
         }
-        let project = StoredProject { id: new_id(), path: path.to_string(), created_at: now() };
+        let project = StoredProject {
+            id: new_id(),
+            path: path.to_string(),
+            created_at: now(),
+            icon: icons::find(Path::new(path)),
+            icon_chosen: false,
+        };
         self.store.add_project(&project)?;
         projects.push(project);
         self.announce_projects(&projects);
@@ -357,6 +369,38 @@ impl Hub {
         let mut projects = self.projects.lock().await;
         self.store.remove_project(project_id)?;
         projects.retain(|project| project.id != project_id);
+        self.announce_projects(&projects);
+        Ok(())
+    }
+
+    pub async fn project_icon(&self, project_id: &str) -> anyhow::Result<Message> {
+        let projects = self.projects.lock().await;
+        let project = projects.iter().find(|project| project.id == project_id);
+        let icon = project.and_then(|project| project.icon.as_deref()).context("That project has no icon.")?;
+        Ok(Message::Icon { data: BASE64.encode(icons::read(icon)?) })
+    }
+
+    /// Makes the image at `path` the project's icon, or goes back to the one in its folder.
+    pub async fn set_project_icon(&self, project_id: &str, path: Option<String>) -> anyhow::Result<()> {
+        let mut projects = self.projects.lock().await;
+        let project = projects
+            .iter_mut()
+            .find(|project| project.id == project_id)
+            .context("That project is no longer on the host.")?;
+        match path {
+            Some(path) => {
+                if icons::version(&path).is_none() {
+                    bail!("{path} isn't an image of at most 1 MB.");
+                }
+                project.icon = Some(path);
+                project.icon_chosen = true;
+            }
+            None => {
+                project.icon = icons::find(Path::new(&project.path));
+                project.icon_chosen = false;
+            }
+        }
+        self.store.save_project_icon(project)?;
         self.announce_projects(&projects);
         Ok(())
     }
@@ -589,8 +633,12 @@ impl Hub {
         if std::mem::take(&mut live.title_needs_refinement) && live.stored.title_source == TitleSource::Placeholder {
             tokio::spawn(self.clone().title_from_transcript(thread_id.to_string()));
         }
-        // The turn may have switched branches.
-        self.announce_projects(&self.projects.lock().await);
+        // The turn may have switched branches, or made the project an icon.
+        let mut projects = self.projects.lock().await;
+        if let Some(project) = projects.iter_mut().find(|project| project.id == live.stored.thread.project_id) {
+            refresh_icon(&self.store, project);
+        }
+        self.announce_projects(&projects);
     }
 }
 
@@ -771,9 +819,28 @@ fn projects(stored: &[StoredProject]) -> Vec<Project> {
         path: stored.path.clone(),
         name: file_name(&stored.path).to_string(),
         branch: git_branch(&stored.path),
+        icon: stored.icon.as_deref().and_then(icons::version),
         created_at: stored.created_at,
     };
     stored.iter().map(project).collect()
+}
+
+/// Looks for the project's icon in its folder again, unless the user picked one that is still
+/// there.
+fn refresh_icon(store: &Store, project: &mut StoredProject) {
+    let chosen_exists = project.icon_chosen && project.icon.as_deref().and_then(icons::version).is_some();
+    if chosen_exists {
+        return;
+    }
+    let found = icons::find(Path::new(&project.path));
+    if !project.icon_chosen && found == project.icon {
+        return;
+    }
+    project.icon = found;
+    project.icon_chosen = false;
+    if let Err(error) = store.save_project_icon(project) {
+        tracing::error!(project_id = project.id, "couldn't save a project's icon: {error:#}");
+    }
 }
 
 /// The branch checked out in the folder, read from git's own files.
