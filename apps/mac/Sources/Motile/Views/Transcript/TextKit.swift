@@ -100,6 +100,19 @@ final class RowTextView: NSTextView {
         return view
     }
 
+    /// Lays out a little of every kind of text once, at launch, so that the first reply doesn't
+    /// pay for loading the fonts and the text system while it streams.
+    static func warmUp() {
+        let view = make()
+        let sample = NSMutableAttributedString(attributedString: Typesetter.plain("Warm up", color: Theme.text))
+        sample.append(Typesetter.code("let warm = true", spans: [0, 3, 2]))
+        sample.append(Typesetter.mono("up", color: Theme.secondary))
+        sample.append(NSAttributedString(string: "bold", attributes: [.font: Theme.proseBold]))
+        sample.append(NSAttributedString(string: "heading", attributes: [.font: Theme.heading(2)]))
+        view.content = sample
+        _ = view.height(forWidth: 400)
+    }
+
     var content: NSAttributedString {
         get { textStorage ?? NSAttributedString() }
         set { update(to: newValue) }

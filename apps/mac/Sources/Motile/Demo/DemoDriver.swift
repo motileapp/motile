@@ -118,7 +118,7 @@ private final class Demo {
         await shoot("05-working")
         let streaming = StallMonitor()
         await expect("the turn runs to its end", within: 60) { turnEnded }
-        results.append(responsive("a reply streams", streaming.longestMilliseconds))
+        results.append(responsive("a reply streams", streaming))
         let kinds = store.transcript.rows.map(\.kindName)
         results.append("\(kinds.contains("code") && kinds.contains("tool") && kinds.contains("prose") ? "PASS" : "FAIL") the transcript has prose, code and tool calls — \(kinds.count) rows")
         await expect("the thread gets a generated title") { store.selectedThread?.title == "Add API Rate Limiting" }
@@ -149,10 +149,10 @@ private final class Demo {
         await wait(0.5)
         let longStreaming = StallMonitor()
         await expect("a long reply arrives whole", within: 90) { turnEnded }
-        results.append(responsive("a long reply streams", longStreaming.longestMilliseconds))
+        results.append(responsive("a long reply streams", longStreaming))
         let scrolling = StallMonitor()
         await scrollTranscript()
-        results.append(responsive("a long reply is scrolled", scrolling.longestMilliseconds))
+        results.append(responsive("a long reply is scrolled", scrolling))
         scrollTranscript(to: 0.45)
         await shoot("08-long-reply")
 
@@ -169,11 +169,11 @@ private final class Demo {
         store.select(.thread(huge))
         await expect("a thread of \(rowCount) rows opens again from the cache") { store.transcript.rows.count == rowCount }
         let opened = Int(Date().timeIntervalSince(began) * 1000)
-        results.append(responsive("a thread of \(rowCount) rows opens (in \(opened) ms)", opening.longestMilliseconds))
+        results.append(responsive("a thread of \(rowCount) rows opens (in \(opened) ms)", opening))
         await wait(0.5)
         let hugeScrolling = StallMonitor()
         await scrollTranscript()
-        results.append(responsive("a thread of \(rowCount) rows is scrolled", hugeScrolling.longestMilliseconds))
+        results.append(responsive("a thread of \(rowCount) rows is scrolled", hugeScrolling))
         scrollTranscript(to: 0.5)
         await shoot("09-huge-thread")
 
@@ -198,10 +198,12 @@ private final class Demo {
         finish()
     }
 
-    private func responsive(_ what: String, _ stall: Int) -> String {
+    private func responsive(_ what: String, _ monitor: StallMonitor) -> String {
         // A runner's virtual display can hold the main thread by itself, so only a real freeze
-        // fails; the number is reported either way.
-        "\(stall < 1000 ? "PASS" : "FAIL") the window stays responsive while \(what) — longest stall \(stall) ms"
+        // fails; the numbers are reported either way.
+        let report = monitor.report()
+        let verdict = report.longest < 1000 ? "PASS" : "FAIL"
+        return "\(verdict) the window stays responsive while \(what) — longest stall \(report.longest) ms, \(report.slow) of \(report.samples) checks over 50 ms"
     }
 
     private var transcriptView: TranscriptView? {
@@ -261,8 +263,15 @@ extension RowModel {
 /// Times how long the main thread takes to get to a piece of work, over and over. A long wait is
 /// what the user sees as the window freezing.
 final class StallMonitor: @unchecked Sendable {
+    struct Report {
+        let longest: Int
+        /// How many of the waits were longer than three frames.
+        let slow: Int
+        let samples: Int
+    }
+
     private let lock = NSLock()
-    private var longest = 0.0
+    private var waits: [Double] = []
     private var stopped = false
 
     init() {
@@ -286,15 +295,19 @@ final class StallMonitor: @unchecked Sendable {
 
     private func record(_ wait: TimeInterval) {
         lock.lock()
-        longest = max(longest, wait)
+        waits.append(wait)
         lock.unlock()
     }
 
-    /// The longest wait so far, in milliseconds. Reading it ends the measuring.
-    var longestMilliseconds: Int {
+    /// What was measured so far. Asking ends the measuring.
+    func report() -> Report {
         lock.lock()
         defer { lock.unlock() }
         stopped = true
-        return Int(longest * 1000)
+        return Report(
+            longest: Int((waits.max() ?? 0) * 1000),
+            slow: waits.filter { $0 > 0.05 }.count,
+            samples: waits.count
+        )
     }
 }

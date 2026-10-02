@@ -149,6 +149,8 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         render_scheduled: false,
         ticks: 0,
     };
+    // Loading the syntax definitions takes a moment; better now than at the first code block.
+    tokio::task::spawn_blocking(|| highlight::highlight("rust", "fn main() {}"));
     tokio::spawn(async move {
         core.begin();
         while let Some(input) = received.recv().await {
