@@ -29,8 +29,8 @@ const tile = (ratio) =>
 const square = (ratio) =>
   svg(64, `<rect width="64" height="64" fill="${BLACK}"/>${mark(64, ratio)}`)
 
-// A tab shows the favicon at 16 points, so its mark is larger than in the other icons.
-const favicon = tile(0.7)
+// How much of a tile's width the mark takes up.
+const MARK_IN_TILE = 0.7
 
 // An 824-point tile in a 1024-point canvas, as Apple's icon grid has it.
 const mac = svg(
@@ -41,7 +41,7 @@ const mac = svg(
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#fill)"/>
   <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="url(#edge)" stroke-width="4"/>
-  ${mark(1024, 0.45)}`
+  ${mark(1024, (MARK_IN_TILE * 824) / 1024)}`
 )
 
 /** Rasterised at twice the size it is asked for, then scaled down. */
@@ -85,15 +85,19 @@ function ico(images) {
 }
 
 const icoImages = await Promise.all(
-  [16, 32, 48].map(async (size) => ({ size, data: await png(favicon, size) }))
+  [16, 32, 48].map(async (size) => ({
+    size,
+    data: await png(tile(MARK_IN_TILE), size),
+  }))
 )
 const files = {
-  "favicon.svg": favicon,
+  "favicon.svg": tile(MARK_IN_TILE),
   "favicon.ico": ico(icoImages),
-  "apple-touch-icon.png": await opaque(square(0.54), 180),
-  "icon-192.png": await png(tile(0.58), 192),
-  "icon-512.png": await png(tile(0.58), 512),
-  "icon-maskable-512.png": await opaque(square(0.46), 512),
+  "apple-touch-icon.png": await opaque(square(0.62), 180),
+  "icon-192.png": await png(tile(MARK_IN_TILE), 192),
+  "icon-512.png": await png(tile(MARK_IN_TILE), 512),
+  // A launcher may crop this one to a circle 80% of its width.
+  "icon-maskable-512.png": await opaque(square(0.54), 512),
 }
 for (const folder of WEB_FOLDERS) {
   for (const [name, data] of Object.entries(files))
