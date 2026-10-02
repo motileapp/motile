@@ -200,7 +200,7 @@ fn install_agent(data_dir: &Path) -> anyhow::Result<bool> {
     std::fs::write(&plist, agent_plist(&binary, data_dir, &log))?;
 
     let domain = gui_domain();
-    let _ = launchctl(&["bootout", &format!("{domain}/{AGENT_LABEL}")]);
+    stop_agent(&domain);
     if launchctl(&["print", &domain]).is_err() {
         println!("Installed the service. It starts when you log in on this Mac's desktop.");
         note_about_automatic_login();
@@ -212,8 +212,20 @@ fn install_agent(data_dir: &Path) -> anyhow::Result<bool> {
     Ok(true)
 }
 
+/// `bootout` returns before the service is gone, and starting the same label fails until it is.
+fn stop_agent(domain: &str) {
+    let service = format!("{domain}/{AGENT_LABEL}");
+    let _ = launchctl(&["bootout", &service]);
+    for _ in 0..100 {
+        if launchctl(&["print", &service]).is_err() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 fn uninstall_agent() -> anyhow::Result<()> {
-    let _ = launchctl(&["bootout", &format!("{}/{AGENT_LABEL}", gui_domain())]);
+    stop_agent(&gui_domain());
     let _ = std::fs::remove_file(agent_plist_path()?);
     println!("Removed {AGENT_LABEL}. Threads and the device key are still in the data folder.");
     Ok(())
