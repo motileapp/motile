@@ -658,7 +658,7 @@ impl Hub {
             .process_group(0)
             .kill_on_drop(true);
         if unsafe { libc::getuid() } == 0 {
-            command.env(crate::setup::SANDBOX_VARIABLE, "1");
+            command.env(crate::service::SANDBOX_VARIABLE, "1");
         }
         command.spawn().with_context(|| format!("{name} couldn't be started."))
     }

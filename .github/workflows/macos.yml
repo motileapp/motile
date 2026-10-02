@@ -1,7 +1,7 @@
 name: macOS
 
-# Builds the Mac app, walks it through a demo against a real auth server and a real server on the runner,
-# and keeps the app and the screenshots as artifacts.
+# Builds the Mac app and the server for Macs, walks the app through a demo against a real auth server
+# and a real server on the runner, and keeps the app, the server and the screenshots as artifacts.
 on:
   push:
     branches: [main]
@@ -70,6 +70,20 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
           echo "MOTILE_SIGN_IDENTITY=Developer ID Application" >> "$GITHUB_ENV"
+
+      # Signed so that macOS keeps trusting it across updates. Nothing downloads it through a
+      # browser, so it needs no notarization.
+      - name: Sign the server
+        if: inputs.sign
+        run: codesign --force --timestamp --sign "$MOTILE_SIGN_IDENTITY" target/release/motile
+
+      - name: Package the server
+        run: tar -czf motile-aarch64-apple-darwin.tar.gz -C target/release motile
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-aarch64-apple-darwin
+          path: motile-aarch64-apple-darwin.tar.gz
 
       - name: Bundle the app
         run: apps/macos/scripts/build-app.sh

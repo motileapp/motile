@@ -131,16 +131,37 @@ async fn shell_environment() -> HashMap<String, String> {
 }
 
 fn login_shell() -> String {
-    let passwd = std::fs::read_to_string("/etc/passwd").unwrap_or_default();
-    let uid = unsafe { libc::getuid() }.to_string();
-    let shell = passwd
-        .lines()
-        .map(|line| line.split(':').collect::<Vec<_>>())
-        .find(|fields| fields.get(2) == Some(&uid.as_str()));
-    shell
-        .and_then(|fields| fields.get(6).map(|shell| shell.to_string()))
-        .filter(|shell| !shell.is_empty())
-        .unwrap_or_else(|| "/bin/sh".to_string())
+    passwd_field(|entry| entry.pw_shell).filter(|shell| !shell.is_empty()).unwrap_or_else(|| "/bin/sh".to_string())
+}
+
+pub fn is_root() -> bool {
+    unsafe { libc::getuid() == 0 }
+}
+
+/// The name of the user running this, from the user database rather than the environment, which
+/// isn't always set.
+pub fn user_name() -> String {
+    passwd_field(|entry| entry.pw_name).unwrap_or_else(|| std::env::var("USER").unwrap_or_else(|_| "root".to_string()))
+}
+
+pub fn home_dir() -> anyhow::Result<PathBuf> {
+    if let Some(home) = std::env::var_os("HOME").filter(|home| !home.is_empty()) {
+        return Ok(PathBuf::from(home));
+    }
+    passwd_field(|entry| entry.pw_dir).map(PathBuf::from).ok_or_else(|| anyhow::anyhow!("HOME isn't set."))
+}
+
+/// A field of this user's entry in the user database, which on a Mac isn't `/etc/passwd`.
+fn passwd_field(field: impl FnOnce(&libc::passwd) -> *const libc::c_char) -> Option<String> {
+    let entry = unsafe { libc::getpwuid(libc::getuid()) };
+    if entry.is_null() {
+        return None;
+    }
+    let value = field(unsafe { &*entry });
+    if value.is_null() {
+        return None;
+    }
+    Some(unsafe { std::ffi::CStr::from_ptr(value) }.to_string_lossy().into_owned())
 }
 
 /// Stdout of a short-lived process, or `None` if it failed or took too long.

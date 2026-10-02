@@ -9,7 +9,7 @@ The command center for coding agents. [Claude Code](https://docs.claude.com/en/d
 | ![Starting a thread](docs/screenshots/new-thread.png) | ![An agent at work](docs/screenshots/working.png) |
 | ![A turn waiting for approval](docs/screenshots/approval.png) | ![Dark mode, with a thread marked done](docs/screenshots/done-dark.png) |
 
-- **Your machines do the work.** The Motile server is a small program that runs the agents on a Linux machine and keeps the threads there. A turn keeps running when you close the app.
+- **Your machines do the work.** The Motile server is a small program that runs the agents on a Linux machine or a Mac and keeps the threads there. A turn keeps running when you close the app.
 - **No ports to open.** The app connects straight to your server over [iroh](https://www.iroh.computer), encrypted end to end. It works behind a home router, and falls back to a relay when a direct path isn't possible.
 - **Opens where you left off.** The app keeps a local copy of every thread and shows it before it has connected to anything.
 - **Built not to stall.** Long threads, long replies and big code blocks stay smooth: only the rows on screen exist, and parsing and highlighting happen off the main thread.
@@ -19,7 +19,7 @@ These are its programs:
 | Program | Where it runs | What it does |
 | --- | --- | --- |
 | Motile.app (`apps/macos`) | Your Mac | The interface |
-| `motile` (`apps/server`) | Your Linux machines | Runs the agents, stores the threads, serves your apps |
+| `motile` (`apps/server`) | Your Linux machines and Macs | Runs the agents, stores the threads, serves your apps |
 | Auth server (`apps/auth`) | auth.motile.app | Signs you in and records which devices are yours. It never sees a thread |
 | Web app (`apps/web`) | [app.motile.app](https://app.motile.app) | Lists your servers and apps, adds a server, removes a device |
 | Marketing site (`apps/marketing`) | [motile.app](https://motile.app) | The landing page, the download and the installer |
@@ -38,7 +38,7 @@ Open the app and sign in with Google. This links the Mac to your account.
 
 ### 3. Add a server
 
-With no server yet, the app shows one command. Run it on the Linux machine where the agents should work:
+With no server yet, the app shows one command. Run it on the Linux machine or the Mac where the agents should work:
 
 ```sh
 curl -fsSL https://motile.app/install.sh | sh -s -- <token>
@@ -46,16 +46,18 @@ curl -fsSL https://motile.app/install.sh | sh -s -- <token>
 
 The installer:
 
-1. Downloads the `motile` binary to `/usr/local/bin`.
+1. Downloads the `motile` binary, to `/usr/local/bin` on Linux and to `~/.local/bin` on a Mac.
 2. Checks for Claude Code and Codex. If neither is installed it offers to install them; sign in to the agent once afterwards (`claude` or `codex login`).
 3. Links the machine to your account with the token in the command.
-4. Installs and starts `motile.service`, a systemd unit that survives reboots. It runs as the user who ran the installer, with that user's sign-ins.
+4. Installs and starts a service that survives reboots and crashes. On Linux it is `motile.service`, a systemd unit that runs as the user who ran the installer, with that user's sign-ins. On a Mac it is `app.motile.server`, a launchd agent in that user's desktop session, so the agents can use the Keychain, the simulators and code signing.
 
 The server appears in the app a moment later. The token works for one machine, for an hour; **Thread → Add a Server…** gives you a new command for the next machine, and so does [app.motile.app](https://app.motile.app).
 
-When the server runs as root, the service sets `IS_SANDBOX=1`. Claude Code refuses full access as root without it.
+When the server runs as root on Linux, the service sets `IS_SANDBOX=1`. Claude Code refuses full access as root without it.
 
-On the server, `motile status` shows its account, agents and service, `motile logs` follows its log, and `sudo motile uninstall` removes the service.
+A Mac starts the service when you log in. For it to come back from a reboot on its own, turn on automatic login in System Settings → Users & Groups, and set the Mac to never sleep.
+
+On the server, `motile status` shows its account, agents and service, `motile logs` follows its log, and `motile uninstall` removes the service (with `sudo` on Linux).
 
 ## Using it
 

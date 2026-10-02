@@ -12,7 +12,7 @@ use motile_server::config::DataDir;
 use motile_server::hub::Hub;
 use motile_server::serve::{BindOptions, Server, bind};
 use motile_server::store::Store;
-use motile_server::{setup, update};
+use motile_server::{service, setup, update};
 
 /// Runs coding agents on this machine for the Motile apps.
 #[derive(Parser)]
@@ -40,7 +40,7 @@ enum CliCommand {
         /// Ask nothing.
         #[arg(long, short = 'y')]
         yes: bool,
-        /// Link the machine but don't install the systemd service.
+        /// Link the machine but don't install the service.
         #[arg(long)]
         no_service: bool,
     },
@@ -59,7 +59,7 @@ enum CliCommand {
     Status,
     /// Follows the service's log.
     Logs,
-    /// Stops and removes the systemd service.
+    /// Stops and removes the service.
     Uninstall,
     #[command(hide = true)]
     Service {
@@ -70,7 +70,7 @@ enum CliCommand {
 
 #[derive(Subcommand)]
 enum ServiceCommand {
-    /// Run by `setup` through sudo.
+    /// Run by `setup` through sudo on Linux.
     Install {
         #[arg(long)]
         user: String,
@@ -100,11 +100,11 @@ async fn main() -> anyhow::Result<()> {
             run(&DataDir::new(cli.data_dir)?, allow_keys, BindOptions { local_only: local, port }).await
         }
         CliCommand::Status => status(&DataDir::new(cli.data_dir)?).await,
-        CliCommand::Logs => logs(),
-        CliCommand::Uninstall => setup::uninstall(),
+        CliCommand::Logs => service::logs(),
+        CliCommand::Uninstall => service::uninstall(),
         CliCommand::Service { command: ServiceCommand::Install { user } } => {
             let data_dir = cli.data_dir.context("--data-dir is required.")?;
-            setup::write_service(&std::env::current_exe()?, &data_dir, &user)
+            service::install_unit(&std::env::current_exe()?, &data_dir, &user)
         }
     }
 }
@@ -184,13 +184,7 @@ async fn status(data_dir: &DataDir) -> anyhow::Result<()> {
         let version = agent.version.unwrap_or_else(|| "not installed".to_string());
         println!("{:<10} {version}", format!("{:?}:", agent.agent));
     }
-    println!("Service:   {}", setup::service_state().unwrap_or_else(|| "no systemd".to_string()));
+    println!("Service:   {}", service::state());
     println!("Data:      {}", data_dir.path().display());
     Ok(())
-}
-
-fn logs() -> anyhow::Result<()> {
-    use std::os::unix::process::CommandExt;
-    let error = std::process::Command::new("journalctl").args(["-u", "motile", "-f", "-n", "100"]).exec();
-    Err(error).context("journalctl isn't available.")
 }

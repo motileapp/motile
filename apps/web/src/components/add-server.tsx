@@ -59,8 +59,8 @@ export function AddServer({ servers }: { servers: Array<Device> }) {
           <DialogHeader>
             <DialogTitle>Add a server</DialogTitle>
             <DialogDescription>
-              Run this on the Linux machine your agents should work on. It
-              installs Motile there and links the machine to your account.
+              Run this on the Linux machine or the Mac your agents should work
+              on. It installs Motile there and links the machine to your account.
             </DialogDescription>
           </DialogHeader>
           {install ? (

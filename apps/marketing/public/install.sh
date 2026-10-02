@@ -5,11 +5,11 @@
 #
 # The token comes from the install command the Motile app shows. MOTILE_AUTH_URL links the server
 # with another auth server than Motile's, and MOTILE_DOWNLOAD_URL downloads it from another place
-# than the latest release.
+# than the latest release. On Linux the binary goes to /usr/local/bin, on a Mac to ~/.local/bin,
+# where the server can update itself without a password.
 set -eu
 
 DOWNLOAD_URL="${MOTILE_DOWNLOAD_URL:-https://github.com/motileapp/motile/releases/latest/download}"
-BINARY=/usr/local/bin/motile
 
 fail() {
     echo "motile: $1" >&2
@@ -34,12 +34,28 @@ download() {
     wget -qO "$2" "$1"
 }
 
+# Puts the binary in place in one step, so a running server is replaced, not overwritten.
+place() {
+    if mkdir -p "$(dirname "$BINARY")" 2>/dev/null && [ -w "$(dirname "$BINARY")" ]; then
+        cp "$1" "$BINARY.new"
+        mv -f "$BINARY.new" "$BINARY"
+        return
+    fi
+    as_root cp "$1" "$BINARY.new"
+    as_root mv -f "$BINARY.new" "$BINARY"
+}
+
 main() {
-    [ "$(uname -s)" = Linux ] || fail "servers run on Linux for now"
-    case "$(uname -m)" in
-        x86_64 | amd64) target=x86_64-unknown-linux-musl ;;
-        aarch64 | arm64) target=aarch64-unknown-linux-musl ;;
-        *) fail "unsupported machine: $(uname -m)" ;;
+    BINARY=/usr/local/bin/motile
+    case "$(uname -s)-$(uname -m)" in
+        Linux-x86_64 | Linux-amd64) target=x86_64-unknown-linux-musl ;;
+        Linux-aarch64 | Linux-arm64) target=aarch64-unknown-linux-musl ;;
+        Darwin-arm64)
+            target=aarch64-apple-darwin
+            BINARY="$HOME/.local/bin/motile"
+            ;;
+        Darwin-*) fail "servers run on Apple silicon Macs; this Mac has an Intel processor" ;;
+        *) fail "unsupported machine: $(uname -s) $(uname -m)" ;;
     esac
 
     tmp="$(mktemp -d)"
@@ -50,11 +66,14 @@ main() {
     tar -xzf "$tmp/motile.tar.gz" -C "$tmp"
     chmod 755 "$tmp/motile"
 
-    # Moved into place in one step, so a running server is replaced, not overwritten.
-    as_root cp "$tmp/motile" "$BINARY.new"
-    as_root mv -f "$BINARY.new" "$BINARY"
+    place "$tmp/motile"
 
     "$BINARY" setup "$@"
+
+    case ":$PATH:" in
+        *":$(dirname "$BINARY"):"*) ;;
+        *) echo "To use motile status and motile logs, add $(dirname "$BINARY") to your PATH." ;;
+    esac
 }
 
 main "$@"

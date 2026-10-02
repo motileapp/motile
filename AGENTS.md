@@ -13,7 +13,7 @@ These programs make it up, plus the code the apps share:
 | Auth server (`apps/auth`) | auth.motile.app | Signs people in with Google, records which devices belong to an account |
 | Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/install.sh` |
 | Web app (`apps/web`) | app.motile.app | Lists an account's servers and apps, adds servers, removes devices |
-| Server (`apps/server`, the `motile` binary) | The user's Linux machines | Runs the agents, stores threads in SQLite, serves the account's apps |
+| Server (`apps/server`, the `motile` binary) | The user's Linux machines and Macs | Runs the agents, stores threads in SQLite, serves the account's apps |
 | Mac app (`apps/macos`) | The user's Mac | The interface |
 | Core (`crates/core`) | Inside every app | Account, connections, sync, the local cache, rendering transcripts |
 
@@ -104,8 +104,12 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   (`rev`); an app asks for what changed after the revision it has.
 - `title.rs` generates thread titles with the thread's own agent.
 - `setup.rs` is what the installer runs: it checks for agents, links the server with the install
-  token, and installs the systemd unit. The unit is a system unit that runs as the installing
-  user; for root it sets `IS_SANDBOX=1`, without which Claude Code refuses full access.
+  token, and installs the service. `service.rs` is that service: on Linux a systemd system unit
+  that runs as the installing user (for root it sets `IS_SANDBOX=1`, without which Claude Code
+  refuses full access), on a Mac a launchd agent in the user's desktop session, where the
+  agents find the Keychain, the simulators and code signing. The installer puts the binary in
+  `/usr/local/bin` on Linux and in `~/.local/bin` on a Mac, where it can update itself without
+  a password.
 - `access.rs` asks the auth server which apps belong to the account, and caches the answer.
 - `icons.rs` finds a project's icon in its folder (a favicon, icon or logo file, also in the
   `apps` and `packages` of a workspace). The path is kept with the project; the user can pick
@@ -115,8 +119,8 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   copies the file then, named by its contents, and the item says what it shows and how large it
   is. So a thread shows the same thing after the file has changed or gone. An app asks for the
   bytes by that name, and the copy goes when the last thread that shows it is deleted.
-- `update.rs` replaces the server's own program with the latest release's and starts it again,
-  when an app asks. It refuses while an agent is working.
+- `update.rs` replaces the server's own program with the latest release's for this OS and CPU
+  and starts it again, when an app asks. It refuses while an agent is working.
 - `tests/e2e.rs` runs the server against `scripts/fake-agent` over real iroh connections.
 
 ### crates/core
@@ -225,8 +229,8 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
 
-The Mac app can't be built on Linux. The `macOS` workflow builds it on every push that touches it,
-runs the demo and uploads the app and the screenshots:
+The Mac app can't be built on Linux. The `macOS` workflow builds it and the server for Macs on
+every push that touches them, runs the demo and uploads the app, the server and the screenshots:
 
     gh run watch                                      # then
     gh run download --name screenshots
@@ -244,7 +248,7 @@ its reply with it.
 
 To release, set `version` in `Cargo.toml` to the new version, commit, and push the tag
 `v<version>`; the workflow refuses a tag that doesn't match. It publishes the server and the auth
-server for Linux and the Mac app as a GitHub release. The installer and the download button
+server for Linux, and the server and the app for Macs, as a GitHub release. The installer and the download button
 always fetch the latest release, and apps and servers compare their own version with it to offer
 an update. The app in a release is signed with the Developer ID certificate and
 notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with

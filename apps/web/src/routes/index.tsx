@@ -55,7 +55,7 @@ function Account() {
                 </EmptyMedia>
                 <EmptyTitle>No servers yet</EmptyTitle>
                 <EmptyDescription>
-                  Add a Linux machine and your apps can start threads on it.
+                  Add a Linux machine or a Mac and your apps can start threads on it.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>

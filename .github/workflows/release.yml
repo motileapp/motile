@@ -1,8 +1,8 @@
 name: Release
 
-# Builds the server and the auth server for Linux and the Mac app, and publishes them as a GitHub
-# release. The installer downloads the server from the latest release, and the download button on
-# motile.app links to the app in it.
+# Builds the server and the auth server for Linux, and the server and the app for Macs, and publishes
+# them as a GitHub release. The installer downloads the server from the latest release, and the
+# download button on motile.app links to the app in it.
 on:
   push:
     tags: ["v*"]
@@ -75,7 +75,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: Motile
-      - name: Attach the app
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-aarch64-apple-darwin
+      - name: Attach the app and the server
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" Motile.zip --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$GITHUB_REF_NAME" Motile.zip motile-aarch64-apple-darwin.tar.gz --repo "$GITHUB_REPOSITORY" --clobber

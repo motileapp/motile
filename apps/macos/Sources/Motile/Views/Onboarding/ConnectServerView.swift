@@ -21,7 +21,7 @@ struct ConnectServerView: View {
             Text(isFirst ? "Connect your first server" : "Add a server")
                 .font(.system(size: 24, weight: .semibold))
                 .padding(.top, 18)
-            Text("Run this on the Linux machine where your agents should work. It installs Motile, links the machine to your account and keeps it running.")
+            Text("Run this on the Linux machine or the Mac where your agents should work. It installs Motile, links the machine to your account and keeps it running.")
                 .font(.system(size: 14))
                 .foregroundStyle(Color.themeSecondary)
                 .multilineTextAlignment(.center)

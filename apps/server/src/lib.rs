@@ -7,6 +7,7 @@ pub mod icons;
 pub mod media;
 pub mod pacing;
 pub mod serve;
+pub mod service;
 pub mod setup;
 pub mod store;
 pub mod title;

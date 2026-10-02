@@ -14,10 +14,15 @@ const REPORT_EVERY: Duration = Duration::from_millis(100);
 
 /// The release's file for this kind of machine.
 fn archive() -> anyhow::Result<&'static str> {
-    match std::env::consts::ARCH {
-        "x86_64" => Ok("motile-x86_64-unknown-linux-musl.tar.gz"),
-        "aarch64" => Ok("motile-aarch64-unknown-linux-musl.tar.gz"),
-        other => bail!("There is no release for {other} machines."),
+    archive_for(std::env::consts::OS, std::env::consts::ARCH)
+}
+
+fn archive_for(os: &str, arch: &str) -> anyhow::Result<&'static str> {
+    match (os, arch) {
+        ("linux", "x86_64") => Ok("motile-x86_64-unknown-linux-musl.tar.gz"),
+        ("linux", "aarch64") => Ok("motile-aarch64-unknown-linux-musl.tar.gz"),
+        ("macos", "aarch64") => Ok("motile-aarch64-apple-darwin.tar.gz"),
+        _ => bail!("There is no release for {arch} machines running {os}."),
     }
 }
 
@@ -183,6 +188,14 @@ mod tests {
         assert_eq!(reports.first(), Some(&(0, Some(size))));
         assert_eq!(reports.last(), Some(&(size, Some(size))));
         assert!(!staging_path(&program).exists());
+    }
+
+    #[test]
+    fn each_kind_of_machine_gets_its_own_release_file() {
+        assert_eq!(archive_for("linux", "x86_64").unwrap(), "motile-x86_64-unknown-linux-musl.tar.gz");
+        assert_eq!(archive_for("linux", "aarch64").unwrap(), "motile-aarch64-unknown-linux-musl.tar.gz");
+        assert_eq!(archive_for("macos", "aarch64").unwrap(), "motile-aarch64-apple-darwin.tar.gz");
+        assert!(archive_for("macos", "x86_64").is_err());
     }
 
     #[tokio::test]
