@@ -28,7 +28,6 @@ Production is the `Motile` project on Unbind:
 | --- | --- | --- |
 | `Motile` | https://motile.app | The auth server and the site, built from `Dockerfile` |
 | `Web` | https://app.motile.app | The web app, built from `apps/web/Dockerfile` |
-| `Relay` | https://relay.motile.app | iroh's relay, the `n0computer/iroh-relay` image with its config in `RELAY_CONFIG` |
 | `Postgres` | | The auth server's database |
 
 ## Repo Structure:
@@ -42,9 +41,6 @@ What the three programs agree on.
 - `auth_api.rs` and `auth_client.rs` are the auth server's JSON and the client for it.
 - `identity.rs` is the device key and request signing: a linked device signs its requests to the
   auth server instead of holding a token.
-- `relay.rs` is the relays apps and hosts meet on: Motile's own next to iroh's public ones.
-  Motile's has no QUIC address discovery (it sits behind Unbind's ingress, which only passes
-  HTTP), so iroh's are what tell a device its public address.
 
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
@@ -191,8 +187,7 @@ Linux and the Mac app as a GitHub release. The installer and the download button
 the latest release.
 
 Unbind builds the `Motile` and `Web` services from `main` and deploys them on every push that
-touches their files. The `Relay` service runs a pinned `n0computer/iroh-relay` image; keep it on
-the same minor version as the `iroh` crate.
+touches their files.
 
 ## Commit Messages
 
