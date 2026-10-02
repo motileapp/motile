@@ -38,17 +38,21 @@ struct ComposerView: View {
                     chooseFiles()
                 }
                 .foregroundStyle(Color.themeSecondary)
-                .padding(.trailing, 4)
-                primaryButtons
+                .padding(.trailing, 6)
+                HStack(spacing: 8) {
+                    primaryButtons
+                }
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 10)
-            .padding(.vertical, 9)
+            .padding(.leading, 7)
+            .padding([.trailing, .bottom, .top], 8)
         }
         .frame(maxWidth: Theme.contentWidth)
-        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.themeComposer)
+                .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
+        }
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1))
-        .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             for provider in providers {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in

@@ -198,8 +198,8 @@ enum Typesetter {
 
     private static let bodyStyle: NSParagraphStyle = {
         let style = NSMutableParagraphStyle()
-        style.lineSpacing = 4
-        style.paragraphSpacing = 9
+        style.lineSpacing = 7
+        style.paragraphSpacing = 12
         return style
     }()
 
@@ -222,9 +222,11 @@ enum Typesetter {
         return style
     }()
 
+    static let plainLineSpacing: CGFloat = 5
+
     static func plain(_ text: String, color: NSColor, size: CGFloat = Theme.proseSize) -> NSAttributedString {
         let style = NSMutableParagraphStyle()
-        style.lineSpacing = 4
+        style.lineSpacing = plainLineSpacing
         style.paragraphSpacing = 6
         return NSAttributedString(
             string: text,
@@ -285,7 +287,7 @@ enum Typesetter {
                 let font = Theme.heading(para.int("level"))
                 let style = NSMutableParagraphStyle()
                 style.lineSpacing = 3
-                style.paragraphSpacingBefore = range.location == 0 ? 0 : 10
+                style.paragraphSpacingBefore = range.location == 0 ? 0 : 14
                 style.paragraphSpacing = 8
                 result.addAttributes([.font: font, .foregroundColor: Theme.text, .paragraphStyle: style], range: range)
                 headingRanges.append((range, font))
@@ -293,8 +295,8 @@ enum Typesetter {
                 let depth = CGFloat(max(1, para.int("depth")))
                 let quote = CGFloat(para.int("quote")) * 14
                 let style = NSMutableParagraphStyle()
-                style.lineSpacing = 4
-                style.paragraphSpacing = 4
+                style.lineSpacing = 7
+                style.paragraphSpacing = 6
                 style.headIndent = quote + depth * 22
                 style.firstLineHeadIndent = para.bool("marker") ? quote + (depth - 1) * 22 + 4 : style.headIndent
                 style.tabStops = [NSTextTab(textAlignment: .left, location: style.headIndent)]
@@ -306,8 +308,8 @@ enum Typesetter {
             case "quote":
                 let depth = para.int("depth")
                 let style = NSMutableParagraphStyle()
-                style.lineSpacing = 4
-                style.paragraphSpacing = 6
+                style.lineSpacing = 7
+                style.paragraphSpacing = 8
                 style.headIndent = CGFloat(depth) * 14
                 style.firstLineHeadIndent = style.headIndent
                 result.addAttributes(

@@ -13,10 +13,15 @@ final class DecoratingLayoutManager: NSLayoutManager {
             super.fillBackgroundRectArray(rectArray, count: rectCount, forCharacterRange: charRange, color: color)
             return
         }
+        // The rects reach down into the space between the lines; the background stays on the line.
+        let inText = charRange.location < (textStorage?.length ?? 0)
+        let style = inText ? textStorage?.attribute(.paragraphStyle, at: charRange.location, effectiveRange: nil) as? NSParagraphStyle : nil
+        let lineSpacing = style?.lineSpacing ?? 0
         color.setFill()
         for index in 0..<rectCount {
-            let rect = rectArray[index].insetBy(dx: -2, dy: 1)
-            NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
+            var rect = rectArray[index]
+            rect.size.height -= lineSpacing
+            NSBezierPath(roundedRect: rect.insetBy(dx: -2, dy: 1), xRadius: 4, yRadius: 4).fill()
         }
     }
 

@@ -133,9 +133,9 @@ class RowView: FlippedView {
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
         case .user(let text, let attachments):
-            return estimatedTextHeight(text.length, width: width * 0.75) + 44 + (attachments.isEmpty ? 0 : 24)
+            return estimatedTextHeight(text.length, width: width * 0.75) + 43 + (attachments.isEmpty ? 0 : 24)
         case .prose(let text):
-            return estimatedTextHeight(text.length, width: width) + 12
+            return estimatedTextHeight(text.length, width: width) + 9
         case .code(let content):
             return CodeRowView.height(lines: content.lineCount)
         case .tool, .thinking:
@@ -218,13 +218,14 @@ final class UserRowView: RowView {
         )
         let attachmentsWidth = hasAttachments ? min(widest, attachments.intrinsicContentSize.width) : 0
         let textWidth = min(widest, max(ceil(natural.width) + 2, attachmentsWidth, 12))
-        let textHeight = text.height(forWidth: textWidth)
+        // The space under the last line isn't part of the text the bubble wraps.
+        let textHeight = text.height(forWidth: textWidth) - Typesetter.plainLineSpacing
         let attachmentsHeight: CGFloat = hasAttachments ? 22 : 0
         let bubbleSize = NSSize(width: textWidth + padding * 2, height: textHeight + 20 + attachmentsHeight)
         bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
-        text.frame = NSRect(x: padding, y: 10, width: textWidth, height: textHeight)
+        text.frame = NSRect(x: padding, y: 10, width: textWidth, height: textHeight + Typesetter.plainLineSpacing)
         attachments.frame = NSRect(x: padding, y: 10 + textHeight + 4, width: textWidth, height: 16)
-        return bubbleSize.height + 14 + 10
+        return bubbleSize.height + 14 + 14
     }
 
     override func clearSelection() { text.clearSelection() }
@@ -253,7 +254,7 @@ final class ProseRowView: RowView {
     override func layout(width: CGFloat) -> CGFloat {
         let height = text.height(forWidth: width)
         text.frame = NSRect(x: 0, y: 3, width: width, height: height)
-        return height + 12
+        return height + 9
     }
 
     override func clearSelection() { text.clearSelection() }

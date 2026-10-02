@@ -6,6 +6,9 @@ import SwiftUI
 struct ThreadPane: View {
     @Environment(AppStore.self) private var store
     @State private var composerHeight: CGFloat = 120
+    /// How far the title starts from the pane's left edge: past the window's buttons when the
+    /// sidebar is hidden.
+    var titleInset: CGFloat = 20
 
     private var isStart: Bool {
         store.selection == .newThread && store.transcriptIsEmpty && !store.sending
@@ -14,7 +17,6 @@ struct ThreadPane: View {
     var body: some View {
         @Bindable var store = store
         ZStack(alignment: .bottom) {
-            GlassBackground()
             if isStart {
                 start
             } else {
@@ -38,9 +40,10 @@ struct ThreadPane: View {
                     )
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
+        .overlay(alignment: .topLeading) { title }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
-        .navigationSubtitle(subtitle)
         .toolbar {
             ToolbarItemGroup {
                 if let thread = store.selectedThread {
@@ -72,6 +75,29 @@ struct ThreadPane: View {
             Color.clear
                 .frame(height: max(0, composerHeight - fade))
         }
+    }
+
+    /// The thread's name, drawn in the window's top bar over this pane.
+    private var title: some View {
+        GeometryReader { proxy in
+            VStack(alignment: .leading, spacing: 1) {
+                Text(store.selectedThread?.title ?? "New thread")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.themeText)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.themeSecondary)
+                }
+            }
+            .lineLimit(1)
+            .padding(.leading, titleInset)
+            .padding(.trailing, 60)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: proxy.safeAreaInsets.top)
+            .offset(y: -proxy.safeAreaInsets.top)
+        }
+        .allowsHitTesting(false)
     }
 
     private var subtitle: String {
@@ -115,7 +141,7 @@ struct ThreadPane: View {
 
     private var headline: some View {
         let selected = store.project(store.newThread.projectID)
-        return HStack(spacing: 8) {
+        return HStack(spacing: 12) {
             Text("Let’s build in")
             Menu {
                 ForEach(store.projects) { project in
@@ -144,8 +170,9 @@ struct ThreadPane: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color.themeTertiary)
+                        .padding(.leading, -2)
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .contentShape(Rectangle())
             }
@@ -154,7 +181,8 @@ struct ThreadPane: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .hoverHighlight(radius: 10)
-            .padding(.leading, -4)
+            // The highlight's margin takes no room, so the words and the icon are what is centred.
+            .padding(.horizontal, -8)
         }
         .font(.system(size: 28, weight: .regular))
     }

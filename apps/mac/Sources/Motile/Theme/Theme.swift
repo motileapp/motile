@@ -24,6 +24,8 @@ enum Theme {
     // Surfaces
     static let background = dynamic(hex(0xfcfcfc), hex(0x0f0f10))
     static let raised = dynamic(hex(0xffffff), hex(0x1a1a1c))
+    /// The composer lies on the window's surface, so in the dark it only lightens what is there.
+    static let composer = dynamic(hex(0xffffff), white(0.04))
     static let bubble = dynamic(hex(0xf1f1f3), hex(0x232326))
     static let codeBackground = dynamic(hex(0xf6f6f7), hex(0x18181a))
     /// Over the blurred backdrop of the window: nearly opaque, so only a hint of it comes through.
@@ -35,7 +37,7 @@ enum Theme {
 
     // Text
     static let text = dynamic(hex(0x27272a), hex(0xececee))
-    static let prose = dynamic(hex(0x3a3a40), hex(0xd6d6da))
+    static let prose = dynamic(hex(0x3a3a40), hex(0xc2c2c7))
     static let secondary = dynamic(hex(0x71717a), hex(0x9c9ca6))
     static let tertiary = dynamic(hex(0xa1a1aa), hex(0x6c6c75))
 
@@ -78,7 +80,7 @@ enum Theme {
     static let inlineCodeFont = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
     static let smallFont = NSFont.systemFont(ofSize: 12)
     static let smallMono = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
-    static let proseLineHeight: CGFloat = 21
+    static let proseLineHeight: CGFloat = 24
     static let codeLineHeight: CGFloat = 18
 
     static func heading(_ level: Int) -> NSFont {
@@ -99,6 +101,7 @@ enum Theme {
 extension Color {
     static let themeBackground = Color(nsColor: Theme.background)
     static let themeRaised = Color(nsColor: Theme.raised)
+    static let themeComposer = Color(nsColor: Theme.composer)
     static let themeBubble = Color(nsColor: Theme.bubble)
     static let themeGlassTint = Color(nsColor: Theme.glassTint)
     static let themeHover = Color(nsColor: Theme.hover)

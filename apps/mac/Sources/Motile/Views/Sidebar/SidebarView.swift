@@ -14,54 +14,12 @@ struct SidebarView: View {
     var body: some View {
         let active = store.activeThreads.filter(matches)
         let done = store.doneThreads.filter(matches)
-        ScrollView {
-            LazyVStack(spacing: 2) {
-                ForEach(active) { thread in
-                    ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 })
-                }
-                if active.isEmpty {
-                    Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.themeTertiary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-        }
-        .searchable(text: $search, placement: .sidebar, prompt: "Search")
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                if !done.isEmpty {
-                    DoneShelf(
-                        threads: done,
-                        expanded: search.isEmpty ? $doneExpanded : .constant(true),
-                        limit: $doneLimit,
-                        rename: beginRename,
-                        delete: { deleting = $0 }
-                    )
-                }
-                SidebarFooter()
-            }
-        }
-        .background(GlassBackground())
-        .toolbar {
-            ToolbarItemGroup {
-                Button {
-                    store.showsFolderPicker = true
-                } label: {
-                    Label("Add Project", systemImage: "folder.badge.plus")
-                }
-                .help("Add a project")
-                Button {
-                    store.startNewThread()
-                } label: {
-                    Label("New Thread", systemImage: "square.and.pencil")
-                }
-                .help("New thread")
-            }
+        VStack(spacing: 0) {
+            SearchField(text: $search)
+                .padding(.horizontal, 10)
+                .padding(.top, 2)
+                .padding(.bottom, 6)
+            threads(active: active, done: done)
         }
         .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Title", text: $newTitle)
@@ -84,6 +42,41 @@ struct SidebarView: View {
         }
     }
 
+    private func threads(active: [ThreadInfo], done: [ThreadInfo]) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 2) {
+                ForEach(active) { thread in
+                    ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 })
+                }
+                if active.isEmpty {
+                    Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.themeTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if !done.isEmpty {
+                    DoneShelf(
+                        threads: done,
+                        expanded: search.isEmpty ? $doneExpanded : .constant(true),
+                        limit: $doneLimit,
+                        rename: beginRename,
+                        delete: { deleting = $0 }
+                    )
+                }
+                SidebarFooter()
+            }
+        }
+        .clipped()
+    }
+
     /// Whether the thread's title or project matches what is being searched for.
     private func matches(_ thread: ThreadInfo) -> Bool {
         guard !search.isEmpty else { return true }
@@ -94,6 +87,28 @@ struct SidebarView: View {
     private func beginRename(_ thread: ThreadInfo) {
         newTitle = thread.title
         renaming = thread
+    }
+}
+
+private struct SearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.themeTertiary)
+            TextField("Search", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+            if !text.isEmpty {
+                IconOnlyButton(symbol: "xmark.circle.fill", help: "Clear", size: 18, symbolSize: 12) { text = "" }
+                    .foregroundStyle(Color.themeTertiary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(Color.themeHover, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
