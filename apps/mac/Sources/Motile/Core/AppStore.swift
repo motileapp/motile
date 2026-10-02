@@ -119,7 +119,10 @@ final class AppStore {
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
                 self.transcript.apply(reset: reset, start: start, remove: remove, rows: rows)
-                self.transcriptIsEmpty = self.transcript.isEmpty
+                // Assigned only when it changes: every assignment makes the views that read it
+                // update, and rows arrive many times a second.
+                let isEmpty = self.transcript.isEmpty
+                if self.transcriptIsEmpty != isEmpty { self.transcriptIsEmpty = isEmpty }
             }
         case "spans":
             let (threadID, rowID) = (event.string("thread_id"), event.string("row_id"))
@@ -133,7 +136,7 @@ final class AppStore {
             let activity = Activity(json: event.object("activity") ?? [:])
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
-                self.activity = activity
+                if self.activity != activity { self.activity = activity }
                 self.transcript.setActivity(activity)
             }
         case "thread_error":
