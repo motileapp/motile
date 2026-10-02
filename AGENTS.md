@@ -67,7 +67,8 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 `pnpm dlx shadcn@latest add <name>` inside the app.
 
 - `apps/marketing` builds to `dist`, which the auth server serves. It ships no JavaScript; React only
-  renders at build time.
+  renders at build time. `scripts/icons.mjs` draws every icon from the mark, for both web
+  projects and the Mac app: `pnpm --filter motile-marketing icons`.
 - `apps/web` runs on its own server. `src/server/auth.ts` holds the session: the browser only
   gets an HttpOnly cookie, and the server calls the auth server with the session's token.
   `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/` starts and

@@ -13,7 +13,8 @@
     "astro": "astro",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,astro}\"",
-    "typecheck": "astro check"
+    "typecheck": "astro check",
+    "icons": "node scripts/icons.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^7",
