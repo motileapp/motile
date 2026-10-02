@@ -1,10 +1,10 @@
 .DS_Store
 /target
 .env
-/apps/mac/.build
-/apps/mac/build
-/apps/mac/.swiftpm
-/apps/mac/screenshots
+/apps/macos/.build
+/apps/macos/build
+/apps/macos/.swiftpm
+/apps/macos/screenshots
 xcuserdata/
 DerivedData/
 node_modules/

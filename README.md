@@ -18,7 +18,7 @@ These are its programs:
 
 | Program | Where it runs | What it does |
 | --- | --- | --- |
-| Motile.app (`apps/mac`) | Your Mac | The interface |
+| Motile.app (`apps/macos`) | Your Mac | The interface |
 | `motile` (`apps/server`) | Your Linux machines | Runs the agents, stores the threads, serves your apps |
 | Auth server (`apps/auth`) | auth.motile.app | Signs you in and records which devices are yours. It never sees a thread |
 | Web app (`apps/web`) | [app.motile.app](https://app.motile.app) | Lists your hosts and apps, adds a host, removes a device |
@@ -106,7 +106,7 @@ The app and the hosts use auth.motile.app by default. To run your own:
    | `WEB_URL` | Optional: the address of your web app, which may then start sign-ins |
 
    It listens on `PORT` (3000) and answers `/healthz`.
-3. Build the app for it: `MOTILE_AUTH_URL=https://<your-address> apps/mac/scripts/build-app.sh`.
+3. Build the app for it: `MOTILE_AUTH_URL=https://<your-address> apps/macos/scripts/build-app.sh`.
    The install command your server hands out already tells the installer to link hosts with your address.
 4. Optionally run the web app (`docker build -f apps/web/Dockerfile .`) with `AUTH_URL=https://<your-address>` and `PUBLIC_URL` set to its own address.
 
@@ -119,7 +119,7 @@ apps/auth        The auth server
 apps/marketing   The marketing site at motile.app, with the installer
 apps/web         The web app at app.motile.app
 apps/server      The host: agents, thread storage, the iroh endpoint, the installer's setup
-apps/mac         The Mac app
+apps/macos       The Mac app
 crates/protocol  Messages, device keys and request signing, shared by all three
 crates/core      What every app shares: account, connections, sync, cache, rendering
 scripts          fake-agent, which stands in for the agents in tests

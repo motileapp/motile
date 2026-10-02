@@ -62,14 +62,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes artifacts/*.tar.gz
 
-  mac:
-    uses: ./.github/workflows/mac.yml
+  macos:
+    uses: ./.github/workflows/macos.yml
     with:
       sign: true
     secrets: inherit
 
-  attach-mac:
-    needs: [publish, mac]
+  attach-macos:
+    needs: [publish, macos]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

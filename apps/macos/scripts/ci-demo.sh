@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs the app's scripted demo against a real auth server and a real host on this machine, with
-# scripts/fake-agent as the host's agent, and collects screenshots in apps/mac/screenshots.
+# scripts/fake-agent as the host's agent, and collects screenshots in apps/macos/screenshots.
 #
 # Needs target/release/{motile,motile-auth}, build/Motile.app and a PostgreSQL to run.
 set -euo pipefail

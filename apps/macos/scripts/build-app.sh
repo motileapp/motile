@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Motile.app into apps/mac/build. Needs Xcode 16 or later and Rust.
+# Builds Motile.app into apps/macos/build. Needs Xcode 16 or later and Rust.
 #
 #   scripts/build-app.sh [--open]
 #
@@ -68,5 +68,5 @@ if [ -n "${MOTILE_SIGN_IDENTITY:-}" ]; then
 else
     codesign --force --deep --sign - "$APP" >/dev/null
 fi
-echo "✓ Built apps/mac/$APP"
+echo "✓ Built apps/macos/$APP"
 if [ "${1:-}" = "--open" ]; then open "$APP"; fi

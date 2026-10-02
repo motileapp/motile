@@ -14,7 +14,7 @@ These programs make it up, plus the code the apps share:
 | Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/install.sh` |
 | Web app (`apps/web`) | app.motile.app | Lists an account's hosts and apps, adds hosts, removes devices |
 | Host (`apps/server`, the `motile` binary) | The user's Linux machines | Runs the agents, stores threads in SQLite, serves the account's apps |
-| Mac app (`apps/mac`) | The user's Mac | The interface |
+| Mac app (`apps/macos`) | The user's Mac | The interface |
 | Core (`crates/core`) | Inside every app | Account, connections, sync, the local cache, rendering transcripts |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
@@ -116,7 +116,7 @@ Rust library for tests.
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
   terminal.
 
-### apps/mac (Swift: SwiftUI, with AppKit for the transcript)
+### apps/macos (Swift: SwiftUI, with AppKit for the transcript)
 
 - `Core/CoreBridge.swift` calls the Rust core; `Core/AppStore.swift` is all the state the views
   show. Events are decoded off the main thread.
@@ -139,7 +139,7 @@ Rust library for tests.
 - Keep it simple. Do not overcomplicate things.
 - The UI must never stall. Nothing slow runs on the main thread: parsing, highlighting, decoding
   and text layout preparation happen in the core or on a background queue, and the transcript
-  only ever builds what is on screen. If a change touches the transcript, run the Mac workflow
+  only ever builds what is on screen. If a change touches the transcript, run the macOS workflow
   and read the stall numbers in `checks.txt`.
 - The auth server is security-critical. The sign-in code is only ever sent to `motile://auth` or
   to the web app's callback, works once, and only with the secret that started the sign-in. A
@@ -184,7 +184,7 @@ web app. The Mac app needs Xcode 16 or later.
     pnpm --filter motile-web dev                # the web app on localhost:3001
     cargo run -p motile-server -- run           # a host, once linked with `motile setup <token>`
     cargo run -p motile-core --example drive    # the core, driven from a terminal
-    apps/mac/scripts/build-app.sh --open        # on a Mac
+    apps/macos/scripts/build-app.sh --open      # on a Mac
 
 Checks (`cargo test` needs the compose Postgres; it creates a throwaway database per test):
 
@@ -192,7 +192,7 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
 
-The Mac app can't be built on Linux. The `Mac` workflow builds it on every push that touches it,
+The Mac app can't be built on Linux. The `macOS` workflow builds it on every push that touches it,
 runs the demo and uploads the app and the screenshots:
 
     gh run watch                                      # then
@@ -208,7 +208,7 @@ To release, set `version` in `Cargo.toml` to the new version, commit, and push t
 server for Linux and the Mac app as a GitHub release. The installer and the download button
 always fetch the latest release, and apps and hosts compare their own version with it to offer
 an update. The app in a release is signed with the Developer ID certificate and
-notarized, using the repository's `APPLE_*` secrets; running the `Mac` workflow by hand with
+notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with
 `sign` does the same without a release.
 
 Unbind builds the `Marketing`, `Web` and `Auth` services from `main` and deploys them on every
@@ -220,10 +220,10 @@ Commit messages start with the part of the system they touched, followed by a sh
 sentence describing the change:
 
     auth: Refuse a sign-in code that was started by another app
-    mac: Show the host's round-trip time in the sidebar
-    server | core | mac: Stream replies in finished blocks
+    macos: Show the host's round-trip time in the sidebar
+    server | core | macos: Stream replies in finished blocks
 
-The parts are the folders in `apps` and `crates`: `auth`, `marketing`, `web`, `server`, `mac`,
+The parts are the folders in `apps` and `crates`: `auth`, `marketing`, `web`, `server`, `macos`,
 `core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
 
 The title should be concise. Description should explain the work in more detail (only if

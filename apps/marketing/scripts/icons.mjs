@@ -104,4 +104,4 @@ for (const folder of WEB_FOLDERS) {
   for (const [name, data] of Object.entries(files))
     writeFileSync(`${folder}/${name}`, data)
 }
-writeFileSync("../mac/Resources/AppIcon.png", await png(mac, 1024))
+writeFileSync("../macos/Resources/AppIcon.png", await png(mac, 1024))

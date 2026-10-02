@@ -1,4 +1,4 @@
-name: Mac
+name: macOS
 
 # Builds the Mac app, walks it through a demo against a real auth server and host on the runner,
 # and keeps the app and the screenshots as artifacts.
@@ -6,13 +6,13 @@ on:
   push:
     branches: [main]
     paths:
-      - apps/mac/**
+      - apps/macos/**
       - crates/**
       - apps/server/**
       - apps/auth/**
       - scripts/**
       - Cargo.lock
-      - .github/workflows/mac.yml
+      - .github/workflows/macos.yml
   workflow_dispatch:
     inputs:
       sign:
@@ -26,7 +26,7 @@ on:
         default: false
 
 concurrency:
-  group: mac-${{ github.ref }}
+  group: macos-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -46,7 +46,7 @@ jobs:
 
       # First, because it is quick and says at once whether the Swift code is sound.
       - name: Compile the app
-        working-directory: apps/mac
+        working-directory: apps/macos
         run: swift build -c release --target Motile
 
       - uses: Swatinem/rust-cache@v2
@@ -72,10 +72,10 @@ jobs:
           echo "MOTILE_SIGN_IDENTITY=Developer ID Application" >> "$GITHUB_ENV"
 
       - name: Bundle the app
-        run: apps/mac/scripts/build-app.sh
+        run: apps/macos/scripts/build-app.sh
 
       - name: Demo
-        run: apps/mac/scripts/ci-demo.sh
+        run: apps/macos/scripts/ci-demo.sh
 
       - name: Notarize the app
         if: inputs.sign
@@ -86,15 +86,15 @@ jobs:
         run: |
           echo "$APPLE_API_KEY" > "$RUNNER_TEMP/api-key.p8"
           CREDENTIALS=(--key "$RUNNER_TEMP/api-key.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
-          ditto -c -k --keepParent apps/mac/build/Motile.app "$RUNNER_TEMP/notarize.zip"
+          ditto -c -k --keepParent apps/macos/build/Motile.app "$RUNNER_TEMP/notarize.zip"
           SUBMISSION="$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${CREDENTIALS[@]}" --wait --output-format json | jq -r .id)"
           xcrun notarytool log "$SUBMISSION" "${CREDENTIALS[@]}"
-          xcrun stapler staple apps/mac/build/Motile.app
-          spctl --assess --type execute --verbose apps/mac/build/Motile.app
+          xcrun stapler staple apps/macos/build/Motile.app
+          spctl --assess --type execute --verbose apps/macos/build/Motile.app
 
       - name: Zip the app
         if: always()
-        run: ditto -c -k --keepParent apps/mac/build/Motile.app Motile.zip
+        run: ditto -c -k --keepParent apps/macos/build/Motile.app Motile.zip
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -106,4 +106,4 @@ jobs:
         if: always()
         with:
           name: screenshots
-          path: apps/mac/screenshots
+          path: apps/macos/screenshots
