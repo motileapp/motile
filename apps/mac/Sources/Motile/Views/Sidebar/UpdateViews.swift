@@ -26,6 +26,7 @@ struct AppUpdateRow: View {
                 ProgressView(value: fraction)
                     .progressViewStyle(.linear)
                     .controlSize(.small)
+                    .tint(Color.themeSecondary)
             }
         case .installing(let version):
             line("Installing Motile \(version)…", symbol: "arrow.down.circle") {
