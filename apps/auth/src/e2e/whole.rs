@@ -161,6 +161,21 @@ async fn run_host(data: &DataDir, endpoint: iroh::Endpoint, key: DeviceKey) {
     tokio::spawn(server.run(endpoint));
 }
 
+fn kinds(app: &App) -> Vec<&'static str> {
+    let kinds = app.rows.iter().map(|row| match &row.kind {
+        RowKind::User { .. } => "user",
+        RowKind::Prose { .. } => "prose",
+        RowKind::Code { .. } => "code",
+        RowKind::Tool { .. } => "tool",
+        RowKind::Thinking { .. } => "thinking",
+        RowKind::Group { .. } => "group",
+        RowKind::Fold { .. } => "fold",
+        RowKind::Error { .. } => "error",
+        RowKind::TurnEnd { .. } => "turn_end",
+    });
+    kinds.collect()
+}
+
 #[sqlx::test]
 async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_restart(db: PgPool) {
     let auth = Auth::start(db).await;
@@ -248,24 +263,22 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     app.ask(Command::MarkSeen { thread_id: thread_id.clone() }).await.unwrap();
     app.until("the turn has ended", App::turn_ended).await;
 
-    let kinds: Vec<&str> = app
-        .rows
-        .iter()
-        .map(|row| match &row.kind {
-            RowKind::User { .. } => "user",
-            RowKind::Prose { .. } => "prose",
-            RowKind::Code { .. } => "code",
-            RowKind::Tool { .. } => "tool",
-            RowKind::Thinking { .. } => "thinking",
-            RowKind::Error { .. } => "error",
-            RowKind::TurnEnd { .. } => "turn_end",
-        })
-        .collect();
+    // The finished turn shows its last message; what led to it is behind the fold.
+    assert_eq!(kinds(&app), ["user", "fold", "prose", "code", "prose", "code", "prose", "turn_end"]);
+    for (open, len) in [("fold", 12), ("group", 14), ("group", 17)] {
+        let closed = |row: &&Row| match &row.kind {
+            RowKind::Fold { open, .. } | RowKind::Group { open, .. } => !open,
+            _ => false,
+        };
+        let row_id = app.rows.iter().find(closed).unwrap().id.clone();
+        app.ask(Command::ToggleRow { thread_id: thread_id.clone(), row_id }).await.unwrap();
+        app.until(&format!("the {open} has opened"), |app| app.rows.len() == len).await;
+    }
     assert_eq!(
-        kinds,
-        vec![
-            "user", "prose", "tool", "tool", "prose", "tool", "tool", "tool", "prose", "code", "prose", "code",
-            "prose", "turn_end"
+        kinds(&app),
+        [
+            "user", "fold", "prose", "group", "tool", "tool", "prose", "group", "tool", "tool", "tool", "prose",
+            "code", "prose", "code", "prose", "turn_end"
         ]
     );
     let tools: Vec<(&str, &str, ToolStatus)> = app
@@ -291,7 +304,11 @@ async fn an_app_signs_in_links_a_host_and_runs_a_thread_it_still_has_after_a_res
     app.until("the thread is at rest", |app| !app.threads[&thread_id].thread.running).await;
     assert!(app.threads[&thread_id].thread.turn_ended_at.is_some());
 
-    // Closed and opened again with the host gone: everything is there from the cache.
+    // Closed and opened again with the host gone: everything is there from the cache, folded as
+    // a finished turn is.
+    let fold = app.rows.iter().find(|row| matches!(row.kind, RowKind::Fold { .. })).unwrap().id.clone();
+    app.ask(Command::ToggleRow { thread_id: thread_id.clone(), row_id: fold }).await.unwrap();
+    app.until("the fold has closed", |app| app.rows.len() == 8).await;
     let before = app.rows.clone();
     app.handle.stop();
     host_endpoint.close().await;

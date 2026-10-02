@@ -135,11 +135,21 @@ private final class Demo {
         let streaming = StallMonitor()
         await expect("the turn runs to its end", within: 60) { turnEnded }
         results.append(responsive("a reply streams", streaming))
-        let kinds = store.transcript.rows.map(\.kindName)
-        results.append("\(kinds.contains("code") && kinds.contains("tool") && kinds.contains("prose") ? "PASS" : "FAIL") the transcript has prose, code and tool calls — \(kinds.count) rows")
         await expect("the thread gets a generated title") { store.selectedThread?.title == "Add API Rate Limiting" }
         let first = store.selectedThread?.id ?? ""
         await shoot("06-thread")
+
+        // The finished turn is folded. The fold opens into what the agent did, with the tool
+        // calls that followed one another as one row each, and those open into the calls.
+        let fold = store.transcript.rows.first { $0.kindName == "fold" }
+        await toggle(fold, "the fold of a finished turn")
+        scrollTranscript(to: 0)
+        await shoot("06-unfolded")
+        for group in store.transcript.rows.filter({ $0.kindName == "group" }) {
+            await toggle(group, "a group of tool calls")
+        }
+        let kinds = store.transcript.rows.map(\.kindName)
+        results.append("\(kinds.contains("code") && kinds.contains("tool") && kinds.contains("prose") ? "PASS" : "FAIL") the transcript has prose, code and tool calls — \(kinds.count) rows")
 
         // Opening tool calls shows what they did.
         let toolRows = store.transcript.rows.filter { row in
@@ -150,6 +160,7 @@ private final class Demo {
         scrollTranscript(to: 0.12)
         await shoot("06-tool-details")
         for row in toolRows { transcriptView?.rowToggledExpansion(id: row.id) }
+        await toggle(fold, "the open fold")
 
         // A thread that ends asking for permission.
         store.startNewThread()
@@ -177,13 +188,15 @@ private final class Demo {
         send("Make a huge transcript.")
         await expect("a very long thread is built", within: 180) { turnEnded }
         let huge = store.selectedThread?.id ?? ""
-        let rowCount = store.transcript.rows.count
         store.select(.thread(first))
         await wait(1)
         let opening = StallMonitor()
         let began = Date()
         store.select(.thread(huge))
-        await expect("a thread of \(rowCount) rows opens again from the cache") { store.transcript.rows.count == rowCount }
+        await expect("the very long thread opens again from the cache, folded") { turnEnded }
+        await wait(0.3)
+        await toggle(store.transcript.rows.first { $0.kindName == "fold" }, "the fold of a very long turn")
+        let rowCount = store.transcript.rows.count
         let opened = Int(Date().timeIntervalSince(began) * 1000)
         results.append(responsive("a thread of \(rowCount) rows opens (in \(opened) ms)", opening))
         await wait(0.5)
@@ -239,6 +252,17 @@ private final class Demo {
         return "\(verdict) the window stays responsive while \(what) — longest stall \(report.longest) ms, \(report.slow) of \(report.samples) checks over 50 ms"
     }
 
+    /// Clicks a group or a fold and waits for its rows to come or go.
+    private func toggle(_ row: RowModel?, _ what: String) async {
+        guard let row else {
+            results.append("FAIL \(what) is in the transcript")
+            return
+        }
+        let count = store.transcript.rows.count
+        transcriptView?.toggleRow(id: row.id)
+        await expect("clicking \(what) opens or closes it") { store.transcript.rows.count != count }
+    }
+
     private var transcriptView: TranscriptView? {
         func find(in view: NSView) -> TranscriptView? {
             (view as? TranscriptView) ?? view.subviews.lazy.compactMap(find).first
@@ -287,6 +311,8 @@ extension RowModel {
         case .code: "code"
         case .tool: "tool"
         case .thinking: "thinking"
+        case .group: "group"
+        case .fold: "fold"
         case .error: "error"
         case .turnEnd: "turn_end"
         }

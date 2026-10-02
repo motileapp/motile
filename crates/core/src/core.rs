@@ -851,6 +851,13 @@ impl Core {
                 self.highlight(&thread_id, &row_ids);
                 self.reply(id, Ok(json!({})));
             }
+            Command::ToggleRow { thread_id, row_id } => {
+                let splice = self.open.get_mut(&thread_id).and_then(|open| open.transcript.toggle(&row_id));
+                if let Some(splice) = splice {
+                    self.emit_rows(&thread_id, false, splice);
+                }
+                self.reply(id, Ok(json!({})));
+            }
         }
     }
 
@@ -870,9 +877,10 @@ impl Core {
         let mut transcript = Transcript::new(&cwd);
         transcript.load(newest);
         self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows: transcript.rows().to_vec() });
-        if !items.is_empty() {
-            let earlier = transcript.prepend(items);
-            self.emit_rows(thread_id, false, Splice { start: 0, remove: 0, rows: earlier });
+        if !items.is_empty()
+            && let Some(earlier) = transcript.prepend(items)
+        {
+            self.emit_rows(thread_id, false, earlier);
         }
 
         let open = OpenThread {

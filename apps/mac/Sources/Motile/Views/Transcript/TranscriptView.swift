@@ -10,6 +10,7 @@ final class TranscriptView: FlippedView, RowHost {
     var onAllow: (([Denial]) -> Void)?
     /// Code rows that came into view without highlighting.
     var onNeedHighlight: (([String]) -> Void)?
+    var onToggleRow: ((String) -> Void)?
 
     /// Room left under the last row for what floats over the transcript's end.
     var bottomInset: CGFloat = 0 {
@@ -53,6 +54,8 @@ final class TranscriptView: FlippedView, RowHost {
     private var glide: Timer?
     /// Rows that just arrived in a streaming reply; they fade in.
     private var fresh: Set<String> = []
+    /// The group or fold that was just clicked. It stays where it is while its rows come and go.
+    private var toggled: Anchor?
     private var layoutWidth: CGFloat = 0
 
     private struct Anchor {
@@ -211,7 +214,8 @@ final class TranscriptView: FlippedView, RowHost {
     func splice(start: Int, remove: Int, rows new: [RowModel]) {
         let coreCount = rows.count - (hasPending ? 1 : 0)
         guard start >= 0, remove >= 0, start + remove <= coreCount else { return }
-        let anchor = currentAnchor()
+        let opening = toggled.flatMap { $0.id == new.first?.id ? $0 : nil }
+        let anchor = opening ?? currentAnchor()
         let range = start..<(start + remove)
 
         // A row that is replaced by one with the same id keeps its view and, as a first guess,
@@ -240,7 +244,17 @@ final class TranscriptView: FlippedView, RowHost {
             view.fadesGrowth = animates
             stale.insert(row.id)
         }
-        updateVisible(anchor: anchor)
+        if opening != nil {
+            // Opening a row shouldn't drag the view to the end.
+            toggled = nil
+            let wasPinned = pinned
+            pinned = false
+            updateVisible(anchor: anchor)
+            pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < 30
+            jumpButton.isHidden = pinned || rows.isEmpty
+        } else {
+            updateVisible(anchor: anchor)
+        }
         // Only what came into view fades in; the rest is simply there when it is scrolled to.
         fresh.removeAll()
     }
@@ -485,6 +499,12 @@ final class TranscriptView: FlippedView, RowHost {
         updateVisible(anchor: anchor)
         pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < 30
         jumpButton.isHidden = pinned || rows.isEmpty
+    }
+
+    func toggleRow(id: String) {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
+        toggled = Anchor(id: id, delta: scrollView.contentView.bounds.minY - Self.topPadding - offsets[index])
+        onToggleRow?(id)
     }
 
     func isExpanded(id: String) -> Bool { expanded.contains(id) }

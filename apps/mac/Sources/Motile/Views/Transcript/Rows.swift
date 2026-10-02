@@ -9,23 +9,29 @@ final class RowModel {
         case code(CodeContent)
         case tool(ToolContent)
         case thinking(NSAttributedString)
+        case group(GroupContent)
+        case fold(FoldContent)
         case error(NSAttributedString)
         case turnEnd(TurnEnd)
     }
 
     let id: String
     let itemID: String
+    /// The row belongs to the group above it, which is open.
+    let nested: Bool
     let kind: Kind
 
     init(id: String, itemID: String, kind: Kind) {
         self.id = id
         self.itemID = itemID
+        nested = false
         self.kind = kind
     }
 
     init?(json: JSON) {
         id = json.string("id")
         itemID = json.string("item")
+        nested = json.bool("nested")
         switch json.string("kind") {
         case "user":
             kind = .user(text: Typesetter.plain(json.string("text"), color: Theme.text), attachments: json.strings("attachments"))
@@ -37,6 +43,10 @@ final class RowModel {
             kind = .tool(ToolContent(json: json))
         case "thinking":
             kind = .thinking(Typesetter.plain(json.string("text"), color: Theme.secondary, size: 13))
+        case "group":
+            kind = .group(GroupContent(json: json))
+        case "fold":
+            kind = .fold(FoldContent(json: json))
         case "error":
             kind = .error(Typesetter.plain(json.string("message"), color: Theme.danger, size: 13))
         case "turn_end":
@@ -112,7 +122,9 @@ struct ToolContent {
         output = json.optionalString("output")
     }
 
-    var symbol: String {
+    var symbol: String { Self.symbol(for: icon) }
+
+    static func symbol(for icon: String) -> String {
         switch icon {
         case "terminal": "terminal"
         case "file": "doc.text"
@@ -148,12 +160,44 @@ struct ToolContent {
     }
 }
 
+/// Tool calls that followed one another, as one row that opens into them.
+struct GroupContent {
+    let title: String
+    let target: String
+    let icon: String
+    let running: Bool
+    let failed: Bool
+    let open: Bool
+
+    init(json: JSON) {
+        title = json.string("title")
+        target = json.string("target")
+        icon = json.string("icon")
+        running = json.bool("running")
+        failed = json.bool("failed")
+        open = json.bool("open")
+    }
+}
+
+/// Stands for what a finished turn did before its last message, and opens into it.
+struct FoldContent {
+    let label: String
+    let open: Bool
+
+    init(json: JSON) {
+        label = TurnEnd.label(stopped: json.bool("stopped"), durationMs: (json["duration_ms"] as? NSNumber)?.intValue)
+        open = json.bool("open")
+    }
+}
+
 struct TurnEnd {
     let durationMs: Int?
     let costUSD: Double?
     let isError: Bool
     let stopped: Bool
     let denials: [Denial]
+    /// The turn's fold says how long it took, so the end of the turn doesn't.
+    let folded: Bool
 
     init(json: JSON) {
         durationMs = (json["duration_ms"] as? NSNumber)?.intValue
@@ -161,9 +205,12 @@ struct TurnEnd {
         isError = json.bool("is_error")
         stopped = json.bool("stopped")
         denials = json.objects("denials").map { Denial(json: $0) }
+        folded = json.bool("folded")
     }
 
-    var label: String {
+    var label: String { Self.label(stopped: stopped, durationMs: durationMs) }
+
+    static func label(stopped: Bool, durationMs: Int?) -> String {
         let duration = durationMs.map { Time.duration(milliseconds: $0) }
         switch (stopped, duration) {
         case (true, let duration?): return "You stopped after \(duration)"

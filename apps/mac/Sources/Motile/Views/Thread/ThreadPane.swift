@@ -45,6 +45,10 @@ struct ThreadPane: View {
         .overlay(alignment: .topLeading) { title }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
         .toolbar {
+            // Without a title in the toolbar, this is what keeps the button at the right.
+            ToolbarItem {
+                Spacer()
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 if let thread = store.selectedThread {
                     Button {

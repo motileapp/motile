@@ -5,6 +5,8 @@ import QuartzCore
 protocol RowHost: AnyObject {
     func rowWillSelect(_ view: RowView)
     func rowToggledExpansion(id: String)
+    /// Opens or closes a group or a fold, whose rows the core adds and removes.
+    func toggleRow(id: String)
     func isExpanded(id: String) -> Bool
     func allow(_ denials: [Denial])
     func copyReply(endingAt rowID: String)
@@ -120,11 +122,13 @@ final class IconButton: NSButton {
 class RowView: FlippedView {
     weak var host: RowHost?
     private(set) var rowID = ""
+    private(set) var nested = false
     /// Set when the row grew while its reply streams: the next layout fades the new part in.
     var fadesGrowth = false
 
     func configure(_ row: RowModel) {
         rowID = row.id
+        nested = row.nested
     }
 
     func layout(width: CGFloat) -> CGFloat { 0 }
@@ -140,7 +144,7 @@ class RowView: FlippedView {
             return estimatedTextHeight(text.length, width: width) + 9
         case .code(let content):
             return CodeRowView.height(lines: content.lineCount)
-        case .tool, .thinking:
+        case .tool, .thinking, .group, .fold:
             return ToolRowView.rowHeight
         case .error(let text):
             return estimatedTextHeight(text.length, width: width - 40) + 34
@@ -159,7 +163,7 @@ class RowView: FlippedView {
         case .user: return UserRowView()
         case .prose: return ProseRowView()
         case .code: return CodeRowView()
-        case .tool, .thinking: return ToolRowView()
+        case .tool, .thinking, .group, .fold: return ToolRowView()
         case .error: return ErrorRowView()
         case .turnEnd: return TurnEndRowView()
         }
@@ -170,7 +174,7 @@ class RowView: FlippedView {
         case .user: return "user"
         case .prose: return "prose"
         case .code: return "code"
-        case .tool, .thinking: return "tool"
+        case .tool, .thinking, .group, .fold: return "tool"
         case .error: return "error"
         case .turnEnd: return "turnEnd"
         }
@@ -378,6 +382,8 @@ final class ToolRowView: RowView {
     private var hasDetail = false
     private var loadedDetail = false
     private var running = false
+    /// For a group or a fold: whether it is open. Their rows are the core's, not a detail here.
+    private var open: Bool?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -406,6 +412,10 @@ final class ToolRowView: RowView {
         }
         header.onClick = { [weak self] in
             guard let self, self.hasDetail else { return }
+            guard self.open == nil else {
+                self.host?.toggleRow(id: self.rowID)
+                return
+            }
             self.host?.rowToggledExpansion(id: self.rowID)
         }
     }
@@ -415,45 +425,63 @@ final class ToolRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         loadedDetail = false
+        open = nil
         switch row.kind {
         case .tool(let tool):
             icon.image = symbol(tool.symbol)
-            let text = NSMutableAttributedString(
-                string: tool.verb + " ",
-                attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.secondary]
-            )
-            let targetColor = tool.status == .failed ? Theme.danger : Theme.prose
-            text.append(NSAttributedString(string: tool.target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
-            title.attributedStringValue = text
-            title.lineBreakMode = .byTruncatingTail
+            setTitle(tool.verb, target: tool.target, failed: tool.status == .failed)
             running = tool.status == .running
-            if running { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
             hasDetail = tool.hasDetail
             detailText = { tool.detail() }
         case .thinking(let thought):
             icon.image = symbol("brain")
-            title.attributedStringValue = NSAttributedString(
-                string: "Thought",
-                attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.secondary]
-            )
+            setTitle("Thought")
             running = false
-            spinner.stopAnimation(nil)
             hasDetail = thought.length > 0
             detailText = { thought }
+        case .group(let group):
+            icon.image = symbol(ToolContent.symbol(for: group.icon))
+            setTitle(group.title, target: group.target, failed: group.failed)
+            running = group.running
+            hasDetail = true
+            detailText = nil
+            open = group.open
+        case .fold(let fold):
+            icon.image = symbol("clock")
+            setTitle(fold.label)
+            running = false
+            hasDetail = true
+            detailText = nil
+            open = fold.open
         default:
             break
         }
+        if running { spinner.startAnimation(nil) } else { spinner.stopAnimation(nil) }
+    }
+
+    private func setTitle(_ words: String, target: String = "", failed: Bool = false) {
+        let text = NSMutableAttributedString(
+            string: target.isEmpty ? words : words + " ",
+            attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.secondary]
+        )
+        let targetColor = failed ? Theme.danger : Theme.prose
+        text.append(NSAttributedString(string: target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
+        title.attributedStringValue = text
+        title.lineBreakMode = .byTruncatingTail
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let expanded = hasDetail && (host?.isExpanded(id: rowID) ?? false)
-        header.frame = NSRect(x: -6, y: 1, width: width + 12, height: Self.rowHeight - 2)
+        let expanded = open == nil && hasDetail && (host?.isExpanded(id: rowID) ?? false)
+        // The rows of an open group stand in from the group's own.
+        let inset: CGFloat = nested ? 24 : 0
+        let width = width - inset
+        header.frame = NSRect(x: inset - 6, y: 1, width: width + 12, height: Self.rowHeight - 2)
         icon.frame = NSRect(x: 6, y: 5, width: 16, height: 16)
         let titleWidth = min(title.intrinsicContentSize.width + 4, width - 60)
         title.frame = NSRect(x: 30, y: 4, width: titleWidth, height: 18)
         spinner.frame = NSRect(x: 30 + titleWidth + 6, y: 5, width: 16, height: 16)
         chevron.isHidden = !hasDetail
-        chevron.image = symbol(expanded ? "chevron.down" : "chevron.right", size: 9, weight: .semibold)
+        chevron.image = symbol(open ?? expanded ? "chevron.down" : "chevron.right", size: 9, weight: .semibold)
         chevron.frame = NSRect(x: 30 + titleWidth + (running ? 26 : 2), y: 5, width: 14, height: 16)
 
         detailSurface.isHidden = !expanded
@@ -464,7 +492,7 @@ final class ToolRowView: RowView {
         }
         let inner = width - 30 - 24
         let detailHeight = detail.height(forWidth: inner)
-        detailSurface.frame = NSRect(x: 30, y: Self.rowHeight + 2, width: width - 30, height: detailHeight + 20)
+        detailSurface.frame = NSRect(x: inset + 30, y: Self.rowHeight + 2, width: width - 30, height: detailHeight + 20)
         detail.frame = NSRect(x: 12, y: 10, width: inner, height: detailHeight)
         return Self.rowHeight + detailHeight + 20 + 8
     }
@@ -523,6 +551,7 @@ final class TurnEndRowView: RowView {
     private let approvalList = RowTextView.make()
     private let allowButton = NSButton(title: "Allow and continue", target: nil, action: nil)
     private var denials: [Denial] = []
+    private var folded = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -558,6 +587,8 @@ final class TurnEndRowView: RowView {
         super.configure(row)
         guard case .turnEnd(let end) = row.kind else { return }
         summary.stringValue = end.label
+        folded = end.folded
+        summary.isHidden = folded
         denials = end.denials
         approval.isHidden = denials.isEmpty
         let lines = denials.map { "\($0.toolName)  \($0.summary)" }.joined(separator: "\n")
@@ -577,9 +608,9 @@ final class TurnEndRowView: RowView {
             approval.frame = NSRect(x: 0, y: y, width: width, height: height)
             y += height + 10
         }
-        let summaryWidth = min(summary.intrinsicContentSize.width + 4, width - 40)
+        let summaryWidth = folded ? 0 : min(summary.intrinsicContentSize.width + 4, width - 40)
         summary.frame = NSRect(x: 0, y: y + 3, width: summaryWidth, height: 16)
-        copyButton.frame = NSRect(x: summaryWidth + 4, y: y - 3, width: IconButton.side, height: IconButton.side)
+        copyButton.frame = NSRect(x: folded ? -6 : summaryWidth + 4, y: y - 3, width: IconButton.side, height: IconButton.side)
         rule.frame = NSRect(x: 0, y: y + 30, width: width, height: 1)
         return y + 30 + 1 + 14
     }

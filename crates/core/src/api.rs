@@ -102,6 +102,11 @@ pub enum Command {
         thread_id: String,
         row_ids: Vec<String>,
     },
+    /// Opens or closes a group of tool calls or a turn's fold.
+    ToggleRow {
+        thread_id: String,
+        row_id: String,
+    },
 }
 
 #[derive(Serialize, Clone, Debug)]
