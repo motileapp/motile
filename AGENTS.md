@@ -81,6 +81,8 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 
 - `hub.rs` is the live state of every thread. A turn is one run of the agent's CLI; its events
   are applied there, saved, and sent to every app that has the thread open.
+- `pacing.rs` says how much of a streamed reply is finished. The hub passes text on in finished
+  blocks (a paragraph, a list item, a line of code), not token by token.
 - `agents/` builds the command for a turn and parses its output: `claude.rs` for
   `claude -p --output-format stream-json`, `codex.rs` for `codex exec --json`. Both become the
   same `AgentEvent`s. `models.rs` lists Claude's models by hand; Codex's are read from its cache.
@@ -109,7 +111,8 @@ Rust library for tests.
 - `cache.rs` is the app's SQLite copy of its hosts' threads.
 - `render/` turns transcripts into rows ready to draw: `markdown.rs` (text with style runs, in
   UTF-16 offsets), `highlight.rs` (syntect; streaming code is highlighted incrementally) and
-  `rows.rs` (the row list and the splices sent to the app).
+  `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
+  are one row, and a finished turn's work folds behind one).
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
   terminal.
 
@@ -117,6 +120,9 @@ Rust library for tests.
 
 - `Core/CoreBridge.swift` calls the Rust core; `Core/AppStore.swift` is all the state the views
   show. Events are decoded off the main thread.
+- `App/MotileApp.swift` lays out the window: the sidebar and the thread side by side on one
+  surface, with a line between them. It is not a `NavigationSplitView`, whose sidebar the system
+  draws as a floating panel.
 - `Views/Transcript/` is the transcript: `TranscriptView.swift` only keeps views for the rows on
   screen, `RowViews.swift` are the rows, `Rows.swift` builds their text off the main thread.
 - `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
