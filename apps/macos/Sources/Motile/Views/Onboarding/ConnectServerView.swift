@@ -1,9 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// The one command that turns a machine into a host. Shown when the account has no host yet,
+/// The one command that turns a machine into a server. Shown when the account has no server yet,
 /// and as a sheet when adding another.
-struct ConnectHostView: View {
+struct ConnectServerView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let isFirst: Bool
@@ -18,7 +18,7 @@ struct ConnectHostView: View {
                 .frame(width: 56, height: 56)
                 .background(Color.themePrimary.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .padding(.top, isFirst ? 0 : 32)
-            Text(isFirst ? "Connect your first host" : "Add a host")
+            Text(isFirst ? "Connect your first server" : "Add a server")
                 .font(.system(size: 24, weight: .semibold))
                 .padding(.top, 18)
             Text("Run this on the Linux machine where your agents should work. It installs Motile, links the machine to your account and keeps it running.")
@@ -35,7 +35,7 @@ struct ConnectHostView: View {
 
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Waiting for the host to connect…")
+                Text("Waiting for your server to connect…")
                     .font(.system(size: 13))
                     .foregroundStyle(Color.themeSecondary)
             }
@@ -67,8 +67,8 @@ struct ConnectHostView: View {
         }
         .padding(.horizontal, 30)
         .frame(maxWidth: .infinity, maxHeight: isFirst ? .infinity : nil)
-        .onAppear { store.prepareToAddHost() }
-        .onDisappear { store.stopAddingHost() }
+        .onAppear { store.prepareToAddServer() }
+        .onDisappear { store.stopAddingServer() }
     }
 
     private var commandBox: some View {

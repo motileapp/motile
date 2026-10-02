@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs the app's scripted demo against a real auth server and a real host on this machine, with
-# scripts/fake-agent as the host's agent, and collects screenshots in apps/macos/screenshots.
+# Runs the app's scripted demo against a real auth server and a real server on this machine, with
+# scripts/fake-agent as the server's agent, and collects screenshots in apps/macos/screenshots.
 #
 # Needs target/release/{motile,motile-auth}, build/Motile.app and a PostgreSQL to run.
 set -euo pipefail
@@ -12,12 +12,12 @@ APP="$PWD/build/Motile.app/Contents/MacOS/Motile"
 OUT="$PWD/screenshots"
 WORK="$(mktemp -d)"
 AUTH_URL="http://127.0.0.1:3111"
-HOST_PORT=47613
+SERVER_PORT=47613
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
 cleanup() {
-    kill "${HOST_PID:-}" "${AUTH_PID:-}" "${APP_PID:-}" 2>/dev/null || true
+    kill "${SERVER_PID:-}" "${AUTH_PID:-}" "${APP_PID:-}" 2>/dev/null || true
     [ -d "$WORK/pg" ] && pg_ctl -D "$WORK/pg" stop -m immediate >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -50,11 +50,11 @@ git -C "$PROJECT" init -q -b main 2>/dev/null || true
 echo "▸ Starting the app…"
 defaults delete app.motile.mac >/dev/null 2>&1 || true
 MOTILE_DEMO=1 MOTILE_DEMO_OUTPUT="$OUT" MOTILE_DEMO_TOKEN_FILE="$WORK/token" MOTILE_DEMO_PROJECT="$PROJECT" \
-    MOTILE_DATA_DIR="$WORK/app" MOTILE_AUTH_URL="$AUTH_URL" MOTILE_LOCAL=1 MOTILE_HOST_ADDR="127.0.0.1:$HOST_PORT" \
+    MOTILE_DATA_DIR="$WORK/app" MOTILE_AUTH_URL="$AUTH_URL" MOTILE_LOCAL=1 MOTILE_SERVER_ADDR="127.0.0.1:$SERVER_PORT" \
     "$APP" > "$OUT/app.log" 2>&1 &
 APP_PID=$!
 
-# The app writes the token of the install command it shows; the host is set up with it, as
+# The app writes the token of the install command it shows; the server is set up with it, as
 # the installer would.
 for _ in $(seq 1 300); do
     [ -s "$WORK/token" ] && break
@@ -62,12 +62,12 @@ for _ in $(seq 1 300); do
     sleep 0.2
 done
 if [ -s "$WORK/token" ]; then
-    echo "▸ Setting up the host…"
-    export MOTILE_DATA_DIR="$WORK/host" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent"
+    echo "▸ Setting up the server…"
+    export MOTILE_DATA_DIR="$WORK/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent"
     export FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6
     MOTILE_AUTH_URL="$AUTH_URL" "$BIN/motile" setup "$(cat "$WORK/token")" --name studio --no-service --yes
-    "$BIN/motile" run --local --port "$HOST_PORT" > "$OUT/host.log" 2>&1 &
-    HOST_PID=$!
+    "$BIN/motile" run --local --port "$SERVER_PORT" > "$OUT/server.log" 2>&1 &
+    SERVER_PID=$!
 fi
 
 for _ in $(seq 1 600); do

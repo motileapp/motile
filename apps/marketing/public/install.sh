@@ -1,9 +1,9 @@
 #!/bin/sh
-# Installs the Motile host on this machine and links it to your account:
+# Installs the Motile server on this machine and links it to your account:
 #
 #   curl -fsSL https://motile.app/install.sh | sh -s -- <token>
 #
-# The token comes from the install command the Motile app shows. MOTILE_AUTH_URL links the host
+# The token comes from the install command the Motile app shows. MOTILE_AUTH_URL links the server
 # with another auth server than Motile's, and MOTILE_DOWNLOAD_URL downloads it from another place
 # than the latest release.
 set -eu
@@ -35,7 +35,7 @@ download() {
 }
 
 main() {
-    [ "$(uname -s)" = Linux ] || fail "hosts run on Linux for now"
+    [ "$(uname -s)" = Linux ] || fail "servers run on Linux for now"
     case "$(uname -m)" in
         x86_64 | amd64) target=x86_64-unknown-linux-musl ;;
         aarch64 | arm64) target=aarch64-unknown-linux-musl ;;
@@ -50,7 +50,7 @@ main() {
     tar -xzf "$tmp/motile.tar.gz" -C "$tmp"
     chmod 755 "$tmp/motile"
 
-    # Moved into place in one step, so a running host is replaced, not overwritten.
+    # Moved into place in one step, so a running server is replaced, not overwritten.
     as_root cp "$tmp/motile" "$BINARY.new"
     as_root mv -f "$BINARY.new" "$BINARY"
 

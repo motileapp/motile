@@ -773,7 +773,7 @@ mod tests {
     }
 
     #[test]
-    fn an_image_the_host_kept_is_a_row_with_its_size_and_any_other_is_a_link() {
+    fn an_image_the_server_kept_is_a_row_with_its_size_and_any_other_is_a_link() {
         use motile_protocol::wire::Media;
         let mut reply = assistant("a", 0, "Done:\n\n![The page](/tmp/shots/page.png)\n\n![Gone](/tmp/gone.png)");
         let kept = Media {

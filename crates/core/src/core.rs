@@ -1,4 +1,4 @@
-//! The core's one loop. Commands from the app and events from the hosts' links arrive on a single
+//! The core's one loop. Commands from the app and events from the servers' links arrive on a single
 //! channel and are handled in turn, so the state needs no locks. Anything that waits on the
 //! network runs in a task of its own and reports back through the same channel.
 
@@ -15,13 +15,13 @@ use motile_protocol::auth_api::{Device, DeviceKind, Me};
 use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
-use motile_protocol::wire::{HostInfo, Item, Message, Project, Request, Thread};
+use motile_protocol::wire::{Item, Message, Project, Request, ServerInfo, Thread};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-use crate::api::{AccountView, Command, Config, Event, HostView, ProjectView, ThreadView};
+use crate::api::{AccountView, Command, Config, Event, ProjectView, ServerView, ThreadView};
 use crate::cache::Cache;
-use crate::connection::{HostAddr, bind};
+use crate::connection::{ServerAddr, bind};
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
 use crate::render::highlight::{self, Spans};
@@ -35,7 +35,7 @@ const SAVE_EVERY: Duration = Duration::from_secs(1);
 const TICK: Duration = Duration::from_secs(2);
 /// How often the app is told how far a download is.
 const PROGRESS_EVERY: Duration = Duration::from_millis(200);
-/// How many ticks pass between account checks when nobody is waiting for a host.
+/// How many ticks pass between account checks when nobody is waiting for a server.
 const ACCOUNT_CHECK_TICKS: u64 = 30;
 
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
@@ -50,7 +50,7 @@ impl Handle {
         let _ = self.inputs.send(Input::Command { id, command });
     }
 
-    /// Disconnects from the hosts and ends the core. What it knows is already in the cache.
+    /// Disconnects from the servers and ends the core. What it knows is already in the cache.
     pub fn stop(&self) {
         let _ = self.inputs.send(Input::Stop);
     }
@@ -63,23 +63,23 @@ enum Input {
     AccountChecked { key: String, result: Result<Me, String> },
     SignedIn { id: u64, result: Result<Me, String> },
     Highlighted { thread_id: String, row_id: String, para: Option<usize>, code: String, spans: Spans },
-    IconFetched { host_id: String },
+    IconFetched { server_id: String },
     MediaFetched { id: String, result: Result<String, String> },
     Render,
     Tick,
     Stop,
 }
 
-struct Host {
+struct Server {
     device: Device,
     link: Option<Arc<Link>>,
     status: Status,
-    info: Option<HostInfo>,
+    info: Option<ServerInfo>,
     threads: HashMap<String, Thread>,
 }
 
 struct OpenThread {
-    host_id: String,
+    server_id: String,
     transcript: Transcript,
     /// Whether the catch-up is done and updates now arrive in revision order.
     live: bool,
@@ -102,11 +102,11 @@ struct Core {
     endpoint: Option<Endpoint>,
     me: Me,
     account_error: Option<String>,
-    hosts: Vec<Host>,
+    servers: Vec<Server>,
     open: HashMap<String, OpenThread>,
     /// The secret and the state of the sign-in the browser is busy with.
     pending_sign_in: Option<(String, String)>,
-    watch_hosts: bool,
+    watch_servers: bool,
     render_scheduled: bool,
     ticks: u64,
     /// The icon files that have been asked for, so none is asked for twice.
@@ -127,8 +127,8 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
     let (link_events, mut from_links) = mpsc::unbounded_channel();
     let forward = inputs.clone();
     tokio::spawn(async move {
-        while let Some((host_id, event)) = from_links.recv().await {
-            if forward.send(Input::Link(host_id, event)).is_err() {
+        while let Some((server_id, event)) = from_links.recv().await {
+            if forward.send(Input::Link(server_id, event)).is_err() {
                 break;
             }
         }
@@ -156,10 +156,10 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         key: Arc::new(key),
         endpoint: None,
         account_error: None,
-        hosts: Vec::new(),
+        servers: Vec::new(),
         open: HashMap::new(),
         pending_sign_in: None,
-        watch_hosts: false,
+        watch_servers: false,
         render_scheduled: false,
         ticks: 0,
         icons_asked: HashSet::new(),
@@ -199,7 +199,7 @@ impl Core {
     /// Shows what is known from last time, then goes to find out what is true now.
     fn begin(&mut self) {
         self.emit_account();
-        self.sync_hosts();
+        self.sync_servers();
         self.emit(Event::Restored);
         self.bind_endpoint();
         self.check_account();
@@ -208,7 +208,7 @@ impl Core {
     fn handle(&mut self, input: Input) {
         match input {
             Input::Command { id, command } => self.command(id, command),
-            Input::Link(host_id, event) => self.link_event(&host_id, event),
+            Input::Link(server_id, event) => self.link_event(&server_id, event),
             Input::Endpoint { key, result } => self.endpoint_bound(&key, result),
             Input::AccountChecked { key, result } => self.account_checked(&key, result),
             Input::SignedIn { id, result } => self.signed_in(id, result),
@@ -224,9 +224,9 @@ impl Core {
                     self.emit_rows(&thread_id, false, splice);
                 }
             }
-            Input::IconFetched { host_id } => {
-                let projects = self.cache.projects(&host_id);
-                self.emit_projects(&host_id, projects);
+            Input::IconFetched { server_id } => {
+                let projects = self.cache.projects(&server_id);
+                self.emit_projects(&server_id, projects);
             }
             Input::MediaFetched { id, result } => {
                 let answer = result.map(|path| json!({ "path": path }));
@@ -238,7 +238,7 @@ impl Core {
             Input::Stop => {}
             Input::Tick => {
                 self.ticks += 1;
-                if self.watch_hosts || self.ticks.is_multiple_of(ACCOUNT_CHECK_TICKS) {
+                if self.watch_servers || self.ticks.is_multiple_of(ACCOUNT_CHECK_TICKS) {
                     self.check_account();
                 }
             }
@@ -249,8 +249,8 @@ impl Core {
         for (thread_id, open) in &mut self.open {
             save_streamed(&self.cache, thread_id, open);
         }
-        for host in &self.hosts {
-            if let Some(link) = &host.link {
+        for server in &self.servers {
+            if let Some(link) = &server.link {
                 link.shutdown();
             }
         }
@@ -310,7 +310,7 @@ impl Core {
                 self.cache.set_account(&me);
                 self.me = me;
                 self.emit_account();
-                self.sync_hosts();
+                self.sync_servers();
             }
             Err(error) => {
                 if self.account_error.as_deref() == Some(&error) {
@@ -383,7 +383,7 @@ impl Core {
         self.me = me;
         self.account_error = None;
         self.emit_account();
-        self.sync_hosts();
+        self.sync_servers();
         self.reply(id, Ok(json!({})));
     }
 
@@ -404,7 +404,7 @@ impl Core {
         self.me = Me::default();
         self.account_error = None;
         self.pending_sign_in = None;
-        self.sync_hosts();
+        self.sync_servers();
         self.open.clear();
         self.cache.clear();
         self.media.clear();
@@ -420,7 +420,7 @@ impl Core {
         self.bind_endpoint();
     }
 
-    // ---- hosts ----
+    // ---- servers ----
 
     fn bind_endpoint(&self) {
         let (key, inputs, local_only) = (self.key.clone(), self.inputs.clone(), self.config.local_only);
@@ -437,108 +437,108 @@ impl Core {
         match result {
             Ok(endpoint) => {
                 self.endpoint = Some(endpoint);
-                self.connect_hosts();
+                self.connect_servers();
             }
             Err(error) => tracing::error!("the network endpoint couldn't be opened: {error}"),
         }
     }
 
-    /// Makes the hosts match the account's: drops the ones that are gone, adds the new ones.
-    fn sync_hosts(&mut self) {
+    /// Makes the servers match the account's: drops the ones that are gone, adds the new ones.
+    fn sync_servers(&mut self) {
         let wanted: Vec<Device> =
-            self.me.devices.iter().filter(|device| device.kind == DeviceKind::Host).cloned().collect();
-        let (kept, gone): (Vec<Host>, Vec<Host>) = std::mem::take(&mut self.hosts)
+            self.me.devices.iter().filter(|device| device.kind == DeviceKind::Server).cloned().collect();
+        let (kept, gone): (Vec<Server>, Vec<Server>) = std::mem::take(&mut self.servers)
             .into_iter()
-            .partition(|host| wanted.iter().any(|device| device.public_key == host.device.public_key));
-        self.hosts = kept;
-        for host in gone {
-            let host_id = host.device.public_key;
-            if let Some(link) = host.link {
+            .partition(|server| wanted.iter().any(|device| device.public_key == server.device.public_key));
+        self.servers = kept;
+        for server in gone {
+            let server_id = server.device.public_key;
+            if let Some(link) = server.link {
                 link.shutdown();
             }
-            self.open.retain(|_, open| open.host_id != host_id);
-            self.cache.remove_host(&host_id);
-            self.emit(Event::Threads { host_id: host_id.clone(), threads: Vec::new() });
-            self.emit_projects(&host_id, Vec::new());
+            self.open.retain(|_, open| open.server_id != server_id);
+            self.cache.remove_server(&server_id);
+            self.emit(Event::Threads { server_id: server_id.clone(), threads: Vec::new() });
+            self.emit_projects(&server_id, Vec::new());
         }
 
         let mut added = Vec::new();
         for device in wanted {
-            if let Some(host) = self.hosts.iter_mut().find(|host| host.device.public_key == device.public_key) {
-                host.device = device;
+            if let Some(server) = self.servers.iter_mut().find(|server| server.device.public_key == device.public_key) {
+                server.device = device;
                 continue;
             }
-            let host_id = device.public_key.clone();
-            let cached = self.cache.threads(&host_id);
+            let server_id = device.public_key.clone();
+            let cached = self.cache.threads(&server_id);
             let views: Vec<ThreadView> = cached
                 .iter()
                 .map(|cached| ThreadView {
                     unread: is_unread(&cached.thread, cached.seen_at),
                     thread: cached.thread.clone(),
-                    host_id: host_id.clone(),
+                    server_id: server_id.clone(),
                 })
                 .collect();
             let threads = cached.into_iter().map(|cached| (cached.thread.id.clone(), cached.thread)).collect();
-            self.hosts.push(Host {
+            self.servers.push(Server {
                 device,
                 link: None,
                 status: Status::default(),
-                info: self.cache.host_info(&host_id),
+                info: self.cache.server_info(&server_id),
                 threads,
             });
-            added.push((host_id, views));
+            added.push((server_id, views));
         }
-        self.connect_hosts();
-        self.emit_hosts();
-        // What the cache remembers of the new hosts, until they answer themselves.
-        for (host_id, threads) in added {
-            let projects = self.cache.projects(&host_id);
-            self.emit_projects(&host_id, projects);
-            self.emit(Event::Threads { host_id, threads });
+        self.connect_servers();
+        self.emit_servers();
+        // What the cache remembers of the new servers, until they answer themselves.
+        for (server_id, threads) in added {
+            let projects = self.cache.projects(&server_id);
+            self.emit_projects(&server_id, projects);
+            self.emit(Event::Threads { server_id, threads });
         }
     }
 
-    fn connect_hosts(&mut self) {
+    fn connect_servers(&mut self) {
         let Some(endpoint) = &self.endpoint else { return };
         let direct = self.config.direct_addr.as_deref().and_then(|address| address.parse().ok());
-        for host in self.hosts.iter_mut().filter(|host| host.link.is_none()) {
-            let host_id = host.device.public_key.clone();
-            let address = HostAddr { key: host_id.clone(), direct };
+        for server in self.servers.iter_mut().filter(|server| server.link.is_none()) {
+            let server_id = server.device.public_key.clone();
+            let address = ServerAddr { key: server_id.clone(), direct };
             let link = Link::connect(endpoint.clone(), address, self.link_events.clone());
             // Threads the app opened before there was a connection to follow them on.
-            for (thread_id, open) in self.open.iter().filter(|(_, open)| open.host_id == host_id) {
+            for (thread_id, open) in self.open.iter().filter(|(_, open)| open.server_id == server_id) {
                 link.open(thread_id.clone(), open.rev);
             }
-            host.link = Some(link);
+            server.link = Some(link);
         }
     }
 
-    fn emit_hosts(&self) {
-        let view = |host: &Host| HostView {
-            id: host.device.public_key.clone(),
-            name: host.device.name.clone(),
-            platform: host.device.platform.clone(),
-            state: host.status.state,
-            error: host.status.error.clone(),
-            path: host.status.path,
-            rtt_ms: host.status.rtt_ms,
-            info: host.info.clone(),
+    fn emit_servers(&self) {
+        let view = |server: &Server| ServerView {
+            id: server.device.public_key.clone(),
+            name: server.device.name.clone(),
+            platform: server.device.platform.clone(),
+            state: server.status.state,
+            error: server.status.error.clone(),
+            path: server.status.path,
+            rtt_ms: server.status.rtt_ms,
+            info: server.info.clone(),
         };
-        self.emit(Event::Hosts { hosts: self.hosts.iter().map(view).collect() });
+        self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });
     }
 
-    fn host_mut(&mut self, host_id: &str) -> Option<&mut Host> {
-        self.hosts.iter_mut().find(|host| host.device.public_key == host_id)
+    fn server_mut(&mut self, server_id: &str) -> Option<&mut Server> {
+        self.servers.iter_mut().find(|server| server.device.public_key == server_id)
     }
 
-    fn link(&self, host_id: &str) -> Result<Arc<Link>, String> {
-        let host = self.hosts.iter().find(|host| host.device.public_key == host_id);
-        host.and_then(|host| host.link.clone()).ok_or_else(|| "Not connected to that host.".to_string())
+    fn link(&self, server_id: &str) -> Result<Arc<Link>, String> {
+        let server = self.servers.iter().find(|server| server.device.public_key == server_id);
+        server.and_then(|server| server.link.clone()).ok_or_else(|| "Not connected to that server.".to_string())
     }
 
-    /// Tells the app about a host's projects, each with its icon if this device has the file.
+    /// Tells the app about a server's projects, each with its icon if this device has the file.
     /// Icons it doesn't have yet are fetched, and the projects are told again when they arrive.
-    fn emit_projects(&mut self, host_id: &str, projects: Vec<Project>) {
+    fn emit_projects(&mut self, server_id: &str, projects: Vec<Project>) {
         let folder = self.config.data_dir.join("icons");
         let view = |project: Project| {
             let file = project.icon.as_ref().map(|icon| folder.join(format!("{}-{icon}", project.id)));
@@ -547,37 +547,37 @@ impl Core {
         };
         let views: Vec<ProjectView> = projects.into_iter().map(view).collect();
         for view in views.iter().filter(|view| view.icon_path.is_none()) {
-            self.fetch_icon(host_id, &view.project);
+            self.fetch_icon(server_id, &view.project);
         }
-        self.emit(Event::Projects { host_id: host_id.to_string(), projects: views });
+        self.emit(Event::Projects { server_id: server_id.to_string(), projects: views });
     }
 
-    fn fetch_icon(&mut self, host_id: &str, project: &Project) {
+    fn fetch_icon(&mut self, server_id: &str, project: &Project) {
         let Some(icon) = &project.icon else { return };
-        let Ok(link) = self.link(host_id) else { return };
+        let Ok(link) = self.link(server_id) else { return };
         let name = format!("{}-{icon}", project.id);
         if !self.icons_asked.insert(name.clone()) {
             return;
         }
         let folder = self.config.data_dir.join("icons");
-        let (inputs, host_id, project_id) = (self.inputs.clone(), host_id.to_string(), project.id.clone());
+        let (inputs, server_id, project_id) = (self.inputs.clone(), server_id.to_string(), project.id.clone());
         tokio::spawn(async move {
             let fetched = async {
                 let request = Request::ProjectIcon { project_id: project_id.clone() };
                 let Message::Icon { data } = link.request(&request).await? else {
-                    bail!("The host didn't answer with an icon.");
+                    bail!("The server didn't answer with an icon.");
                 };
                 save_icon(&folder, &project_id, &name, &BASE64.decode(data)?)
             };
             match fetched.await {
-                Ok(()) => drop(inputs.send(Input::IconFetched { host_id })),
+                Ok(()) => drop(inputs.send(Input::IconFetched { server_id })),
                 Err(error) => tracing::debug!(project_id, "couldn't fetch a project's icon: {error:#}"),
             }
         });
     }
 
     /// Answers with where the image or video is on this device, fetching it first if it isn't.
-    fn find_media(&mut self, id: u64, host_id: &str, media_id: String) {
+    fn find_media(&mut self, id: u64, server_id: &str, media_id: String) {
         if let Some(file) = self.media.get(&media_id) {
             return self.reply(id, Ok(json!({ "path": file.to_string_lossy() })));
         }
@@ -587,7 +587,7 @@ impl Core {
         let Some(unfinished) = self.media.unfinished(&media_id) else {
             return self.reply(id, Err("That isn't the name of an image or a video.".to_string()));
         };
-        let link = match self.link(host_id) {
+        let link = match self.link(server_id) {
             Ok(link) => link,
             Err(error) => return self.reply(id, Err(error)),
         };
@@ -616,66 +616,66 @@ impl Core {
         });
     }
 
-    fn thread_view(&self, host_id: &str, thread: &Thread) -> ThreadView {
+    fn thread_view(&self, server_id: &str, thread: &Thread) -> ThreadView {
         ThreadView {
             unread: is_unread(thread, self.cache.seen_at(&thread.id)),
             thread: thread.clone(),
-            host_id: host_id.to_string(),
+            server_id: server_id.to_string(),
         }
     }
 
-    // ---- what the hosts say ----
+    // ---- what the servers say ----
 
-    fn link_event(&mut self, host_id: &str, event: LinkEvent) {
+    fn link_event(&mut self, server_id: &str, event: LinkEvent) {
         match event {
             LinkEvent::Status(status) => {
                 let refused = status.state == State::Refused;
-                let Some(host) = self.host_mut(host_id) else { return };
-                host.status = status;
-                self.emit_hosts();
-                // The host may have been removed from the account, or this device.
+                let Some(server) = self.server_mut(server_id) else { return };
+                server.status = status;
+                self.emit_servers();
+                // The server may have been removed from the account, or this device.
                 if refused {
                     self.check_account();
                 }
             }
-            LinkEvent::List(message) => self.list_message(host_id, message),
+            LinkEvent::List(message) => self.list_message(server_id, message),
             LinkEvent::Thread { thread_id, message } => self.thread_message(&thread_id, message),
         }
     }
 
-    fn list_message(&mut self, host_id: &str, message: Message) {
+    fn list_message(&mut self, server_id: &str, message: Message) {
         match message {
-            Message::Welcome { host: info, threads, projects } => {
-                self.cache.set_host_info(host_id, &info);
-                self.cache.set_threads(host_id, &threads);
-                self.cache.set_projects(host_id, &projects);
-                let views = threads.iter().map(|thread| self.thread_view(host_id, thread)).collect();
-                let Some(host) = self.host_mut(host_id) else { return };
-                host.info = Some(info);
-                host.threads = threads.into_iter().map(|thread| (thread.id.clone(), thread)).collect();
+            Message::Welcome { server: info, threads, projects } => {
+                self.cache.set_server_info(server_id, &info);
+                self.cache.set_threads(server_id, &threads);
+                self.cache.set_projects(server_id, &projects);
+                let views = threads.iter().map(|thread| self.thread_view(server_id, thread)).collect();
+                let Some(server) = self.server_mut(server_id) else { return };
+                server.info = Some(info);
+                server.threads = threads.into_iter().map(|thread| (thread.id.clone(), thread)).collect();
                 // Threads deleted while the app was away are no longer followed.
-                let known: HashSet<String> = host.threads.keys().cloned().collect();
-                self.open.retain(|thread_id, open| open.host_id != host_id || known.contains(thread_id));
-                self.emit_hosts();
-                self.emit(Event::Threads { host_id: host_id.to_string(), threads: views });
-                self.emit_projects(host_id, projects);
+                let known: HashSet<String> = server.threads.keys().cloned().collect();
+                self.open.retain(|thread_id, open| open.server_id != server_id || known.contains(thread_id));
+                self.emit_servers();
+                self.emit(Event::Threads { server_id: server_id.to_string(), threads: views });
+                self.emit_projects(server_id, projects);
             }
             Message::Projects { projects } => {
-                self.cache.set_projects(host_id, &projects);
-                self.emit_projects(host_id, projects);
+                self.cache.set_projects(server_id, &projects);
+                self.emit_projects(server_id, projects);
             }
             Message::ThreadUpsert { thread } => {
-                self.cache.upsert_thread(host_id, &thread);
-                let view = self.thread_view(host_id, &thread);
-                let Some(host) = self.host_mut(host_id) else { return };
-                host.threads.insert(thread.id.clone(), thread);
+                self.cache.upsert_thread(server_id, &thread);
+                let view = self.thread_view(server_id, &thread);
+                let Some(server) = self.server_mut(server_id) else { return };
+                server.threads.insert(thread.id.clone(), thread);
                 self.emit(Event::ThreadUpsert { thread: view });
             }
             Message::ThreadDeleted { thread_id } => {
                 self.cache.remove_thread(&thread_id);
                 self.open.remove(&thread_id);
-                if let Some(host) = self.host_mut(host_id) {
-                    host.threads.remove(&thread_id);
+                if let Some(server) = self.server_mut(server_id) {
+                    server.threads.remove(&thread_id);
                 }
                 self.emit(Event::ThreadDeleted { thread_id });
             }
@@ -820,8 +820,8 @@ impl Core {
                 self.check_account();
                 self.reply(id, Ok(json!({})));
             }
-            Command::WatchHosts { on } => {
-                self.watch_hosts = on;
+            Command::WatchServers { on } => {
+                self.watch_servers = on;
                 if on {
                     self.check_account();
                 }
@@ -834,18 +834,18 @@ impl Core {
                     reply(&sink, id, token.map(|token| serde_json::to_value(token).unwrap_or_default()));
                 });
             }
-            Command::RemoveHost { host_id } => {
+            Command::RemoveServer { server_id } => {
                 let (auth, key, sink, inputs) =
                     (self.auth.clone(), self.key.clone(), self.sink.clone(), self.inputs.clone());
                 tokio::spawn(async move {
-                    let removed = auth.remove_device(&key, &host_id).await.map_err(error_text);
+                    let removed = auth.remove_device(&key, &server_id).await.map_err(error_text);
                     let result = auth.me(&key).await.map_err(error_text);
                     let _ = inputs.send(Input::AccountChecked { key: key.public(), result });
                     reply(&sink, id, removed.map(|_| json!({})));
                 });
             }
-            Command::OpenThread { host_id, thread_id } => {
-                let result = self.open_thread(&host_id, &thread_id);
+            Command::OpenThread { server_id, thread_id } => {
+                let result = self.open_thread(&server_id, &thread_id);
                 self.reply(id, result.map(|_| json!({})));
             }
             Command::CloseThread { thread_id } => {
@@ -856,8 +856,8 @@ impl Core {
                 self.mark_seen(&thread_id);
                 self.reply(id, Ok(json!({})));
             }
-            Command::Request { host_id, request } => {
-                let link = match self.link(&host_id) {
+            Command::Request { server_id, request } => {
+                let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
@@ -867,8 +867,8 @@ impl Core {
                     reply(&sink, id, answer.map(|message| serde_json::to_value(message).unwrap_or_default()));
                 });
             }
-            Command::Send { host_id, thread_id, new_thread, text, files } => {
-                let link = match self.link(&host_id) {
+            Command::Send { server_id, thread_id, new_thread, text, files } => {
+                let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
@@ -881,14 +881,14 @@ impl Core {
                         }
                         match link.request(&Request::Send { thread_id, new_thread, text, attachments }).await? {
                             Message::Sent { thread_id } => Ok(json!({ "thread_id": thread_id })),
-                            other => bail!("Unexpected answer from the host: {other:?}"),
+                            other => bail!("Unexpected answer from the server: {other:?}"),
                         }
                     };
                     reply(&sink, id, sent.await.map_err(error_text));
                 });
             }
-            Command::UpdateHost { host_id } => {
-                let link = match self.link(&host_id) {
+            Command::UpdateServer { server_id } => {
+                let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
@@ -896,13 +896,13 @@ impl Core {
                 tokio::spawn(async move {
                     let events = sink.clone();
                     let report = move |received, total| {
-                        events(Event::HostUpdate { host_id: host_id.clone(), received, total });
+                        events(Event::ServerUpdate { server_id: server_id.clone(), received, total });
                     };
                     reply(&sink, id, link.update(report).await.map(|_| json!({})).map_err(error_text));
                 });
             }
-            Command::SetProjectIcon { host_id, project_id, path } => {
-                let link = match self.link(&host_id) {
+            Command::SetProjectIcon { server_id, project_id, path } => {
+                let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
@@ -912,7 +912,7 @@ impl Core {
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
             }
-            Command::Media { host_id, id: media_id } => self.find_media(id, &host_id, media_id),
+            Command::Media { server_id, id: media_id } => self.find_media(id, &server_id, media_id),
             Command::Storage => {
                 let (media, sink) = (self.media.clone(), self.sink.clone());
                 tokio::task::spawn_blocking(move || {
@@ -937,15 +937,16 @@ impl Core {
         }
     }
 
-    fn open_thread(&mut self, host_id: &str, thread_id: &str) -> Result<(), String> {
+    fn open_thread(&mut self, server_id: &str, thread_id: &str) -> Result<(), String> {
         if let Some(open) = self.open.get(thread_id) {
             let rows = open.transcript.rows().to_vec();
             self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows });
             return Ok(());
         }
-        let host = self.hosts.iter().find(|host| host.device.public_key == host_id).ok_or("That host is gone.")?;
-        let cwd = host.threads.get(thread_id).map(|thread| thread.cwd.clone()).unwrap_or_default();
-        let link = host.link.clone();
+        let server =
+            self.servers.iter().find(|server| server.device.public_key == server_id).ok_or("That server is gone.")?;
+        let cwd = server.threads.get(thread_id).map(|thread| thread.cwd.clone()).unwrap_or_default();
+        let link = server.link.clone();
 
         let mut items = self.cache.items(thread_id);
         let since = self.cache.synced_rev(thread_id);
@@ -960,7 +961,7 @@ impl Core {
         }
 
         let open = OpenThread {
-            host_id: host_id.to_string(),
+            server_id: server_id.to_string(),
             transcript,
             live: false,
             rev: since,
@@ -978,18 +979,18 @@ impl Core {
     fn close_thread(&mut self, thread_id: &str) {
         let Some(mut open) = self.open.remove(thread_id) else { return };
         save_streamed(&self.cache, thread_id, &mut open);
-        if let Ok(link) = self.link(&open.host_id) {
+        if let Ok(link) = self.link(&open.server_id) {
             link.close(thread_id);
         }
     }
 
     fn mark_seen(&mut self, thread_id: &str) {
         self.cache.set_seen(thread_id, now());
-        let found = self.hosts.iter().find_map(|host| {
-            host.threads.get(thread_id).map(|thread| (host.device.public_key.clone(), thread.clone()))
+        let found = self.servers.iter().find_map(|server| {
+            server.threads.get(thread_id).map(|thread| (server.device.public_key.clone(), thread.clone()))
         });
-        let Some((host_id, thread)) = found else { return };
-        self.emit(Event::ThreadUpsert { thread: ThreadView { thread, host_id, unread: false } });
+        let Some((server_id, thread)) = found else { return };
+        self.emit(Event::ThreadUpsert { thread: ThreadView { thread, server_id, unread: false } });
     }
 
     fn highlight(&self, thread_id: &str, row_ids: &[String]) {

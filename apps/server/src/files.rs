@@ -1,4 +1,4 @@
-//! The host's folders, for choosing where a chat works, and files the app sends as attachments.
+//! The server's folders, for choosing where a chat works, and files the app sends as attachments.
 
 use std::path::{Path, PathBuf};
 

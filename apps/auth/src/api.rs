@@ -1,4 +1,4 @@
-//! What the apps, the hosts and the web app call. A linked device signs its requests with its
+//! What the apps, the servers and the web app call. A linked device signs its requests with its
 //! key; the requests that link one prove the key with a signature over what they redeem. The web
 //! app sends the token of the session a person signed in to.
 
@@ -160,9 +160,9 @@ pub async fn create_enroll_token(
         Caller::Web(user) => user,
         Caller::Device(public_key) => {
             let user = linked_user(&state, &public_key).await?;
-            // A host can't add more hosts; only someone signed in can, in an app or on the web.
+            // A server can't add more servers; only someone signed in can, in an app or on the web.
             if db::device_kind(&state.db, &public_key).await?.as_deref() != Some(db::kind_text(DeviceKind::Client)) {
-                return Err(AppError::new(StatusCode::FORBIDDEN, "Hosts are added from the app."));
+                return Err(AppError::new(StatusCode::FORBIDDEN, "Servers are added from the app."));
             }
             user
         }
@@ -195,9 +195,9 @@ pub async fn enroll(
     let user_id = db::use_enroll_token(&state.db, &token_hash, &request.public_key).await?.ok_or_else(expired)?;
     let user = db::user_by_id(&state.db, user_id).await?.ok_or_else(expired)?;
 
-    let name = clean(&request.name, "Host");
+    let name = clean(&request.name, "Server");
     let platform = clean(&request.platform, "unknown");
-    if !db::link_device(&state.db, user.id, &request.public_key, DeviceKind::Host, &name, &platform).await? {
+    if !db::link_device(&state.db, user.id, &request.public_key, DeviceKind::Server, &name, &platform).await? {
         return Err(AppError::new(StatusCode::CONFLICT, "This machine can't be linked to the account."));
     }
     Ok(Json(EnrollResponse { email: user.email }))

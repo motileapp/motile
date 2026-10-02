@@ -42,7 +42,7 @@ impl TitleSource {
     }
 }
 
-/// A thread with what only the host needs to know about it.
+/// A thread with what only the server needs to know about it.
 #[derive(Clone, Debug)]
 pub struct StoredThread {
     pub thread: Thread,

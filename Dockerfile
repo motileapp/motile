@@ -1,4 +1,4 @@
-# The auth server (apps/auth). The host and the apps are built by the release workflow, the
+# The auth server (apps/auth). The server and the apps are built by the release workflow, the
 # marketing site by apps/marketing/Dockerfile and the web app by apps/web/Dockerfile.
 
 # ---------- rust toolchain ----------

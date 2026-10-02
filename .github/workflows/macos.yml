@@ -1,6 +1,6 @@
 name: macOS
 
-# Builds the Mac app, walks it through a demo against a real auth server and host on the runner,
+# Builds the Mac app, walks it through a demo against a real auth server and a real server on the runner,
 # and keeps the app and the screenshots as artifacts.
 on:
   push:
@@ -51,7 +51,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build the core, the host and the auth server
+      - name: Build the core, the server and the auth server
         run: cargo build --release -p motile-core -p motile-server -p motile-auth
 
       - name: Import the signing certificate

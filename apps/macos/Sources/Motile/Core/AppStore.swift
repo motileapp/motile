@@ -37,17 +37,17 @@ enum PanelPage: Equatable {
     case threads
 }
 
-/// A host that is installing a new version of itself.
-struct HostUpdate: Equatable {
+/// A server that is installing a new version of itself.
+struct ServerUpdate: Equatable {
     /// The version it had when the update began.
     let from: String
-    /// How much of the download has arrived, when the host knows how much there is.
+    /// How much of the download has arrived, when the server knows how much there is.
     var fraction: Double?
-    /// The new version is installed and the host is starting it.
+    /// The new version is installed and the server is starting it.
     var restarting = false
 }
 
-/// What the images and videos fetched from the hosts take on this Mac, and what they may take.
+/// What the images and videos fetched from the servers take on this Mac, and what they may take.
 struct MediaStorage: Equatable {
     let used: Int64
     let limit: Int64
@@ -69,7 +69,7 @@ final class AppStore {
     private(set) var signingIn = false
     var signInError: String?
     private(set) var enrollToken: EnrollToken?
-    var showsAddHost = false
+    var showsAddServer = false
     var showsFolderPicker = false
     /// The project an icon is being chosen for.
     var iconProject: Project?
@@ -79,9 +79,9 @@ final class AppStore {
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
 
-    // What the hosts hold
-    private(set) var hosts: [Host] = []
-    private(set) var hostUpdates: [String: HostUpdate] = [:]
+    // What the servers hold
+    private(set) var servers: [Server] = []
+    private(set) var serverUpdates: [String: ServerUpdate] = [:]
     private(set) var projects: [Project] = []
     private(set) var threads: [String: ThreadInfo] = [:]
 
@@ -90,7 +90,7 @@ final class AppStore {
     private(set) var selection: Selection = .draft("")
     private(set) var activity = Activity()
     private(set) var transcriptIsEmpty = true
-    /// The drafts whose first message is on its way to the host.
+    /// The drafts whose first message is on its way to the server.
     private(set) var sendingDraftIDs: Set<String> = []
     var errorMessage: String?
     private(set) var threadDrafts: [ThreadDraft] = []
@@ -135,7 +135,7 @@ final class AppStore {
             "platform": "macos",
             "local_only": environment["MOTILE_LOCAL"] == "1",
         ]
-        if let address = environment["MOTILE_HOST_ADDR"] { config["direct_addr"] = address }
+        if let address = environment["MOTILE_SERVER_ADDR"] { config["direct_addr"] = address }
         if !core.start(config: config) {
             errorMessage = "Motile couldn't start. Its data folder may not be writable."
         }
@@ -155,13 +155,13 @@ final class AppStore {
                 self?.ready = true
                 self?.ensureDraftProject()
             }
-        case "hosts":
-            let hosts = event.objects("hosts").map { Host(json: $0) }
-            return { [weak self] in self?.apply(hosts: hosts) }
+        case "servers":
+            let servers = event.objects("servers").map { Server(json: $0) }
+            return { [weak self] in self?.apply(servers: servers) }
         case "threads":
-            let hostID = event.string("host_id")
+            let serverID = event.string("server_id")
             let threads = event.objects("threads").map { ThreadInfo(json: $0) }
-            return { [weak self] in self?.apply(threads: threads, hostID: hostID) }
+            return { [weak self] in self?.apply(threads: threads, serverID: serverID) }
         case "thread_upsert":
             let thread = ThreadInfo(json: event.object("thread") ?? [:])
             return { [weak self] in self?.upsert(thread) }
@@ -169,14 +169,14 @@ final class AppStore {
             let threadID = event.string("thread_id")
             return { [weak self] in self?.removeThread(threadID) }
         case "projects":
-            let hostID = event.string("host_id")
-            let projects = event.objects("projects").map { Project(json: $0, hostID: hostID) }
-            return { [weak self] in self?.apply(projects: projects, hostID: hostID) }
-        case "host_update":
-            let hostID = event.string("host_id")
+            let serverID = event.string("server_id")
+            let projects = event.objects("projects").map { Project(json: $0, serverID: serverID) }
+            return { [weak self] in self?.apply(projects: projects, serverID: serverID) }
+        case "server_update":
+            let serverID = event.string("server_id")
             let (received, total) = (event.double("received"), event.optionalDouble("total"))
             return { [weak self] in
-                self?.hostUpdates[hostID]?.fraction = total.flatMap { $0 > 0 ? received / $0 : nil }
+                self?.serverUpdates[serverID]?.fraction = total.flatMap { $0 > 0 ? received / $0 : nil }
             }
         case "media_progress":
             let (id, received, size) = (event.string("id"), event.double("received"), event.double("size"))
@@ -229,25 +229,25 @@ final class AppStore {
         }
     }
 
-    private func apply(hosts: [Host]) {
-        self.hosts = hosts
-        let known = Set(hosts.map(\.id))
-        projects.removeAll { !known.contains($0.hostID) }
-        threads = threads.filter { known.contains($0.value.hostID) }
-        // A host that is back with another version has finished updating.
-        for host in hosts where host.state == .connected {
-            guard let update = hostUpdates[host.id], update.restarting, host.version != update.from else { continue }
-            hostUpdates[host.id] = nil
+    private func apply(servers: [Server]) {
+        self.servers = servers
+        let known = Set(servers.map(\.id))
+        projects.removeAll { !known.contains($0.serverID) }
+        threads = threads.filter { known.contains($0.value.serverID) }
+        // A server that is back with another version has finished updating.
+        for server in servers where server.state == .connected {
+            guard let update = serverUpdates[server.id], update.restarting, server.version != update.from else { continue }
+            serverUpdates[server.id] = nil
         }
         ensureDraftProject()
-        // The host has arrived; the install command has done its job.
-        if showsAddHost, hosts.count > addHostCount {
-            showsAddHost = false
+        // The server has arrived; the install command has done its job.
+        if showsAddServer, servers.count > addServerCount {
+            showsAddServer = false
         }
     }
 
-    private func apply(threads new: [ThreadInfo], hostID: String) {
-        threads = threads.filter { $0.value.hostID != hostID }
+    private func apply(threads new: [ThreadInfo], serverID: String) {
+        threads = threads.filter { $0.value.serverID != serverID }
         for thread in new { threads[thread.id] = thread }
         if case .thread(let id) = selection, threads[id] == nil {
             openEmptyDraft()
@@ -268,8 +268,8 @@ final class AppStore {
         if selection == .thread(id) { openEmptyDraft() }
     }
 
-    private func apply(projects new: [Project], hostID: String) {
-        projects.removeAll { $0.hostID == hostID }
+    private func apply(projects new: [Project], serverID: String) {
+        projects.removeAll { $0.serverID == serverID }
         projects.append(contentsOf: new)
         projects.sort { $0.createdAt < $1.createdAt }
         ImageFiles.shared.warm(new.compactMap(\.iconPath))
@@ -328,19 +328,19 @@ final class AppStore {
         return projects.sorted { (lastUsed[$0.id] ?? $0.createdAt, $0.id) > (lastUsed[$1.id] ?? $1.createdAt, $1.id) }
     }
 
-    func host(_ id: String?) -> Host? {
-        hosts.first { $0.id == id }
+    func server(_ id: String?) -> Server? {
+        servers.first { $0.id == id }
     }
 
-    /// The host the composer is talking to: the open thread's, or the open draft's project's.
-    var composerHost: Host? {
-        if let thread = selectedThread { return host(thread.hostID) }
-        return host(project(selectedDraft?.projectID)?.hostID) ?? hosts.first
+    /// The server the composer is talking to: the open thread's, or the open draft's project's.
+    var composerServer: Server? {
+        if let thread = selectedThread { return server(thread.serverID) }
+        return server(project(selectedDraft?.projectID)?.serverID) ?? servers.first
     }
 
     /// The models the composer offers: an open thread stays with its agent.
     var composerModels: [ModelInfo] {
-        let models = composerHost?.models ?? []
+        let models = composerServer?.models ?? []
         guard let thread = selectedThread else { return models }
         return models.filter { $0.agent == thread.agent }
     }
@@ -503,14 +503,14 @@ final class AppStore {
         core.send("sign_out")
     }
 
-    // MARK: Hosts
+    // MARK: Servers
 
-    @ObservationIgnored private var addHostCount = 0
+    @ObservationIgnored private var addServerCount = 0
 
-    /// Asks for an install command and keeps looking for the host it will link.
-    func prepareToAddHost() {
-        addHostCount = hosts.count
-        core.send("watch_hosts", ["on": true])
+    /// Asks for an install command and keeps looking for the server it will link.
+    func prepareToAddServer() {
+        addServerCount = servers.count
+        core.send("watch_servers", ["on": true])
         if let token = enrollToken, token.expiresAt - Date().timeIntervalSince1970 > 600 { return }
         core.send("create_enroll_token") { [weak self] result in
             switch result {
@@ -520,73 +520,73 @@ final class AppStore {
         }
     }
 
-    func stopAddingHost() {
-        core.send("watch_hosts", ["on": false])
-        // A token links one host; the next host gets a new one.
-        if hosts.count != addHostCount { enrollToken = nil }
+    func stopAddingServer() {
+        core.send("watch_servers", ["on": false])
+        // A token links one server; the next server gets a new one.
+        if servers.count != addServerCount { enrollToken = nil }
     }
 
-    /// Whether the host runs an older version than the newest release.
-    func isOutdated(_ host: Host) -> Bool {
-        host.state == .connected && Version.isOlder(host.version, than: updater.latest)
+    /// Whether the server runs an older version than the newest release.
+    func isOutdated(_ server: Server) -> Bool {
+        server.state == .connected && Version.isOlder(server.version, than: updater.latest)
     }
 
-    /// Has the host install the newest release and start it.
-    func update(_ host: Host) {
-        guard hostUpdates[host.id] == nil else { return }
-        hostUpdates[host.id] = HostUpdate(from: host.version)
-        core.send("update_host", ["host_id": host.id]) { [weak self] result in
+    /// Has the server install the newest release and start it.
+    func update(_ server: Server) {
+        guard serverUpdates[server.id] == nil else { return }
+        serverUpdates[server.id] = ServerUpdate(from: server.version)
+        core.send("update_server", ["server_id": server.id]) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success:
-                self.hostUpdates[host.id]?.restarting = true
-                // If the host never says it is back, the row stops waiting for it.
+                self.serverUpdates[server.id]?.restarting = true
+                // If the server never says it is back, the row stops waiting for it.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
-                    if self?.hostUpdates[host.id]?.restarting == true { self?.hostUpdates[host.id] = nil }
+                    if self?.serverUpdates[server.id]?.restarting == true { self?.serverUpdates[server.id] = nil }
                 }
             case .failure(let error):
-                self.hostUpdates[host.id] = nil
+                self.serverUpdates[server.id] = nil
                 self.errorMessage = error.message
             }
         }
     }
 
-    func removeHost(_ host: Host) {
-        core.send("remove_host", ["host_id": host.id]) { [weak self] result in
+    func removeServer(_ server: Server) {
+        core.send("remove_server", ["server_id": server.id]) { [weak self] result in
             if case .failure(let error) = result { self?.errorMessage = error.message }
         }
     }
 
     // MARK: Projects
 
-    func listFolder(hostID: String, path: String?, icons: Bool = false, done: @escaping (Result<RemoteFolder, CoreBridge.CoreError>) -> Void) {
+    func listFolder(serverID: String, path: String?, icons: Bool = false, done: @escaping (Result<RemoteFolder, CoreBridge.CoreError>) -> Void) {
         var request: JSON = ["type": "list_dir", "icons": icons]
         if let path { request["path"] = path }
-        core.send("request", ["host_id": hostID, "request": request]) { result in
+        core.send("request", ["server_id": serverID, "request": request]) { result in
             done(result.map { RemoteFolder(json: $0) })
         }
     }
 
-    func addProject(hostID: String, path: String) {
-        request(hostID, ["type": "add_project", "path": path]) { [weak self] in
+    func addProject(serverID: String, path: String) {
+        request(serverID, ["type": "add_project", "path": path]) { [weak self] in
             guard let self else { return }
             // The new project is the one the next thread starts in.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
-                guard let project = self.projects.first(where: { $0.hostID == hostID && $0.path == trimmed }) else { return }
+                guard let project = self.projects.first(where: { $0.serverID == serverID && $0.path == trimmed }) else { return }
                 self.setNewThreadProject(project.id)
             }
         }
     }
 
     func removeProject(_ project: Project) {
-        request(project.hostID, ["type": "remove_project", "project_id": project.id])
+        request(project.serverID, ["type": "remove_project", "project_id": project.id])
     }
 
-    /// Makes an image on the project's host its icon. Without one, the project goes back to the
+    /// Makes an image on the project's server its icon. Without one, the project goes back to the
     /// icon found in its folder.
     func setIcon(of project: Project, to path: String?) {
-        var command: JSON = ["host_id": project.hostID, "project_id": project.id]
+        var command: JSON = ["server_id": project.serverID, "project_id": project.id]
         if let path { command["path"] = path }
         core.send("set_project_icon", command) { [weak self] result in
             if case .failure(let error) = result { self?.errorMessage = error.message }
@@ -596,7 +596,7 @@ final class AppStore {
     // MARK: Command panel
 
     func openPanel(_ page: PanelPage) {
-        guard account.signedIn, !hosts.isEmpty else { return }
+        guard account.signedIn, !servers.isEmpty else { return }
         panel = page
     }
 
@@ -638,7 +638,7 @@ final class AppStore {
         openThreadID = thread.id
         transcript.begin(threadID: thread.id)
         defaults.set(thread.id, forKey: "selection")
-        core.send("open_thread", ["host_id": thread.hostID, "thread_id": thread.id])
+        core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id])
         core.send("mark_seen", ["thread_id": thread.id])
     }
 
@@ -669,7 +669,7 @@ final class AppStore {
     }
 
     var canSend: Bool {
-        guard !sendingDraftIDs.contains(draftKey), let host = composerHost, host.state == .connected else { return false }
+        guard !sendingDraftIDs.contains(draftKey), let server = composerServer, server.state == .connected else { return false }
         if selectedThread == nil && project(selectedDraft?.projectID) == nil { return false }
         return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
@@ -682,11 +682,11 @@ final class AppStore {
         var command: JSON = ["text": text, "files": files]
         let existing = selectedThread
         if let thread = existing {
-            command["host_id"] = thread.hostID
+            command["server_id"] = thread.serverID
             command["thread_id"] = thread.id
         } else {
             guard let draft = selectedDraft, let project = project(draft.projectID), let model = composerModel else {
-                errorMessage = "This host has no agent installed. Install Claude Code or Codex on it and try again."
+                errorMessage = "This server has no agent installed. Install Claude Code or Codex on it and try again."
                 return
             }
             var settings: JSON = [
@@ -697,13 +697,13 @@ final class AppStore {
                 "plan": draft.plan,
             ]
             if let effort = composerEffort { settings["effort"] = effort }
-            command["host_id"] = project.hostID
+            command["server_id"] = project.serverID
             command["new_thread"] = settings
             sendingDraftIDs.insert(draft.id)
             activity = Activity.starting
             transcript.setActivity(activity)
         }
-        let hostID = command.string("host_id")
+        let serverID = command.string("server_id")
         draft = ""
         attachments = []
         transcript.setPending(text)
@@ -725,14 +725,14 @@ final class AppStore {
                 self.transcript.setActivity(self.activity)
             case .success(let value):
                 guard existing == nil else { return }
-                self.openNewThread(id: value.string("thread_id"), hostID: hostID, draftID: key)
+                self.openNewThread(id: value.string("thread_id"), serverID: serverID, draftID: key)
             }
         }
     }
 
     /// Replaces a draft with the thread its first message created. If the draft is still open,
     /// the thread opens in its place with the message kept on screen.
-    private func openNewThread(id: String, hostID: String, draftID: String) {
+    private func openNewThread(id: String, serverID: String, draftID: String) {
         let wasOpen = selection == .draft(draftID)
         removeDraft(draftID)
         guard wasOpen else { return }
@@ -740,17 +740,17 @@ final class AppStore {
         openThreadID = id
         defaults.set(id, forKey: "selection")
         transcript.adopt(threadID: id)
-        core.send("open_thread", ["host_id": hostID, "thread_id": id])
+        core.send("open_thread", ["server_id": serverID, "thread_id": id])
         core.send("mark_seen", ["thread_id": id])
     }
 
     // MARK: Images and videos
 
     /// The file of an image or a video the open thread shows. The core fetches it from the
-    /// thread's host if this Mac doesn't have it.
+    /// thread's server if this Mac doesn't have it.
     func media(_ id: String, done: @escaping (URL?) -> Void) {
         guard let thread = selectedThread else { return done(nil) }
-        core.send("media", ["host_id": thread.hostID, "id": id]) { result in
+        core.send("media", ["server_id": thread.serverID, "id": id]) { result in
             guard case .success(let value) = result, let path = value["path"] as? String else { return done(nil) }
             done(URL(fileURLWithPath: path))
         }
@@ -764,14 +764,14 @@ final class AppStore {
         }
     }
 
-    /// Removes the images and videos kept on this Mac. The hosts still have them.
+    /// Removes the images and videos kept on this Mac. The servers still have them.
     func clearMedia() {
         core.send("clear_media") { [weak self] _ in self?.refreshMediaStorage() }
     }
 
     func stop() {
         guard let thread = selectedThread else { return }
-        request(thread.hostID, ["type": "stop", "thread_id": thread.id])
+        request(thread.serverID, ["type": "stop", "thread_id": thread.id])
     }
 
     /// Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by
@@ -779,7 +779,7 @@ final class AppStore {
     func answer(_ approval: Approval, allow: Bool, answers: [String: String] = [:]) {
         guard let thread = selectedThread else { return }
         let answer: JSON = ["type": "answer", "thread_id": thread.id, "approval_id": approval.id, "allow": allow, "answers": answers]
-        request(thread.hostID, answer)
+        request(thread.serverID, answer)
     }
 
     func rename(_ thread: ThreadInfo, to title: String) {
@@ -789,7 +789,7 @@ final class AppStore {
     }
 
     func delete(_ thread: ThreadInfo) {
-        request(thread.hostID, ["type": "delete", "thread_id": thread.id])
+        request(thread.serverID, ["type": "delete", "thread_id": thread.id])
     }
 
     func setModel(_ model: ModelInfo) {
@@ -871,18 +871,18 @@ final class AppStore {
         setDone(notice.threadIDs, done: false)
     }
 
-    /// Changes a thread on its host, and here at once so the app doesn't wait for the answer.
+    /// Changes a thread on its server, and here at once so the app doesn't wait for the answer.
     private func update(_ thread: ThreadInfo, _ change: JSON, locally: (inout ThreadInfo) -> Void) {
         var changed = thread
         locally(&changed)
         threads[thread.id] = changed
-        request(thread.hostID, ["type": "update", "thread_id": thread.id, "change": change], failed: { [weak self] in
+        request(thread.serverID, ["type": "update", "thread_id": thread.id, "change": change], failed: { [weak self] in
             self?.threads[thread.id] = thread
         })
     }
 
-    private func request(_ hostID: String, _ request: JSON, done: (() -> Void)? = nil, failed: (() -> Void)? = nil) {
-        core.send("request", ["host_id": hostID, "request": request]) { [weak self] result in
+    private func request(_ serverID: String, _ request: JSON, done: (() -> Void)? = nil, failed: (() -> Void)? = nil) {
+        core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
             switch result {
             case .success: done?()
             case .failure(let error):
@@ -920,7 +920,7 @@ final class AppStore {
 }
 
 extension Activity {
-    /// What is shown between sending a first message and the host saying the turn runs.
+    /// What is shown between sending a first message and the server saying the turn runs.
     static var starting: Activity {
         var activity = Activity()
         activity.running = true

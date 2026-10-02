@@ -61,7 +61,7 @@ struct SettingsView: View {
                 }
 
                 if store.account.signedIn {
-                    hosts
+                    servers
                     projects
                 }
             }
@@ -71,34 +71,34 @@ struct SettingsView: View {
         .onAppear { store.refreshMediaStorage() }
     }
 
-    /// The hosts keep every image and video; the ones on this Mac only make threads open with them.
+    /// The servers keep every image and video; the ones on this Mac only make threads open with them.
     private var storageDescription: String {
         guard let storage = store.mediaStorage else { return "Kept on this Mac so threads open with them" }
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         formatter.allowsNonnumericFormatting = false
         let (used, limit) = (formatter.string(fromByteCount: storage.used), formatter.string(fromByteCount: storage.limit))
-        return "\(used) of \(limit) on this Mac. Your hosts keep them all."
+        return "\(used) of \(limit) on this Mac. Your servers keep them all."
     }
 
-    private var hosts: some View {
-        SettingsSection("Hosts") {
-            ForEach(store.hosts) { host in
+    private var servers: some View {
+        SettingsSection("Servers") {
+            ForEach(store.servers) { server in
                 SettingsRow {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(host.name)
-                        Text(description(of: host))
+                        Text(server.name)
+                        Text(description(of: server))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 } trailing: {
-                    HostUpdateStatus(host: host) { EmptyView() }
-                    Button("Remove") { store.removeHost(host) }
+                    ServerUpdateStatus(server: server) { EmptyView() }
+                    Button("Remove") { store.removeServer(server) }
                 }
                 SettingsDivider()
             }
             SettingsRow {
-                Button("Add a Host…") { store.showsAddHost = true }
+                Button("Add a Server…") { store.showsAddServer = true }
             } trailing: {
                 EmptyView()
             }
@@ -130,21 +130,21 @@ struct SettingsView: View {
             }
             SettingsRow {
                 Button("Add a Project…") { store.showsFolderPicker = true }
-                    .disabled(store.hosts.isEmpty)
+                    .disabled(store.servers.isEmpty)
             } trailing: {
                 EmptyView()
             }
         }
     }
 
-    private func description(of host: Host) -> String {
-        let agents = host.agents.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.name) \($0.value)" }
+    private func description(of server: Server) -> String {
+        let agents = server.agents.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.name) \($0.value)" }
         let installed = agents.isEmpty ? "no agent installed" : agents.joined(separator: ", ")
-        switch host.state {
-        case .connected: return "Connected · version \(host.version) · \(installed)"
+        switch server.state {
+        case .connected: return "Connected · version \(server.version) · \(installed)"
         case .connecting: return "Connecting…"
         case .disconnected: return "Offline"
-        case .refused: return "This host no longer accepts this Mac"
+        case .refused: return "This server no longer accepts this Mac"
         }
     }
 }

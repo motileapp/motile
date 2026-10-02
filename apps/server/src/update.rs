@@ -1,4 +1,4 @@
-//! Replaces the host's own program with the one in the latest release, and starts it again.
+//! Replaces the server's own program with the one in the latest release, and starts it again.
 
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
@@ -97,7 +97,7 @@ async fn replace(program: &Path, new_program: &Path) -> anyhow::Result<()> {
         .await;
     if !moved.is_ok_and(|status| status.success()) {
         bail!(
-            "This host may not replace {}. Run the install command on the machine again to update it.",
+            "This server may not replace {}. Run the install command on the machine again to update it.",
             program.display()
         );
     }
@@ -126,7 +126,7 @@ pub async fn restart_requested() -> PathBuf {
 /// Starts `program` in this process's place, with the arguments this process was given.
 pub fn restart(program: &Path) -> ! {
     let error = std::process::Command::new(program).args(std::env::args_os().skip(1)).exec();
-    tracing::error!("couldn't start the updated host: {error}");
+    tracing::error!("couldn't start the updated server: {error}");
     std::process::exit(1)
 }
 

@@ -50,8 +50,8 @@ struct MotileApp: App {
                     .disabled(!store.activity.busy)
                 Divider()
                 Button("Add a Project…") { store.showsFolderPicker = true }
-                    .disabled(store.hosts.isEmpty)
-                Button("Add a Host…") { store.showsAddHost = true }
+                    .disabled(store.servers.isEmpty)
+                Button("Add a Server…") { store.showsAddServer = true }
                     .disabled(!store.account.signedIn)
             }
         }
@@ -110,8 +110,8 @@ struct RootView: View {
                 Color.clear
             } else if !store.account.signedIn {
                 SignInView()
-            } else if store.hosts.isEmpty {
-                ConnectHostView(isFirst: true)
+            } else if store.servers.isEmpty {
+                ConnectServerView(isFirst: true)
             } else {
                 MainView()
             }
@@ -127,8 +127,8 @@ struct RootView: View {
                     .id(page)
             }
         }
-        .sheet(isPresented: $store.showsAddHost) {
-            ConnectHostView(isFirst: false)
+        .sheet(isPresented: $store.showsAddServer) {
+            ConnectServerView(isFirst: false)
                 .frame(width: 620)
                 .background(Color.themeBackground)
         }

@@ -43,7 +43,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     private static let checkEvery: TimeInterval = 6 * 3600
 
     private(set) var state = State.idle
-    /// The newest release's version. The hosts are compared with it as well.
+    /// The newest release's version. The servers are compared with it as well.
     private(set) var latest: String?
     let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
 

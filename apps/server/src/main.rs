@@ -34,7 +34,7 @@ enum CliCommand {
         token: Option<String>,
         #[arg(long, env = "MOTILE_AUTH_URL", default_value = DEFAULT_AUTH_URL)]
         auth_url: String,
-        /// How the host appears in the app. Defaults to the hostname.
+        /// How the server appears in the app. Defaults to the hostname.
         #[arg(long)]
         name: Option<String>,
         /// Ask nothing.
@@ -55,7 +55,7 @@ enum CliCommand {
         #[arg(long)]
         port: Option<u16>,
     },
-    /// Shows this host's key, account, agents and service.
+    /// Shows this server's key, account, agents and service.
     Status,
     /// Follows the service's log.
     Logs,
@@ -123,7 +123,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         None => None,
     };
     if account.is_none() && allow_keys.is_empty() {
-        tracing::warn!("this host isn't linked to an account, so no app may connect; run `motile setup <token>`");
+        tracing::warn!("this server isn't linked to an account, so no app may connect; run `motile setup <token>`");
     }
     let access = Access::new(allow_keys, account);
     access.keep_fresh();
@@ -149,7 +149,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         _ = tokio::signal::ctrl_c() => {}
         _ = terminated() => {}
         program = update::restart_requested() => {
-            // Hanging up first tells the apps to dial again, which the new host answers.
+            // Hanging up first tells the apps to dial again, which the new server answers.
             endpoint.close().await;
             update::restart(&program)
         }
@@ -167,14 +167,14 @@ async fn terminated() {
 
 async fn status(data_dir: &DataDir) -> anyhow::Result<()> {
     let device_key = data_dir.device_key()?;
-    println!("Host key:  {}", device_key.public());
+    println!("Key:       {}", device_key.public());
     match data_dir.account() {
         Some(account) => {
             println!("Account:   {} at {}", account.email, account.auth_url);
-            // The app can remove this host; only the auth server knows.
+            // The app can remove this server; only the auth server knows.
             match AuthClient::new(&account.auth_url).me(&device_key).await {
                 Ok(me) if me.user.is_some() => {}
-                Ok(_) => println!("           It no longer lists this host. Link it again from the app."),
+                Ok(_) => println!("           It no longer lists this server. Link it again from the app."),
                 Err(error) => println!("           Couldn't check with it: {error:#}"),
             }
         }

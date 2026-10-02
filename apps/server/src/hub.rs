@@ -17,8 +17,8 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, Agent, HostInfo, Item, ItemKind, Message, NewThread, Project, Thread, ThreadChange, ToolCall, ToolStatus,
-    TurnSummary,
+    Activity, Agent, Item, ItemKind, Message, NewThread, Project, ServerInfo, Thread, ThreadChange, ToolCall,
+    ToolStatus, TurnSummary,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -106,8 +106,8 @@ impl Hub {
         Ok(Arc::new(Self { store, media, environment, threads: Mutex::new(threads), projects, list_updates }))
     }
 
-    pub fn host_info(&self) -> HostInfo {
-        HostInfo {
+    pub fn server_info(&self) -> ServerInfo {
+        ServerInfo {
             version: env!("CARGO_PKG_VERSION").to_string(),
             protocol: motile_protocol::PROTOCOL_VERSION,
             hostname: Environment::hostname(),
@@ -123,7 +123,7 @@ impl Hub {
         list.sort_by(|a, b| b.updated_at.total_cmp(&a.updated_at));
         ListSubscription {
             first: Message::Welcome {
-                host: self.host_info(),
+                server: self.server_info(),
                 threads: list,
                 projects: projects(&self.projects.lock().await),
             },
@@ -137,7 +137,7 @@ impl Hub {
         let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
         live.flush(&self.store)?;
         let rev = live.stored.thread.rev;
-        // An app ahead of the host has a copy from before the host's data was replaced.
+        // An app ahead of the server has a copy from before the server's data was replaced.
         let reset = since > rev;
         let items = self.store.items_since(thread_id, if reset { 0 } else { since })?;
         Ok(ThreadSubscription { reset, activity: live.activity.clone(), items, rev, updates: live.updates.subscribe() })
@@ -193,7 +193,7 @@ impl Hub {
         let project = projects
             .iter()
             .find(|project| project.id == new_thread.project_id)
-            .context("That project is no longer on the host.")?;
+            .context("That project is no longer on the server.")?;
         let created_at = now();
         let thread = Thread {
             id: new_id(),
@@ -400,7 +400,7 @@ impl Hub {
     pub async fn add_project(&self, path: &str) -> anyhow::Result<()> {
         let path = if path.len() > 1 { path.trim_end_matches('/') } else { path };
         if !Path::new(path).is_absolute() || !Path::new(path).is_dir() {
-            bail!("{path} isn't a folder on the host.");
+            bail!("{path} isn't a folder on the server.");
         }
         let mut projects = self.projects.lock().await;
         if projects.iter().any(|project| project.path == path) {
@@ -440,7 +440,7 @@ impl Hub {
         let project = projects
             .iter_mut()
             .find(|project| project.id == project_id)
-            .context("That project is no longer on the host.")?;
+            .context("That project is no longer on the server.")?;
         match path {
             Some(path) => {
                 if icons::version(&path).is_none() {
@@ -575,8 +575,10 @@ impl Hub {
 
     fn spawn(&self, turn: &Turn, cwd: &str) -> anyhow::Result<Child> {
         let name = executable_name(turn.agent);
-        let executable =
-            self.environment.executable(turn.agent).with_context(|| format!("{name} isn't installed on this host."))?;
+        let executable = self
+            .environment
+            .executable(turn.agent)
+            .with_context(|| format!("{name} isn't installed on this server."))?;
         if !Path::new(cwd).is_dir() {
             bail!("The folder {cwd} no longer exists.");
         }
@@ -1021,7 +1023,7 @@ impl Live {
         let agent = agent_name(self.stored.thread.agent);
         let message = match (details.is_empty(), exit_code) {
             (false, _) if details.contains(ROOT_BYPASS_REFUSAL) => {
-                "Claude Code refuses full access when the host runs as root. Run `motile setup` again on the host \
+                "Claude Code refuses full access when the server runs as root. Run `motile setup` again on the server \
                  to fix the service."
                     .to_string()
             }

@@ -1,5 +1,5 @@
 //! What the one-line installer runs after downloading the binary: makes sure there is an agent to
-//! drive, links the host to the account behind the token, and runs it as a systemd service.
+//! drive, links the server to the account behind the token, and runs it as a systemd service.
 
 use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -34,7 +34,7 @@ pub async fn setup(data_dir: &DataDir, options: Options) -> anyhow::Result<()> {
     ensure_agents(options.assume_defaults).await?;
     enroll(data_dir, &options).await?;
     if options.skip_service {
-        println!("Skipped the service. Start the host with: motile run");
+        println!("Skipped the service. Start the server with: motile run");
         return Ok(());
     }
     install_service(data_dir)?;
@@ -113,7 +113,7 @@ async fn enroll(data_dir: &DataDir, options: &Options) -> anyhow::Result<()> {
                 println!("Already linked to {}.", account.email);
                 Ok(())
             }
-            None => bail!("This host isn't linked to an account yet. Copy the install command from the Motile app."),
+            None => bail!("This server isn't linked to an account yet. Copy the install command from the Motile app."),
         };
     };
     let key = data_dir.device_key()?;
@@ -150,7 +150,7 @@ pub fn unit(binary: &Path, data_dir: &Path, user: &str) -> String {
     let sandbox = if user == "root" { format!("Environment={SANDBOX_VARIABLE}=1\n") } else { String::new() };
     format!(
         "[Unit]\n\
-         Description=Motile host\n\
+         Description=Motile server\n\
          After=network-online.target\n\
          Wants=network-online.target\n\
          \n\
@@ -170,7 +170,7 @@ pub fn unit(binary: &Path, data_dir: &Path, user: &str) -> String {
 
 fn install_service(data_dir: &DataDir) -> anyhow::Result<()> {
     if !has_systemd() {
-        println!("systemd isn't running here, so there is no service. Start the host with: motile run");
+        println!("systemd isn't running here, so there is no service. Start the server with: motile run");
         return Ok(());
     }
     if is_root() {

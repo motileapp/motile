@@ -51,9 +51,9 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
-        guard let host = store.composerHost else { return "Ask anything" }
-        if host.state != .connected { return "Waiting for \(host.name) to connect…" }
-        if host.models.isEmpty && host.known { return "Install Claude Code or Codex on \(host.name) to start" }
+        guard let server = store.composerServer else { return "Ask anything" }
+        if server.state != .connected { return "Waiting for \(server.name) to connect…" }
+        if server.models.isEmpty && server.known { return "Install Claude Code or Codex on \(server.name) to start" }
         if store.activity.running { return "Send a follow-up; it starts when this turn ends" }
         return "Ask anything, or describe what to build"
     }

@@ -172,7 +172,7 @@ def long_reply():
     ]
     steps = """Try it first:
 
-1. **Install it** (on the host):
+1. **Install it** (on the server):
 
    ```sh
    pip install -e .

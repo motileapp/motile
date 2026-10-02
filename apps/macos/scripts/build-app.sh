@@ -55,7 +55,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSSupportsAutomaticTermination</key><false/>
-    <key>NSLocalNetworkUsageDescription</key><string>Motile connects straight to your host when it is on the same network.</string>
+    <key>NSLocalNetworkUsageDescription</key><string>Motile connects straight to your server when it is on the same network.</string>
     <key>MotileAuthURL</key><string>${MOTILE_AUTH_URL:-https://auth.motile.app}</string>
 </dict>
 </plist>

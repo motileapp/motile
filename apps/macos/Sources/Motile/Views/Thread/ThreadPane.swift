@@ -62,13 +62,13 @@ struct ThreadPane: View {
             .withoutSystemGlass()
         }
         .sheet(isPresented: $store.showsFolderPicker) {
-            if let host = store.composerHost {
-                FolderPicker(host: host)
+            if let server = store.composerServer {
+                FolderPicker(server: server)
             }
         }
         .sheet(item: $store.iconProject) { project in
-            if let host = store.host(project.hostID) {
-                FolderPicker(host: host, iconFor: project)
+            if let server = store.server(project.serverID) {
+                FolderPicker(server: server, iconFor: project)
             }
         }
     }
@@ -136,7 +136,7 @@ struct ThreadPane: View {
                 VStack(spacing: 10) {
                     Text("Add a project to start")
                         .font(.system(size: 28, weight: .regular))
-                    Text("A project is a folder on your host that threads work in.")
+                    Text("A project is a folder on your server that threads work in.")
                         .font(.system(size: 14))
                         .foregroundStyle(Color.themeSecondary)
                     Button {
@@ -145,14 +145,14 @@ struct ThreadPane: View {
                         Label("Add Project", systemImage: "folder.badge.plus")
                     }
                     .controlSize(.large)
-                    .disabled(!store.hosts.contains { $0.state == .connected })
+                    .disabled(!store.servers.contains { $0.state == .connected })
                     .padding(.top, 8)
                 }
             } else {
                 VStack(spacing: 8) {
                     headline
-                    if store.hosts.count > 1, let host = store.host(store.project(store.selectedDraft?.projectID)?.hostID) {
-                        HostLabel(host: host, size: 13)
+                    if store.servers.count > 1, let server = store.server(store.project(store.selectedDraft?.projectID)?.serverID) {
+                        ServerLabel(server: server, size: 13)
                     }
                 }
                 ComposerView()
@@ -174,7 +174,7 @@ struct ThreadPane: View {
                     Button {
                         store.setNewThreadProject(project.id)
                     } label: {
-                        let name = store.hosts.count > 1 ? "\(project.name) · \(store.host(project.hostID)?.name ?? "")" : project.name
+                        let name = store.servers.count > 1 ? "\(project.name) · \(store.server(project.serverID)?.name ?? "")" : project.name
                         Label {
                             Text(name)
                         } icon: {

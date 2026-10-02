@@ -40,7 +40,7 @@ pub struct SignIn {
 
 pub fn kind_text(kind: DeviceKind) -> &'static str {
     match kind {
-        DeviceKind::Host => "host",
+        DeviceKind::Server => "server",
         DeviceKind::Client => "client",
     }
 }
@@ -88,7 +88,7 @@ pub async fn me(db: &PgPool, user: &UserRow) -> Result<Me, sqlx::Error> {
     .await?;
     let devices = rows.into_iter().map(|row| Device {
         public_key: row.public_key,
-        kind: if row.kind == "host" { DeviceKind::Host } else { DeviceKind::Client },
+        kind: if row.kind == "server" { DeviceKind::Server } else { DeviceKind::Client },
         name: row.name,
         platform: row.platform,
         created_at: row.created_at.timestamp_millis() as f64 / 1000.0,
@@ -239,7 +239,7 @@ pub async fn create_enroll_token(db: &PgPool, user_id: Uuid, token_hash: &str) -
     Ok(expires_at)
 }
 
-/// Marks the token as used by the host and returns whose it is. A token works for one host.
+/// Marks the token as used by the server and returns whose it is. A token works for one server.
 pub async fn use_enroll_token(db: &PgPool, token_hash: &str, public_key: &str) -> Result<Option<Uuid>, sqlx::Error> {
     sqlx::query_scalar(
         "UPDATE enroll_tokens SET used_by = $2

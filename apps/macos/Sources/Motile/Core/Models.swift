@@ -65,7 +65,7 @@ struct ModelInfo: Equatable, Identifiable {
     }
 }
 
-struct Host: Equatable, Identifiable {
+struct Server: Equatable, Identifiable {
     enum State: String {
         case connecting, connected, disconnected, refused
     }
@@ -79,12 +79,12 @@ struct Host: Equatable, Identifiable {
     let path: String?
     let rttMs: Int?
     let home: String
-    /// The version of the host's program.
+    /// The version of the server's program.
     let version: String
     let models: [ModelInfo]
-    /// The agents installed on the host, with their versions.
+    /// The agents installed on the server, with their versions.
     let agents: [Agent: String]
-    /// Whether the host has ever told us about itself.
+    /// Whether the server has ever told us about itself.
     let known: Bool
 
     init(json: JSON) {
@@ -111,7 +111,7 @@ struct Host: Equatable, Identifiable {
 
 struct Project: Equatable, Identifiable {
     let id: String
-    let hostID: String
+    let serverID: String
     let path: String
     let name: String
     let branch: String?
@@ -119,9 +119,9 @@ struct Project: Equatable, Identifiable {
     let iconPath: String?
     let createdAt: Double
 
-    init(json: JSON, hostID: String) {
+    init(json: JSON, serverID: String) {
         id = json.string("id")
-        self.hostID = hostID
+        self.serverID = serverID
         path = json.string("path")
         name = json.string("name")
         branch = json.optionalString("branch")
@@ -168,7 +168,7 @@ enum Access: String, CaseIterable, Identifiable, Codable {
 
 struct ThreadInfo: Equatable, Identifiable {
     let id: String
-    let hostID: String
+    let serverID: String
     var title: String
     let projectID: String
     let cwd: String
@@ -190,7 +190,7 @@ struct ThreadInfo: Equatable, Identifiable {
 
     init(json: JSON) {
         id = json.string("id")
-        hostID = json.string("host_id")
+        serverID = json.string("server_id")
         title = json.string("title")
         projectID = json.string("project_id")
         cwd = json.string("cwd")

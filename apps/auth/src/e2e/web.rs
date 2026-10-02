@@ -129,24 +129,24 @@ async fn a_session_token_is_stored_hashed_and_stops_working_once_expired_or_sign
 }
 
 #[sqlx::test]
-async fn a_session_adds_hosts_and_removes_devices_of_its_own_account_only(db: PgPool) {
+async fn a_session_adds_servers_and_removes_devices_of_its_own_account_only(db: PgPool) {
     let auth = Auth::start(db).await;
     let ann = session(&auth, &ANN).await;
     let bob = session(&auth, &BOB).await;
-    let host = DeviceKey::generate();
+    let server = DeviceKey::generate();
 
     let token: EnrollToken = call(&auth, Method::POST, "/api/enroll-tokens", &ann).await.json().await.unwrap();
     assert!(token.command.ends_with(&format!("sh -s -- {}", token.token)), "{}", token.command);
-    auth.client.enroll(&host, &token.token, &LINUX).await.unwrap();
+    auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
     assert_eq!(names(&me(&auth, &ann).await), vec!["build-box"]);
 
-    let path = format!("/api/devices/{}", host.public());
+    let path = format!("/api/devices/{}", server.public());
     assert_eq!(call(&auth, Method::DELETE, &path, &bob).await.status(), StatusCode::NOT_FOUND);
     assert_eq!(me(&auth, &ann).await.devices.len(), 1);
 
     assert_eq!(call(&auth, Method::DELETE, &path, &ann).await.status(), StatusCode::OK);
     assert_eq!(me(&auth, &ann).await.devices, vec![]);
-    assert_eq!(auth.client.me(&host).await.unwrap().user, None);
+    assert_eq!(auth.client.me(&server).await.unwrap().user, None);
 }
 
 #[sqlx::test]

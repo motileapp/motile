@@ -4,7 +4,7 @@ import AppKit
 /// stays responsive. Runs only when `MOTILE_DEMO=1`.
 ///
 /// It expects an auth server that allows the dev login. Once signed in it writes the install
-/// token to `MOTILE_DEMO_TOKEN_FILE`; `scripts/ci-demo.sh` picks it up and starts a host with it,
+/// token to `MOTILE_DEMO_TOKEN_FILE`; `scripts/ci-demo.sh` picks it up and starts a server with it,
 /// whose agent is `scripts/fake-agent`.
 enum DemoDriver {
     private static var started = false
@@ -124,15 +124,15 @@ private final class Demo {
         store.devSignIn(email: "demo@motile.app")
         let signedIn = await expect("signing in leads to the install command") { store.account.signedIn && store.enrollToken != nil }
         guard signedIn else { return finish() }
-        await shoot("02-connect-host")
+        await shoot("02-connect-server")
 
-        // The install command's token goes to the script, which starts the host with it.
+        // The install command's token goes to the script, which starts the server with it.
         if let file = environment["MOTILE_DEMO_TOKEN_FILE"], let command = store.enrollToken?.command {
             let token = command.split(separator: " ").last.map(String.init) ?? ""
             try? token.write(toFile: file, atomically: true, encoding: .utf8)
         }
-        let connected = await expect("the host appears once the install command has run", within: 90) {
-            store.hosts.first?.state == .connected
+        let connected = await expect("the server appears once the install command has run", within: 90) {
+            store.servers.first?.state == .connected
         }
         guard connected else { return finish() }
         await shoot("03-add-project")
@@ -143,10 +143,10 @@ private final class Demo {
         store.showsFolderPicker = false
         await wait(0.6)
 
-        guard let host = store.hosts.first else { return finish() }
-        store.addProject(hostID: host.id, path: environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory())
-        await expect("a folder on the host becomes a project") { store.project(store.selectedDraft?.projectID) != nil }
-        await expect("the project's icon is fetched from the host") { store.project(store.selectedDraft?.projectID)?.iconPath != nil }
+        guard let server = store.servers.first else { return finish() }
+        store.addProject(serverID: server.id, path: environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory())
+        await expect("a folder on the server becomes a project") { store.project(store.selectedDraft?.projectID) != nil }
+        await expect("the project's icon is fetched from the server") { store.project(store.selectedDraft?.projectID)?.iconPath != nil }
         store.draft = "Add a rate limiter to the API"
         await shoot("04-new-thread")
 
@@ -244,7 +244,7 @@ private final class Demo {
         await expect("the agent reports what it watched and is done") { turnEnds == 3 && store.selectedThread?.busy == false }
         await shoot("07-monitored")
 
-        // An image the agent shows is fetched from the host and drawn in the reply.
+        // An image the agent shows is fetched from the server and drawn in the reply.
         store.startNewThread()
         send("Show the screenshot of the landing page.")
         await expect("an image the agent shows is a row of its reply") {
@@ -252,7 +252,7 @@ private final class Demo {
         }
         await wait(1)
         store.refreshMediaStorage()
-        await expect("the image is fetched from the host and kept on this Mac") { (store.mediaStorage?.used ?? 0) > 0 }
+        await expect("the image is fetched from the server and kept on this Mac") { (store.mediaStorage?.used ?? 0) > 0 }
         await shoot("07-image")
 
         // A long reply full of code, to see that the window keeps up.
@@ -329,7 +329,7 @@ private final class Demo {
         store.setDone([first], done: false)
         await expect("a thread marked undone is active again") { store.doneThreads.isEmpty }
         store.startNewThread()
-        store.draft = "Why is the sync slow on large threads?\n\nLook at how the host answers `Open` first:\n- what it reads from SQLite\n- how many items it sends"
+        store.draft = "Why is the sync slow on large threads?\n\nLook at how the server answers `Open` first:\n- what it reads from SQLite\n- how many items it sends"
         store.attach([URL(fileURLWithPath: "/tmp/motile-demo/api/greet.py")])
         await shoot("12-dark-new-thread")
 

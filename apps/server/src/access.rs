@@ -1,5 +1,5 @@
-//! Which devices may connect: the apps linked to the host's account, as listed by the auth
-//! server. The list is kept on disk so the host still accepts its apps while the auth server is
+//! Which devices may connect: the apps linked to the server's account, as listed by the auth
+//! server. The list is kept on disk so the server still accepts its apps while the auth server is
 //! unreachable.
 
 use std::collections::HashSet;
@@ -52,7 +52,7 @@ impl Access {
         if self.is_listed(public_key).await {
             return true;
         }
-        // It may have been linked a moment ago. Unknown devices can't make the host ask the auth
+        // It may have been linked a moment ago. Unknown devices can't make the server ask the auth
         // server more than once every few seconds.
         if self.refreshed_recently().await {
             return false;
@@ -61,7 +61,7 @@ impl Access {
         self.is_listed(public_key).await
     }
 
-    /// Whether the device is allowed as far as the host knows right now.
+    /// Whether the device is allowed as far as the server knows right now.
     pub async fn is_listed(&self, public_key: &str) -> bool {
         self.fixed.contains(public_key) || self.linked.read().await.contains(public_key)
     }
@@ -84,7 +84,7 @@ impl Access {
             }
         };
         if me.user.is_none() {
-            tracing::warn!("this host is no longer linked to an account; no app may connect");
+            tracing::warn!("this server is no longer linked to an account; no app may connect");
         }
         let apps = me.devices.into_iter().filter(|device| device.kind == DeviceKind::Client);
         let keys: HashSet<String> = apps.map(|device| device.public_key).collect();

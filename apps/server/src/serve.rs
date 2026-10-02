@@ -1,5 +1,5 @@
 //! The iroh endpoint apps connect to. A connection is accepted only from a device linked to the
-//! host's account; every stream on it carries one request.
+//! server's account; every stream on it carries one request.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -69,7 +69,7 @@ impl Server {
         let device = connection.remote_id().to_string();
         if !self.access.allows(&device).await {
             tracing::warn!(device, "refused a device that isn't linked");
-            connection.close(NOT_LINKED.into(), b"This device isn't linked to the host's account.");
+            connection.close(NOT_LINKED.into(), b"This device isn't linked to the server's account.");
             return;
         }
         tracing::info!(device, "app connected");
@@ -88,7 +88,7 @@ impl Server {
                 _ = recheck.tick() => {
                     if !self.access.is_listed(&device).await {
                         tracing::warn!(device, "closed a device that was removed from the account");
-                        connection.close(NOT_LINKED.into(), b"This device is no longer linked to the host's account.");
+                        connection.close(NOT_LINKED.into(), b"This device is no longer linked to the server's account.");
                         break;
                     }
                 }
@@ -102,7 +102,7 @@ impl Server {
         let hub = &self.hub;
         let reply = match request {
             Request::Subscribe => return follow_list(send, hub.subscribe().await).await,
-            Request::UpdateHost => return update_host(send, hub).await,
+            Request::UpdateServer => return update_server(send, hub).await,
             Request::Media { id } => return send_media(send, &hub.media, &id).await,
             Request::Open { thread_id, since } => match hub.open(&thread_id, since).await {
                 Ok(subscription) => return follow_thread(send, subscription).await,
@@ -126,7 +126,7 @@ impl Server {
             Request::SetProjectIcon { project_id, path } => {
                 hub.set_project_icon(&project_id, path).await.map(|_| Message::Ok)
             }
-            Request::ListDir { path, icons } => files::list_dir(path.as_deref(), &hub.host_info().home, icons),
+            Request::ListDir { path, icons } => files::list_dir(path.as_deref(), &hub.server_info().home, icons),
             Request::Upload { name, size } => {
                 let saved = files::receive_upload(&mut recv, &self.attachments, &name, size).await;
                 saved.map(|path| Message::Uploaded { path })
@@ -141,12 +141,12 @@ impl Server {
 
 /// Installs the latest release while telling the app how far the download is, then starts the
 /// new program in this one's place.
-async fn update_host(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
+async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     static UPDATING: AtomicBool = AtomicBool::new(false);
     let refusal = if hub.any_running().await {
-        Some("An agent is working on this host. Update it when the threads have finished.")
+        Some("An agent is working on this server. Update it when the threads have finished.")
     } else if UPDATING.swap(true, Ordering::SeqCst) {
-        Some("This host is already updating.")
+        Some("This server is already updating.")
     } else {
         None
     };
@@ -182,7 +182,7 @@ async fn update_host(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     }
     let _ = write_frame(&mut send, &Message::Ok).await;
     let _ = send.finish();
-    tracing::info!("updated; starting the new host");
+    tracing::info!("updated; starting the new server");
     tokio::time::sleep(RESTART_AFTER).await;
     update::request_restart(program);
     Ok(())

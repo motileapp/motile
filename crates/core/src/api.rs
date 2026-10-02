@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
-use motile_protocol::wire::{Activity, HostInfo, NewThread, Project, Request, Thread};
+use motile_protocol::wire::{Activity, NewThread, Project, Request, ServerInfo, Thread};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -20,7 +20,7 @@ pub struct Config {
     /// How this device appears in the account.
     pub device_name: String,
     pub platform: String,
-    /// No relays and no address lookup; every host is dialed at `direct_addr`. For tests and demos.
+    /// No relays and no address lookup; every server is dialed at `direct_addr`. For tests and demos.
     #[serde(default)]
     pub local_only: bool,
     #[serde(default)]
@@ -50,18 +50,18 @@ pub enum Command {
     },
     SignOut,
     RefreshAccount,
-    /// Asks the auth server about the account every couple of seconds, while waiting for a host.
-    WatchHosts {
+    /// Asks the auth server about the account every couple of seconds, while waiting for a server.
+    WatchServers {
         on: bool,
     },
     /// Answers with `token`, `command` and `expires_at`.
     CreateEnrollToken,
-    RemoveHost {
-        host_id: String,
+    RemoveServer {
+        server_id: String,
     },
     /// Sends the thread's rows from the cache, then keeps them current.
     OpenThread {
-        host_id: String,
+        server_id: String,
         thread_id: String,
     },
     CloseThread {
@@ -70,43 +70,43 @@ pub enum Command {
     MarkSeen {
         thread_id: String,
     },
-    /// Any request to a host; answers with the host's message.
+    /// Any request to a server; answers with the server's message.
     Request {
-        host_id: String,
+        server_id: String,
         request: Request,
     },
     /// Uploads `files` from this device, then sends the message. Answers with `thread_id`.
     Send {
-        host_id: String,
+        server_id: String,
         thread_id: Option<String>,
         new_thread: Option<NewThread>,
         text: String,
         #[serde(default)]
         files: Vec<String>,
     },
-    /// Has the host install the latest release and restart. `host_update` events say how far the
-    /// download is; the answer comes when the host is about to restart.
-    UpdateHost {
-        host_id: String,
+    /// Has the server install the latest release and restart. `server_update` events say how far the
+    /// download is; the answer comes when the server is about to restart.
+    UpdateServer {
+        server_id: String,
     },
-    /// Makes the image at `path` on the host the project's icon. Without `path` the project
+    /// Makes the image at `path` on the server the project's icon. Without `path` the project
     /// goes back to the icon found in its folder.
     SetProjectIcon {
-        host_id: String,
+        server_id: String,
         project_id: String,
         #[serde(default)]
         path: Option<String>,
     },
     /// Answers with the `path` of an image or a video on this device, once it is here: one that
-    /// isn't is fetched from the host, and `media_progress` events say how far that is.
+    /// isn't is fetched from the server, and `media_progress` events say how far that is.
     Media {
-        host_id: String,
+        server_id: String,
         id: String,
     },
     /// Answers with `media_bytes`, what the fetched images and videos take on this device, and
     /// `media_limit`, what they may take.
     Storage,
-    /// Removes the fetched images and videos. The hosts still have them.
+    /// Removes the fetched images and videos. The servers still have them.
     ClearMedia,
     /// Asks for the highlighting of the code in rows that came without it.
     Highlight {
@@ -126,14 +126,14 @@ pub enum Event {
     Account {
         account: AccountView,
     },
-    /// Everything known from last time has been sent: the account, hosts, projects and threads.
+    /// Everything known from last time has been sent: the account, servers, projects and threads.
     Restored,
-    Hosts {
-        hosts: Vec<HostView>,
+    Servers {
+        servers: Vec<ServerView>,
     },
-    /// All of a host's threads, replacing what the app had for it.
+    /// All of a server's threads, replacing what the app had for it.
     Threads {
-        host_id: String,
+        server_id: String,
         threads: Vec<ThreadView>,
     },
     ThreadUpsert {
@@ -143,16 +143,16 @@ pub enum Event {
         thread_id: String,
     },
     Projects {
-        host_id: String,
+        server_id: String,
         projects: Vec<ProjectView>,
     },
-    /// How far a host's download of its update is. `total` is missing when it isn't known.
-    HostUpdate {
-        host_id: String,
+    /// How far a server's download of its update is. `total` is missing when it isn't known.
+    ServerUpdate {
+        server_id: String,
         received: u64,
         total: Option<u64>,
     },
-    /// How much of an image or a video has arrived from its host.
+    /// How much of an image or a video has arrived from its server.
     MediaProgress {
         id: String,
         received: u64,
@@ -177,7 +177,7 @@ pub enum Event {
         /// The tool calls the turn waits with, worded for a person.
         waiting: Vec<Waiting>,
     },
-    /// The thread couldn't be opened on its host.
+    /// The thread couldn't be opened on its server.
     ThreadError {
         thread_id: String,
         message: String,
@@ -201,7 +201,7 @@ pub struct AccountView {
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
-pub struct HostView {
+pub struct ServerView {
     pub id: String,
     pub name: String,
     pub platform: String,
@@ -209,15 +209,15 @@ pub struct HostView {
     pub error: Option<String>,
     pub path: Option<PathKind>,
     pub rtt_ms: Option<u64>,
-    /// From the host itself; from the cache until it has connected.
-    pub info: Option<HostInfo>,
+    /// From the server itself; from the cache until it has connected.
+    pub info: Option<ServerInfo>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct ProjectView {
     #[serde(flatten)]
     pub project: Project,
-    /// The project's icon as a file on this device, once it has been fetched from the host.
+    /// The project's icon as a file on this device, once it has been fetched from the server.
     pub icon_path: Option<String>,
 }
 
@@ -225,7 +225,7 @@ pub struct ProjectView {
 pub struct ThreadView {
     #[serde(flatten)]
     pub thread: Thread,
-    pub host_id: String,
+    pub server_id: String,
     /// A turn ended since the user last looked at the thread on this device.
     pub unread: bool,
 }
@@ -236,36 +236,36 @@ mod tests {
 
     #[test]
     fn commands_are_flat_json_objects_tagged_by_type() {
-        let json = r#"{"id": 7, "type": "request", "host_id": "h",
+        let json = r#"{"id": 7, "type": "request", "server_id": "h",
             "request": {"type": "update", "thread_id": "t", "change": {"done": true}}}"#;
         let envelope: Envelope = serde_json::from_str(json).unwrap();
 
         assert_eq!(envelope.id, 7);
-        let Command::Request { host_id, request: Request::Update { thread_id, change } } = envelope.command else {
+        let Command::Request { server_id, request: Request::Update { thread_id, change } } = envelope.command else {
             panic!("expected an update request");
         };
-        assert_eq!((host_id.as_str(), thread_id.as_str(), change.done, change.title), ("h", "t", Some(true), None));
+        assert_eq!((server_id.as_str(), thread_id.as_str(), change.done, change.title), ("h", "t", Some(true), None));
 
         let send: Envelope = serde_json::from_str(
-            r#"{"id": 8, "type": "send", "host_id": "h", "thread_id": "t", "new_thread": null, "text": "hi"}"#,
+            r#"{"id": 8, "type": "send", "server_id": "h", "thread_id": "t", "new_thread": null, "text": "hi"}"#,
         )
         .unwrap();
         assert!(matches!(send.command, Command::Send { files, .. } if files.is_empty()));
     }
 
     #[test]
-    fn a_thread_is_sent_flat_with_its_host() {
+    fn a_thread_is_sent_flat_with_its_server() {
         let thread: Thread = serde_json::from_value(serde_json::json!({
             "id": "t", "title": "T", "project_id": "p", "cwd": "/srv", "agent": "claude", "model": null,
             "effort": null, "access": "accept_edits", "plan": false, "created_at": 1.0, "updated_at": 2.0,
             "done_at": null, "undone_at": null, "running": true, "needs_approval": false, "turn_ended_at": null, "rev": 3,
         }))
         .unwrap();
-        let event = Event::ThreadUpsert { thread: ThreadView { thread, host_id: "h".into(), unread: false } };
+        let event = Event::ThreadUpsert { thread: ThreadView { thread, server_id: "h".into(), unread: false } };
         let json = serde_json::to_value(event).unwrap();
 
         assert_eq!(json["type"], "thread_upsert");
-        assert_eq!(json["thread"]["host_id"], "h");
+        assert_eq!(json["thread"]["server_id"], "h");
         assert_eq!(json["thread"]["access"], "accept_edits");
         assert_eq!(json["thread"]["running"], true);
     }

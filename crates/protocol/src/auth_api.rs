@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceKind {
-    /// A machine that runs the agents.
-    Host,
-    /// An app that drives hosts.
+    /// A machine that runs the agents. Up to 0.1.6 it was called a host.
+    #[serde(alias = "host")]
+    Server,
+    /// An app that drives servers.
     Client,
 }
 
@@ -72,7 +73,7 @@ pub struct Session {
 pub struct EnrollToken {
     pub token: String,
     pub expires_at: f64,
-    /// The one command to run on the host.
+    /// The one command to run on the server.
     pub command: String,
 }
 

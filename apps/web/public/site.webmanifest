@@ -1,7 +1,7 @@
 {
   "name": "Motile",
   "short_name": "Motile",
-  "description": "The hosts and apps on your Motile account",
+  "description": "The servers and apps on your Motile account",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",

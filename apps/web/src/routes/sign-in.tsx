@@ -29,7 +29,7 @@ function SignIn() {
           Sign in to Motile
         </h1>
         <p className="text-muted-foreground">
-          See the hosts and apps on your account, add a host, and remove what
+          See the servers and apps on your account, add a server, and remove what
           you no longer use.
         </p>
       </div>

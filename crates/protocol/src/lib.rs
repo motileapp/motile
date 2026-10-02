@@ -1,4 +1,4 @@
-//! What the apps, the host server and the auth server agree on: the messages on an iroh stream,
+//! What the apps, the server and the auth server agree on: the messages on an iroh stream,
 //! the auth server's JSON, and how a device proves who it is.
 
 pub mod auth_api;

@@ -1,5 +1,5 @@
-//! Messages between an app and a host. Every stream starts with one `Request` from the app; the
-//! host answers with one `Message`, or with a stream of them for `Subscribe` and `Open`.
+//! Messages between an app and a server. Every stream starts with one `Request` from the app; the
+//! server answers with one `Message`, or with a stream of them for `Subscribe` and `Open`.
 
 use std::collections::HashMap;
 
@@ -73,7 +73,7 @@ pub struct Item {
     pub kind: ItemKind,
 }
 
-/// An image or a video an agent showed. The host keeps the copy it took then, so the thread
+/// An image or a video an agent showed. The server keeps the copy it took then, so the thread
 /// shows the same thing after the file has changed or gone.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Media {
@@ -162,7 +162,7 @@ pub struct ThreadChange {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
-    /// Host details, the threads and the projects, then every change to them.
+    /// Server details, the threads and the projects, then every change to them.
     Subscribe,
     /// The transcript items changed after revision `since`, then every change as it happens.
     Open {
@@ -208,7 +208,7 @@ pub enum Request {
     ProjectIcon {
         project_id: String,
     },
-    /// Makes the image at `path` on the host the project's icon. `None` goes back to the one
+    /// Makes the image at `path` on the server the project's icon. `None` goes back to the one
     /// found in the project's folder.
     SetProjectIcon {
         project_id: String,
@@ -226,24 +226,25 @@ pub enum Request {
         name: String,
         size: u64,
     },
-    /// The copy the host keeps of an image or a video. `Media` answers, and the bytes follow on
+    /// The copy the server keeps of an image or a video. `Media` answers, and the bytes follow on
     /// the same stream.
     Media {
         id: String,
     },
-    /// Replaces the host's program with the latest release and starts it again. The host answers
+    /// Replaces the server's program with the latest release and starts it again. The server answers
     /// with `Updating` while it downloads, then `Ok` just before it restarts.
-    UpdateHost,
+    #[serde(alias = "update_host")]
+    UpdateServer,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct AgentInfo {
     pub agent: Agent,
-    /// `None` when the agent's CLI isn't installed on the host.
+    /// `None` when the agent's CLI isn't installed on the server.
     pub version: Option<String>,
 }
 
-/// A folder on the host that threads work in.
+/// A folder on the server that threads work in.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Project {
     pub id: String,
@@ -258,7 +259,7 @@ pub struct Project {
     pub created_at: f64,
 }
 
-/// A model an agent on the host can run, and the choices it offers.
+/// A model an agent on the server can run, and the choices it offers.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct ModelInfo {
     pub id: String,
@@ -270,7 +271,7 @@ pub struct ModelInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct HostInfo {
+pub struct ServerInfo {
     pub version: String,
     pub protocol: u32,
     pub hostname: String,
@@ -297,7 +298,8 @@ pub struct Activity {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
     Welcome {
-        host: HostInfo,
+        #[serde(alias = "host")]
+        server: ServerInfo,
         threads: Vec<Thread>,
         projects: Vec<Project>,
     },
@@ -350,7 +352,7 @@ pub enum Message {
     Uploaded {
         path: String,
     },
-    /// How far the download of the host's update is. `total` is missing when it isn't known.
+    /// How far the download of the server's update is. `total` is missing when it isn't known.
     Updating {
         received: u64,
         total: Option<u64>,
@@ -389,5 +391,20 @@ mod tests {
             serde_json::json!({"id": "a", "seq": 3, "rev": 7, "created_at": 1.0, "type": "assistant", "text": "hi"})
         );
         assert_eq!(serde_json::from_value::<Item>(json).unwrap(), item);
+    }
+
+    #[test]
+    fn what_0_1_6_calls_a_host_is_read_as_a_server() {
+        let update: Request = serde_json::from_value(serde_json::json!({"type": "update_host"})).unwrap();
+        let welcome: Message = serde_json::from_value(serde_json::json!({
+            "type": "welcome", "threads": [], "projects": [],
+            "host": {"version": "0.1.6", "protocol": 1, "hostname": "box", "home": "/root", "agents": [], "models": []},
+        }))
+        .unwrap();
+        let kind: crate::auth_api::DeviceKind = serde_json::from_value(serde_json::json!("host")).unwrap();
+
+        assert_eq!(update, Request::UpdateServer);
+        assert!(matches!(welcome, Message::Welcome { server, .. } if server.version == "0.1.6"));
+        assert_eq!(kind, crate::auth_api::DeviceKind::Server);
     }
 }

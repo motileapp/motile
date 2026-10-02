@@ -45,7 +45,7 @@ export function DeviceList({ devices }: { devices: Array<Device> }) {
       {devices.map((device) => (
         <Item key={device.public_key} variant="outline" role="listitem">
           <ItemMedia variant="icon">
-            {device.kind === "host" ? <ServerIcon /> : <LaptopIcon />}
+            {device.kind === "server" ? <ServerIcon /> : <LaptopIcon />}
           </ItemMedia>
           <ItemContent>
             <ItemTitle>{device.name}</ItemTitle>
@@ -90,9 +90,9 @@ function RemoveDevice({ device }: { device: Device }) {
         <AlertDialogHeader>
           <AlertDialogTitle>Remove {device.name}?</AlertDialogTitle>
           <AlertDialogDescription>
-            {device.kind === "host"
-              ? "Your apps will no longer reach this host. Its threads stay on the machine, and it can be added again with a new install command."
-              : "This app is signed out and can no longer reach your hosts."}
+            {device.kind === "server"
+              ? "Your apps will no longer reach this server. Its threads stay on the machine, and it can be added again with a new install command."
+              : "This app is signed out and can no longer reach your servers."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -1,10 +1,10 @@
 ## What is this?
 
 Motile is the open-source command center for coding agents. The agents (Claude Code and Codex)
-run on machines the user owns, called hosts. Native apps drive them: an app connects straight to
-its hosts over [iroh](https://www.iroh.computer), which needs no open ports, and keeps a local
+run on machines the user owns, called servers. Native apps drive them: an app connects straight to
+its servers over [iroh](https://www.iroh.computer), which needs no open ports, and keeps a local
 copy of every thread so it opens where it was left. There is no local mode; an app always talks
-to a host.
+to a server.
 
 These programs make it up, plus the code the apps share:
 
@@ -12,15 +12,15 @@ These programs make it up, plus the code the apps share:
 | --- | --- | --- |
 | Auth server (`apps/auth`) | auth.motile.app | Signs people in with Google, records which devices belong to an account |
 | Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/install.sh` |
-| Web app (`apps/web`) | app.motile.app | Lists an account's hosts and apps, adds hosts, removes devices |
-| Host (`apps/server`, the `motile` binary) | The user's Linux machines | Runs the agents, stores threads in SQLite, serves the account's apps |
+| Web app (`apps/web`) | app.motile.app | Lists an account's servers and apps, adds servers, removes devices |
+| Server (`apps/server`, the `motile` binary) | The user's Linux machines | Runs the agents, stores threads in SQLite, serves the account's apps |
 | Mac app (`apps/macos`) | The user's Mac | The interface |
 | Core (`crates/core`) | Inside every app | Account, connections, sync, the local cache, rendering transcripts |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
-keys belong to one account; it never sees a thread. A host accepts connections only from its
+keys belong to one account; it never sees a thread. A server accepts connections only from its
 account's apps. The web app is not a device: it holds a session, which can manage the account
-but can never connect to a host. README.md covers how a user sets things up.
+but can never connect to a server. README.md covers how a user sets things up.
 
 Production is the `Motile` project on Unbind:
 
@@ -37,8 +37,8 @@ Production is the `Motile` project on Unbind:
 
 What the three programs agree on.
 
-- `wire.rs` is every message between an app and a host. Changing it changes both sides; bump
-  `PROTOCOL_VERSION` when an old app or host could no longer understand the other.
+- `wire.rs` is every message between an app and a server. Changing it changes both sides; bump
+  `PROTOCOL_VERSION` when an old app or server could no longer understand the other.
 - `auth_api.rs` and `auth_client.rs` are the auth server's JSON and the client for it.
 - `identity.rs` is the device key and request signing: a linked device signs its requests to the
   auth server instead of holding a token.
@@ -48,7 +48,7 @@ What the three programs agree on.
 - `sign_in.rs` is the browser's side of a sign-in: `/auth/start`, Google, and back with a
   one-time code, to the app at `motile://auth` or to the web app at `WEB_URL/auth/callback`.
   `google.rs` is the OIDC exchange.
-- `api.rs` is what apps, hosts and the web app call: exchanging the code for a linked device or
+- `api.rs` is what apps, servers and the web app call: exchanging the code for a linked device or
   for a web session (`/api/sessions`), install tokens (`/api/enroll-tokens`, `/api/enroll`),
   `/api/me`, removing devices. A caller is a device that signed the request or a session's
   `Bearer` token.
@@ -69,7 +69,7 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 
 - `apps/marketing` builds to `dist`, which static-web-server serves in production
   (`server.toml`). It ships no JavaScript; React only renders at build time.
-  `public/install.sh` is the installer: it downloads the host from the latest release and runs
+  `public/install.sh` is the installer: it downloads the server from the latest release and runs
   `motile setup`. `scripts/icons.mjs` draws the icons of both web projects from the
   mark: `pnpm --filter motile-marketing icons`.
 - `apps/web` runs on its own server. `src/server/auth.ts` holds the session: the browser only
@@ -77,7 +77,7 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/` starts and
   finishes a sign-in.
 
-### apps/server (the host)
+### apps/server
 
 - `hub.rs` is the live state of every thread. A turn is one run of the agent's CLI; its events
   are applied there, saved, and sent to every app that has the thread open. Claude Code's
@@ -95,7 +95,7 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 - `store.rs` is SQLite. Every item has a position (`seq`) and the revision that last changed it
   (`rev`); an app asks for what changed after the revision it has.
 - `title.rs` generates thread titles with the thread's own agent.
-- `setup.rs` is what the installer runs: it checks for agents, links the host with the install
+- `setup.rs` is what the installer runs: it checks for agents, links the server with the install
   token, and installs the systemd unit. The unit is a system unit that runs as the installing
   user; for root it sets `IS_SANDBOX=1`, without which Claude Code refuses full access.
 - `access.rs` asks the auth server which apps belong to the account, and caches the answer.
@@ -103,26 +103,26 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   `apps` and `packages` of a workspace). The path is kept with the project; the user can pick
   another image instead.
 - `media.rs` keeps the images and videos agents show. An agent shows one by writing a Markdown
-  image that points at a file on the host; the agents are told so when they start. The host
+  image that points at a file on the server; the agents are told so when they start. The server
   copies the file then, named by its contents, and the item says what it shows and how large it
   is. So a thread shows the same thing after the file has changed or gone. An app asks for the
   bytes by that name, and the copy goes when the last thread that shows it is deleted.
-- `update.rs` replaces the host's own program with the latest release's and starts it again,
+- `update.rs` replaces the server's own program with the latest release's and starts it again,
   when an app asks. It refuses while an agent is working.
-- `tests/e2e.rs` runs the host against `scripts/fake-agent` over real iroh connections.
+- `tests/e2e.rs` runs the server against `scripts/fake-agent` over real iroh connections.
 
 ### crates/core
 
 Built as a static library for the apps (`ffi.rs`: JSON commands in, JSON events out) and as a
 Rust library for tests.
 
-- `core.rs` is one loop that owns all state. Commands from the app and events from the hosts
+- `core.rs` is one loop that owns all state. Commands from the app and events from the servers
   arrive on one channel; anything that waits on the network runs in its own task.
-- `link.rs` keeps one host connected and follows its thread list and the open threads.
-- `cache.rs` is the app's SQLite copy of its hosts' threads.
-- `media.rs` is the images and videos the app has fetched from its hosts, as files. They are
+- `link.rs` keeps one server connected and follows its thread list and the open threads.
+- `cache.rs` is the app's SQLite copy of its servers' threads.
+- `media.rs` is the images and videos the app has fetched from its servers, as files. They are
   fetched when a row that shows one is seen, and take at most 2 GB: past that, what was looked
-  at longest ago goes first. The hosts keep them all, so the app can also clear them.
+  at longest ago goes first. The servers keep them all, so the app can also clear them.
 - `render/` turns transcripts into rows ready to draw: `markdown.rs` (text with style runs, in
   UTF-16 offsets), `highlight.rs` (syntect; streaming code is highlighted incrementally) and
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
@@ -151,7 +151,7 @@ Rust library for tests.
 - `Resources/AppIcon.icon` is the app icon, made in Icon Composer. `scripts/build-app.sh`
   compiles it with `actool`, which also draws the flat icon older macOS versions show.
 - `Demo/DemoDriver.swift` walks the app through a scripted demo; `scripts/ci-demo.sh` runs it
-  in CI against a real auth server and host and collects screenshots and `checks.txt`.
+  in CI against a real auth server and a real server and collects screenshots and `checks.txt`.
 
 ## General Rules:
 
@@ -164,8 +164,11 @@ Rust library for tests.
   to the web app's callback, works once, and only with the secret that started the sign-in. A
   code sent to the web app only opens a session and never links a device. Codes and tokens are
   stored hashed. Anything that changes this needs a test in `apps/auth/src/e2e`.
-- A host runs agents with full access to its machine. It must only ever accept devices of its
+- A server runs agents with full access to its machine. It must only ever accept devices of its
   own account.
+- A machine that runs agents is a server, in the code and in what the user reads. What the user
+  reads says "your server" or its name, not "the server" alone, which sounds like ours. The auth
+  server is always called the auth server.
 - Rendering logic belongs in `crates/core`, not in an app, so that every future app (iOS,
   Android, Windows, Linux) gets it.
 - Do not leave paragraphs of comments on top of the code. You should try to avoid them as much
@@ -201,7 +204,7 @@ web app. The Mac app needs Xcode 26 or later.
     pnpm install
     pnpm --filter motile-marketing dev          # the marketing site on localhost:4321
     pnpm --filter motile-web dev                # the web app on localhost:3001
-    cargo run -p motile-server -- run           # a host, once linked with `motile setup <token>`
+    cargo run -p motile-server -- run           # a server, once linked with `motile setup <token>`
     cargo run -p motile-core --example drive    # the core, driven from a terminal
     apps/macos/scripts/build-app.sh --open      # on a Mac
 
@@ -227,9 +230,9 @@ ask the user a question, and "plan the hello" present a plan to approve.
 ## Releasing and deploying
 
 To release, set `version` in `Cargo.toml` to the new version, commit, and push the tag
-`v<version>`; the workflow refuses a tag that doesn't match. It publishes the host and the auth
+`v<version>`; the workflow refuses a tag that doesn't match. It publishes the server and the auth
 server for Linux and the Mac app as a GitHub release. The installer and the download button
-always fetch the latest release, and apps and hosts compare their own version with it to offer
+always fetch the latest release, and apps and servers compare their own version with it to offer
 an update. The app in a release is signed with the Developer ID certificate and
 notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with
 `sign` does the same without a release.
@@ -243,7 +246,7 @@ Commit messages start with the part of the system they touched, followed by a sh
 sentence describing the change:
 
     auth: Refuse a sign-in code that was started by another app
-    macos: Show the host's round-trip time in the sidebar
+    macos: Show the server's round-trip time in the sidebar
     server | core | macos: Stream replies in finished blocks
 
 The parts are the folders in `apps` and `crates`: `auth`, `marketing`, `web`, `server`, `macos`,

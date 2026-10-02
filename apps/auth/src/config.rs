@@ -57,7 +57,7 @@ impl Config {
         self.web_url.as_ref().map(|url| format!("{url}/auth/callback"))
     }
 
-    /// The installer links a host with Motile's own auth server unless it is told another.
+    /// The installer links a server with Motile's own auth server unless it is told another.
     pub fn install_command(&self, token: &str) -> String {
         if self.public_url == DEFAULT_AUTH_URL {
             return format!("curl -fsSL {} | sh -s -- {token}", self.install_url);

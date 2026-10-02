@@ -68,15 +68,15 @@ struct AppUpdateRow: View {
     }
 }
 
-/// What stands at the end of a host's line: the offer to update it, the update as it goes, or
+/// What stands at the end of a server's line: the offer to update it, the update as it goes, or
 /// `otherwise`.
-struct HostUpdateStatus<Otherwise: View>: View {
+struct ServerUpdateStatus<Otherwise: View>: View {
     @Environment(AppStore.self) private var store
-    let host: Host
+    let server: Server
     @ViewBuilder let otherwise: () -> Otherwise
 
     var body: some View {
-        if let update = store.hostUpdates[host.id] {
+        if let update = store.serverUpdates[server.id] {
             HStack(spacing: 6) {
                 Text(progress(of: update))
                     .font(.system(size: 11))
@@ -84,15 +84,15 @@ struct HostUpdateStatus<Otherwise: View>: View {
                     .monospacedDigit()
                 ProgressView().controlSize(.small)
             }
-        } else if store.isOutdated(host) {
-            PillButton("Update") { store.update(host) }
-                .help("Install version \(store.updater.latest ?? "") on \(host.name). It restarts, and no agent may be working.")
+        } else if store.isOutdated(server) {
+            PillButton("Update") { store.update(server) }
+                .help("Install version \(store.updater.latest ?? "") on \(server.name). It restarts, and no agent may be working.")
         } else {
             otherwise()
         }
     }
 
-    private func progress(of update: HostUpdate) -> String {
+    private func progress(of update: ServerUpdate) -> String {
         if update.restarting { return "Restarting…" }
         guard let fraction = update.fraction else { return "Updating…" }
         return "Updating \(Int(fraction * 100))%"

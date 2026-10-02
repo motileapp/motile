@@ -61,7 +61,7 @@ final class RowModel {
         }
     }
 
-    /// A user message shown the moment it is sent, before the host has it.
+    /// A user message shown the moment it is sent, before the server has it.
     static func pending(text: String) -> RowModel {
         RowModel(id: "pending", itemID: "pending", kind: .user(text: Typesetter.plain(text, color: Theme.text), attachments: []))
     }
@@ -168,7 +168,7 @@ struct ToolContent {
         return result
     }
 
-    /// The first lines of long output; the rest is in the transcript on the host.
+    /// The first lines of long output; the rest is in the transcript on the server.
     private static func clipped(_ output: String) -> String {
         let lines = output.split(separator: "\n", omittingEmptySubsequences: false)
         guard lines.count > 60 else { return output }

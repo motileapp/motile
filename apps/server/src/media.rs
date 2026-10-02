@@ -1,4 +1,4 @@
-//! The images and videos agents show in their replies. The host copies each one when it is shown,
+//! The images and videos agents show in their replies. The server copies each one when it is shown,
 //! named by its contents, so a thread keeps showing it after the file has changed or gone.
 
 use std::io::{Read, Write};
@@ -119,7 +119,7 @@ impl MediaStore {
         if !is_id(id) {
             bail!("{id} isn't the name of an image or a video.");
         }
-        let file = tokio::fs::File::open(self.folder.join(id)).await.context("The host no longer has that file.")?;
+        let file = tokio::fs::File::open(self.folder.join(id)).await.context("The server no longer has that file.")?;
         let size = file.metadata().await?.len();
         Ok((file, size))
     }

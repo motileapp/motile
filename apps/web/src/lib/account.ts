@@ -11,7 +11,7 @@ import {
 
 export type Device = {
   public_key: string
-  kind: "host" | "client"
+  kind: "server" | "client"
   name: string
   platform: string
   created_at: number
@@ -19,7 +19,7 @@ export type Device = {
 
 export type Account = {
   user: { email: string; name: string | null; picture: string | null }
-  hosts: Array<Device>
+  servers: Array<Device>
   apps: Array<Device>
 }
 
@@ -37,7 +37,7 @@ export const getAccount = createServerFn().handler(
     if (!me?.user) return null
     return {
       user: me.user,
-      hosts: me.devices.filter((device) => device.kind === "host"),
+      servers: me.devices.filter((device) => device.kind === "server"),
       apps: me.devices.filter((device) => device.kind === "client"),
     }
   }

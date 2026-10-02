@@ -4,7 +4,7 @@ import SwiftUI
 private let rowGap = 2.0
 private let rowMargin = EdgeInsets(top: rowGap / 2, leading: 10, bottom: rowGap / 2, trailing: 10)
 
-/// The drafts, then every active thread on every host in one list, with the ones marked done on
+/// The drafts, then every active thread on every server in one list, with the ones marked done on
 /// a shelf at the bottom.
 struct SidebarView: View {
     @Environment(AppStore.self) private var store
@@ -43,7 +43,7 @@ struct SidebarView: View {
                 deleting = nil
             }
         } message: {
-            Text("The thread and its transcript are removed from the host. Files the agent changed stay as they are.")
+            Text("The thread and its transcript are removed from its server. Files the agent changed stay as they are.")
         }
     }
 
@@ -160,8 +160,8 @@ private struct ThreadRow: View {
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .layoutPriority(1)
-                if store.hosts.count > 1, let host = store.host(thread.hostID) {
-                    HostLabel(host: host)
+                if store.servers.count > 1, let server = store.server(thread.serverID) {
+                    ServerLabel(server: server)
                 }
                 Spacer(minLength: 6)
                 if hovering && !thread.busy {
@@ -251,8 +251,8 @@ private struct DraftRow: View {
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .layoutPriority(1)
-                if store.hosts.count > 1, let host = store.host(project?.hostID) {
-                    HostLabel(host: host)
+                if store.servers.count > 1, let server = store.server(project?.serverID) {
+                    ServerLabel(server: server)
                 }
                 Spacer(minLength: 6)
                 if hovering {
@@ -478,7 +478,7 @@ private struct ThreadStatus: View {
     }
 }
 
-/// The hosts and how the app reaches them, the account, and the offer to undo.
+/// The servers and how the app reaches them, the account, and the offer to undo.
 private struct SidebarFooter: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openSettings) private var openSettings
@@ -500,29 +500,29 @@ private struct SidebarFooter: View {
                 .font(.system(size: 12))
                 .transition(.opacity)
             }
-            ForEach(store.hosts) { host in
+            ForEach(store.servers) { server in
                 HStack(spacing: 7) {
                     Circle()
-                        .fill(color(of: host))
+                        .fill(color(of: server))
                         .frame(width: 7, height: 7)
-                    Text(host.name)
+                    Text(server.name)
                         .font(.system(size: 12, weight: .medium))
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    HostUpdateStatus(host: host) {
-                        Text(detail(of: host))
+                    ServerUpdateStatus(server: server) {
+                        Text(detail(of: server))
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                             .monospacedDigit()
                     }
                 }
                 .frame(height: 20)
-                .help(host.error ?? detail(of: host))
+                .help(server.error ?? detail(of: server))
             }
             Menu {
                 Button("Settings…") { openSettings() }
                 Button("Add a Project…") { store.showsFolderPicker = true }
-                Button("Add a Host…") { store.showsAddHost = true }
+                Button("Add a Server…") { store.showsAddServer = true }
                 Divider()
                 Button("Sign Out") { store.signOut() }
             } label: {
@@ -556,19 +556,19 @@ private struct SidebarFooter: View {
         .animation(.easeOut(duration: 0.15), value: store.undo)
     }
 
-    private func color(of host: Host) -> Color {
-        switch host.state {
+    private func color(of server: Server) -> Color {
+        switch server.state {
         case .connected: return Color.themeSuccess
         case .connecting: return Color.themeWarning
         case .disconnected, .refused: return Color.themeDanger
         }
     }
 
-    private func detail(of host: Host) -> String {
-        switch host.state {
+    private func detail(of server: Server) -> String {
+        switch server.state {
         case .connected:
-            let path = host.path ?? "connected"
-            return host.rttMs.map { "\(path) · \($0) ms" } ?? path
+            let path = server.path ?? "connected"
+            return server.rttMs.map { "\(path) · \($0) ms" } ?? path
         case .connecting: return "connecting…"
         case .disconnected: return "offline"
         case .refused: return "refused"

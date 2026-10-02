@@ -195,21 +195,21 @@ struct ProjectIcon: View {
     }
 }
 
-/// The host a thread or project is on, for when there is more than one.
-struct HostLabel: View {
-    let host: Host
+/// The server a thread or project is on, for when there is more than one.
+struct ServerLabel: View {
+    let server: Server
     var size: CGFloat = 11
 
     var body: some View {
         HStack(spacing: size * 0.3) {
             Image(systemName: "server.rack")
                 .font(.system(size: size * 0.82, weight: .medium))
-            Text(host.name)
+            Text(server.name)
                 .font(.system(size: size))
                 .lineLimit(1)
         }
         .foregroundStyle(Color.themeTertiary)
-        .help("On \(host.name)")
+        .help("On \(server.name)")
     }
 }
 

@@ -1,11 +1,11 @@
-//! The host and an app's connection talking over real iroh connections on this machine, with
+//! The server and an app's connection talking over real iroh connections on this machine, with
 //! `scripts/fake-agent` standing in for Claude Code and Codex.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use motile_core::connection::{Connection, Follow, HostAddr, bind};
+use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, Approval, Item, ItemKind, Message, NewThread, Project, Request, Thread, ThreadChange,
@@ -25,15 +25,15 @@ fn repo_file(path: &str) -> PathBuf {
 
 struct Harness {
     dir: tempfile::TempDir,
-    host_key: DeviceKey,
+    server_key: DeviceKey,
     app_key: DeviceKey,
-    address: HostAddr,
+    address: ServerAddr,
     endpoint: Option<iroh::Endpoint>,
     variables: HashMap<String, String>,
 }
 
 impl Harness {
-    /// A host whose agents replay `fixture`, pausing `delay` seconds between lines.
+    /// A server whose agents replay `fixture`, pausing `delay` seconds between lines.
     async fn start(fixture: &str, delay: &str) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let arguments_file = dir.path().join("arguments.txt");
@@ -44,19 +44,19 @@ impl Harness {
             ("FAKE_AGENT_DELAY".to_string(), delay.to_string()),
             ("FAKE_AGENT_ARGUMENTS_FILE".to_string(), arguments_file.to_string_lossy().into_owned()),
         ]);
-        let host_key = DeviceKey::generate();
+        let server_key = DeviceKey::generate();
         let app_key = DeviceKey::generate();
-        let (endpoint, address) = serve(&dir, &host_key, &app_key, &variables, None).await;
-        Self { dir, host_key, app_key, address, endpoint: Some(endpoint), variables }
+        let (endpoint, address) = serve(&dir, &server_key, &app_key, &variables, None).await;
+        Self { dir, server_key, app_key, address, endpoint: Some(endpoint), variables }
     }
 
-    /// Stops the host and starts it again on the same data and the same address.
+    /// Stops the server and starts it again on the same data and the same address.
     async fn restart(&mut self) {
         if let Some(endpoint) = self.endpoint.take() {
             endpoint.close().await;
         }
         let port = self.address.direct.map(|address| address.port());
-        let (endpoint, address) = serve(&self.dir, &self.host_key, &self.app_key, &self.variables, port).await;
+        let (endpoint, address) = serve(&self.dir, &self.server_key, &self.app_key, &self.variables, port).await;
         self.endpoint = Some(endpoint);
         self.address = address;
     }
@@ -118,11 +118,11 @@ impl Harness {
 
 async fn serve(
     dir: &tempfile::TempDir,
-    host_key: &DeviceKey,
+    server_key: &DeviceKey,
     app_key: &DeviceKey,
     variables: &HashMap<String, String>,
     port: Option<u16>,
-) -> (iroh::Endpoint, HostAddr) {
+) -> (iroh::Endpoint, ServerAddr) {
     let fake_agent = repo_file("scripts/fake-agent");
     let executables = HashMap::from([(Agent::Claude, fake_agent.clone()), (Agent::Codex, fake_agent)]);
     let environment = Environment::fixed(variables.clone(), executables);
@@ -131,17 +131,17 @@ async fn serve(
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
-    let mut endpoint = motile_server::serve::bind(host_key, &options).await;
+    let mut endpoint = motile_server::serve::bind(server_key, &options).await;
     for _ in 0..50 {
         if endpoint.is_ok() {
             break;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
-        endpoint = motile_server::serve::bind(host_key, &options).await;
+        endpoint = motile_server::serve::bind(server_key, &options).await;
     }
     let endpoint = endpoint.unwrap();
     let port = endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
-    let address = format!("{}@127.0.0.1:{port}", host_key.public()).parse().unwrap();
+    let address = format!("{}@127.0.0.1:{port}", server_key.public()).parse().unwrap();
 
     let access = Access::new(vec![app_key.public()], None);
     let server = Server { hub, access, attachments: dir.path().join("attachments") };
@@ -150,7 +150,7 @@ async fn serve(
 }
 
 async fn next(follow: &mut Follow) -> Message {
-    let message = tokio::time::timeout(TIMEOUT, follow.next()).await.expect("the host went quiet");
+    let message = tokio::time::timeout(TIMEOUT, follow.next()).await.expect("the server went quiet");
     message.unwrap().expect("the stream ended")
 }
 
@@ -436,7 +436,7 @@ async fn an_app_that_reconnects_mid_turn_is_sent_only_what_it_missed() {
 }
 
 #[tokio::test]
-async fn an_app_ahead_of_the_host_starts_over() {
+async fn an_app_ahead_of_the_server_starts_over() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
@@ -456,11 +456,11 @@ async fn the_thread_list_follows_new_retitled_and_deleted_threads() {
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
-    let Message::Welcome { host, threads, .. } = next(&mut list).await else {
+    let Message::Welcome { server, threads, .. } = next(&mut list).await else {
         panic!("the list starts with a welcome")
     };
     assert!(threads.is_empty());
-    assert_eq!(host.agents.len(), 2);
+    assert_eq!(server.agents.len(), 2);
 
     let text = "Please look at README.md and tell me what this project is actually for.\nBe brief.";
     let thread_id = send(&connection, None, new_thread, text).await;
@@ -788,8 +788,8 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
     let connection = harness.connect().await;
     let project = harness.project(&connection).await;
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
-    let Message::Welcome { host, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
-    let opus = host.models.iter().find(|model| model.id == "claude-opus-5-5").expect("Claude's models are offered");
+    let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    let opus = server.models.iter().find(|model| model.id == "claude-opus-5-5").expect("Claude's models are offered");
     assert_eq!(opus.agent, Agent::Claude);
     assert!(opus.efforts.contains(&"xhigh".to_string()));
 
@@ -886,7 +886,7 @@ async fn a_project_shows_the_icon_in_its_folder_until_another_is_chosen() {
     assert!(project.icon.as_deref().is_some_and(|icon| icon.ends_with(".svg")), "{:?}", project.icon);
     assert_eq!(icon_bytes(&connection, &project.id).await, b"<svg>found</svg>");
 
-    // Another image on the host takes its place.
+    // Another image on the server takes its place.
     let image = format!("{folder}/chosen.png");
     std::fs::write(&image, "png bytes").unwrap();
     let choose = Request::SetProjectIcon { project_id: project.id.clone(), path: Some(image) };

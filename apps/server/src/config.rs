@@ -1,4 +1,4 @@
-//! Where the host keeps its files, and which account it belongs to.
+//! Where the server keeps its files, and which account it belongs to.
 
 use std::path::{Path, PathBuf};
 
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone)]
 pub struct DataDir(PathBuf);
 
-/// Written by `setup`: the auth server this host asks for its account's devices.
+/// Written by `setup`: the auth server this server asks for its account's devices.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Account {
     pub auth_url: String,

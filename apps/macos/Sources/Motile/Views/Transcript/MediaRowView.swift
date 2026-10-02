@@ -184,12 +184,12 @@ final class MediaRowView: RowView {
         }
     }
 
-    /// Hands over the file, which the core fetches from the host if this Mac doesn't have it.
+    /// Hands over the file, which the core fetches from the server if this Mac doesn't have it.
     private func fetch(_ done: @escaping (URL?) -> Void) {
         guard let media = content else { return }
         if let file { return done(file) }
-        guard let host else { return done(nil) }
-        host.media(id: media.id) { [weak self] file in
+        guard let owner else { return done(nil) }
+        owner.media(id: media.id) { [weak self] file in
             guard let self, self.content?.id == media.id else { return }
             self.file = file
             done(file)

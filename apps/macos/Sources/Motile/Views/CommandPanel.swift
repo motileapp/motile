@@ -178,11 +178,11 @@ struct CommandPanel: View {
 
     private var projectItems: [PanelItem] {
         store.recentProjects.enumerated().map { position, project in
-            let host = store.host(project.hostID)?.name ?? ""
+            let server = store.server(project.serverID)?.name ?? ""
             return PanelItem(
                 id: "project-\(project.id)",
                 title: project.name,
-                detail: host.isEmpty ? project.path : "\(host) · \(project.path)",
+                detail: server.isEmpty ? project.path : "\(server) · \(project.path)",
                 icon: .project(project),
                 shortcut: position < 9 && page == .projects ? position + 1 : nil
             ) { store.startNewThread(in: project) }
@@ -190,7 +190,7 @@ struct CommandPanel: View {
     }
 
     private var addProject: PanelItem {
-        PanelItem(id: "add-project", title: "Add a project…", detail: "A folder on a host", icon: .symbol("folder.badge.plus")) {
+        PanelItem(id: "add-project", title: "Add a project…", detail: "A folder on a server", icon: .symbol("folder.badge.plus")) {
             store.showsFolderPicker = true
         }
     }
@@ -223,11 +223,11 @@ struct CommandPanel: View {
         return items
     }
 
-    /// The hosts that run an older version than the newest release.
-    private var hostUpdates: [PanelItem] {
-        store.hosts.filter { store.isOutdated($0) && store.hostUpdates[$0.id] == nil }.map { host in
-            PanelItem(id: "update-\(host.id)", title: "Update \(host.name)", detail: "From version \(host.version) to \(store.updater.latest ?? "")", icon: .symbol("arrow.down.circle")) {
-                store.update(host)
+    /// The servers that run an older version than the newest release.
+    private var serverUpdates: [PanelItem] {
+        store.servers.filter { store.isOutdated($0) && store.serverUpdates[$0.id] == nil }.map { server in
+            PanelItem(id: "update-\(server.id)", title: "Update \(server.name)", detail: "From version \(server.version) to \(store.updater.latest ?? "")", icon: .symbol("arrow.down.circle")) {
+                store.update(server)
             }
         }
     }
@@ -241,17 +241,17 @@ struct CommandPanel: View {
                 open(.threads)
             },
             addProject,
-            PanelItem(id: "add-host", title: "Add a host…", detail: "A machine that runs your agents", icon: .symbol("server.rack")) {
-                store.showsAddHost = true
+            PanelItem(id: "add-server", title: "Add a server…", detail: "A machine that runs your agents", icon: .symbol("server.rack")) {
+                store.showsAddServer = true
             },
             PanelItem(id: "check-updates", title: "Check for updates", detail: "Motile \(store.updater.current)", icon: .symbol("arrow.triangle.2.circlepath")) {
                 store.updater.check(asked: true)
             },
-            PanelItem(id: "settings", title: "Settings…", detail: "Appearance, hosts and projects", icon: .symbol("gearshape")) {
+            PanelItem(id: "settings", title: "Settings…", detail: "Appearance, servers and projects", icon: .symbol("gearshape")) {
                 openSettings()
             },
         ]
-        return hostUpdates + always
+        return serverUpdates + always
     }
 
     // MARK: Acting

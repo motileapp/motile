@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         device_name: "Terminal".to_string(),
         platform: std::env::consts::OS.to_string(),
         local_only: std::env::var("MOTILE_LOCAL").is_ok(),
-        direct_addr: std::env::var("MOTILE_HOST_ADDR").ok(),
+        direct_addr: std::env::var("MOTILE_SERVER_ADDR").ok(),
     };
     let sink = Arc::new(|event: Event| println!("{}", serde_json::to_string(&event).unwrap_or_default()));
     let handle = motile_core::core::start(config, sink)?;

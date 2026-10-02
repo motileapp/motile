@@ -2,7 +2,7 @@ import AppKit
 import QuartzCore
 
 /// What a row needs from the transcript around it.
-protocol RowHost: AnyObject {
+protocol RowOwner: AnyObject {
     func rowWillSelect(_ view: RowView)
     func rowToggledExpansion(id: String)
     /// Opens or closes a group or a fold, whose rows the core adds and removes.
@@ -199,7 +199,7 @@ final class IconButton: NSButton {
 /// The base of every row. A row is as wide as the transcript's column; `layout(width:)` places
 /// its parts for that width and says how tall it is.
 class RowView: FlippedView {
-    weak var host: RowHost?
+    weak var owner: RowOwner?
     private(set) var rowID = ""
     private(set) var nested = false
     /// Set when the row grew while its reply streams: the next layout fades the new part in.
@@ -280,7 +280,7 @@ final class UserRowView: RowView {
         bubble.addSubview(attachments)
         text.onSelect = { [weak self] in
             guard let self else { return }
-            self.host?.rowWillSelect(self)
+            self.owner?.rowWillSelect(self)
         }
     }
 
@@ -328,7 +328,7 @@ final class ProseRowView: RowView {
         addSubview(text)
         text.onSelect = { [weak self] in
             guard let self else { return }
-            self.host?.rowWillSelect(self)
+            self.owner?.rowWillSelect(self)
         }
     }
 
@@ -437,7 +437,7 @@ final class CodeRowView: RowView {
         surface.addSubview(scroll)
         text.onSelect = { [weak self] in
             guard let self else { return }
-            self.host?.rowWillSelect(self)
+            self.owner?.rowWillSelect(self)
         }
     }
 
@@ -528,15 +528,15 @@ final class ToolRowView: RowView {
         detailSurface.addSubview(detail)
         detail.onSelect = { [weak self] in
             guard let self else { return }
-            self.host?.rowWillSelect(self)
+            self.owner?.rowWillSelect(self)
         }
         header.onClick = { [weak self] in
             guard let self, self.hasDetail else { return }
             guard self.open == nil else {
-                self.host?.toggleRow(id: self.rowID)
+                self.owner?.toggleRow(id: self.rowID)
                 return
             }
-            self.host?.rowToggledExpansion(id: self.rowID)
+            self.owner?.rowToggledExpansion(id: self.rowID)
         }
     }
 
@@ -596,7 +596,7 @@ final class ToolRowView: RowView {
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let expanded = open == nil && hasDetail && (host?.isExpanded(id: rowID) ?? false)
+        let expanded = open == nil && hasDetail && (owner?.isExpanded(id: rowID) ?? false)
         // The rows of an open group stand in from the group's own.
         let inset: CGFloat = nested ? 24 : 0
         let width = width - inset
@@ -641,7 +641,7 @@ final class ErrorRowView: RowView {
         surface.addSubview(text)
         text.onSelect = { [weak self] in
             guard let self else { return }
-            self.host?.rowWillSelect(self)
+            self.owner?.rowWillSelect(self)
         }
     }
 
@@ -680,7 +680,7 @@ final class TurnEndRowView: RowView {
         addSubview(summary)
         copyButton = IconButton(symbolName: "doc.on.doc", tooltip: "Copy reply") { [weak self] in
             guard let self else { return }
-            self.host?.copyReply(endingAt: self.rowID)
+            self.owner?.copyReply(endingAt: self.rowID)
             self.copyButton.set(symbolName: "checkmark")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 self?.copyButton.set(symbolName: "doc.on.doc")

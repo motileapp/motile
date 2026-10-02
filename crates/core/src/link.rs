@@ -1,4 +1,4 @@
-//! Keeps the app connected to one host: reconnects when the connection drops, and follows the
+//! Keeps the app connected to one server: reconnects when the connection drops, and follows the
 //! thread list and the threads the app has open, catching each up from the revision it had.
 
 use std::collections::HashMap;
@@ -14,12 +14,12 @@ use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 
-use crate::connection::{Closed, Connection, HostAddr, PathKind};
+use crate::connection::{Closed, Connection, PathKind, ServerAddr};
 
 const RETRY_DELAYS: [Duration; 4] =
     [Duration::from_millis(300), Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5)];
 const RTT_REFRESH: Duration = Duration::from_secs(5);
-/// How long to wait before asking again a host that turned this device away.
+/// How long to wait before asking again a server that turned this device away.
 const REFUSED_RETRY: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug)]
@@ -39,10 +39,10 @@ pub enum LinkEvent {
 pub enum State {
     #[default]
     Connecting,
-    /// The host has answered with its thread list.
+    /// The server has answered with its thread list.
     Connected,
     Disconnected,
-    /// The host turned this device away.
+    /// The server turned this device away.
     Refused,
 }
 
@@ -55,7 +55,7 @@ pub struct Status {
 }
 
 pub struct Link {
-    host_id: String,
+    server_id: String,
     endpoint: Endpoint,
     events: mpsc::UnboundedSender<(String, LinkEvent)>,
     inner: Mutex<Inner>,
@@ -81,11 +81,11 @@ struct OpenThread {
 impl Link {
     pub fn connect(
         endpoint: Endpoint,
-        host: HostAddr,
+        server: ServerAddr,
         events: mpsc::UnboundedSender<(String, LinkEvent)>,
     ) -> Arc<Self> {
-        let link = Arc::new(Self { host_id: host.key.clone(), endpoint, events, inner: Mutex::default() });
-        let dialer = tokio::spawn(link.clone().dial_forever(host));
+        let link = Arc::new(Self { server_id: server.key.clone(), endpoint, events, inner: Mutex::default() });
+        let dialer = tokio::spawn(link.clone().dial_forever(server));
         link.lock().dialer = Some(dialer.abort_handle());
         link
     }
@@ -95,7 +95,7 @@ impl Link {
     }
 
     fn emit(&self, event: LinkEvent) {
-        let _ = self.events.send((self.host_id.clone(), event));
+        let _ = self.events.send((self.server_id.clone(), event));
     }
 
     fn update_status(&self, change: impl FnOnce(&mut Status)) {
@@ -133,13 +133,13 @@ impl Link {
         }
     }
 
-    async fn dial_forever(self: Arc<Self>, host: HostAddr) {
+    async fn dial_forever(self: Arc<Self>, server: ServerAddr) {
         let mut failures = 0;
         loop {
             self.update_status(|status| {
                 *status = Status { state: State::Connecting, error: status.error.take(), ..Status::default() }
             });
-            let closed = match Connection::dial(&self.endpoint, &host).await {
+            let closed = match Connection::dial(&self.endpoint, &server).await {
                 Ok(connection) => {
                     self.attach(&connection);
                     let closed = connection.closed().await;
@@ -149,7 +149,7 @@ impl Link {
                 Err(error) => Closed { refused: false, reason: format!("{error:#}") },
             };
 
-            // A host that turns the device away still completes the handshake first, so only a
+            // A server that turns the device away still completes the handshake first, so only a
             // connection that got its thread list counts as having worked.
             let had_connected = self.lock().status.state == State::Connected;
             let delay = match (closed.refused, had_connected) {
@@ -174,7 +174,7 @@ impl Link {
         }
     }
 
-    /// Starts using a connection whose handshake is done. It counts as connected once the host
+    /// Starts using a connection whose handshake is done. It counts as connected once the server
     /// sends its thread list.
     fn attach(self: &Arc<Self>, connection: &Connection) {
         let mut inner = self.lock();
@@ -294,7 +294,7 @@ impl Link {
 
     fn connection(&self) -> anyhow::Result<Connection> {
         let connection = self.lock().connection.clone();
-        connection.ok_or_else(|| anyhow::anyhow!("Not connected to the host."))
+        connection.ok_or_else(|| anyhow::anyhow!("Not connected to the server."))
     }
 
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
@@ -304,19 +304,19 @@ impl Link {
         }
     }
 
-    /// Has the host install the latest release, telling `progress` how far the download is.
+    /// Has the server install the latest release, telling `progress` how far the download is.
     pub async fn update(&self, mut progress: impl FnMut(u64, Option<u64>)) -> anyhow::Result<()> {
-        let mut follow = self.connection()?.follow(&Request::UpdateHost).await?;
+        let mut follow = self.connection()?.follow(&Request::UpdateServer).await?;
         loop {
-            // A host from before it could update itself closes the stream without an answer.
+            // A server from before it could update itself closes the stream without an answer.
             let Some(message) = follow.next().await? else {
-                anyhow::bail!("This host is too old to update itself. Run the install command on the machine again.");
+                anyhow::bail!("This server is too old to update itself. Run the install command on the machine again.");
             };
             match message {
                 Message::Updating { received, total } => progress(received, total),
                 Message::Ok => return Ok(()),
                 Message::Error { message } => anyhow::bail!(message),
-                other => anyhow::bail!("Unexpected answer from the host: {other:?}"),
+                other => anyhow::bail!("Unexpected answer from the server: {other:?}"),
             }
         }
     }

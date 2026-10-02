@@ -3,7 +3,7 @@ import { LaptopIcon, ServerIcon } from "lucide-react"
 import { getAccount } from "@/lib/account"
 import { cn } from "@/lib/utils"
 import { AccountMenu } from "@/components/account-menu"
-import { AddHost } from "@/components/add-host"
+import { AddServer } from "@/components/add-server"
 import { DeviceList } from "@/components/device-list"
 import { Logo } from "@/components/logo"
 import { buttonVariants } from "@/components/ui/button"
@@ -40,20 +40,20 @@ function Account() {
         <section className="flex flex-col gap-4">
           <div className="flex items-end justify-between gap-4">
             <Heading
-              title="Hosts"
+              title="Servers"
               description="The machines your agents run on."
             />
-            <AddHost hosts={account.hosts} />
+            <AddServer servers={account.servers} />
           </div>
-          {account.hosts.length > 0 ? (
-            <DeviceList devices={account.hosts} />
+          {account.servers.length > 0 ? (
+            <DeviceList devices={account.servers} />
           ) : (
             <Empty className="border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <ServerIcon />
                 </EmptyMedia>
-                <EmptyTitle>No hosts yet</EmptyTitle>
+                <EmptyTitle>No servers yet</EmptyTitle>
                 <EmptyDescription>
                   Add a Linux machine and your apps can start threads on it.
                 </EmptyDescription>
@@ -64,7 +64,7 @@ function Account() {
         <section className="flex flex-col gap-4">
           <Heading
             title="Apps"
-            description="The devices signed in to your account. They can reach every host."
+            description="The devices signed in to your account. They can reach every server."
           />
           {account.apps.length > 0 ? (
             <DeviceList devices={account.apps} />

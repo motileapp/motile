@@ -51,7 +51,7 @@ final class TranscriptModel {
     }
 
     func apply(reset: Bool, start: Int, remove: Int, rows new: [RowModel]) {
-        // The host has the message now, so the copy shown while it travelled goes. The view lets
+        // The server has the message now, so the copy shown while it travelled goes. The view lets
         // go of its own with these rows, so that the message doesn't move.
         let sent = pending != nil && new.contains(where: \.isUser)
         if reset {

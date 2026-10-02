@@ -6,7 +6,7 @@ import AppKit
 /// are made when it scrolls in and reused when it scrolls out, so a thread of any length costs
 /// what is on screen. When heights above the viewport turn out different from their estimates,
 /// the scroll position is corrected in the same pass, so nothing on screen moves.
-final class TranscriptView: FlippedView, RowHost {
+final class TranscriptView: FlippedView, RowOwner {
     /// Rows that came into view with code that isn't highlighted.
     var onNeedHighlight: (([String]) -> Void)?
     var onToggleRow: ((String) -> Void)?
@@ -52,7 +52,7 @@ final class TranscriptView: FlippedView, RowHost {
     private var expanded: Set<String> = []
     private var requestedHighlight: Set<String> = []
     private var activity = Activity()
-    /// The row that ended the turn the host still reports as running.
+    /// The row that ended the turn the server still reports as running.
     private var endOfRunningTurn: String?
 
     /// Whether the view follows the end of the transcript as it grows. It then rests on the end
@@ -158,7 +158,7 @@ final class TranscriptView: FlippedView, RowHost {
     private var endY: CGFloat { max(0, document.frame.height - viewportHeight) }
 
     /// Whether the line that says the agent is at work shows under the rows. The row that ends
-    /// a turn replaces it right away, a moment before the host says that the agent stopped.
+    /// a turn replaces it right away, a moment before the server says that the agent stopped.
     private var showsWorking: Bool {
         guard activity.busy else { return false }
         return endOfRunningTurn == nil || rows.last?.id != endOfRunningTurn
@@ -256,7 +256,7 @@ final class TranscriptView: FlippedView, RowHost {
         let opening = toggled.flatMap { $0.id == new.first?.id ? $0 : nil }
         let anchor = opening ?? currentAnchor()
         let range = start..<(start + remove)
-        // The host has the message now: its row takes the place of the copy shown while it
+        // The server has the message now: its row takes the place of the copy shown while it
         // travelled, and as a first guess its height.
         let sentHeight = hasPending && new.contains(where: \.isUser) ? heights.last : nil
         if sentHeight != nil { removePending() }
@@ -307,7 +307,7 @@ final class TranscriptView: FlippedView, RowHost {
         fresh.removeAll()
     }
 
-    /// Shows a message at the end before the host has confirmed it, or takes it away again.
+    /// Shows a message at the end before the server has confirmed it, or takes it away again.
     func setPending(_ row: RowModel?) {
         removePending()
         if let row {
@@ -367,7 +367,7 @@ final class TranscriptView: FlippedView, RowHost {
             view.isHidden = false
         } else {
             view = RowView.make(for: row)
-            view.host = self
+            view.owner = self
             document.addSubview(view)
         }
         view.configure(row)
@@ -578,7 +578,7 @@ final class TranscriptView: FlippedView, RowHost {
         updateVisible(follows: false)
     }
 
-    // MARK: RowHost
+    // MARK: RowOwner
 
     func rowWillSelect(_ view: RowView) {
         for other in views.values where other !== view { other.clearSelection() }

@@ -1,4 +1,4 @@
-//! One connection to a host, and how long it took to get.
+//! One connection to a server, and how long it took to get.
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -15,29 +15,29 @@ use motile_protocol::wire::{Message, Request};
 use serde::Serialize;
 use tokio::io::AsyncWriteExt;
 
-/// A host's key, optionally with an address to reach it at directly: `key` or `key@ip:port`.
+/// A server's key, optionally with an address to reach it at directly: `key` or `key@ip:port`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HostAddr {
+pub struct ServerAddr {
     pub key: String,
     pub direct: Option<SocketAddr>,
 }
 
-impl FromStr for HostAddr {
+impl FromStr for ServerAddr {
     type Err = anyhow::Error;
 
     fn from_str(text: &str) -> anyhow::Result<Self> {
         let (key, direct) = match text.split_once('@') {
-            Some((key, addr)) => (key, Some(addr.parse().context("The host's address should be ip:port.")?)),
+            Some((key, addr)) => (key, Some(addr.parse().context("The server's address should be ip:port.")?)),
             None => (text, None),
         };
         if EndpointId::from_str(key).is_err() {
-            bail!("{key} isn't a host key.");
+            bail!("{key} isn't a server key.");
         }
         Ok(Self { key: key.to_string(), direct })
     }
 }
 
-impl HostAddr {
+impl ServerAddr {
     fn endpoint_addr(&self) -> anyhow::Result<EndpointAddr> {
         let addr = EndpointAddr::new(EndpointId::from_str(&self.key)?);
         Ok(match self.direct {
@@ -47,7 +47,7 @@ impl HostAddr {
     }
 }
 
-/// `local_only` skips relays and address lookup, so hosts must be given with an address.
+/// `local_only` skips relays and address lookup, so servers must be given with an address.
 pub async fn bind(key: &DeviceKey, local_only: bool) -> anyhow::Result<Endpoint> {
     let builder = match local_only {
         true => Endpoint::builder(presets::Minimal),
@@ -64,11 +64,11 @@ pub enum PathKind {
     Direct,
 }
 
-/// The code a host closes with when the device isn't allowed on it.
+/// The code a server closes with when the device isn't allowed on it.
 pub const REFUSED: u32 = 403;
 
 pub struct Closed {
-    /// The host turned this device away; dialing again won't help until that changes.
+    /// The server turned this device away; dialing again won't help until that changes.
     pub refused: bool,
     pub reason: String,
 }
@@ -83,10 +83,10 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub async fn dial(endpoint: &Endpoint, host: &HostAddr) -> anyhow::Result<Self> {
+    pub async fn dial(endpoint: &Endpoint, server: &ServerAddr) -> anyhow::Result<Self> {
         let dialed = Instant::now();
         let inner =
-            endpoint.connect(host.endpoint_addr()?, ALPN).await.map_err(|error| anyhow::anyhow!("{error:#}"))?;
+            endpoint.connect(server.endpoint_addr()?, ALPN).await.map_err(|error| anyhow::anyhow!("{error:#}"))?;
         Ok(Self { inner, _endpoint: endpoint.clone(), dialed, connect_time: dialed.elapsed() })
     }
 
@@ -121,7 +121,7 @@ impl Connection {
         let (mut send, mut recv) = self.inner.open_bi().await?;
         write_frame(&mut send, request).await?;
         send.finish()?;
-        read_frame(&mut recv).await?.context("The host closed the stream without answering.")
+        read_frame(&mut recv).await?.context("The server closed the stream without answering.")
     }
 
     /// For `Subscribe` and `Open`: every message until the stream is dropped.
@@ -132,7 +132,7 @@ impl Connection {
         Ok(Follow { recv })
     }
 
-    /// Sends a file to the host and returns its path there.
+    /// Sends a file to the server and returns its path there.
     pub async fn upload(&self, path: &Path) -> anyhow::Result<String> {
         let name = path.file_name().and_then(|name| name.to_str()).context("The attachment needs a file name.")?;
         let mut file =
@@ -143,20 +143,20 @@ impl Connection {
         write_frame(&mut send, &Request::Upload { name: name.to_string(), size }).await?;
         tokio::io::copy(&mut file, &mut send).await?;
         send.finish()?;
-        match read_frame(&mut recv).await?.context("The host closed the stream without answering.")? {
+        match read_frame(&mut recv).await?.context("The server closed the stream without answering.")? {
             Message::Uploaded { path } => Ok(path),
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to an upload: {other:?}"),
         }
     }
 
-    /// Fetches the host's copy of an image or a video into `file`, telling `progress` how many
+    /// Fetches the server's copy of an image or a video into `file`, telling `progress` how many
     /// of its bytes have arrived.
     pub async fn media(&self, id: &str, file: &Path, mut progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {
         let (mut send, mut recv) = self.inner.open_bi().await?;
         write_frame(&mut send, &Request::Media { id: id.to_string() }).await?;
         send.finish()?;
-        let size = match read_frame(&mut recv).await?.context("The host closed the stream without answering.")? {
+        let size = match read_frame(&mut recv).await?.context("The server closed the stream without answering.")? {
             Message::Media { size } => size,
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to a media request: {other:?}"),
@@ -182,7 +182,7 @@ pub struct Follow {
 }
 
 impl Follow {
-    /// `None` when the host ended the stream.
+    /// `None` when the server ended the stream.
     pub async fn next(&mut self) -> anyhow::Result<Option<Message>> {
         Ok(read_frame(&mut self.recv).await?)
     }

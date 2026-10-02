@@ -50,7 +50,7 @@ impl Environment {
         let mut buffer = [0u8; 256];
         let result = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
         if result != 0 {
-            return "host".to_string();
+            return "server".to_string();
         }
         let length = buffer.iter().position(|byte| *byte == 0).unwrap_or(buffer.len());
         String::from_utf8_lossy(&buffer[..length]).into_owned()

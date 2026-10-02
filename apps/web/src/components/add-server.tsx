@@ -16,7 +16,7 @@ import { Spinner } from "@/components/ui/spinner"
 
 const CHECK_EVERY_MS = 3000
 
-export function AddHost({ hosts }: { hosts: Array<Device> }) {
+export function AddServer({ servers }: { servers: Array<Device> }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [install, setInstall] = useState<InstallCommand>()
@@ -36,28 +36,28 @@ export function AddHost({ hosts }: { hosts: Array<Device> }) {
   // The dialog closes by itself once the command has linked a machine.
   useEffect(() => {
     if (!open) return
-    const known = new Set(hosts.map((host) => host.public_key))
+    const known = new Set(servers.map((server) => server.public_key))
     const timer = setInterval(async () => {
       const account = await getAccount().catch(() => null)
-      const added = account?.hosts.find((host) => !known.has(host.public_key))
+      const added = account?.servers.find((server) => !known.has(server.public_key))
       if (!added) return
       setOpen(false)
       toast.success(`${added.name} was added.`)
       await router.invalidate()
     }, CHECK_EVERY_MS)
     return () => clearInterval(timer)
-  }, [open, hosts, router])
+  }, [open, servers, router])
 
   return (
     <>
       <Button onClick={start}>
         <PlusIcon data-icon="inline-start" />
-        Add a host
+        Add a server
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add a host</DialogTitle>
+            <DialogTitle>Add a server</DialogTitle>
             <DialogDescription>
               Run this on the Linux machine your agents should work on. It
               installs Motile there and links the machine to your account.

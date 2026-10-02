@@ -21,7 +21,7 @@ export const Route = createRootRoute({
       { title: "Motile" },
       {
         name: "description",
-        content: "The hosts and apps on your Motile account.",
+        content: "The servers and apps on your Motile account.",
       },
     ],
     links: [

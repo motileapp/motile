@@ -1,6 +1,6 @@
 //! Running Claude Code and Codex: the command for a turn and the events read from its output.
 //! Both CLIs print one JSON object per line; `claude.rs` and `codex.rs` turn those into the same
-//! `AgentEvent`s so the rest of the host doesn't care which agent is running.
+//! `AgentEvent`s so the rest of the server doesn't care which agent is running.
 
 pub mod claude;
 pub mod codex;
