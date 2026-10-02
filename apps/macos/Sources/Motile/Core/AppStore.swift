@@ -750,7 +750,7 @@ final class AppStore {
     /// thread's server if this Mac doesn't have it.
     func media(_ id: String, done: @escaping (URL?) -> Void) {
         guard let thread = selectedThread else { return done(nil) }
-        core.send("media", ["server_id": thread.serverID, "id": id]) { result in
+        core.send("media", ["server_id": thread.serverID, "media_id": id]) { result in
             guard case .success(let value) = result, let path = value["path"] as? String else { return done(nil) }
             done(URL(fileURLWithPath: path))
         }

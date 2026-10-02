@@ -331,7 +331,7 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
     assert_eq!((width, height), (Some(960), Some(600)));
     assert_eq!((alt.as_str(), name.as_str()), ("The landing page", "screenshot.png"));
     let screenshot = std::fs::read(project_folder.join("screenshot.png")).unwrap();
-    let find = || Command::Media { server_id: server.id.clone(), id: media.clone() };
+    let find = || Command::Media { server_id: server.id.clone(), media_id: media.clone() };
     let fetched = app.ask(find()).await.unwrap()["path"].as_str().unwrap().to_string();
     assert!(Path::new(&fetched).starts_with(&app_data));
     assert_eq!(std::fs::read(&fetched).unwrap(), screenshot);

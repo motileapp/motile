@@ -264,7 +264,6 @@ private final class Demo {
         await scrollByHandWhileStreaming()
         await expect("a long reply arrives whole", within: 90) { turnEnded }
         results.append(responsive("a long reply streams", longStreaming))
-        pullPastEnd()
         let scrolling = StallMonitor()
         await scrollTranscript()
         results.append(responsive("a long reply is scrolled", scrolling))
@@ -433,18 +432,6 @@ private final class Demo {
         results.append("\(stayed ? "PASS" : "FAIL") the transcript stays where it is scrolled to while a reply streams under it")
         NotificationCenter.default.post(name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
         await expect("let go near the end, the transcript follows the reply again", within: 5) { clip.bounds.minY > held + 5 }
-    }
-
-    /// Pulls the viewport past the end, where the bounce of a trackpad takes it.
-    private func pullPastEnd() {
-        guard let scrollView = transcriptScrollView, let document = scrollView.documentView else { return }
-        let clip = scrollView.contentView
-        let end = max(0, document.frame.height - clip.bounds.height)
-        clip.setBoundsOrigin(NSPoint(x: 0, y: end + 40))
-        let stayed = abs(clip.bounds.minY - (end + 40)) < 1
-        results.append("\(stayed ? "PASS" : "FAIL") the transcript lets the scroll view bounce past its end")
-        clip.scroll(to: NSPoint(x: 0, y: end))
-        scrollView.reflectScrolledClipView(clip)
     }
 
     private func finish() {

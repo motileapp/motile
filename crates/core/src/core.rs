@@ -912,7 +912,7 @@ impl Core {
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
             }
-            Command::Media { server_id, id: media_id } => self.find_media(id, &server_id, media_id),
+            Command::Media { server_id, media_id } => self.find_media(id, &server_id, media_id),
             Command::Storage => {
                 let (media, sink) = (self.media.clone(), self.sink.clone());
                 tokio::task::spawn_blocking(move || {

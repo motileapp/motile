@@ -101,7 +101,7 @@ pub enum Command {
     /// isn't is fetched from the server, and `media_progress` events say how far that is.
     Media {
         server_id: String,
-        id: String,
+        media_id: String,
     },
     /// Answers with `media_bytes`, what the fetched images and videos take on this device, and
     /// `media_limit`, what they may take.
@@ -251,6 +251,10 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(send.command, Command::Send { files, .. } if files.is_empty()));
+
+        let media: Envelope =
+            serde_json::from_str(r#"{"id": 9, "type": "media", "server_id": "h", "media_id": "m.png"}"#).unwrap();
+        assert!(matches!(media.command, Command::Media { media_id, .. } if media_id == "m.png"));
     }
 
     #[test]
