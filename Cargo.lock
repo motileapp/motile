@@ -2057,7 +2057,7 @@ dependencies = [
 
 [[package]]
 name = "motile-auth"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -2082,7 +2082,7 @@ dependencies = [
 
 [[package]]
 name = "motile-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -2103,7 +2103,7 @@ dependencies = [
 
 [[package]]
 name = "motile-protocol"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "ed25519-dalek 2.2.0",
@@ -2119,7 +2119,7 @@ dependencies = [
 
 [[package]]
 name = "motile-server"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
