@@ -16,7 +16,11 @@ const config = defineConfig({
             "x-frame-options": "DENY",
             "x-content-type-options": "nosniff",
             "referrer-policy": "no-referrer",
+            "cache-control": "no-cache",
           },
+        },
+        "/assets/**": {
+          headers: { "cache-control": "public, max-age=31536000, immutable" },
         },
       },
     }),
