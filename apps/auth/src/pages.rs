@@ -1,4 +1,5 @@
-//! The few pages a person sees in a browser, the installer script and the downloads.
+//! The installer script, the downloads, and the page a sign-in that failed ends on. The site
+//! itself is `apps/site`.
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -8,50 +9,21 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use crate::AppState;
 
 const INSTALL_SCRIPT: &str = include_str!("../assets/install.sh");
-const STYLE: &str = include_str!("../assets/style.css");
-const HOME: &str = include_str!("../assets/home.html");
-const PRIVACY: &str = include_str!("../assets/privacy.html");
-const TERMS: &str = include_str!("../assets/terms.html");
-const LOGO: &str = include_str!("../assets/logo.svg");
-
-fn page(title: &str, body: &str) -> Html<String> {
-    Html(format!(
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
-         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
-         <meta name=\"color-scheme\" content=\"light dark\">\n\
-         <title>{title}</title>\n<link rel=\"icon\" href=\"/logo.svg\">\n<style>{STYLE}</style>\n</head>\n\
-         <body>\n{body}\n</body>\n</html>\n"
-    ))
-}
+const STYLE: &str = include_str!("../assets/message.css");
 
 fn escape(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
 pub fn message(title: &str, text: &str) -> Html<String> {
-    let body = format!(
-        "<main class=\"narrow\"><a class=\"brand\" href=\"/\"><img src=\"/logo.svg\" alt=\"\">Motile</a>\
-         <h1>{}</h1><p>{}</p></main>",
-        escape(title),
-        escape(text)
-    );
-    page(&format!("{title} · Motile"), &body)
-}
-
-pub async fn home() -> Html<String> {
-    page("Motile · A command center for your coding agents", HOME)
-}
-
-pub async fn privacy() -> Html<String> {
-    page("Privacy · Motile", PRIVACY)
-}
-
-pub async fn terms() -> Html<String> {
-    page("Terms · Motile", TERMS)
-}
-
-pub async fn logo() -> Response {
-    ([(CONTENT_TYPE, "image/svg+xml"), (CACHE_CONTROL, "public, max-age=86400")], LOGO).into_response()
+    let (title, text) = (escape(title), escape(text));
+    Html(format!(
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
+         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
+         <meta name=\"color-scheme\" content=\"light dark\">\n\
+         <title>{title} · Motile</title>\n<style>{STYLE}</style>\n</head>\n\
+         <body>\n<main><a href=\"/\">Motile</a><h1>{title}</h1><p>{text}</p></main>\n</body>\n</html>\n"
+    ))
 }
 
 pub async fn install_script(State(state): State<AppState>) -> Response {

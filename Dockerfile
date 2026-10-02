@@ -1,4 +1,16 @@
-# The auth server (apps/auth). The host and the apps are built by the release workflow.
+# The auth server (apps/auth) with the site (apps/site) it serves. The host and the apps are
+# built by the release workflow, and the web app by apps/web/Dockerfile.
+
+# ---------- site ----------
+FROM node:24-bookworm-slim AS site
+RUN npm install -g pnpm@11.24.0
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/site/package.json apps/site/
+COPY apps/web/package.json apps/web/
+RUN pnpm install --frozen-lockfile --filter motile-site
+COPY apps/site apps/site
+RUN pnpm --filter motile-site build
 
 # ---------- rust toolchain ----------
 # Pinned so a new Rust release doesn't throw away the cached dependency layers.
@@ -28,7 +40,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=auth /out/motile-auth /usr/local/bin/motile-auth
-ENV PORT=3000 RUST_LOG=info
+COPY --from=site /app/apps/site/dist /srv/site
+ENV PORT=3000 RUST_LOG=info SITE_DIR=/srv/site
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD curl -fsS http://127.0.0.1:3000/healthz || exit 1
 CMD ["motile-auth"]

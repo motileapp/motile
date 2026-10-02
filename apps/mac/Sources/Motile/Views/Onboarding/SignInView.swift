@@ -11,7 +11,7 @@ struct SignInView: View {
             Text("Motile")
                 .font(.system(size: 30, weight: .semibold))
                 .padding(.top, 22)
-            Text("A command center for your coding agents.")
+            Text("The command center for coding agents.")
                 .font(.system(size: 15))
                 .foregroundStyle(Color.themeSecondary)
                 .padding(.top, 6)

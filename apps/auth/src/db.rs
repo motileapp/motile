@@ -7,6 +7,7 @@ use crate::google::Identity;
 
 pub const SIGN_IN_LIFETIME: Duration = Duration::minutes(10);
 pub const ENROLL_TOKEN_LIFETIME: Duration = Duration::hours(1);
+pub const SESSION_LIFETIME: Duration = Duration::days(30);
 pub const MAX_DEVICES_PER_USER: i64 = 200;
 
 #[derive(sqlx::FromRow, Clone)]
@@ -34,6 +35,7 @@ pub struct SignIn {
     pub google_verifier: String,
     pub nonce: String,
     pub user_id: Option<Uuid>,
+    pub web: bool,
 }
 
 pub fn kind_text(kind: DeviceKind) -> &'static str {
@@ -145,18 +147,20 @@ pub struct NewSignIn<'a> {
     pub app_state: &'a str,
     pub google_verifier: &'a str,
     pub nonce: &'a str,
+    pub web: bool,
 }
 
 pub async fn create_sign_in(db: &PgPool, sign_in: &NewSignIn<'_>) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO sign_ins (id, challenge, app_state, google_verifier, nonce, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO sign_ins (id, challenge, app_state, google_verifier, nonce, web, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(sign_in.id)
     .bind(sign_in.challenge)
     .bind(sign_in.app_state)
     .bind(sign_in.google_verifier)
     .bind(sign_in.nonce)
+    .bind(sign_in.web)
     .bind(Utc::now() + SIGN_IN_LIFETIME)
     .execute(db)
     .await?;
@@ -166,7 +170,7 @@ pub async fn create_sign_in(db: &PgPool, sign_in: &NewSignIn<'_>) -> Result<(), 
 /// The sign-in waiting for Google's answer.
 pub async fn pending_sign_in(db: &PgPool, id: &str) -> Result<Option<SignIn>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT id, challenge, app_state, google_verifier, nonce, user_id FROM sign_ins
+        "SELECT id, challenge, app_state, google_verifier, nonce, user_id, web FROM sign_ins
          WHERE id = $1 AND code_hash IS NULL AND expires_at > now()",
     )
     .bind(id)
@@ -184,15 +188,44 @@ pub async fn complete_sign_in(db: &PgPool, id: &str, user_id: Uuid, code_hash: &
     Ok(())
 }
 
-/// Takes the sign-in the code belongs to. A code works once.
-pub async fn take_sign_in(db: &PgPool, code_hash: &str) -> Result<Option<SignIn>, sqlx::Error> {
+/// Takes the sign-in the code belongs to. A code works once, and only for what it was started
+/// for: `web` to open a session, otherwise to link an app.
+pub async fn take_sign_in(db: &PgPool, code_hash: &str, web: bool) -> Result<Option<SignIn>, sqlx::Error> {
     sqlx::query_as(
-        "DELETE FROM sign_ins WHERE code_hash = $1 AND expires_at > now()
-         RETURNING id, challenge, app_state, google_verifier, nonce, user_id",
+        "DELETE FROM sign_ins WHERE code_hash = $1 AND web = $2 AND expires_at > now()
+         RETURNING id, challenge, app_state, google_verifier, nonce, user_id, web",
     )
     .bind(code_hash)
+    .bind(web)
     .fetch_optional(db)
     .await
+}
+
+pub async fn create_session(db: &PgPool, user_id: Uuid, token_hash: &str) -> Result<DateTime<Utc>, sqlx::Error> {
+    let expires_at = Utc::now() + SESSION_LIFETIME;
+    sqlx::query("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)")
+        .bind(token_hash)
+        .bind(user_id)
+        .bind(expires_at)
+        .execute(db)
+        .await?;
+    Ok(expires_at)
+}
+
+pub async fn user_of_session(db: &PgPool, token_hash: &str) -> Result<Option<UserRow>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT users.id, users.email, users.name, users.picture
+         FROM sessions JOIN users ON users.id = sessions.user_id
+         WHERE sessions.token_hash = $1 AND sessions.expires_at > now()",
+    )
+    .bind(token_hash)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn end_session(db: &PgPool, token_hash: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM sessions WHERE token_hash = $1").bind(token_hash).execute(db).await?;
+    Ok(())
 }
 
 pub async fn create_enroll_token(db: &PgPool, user_id: Uuid, token_hash: &str) -> Result<DateTime<Utc>, sqlx::Error> {
@@ -226,5 +259,6 @@ pub async fn user_by_id(db: &PgPool, id: Uuid) -> Result<Option<UserRow>, sqlx::
 pub async fn cleanup(db: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sign_ins WHERE expires_at < now()").execute(db).await?;
     sqlx::query("DELETE FROM enroll_tokens WHERE expires_at < now()").execute(db).await?;
+    sqlx::query("DELETE FROM sessions WHERE expires_at < now()").execute(db).await?;
     Ok(())
 }

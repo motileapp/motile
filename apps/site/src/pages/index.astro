@@ -1,0 +1,136 @@
+---
+import { getImage } from "astro:assets"
+import { FolderSyncIcon, GaugeIcon, RouteIcon, ServerIcon } from "lucide-react"
+import Layout from "@/layouts/main.astro"
+import { buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { DOWNLOAD_URL, GITHUB_URL, TAGLINE, WEB_APP_URL } from "@/lib/links"
+import threadLight from "@/assets/thread-light.png"
+import threadDark from "@/assets/thread-dark.png"
+
+const light = await getImage({ src: threadLight, format: "webp" })
+const dark = await getImage({ src: threadDark, format: "webp" })
+
+const features = [
+  {
+    icon: ServerIcon,
+    title: "Your machines do the work",
+    text: "A small host program runs the agents on a Linux machine and keeps the threads there. A turn keeps running when you close the app.",
+  },
+  {
+    icon: RouteIcon,
+    title: "No ports to open",
+    text: "The app connects straight to the host, encrypted end to end. It works behind a home router, and falls back to a relay when a direct path isn't possible.",
+  },
+  {
+    icon: FolderSyncIcon,
+    title: "Opens where you left off",
+    text: "The app keeps a local copy of every thread and shows it before it has connected to anything.",
+  },
+  {
+    icon: GaugeIcon,
+    title: "Built not to stall",
+    text: "Long threads, long replies and big code blocks stay smooth. Only what is on screen is drawn.",
+  },
+]
+
+const steps = [
+  {
+    title: "Sign in",
+    text: "Open the app and sign in with Google. Motile's server only keeps track of which devices are yours.",
+  },
+  {
+    title: "Add a host",
+    text: "The app shows one command. Run it on a Linux machine and that machine appears in the app.",
+    command: "curl -fsSL https://motile.app/install | sh -s -- …",
+  },
+  {
+    title: "Start a thread",
+    text: "Pick a folder on the host and ask. Claude Code or Codex gets to work there, with the access you choose.",
+  },
+]
+---
+
+<Layout image={light.src}>
+  <main class="mx-auto w-full max-w-5xl px-6 pb-24">
+    <section class="flex flex-col items-center pt-16 text-center sm:pt-24">
+      <h1 class="max-w-[16ch] text-4xl leading-[1.05] font-medium tracking-tight text-balance sm:text-6xl">
+        {TAGLINE}
+      </h1>
+      <p class="mt-6 max-w-xl text-lg text-pretty text-muted-foreground">
+        Run Claude Code and Codex on machines you own, and drive them from a
+        native app. Your threads keep working when you close the lid.
+      </p>
+      <div class="mt-9 flex flex-wrap justify-center gap-3">
+        <a href={DOWNLOAD_URL} class={cn(buttonVariants({ size: "lg" }))}>
+          Download for macOS
+        </a>
+        <a
+          href={GITHUB_URL}
+          class={cn(buttonVariants({ size: "lg", variant: "outline" }))}
+        >
+          View the source
+        </a>
+      </div>
+      <p class="mt-4 text-sm text-muted-foreground">
+        Apple silicon, macOS 14 or later. Open source under the MIT license.
+      </p>
+      <picture class="mt-14 w-full sm:mt-20">
+        <source srcset={dark.src} media="(prefers-color-scheme: dark)" />
+        <img
+          src={light.src}
+          width={light.attributes.width}
+          height={light.attributes.height}
+          alt="A thread in Motile: the agent's reply with code, a table and what it changed"
+          class="w-full rounded-2xl border shadow-2xl shadow-foreground/10"
+        />
+      </picture>
+    </section>
+
+    <section class="mt-24 grid gap-x-10 gap-y-10 sm:mt-32 sm:grid-cols-2">
+      {features.map((feature) => (
+        <div class="flex gap-4">
+          <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted">
+            <feature.icon className="size-5" />
+          </div>
+          <div>
+            <h2 class="font-medium">{feature.title}</h2>
+            <p class="mt-1 text-pretty text-muted-foreground">{feature.text}</p>
+          </div>
+        </div>
+      ))}
+    </section>
+
+    <section class="mt-24 sm:mt-32">
+      <h2 class="text-2xl font-medium tracking-tight sm:text-3xl">
+        Running in three steps
+      </h2>
+      <ol class="mt-8 grid gap-4 md:grid-cols-3">
+        {steps.map((step, index) => (
+          <li class="flex min-w-0 flex-col rounded-2xl border bg-card p-5">
+            <span class="flex size-7 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
+              {index + 1}
+            </span>
+            <h3 class="mt-4 font-medium">{step.title}</h3>
+            <p class="mt-1 text-pretty text-muted-foreground">{step.text}</p>
+            {step.command && (
+              <code class="mt-4 rounded-xl bg-muted px-3 py-2.5 font-mono text-xs break-all">
+                {step.command}
+              </code>
+            )}
+          </li>
+        ))}
+      </ol>
+      <p class="mt-6 text-muted-foreground">
+        Your hosts and apps are listed at{" "}
+        <a
+          href={WEB_APP_URL}
+          class="text-foreground underline underline-offset-4"
+        >
+          app.motile.app
+        </a>
+        , where you can also add a host or remove a device.
+      </p>
+    </section>
+  </main>
+</Layout>

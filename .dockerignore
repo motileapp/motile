@@ -2,6 +2,11 @@
 .github
 .env
 **/target
+**/node_modules
+**/dist
+**/.output
+**/.astro
+**/.tanstack
 apps/mac
 docs
 fixtures

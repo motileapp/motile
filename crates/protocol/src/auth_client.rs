@@ -101,7 +101,8 @@ impl AuthClient {
 
     /// Signs in without Google. Only answered by an auth server started with `DEV_LOGIN=1`.
     pub async fn dev_login(&self, verifier: &str, email: &str) -> anyhow::Result<String> {
-        let request = DevLoginRequest { challenge: sha256_hex(verifier.as_bytes()), email: email.to_string() };
+        let request =
+            DevLoginRequest { challenge: sha256_hex(verifier.as_bytes()), email: email.to_string(), web: false };
         let response: DevLoginResponse = self.send(self.post("/api/dev/login", &request)).await?;
         Ok(response.code)
     }

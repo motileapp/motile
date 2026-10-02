@@ -16,6 +16,11 @@ pub struct Config {
     pub releases_url: String,
     /// When set, `/download/<file>` serves files from this folder instead.
     pub download_dir: Option<String>,
+    /// The web app's address. Sign-ins it starts end at its `/auth/callback`; without it there
+    /// are none.
+    pub web_url: Option<String>,
+    /// The built marketing site (`apps/site/dist`), served for every address that isn't a route.
+    pub site_dir: Option<String>,
 }
 
 fn required(name: &str) -> Result<String, String> {
@@ -46,7 +51,14 @@ impl Config {
             dev_login: optional("DEV_LOGIN").is_some_and(|value| value == "1"),
             releases_url: optional("RELEASES_URL").unwrap_or_else(|| DEFAULT_RELEASES_URL.to_string()),
             download_dir: optional("DOWNLOAD_DIR"),
+            web_url: optional("WEB_URL").map(|url| url.trim_end_matches('/').to_string()),
+            site_dir: optional("SITE_DIR"),
         })
+    }
+
+    /// Where the web app is handed the code of a sign-in it started.
+    pub fn web_redirect(&self) -> Option<String> {
+        self.web_url.as_ref().map(|url| format!("{url}/auth/callback"))
     }
 
     pub fn install_command(&self, token: &str) -> String {

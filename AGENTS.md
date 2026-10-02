@@ -1,26 +1,35 @@
 ## What is this?
 
-Motile is an open-source command center for coding agents. The agents (Claude Code and Codex)
-run on machines the user owns, called hosts. Native apps drive them: an app connects straight to
-its hosts over [iroh](https://www.iroh.computer), which needs no open ports, and keeps a local
-copy of every thread so it opens where it was left. There is no local mode; an app always talks
-to a host.
+Motile is the command center for coding agents, and it is open source. The agents (Claude Code
+and Codex) run on machines the user owns, called hosts. Native apps drive them: an app connects
+straight to its hosts over [iroh](https://www.iroh.computer), which needs no open ports, and
+keeps a local copy of every thread so it opens where it was left. There is no local mode; an app
+always talks to a host.
 
-Three programs make it up, plus the code the apps share:
+These programs make it up, plus the code the apps share:
 
 | Program | Where it runs | What it does |
 | --- | --- | --- |
-| Auth server (`apps/auth`) | motile.app | Signs people in with Google, records which devices belong to an account, serves the installer |
+| Auth server (`apps/auth`) | motile.app | Signs people in with Google, records which devices belong to an account, serves the installer and the site |
+| Site (`apps/site`) | motile.app, as static files | The landing page, privacy and terms |
+| Web app (`apps/web`) | app.motile.app | Lists an account's hosts and apps, adds hosts, removes devices |
 | Host (`apps/server`, the `motile` binary) | The user's Linux machines | Runs the agents, stores threads in SQLite, serves the account's apps |
 | Mac app (`apps/mac`) | The user's Mac | The interface |
 | Core (`crates/core`) | Inside every app | Account, connections, sync, the local cache, rendering transcripts |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
 keys belong to one account; it never sees a thread. A host accepts connections only from its
-account's apps. README.md covers how a user sets things up.
+account's apps. The web app is not a device: it holds a session, which can manage the account
+but can never connect to a host. README.md covers how a user sets things up.
 
-Production is the `Motile` project on Unbind: the `Motile` service (the auth server) and a
-`Postgres` database, at https://motile.app.
+Production is the `Motile` project on Unbind:
+
+| Service | Address | What it runs |
+| --- | --- | --- |
+| `Motile` | https://motile.app | The auth server and the site, built from `Dockerfile` |
+| `Web` | https://app.motile.app | The web app, built from `apps/web/Dockerfile` |
+| `Relay` | https://relay.motile.app | iroh's relay, the `n0computer/iroh-relay` image with its config in `RELAY_CONFIG` |
+| `Postgres` | | The auth server's database |
 
 ## Repo Structure:
 
@@ -33,20 +42,40 @@ What the three programs agree on.
 - `auth_api.rs` and `auth_client.rs` are the auth server's JSON and the client for it.
 - `identity.rs` is the device key and request signing: a linked device signs its requests to the
   auth server instead of holding a token.
+- `relay.rs` is the relays apps and hosts meet on: Motile's own next to iroh's public ones.
+  Motile's has no QUIC address discovery (it sits behind Unbind's ingress, which only passes
+  HTTP), so iroh's are what tell a device its public address.
 
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
-- `sign_in.rs` is the browser's side of a sign-in: `/auth/start`, Google, and back to the app at
-  `motile://auth` with a one-time code. `google.rs` is the OIDC exchange.
-- `api.rs` is what apps and hosts call: exchanging the code for a linked device, install tokens
-  (`/api/enroll-tokens`, `/api/enroll`), `/api/me`, removing devices.
-- `pages.rs` serves the landing page, `/install` (`assets/install.sh`) and `/download/<file>`,
-  which redirects to the latest GitHub release.
+- `sign_in.rs` is the browser's side of a sign-in: `/auth/start`, Google, and back with a
+  one-time code, to the app at `motile://auth` or to the web app at `WEB_URL/auth/callback`.
+  `google.rs` is the OIDC exchange.
+- `api.rs` is what apps, hosts and the web app call: exchanging the code for a linked device or
+  for a web session (`/api/sessions`), install tokens (`/api/enroll-tokens`, `/api/enroll`),
+  `/api/me`, removing devices. A caller is a device that signed the request or a session's
+  `Bearer` token.
+- `pages.rs` serves `/install` (`assets/install.sh`) and `/download/<file>`, which redirects to
+  the latest GitHub release. Everything that isn't a route is served from `SITE_DIR`, the built
+  `apps/site`.
 - `migrations/` is the schema. Expired sign-ins and tokens are deleted every minute.
 - `e2e/` runs the real router on a fresh database per test, with a fake Google. `e2e/whole.rs`
   runs all three programs together.
 - `DEV_LOGIN=1` lets anyone sign in as anyone without Google. It exists for tests, the Mac demo
   and local work, and must never be set in production.
+
+### apps/site (Astro, static) and apps/web (TanStack Start)
+
+Both use shadcn/ui (preset `b7ClRmfAW`, Base UI, Tailwind 4) and follow the system's light or
+dark appearance. They are one pnpm workspace; add components with
+`pnpm dlx shadcn@latest add <name>` inside the app.
+
+- `apps/site` builds to `dist`, which the auth server serves. It ships no JavaScript; React only
+  renders at build time.
+- `apps/web` runs on its own server. `src/server/auth.ts` holds the session: the browser only
+  gets an HttpOnly cookie, and the server calls the auth server with the session's token.
+  `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/` starts and
+  finishes a sign-in.
 
 ### apps/server (the host)
 
@@ -96,9 +125,10 @@ Rust library for tests.
   and text layout preparation happen in the core or on a background queue, and the transcript
   only ever builds what is on screen. If a change touches the transcript, run the Mac workflow
   and read the stall numbers in `checks.txt`.
-- The auth server is security-critical. The sign-in code is only ever sent to `motile://auth`,
-  works once, and only with the secret that started the sign-in. Codes and tokens are stored
-  hashed. Anything that changes this needs a test in `apps/auth/src/e2e`.
+- The auth server is security-critical. The sign-in code is only ever sent to `motile://auth` or
+  to the web app's callback, works once, and only with the secret that started the sign-in. A
+  code sent to the web app only opens a session and never links a device. Codes and tokens are
+  stored hashed. Anything that changes this needs a test in `apps/auth/src/e2e`.
 - A host runs agents with full access to its machine. It must only ever accept devices of its
   own account.
 - Rendering logic belongs in `crates/core`, not in an app, so that every future app (iOS,
@@ -108,7 +138,8 @@ Rust library for tests.
   them concise. Remove such comments when you come by them in the codebase. Comments should
   always move with code, not be left behind.
 - Use guard statement patterns in any code you write.
-- Do not edit generated code: `Cargo.lock`. Never edit an applied migration in
+- Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`
+  and the shadcn components in `src/components/ui`. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.
 - Do not write useless tests; tests should cover input/output behaviour.
 - Reinvent the wheel but do not reinvent the car. If you are solving a simple problem do not
@@ -127,10 +158,13 @@ Rust library for tests.
 
 ## Development
 
-Needs Rust stable and Docker (for Postgres). The Mac app needs Xcode 16 or later.
+Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the site and the web app.
+The Mac app needs Xcode 16 or later.
 
     docker compose up -d                              # Postgres on localhost:5435
+    pnpm install && pnpm --filter motile-site build   # the site the auth server serves
     cargo run -p motile-auth                          # with the variables from .env.example exported
+    pnpm --filter motile-web dev                      # the web app on localhost:3001, with apps/web/.env.example exported
     cargo run -p motile-server -- run                 # a host, once linked with `motile setup <token>`
     cargo run -p motile-core --example drive          # the core, driven from a terminal
     apps/mac/scripts/build-app.sh --open              # on a Mac
@@ -139,6 +173,7 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
 
     export DATABASE_URL=postgres://motile:motile@localhost:5435/motile
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
+    pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing the site or the web app
 
 The Mac app can't be built on Linux. The `Mac` workflow builds it on every push that touches it,
 runs the demo and uploads the app and the screenshots:
@@ -155,10 +190,9 @@ Pushing a tag `v*` runs the `Release` workflow, which publishes the host and the
 Linux and the Mac app as a GitHub release. The installer and the download button always fetch
 the latest release.
 
-The auth server on Unbind is an `alpine` image whose run command downloads `motile-auth` from
-the latest release, so deploying it is: tag a release, then restart the `Motile` service.
-(Unbind's GitHub app isn't installed on the `motileapp` organisation; if it is one day, the
-service can build from the `Dockerfile` instead.)
+Unbind builds the `Motile` and `Web` services from `main` and deploys them on every push that
+touches their files. The `Relay` service runs a pinned `n0computer/iroh-relay` image; keep it on
+the same minor version as the `iroh` crate.
 
 ## Commit Messages
 

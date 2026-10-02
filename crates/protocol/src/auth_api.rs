@@ -53,6 +53,21 @@ pub fn link_message(code: &str) -> Vec<u8> {
     format!("link\n{code}").into_bytes()
 }
 
+/// Finishes a sign-in the web app started: the code its callback was sent, and the secret whose
+/// hash started the sign-in.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SessionRequest {
+    pub code: String,
+    pub verifier: String,
+}
+
+/// A browser signed in to the web app. The token is sent as `Authorization: Bearer <token>`.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Session {
+    pub token: String,
+    pub expires_at: f64,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct EnrollToken {
     pub token: String,
@@ -84,6 +99,9 @@ pub struct EnrollResponse {
 pub struct DevLoginRequest {
     pub challenge: String,
     pub email: String,
+    /// The code is for the web app, to open a session with, rather than for an app to link itself.
+    #[serde(default)]
+    pub web: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

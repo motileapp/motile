@@ -55,7 +55,15 @@ async fn the_code_is_only_ever_sent_to_the_app(db: PgPool) {
     let auth = Auth::start(db).await;
     let challenge = sha256_hex(b"verifier");
 
-    for redirect in ["https://evil.example.com", "motile://auth.evil", ""] {
+    let elsewhere = [
+        "https://evil.example.com",
+        "motile://auth.evil",
+        "https://app.example.com",
+        "https://app.example.com/auth/callback/",
+        "https://app.example.com.evil.example.com/auth/callback",
+        "",
+    ];
+    for redirect in elsewhere {
         let url = format!("{}/auth/start?challenge={challenge}&state=s&redirect={redirect}", auth.base);
         assert_eq!(auth.get(&url).await.status(), StatusCode::BAD_REQUEST, "{redirect}");
     }
@@ -103,7 +111,7 @@ async fn signing_in_again_keeps_the_account_and_another_person_gets_their_own(db
 
 #[sqlx::test]
 async fn the_dev_login_only_exists_when_it_is_switched_on(db: PgPool) {
-    let auth = Auth::start_with(db, false).await;
+    let auth = Auth::start_with(db, |config| config.dev_login = false).await;
     let refused = auth.client.dev_login(&random_token(), "dev@example.com").await;
     assert!(refused.is_err());
 }
@@ -135,4 +143,24 @@ async fn the_installer_downloads_from_this_server_and_downloads_lead_to_the_rele
     );
     let odd = auth.get(&format!("{}/download/..%2Fsecret", auth.base)).await;
     assert_eq!(odd.status(), StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test]
+async fn the_site_is_served_from_its_folder_next_to_the_routes(db: PgPool) {
+    let site = tempfile::tempdir().unwrap();
+    std::fs::write(site.path().join("index.html"), "the home page").unwrap();
+    std::fs::write(site.path().join("404.html"), "the missing page").unwrap();
+    let site_dir = site.path().to_str().unwrap().to_string();
+    let auth = Auth::start_with(db, |config| config.site_dir = Some(site_dir)).await;
+
+    let home = auth.get(&auth.base).await;
+    assert_eq!(home.status(), StatusCode::OK);
+    assert_eq!(home.text().await.unwrap(), "the home page");
+
+    let missing = auth.get(&format!("{}/nowhere", auth.base)).await;
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    assert_eq!(missing.text().await.unwrap(), "the missing page");
+
+    let script = auth.get(&format!("{}/install", auth.base)).await.text().await.unwrap();
+    assert!(script.starts_with("#!/bin/sh"));
 }

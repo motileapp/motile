@@ -3,6 +3,7 @@
 
 mod devices;
 mod sign_in;
+mod web;
 mod whole;
 
 use std::collections::HashMap;
@@ -22,6 +23,7 @@ use crate::config::Config;
 use crate::{Inner, google, router};
 
 const GOOGLE_CLIENT_ID: &str = "google-client";
+const WEB_URL: &str = "https://app.example.com";
 const MAC: DeviceDescription<'static> = DeviceDescription { name: "Ann's Mac", platform: "macos" };
 const LINUX: DeviceDescription<'static> = DeviceDescription { name: "build-box", platform: "linux" };
 
@@ -49,10 +51,10 @@ pub struct Auth {
 
 impl Auth {
     pub async fn start(db: PgPool) -> Self {
-        Self::start_with(db, true).await
+        Self::start_with(db, |_| {}).await
     }
 
-    pub async fn start_with(db: PgPool, dev_login: bool) -> Self {
+    pub async fn start_with(db: PgPool, configure: impl FnOnce(&mut Config)) -> Self {
         motile_protocol::tls::install();
         let google_account = Arc::new(Mutex::new(ANN));
         let google_nonce = Arc::new(Mutex::new(String::new()));
@@ -60,7 +62,7 @@ impl Auth {
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
-        let config = Config {
+        let mut config = Config {
             public_url: base.clone(),
             database_url: String::new(),
             port: 0,
@@ -68,10 +70,13 @@ impl Auth {
             google_client_secret: "google-secret".into(),
             google_authorize_url: google::AUTHORIZE_URL.into(),
             google_token_url: format!("{google_base}/token"),
-            dev_login,
+            dev_login: true,
             releases_url: "https://releases.example.com/latest".into(),
             download_dir: None,
+            web_url: Some(WEB_URL.into()),
+            site_dir: None,
         };
+        configure(&mut config);
         let state = Arc::new(Inner { config, db: db.clone(), http: reqwest::Client::new() });
         tokio::spawn(async move { axum::serve(listener, router(state)).await.unwrap() });
 
@@ -85,14 +90,22 @@ impl Auth {
 
     /// Opens the sign-in page as the browser would and returns where Google is asked to sign in.
     async fn open_sign_in(&self, verifier: &str, app_state: &str) -> Url {
-        let response = self.get(&self.client.sign_in_url(verifier, app_state)).await;
+        self.open(&self.client.sign_in_url(verifier, app_state)).await
+    }
+
+    async fn open(&self, sign_in_url: &str) -> Url {
+        let response = self.get(sign_in_url).await;
         assert!(response.status().is_redirection(), "{}", response.status());
         Url::parse(response.headers()[LOCATION].to_str().unwrap()).unwrap()
     }
 
     /// Goes through Google as `account` and returns where the browser ends up.
     async fn through_google(&self, verifier: &str, app_state: &str, account: &GoogleAccount) -> reqwest::Response {
-        let google = self.open_sign_in(verifier, app_state).await;
+        self.through_google_from(&self.client.sign_in_url(verifier, app_state), account).await
+    }
+
+    async fn through_google_from(&self, sign_in_url: &str, account: &GoogleAccount) -> reqwest::Response {
+        let google = self.open(sign_in_url).await;
         let query: HashMap<String, String> = google.query_pairs().into_owned().collect();
         *self.google_account.lock().unwrap() = account.clone();
         *self.google_nonce.lock().unwrap() = query["nonce"].clone();
