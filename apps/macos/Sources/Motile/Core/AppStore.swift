@@ -102,6 +102,11 @@ final class AppStore {
     private(set) var mediaStorage: MediaStorage?
     private var drafts: [String: String] = [:]
     private var attachmentsByKey: [String: [String]] = [:]
+    /// The attached files that are on their server already: those of a queued message that was
+    /// taken back.
+    private var uploaded: Set<String> = []
+    /// Messages on their way to a thread whose agent is working, by thread.
+    private var outgoing: [String: [QueuedMessage]] = [:]
 
     let updater = AppUpdater()
     @ObservationIgnored let core = CoreBridge()
@@ -206,7 +211,7 @@ final class AppStore {
             }
         case "activity":
             let threadID = event.string("thread_id")
-            let activity = Activity(json: event.object("activity") ?? [:], waiting: event.objects("waiting"))
+            let activity = Activity(json: event.object("activity") ?? [:], waiting: event.objects("waiting"), queued: event.objects("queued"))
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
                 if self.activity != activity { self.activity = activity }
@@ -677,10 +682,13 @@ final class AppStore {
     func send() {
         guard canSend else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let files = attachments
+        let attached = attachments
+        let files = attached.filter { !uploaded.contains($0) }
         let key = draftKey
-        var command: JSON = ["text": text, "files": files]
+        var command: JSON = ["text": text, "files": files, "attachments": attached.filter { uploaded.contains($0) }]
         let existing = selectedThread
+        // A message for an agent that is working waits in the queue, not in the transcript.
+        let queued = existing != nil && activity.running ? QueuedMessage(sending: text, files: attached) : nil
         if let thread = existing {
             command["server_id"] = thread.serverID
             command["thread_id"] = thread.id
@@ -706,19 +714,24 @@ final class AppStore {
         let serverID = command.string("server_id")
         draft = ""
         attachments = []
-        transcript.setPending(text)
-        transcriptIsEmpty = false
+        if let queued {
+            outgoing[key, default: []].append(queued)
+        } else {
+            transcript.setPending(text)
+            transcriptIsEmpty = false
+        }
 
         core.send("send", command) { [weak self] result in
             guard let self else { return }
             if existing == nil { self.sendingDraftIDs.remove(key) }
+            if let queued { self.outgoing[key]?.removeAll { $0.id == queued.id } }
             switch result {
             case .failure(let error):
                 // The message goes back to where it was written, wherever the app is now.
                 self.setText(text, for: key)
-                self.attachmentsByKey[key] = files.isEmpty ? nil : files
+                self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
                 self.errorMessage = error.message
-                guard self.draftKey == key else { return }
+                guard self.draftKey == key, queued == nil else { return }
                 self.transcript.setPending(nil)
                 self.transcriptIsEmpty = self.transcript.isEmpty
                 self.activity = existing == nil ? Activity() : self.activity
@@ -780,6 +793,33 @@ final class AppStore {
         guard let thread = selectedThread else { return }
         let answer: JSON = ["type": "answer", "thread_id": thread.id, "approval_id": approval.id, "allow": allow, "answers": answers]
         request(thread.serverID, answer)
+    }
+
+    /// The messages that wait for the open thread's agent, and those on their way to it.
+    var queuedMessages: [QueuedMessage] {
+        guard let thread = selectedThread else { return [] }
+        return activity.queued + (outgoing[thread.id] ?? [])
+    }
+
+    /// Gives the agent a queued message without waiting for its next tool call.
+    func sendNow(_ message: QueuedMessage) {
+        guard let thread = selectedThread else { return }
+        request(thread.serverID, ["type": "send_queued", "thread_id": thread.id, "message_id": message.id])
+    }
+
+    /// Takes a queued message back into the composer of its thread, after what is written there.
+    func takeBack(_ message: QueuedMessage) {
+        guard let thread = selectedThread else { return }
+        let key = thread.id
+        request(thread.serverID, ["type": "cancel_queued", "thread_id": thread.id, "message_id": message.id], done: { [weak self] in
+            guard let self else { return }
+            let written = [self.drafts[key] ?? "", message.text].filter { !$0.isEmpty }
+            self.setText(written.joined(separator: "\n\n"), for: key)
+            self.uploaded.formUnion(message.attachments)
+            let attached = (self.attachmentsByKey[key] ?? []) + message.attachments.filter { !(self.attachmentsByKey[key] ?? []).contains($0) }
+            self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
+            self.composerFocus += 1
+        })
     }
 
     func rename(_ thread: ThreadInfo, to title: String) {

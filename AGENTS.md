@@ -80,18 +80,26 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 ### apps/server
 
 - `hub.rs` is the live state of every thread. A turn is one run of the agent's CLI; its events
-  are applied there, saved, and sent to every app that has the thread open. Claude Code's
-  process is talked to over its stdin while it runs: it asks before a tool call that needs
-  approval and waits for the app's answer, which is also how its questions to the user are
-  answered and its plan is approved, and it is told when the thread's model, effort or access
-  change. It stays after a turn while something it started is still running (a monitor,
-  a background shell): the thread is then `monitoring`, the process takes the next messages
-  itself, and it starts turns of its own when what it watches reports.
+  are applied there, saved, and sent to every app that has the thread open. The agent's process
+  is talked to over its stdin while it runs: it asks before a tool call that needs approval and
+  waits for the app's answer, which is also how its questions to the user are answered and its
+  plan is approved. Claude Code is also told when the thread's model, effort or access change;
+  Codex takes them when its next process starts. A message sent while a turn runs is queued:
+  the agent is given it after its next tool call, or when the turn ends, and it joins the
+  transcript when the agent says it has read it. A queued message can be sent at once or taken
+  back, and the ones a stopped turn leaves behind wait until they are sent. The queue is only
+  in memory. Claude Code's process stays after a turn while something it started is still
+  running (a monitor, a background shell): the thread is then `monitoring`, the process takes
+  the next messages itself, and it starts turns of its own when what it watches reports.
 - `pacing.rs` says how much of a streamed reply is finished. The hub passes text on in finished
   blocks (a paragraph, a list item, a line of code), not token by token.
-- `agents/` builds the command for a turn and parses its output: `claude.rs` for
-  `claude -p --input-format stream-json --output-format stream-json --permission-prompt-tool
-  stdio`, `codex.rs` for `codex exec --json`. Both become the same `AgentEvent`s. `models.rs` lists Claude's models by hand; Codex's are read from its cache.
+- `agents/` builds the command for a turn, the lines its process is given and parses its
+  output: `claude.rs` for `claude -p --input-format stream-json --output-format stream-json
+  --replay-user-messages --permission-prompt-tool stdio`, `codex.rs` for `codex app-server`,
+  which is JSON-RPC: its parser asks for the thread and the turn as the answers arrive. Both
+  become the same `AgentEvent`s. Codex presents a plan when its turn has ended and carries it
+  out in a turn of its own. `models.rs` lists Claude's models by hand; Codex's are read from
+  its cache.
 - `store.rs` is SQLite. Every item has a position (`seq`) and the revision that last changed it
   (`rev`); an app asks for what changed after the revision it has.
 - `title.rs` generates thread titles with the thread's own agent.
@@ -126,8 +134,9 @@ Rust library for tests.
 - `render/` turns transcripts into rows ready to draw: `markdown.rs` (text with style runs, in
   UTF-16 offsets), `highlight.rs` (syntect; streaming code is highlighted incrementally) and
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
-  are one row, a finished turn's work folds behind one, and an image or a video is a row that
-  knows its size before the file is there).
+  are one row, a finished turn's work folds behind one, as does what the agent did before a
+  message it took mid-turn, and an image or a video is a row that knows its size before the
+  file is there). It also words the queued messages: when the agent gets each.
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
   terminal.
 
@@ -142,7 +151,9 @@ Rust library for tests.
   screen, `RowViews.swift` are the rows, `Rows.swift` builds their text off the main thread.
   `MediaRowView.swift` is the row of an image or a video: images are decoded off the main
   thread at the size they are shown, and a video is downloaded when it is played.
-- `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
+- `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI. The
+  composer also shows what waits for the user or the agent: the approvals and the queued
+  messages.
   `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P, and `Views/Shared` holds the
   window's glass surface, the hover highlight and the agents' and projects' icons.
 - `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
@@ -225,7 +236,9 @@ the recorded output in `fixtures/` or makes up a turn, depending on the prompt. 
 "watch the deploy" it stays after its turn, as Claude Code does while it monitors, asked to
 "run greet.py" under supervised access it asks before each tool call, and asked to "show the
 screenshot" it makes an image and shows it. "Which color" has it
-ask the user a question, and "plan the hello" present a plan to approve.
+ask the user a question, and "plan the hello" present a plan to approve. A message it is given
+while it works is read after its next tool call, as both agents do, and "run greet.py" ends
+its reply with it.
 
 ## Releasing and deploying
 

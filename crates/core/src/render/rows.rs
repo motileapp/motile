@@ -8,7 +8,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use motile_protocol::wire::{Approval, Item, ItemKind, ToolCall, ToolStatus};
+use motile_protocol::wire::{Approval, Item, ItemKind, Queued, ToolCall, ToolStatus};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -180,6 +180,39 @@ pub struct Question {
 pub struct Choice {
     pub label: String,
     pub detail: String,
+}
+
+/// A message that waits for the agent to take it.
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct QueuedMessage {
+    pub id: String,
+    pub text: String,
+    /// The files attached to it, as paths on the server.
+    pub attachments: Vec<String>,
+    /// When the agent gets it.
+    pub status: &'static str,
+    /// The agent is being given it, so it can no longer be sent now or taken back.
+    pub sending: bool,
+}
+
+/// The queued messages with what to say about each.
+pub fn queued(queued: &[Queued]) -> Vec<QueuedMessage> {
+    let busy = queued.iter().any(|message| message.sending);
+    let next = queued.iter().position(|message| !message.held && !message.sending).filter(|_| !busy);
+    let status = |index: usize, message: &Queued| match (message.sending, message.held) {
+        (true, _) => "Sending…",
+        (false, true) => "Not sent yet",
+        (false, false) if next == Some(index) => "Sends after the next tool call",
+        (false, false) => "Sends after the message above",
+    };
+    let shown = queued.iter().enumerate().map(|(index, message)| QueuedMessage {
+        id: message.id.clone(),
+        text: message.text.clone(),
+        attachments: message.attachments.clone(),
+        status: status(index, message),
+        sending: message.sending,
+    });
+    shown.collect()
 }
 
 pub struct Splice {
@@ -398,7 +431,15 @@ fn present<'a>(items: &'a [Item], rendered: &'a [Vec<Row>], opened: &HashSet<Str
                 || matches!(items[index - 1].kind, ItemKind::TurnEnd { .. })
         });
         let end = next_turn.unwrap_or(items.len());
-        present_turn(&items[start..end], &rendered[start..end], opened, &mut shown);
+        let is_turn_end = |item: &Item| matches!(item.kind, ItemKind::TurnEnd { .. });
+        let went_on = !items[start..end].iter().any(is_turn_end);
+        let part = Part {
+            took_message: start > 0 && !is_turn_end(&items[start - 1]),
+            last: end == items.len(),
+            // The user said more while the agent worked, and the turn has ended since.
+            ended_after: items[end..].first().filter(|_| went_on && items[end..].iter().any(is_turn_end)),
+        };
+        present_turn(&items[start..end], &rendered[start..end], part, opened, &mut shown);
         start = end;
     }
     join(&mut shown);
@@ -418,11 +459,23 @@ fn join(shown: &mut [Cow<Row>]) {
     }
 }
 
+/// Where a part of the transcript stands among the others. A turn the user spoke into is
+/// several parts: one up to each message the agent took while it worked.
+struct Part<'a> {
+    /// It starts with a message the agent took while it worked.
+    took_message: bool,
+    /// Nothing comes after it.
+    last: bool,
+    /// The message the agent took after this part, once the turn that went on with it has ended.
+    ended_after: Option<&'a Item>,
+}
+
 /// A turn is the user's message and what the agent did until it ended, or what an agent that
 /// monitors did when it went back to work by itself.
 fn present_turn<'a>(
     items: &'a [Item],
     rendered: &'a [Vec<Row>],
+    part: Part,
     opened: &HashSet<String>,
     shown: &mut Vec<Cow<'a, Row>>,
 ) {
@@ -430,25 +483,33 @@ fn present_turn<'a>(
     shown.extend(rendered[..work_start].iter().flatten().map(Cow::Borrowed));
 
     let ended = items.iter().rev().find_map(|item| match &item.kind {
-        ItemKind::TurnEnd { summary } => Some(summary),
+        ItemKind::TurnEnd { summary } => Some((summary, item.created_at)),
         _ => None,
     });
     let failed = items.iter().any(|item| matches!(item.kind, ItemKind::Error { .. }));
     let answer = items.iter().rposition(|item| matches!(item.kind, ItemKind::Assistant { .. }));
-    // Once the turn has ended well, what led up to its last message folds away.
-    let fold = match (ended, answer) {
-        (Some(summary), Some(answer)) if !failed && answer > work_start => Some((summary, answer)),
+    let since_start = |until: f64| Some(((until - items[0].created_at).max(0.0) * 1000.0) as u64);
+    // Once the turn has ended well, what led up to its last message folds away. So does all of
+    // what the agent did before the user said more.
+    let fold = match (ended, answer, part.ended_after) {
+        (Some((summary, at)), Some(answer), _) if !failed && answer > work_start => {
+            let duration_ms = if part.took_message { since_start(at) } else { summary.duration_ms };
+            Some((duration_ms, summary.stopped, answer))
+        }
+        (None, _, Some(next)) if !failed && items.len() > work_start => {
+            Some((since_start(next.created_at), false, items.len()))
+        }
         _ => None,
     };
 
     let mut index = work_start;
-    if let Some((summary, answer)) = fold {
+    if let Some((duration_ms, stopped, shown_from)) = fold {
         let id = format!("{}/fold", items[work_start].id);
         let open = opened.contains(&id);
-        let kind = RowKind::Fold { duration_ms: summary.duration_ms, stopped: summary.stopped, open };
+        let kind = RowKind::Fold { duration_ms, stopped, open };
         shown.push(Cow::Owned(Row { id, item: items[work_start].id.clone(), nested: false, kind }));
         if !open {
-            index = answer;
+            index = shown_from;
         }
     }
 
@@ -472,7 +533,7 @@ fn present_turn<'a>(
         let id = format!("{}/group", first.item);
         let open = opened.contains(&id);
         // The calls a running turn is making now are named; the ones behind it are summed up.
-        let live = ended.is_none() && run_end == items.len();
+        let live = ended.is_none() && part.last && run_end == items.len();
         shown.push(Cow::Owned(Row { id, item: first.item.clone(), nested: false, kind: group(run, live, open) }));
         if open {
             shown.extend(run.iter().flatten().map(|row| Cow::Owned(Row { nested: true, ..row.clone() })));
@@ -724,8 +785,8 @@ fn describe(call: &ToolCall, cwd: &str) -> Tool {
         "Read" => ("file", verb("Reading", "Read"), path, String::new(), String::new()),
         "Write" => ("edit", verb("Writing", "Wrote"), path, text("content"), language_of(&text("file_path"))),
         "Edit" | "MultiEdit" | "NotebookEdit" => {
-            let changes = match input["edits"].as_array() {
-                Some(edits) => edits
+            let changes = match (input["edits"].as_array(), input["changes"].as_array()) {
+                (Some(edits), _) => edits
                     .iter()
                     .map(|edit| {
                         diff(
@@ -735,7 +796,11 @@ fn describe(call: &ToolCall, cwd: &str) -> Tool {
                     })
                     .collect::<Vec<_>>()
                     .join("\n"),
-                None => diff(&text("old_string"), &text("new_string")),
+                // Codex says what it changed as diffs, one for each file.
+                (None, Some(changes)) => {
+                    changes.iter().filter_map(|change| change["diff"].as_str()).collect::<Vec<_>>().join("\n")
+                }
+                (None, None) => diff(&text("old_string"), &text("new_string")),
             };
             ("edit", verb("Editing", "Edited"), path, changes, "diff".to_string())
         }
@@ -1094,6 +1159,65 @@ mod tests {
     }
 
     #[test]
+    fn work_before_a_message_the_agent_took_folds_once_the_turn_has_ended() {
+        let read = |id: &str, seq| {
+            call(id, seq, "Read", serde_json::json!({"file_path": "/srv/api/a.rs"}), ToolStatus::Succeeded)
+        };
+        let at = |created_at, item: Item| Item { created_at, ..item };
+        let user = |id: &str, seq| item(id, seq, ItemKind::User { text: "Go".into(), attachments: Vec::new() });
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![
+            at(100.0, user("u1", 0)),
+            assistant("a1", 1, "Looking."),
+            read("t1", 2),
+            read("t2", 3),
+            at(130.0, user("u2", 4)),
+            read("t3", 5),
+            assistant("a2", 6, "Done."),
+        ]);
+        assert_eq!(
+            outline(&transcript),
+            ["user", "Looking.", "[Read 2 files]", "user", "Read a.rs", "Done."],
+            "nothing folds while the turn runs"
+        );
+
+        let summary = motile_protocol::wire::TurnSummary { duration_ms: Some(90_000), ..Default::default() };
+        transcript.upsert(at(190.0, item("e", 7, ItemKind::TurnEnd { summary })), true);
+        assert_eq!(outline(&transcript), ["user", "fold", "user", "fold", "Done.", "end folded"]);
+        let folds = transcript.rows().iter().filter_map(|row| match row.kind {
+            RowKind::Fold { duration_ms, .. } => duration_ms,
+            _ => None,
+        });
+        assert_eq!(folds.collect::<Vec<_>>(), [30_000, 60_000], "each fold says how long its own part took");
+
+        transcript.toggle("a1/fold");
+        assert_eq!(
+            outline(&transcript),
+            ["user", "fold open", "Looking.", "[Read 2 files]", "user", "fold", "Done.", "end folded"]
+        );
+    }
+
+    #[test]
+    fn queued_messages_say_when_the_agent_gets_them() {
+        let message = |id: &str, held, sending| Queued {
+            id: id.into(),
+            text: "Also this".into(),
+            attachments: Vec::new(),
+            held,
+            sending,
+        };
+        let statuses = |messages: &[Queued]| queued(messages).iter().map(|message| message.status).collect::<Vec<_>>();
+
+        let waiting = [message("a", true, false), message("b", false, false), message("c", false, false)];
+        assert_eq!(
+            statuses(&waiting),
+            ["Not sent yet", "Sends after the next tool call", "Sends after the message above"]
+        );
+        let given = [message("a", false, true), message("b", false, false)];
+        assert_eq!(statuses(&given), ["Sending…", "Sends after the message above"]);
+    }
+
+    #[test]
     fn what_a_monitoring_agent_does_later_is_a_turn_of_its_own() {
         let summary = motile_protocol::wire::TurnSummary::default();
         let mut transcript = Transcript::new("");
@@ -1193,6 +1317,10 @@ mod tests {
         let edited = tool("Edit", edit, ToolStatus::Succeeded);
         assert_eq!((edited.target.as_str(), edited.input.as_str()), ("/etc/hosts", "-a\n-b\n+c"));
         assert_eq!(edited.input_language, "diff");
+        let changes = serde_json::json!([{"path": "/srv/api/a.rs", "kind": "update", "diff": "@@ -1 +1 @@\n-a\n+b"}]);
+        let changed =
+            tool("Edit", serde_json::json!({"file_path": "/srv/api/a.rs", "changes": changes}), ToolStatus::Succeeded);
+        assert_eq!((changed.target.as_str(), changed.input.as_str()), ("a.rs", "@@ -1 +1 @@\n-a\n+b"));
 
         let monitor = serde_json::json!({"command": "tail -f deploy.log", "description": "deploy log"});
         let watching = tool("Monitor", monitor, ToolStatus::Succeeded);

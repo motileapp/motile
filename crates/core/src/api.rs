@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::connection::PathKind;
 use crate::link::State;
 use crate::render::highlight::Spans;
-use crate::render::rows::{Row, Waiting};
+use crate::render::rows::{QueuedMessage, Row, Waiting};
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
@@ -75,7 +75,8 @@ pub enum Command {
         server_id: String,
         request: Request,
     },
-    /// Uploads `files` from this device, then sends the message. Answers with `thread_id`.
+    /// Uploads `files` from this device, then sends the message with them and with `attachments`,
+    /// which are on the server already. Answers with `thread_id`.
     Send {
         server_id: String,
         thread_id: Option<String>,
@@ -83,6 +84,8 @@ pub enum Command {
         text: String,
         #[serde(default)]
         files: Vec<String>,
+        #[serde(default)]
+        attachments: Vec<String>,
     },
     /// Has the server install the latest release and restart. `server_update` events say how far the
     /// download is; the answer comes when the server is about to restart.
@@ -176,6 +179,8 @@ pub enum Event {
         activity: Activity,
         /// The tool calls the turn waits with, worded for a person.
         waiting: Vec<Waiting>,
+        /// The messages that wait for the agent, with when it gets each.
+        queued: Vec<QueuedMessage>,
     },
     /// The thread couldn't be opened on its server.
     ThreadError {

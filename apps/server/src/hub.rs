@@ -3,7 +3,9 @@
 //! sent to everyone with the thread open. Claude Code's process is talked to while it runs: it
 //! asks before a tool call that needs approval and is told the thread's changed settings. It
 //! outlives the turn while it monitors something: it then takes the next prompts itself, and
-//! starts turns of its own.
+//! starts turns of its own. A message sent while a turn runs is queued, and the agent is given
+//! it after its next tool call, so it carries on in the same turn. Codex's process is asked for
+//! the thread and its turn, and answered what it asks, in the same way.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -17,7 +19,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, Agent, Item, ItemKind, Message, NewThread, Project, ServerInfo, Thread, ThreadChange, ToolCall,
+    Activity, Agent, Item, ItemKind, Message, NewThread, Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall,
     ToolStatus, TurnSummary,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -25,7 +27,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, broadcast, mpsc};
 
 use crate::agents::environment::Environment;
-use crate::agents::{self, AgentEvent, Background, Parser, Turn, claude, executable_name};
+use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name};
 use crate::media::MediaStore;
 use crate::store::{Store, StoredProject, StoredThread, TitleSource};
 use crate::{icons, pacing, title};
@@ -59,8 +61,8 @@ struct Live {
     activity: Activity,
     updates: broadcast::Sender<Message>,
     run: Option<Run>,
-    /// Prompts sent while the agent was working; they start the next turn.
-    queued: Vec<String>,
+    /// Messages sent while the agent was working, until it takes them.
+    queued: Vec<Queued>,
     title_needs_refinement: bool,
 }
 
@@ -74,6 +76,8 @@ struct Run {
     /// Writes lines to the process's stdin, which closes when this is dropped.
     input: Option<mpsc::UnboundedSender<String>>,
     background: Background,
+    /// The agent's own name for the turn that runs.
+    turn_id: Option<String>,
 }
 
 pub struct ListSubscription {
@@ -140,7 +144,7 @@ impl Hub {
         // An app ahead of the server has a copy from before the server's data was replaced.
         let reset = since > rev;
         let items = self.store.items_since(thread_id, if reset { 0 } else { since })?;
-        Ok(ThreadSubscription { reset, activity: live.activity.clone(), items, rev, updates: live.updates.subscribe() })
+        Ok(ThreadSubscription { reset, activity: live.activity(), items, rev, updates: live.updates.subscribe() })
     }
 
     /// Starts a turn and returns the thread it runs in.
@@ -169,13 +173,19 @@ impl Hub {
         };
         let live = threads.get_mut(&thread_id).context("That thread no longer exists.")?;
         let prompt = prompt(&text, &attachments);
-        live.append(&self.store, ItemKind::User { text: text.clone(), attachments })?;
         if let Some(run) = &live.run {
-            if !run.received_result || !self.deliver(live, &prompt)? {
-                live.queued.push(prompt);
+            // An agent that is only monitoring takes the message right away.
+            let idle = run.received_result;
+            if !idle || !live.write_prompt(&prompt, &new_id()) {
+                live.queued.push(Queued { id: new_id(), text, attachments, held: false, sending: false });
+                live.send_activity();
+                return Ok(thread_id);
             }
+            live.append(&self.store, ItemKind::User { text, attachments })?;
+            self.resume(live)?;
             return Ok(thread_id);
         }
+        live.append(&self.store, ItemKind::User { text: text.clone(), attachments })?;
         self.start_turn(live, prompt)?;
         if is_new {
             tokio::spawn(self.clone().title_from_first_message(thread_id.clone(), text));
@@ -284,13 +294,62 @@ impl Hub {
         let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
         let waiting = live.activity.approvals.iter().position(|approval| approval.id == approval_id);
         let approval = live.activity.approvals.remove(waiting.context("The agent no longer waits for that answer.")?);
-        if !live.write(claude::answer(&approval, allow, &answers, live.stored.thread.access)) {
+        let thread = &live.stored.thread;
+        let line = agents::answer(thread.agent, &approval, allow, &answers, thread.access);
+        if line.is_some_and(|line| !live.write(line)) {
             bail!("The agent is no longer running.");
         }
-        if allow && claude::leaves_plan_mode(&approval) {
+        if allow && approval.tool_name == PLAN_TOOL {
             live.stored.thread.plan = false;
         }
+        // Codex presents its plan when the turn has ended: it carries the plan out in a new
+        // turn, and has nothing left to do when the plan is refused.
+        let ended = live.run.as_ref().is_some_and(|run| run.received_result);
+        if ended && allow {
+            return self.resume(live);
+        }
+        if let Some(run) = live.run.as_mut().filter(|_| ended) {
+            run.input = None;
+        }
         self.announce_approvals(live)
+    }
+
+    /// Gives the agent a queued message without waiting for its next tool call.
+    pub async fn send_queued(self: &Arc<Self>, thread_id: &str, message_id: &str) -> anyhow::Result<()> {
+        let mut threads = self.threads.lock().await;
+        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let index = live.queued_index(message_id)?;
+        if live.queued[index].sending {
+            return Ok(());
+        }
+        let Some(run) = &live.run else {
+            let queued = live.queued.remove(index);
+            return self.start_next_turn(live, queued);
+        };
+        let idle = run.received_result;
+        if !live.give(index) {
+            // The agent's process takes no more; the message starts the next turn.
+            live.queued[index].held = false;
+            live.send_activity();
+            return Ok(());
+        }
+        if idle {
+            self.resume(live)?;
+        }
+        Ok(())
+    }
+
+    /// Takes a queued message back.
+    pub async fn cancel_queued(&self, thread_id: &str, message_id: &str) -> anyhow::Result<()> {
+        let mut threads = self.threads.lock().await;
+        let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        let index = live.queued_index(message_id)?;
+        if live.queued[index].sending {
+            bail!("The agent has already been given that message.");
+        }
+        live.queued.remove(index);
+        live.send_activity();
+        Ok(())
     }
 
     fn announce_approvals(&self, live: &mut Live) -> anyhow::Result<()> {
@@ -303,15 +362,22 @@ impl Hub {
 
     pub async fn stop(self: &Arc<Self>, thread_id: &str) {
         let mut threads = self.threads.lock().await;
-        let Some(run) = threads.get_mut(thread_id).and_then(|live| live.run.as_mut()) else { return };
+        let Some(live) = threads.get_mut(thread_id) else { return };
+        let Some(run) = &live.run else { return };
         run.interrupted.store(true, Ordering::Relaxed);
-        run.input = None;
-        self.end_process(thread_id, run.process_id);
+        let process_id = run.process_id;
+        let thread = &live.stored.thread;
+        let stop = agents::stop(thread.agent, live.stored.session_id.as_deref(), run.turn_id.as_deref());
+        // A process that is asked to stop ends its turn itself, and is only signalled if it doesn't.
+        let asked = stop.is_some_and(|line| live.write(line));
+        if !asked && let Some(run) = &mut live.run {
+            run.input = None;
+            signal(process_id, libc::SIGINT);
+        }
+        self.end_process(thread_id, process_id);
     }
 
     fn end_process(self: &Arc<Self>, thread_id: &str, process_id: u32) {
-        signal(process_id, libc::SIGINT);
-
         // Escalate if the agent ignores the interrupt.
         let hub = self.clone();
         let thread_id = thread_id.to_string();
@@ -366,7 +432,8 @@ impl Hub {
             }
             _ => {}
         }
-        if agents::takes_more_input(thread.agent) {
+        // Codex takes its settings when its next process starts.
+        if thread.agent == Agent::Claude {
             for line in told {
                 live.write(line);
             }
@@ -491,18 +558,20 @@ impl Hub {
 
         let interrupted = Arc::new(AtomicBool::new(false));
         let (input, lines) = mpsc::unbounded_channel();
-        let _ = input.send(agents::input(agent, &prompt));
+        let prompt_id = new_id();
+        let _ = input.send(agents::opening(agent, &prompt, &prompt_id));
+        let parser = Parser::new(&turn, &thread.cwd, &prompt, &prompt_id);
         live.run = Some(Run {
             process_id: child.id().unwrap_or_default(),
             started: Instant::now(),
             interrupted: interrupted.clone(),
             received_result: false,
-            input: agents::takes_more_input(agent).then_some(input),
+            input: Some(input),
             background: Background::default(),
+            turn_id: None,
         });
         self.announce_working(live)?;
 
-        let parser = Parser::new(agent);
         tokio::spawn(self.clone().drive(live.stored.thread.id.clone(), child, lines, parser, interrupted));
         Ok(())
     }
@@ -524,15 +593,6 @@ impl Hub {
         Ok(())
     }
 
-    /// Gives the prompt to the process that is still there. `false` when it takes no more.
-    fn deliver(&self, live: &mut Live, prompt: &str) -> anyhow::Result<bool> {
-        if !live.write(agents::input(live.stored.thread.agent, prompt)) {
-            return Ok(false);
-        }
-        self.resume(live)?;
-        Ok(true)
-    }
-
     /// The idle process is at work again.
     fn resume(&self, live: &mut Live) -> anyhow::Result<()> {
         let Some(run) = live.run.as_mut().filter(|run| run.received_result) else { return Ok(()) };
@@ -541,23 +601,26 @@ impl Hub {
         self.announce_working(live)
     }
 
-    /// What the process does once its turn has ended: exit, take the prompts that waited, keep
-    /// working in the background, or monitor.
+    /// What the process does once its turn has ended: take the next message that waits, exit,
+    /// keep working in the background, or monitor.
     fn rest(&self, live: &mut Live) -> anyhow::Result<()> {
+        let Some(run) = &live.run else { return Ok(()) };
+        // What the agent asks once its turn has ended, it stays to hear the answer to.
+        if !live.activity.approvals.is_empty() {
+            return Ok(());
+        }
+        let interrupted = run.interrupted.load(Ordering::Relaxed);
+        // A message the agent was given too late for this turn starts its next one.
+        let given = live.queued.iter().any(|queued| queued.sending);
+        if !interrupted && (given || live.hand_over()) {
+            return self.resume(live);
+        }
         let Some(run) = &mut live.run else { return Ok(()) };
-        if run.background.is_empty() || run.interrupted.load(Ordering::Relaxed) {
+        if run.background.is_empty() || interrupted {
             run.input = None;
             return Ok(());
         }
-        let agents_at_work = run.background.agents > 0;
-        if !live.queued.is_empty() {
-            let prompt = live.queued.join("\n\n");
-            if self.deliver(live, &prompt)? {
-                live.queued.clear();
-                return Ok(());
-            }
-        }
-        if agents_at_work {
+        if run.background.agents > 0 {
             return Ok(());
         }
         let thread = &mut live.stored.thread;
@@ -644,10 +707,15 @@ impl Hub {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
         let was_running = live.stored.thread.running;
+        let ended = events.iter().any(|event| matches!(event, AgentEvent::Completed { .. }));
         for event in events {
             if let Err(error) = self.apply_event(live, event) {
                 tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
             }
+        }
+        // Decided once everything the agent said with the turn's end is known.
+        if ended && let Err(error) = self.rest(live) {
+            tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
         }
         if was_running && live.stored.thread.monitoring {
             self.after_turn(live).await;
@@ -708,15 +776,21 @@ impl Hub {
                 call.output = Some(output);
                 call.status = if is_error { ToolStatus::Failed } else { ToolStatus::Succeeded };
                 live.upsert(store, id, ItemKind::Tool { call })?;
+                live.hand_over();
             }
             AgentEvent::Tool { call } => {
                 live.set_thinking(false);
+                let finished = call.status != ToolStatus::Running;
                 live.upsert(store, call.id.clone(), ItemKind::Tool { call })?;
+                if finished {
+                    live.hand_over();
+                }
             }
             AgentEvent::Completed { mut summary, result_text } => {
                 live.set_thinking(false);
                 if let Some(run) = &mut live.run {
                     run.received_result = true;
+                    run.turn_id = None;
                     summary.duration_ms = Some(run.started.elapsed().as_millis() as u64);
                     // Claude Code reports a turn the user stopped as one that failed.
                     if run.interrupted.load(Ordering::Relaxed) {
@@ -732,7 +806,6 @@ impl Hub {
                 live.activity.approvals.clear();
                 live.stored.thread.needs_approval = false;
                 live.append(store, ItemKind::TurnEnd { summary })?;
-                self.rest(live)?;
             }
             AgentEvent::Approval(approval) => {
                 live.set_thinking(false);
@@ -749,9 +822,25 @@ impl Hub {
                 }
             }
             AgentEvent::Woke => self.resume(live)?,
+            AgentEvent::Taken { id } => {
+                let Some(index) = live.queued.iter().position(|queued| queued.id == id) else { return Ok(()) };
+                let queued = live.queued.remove(index);
+                live.append(store, ItemKind::User { text: queued.text, attachments: queued.attachments })?;
+                live.send_activity();
+            }
+            AgentEvent::Turn { id } => {
+                if let Some(run) = &mut live.run {
+                    run.turn_id = Some(id);
+                }
+            }
+            AgentEvent::Write(lines) => {
+                live.write(lines);
+            }
+            // The process can't go on, and would stay if it weren't let go.
             AgentEvent::Failed { message } => {
                 if let Some(run) = &mut live.run {
                     run.received_result = true;
+                    run.input = None;
                 }
                 live.append(store, ItemKind::Error { message })?;
             }
@@ -778,9 +867,15 @@ impl Hub {
         live.activity = Activity::default();
         live.open.clear();
 
-        if !live.queued.is_empty() {
-            let prompt = std::mem::take(&mut live.queued).join("\n\n");
-            if let Err(error) = self.start_turn(live, prompt) {
+        // What the user stopped doesn't go on by itself: the messages that waited stay until
+        // they are sent.
+        for queued in &mut live.queued {
+            queued.sending = false;
+            queued.held |= interrupted;
+        }
+        if let Some(index) = live.queued.iter().position(|queued| !queued.held) {
+            let queued = live.queued.remove(index);
+            if let Err(error) = self.start_next_turn(live, queued) {
                 tracing::error!(thread_id, "couldn't start the next turn: {error:#}");
             }
             return;
@@ -791,6 +886,12 @@ impl Hub {
         live.send_activity();
         self.announce(&live.stored.thread);
         self.after_turn(live).await;
+    }
+
+    fn start_next_turn(self: &Arc<Self>, live: &mut Live, queued: Queued) -> anyhow::Result<()> {
+        let prompt = prompt(&queued.text, &queued.attachments);
+        live.append(&self.store, ItemKind::User { text: queued.text, attachments: queued.attachments })?;
+        self.start_turn(live, prompt)
     }
 
     async fn after_turn(self: &Arc<Self>, live: &mut Live) {
@@ -837,8 +938,45 @@ impl Live {
         }
     }
 
+    fn activity(&self) -> Activity {
+        Activity { queued: self.queued.clone(), ..self.activity.clone() }
+    }
+
     fn send_activity(&self) {
-        let _ = self.updates.send(Message::Activity { activity: self.activity.clone() });
+        let _ = self.updates.send(Message::Activity { activity: self.activity() });
+    }
+
+    fn queued_index(&self, message_id: &str) -> anyhow::Result<usize> {
+        let index = self.queued.iter().position(|queued| queued.id == message_id);
+        index.context("That message is no longer waiting.")
+    }
+
+    /// Gives the agent the first message that waits for its turn, unless it still has one to
+    /// take or waits for an answer itself. `false` when nothing was given.
+    fn hand_over(&mut self) -> bool {
+        if self.queued.iter().any(|queued| queued.sending) || !self.activity.approvals.is_empty() {
+            return false;
+        }
+        let Some(index) = self.queued.iter().position(|queued| !queued.held) else { return false };
+        self.give(index)
+    }
+
+    /// Writes a prompt to the agent's process. `false` when it takes none.
+    fn write_prompt(&self, prompt: &str, id: &str) -> bool {
+        let line = agents::input(self.stored.thread.agent, self.stored.session_id.as_deref(), prompt, id);
+        line.is_some_and(|line| self.write(line))
+    }
+
+    /// Writes the queued message to the agent's process. `false` when it takes no more.
+    fn give(&mut self, index: usize) -> bool {
+        let queued = &self.queued[index];
+        if !self.write_prompt(&prompt(&queued.text, &queued.attachments), &queued.id) {
+            return false;
+        }
+        self.queued[index].sending = true;
+        self.queued[index].held = false;
+        self.send_activity();
+        true
     }
 
     /// Writes a line to the process's stdin. `false` when it takes no more.

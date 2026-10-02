@@ -2,9 +2,12 @@
 """Stand-in for the `claude` and `codex` CLIs, for tests and screenshots.
 
 By default it replays a recorded transcript: FAKE_AGENT_FIXTURE names a .jsonl file recorded with
-`claude -p --output-format stream-json --verbose --include-partial-messages` or `codex exec --json`.
+`claude -p --output-format stream-json --verbose --include-partial-messages`, or the notifications
+of a turn of `codex app-server`.
 With `--input-format stream-json` the prompt is the first JSON line on stdin, as Claude Code reads
-it. Some prompts get a reply made up on the spot instead:
+it, and the process stays until stdin closes. A prompt written while a turn runs is read after the
+turn's next tool call and repeated on stdout; one that comes later gets a turn of its own. Some
+prompts get a reply made up on the spot instead:
 
 - "long reply with a lot of code": steps with code inside a list, then ten large code blocks,
   streamed in small pieces.
@@ -14,14 +17,22 @@ it. Some prompts get a reply made up on the spot instead:
   it answers the prompts it is given, and FAKE_AGENT_WATCH seconds after the last one it says what
   the monitor saw and exits.
 - "run greet.py": a turn that edits a file and runs it. With `--permission-mode default` it asks
-  before each of the two and waits for the answer on stdin.
+  before each of the two and waits for the answer on stdin. Its reply ends with what it was told
+  while it worked.
 - "which color": a turn that asks the user a question and goes on with the answer.
 - "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
 - "show the screenshot": a turn that writes `screenshot.png` in its folder and shows it in the reply.
 
+Called as `app-server` it is Codex: it answers the requests that start a thread and its turns,
+takes a prompt written while a turn runs after the turn's next tool call, and stops a turn when
+asked. There "run greet.py" asks before each of the two under the `untrusted` approval policy,
+"which color" asks its question, and "plan the hello" presents a plan and carries it out when told
+to implement it.
+
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
 answers with FAKE_AGENT_TITLE. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
-per call, and the settings it was told to change while it ran, one JSON object each.
+per call, and what it was told while it ran, one JSON object each: the settings Claude Code was
+told to change, and the threads and turns Codex was asked for.
 """
 import json
 import os
@@ -37,14 +48,6 @@ if "--version" in sys.argv:
     sys.exit(0)
 
 
-def read_prompt():
-    if "--input-format" not in sys.argv:
-        return sys.stdin.read()
-    line = sys.stdin.readline()
-    return json.loads(line)["message"]["content"] if line.strip() else ""
-
-
-prompt = read_prompt()
 arguments_file = os.environ.get("FAKE_AGENT_ARGUMENTS_FILE")
 
 
@@ -54,6 +57,61 @@ def record(what):
             f.write(json.dumps(what) + "\n")
 
 
+# What stdin brings while the process runs: prompts, and answers to what it asked. `None` ends each.
+prompts = queue.Queue()
+answers = queue.Queue()
+
+
+def read_stdin():
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        message = json.loads(line)
+        if message["type"] == "user":
+            prompts.put(message)
+        if message["type"] == "control_response":
+            answers.put(message)
+        if message["type"] == "control_request":
+            record(message["request"])
+    prompts.put(None)
+    answers.put(None)
+
+
+def emit(event, pause=0.0):
+    sys.stdout.write(json.dumps(event) + "\n")
+    sys.stdout.flush()
+    if pause:
+        time.sleep(pause)
+
+
+def take(message):
+    """Repeats a prompt read from stdin, as `--replay-user-messages` does, and returns its text."""
+    emit(dict(message, isReplay=True))
+    return message["message"]["content"]
+
+
+def take_waiting():
+    """The prompts written while the turn worked, which Claude Code reads after a tool call."""
+    taken = []
+    while not prompts.empty():
+        message = prompts.get()
+        if message is None:
+            prompts.put(None)
+            break
+        taken.append(take(message))
+    return taken
+
+
+def read_prompt():
+    if "--input-format" not in sys.argv:
+        return sys.stdin.read()
+    threading.Thread(target=read_stdin, daemon=True).start()
+    message = prompts.get()
+    return take(message) if message else ""
+
+
+APP_SERVER = sys.argv[1:2] == ["app-server"]
+prompt = "" if APP_SERVER else read_prompt()
 record(sys.argv[1:])
 
 delay = float(os.environ.get("FAKE_AGENT_DELAY", "0.02"))
@@ -88,13 +146,6 @@ if "--output-last-message" in sys.argv:
     sys.exit(0)
 
 
-def emit(event, pause=0.0):
-    sys.stdout.write(json.dumps(event) + "\n")
-    sys.stdout.flush()
-    if pause:
-        time.sleep(pause)
-
-
 class Turn:
     """Writes Claude Code's stream-json for a scripted turn."""
 
@@ -103,6 +154,8 @@ class Turn:
     def __init__(self, session_id, piece=24, pause=0.01):
         self.piece = piece
         self.pause = pause
+        # What the user said while the turn worked.
+        self.told = []
         emit({"type": "system", "subtype": "init", "session_id": session_id})
 
     def _start(self):
@@ -146,15 +199,16 @@ class Turn:
             output = output(answer)
         result = {"type": "tool_result", "tool_use_id": tool_id, "content": output, "is_error": is_error}
         emit({"type": "user", "message": {"content": [result]}})
+        self.told += take_waiting()
         return allowed
 
     def _answer(self, name, tool_input, tool_id):
         request = {"subtype": "can_use_tool", "tool_name": name, "input": tool_input, "tool_use_id": tool_id}
         emit({"type": "control_request", "request_id": f"request_{self.messages:04d}", "request": request})
-        answer = sys.stdin.readline()
+        answer = answers.get()
         if not answer:
             sys.exit(0)
-        return json.loads(answer)["response"]["response"]
+        return answer["response"]["response"]
 
     def done(self):
         emit({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 1, "total_cost_usd": 0.0412,
@@ -305,18 +359,14 @@ def watch_the_deploy():
     turn.text("The deploy is rolling out. I'm watching it and will tell you when it is healthy.")
     turn.done()
 
-    lines = queue.Queue()
-    threading.Thread(target=lambda: [lines.put(line) for line in sys.stdin], daemon=True).start()
     while True:
         try:
-            line = lines.get(timeout=float(os.environ.get("FAKE_AGENT_WATCH", "2")))
+            message = prompts.get(timeout=float(os.environ.get("FAKE_AGENT_WATCH", "2")))
         except queue.Empty:
             break
-        message = json.loads(line)
-        if message["type"] == "control_request":
-            record(message["request"])
-            continue
-        said = message["message"]["content"]
+        if message is None:
+            sys.exit(0)
+        said = take(message)
         turn = Turn(session_id)
         turn.text(f"Still rolling out; 2 of 3 services are up. You said: {said}")
         turn.done()
@@ -336,12 +386,13 @@ def run_greet():
     edited = turn.tool("Edit", edit, "The file /srv/api/greet.py has been updated successfully.", ask=asks)
     ran = edited and turn.tool("Bash", {"command": "python3 greet.py", "description": "Run greet.py"},
                                "Hello, world!", ask=asks)
+    told = "".join(f" You also said: {said}" for said in turn.told)
     if ran:
-        turn.text("`greet` uses an f-string now, and running it prints `Hello, world!`.")
+        turn.text("`greet` uses an f-string now, and running it prints `Hello, world!`." + told)
     elif edited:
-        turn.text("`greet` uses an f-string now. I didn't run it.")
+        turn.text("`greet` uses an f-string now. I didn't run it." + told)
     else:
-        turn.text("I left `greet.py` as it was.")
+        turn.text("I left `greet.py` as it was." + told)
     turn.done()
 
 
@@ -406,43 +457,246 @@ def show_screenshot():
     turn.done()
 
 
-if "show the screenshot" in prompt.lower():
-    show_screenshot()
+class Stopped(Exception):
+    """The turn was asked to stop."""
+
+
+class Codex:
+    """Speaks the JSON-RPC of `codex app-server` for one thread."""
+
+    THREAD = "01a0f557-4a9b-74a0-b330-f6c4d13b2880"
+
+    def __init__(self):
+        # Ids are unique in a thread, also across the processes that resume it.
+        self.process = os.urandom(4).hex()
+        self.prompts = queue.Queue()
+        self.answers = queue.Queue()
+        self.stopping = threading.Event()
+        self.thread = {}
+        self.turns = 0
+        self.items = 0
+        self.requests = 0
+        self.told = []
+
+    def read(self):
+        for line in sys.stdin:
+            message = json.loads(line)
+            method, params = message.get("method"), message.get("params") or {}
+            if method is None:
+                self.answers.put(message)
+            if method == "initialize":
+                emit({"id": message["id"], "result": {}})
+            if method in ("thread/start", "thread/resume"):
+                record({method: params})
+                self.thread = params
+                thread = {"id": params.get("threadId", self.THREAD)}
+                emit({"id": message["id"], "result": {"thread": thread, "model": params.get("model") or "gpt-fake"}})
+            if method == "turn/start":
+                record({method: params})
+                emit({"id": message["id"], "result": {"turn": {"id": self.turn_id(), "status": "inProgress"}}})
+                self.prompts.put(params)
+            if method == "turn/interrupt":
+                emit({"id": message["id"], "result": {}})
+                self.stopping.set()
+        self.prompts.put(None)
+        self.answers.put(None)
+
+    def turn_id(self):
+        return f"turn-{self.process}-{max(self.turns, 1)}"
+
+    def notify(self, method, **params):
+        emit({"method": method, "params": params})
+
+    def pause(self, seconds):
+        if self.stopping.wait(seconds):
+            raise Stopped()
+
+    def item(self, kind, **fields):
+        self.items += 1
+        return dict(fields, type=kind, id=f"item-{self.process}-{self.items}")
+
+    def user_message(self, params):
+        item = self.item("userMessage", clientId=params.get("clientUserMessageId"), content=params["input"])
+        self.notify("item/started", item=item)
+        self.notify("item/completed", item=item)
+        return params["input"][0]["text"]
+
+    def take_waiting(self):
+        """The prompts written while the turn worked, which Codex reads after a tool call."""
+        while not self.prompts.empty():
+            params = self.prompts.get()
+            if params is None:
+                self.prompts.put(None)
+                return
+            self.told.append(self.user_message(params))
+
+    def ask(self, method, **params):
+        """Asks and waits for the answer, or for the turn to be stopped."""
+        self.requests += 1
+        emit({"id": self.requests, "method": method, "params": params})
+        while True:
+            try:
+                answer = self.answers.get(timeout=0.05)
+            except queue.Empty:
+                self.pause(0)
+                continue
+            if answer is None:
+                sys.exit(0)
+            self.notify("serverRequest/resolved", requestId=self.requests)
+            return answer["result"]
+
+    def asks(self):
+        return self.thread.get("approvalPolicy") == "untrusted"
+
+    def text(self, text, piece=24):
+        item = self.item("agentMessage", text="")
+        self.notify("item/started", item=item)
+        for start in range(0, len(text), piece):
+            self.notify("item/agentMessage/delta", itemId=item["id"], delta=text[start:start + piece])
+            self.pause(0.003)
+        self.notify("item/completed", item=dict(item, text=text))
+
+    def work(self, item, method, done, seconds=0.25, **asked):
+        """Does what `item` says, after asking when the thread is supervised. Says whether it was done."""
+        self.notify("item/started", item=dict(item, status="inProgress"))
+        self.pause(seconds)
+        allowed = not self.asks() or self.ask(method, itemId=item["id"], **asked)["decision"] == "accept"
+        self.notify("item/completed", item=dict(item, status="completed", **done) if allowed else dict(item, status="declined"))
+        self.take_waiting()
+        return allowed
+
+    def command(self, command, output, **timing):
+        shell = f"/bin/bash -lc '{command}'"
+        item = self.item("commandExecution", command=shell, aggregatedOutput=None, exitCode=None)
+        done = {"aggregatedOutput": output, "exitCode": 0}
+        return self.work(item, "item/commandExecution/requestApproval", done, command=shell, **timing)
+
+    def edit(self, path, kind, diff):
+        item = self.item("fileChange", changes=[{"path": path, "kind": {"type": kind}, "diff": diff}])
+        return self.work(item, "item/fileChange/requestApproval", {})
+
+    def run_greet(self, params):
+        self.text("I'll switch `greet` to an f-string and run it.")
+        edited = self.edit("/srv/api/greet.py", "update", '-    return "Hello, " + name + "!"\n+    return f"Hello, {name}!"')
+        ran = edited and self.command("python3 greet.py", "Hello, world!\n")
+        told = "".join(f" You also said: {said}" for said in self.told)
+        if ran:
+            self.text("`greet` uses an f-string now, and running it prints `Hello, world!`." + told)
+        elif edited:
+            self.text("`greet` uses an f-string now. I didn't run it." + told)
+        else:
+            self.text("I left `greet.py` as it was." + told)
+
+    def which_color(self, params):
+        options = [{"label": "Red", "description": "Stands out on the page"},
+                   {"label": "Blue", "description": "Matches the rest of the app"}]
+        question = {"id": "color", "header": "Color", "question": "Which color should the button be?", "options": options}
+        chosen = self.ask("item/tool/requestUserInput", itemId="call-color", questions=[question])["answers"]
+        if "color" in chosen:
+            self.text(f"The button will be {chosen['color']['answers'][0].lower()}.")
+        else:
+            self.text("I'll leave the button as it is.")
+
+    def plan_hello(self, params):
+        self.command("cat hello.py", "def main():\n    pass\n")
+        plan = "## Add a greeting\n\n1. Add `hello()` to `hello.py`, which prints the greeting.\n2. Call it from `main()`.\n3. Run the file to see it.\n"
+        item = self.item("plan", text="")
+        self.notify("item/started", item=item)
+        self.notify("item/completed", item=dict(item, text=plan))
+
+    def implement(self, params):
+        self.edit("/srv/api/hello.py", "add", 'def hello():\n    print("Hello!")\n')
+        self.text(f"`hello()` is in place. I worked in {params['collaborationMode']['mode']} mode.")
+
+    def long_reply(self, params):
+        self.text("Here is the whole change.\n\n" + "A line of the change.\n" * 400)
+
+    def replay_fixture(self, params):
+        with open(os.environ["FAKE_AGENT_FIXTURE"]) as f:
+            for line in f:
+                message = json.loads(line)
+                event = message["params"]
+                item = event.get("item", {})
+                if message["method"].startswith("turn/") or item.get("type") == "userMessage":
+                    continue
+                if "itemId" in event:
+                    event["itemId"] = f"{self.process}-{event['itemId']}"
+                if item:
+                    item["id"] = f"{self.process}-{item['id']}"
+                emit(message)
+                self.pause(delay)
+                if message["method"] == "item/completed" and "status" in item:
+                    self.take_waiting()
+
+    SCRIPTED = {
+        "run greet.py": run_greet,
+        "which color": which_color,
+        "plan the hello": plan_hello,
+        "implement the plan": implement,
+        "long reply with a lot of code": long_reply,
+    }
+
+    def turn(self, params):
+        self.turns += 1
+        self.told = []
+        self.stopping.clear()
+        turn = {"id": self.turn_id(), "status": "inProgress", "error": None}
+        self.notify("turn/started", turn=turn)
+        said = self.user_message(params).lower()
+        script = next((script for words, script in self.SCRIPTED.items() if words in said), Codex.replay_fixture)
+        try:
+            script(self, params)
+            status = "completed"
+        except Stopped:
+            status = "interrupted"
+        self.notify("turn/completed", turn=dict(turn, status=status))
+
+    def serve(self):
+        threading.Thread(target=self.read, daemon=True).start()
+        while True:
+            params = self.prompts.get()
+            if params is None:
+                return
+            self.turn(params)
+
+
+if APP_SERVER:
+    Codex().serve()
     sys.exit(0)
 
-if "run greet.py" in prompt.lower():
-    run_greet()
-    sys.exit(0)
+SCRIPTED = {
+    "show the screenshot": show_screenshot,
+    "run greet.py": run_greet,
+    "which color": which_color,
+    "plan the hello": plan_hello,
+    "watch the deploy": watch_the_deploy,
+    "huge transcript": huge_transcript,
+    "long reply with a lot of code": long_reply,
+    "rate limiter": rate_limiter,
+}
 
-if "which color" in prompt.lower():
-    which_color()
-    sys.exit(0)
 
-if "plan the hello" in prompt.lower():
-    plan_hello()
-    sys.exit(0)
+def replay_fixture():
+    fixture = os.environ.get("FAKE_AGENT_FIXTURE") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "edit-and-run.jsonl"
+    )
+    with open(fixture) as f:
+        for line in f:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            time.sleep(delay)
+            if '"tool_result"' in line:
+                take_waiting()
 
-if "watch the deploy" in prompt.lower():
-    watch_the_deploy()
-    sys.exit(0)
 
-if "huge transcript" in prompt.lower():
-    huge_transcript()
-    sys.exit(0)
+def answer(prompt):
+    scripted = next((turn for words, turn in SCRIPTED.items() if words in prompt.lower()), replay_fixture)
+    scripted()
 
-if "long reply with a lot of code" in prompt:
-    long_reply()
-    sys.exit(0)
 
-if "rate limiter" in prompt.lower():
-    rate_limiter()
-    sys.exit(0)
-
-fixture = os.environ.get("FAKE_AGENT_FIXTURE") or os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "edit-and-run.jsonl"
-)
-with open(fixture) as f:
-    for line in f:
-        sys.stdout.write(line)
-        sys.stdout.flush()
-        time.sleep(delay)
+answer(prompt)
+while "--input-format" in sys.argv:
+    message = prompts.get()
+    if message is None:
+        break
+    answer(take(message))

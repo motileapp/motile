@@ -114,6 +114,12 @@ impl Server {
             Request::Answer { thread_id, approval_id, allow, answers } => {
                 hub.answer(&thread_id, &approval_id, allow, answers).await.map(|_| Message::Ok)
             }
+            Request::SendQueued { thread_id, message_id } => {
+                hub.send_queued(&thread_id, &message_id).await.map(|_| Message::Ok)
+            }
+            Request::CancelQueued { thread_id, message_id } => {
+                hub.cancel_queued(&thread_id, &message_id).await.map(|_| Message::Ok)
+            }
             Request::Stop { thread_id } => {
                 hub.stop(&thread_id).await;
                 Ok(Message::Ok)

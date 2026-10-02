@@ -205,6 +205,34 @@ private final class Demo {
         }
         await shoot("07-answered")
 
+        // A message sent while the agent works waits in the queue. It can be taken back, and the
+        // agent takes it after a tool call, in the same turn.
+        store.startNewThread()
+        store.setAccess(.supervised)
+        send("Change greet.py to use an f-string, then run greet.py.")
+        await expect("the turn waits before its first tool call") { store.activity.approvals.first?.title == "Edit" }
+        send("Use single quotes")
+        await expect("a message sent while the agent works waits in the queue") {
+            store.activity.queued.map(\.status) == ["Sends after the next tool call"]
+        }
+        send("Never mind")
+        await expect("the next one waits behind it") {
+            store.activity.queued.map(\.status) == ["Sends after the next tool call", "Sends after the message above"]
+        }
+        await shoot("07-queued")
+        if let last = store.activity.queued.last { store.takeBack(last) }
+        await expect("a queued message that is taken back returns to the composer") {
+            store.activity.queued.count == 1 && store.draft == "Never mind"
+        }
+        store.draft = ""
+        if let edit = store.activity.approvals.first { store.answer(edit, allow: true) }
+        await expect("the next tool call asks") { store.activity.approvals.first?.title == "Bash" }
+        if let bash = store.activity.approvals.first { store.answer(bash, allow: true) }
+        await expect("the agent takes a queued message after a tool call, in the same turn") {
+            turnEnded && turnEnds == 1 && store.activity.queued.isEmpty && store.transcript.rows.filter(\.isUser).count == 2
+        }
+        await shoot("07-queue-taken")
+
         // A question the agent asks is answered in place, and the turn goes on with the answer.
         store.startNewThread()
         send("Which color should the button be? Ask me.")

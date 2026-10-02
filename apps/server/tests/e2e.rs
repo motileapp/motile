@@ -8,14 +8,15 @@ use std::time::Duration;
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, Approval, Item, ItemKind, Message, NewThread, Project, Request, Thread, ThreadChange,
-    ToolStatus, TurnSummary,
+    Access as AgentAccess, Agent, Approval, Item, ItemKind, Message, NewThread, Project, Queued, Request, Thread,
+    ThreadChange, ToolStatus, TurnSummary,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
 use motile_server::hub::Hub;
 use motile_server::serve::{BindOptions, Server};
 use motile_server::store::Store;
+use serde_json::json;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -149,6 +150,14 @@ async fn serve(
     (endpoint, address)
 }
 
+/// What the agent replays for a prompt it has no script for.
+fn fixture(agent: Agent) -> &'static str {
+    match agent {
+        Agent::Claude => "fixtures/read-and-bash.jsonl",
+        Agent::Codex => "fixtures/codex-edit-and-run.jsonl",
+    }
+}
+
 async fn next(follow: &mut Follow) -> Message {
     let message = tokio::time::timeout(TIMEOUT, follow.next()).await.expect("the server went quiet");
     message.unwrap().expect("the stream ended")
@@ -192,6 +201,7 @@ struct Transcript {
     items: Vec<Item>,
     running: bool,
     approvals: Vec<Approval>,
+    queued: Vec<Queued>,
     synced: Option<u64>,
     /// The latest revision seen once live.
     rev: u64,
@@ -210,6 +220,7 @@ impl Transcript {
                 }
                 self.running = activity.running;
                 self.approvals = activity.approvals;
+                self.queued = activity.queued;
             }
             Message::Items { items } => {
                 for item in items {
@@ -245,6 +256,7 @@ impl Transcript {
             Message::Activity { activity } => {
                 self.running = activity.running;
                 self.approvals = activity.approvals;
+                self.queued = activity.queued;
             }
             other => panic!("unexpected thread update: {other:?}"),
         }
@@ -333,14 +345,16 @@ async fn a_claude_turn_streams_into_the_transcript_and_survives_a_restart() {
 async fn a_codex_turn_shows_its_commands_and_edits() {
     let harness = Harness::start("fixtures/codex-edit-and-run.jsonl", "0").await;
     let connection = harness.connect().await;
-    let new_thread = harness.new_thread(&connection, Agent::Codex).await;
-    let thread_id = send(&connection, None, new_thread, "Use an f-string in greet.py").await;
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
+    let new_thread = NewThread { effort: Some("high".into()), access: AgentAccess::AcceptEdits, ..new_thread };
+    let thread_id = send(&connection, None, Some(new_thread), "Use an f-string in greet.py").await;
 
     let transcript = finished_transcript(&connection, &thread_id).await;
 
+    assert_eq!(transcript.user_texts(), vec!["Use an f-string in greet.py"]);
     assert_eq!(
         transcript.texts().last().unwrap(),
-        &"Updated greet.py to use an f-string; running `python3 greet.py` outputs `Hello world`."
+        &"Updated [greet.py](/tmp/cctest/greet.py:2) to use `f\"Hello {name}\"`. Verified it prints `Hello world`."
     );
     assert_eq!(
         transcript.tools(),
@@ -348,6 +362,7 @@ async fn a_codex_turn_shows_its_commands_and_edits() {
             ("Bash", ToolStatus::Succeeded),
             ("Bash", ToolStatus::Succeeded),
             ("Edit", ToolStatus::Succeeded),
+            ("Bash", ToolStatus::Failed),
             ("Bash", ToolStatus::Succeeded)
         ]
     );
@@ -359,16 +374,30 @@ async fn a_codex_turn_shows_its_commands_and_edits() {
     assert!(matches!(transcript.items.last().unwrap().kind, ItemKind::TurnEnd { .. }));
     assert!(transcript.errors().is_empty());
 
-    // The next message resumes Codex's own session and reads the prompt from stdin.
+    // The next message resumes Codex's own thread in a new process, with the thread's settings.
+    let low = ThreadChange { effort: Some("low".into()), access: Some(AgentAccess::Full), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, low).await, Message::Ok);
     send(&connection, Some(thread_id.clone()), None, "Thanks").await;
-    finished_transcript(&connection, &thread_id).await;
-    let turns = harness.recorded_turns();
-    assert!(turns[1].ends_with("resume\n01a0f557-4a9b-74a0-b330-f6c4d13b2880\n-"), "{}", turns[1]);
+    let resumed = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(resumed.turn_ends().len(), 2);
+    assert_eq!(resumed.tools().len(), 10, "the second turn's items don't replace the first's");
+
+    assert_eq!(harness.recorded_turns(), vec!["app-server", "app-server"]);
+    let asked = harness.recorded_changes();
+    let started = &asked[0]["thread/start"];
+    assert_eq!((&started["approvalPolicy"], &started["sandbox"]), (&json!("on-request"), &json!("workspace-write")));
     assert!(
-        turns[1].contains("-c\ndeveloper_instructions=\"You can show the user an image or a video"),
-        "{}",
-        turns[1]
+        started["developerInstructions"].as_str().unwrap().starts_with("You can show the user an image or a video")
     );
+    let first_turn = &asked[1]["turn/start"];
+    assert_eq!(
+        (&first_turn["effort"], &first_turn["input"][0]["text"]),
+        (&json!("high"), &json!("Use an f-string in greet.py"))
+    );
+    let resumed = &asked[2]["thread/resume"];
+    assert_eq!(resumed["threadId"], "01a0f557-4a9b-74a0-b330-f6c4d13b2880");
+    assert_eq!((&resumed["approvalPolicy"], &resumed["sandbox"]), (&json!("never"), &json!("danger-full-access")));
+    assert_eq!(asked[3]["turn/start"]["effort"], "low");
 }
 
 #[tokio::test]
@@ -516,10 +545,19 @@ async fn a_vague_first_message_is_titled_from_the_transcript_once_the_turn_ends(
 }
 
 #[tokio::test]
-async fn a_tool_call_that_needs_approval_waits_for_the_answer() {
-    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+async fn a_tool_call_of_claude_that_needs_approval_waits_for_the_answer() {
+    a_tool_call_that_needs_approval_waits_for_the_answer(Agent::Claude).await;
+}
+
+#[tokio::test]
+async fn a_tool_call_of_codex_that_needs_approval_waits_for_the_answer() {
+    a_tool_call_that_needs_approval_waits_for_the_answer(Agent::Codex).await;
+}
+
+async fn a_tool_call_that_needs_approval_waits_for_the_answer(agent: Agent) {
+    let harness = Harness::start(fixture(agent), "0").await;
     let connection = harness.connect().await;
-    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let new_thread = harness.new_thread(&connection, agent).await;
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     next(&mut list).await;
     let thread_id = send(&connection, None, new_thread, "Use an f-string and run greet.py").await;
@@ -565,10 +603,19 @@ async fn first_approval(transcript: &mut Transcript, follow: &mut Follow) -> App
 }
 
 #[tokio::test]
-async fn a_question_the_agent_asks_is_answered_by_the_user() {
-    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+async fn a_question_claude_asks_is_answered_by_the_user() {
+    a_question_the_agent_asks_is_answered_by_the_user(Agent::Claude).await;
+}
+
+#[tokio::test]
+async fn a_question_codex_asks_is_answered_by_the_user() {
+    a_question_the_agent_asks_is_answered_by_the_user(Agent::Codex).await;
+}
+
+async fn a_question_the_agent_asks_is_answered_by_the_user(agent: Agent) {
+    let harness = Harness::start(fixture(agent), "0").await;
     let connection = harness.connect().await;
-    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let new_thread = harness.new_thread(&connection, agent).await;
     let thread_id = send(&connection, None, new_thread, "Which color should the button be? Ask me.").await;
 
     let mut transcript = Transcript::default();
@@ -605,6 +652,47 @@ async fn an_approved_plan_is_carried_out_with_the_threads_access() {
     transcript.follow_until_idle(&mut follow).await;
     assert_eq!(transcript.texts(), vec!["`hello()` is in place. I worked in acceptEdits mode."]);
     assert!(!thread_where(&mut list, |thread| !thread.running).await.plan, "the thread has left plan mode");
+}
+
+#[tokio::test]
+async fn a_plan_codex_presents_is_carried_out_in_a_turn_of_its_own_or_left() {
+    let harness = Harness::start(fixture(Agent::Codex), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
+    let new_thread = NewThread { plan: true, access: AgentAccess::AcceptEdits, ..new_thread };
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let answer = |thread_id: &str, approval_id, allow| {
+        let request = Request::Answer { thread_id: thread_id.to_string(), approval_id, allow, answers: HashMap::new() };
+        let connection = &connection;
+        async move { connection.request(&request).await.unwrap() }
+    };
+
+    let left = send(&connection, None, Some(new_thread.clone()), "Plan the hello function").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &left, 0).await;
+    let plan = first_approval(&mut transcript, &mut follow).await;
+    assert_eq!(plan.tool_name, "ExitPlanMode");
+    assert_eq!(transcript.turn_ends().len(), 1, "Codex presents its plan when the turn has ended");
+    assert_eq!(answer(&left, plan.id, false).await, Message::Ok);
+    transcript.follow_until_idle(&mut follow).await;
+    assert!(thread_where(&mut list, |thread| thread.id == left && !thread.running).await.plan);
+    assert_eq!(transcript.turn_ends().len(), 1);
+    assert!(transcript.errors().is_empty());
+
+    let carried_out = send(&connection, None, Some(new_thread), "Plan the hello function").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &carried_out, 0).await;
+    let plan = first_approval(&mut transcript, &mut follow).await;
+    assert_eq!(answer(&carried_out, plan.id, true).await, Message::Ok);
+    while transcript.turn_ends().len() < 2 {
+        transcript.apply(next(&mut follow).await);
+    }
+    assert_eq!(transcript.texts(), vec!["`hello()` is in place. I worked in default mode."]);
+    assert_eq!(transcript.user_texts(), vec!["Plan the hello function"]);
+    let ended = thread_where(&mut list, |thread| thread.id == carried_out && !thread.running).await;
+    assert!(!ended.plan, "the thread has left plan mode");
+    assert_eq!(harness.recorded_turns().len(), 2, "the process that planned carries the plan out");
 }
 
 #[tokio::test]
@@ -656,13 +744,68 @@ async fn stopping_a_turn_ends_it_and_says_so() {
     assert!(transcript.tools().iter().all(|(_, status)| *status != ToolStatus::Running));
 }
 
+/// Where the user's messages and the turns' ends are in the transcript, in order.
+fn messages_and_turn_ends(transcript: &Transcript) -> Vec<&str> {
+    let marks = transcript.items.iter().filter_map(|item| match &item.kind {
+        ItemKind::User { text, .. } => Some(text.as_str()),
+        ItemKind::TurnEnd { .. } => Some("(turn end)"),
+        _ => None,
+    });
+    marks.collect()
+}
+
 #[tokio::test]
-async fn a_message_sent_while_a_turn_runs_starts_the_next_turn() {
-    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.05").await;
+async fn a_message_sent_while_claude_works_is_taken_after_the_next_tool_call() {
+    a_message_sent_while_a_turn_runs_is_taken_after_the_next_tool_call(Agent::Claude).await;
+}
+
+#[tokio::test]
+async fn a_message_sent_while_codex_works_is_taken_after_the_next_tool_call() {
+    a_message_sent_while_a_turn_runs_is_taken_after_the_next_tool_call(Agent::Codex).await;
+}
+
+async fn a_message_sent_while_a_turn_runs_is_taken_after_the_next_tool_call(agent: Agent) {
+    let harness = Harness::start(fixture(agent), "0").await;
     let connection = harness.connect().await;
-    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
-    let thread_id = send(&connection, None, new_thread, "What does the note say?").await;
-    send(&connection, Some(thread_id.clone()), None, "And then run it again").await;
+    let new_thread = harness.new_thread(&connection, agent).await.unwrap();
+    let new_thread = NewThread { access: AgentAccess::Full, ..new_thread };
+    let thread_id = send(&connection, None, Some(new_thread), "Run greet.py").await;
+    send(&connection, Some(thread_id.clone()), None, "Use single quotes").await;
+
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    transcript.apply(next(&mut follow).await);
+    let waiting: Vec<&str> = transcript.queued.iter().map(|queued| queued.text.as_str()).collect();
+    assert_eq!(waiting, vec!["Use single quotes"], "the message waits outside the transcript");
+    transcript.follow_until_idle(&mut follow).await;
+
+    assert!(transcript.queued.is_empty());
+    assert_eq!(messages_and_turn_ends(&transcript), vec!["Run greet.py", "Use single quotes", "(turn end)"]);
+    let taken = transcript.items.iter().position(|item| matches!(item.kind, ItemKind::User { .. } if item.seq > 0));
+    assert!(
+        matches!(transcript.items[taken.unwrap() - 1].kind, ItemKind::Tool { .. }),
+        "it is taken after a tool call"
+    );
+    assert!(transcript.texts().last().unwrap().ends_with("You also said: Use single quotes"));
+    assert_eq!(harness.recorded_turns().len(), 1, "the process that works takes the message");
+}
+
+#[tokio::test]
+async fn a_message_sent_when_claude_has_no_tool_call_left_starts_the_next_turn() {
+    a_message_sent_when_no_tool_call_is_left_starts_the_next_turn(Agent::Claude).await;
+}
+
+#[tokio::test]
+async fn a_message_sent_when_codex_has_no_tool_call_left_starts_the_next_turn() {
+    a_message_sent_when_no_tool_call_is_left_starts_the_next_turn(Agent::Codex).await;
+}
+
+async fn a_message_sent_when_no_tool_call_is_left_starts_the_next_turn(agent: Agent) {
+    let harness = Harness::start(fixture(agent), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, agent).await;
+    let thread_id = send(&connection, None, new_thread, "Give me a long reply with a lot of code").await;
+    send(&connection, Some(thread_id.clone()), None, "What does the note say?").await;
 
     let mut transcript = Transcript::default();
     let mut follow = open(&connection, &thread_id, 0).await;
@@ -670,10 +813,124 @@ async fn a_message_sent_while_a_turn_runs_starts_the_next_turn() {
         transcript.apply(next(&mut follow).await);
     }
 
-    assert_eq!(transcript.user_texts(), vec!["What does the note say?", "And then run it again"]);
-    let turns = harness.recorded_turns();
-    assert_eq!(turns.len(), 2);
-    assert!(turns[1].contains("--resume\ne8c19686-947e-4f00-9129-eb7bde33809a"), "{}", turns[1]);
+    assert_eq!(
+        messages_and_turn_ends(&transcript),
+        vec!["Give me a long reply with a lot of code", "(turn end)", "What does the note say?", "(turn end)"]
+    );
+    assert!(transcript.queued.is_empty());
+    assert_eq!(harness.recorded_turns().len(), 1, "the process that worked takes the message");
+}
+
+/// Sends a message to a thread whose turn waits for an approval, and follows the thread until
+/// the message is queued.
+async fn queue_while_waiting(
+    connection: &Connection,
+    thread_id: &str,
+    text: &str,
+    transcript: &mut Transcript,
+    follow: &mut Follow,
+) -> Queued {
+    send(connection, Some(thread_id.to_string()), None, text).await;
+    loop {
+        if let Some(queued) = transcript.queued.iter().find(|queued| queued.text == text) {
+            return queued.clone();
+        }
+        transcript.apply(next(follow).await);
+    }
+}
+
+#[tokio::test]
+async fn a_message_queued_for_claude_is_sent_now_or_taken_back() {
+    a_queued_message_is_sent_now_or_taken_back(Agent::Claude).await;
+}
+
+#[tokio::test]
+async fn a_message_queued_for_codex_is_sent_now_or_taken_back() {
+    a_queued_message_is_sent_now_or_taken_back(Agent::Codex).await;
+}
+
+async fn a_queued_message_is_sent_now_or_taken_back(agent: Agent) {
+    let harness = Harness::start(fixture(agent), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, agent).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    let edit = first_approval(&mut transcript, &mut follow).await;
+
+    let dropped = queue_while_waiting(&connection, &thread_id, "Never mind", &mut transcript, &mut follow).await;
+    let kept = queue_while_waiting(&connection, &thread_id, "Use single quotes", &mut transcript, &mut follow).await;
+    assert!(!dropped.sending && !kept.sending, "nothing is given to an agent that waits for an answer");
+
+    let cancel = Request::CancelQueued { thread_id: thread_id.clone(), message_id: dropped.id.clone() };
+    assert_eq!(connection.request(&cancel).await.unwrap(), Message::Ok);
+    let again = connection.request(&cancel).await.unwrap();
+    assert!(matches!(again, Message::Error { message } if message.contains("no longer waiting")));
+    let send_now = Request::SendQueued { thread_id: thread_id.clone(), message_id: kept.id.clone() };
+    assert_eq!(connection.request(&send_now).await.unwrap(), Message::Ok);
+    while transcript.queued.len() != 1 || !transcript.queued[0].sending {
+        transcript.apply(next(&mut follow).await);
+    }
+    let too_late = Request::CancelQueued { thread_id: thread_id.clone(), message_id: kept.id };
+    let refused = connection.request(&too_late).await.unwrap();
+    assert!(matches!(refused, Message::Error { message } if message.contains("already been given")));
+
+    let allow = |approval_id| Request::Answer {
+        thread_id: thread_id.clone(),
+        approval_id,
+        allow: true,
+        answers: HashMap::new(),
+    };
+    assert_eq!(connection.request(&allow(edit.id.clone())).await.unwrap(), Message::Ok);
+    while transcript.approvals.first().is_none_or(|approval| approval.id == edit.id) {
+        transcript.apply(next(&mut follow).await);
+    }
+    assert_eq!(connection.request(&allow(transcript.approvals[0].id.clone())).await.unwrap(), Message::Ok);
+    transcript.follow_until_idle(&mut follow).await;
+
+    assert_eq!(messages_and_turn_ends(&transcript), vec!["Run greet.py", "Use single quotes", "(turn end)"]);
+    assert!(transcript.texts().last().unwrap().ends_with("You also said: Use single quotes"));
+    assert!(transcript.queued.is_empty());
+}
+
+#[tokio::test]
+async fn stopping_claude_keeps_its_queued_messages_until_they_are_sent() {
+    stopping_a_turn_keeps_its_queued_messages_until_they_are_sent(Agent::Claude).await;
+}
+
+#[tokio::test]
+async fn stopping_codex_keeps_its_queued_messages_until_they_are_sent() {
+    stopping_a_turn_keeps_its_queued_messages_until_they_are_sent(Agent::Codex).await;
+}
+
+async fn stopping_a_turn_keeps_its_queued_messages_until_they_are_sent(agent: Agent) {
+    let harness = Harness::start(fixture(agent), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, agent).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    first_approval(&mut transcript, &mut follow).await;
+    let queued =
+        queue_while_waiting(&connection, &thread_id, "What does the note say?", &mut transcript, &mut follow).await;
+
+    connection.request(&Request::Stop { thread_id: thread_id.clone() }).await.unwrap();
+    transcript.follow_until_idle(&mut follow).await;
+    assert_eq!(messages_and_turn_ends(&transcript), vec!["Run greet.py", "(turn end)"]);
+    assert!(transcript.queued.len() == 1 && transcript.queued[0].held, "the message stays, and waits to be sent");
+    assert_eq!(harness.recorded_turns().len(), 1);
+
+    let send_now = Request::SendQueued { thread_id: thread_id.clone(), message_id: queued.id };
+    assert_eq!(connection.request(&send_now).await.unwrap(), Message::Ok);
+    while transcript.turn_ends().len() < 2 {
+        transcript.apply(next(&mut follow).await);
+    }
+    assert_eq!(
+        messages_and_turn_ends(&transcript),
+        vec!["Run greet.py", "(turn end)", "What does the note say?", "(turn end)"]
+    );
+    assert!(transcript.queued.is_empty());
+    assert_eq!(harness.recorded_turns().len(), 2);
 }
 
 #[tokio::test]

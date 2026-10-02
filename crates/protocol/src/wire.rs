@@ -170,13 +170,23 @@ pub enum Request {
         since: u64,
     },
     /// Starts a turn, in `thread_id` or in a thread created from `new_thread`. While a turn is
-    /// running the message waits and starts the next one; an agent that is only monitoring gets
-    /// it right away.
+    /// running the message is queued: the agent is given it after its next tool call, or when
+    /// the turn ends. An agent that is only monitoring gets it right away.
     Send {
         thread_id: Option<String>,
         new_thread: Option<NewThread>,
         text: String,
         attachments: Vec<String>,
+    },
+    /// Gives the agent a queued message now.
+    SendQueued {
+        thread_id: String,
+        message_id: String,
+    },
+    /// Takes a queued message back before the agent has been given it.
+    CancelQueued {
+        thread_id: String,
+        message_id: String,
     },
     /// Allows or refuses a tool call that waits for it; the turn goes on either way. A tool call
     /// that asks the user questions is allowed with what they chose, by question.
@@ -292,6 +302,21 @@ pub struct Activity {
     /// The running turn stands still until these are answered.
     #[serde(default)]
     pub approvals: Vec<Approval>,
+    /// The messages that wait for the agent to take them, in the order they were sent.
+    #[serde(default)]
+    pub queued: Vec<Queued>,
+}
+
+/// A message sent while the agent was working. It joins the transcript when the agent takes it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Queued {
+    pub id: String,
+    pub text: String,
+    pub attachments: Vec<String>,
+    /// The turn it waited for was stopped; it goes when the user sends it.
+    pub held: bool,
+    /// The agent has been given it and hasn't taken it yet.
+    pub sending: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

@@ -257,6 +257,7 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
         new_thread: Some(new_thread.clone()),
         text: "Add a rate limiter to the API".into(),
         files: Vec::new(),
+        attachments: Vec::new(),
     };
     let sent = app.ask(send).await.unwrap();
     let thread_id = sent["thread_id"].as_str().unwrap().to_string();
@@ -320,6 +321,7 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
         new_thread: Some(new_thread),
         text: "Show the screenshot".into(),
         files: Vec::new(),
+        attachments: Vec::new(),
     };
     let showing = app.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
     app.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: showing }).await.unwrap();

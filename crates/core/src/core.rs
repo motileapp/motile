@@ -15,7 +15,7 @@ use motile_protocol::auth_api::{Device, DeviceKind, Me};
 use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
-use motile_protocol::wire::{Item, Message, Project, Request, ServerInfo, Thread};
+use motile_protocol::wire::{Activity, Item, Message, Project, Request, ServerInfo, Thread};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
@@ -25,7 +25,7 @@ use crate::connection::{ServerAddr, bind};
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
 use crate::render::highlight::{self, Spans};
-use crate::render::rows::{Splice, Transcript, Uncoloured};
+use crate::render::rows::{self, Splice, Transcript, Uncoloured};
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
 const FIRST_ITEMS: usize = 30;
@@ -687,7 +687,7 @@ impl Core {
         let Some(open) = self.open.get_mut(thread_id) else { return };
         match message {
             Message::Opened { reset, activity } => {
-                let waiting = activity.approvals.iter().map(|approval| open.transcript.waiting(approval)).collect();
+                let event = activity_event(thread_id, &open.transcript, activity);
                 open.live = false;
                 if reset {
                     open.transcript.clear();
@@ -697,7 +697,7 @@ impl Core {
                     self.cache.clear_items(thread_id);
                     self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows: Vec::new() });
                 }
-                self.emit(Event::Activity { thread_id: thread_id.to_string(), activity, waiting });
+                self.emit(event);
             }
             Message::Items { items } => {
                 let live = open.live;
@@ -740,8 +740,8 @@ impl Core {
                 if !activity.running {
                     open.transcript.end_streaming();
                 }
-                let waiting = activity.approvals.iter().map(|approval| open.transcript.waiting(approval)).collect();
-                self.emit(Event::Activity { thread_id: thread_id.to_string(), activity, waiting });
+                let event = activity_event(thread_id, &open.transcript, activity);
+                self.emit(event);
             }
             Message::Error { message } => {
                 self.open.remove(thread_id);
@@ -867,7 +867,7 @@ impl Core {
                     reply(&sink, id, answer.map(|message| serde_json::to_value(message).unwrap_or_default()));
                 });
             }
-            Command::Send { server_id, thread_id, new_thread, text, files } => {
+            Command::Send { server_id, thread_id, new_thread, text, files, mut attachments } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
@@ -875,7 +875,6 @@ impl Core {
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
                     let sent = async {
-                        let mut attachments = Vec::new();
                         for file in &files {
                             attachments.push(link.upload(std::path::Path::new(file)).await?);
                         }
@@ -1007,6 +1006,12 @@ impl Core {
 
 /// Writes a project's icon where `emit_projects` looks for it, and removes the icons the project
 /// had before.
+fn activity_event(thread_id: &str, transcript: &Transcript, activity: Activity) -> Event {
+    let waiting = activity.approvals.iter().map(|approval| transcript.waiting(approval)).collect();
+    let queued = rows::queued(&activity.queued);
+    Event::Activity { thread_id: thread_id.to_string(), activity, waiting, queued }
+}
+
 fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
     std::fs::create_dir_all(folder)?;
     let unfinished = folder.join(format!("{name}.part"));

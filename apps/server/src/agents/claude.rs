@@ -1,8 +1,10 @@
 //! `claude -p --input-format stream-json --output-format stream-json --verbose
-//! --include-partial-messages --permission-prompt-tool stdio`. Prompts are written to stdin one
-//! JSON line each, and the process stays for as long as stdin is open or something it started is
-//! still running. It asks on stdout before a tool call that needs approval and reads the answer
-//! from stdin, where it also takes changed settings.
+//! --include-partial-messages --replay-user-messages --permission-prompt-tool stdio`. Prompts are
+//! written to stdin one JSON line each, and the process stays for as long as stdin is open or
+//! something it started is still running. A prompt written while it works is read after its next
+//! tool call, or when the turn has ended; it repeats the prompt on stdout when it does. It asks on
+//! stdout before a tool call that needs approval and reads the answer from stdin, where it also
+//! takes changed settings.
 
 use std::collections::HashMap;
 
@@ -35,6 +37,7 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
         "stream-json",
         "--verbose",
         "--include-partial-messages",
+        "--replay-user-messages",
         "--append-system-prompt",
         super::SHOWING_MEDIA,
         "--permission-prompt-tool",
@@ -58,13 +61,12 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
     arguments
 }
 
-pub fn input(prompt: &str) -> String {
-    format!("{}\n", json!({"type": "user", "message": {"role": "user", "content": prompt}}))
+pub fn input(prompt: &str, id: &str) -> String {
+    format!("{}\n", json!({"type": "user", "uuid": id, "message": {"role": "user", "content": prompt}}))
 }
 
-/// The agent presents its plan with this tool call; allowing it lets the agent carry the plan out.
-pub fn leaves_plan_mode(approval: &Approval) -> bool {
-    approval.tool_name == "ExitPlanMode"
+fn leaves_plan_mode(approval: &Approval) -> bool {
+    approval.tool_name == super::PLAN_TOOL
 }
 
 /// The line that allows or refuses the tool call the process asked about. `answers` is what the
@@ -124,6 +126,10 @@ impl Parser {
             Some("system") => self.parse_system(&object),
             Some("stream_event") => self.parse_stream_event(&object["event"]),
             Some("assistant") => self.parse_assistant(&object["message"]),
+            Some("user") if object["isReplay"] == true => match object["uuid"].as_str() {
+                Some(id) => vec![AgentEvent::Taken { id: id.to_string() }],
+                None => vec![],
+            },
             Some("user") => parse_user(&object["message"]),
             Some("control_request") => parse_control_request(&object),
             Some("control_cancel_request") => {
@@ -381,9 +387,16 @@ mod tests {
 
     #[test]
     fn a_prompt_is_one_line_of_json() {
-        let line = input("first\nsecond \"quoted\"");
+        let line = input("first\nsecond \"quoted\"", "m1");
         assert_eq!(line.matches('\n').count(), 1);
         let message: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(message["message"]["content"], "first\nsecond \"quoted\"");
+    }
+
+    #[test]
+    fn a_prompt_the_agent_repeats_has_been_taken() {
+        let mut parser = Parser::default();
+        let repeated = r#"{"type":"user","uuid":"m1","isReplay":true,"message":{"role":"user","content":"Also this"}}"#;
+        assert_eq!(parser.parse(repeated), vec![AgentEvent::Taken { id: "m1".to_string() }]);
     }
 }
