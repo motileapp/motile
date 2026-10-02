@@ -1,5 +1,6 @@
 ---
 import "@/styles/global.css"
+import Logo from "@/components/logo.astro"
 import { GITHUB_URL, TAGLINE, WEB_APP_URL } from "@/lib/links"
 
 interface Props {
@@ -20,7 +21,20 @@ const fullTitle = title ? `${title} · Motile` : `Motile · ${TAGLINE}`
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0a0a0a"
+      media="(prefers-color-scheme: dark)"
+    />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
@@ -33,7 +47,7 @@ const fullTitle = title ? `${title} · Motile` : `Motile · ${TAGLINE}`
   <body class="flex min-h-svh flex-col">
     <header class="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-6">
       <a href="/" class="flex items-center gap-2.5 font-medium tracking-tight">
-        <img src="/logo.svg" alt="" class="size-7" />
+        <Logo />
         Motile
       </a>
       <nav class="flex items-center gap-6 text-sm text-muted-foreground">

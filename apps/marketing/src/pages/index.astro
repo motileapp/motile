@@ -4,7 +4,7 @@ import { FolderSyncIcon, GaugeIcon, RouteIcon, ServerIcon } from "lucide-react"
 import Layout from "@/layouts/main.astro"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { DOWNLOAD_URL, GITHUB_URL, TAGLINE, WEB_APP_URL } from "@/lib/links"
+import { DOWNLOAD_URL, GITHUB_URL, TAGLINE } from "@/lib/links"
 import threadLight from "@/assets/thread-light.png"
 import threadDark from "@/assets/thread-dark.png"
 
@@ -31,22 +31,6 @@ const features = [
     icon: GaugeIcon,
     title: "Built not to stall",
     text: "Long threads, long replies and big code blocks stay smooth. Only what is on screen is drawn.",
-  },
-]
-
-const steps = [
-  {
-    title: "Sign in",
-    text: "Open the app and sign in with Google. Motile's server only keeps track of which devices are yours.",
-  },
-  {
-    title: "Add a host",
-    text: "The app shows one command. Run it on a Linux machine and that machine appears in the app.",
-    command: "curl -fsSL https://motile.app/install | sh -s -- …",
-  },
-  {
-    title: "Start a thread",
-    text: "Pick a folder on the host and ask. Claude Code or Codex gets to work there, with the access you choose.",
   },
 ]
 ---
@@ -99,38 +83,6 @@ const steps = [
           </div>
         </div>
       ))}
-    </section>
-
-    <section class="mt-24 sm:mt-32">
-      <h2 class="text-2xl font-medium tracking-tight sm:text-3xl">
-        Running in three steps
-      </h2>
-      <ol class="mt-8 grid gap-4 md:grid-cols-3">
-        {steps.map((step, index) => (
-          <li class="flex min-w-0 flex-col rounded-2xl border bg-card p-5">
-            <span class="flex size-7 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
-              {index + 1}
-            </span>
-            <h3 class="mt-4 font-medium">{step.title}</h3>
-            <p class="mt-1 text-pretty text-muted-foreground">{step.text}</p>
-            {step.command && (
-              <code class="mt-4 rounded-xl bg-muted px-3 py-2.5 font-mono text-xs break-all">
-                {step.command}
-              </code>
-            )}
-          </li>
-        ))}
-      </ol>
-      <p class="mt-6 text-muted-foreground">
-        Your hosts and apps are listed at{" "}
-        <a
-          href={WEB_APP_URL}
-          class="text-foreground underline underline-offset-4"
-        >
-          app.motile.app
-        </a>
-        , where you can also add a host or remove a device.
-      </p>
     </section>
   </main>
 </Layout>

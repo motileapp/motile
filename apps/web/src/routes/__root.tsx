@@ -8,6 +8,16 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      {
+        name: "theme-color",
+        content: "#ffffff",
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        name: "theme-color",
+        content: "#0a0a0a",
+        media: "(prefers-color-scheme: dark)",
+      },
       { title: "Motile" },
       {
         name: "description",
@@ -16,7 +26,10 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/svg+xml", href: "/logo.svg" },
+      { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/site.webmanifest" },
     ],
   }),
   notFoundComponent: NotFound,

@@ -131,38 +131,16 @@ struct MainView: View {
     }
 }
 
-/// The app's mark: a rounded square with an "m" that is one continuous stroke.
+/// The app's icon. Its tile is 824 of the image's 1024 points; the frame makes the tile `size`
+/// wide.
 struct LogoView: View {
     let size: CGFloat
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [Color(red: 0.31, green: 0.486, blue: 1), Color(red: 0.118, green: 0.247, blue: 0.839)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .overlay(
-                LogoStroke().stroke(.white, style: StrokeStyle(lineWidth: size * 0.09, lineCap: .round, lineJoin: .round))
-            )
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: size * 1024 / 824, height: size * 1024 / 824)
             .frame(width: size, height: size)
-    }
-}
-
-private struct LogoStroke: Shape {
-    func path(in rect: CGRect) -> Path {
-        let unit = rect.width / 100
-        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * unit, y: rect.minY + y * unit) }
-        var path = Path()
-        path.move(to: point(27, 69))
-        path.addLine(to: point(27, 46))
-        path.addArc(center: point(38.5, 46), radius: 11.5 * unit, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false)
-        path.addLine(to: point(50, 69))
-        path.move(to: point(50, 46))
-        path.addArc(center: point(61.5, 46), radius: 11.5 * unit, startAngle: .degrees(180), endAngle: .degrees(360), clockwise: false)
-        path.addLine(to: point(73, 69))
-        return path
     }
 }

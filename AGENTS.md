@@ -62,8 +62,8 @@ What the three programs agree on.
 
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
 
-Both use shadcn/ui (preset `b7ClRmfAW`, Base UI, Tailwind 4) and follow the system's light or
-dark appearance. They are one pnpm workspace; add components with
+Both use shadcn/ui (preset `b1VlIvUO`: Base UI, neutral colors, Tailwind 4) and follow the
+system's light or dark appearance. They are one pnpm workspace; add components with
 `pnpm dlx shadcn@latest add <name>` inside the app.
 
 - `apps/marketing` builds to `dist`, which the auth server serves. It ships no JavaScript; React only
