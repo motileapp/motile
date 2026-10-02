@@ -22,7 +22,7 @@ const svg = (canvas, body) =>
 const tile = (ratio) =>
   svg(
     32,
-    `<rect width="32" height="32" rx="7.25" fill="${BLACK}"/>${mark(32, ratio)}`
+    `<rect width="32" height="32" rx="8" fill="${BLACK}"/>${mark(32, ratio)}`
   )
 
 /** A full square, for places that cut their own shape out of it. */
@@ -31,6 +31,7 @@ const square = (ratio) =>
 
 // How much of a tile's width the mark takes up: a margin of 5 on each side of 32.
 const MARK_IN_TILE = 22 / 32
+const MARK_IN_APPLE_TILE = 0.7
 
 // An 824-point tile in a 1024-point canvas, as Apple's icon grid has it.
 const mac = svg(
@@ -41,7 +42,7 @@ const mac = svg(
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#fill)"/>
   <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="url(#edge)" stroke-width="4"/>
-  ${mark(1024, (MARK_IN_TILE * 824) / 1024)}`
+  ${mark(1024, (MARK_IN_APPLE_TILE * 824) / 1024)}`
 )
 
 /** Rasterised at twice the size it is asked for, then scaled down. */
@@ -93,7 +94,7 @@ const icoImages = await Promise.all(
 const files = {
   "favicon.svg": tile(MARK_IN_TILE),
   "favicon.ico": ico(icoImages),
-  "apple-touch-icon.png": await opaque(square(0.62), 180),
+  "apple-touch-icon.png": await opaque(square(MARK_IN_APPLE_TILE), 180),
   "icon-192.png": await png(tile(MARK_IN_TILE), 192),
   "icon-512.png": await png(tile(MARK_IN_TILE), 512),
   // A launcher may crop this one to a circle 80% of its width.
