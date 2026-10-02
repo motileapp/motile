@@ -12,6 +12,9 @@ final class TranscriptView: FlippedView, RowOwner {
     var onToggleRow: ((String) -> Void)?
     /// A row needs the file of an image or a video; it is called back with it.
     var onNeedMedia: ((String, @escaping (URL?) -> Void) -> Void)?
+    /// A queued message is to be given to the agent now, or taken back.
+    var onSendQueued: ((String) -> Void)?
+    var onCancelQueued: ((String) -> Void)?
 
     /// Room left under the last row for what floats over the transcript's end.
     var bottomInset: CGFloat = 0 {
@@ -164,6 +167,15 @@ final class TranscriptView: FlippedView, RowOwner {
         return endOfRunningTurn == nil || rows.last?.id != endOfRunningTurn
     }
 
+    /// The row the working line goes above: the first of the messages that wait for the agent,
+    /// which are the last rows the core sends. Without them it goes under every row.
+    private var workingIndex: Int {
+        let end = rows.count - (hasPending ? 1 : 0)
+        var index = end
+        while index > 0, rows[index - 1].isQueued { index -= 1 }
+        return index == end ? rows.count : index
+    }
+
     private var contentHeight: CGFloat {
         let workingHeight = showsWorking ? Self.workingHeight : 0
         return Self.topPadding + (offsets.last ?? 0) + workingHeight + bottomInset + 16
@@ -258,7 +270,7 @@ final class TranscriptView: FlippedView, RowOwner {
         let range = start..<(start + remove)
         // The server has the message now: its row takes the place of the copy shown while it
         // travelled, and as a first guess its height.
-        let sentHeight = hasPending && new.contains(where: \.isUser) ? heights.last : nil
+        let sentHeight = hasPending && new.contains(where: \.isSentMessage) ? heights.last : nil
         if sentHeight != nil { removePending() }
 
         // A row that is replaced by one with the same id keeps its view and, as a first guess,
@@ -269,14 +281,14 @@ final class TranscriptView: FlippedView, RowOwner {
         for index in range where !kept.contains(rows[index].id) { recycle(rows[index].id) }
 
         if animates {
-            fresh.formUnion(new.filter { known[$0.id] == nil && !$0.isUser }.map(\.id))
+            fresh.formUnion(new.filter { known[$0.id] == nil && !$0.isSentMessage }.map(\.id))
         }
         rows.replaceSubrange(range, with: new)
         if activity.running, let last = rows.last, case .turnEnd = last.kind, kept.contains(last.id) {
             endOfRunningTurn = last.id
         }
         heights.replaceSubrange(range, with: new.map { row in
-            known[row.id] ?? (row.isUser ? sentHeight : nil) ?? RowView.estimatedHeight(row, width: columnWidth)
+            known[row.id] ?? (row.isSentMessage ? sentHeight : nil) ?? RowView.estimatedHeight(row, width: columnWidth)
         })
         measured.replaceSubrange(range, with: [Bool](repeating: false, count: new.count))
         offsets = []
@@ -411,6 +423,7 @@ final class TranscriptView: FlippedView, RowOwner {
         case is ToolRowView: "tool"
         case is MediaRowView: "media"
         case is ErrorRowView: "error"
+        case is QueuedRowView: "queued"
         default: "turnEnd"
         }
     }
@@ -469,6 +482,9 @@ final class TranscriptView: FlippedView, RowOwner {
         let anchor = anchor ?? currentAnchor()
         let width = columnWidth
         let x = columnX
+        // The rows under the working line stand lower by its height.
+        let firstLowered = workingIndex
+        let workingRoom = showsWorking ? Self.workingHeight : 0
 
         // Measuring changes heights, which moves the viewport, which changes what is visible.
         // It settles in a pass or two.
@@ -494,7 +510,8 @@ final class TranscriptView: FlippedView, RowOwner {
                         firstChanged = firstChanged ?? index
                     }
                 }
-                view.frame = NSRect(x: x, y: Self.topPadding + y, width: width, height: heights[index])
+                let lowered = index >= firstLowered ? workingRoom : 0
+                view.frame = NSRect(x: x, y: Self.topPadding + y + lowered, width: width, height: heights[index])
                 onScreen.insert(row.id)
                 y += heights[index]
                 index += 1
@@ -505,7 +522,8 @@ final class TranscriptView: FlippedView, RowOwner {
         }
         position(anchor: anchor, follows: follows)
 
-        working.frame = NSRect(x: x, y: Self.topPadding + (offsets.last ?? 0) + 2, width: width, height: Self.workingHeight)
+        let workingY = firstLowered < offsets.count ? offsets[firstLowered] : 0
+        working.frame = NSRect(x: x, y: Self.topPadding + workingY + 2, width: width, height: Self.workingHeight)
         working.isHidden = !showsWorking
         jumpButton.isHidden = pinned || rows.isEmpty
         if !pendingHighlight.isEmpty {
@@ -609,6 +627,10 @@ final class TranscriptView: FlippedView, RowOwner {
         guard let onNeedMedia else { return done(nil) }
         onNeedMedia(id, done)
     }
+
+    func sendQueued(messageID: String) { onSendQueued?(messageID) }
+
+    func cancelQueued(messageID: String) { onCancelQueued?(messageID) }
 
     /// Copies the reply that ends at the given row: every stretch of prose and code back to the
     /// user's message.

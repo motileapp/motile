@@ -16,6 +16,7 @@ final class RowModel {
         case fold(FoldContent)
         case error(NSAttributedString)
         case turnEnd(TurnEnd)
+        case queued(QueuedContent)
     }
 
     let id: String
@@ -57,6 +58,8 @@ final class RowModel {
             kind = .error(Typesetter.plain(json.string("message"), color: Theme.danger, size: 13))
         case "turn_end":
             kind = .turnEnd(TurnEnd(json: json))
+        case "queued":
+            kind = .queued(QueuedContent(json: json))
         default:
             return nil
         }
@@ -89,6 +92,14 @@ final class RowModel {
         if case .user = kind { return true }
         return false
     }
+
+    var isQueued: Bool {
+        if case .queued = kind { return true }
+        return false
+    }
+
+    /// The row is a message the server has: one in the transcript, or one that waits for the agent.
+    var isSentMessage: Bool { isUser || isQueued }
 }
 
 final class CodeContent {
@@ -204,6 +215,23 @@ struct FoldContent {
     init(json: JSON) {
         label = TurnEnd.label(stopped: json.bool("stopped"), durationMs: (json["duration_ms"] as? NSNumber)?.intValue)
         open = json.bool("open")
+    }
+}
+
+/// A message that waits for the agent to take it. The row's item is the message.
+struct QueuedContent {
+    let text: NSAttributedString
+    let attachments: [String]
+    /// When the agent gets it.
+    let status: String
+    /// The agent is being given it, so it can no longer be sent now or taken back.
+    let sending: Bool
+
+    init(json: JSON) {
+        text = Typesetter.plain(json.string("text"), color: Theme.prose)
+        attachments = json.strings("attachments")
+        status = json.string("status")
+        sending = json.bool("sending")
     }
 }
 

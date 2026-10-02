@@ -173,6 +173,7 @@ fn kinds(app: &App) -> Vec<&'static str> {
         RowKind::Fold { .. } => "fold",
         RowKind::Error { .. } => "error",
         RowKind::TurnEnd { .. } => "turn_end",
+        RowKind::Queued { .. } => "queued",
     });
     kinds.collect()
 }

@@ -11,6 +11,9 @@ protocol RowOwner: AnyObject {
     func copyReply(endingAt rowID: String)
     /// Hands over the file of an image or a video, or nothing when it can't be had.
     func media(id: String, done: @escaping (URL?) -> Void)
+    /// Gives the agent a queued message now, or takes it back into the composer.
+    func sendQueued(messageID: String)
+    func cancelQueued(messageID: String)
 }
 
 /// A filled, rounded rectangle whose colours follow the appearance.
@@ -196,6 +199,79 @@ final class IconButton: NSButton {
     }
 }
 
+/// A button of words inside a row. All of its frame takes the click, and what lights up under
+/// the pointer is inset from it, so buttons that touch each other and the row's edge look apart.
+final class RowButton: FlippedView {
+    private let highlight = SurfaceView()
+    private let title = label(Theme.smallFont, Theme.secondary)
+    private let insets: NSEdgeInsets
+    private let action: () -> Void
+    private var tracking: NSTrackingArea?
+
+    init(title: String, tooltip: String, insets: NSEdgeInsets, action: @escaping () -> Void) {
+        self.insets = insets
+        self.action = action
+        super.init(frame: .zero)
+        highlight.radius = 6
+        addSubview(highlight)
+        self.title.stringValue = title
+        highlight.addSubview(self.title)
+        toolTip = tooltip
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(title)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// The label's own measure comes up a little short, so the words are measured directly.
+    var width: CGFloat {
+        let words = ceil(title.stringValue.size(withAttributes: [.font: Theme.smallFont]).width) + 4
+        return words + 20 + insets.left + insets.right
+    }
+
+    override var frame: NSRect {
+        didSet {
+            let lit = NSSize(width: bounds.width - insets.left - insets.right, height: bounds.height - insets.top - insets.bottom)
+            highlight.frame = NSRect(x: insets.left, y: insets.top, width: max(0, lit.width), height: max(0, lit.height))
+            title.frame = NSRect(x: 8, y: ((lit.height - 16) / 2).rounded(), width: max(0, lit.width - 16), height: 16)
+        }
+    }
+
+    /// A button that is shown again starts unlit, wherever the pointer left it.
+    func dim() {
+        highlight.fill = .clear
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        frame.contains(point) ? self : nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        action()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        highlight.fill = Theme.hover
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        dim()
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .arrow)
+    }
+}
+
 /// The base of every row. A row is as wide as the transcript's column; `layout(width:)` places
 /// its parts for that width and says how tall it is.
 class RowView: FlippedView {
@@ -231,6 +307,9 @@ class RowView: FlippedView {
             return estimatedTextHeight(text.length, width: width - 40) + 34
         case .turnEnd:
             return TurnEndRowView.height
+        case .queued(let content):
+            let attachments: CGFloat = content.attachments.isEmpty ? 0 : 22
+            return estimatedTextHeight(content.text.length, width: width * 0.75) + 48 + QueuedRowView.footHeight + attachments
         }
     }
 
@@ -248,6 +327,7 @@ class RowView: FlippedView {
         case .media: return MediaRowView()
         case .error: return ErrorRowView()
         case .turnEnd: return TurnEndRowView()
+        case .queued: return QueuedRowView()
         }
     }
 
@@ -260,6 +340,7 @@ class RowView: FlippedView {
         case .media: return "media"
         case .error: return "error"
         case .turnEnd: return "turnEnd"
+        case .queued: return "queued"
         }
     }
 }
@@ -313,6 +394,112 @@ final class UserRowView: RowView {
         bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
         text.frame = NSRect(x: padding, y: 10, width: textWidth, height: textHeight)
         attachments.frame = NSRect(x: padding, y: 10 + textHeight + 6, width: textWidth, height: 16)
+        return bubbleSize.height + 14 + 14
+    }
+
+    override func clearSelection() { text.clearSelection() }
+}
+
+/// A message that waits for the agent: what it says, when the agent gets it, and the buttons that
+/// send it now or take it back. It stands where the user's messages do, outlined instead of filled.
+final class QueuedRowView: RowView {
+    /// The strip under the message, down to the bubble's edge, that holds the status and the buttons.
+    static let footHeight: CGFloat = 34
+
+    private let bubble = SurfaceView()
+    private let text = RowTextView.make()
+    private let attachments = label(Theme.smallFont, Theme.secondary)
+    private let clock = NSImageView()
+    private let status = label(Theme.smallFont, Theme.secondary)
+    private var sendButton: RowButton!
+    private var cancelButton: RowButton!
+    private var messageID = ""
+    private var hasText = false
+    private var hasAttachments = false
+    private var sending = false
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        bubble.stroke = Theme.strongBorder
+        bubble.radius = 18
+        addSubview(bubble)
+        bubble.addSubview(text)
+        bubble.addSubview(attachments)
+        clock.image = symbol("clock", size: 11)
+        clock.contentTintColor = Theme.secondary
+        clock.imageScaling = .scaleNone
+        bubble.addSubview(clock)
+        bubble.addSubview(status)
+        sendButton = RowButton(
+            title: "Send now",
+            tooltip: "Give it to the agent without waiting",
+            insets: NSEdgeInsets(top: 3, left: 2, bottom: 7, right: 2)
+        ) { [weak self] in
+            guard let self else { return }
+            self.owner?.sendQueued(messageID: self.messageID)
+        }
+        cancelButton = RowButton(
+            title: "Cancel",
+            tooltip: "Take it back into the composer",
+            insets: NSEdgeInsets(top: 3, left: 2, bottom: 7, right: 8)
+        ) { [weak self] in
+            guard let self else { return }
+            self.owner?.cancelQueued(messageID: self.messageID)
+        }
+        bubble.addSubview(sendButton)
+        bubble.addSubview(cancelButton)
+        text.onSelect = { [weak self] in
+            guard let self else { return }
+            self.owner?.rowWillSelect(self)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func configure(_ row: RowModel) {
+        super.configure(row)
+        guard case .queued(let content) = row.kind else { return }
+        messageID = row.itemID
+        text.content = content.text
+        hasText = content.text.length > 0
+        text.isHidden = !hasText
+        hasAttachments = !content.attachments.isEmpty
+        attachments.isHidden = !hasAttachments
+        attachments.stringValue = content.attachments.map { "📎 \($0)" }.joined(separator: "   ")
+        status.stringValue = content.status
+        sending = content.sending
+        sendButton.isHidden = sending
+        cancelButton.isHidden = sending
+        sendButton.dim()
+        cancelButton.dim()
+    }
+
+    override func layout(width: CGFloat) -> CGFloat {
+        let padding: CGFloat = 14
+        let widest = max(120, width * 0.8) - padding * 2
+        let natural = text.content.boundingRect(
+            with: NSSize(width: widest, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        // The buttons reach the bubble's edge, so they take the padding on that side too.
+        let buttonsWidth = sending ? 0 : sendButton.width + cancelButton.width
+        let statusWidth = 18 + ceil(status.stringValue.size(withAttributes: [.font: Theme.smallFont]).width) + 8
+        let footWidth = sending ? statusWidth : statusWidth + 10 + buttonsWidth - padding
+        let attachmentsWidth = hasAttachments ? min(widest, attachments.intrinsicContentSize.width) : 0
+        let innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, attachmentsWidth, footWidth, 12))
+        let textHeight = hasText ? text.height(forWidth: innerWidth) : 0
+        let attachmentsHeight: CGFloat = hasAttachments ? 22 : 0
+        let footY = 10 + textHeight + attachmentsHeight + 2
+        let bubbleSize = NSSize(width: innerWidth + padding * 2, height: footY + Self.footHeight)
+        bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
+        text.frame = NSRect(x: padding, y: 10, width: innerWidth, height: textHeight)
+        attachments.frame = NSRect(x: padding, y: 10 + textHeight + (hasText ? 6 : 0), width: innerWidth, height: 16)
+
+        cancelButton.frame = NSRect(x: bubbleSize.width - cancelButton.width, y: footY, width: cancelButton.width, height: Self.footHeight)
+        sendButton.frame = NSRect(x: cancelButton.frame.minX - sendButton.width, y: footY, width: sendButton.width, height: Self.footHeight)
+        let statusEnd = sending ? bubbleSize.width - padding : sendButton.frame.minX - 6
+        clock.frame = NSRect(x: padding, y: footY + 7, width: 14, height: 16)
+        status.frame = NSRect(x: padding + 18, y: footY + 7, width: max(0, statusEnd - padding - 18), height: 16)
         return bubbleSize.height + 14 + 14
     }
 

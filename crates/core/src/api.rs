@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::connection::PathKind;
 use crate::link::State;
 use crate::render::highlight::Spans;
-use crate::render::rows::{QueuedMessage, Row, Waiting};
+use crate::render::rows::{Row, Waiting};
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
@@ -179,8 +179,6 @@ pub enum Event {
         activity: Activity,
         /// The tool calls the turn waits with, worded for a person.
         waiting: Vec<Waiting>,
-        /// The messages that wait for the agent, with when it gets each.
-        queued: Vec<QueuedMessage>,
     },
     /// The thread couldn't be opened on its server.
     ThreadError {

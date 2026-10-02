@@ -25,7 +25,7 @@ use crate::connection::{ServerAddr, bind};
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
 use crate::render::highlight::{self, Spans};
-use crate::render::rows::{self, Splice, Transcript, Uncoloured};
+use crate::render::rows::{Splice, Transcript, Uncoloured};
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
 const FIRST_ITEMS: usize = 30;
@@ -687,15 +687,20 @@ impl Core {
         let Some(open) = self.open.get_mut(thread_id) else { return };
         match message {
             Message::Opened { reset, activity } => {
-                let event = activity_event(thread_id, &open.transcript, activity);
                 open.live = false;
                 if reset {
                     open.transcript.clear();
                     open.rev = 0;
                     open.unrendered.clear();
                     open.unsaved.clear();
+                }
+                let (queued, event) = activity_changed(thread_id, &mut open.transcript, activity);
+                if reset {
                     self.cache.clear_items(thread_id);
                     self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows: Vec::new() });
+                }
+                if let Some(queued) = queued {
+                    self.emit_rows(thread_id, false, queued);
                 }
                 self.emit(event);
             }
@@ -740,7 +745,10 @@ impl Core {
                 if !activity.running {
                     open.transcript.end_streaming();
                 }
-                let event = activity_event(thread_id, &open.transcript, activity);
+                let (queued, event) = activity_changed(thread_id, &mut open.transcript, activity);
+                if let Some(queued) = queued {
+                    self.emit_rows(thread_id, false, queued);
+                }
                 self.emit(event);
             }
             Message::Error { message } => {
@@ -1006,10 +1014,12 @@ impl Core {
 
 /// Writes a project's icon where `emit_projects` looks for it, and removes the icons the project
 /// had before.
-fn activity_event(thread_id: &str, transcript: &Transcript, activity: Activity) -> Event {
+/// What the app is told when a thread's activity changes: the rows of the messages that wait
+/// for the agent, when those changed, and what the agent is doing.
+fn activity_changed(thread_id: &str, transcript: &mut Transcript, activity: Activity) -> (Option<Splice>, Event) {
+    let queued = transcript.set_queued(activity.queued.clone());
     let waiting = activity.approvals.iter().map(|approval| transcript.waiting(approval)).collect();
-    let queued = rows::queued(&activity.queued);
-    Event::Activity { thread_id: thread_id.to_string(), activity, waiting, queued }
+    (queued, Event::Activity { thread_id: thread_id.to_string(), activity, waiting })
 }
 
 fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8]) -> anyhow::Result<()> {

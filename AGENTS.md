@@ -139,8 +139,9 @@ Rust library for tests.
   UTF-16 offsets), `highlight.rs` (syntect; streaming code is highlighted incrementally) and
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
   are one row, a finished turn's work folds behind one, as does what the agent did before a
-  message it took mid-turn, and an image or a video is a row that knows its size before the
-  file is there). It also words the queued messages: when the agent gets each.
+  message it took mid-turn, an image or a video is a row that knows its size before the file
+  is there, and the messages that wait for the agent are the last rows, each saying when the
+  agent gets it).
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
   terminal.
 
@@ -154,10 +155,10 @@ Rust library for tests.
 - `Views/Transcript/` is the transcript: `TranscriptView.swift` only keeps views for the rows on
   screen, `RowViews.swift` are the rows, `Rows.swift` builds their text off the main thread.
   `MediaRowView.swift` is the row of an image or a video: images are decoded off the main
-  thread at the size they are shown, and a video is downloaded when it is played.
-- `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI. The
-  composer also shows what waits for the user or the agent: the approvals and the queued
-  messages.
+  thread at the size they are shown, and a video is downloaded when it is played. A queued
+  message is a row under the line that says the agent is working, with the buttons that send
+  it now or take it back.
+- `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
   `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P, and `Views/Shared` holds the
   window's glass surface, the hover highlight and the agents' and projects' icons.
 - `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that

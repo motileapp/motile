@@ -17,9 +17,6 @@ struct ComposerView: View {
             if store.selectedThread != nil, !store.activity.approvals.isEmpty {
                 approvals
             }
-            if !store.queuedMessages.isEmpty {
-                queued
-            }
             if !store.attachments.isEmpty {
                 attachments
             }
@@ -113,45 +110,6 @@ struct ComposerView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: Theme.warningBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding([.horizontal, .top], 10)
-    }
-
-    /// The messages that wait for the agent: each can be sent at once or taken back.
-    private var queued: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(store.queuedMessages) { message in
-                HStack(alignment: .top, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        if !message.text.isEmpty {
-                            Text(message.text)
-                                .lineLimit(3)
-                        }
-                        if !message.attachments.isEmpty {
-                            Label(message.attachments.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: ", "), systemImage: "paperclip")
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        Text(message.status)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Color.themeSecondary)
-                    }
-                    Spacer(minLength: 8)
-                    if !message.sending {
-                        Button("Cancel") { store.takeBack(message) }
-                            .buttonStyle(.bordered)
-                            .help("Take it back into the composer")
-                        Button("Send now") { store.sendNow(message) }
-                            .buttonStyle(.bordered)
-                            .help("Give it to the agent without waiting")
-                    }
-                }
-                .controlSize(.small)
-            }
-        }
-        .font(.system(size: 12.5))
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding([.horizontal, .top], 10)
     }
 

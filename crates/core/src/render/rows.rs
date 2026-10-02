@@ -100,6 +100,15 @@ pub enum RowKind {
         /// The turn's fold says how long it took, so this row doesn't.
         folded: bool,
     },
+    /// A message that waits for the agent to take it. The row's item is the message.
+    Queued {
+        text: String,
+        attachments: Vec<String>,
+        /// When the agent gets it.
+        status: &'static str,
+        /// The agent is being given it, so it can no longer be sent now or taken back.
+        sending: bool,
+    },
 }
 
 #[derive(Serialize, Clone, Copy, PartialEq, Debug)]
@@ -182,39 +191,6 @@ pub struct Choice {
     pub detail: String,
 }
 
-/// A message that waits for the agent to take it.
-#[derive(Serialize, Clone, PartialEq, Debug)]
-pub struct QueuedMessage {
-    pub id: String,
-    pub text: String,
-    /// The files attached to it, as paths on the server.
-    pub attachments: Vec<String>,
-    /// When the agent gets it.
-    pub status: &'static str,
-    /// The agent is being given it, so it can no longer be sent now or taken back.
-    pub sending: bool,
-}
-
-/// The queued messages with what to say about each.
-pub fn queued(queued: &[Queued]) -> Vec<QueuedMessage> {
-    let busy = queued.iter().any(|message| message.sending);
-    let next = queued.iter().position(|message| !message.held && !message.sending).filter(|_| !busy);
-    let status = |index: usize, message: &Queued| match (message.sending, message.held) {
-        (true, _) => "Sending…",
-        (false, true) => "Not sent yet",
-        (false, false) if next == Some(index) => "Sends after the next tool call",
-        (false, false) => "Sends after the message above",
-    };
-    let shown = queued.iter().enumerate().map(|(index, message)| QueuedMessage {
-        id: message.id.clone(),
-        text: message.text.clone(),
-        attachments: message.attachments.clone(),
-        status: status(index, message),
-        sending: message.sending,
-    });
-    shown.collect()
-}
-
 pub struct Splice {
     pub start: usize,
     pub remove: usize,
@@ -234,6 +210,8 @@ pub struct Transcript {
     /// Highlighters for the code blocks of items that are still streaming, by row id, and for
     /// code inside prose, by row id and paragraph.
     streaming: HashMap<String, Incremental>,
+    /// The messages that wait for the agent; their rows come after everything else.
+    queued: Vec<Queued>,
 }
 
 /// Code that came without highlighting: a code row, or the code paragraph `para` of a prose row.
@@ -326,6 +304,11 @@ impl Transcript {
         self.rerender(index, true)
     }
 
+    pub fn set_queued(&mut self, queued: Vec<Queued>) -> Option<Splice> {
+        self.queued = queued;
+        self.show()
+    }
+
     /// Opens or closes a group or a fold.
     pub fn toggle(&mut self, row_id: &str) -> Option<Splice> {
         if !self.opened.remove(row_id) {
@@ -342,7 +325,8 @@ impl Transcript {
 
     /// Works out the rows to show and returns how they differ from the ones shown before.
     fn show(&mut self) -> Option<Splice> {
-        let shown = present(&self.items, &self.rendered, &self.opened);
+        let mut shown = present(&self.items, &self.rendered, &self.opened);
+        shown.extend(queued_rows(&self.queued).into_iter().map(Cow::Owned));
         let same_start = self.rows.iter().zip(&shown).take_while(|(before, after)| *before == after.as_ref()).count();
         if same_start == self.rows.len() && same_start == shown.len() {
             return None;
@@ -419,6 +403,30 @@ impl Transcript {
         *slot = Some(spans);
         self.show()
     }
+}
+
+/// The queued messages as rows, each saying when the agent gets it.
+fn queued_rows(queued: &[Queued]) -> Vec<Row> {
+    let busy = queued.iter().any(|message| message.sending);
+    let next = queued.iter().position(|message| !message.held && !message.sending).filter(|_| !busy);
+    let status = |index: usize, message: &Queued| match (message.sending, message.held) {
+        (true, _) => "Sending…",
+        (false, true) => "Not sent yet",
+        (false, false) if next == Some(index) => "Sends after the next tool call",
+        (false, false) => "Sends after the message above",
+    };
+    let row = |(index, message): (usize, &Queued)| Row {
+        id: format!("queued/{}", message.id),
+        item: message.id.clone(),
+        nested: false,
+        kind: RowKind::Queued {
+            text: message.text.clone(),
+            attachments: message.attachments.iter().map(|path| file_name(path).to_string()).collect(),
+            status: status(index, message),
+            sending: message.sending,
+        },
+    };
+    queued.iter().enumerate().map(row).collect()
 }
 
 /// The rows to show for the items: each turn's, one turn after the other.
@@ -1198,23 +1206,44 @@ mod tests {
     }
 
     #[test]
-    fn queued_messages_say_when_the_agent_gets_them() {
+    fn queued_messages_are_the_last_rows_and_say_when_the_agent_gets_them() {
         let message = |id: &str, held, sending| Queued {
             id: id.into(),
             text: "Also this".into(),
-            attachments: Vec::new(),
+            attachments: vec!["/tmp/a/notes.txt".into()],
             held,
             sending,
         };
-        let statuses = |messages: &[Queued]| queued(messages).iter().map(|message| message.status).collect::<Vec<_>>();
+        let statuses = |transcript: &Transcript| {
+            let rows = transcript.rows().iter().filter_map(|row| match &row.kind {
+                RowKind::Queued { status, .. } => Some(*status),
+                _ => None,
+            });
+            rows.collect::<Vec<_>>()
+        };
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![assistant("a", 0, "Working on it.")]);
 
-        let waiting = [message("a", true, false), message("b", false, false), message("c", false, false)];
+        let waiting = vec![message("m1", true, false), message("m2", false, false), message("m3", false, false)];
+        let splice = transcript.set_queued(waiting).unwrap();
+        assert_eq!((splice.start, splice.remove, splice.rows.len()), (1, 0, 3));
         assert_eq!(
-            statuses(&waiting),
+            statuses(&transcript),
             ["Not sent yet", "Sends after the next tool call", "Sends after the message above"]
         );
-        let given = [message("a", false, true), message("b", false, false)];
-        assert_eq!(statuses(&given), ["Sending…", "Sends after the message above"]);
+        let first = &transcript.rows()[1];
+        assert_eq!((first.id.as_str(), first.item.as_str()), ("queued/m1", "m1"));
+        assert!(matches!(&first.kind, RowKind::Queued { attachments, .. } if attachments == &["notes.txt"]));
+
+        transcript.set_queued(vec![message("m2", false, true), message("m3", false, false)]);
+        assert_eq!(statuses(&transcript), ["Sending…", "Sends after the message above"]);
+
+        // What the agent says next goes above the messages that still wait.
+        transcript.upsert(assistant("b", 1, "Still working."), true);
+        let kinds: Vec<bool> = transcript.rows().iter().map(|row| matches!(row.kind, RowKind::Queued { .. })).collect();
+        assert_eq!(kinds, [false, false, true, true]);
+        assert!(transcript.set_queued(Vec::new()).is_some());
+        assert!(statuses(&transcript).is_empty());
     }
 
     #[test]

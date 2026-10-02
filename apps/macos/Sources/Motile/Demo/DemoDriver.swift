@@ -115,6 +115,14 @@ private final class Demo {
         store.send()
     }
 
+    /// What the rows of the queued messages say, in order.
+    private var queuedStatuses: [String] {
+        store.transcript.rows.compactMap { row in
+            guard case .queued(let message) = row.kind else { return nil }
+            return message.status
+        }
+    }
+
     func run() async {
         await wait(2)
         window?.setFrame(NSRect(x: 60, y: 60, width: 1280, height: 840), display: true)
@@ -212,24 +220,24 @@ private final class Demo {
         send("Change greet.py to use an f-string, then run greet.py.")
         await expect("the turn waits before its first tool call") { store.activity.approvals.first?.title == "Edit" }
         send("Use single quotes")
-        await expect("a message sent while the agent works waits in the queue") {
-            store.activity.queued.map(\.status) == ["Sends after the next tool call"]
+        await expect("a message sent while the agent works waits at the end of the transcript") {
+            queuedStatuses == ["Sends after the next tool call"] && store.transcript.rows.last?.kindName == "queued"
         }
         send("Never mind")
         await expect("the next one waits behind it") {
-            store.activity.queued.map(\.status) == ["Sends after the next tool call", "Sends after the message above"]
+            queuedStatuses == ["Sends after the next tool call", "Sends after the message above"]
         }
         await shoot("07-queued")
-        if let last = store.activity.queued.last { store.takeBack(last) }
+        if let last = store.activity.queued.last { store.takeBack(queued: last.id) }
         await expect("a queued message that is taken back returns to the composer") {
-            store.activity.queued.count == 1 && store.draft == "Never mind"
+            queuedStatuses.count == 1 && store.draft == "Never mind"
         }
         store.draft = ""
         if let edit = store.activity.approvals.first { store.answer(edit, allow: true) }
         await expect("the next tool call asks") { store.activity.approvals.first?.title == "Bash" }
         if let bash = store.activity.approvals.first { store.answer(bash, allow: true) }
         await expect("the agent takes a queued message after a tool call, in the same turn") {
-            turnEnded && turnEnds == 1 && store.activity.queued.isEmpty && store.transcript.rows.filter(\.isUser).count == 2
+            turnEnded && turnEnds == 1 && queuedStatuses.isEmpty && store.transcript.rows.filter(\.isUser).count == 2
         }
         await shoot("07-queue-taken")
 
@@ -482,6 +490,7 @@ extension RowModel {
         case .fold: "fold"
         case .error: "error"
         case .turnEnd: "turn_end"
+        case .queued: "queued"
         }
     }
 }

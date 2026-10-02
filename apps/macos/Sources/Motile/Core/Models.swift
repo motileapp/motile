@@ -234,42 +234,28 @@ struct Activity: Equatable {
 
     init() {}
 
-    init(json: JSON, waiting: [JSON], queued: [JSON]) {
+    init(json: JSON, waiting: [JSON]) {
         running = json.bool("running")
         monitoring = json.bool("monitoring")
         thinking = json.bool("thinking")
         startedAt = json.optionalDouble("started_at")
         approvals = waiting.map { Approval(json: $0) }
-        self.queued = queued.map { QueuedMessage(json: $0) }
+        queued = json.objects("queued").map { QueuedMessage(json: $0) }
     }
 }
 
-/// A message sent while the agent was working. It joins the transcript when the agent takes it.
+/// A message sent while the agent was working. The transcript shows it as its last rows until
+/// the agent takes it.
 struct QueuedMessage: Equatable, Identifiable {
     let id: String
     let text: String
     /// The files attached to it, as paths on the server.
     let attachments: [String]
-    /// When the agent gets it.
-    let status: String
-    /// The agent is being given it, so it can no longer be sent now or taken back.
-    let sending: Bool
 
     init(json: JSON) {
         id = json.string("id")
         text = json.string("text")
         attachments = json.strings("attachments")
-        status = json.string("status")
-        sending = json.bool("sending")
-    }
-
-    /// A message this Mac is still sending to its server.
-    init(sending text: String, files: [String]) {
-        id = UUID().uuidString
-        self.text = text
-        attachments = files
-        status = "Sending…"
-        sending = true
     }
 }
 
