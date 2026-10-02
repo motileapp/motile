@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::Context;
@@ -15,11 +16,13 @@ use motile_protocol::wire::{Message, Request};
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::access::Access;
-use crate::files;
 use crate::hub::{Hub, ListSubscription, ThreadSubscription};
+use crate::{files, update};
 
 const NOT_LINKED: u32 = 403;
 const RECHECK_ACCESS_EVERY: Duration = Duration::from_secs(30);
+/// Long enough for the app to hear that the update is installed.
+const RESTART_AFTER: Duration = Duration::from_millis(500);
 /// A long transcript is sent in pieces so the app can show the first ones while the rest travel.
 const ITEMS_PER_MESSAGE: usize = 200;
 
@@ -97,6 +100,7 @@ impl Server {
         let hub = &self.hub;
         let reply = match request {
             Request::Subscribe => return follow_list(send, hub.subscribe().await).await,
+            Request::UpdateHost => return update_host(send, hub).await,
             Request::Open { thread_id, since } => match hub.open(&thread_id, since).await {
                 Ok(subscription) => return follow_thread(send, subscription).await,
                 Err(error) => Err(error),
@@ -128,6 +132,55 @@ impl Server {
         send.finish()?;
         Ok(())
     }
+}
+
+/// Installs the latest release while telling the app how far the download is, then starts the
+/// new program in this one's place.
+async fn update_host(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
+    static UPDATING: AtomicBool = AtomicBool::new(false);
+    let refusal = if hub.any_running().await {
+        Some("An agent is working on this host. Update it when the threads have finished.")
+    } else if UPDATING.swap(true, Ordering::SeqCst) {
+        Some("This host is already updating.")
+    } else {
+        None
+    };
+    if let Some(refusal) = refusal {
+        write_frame(&mut send, &Message::Error { message: refusal.to_string() }).await?;
+        send.finish()?;
+        return Ok(());
+    }
+
+    // Where the program is, asked before it is replaced: afterwards the answer is the old file.
+    let program = std::env::current_exe()?;
+    let download_url = std::env::var("MOTILE_DOWNLOAD_URL").unwrap_or_else(|_| update::DOWNLOAD_URL.to_string());
+    let (reports, mut progress) = tokio::sync::mpsc::unbounded_channel();
+    let installing = tokio::spawn({
+        let program = program.clone();
+        async move {
+            let report = |received, total| {
+                let _ = reports.send((received, total));
+            };
+            update::install_latest(&download_url, &program, report).await
+        }
+    });
+    while let Some((received, total)) = progress.recv().await {
+        // The app may have gone; the update goes on without it.
+        let _ = write_frame(&mut send, &Message::Updating { received, total }).await;
+    }
+    let installed = installing.await?;
+    UPDATING.store(false, Ordering::SeqCst);
+    if let Err(error) = installed {
+        write_frame(&mut send, &Message::Error { message: format!("{error:#}") }).await?;
+        send.finish()?;
+        return Ok(());
+    }
+    let _ = write_frame(&mut send, &Message::Ok).await;
+    let _ = send.finish();
+    tracing::info!("updated; starting the new host");
+    tokio::time::sleep(RESTART_AFTER).await;
+    update::request_restart(program);
+    Ok(())
 }
 
 async fn follow_list(mut send: SendStream, subscription: ListSubscription) -> anyhow::Result<()> {

@@ -64,11 +64,12 @@ On the host, `motile status` shows its account, agents and service, `motile logs
 
 ## Using it
 
-- **Projects** are folders on a host. Add one from the new thread screen; every thread works in a project.
+- **Projects** are folders on a host. Add one from the sidebar's toolbar or the new thread screen; every thread works in a project. A project is shown with the favicon, icon or logo found in its folder, and you can pick another image in Settings.
 - **Threads** are listed in one sidebar across all projects and hosts, each with its project and what it is doing. A thread gets a title generated from its first message. The search field narrows the list by title or project.
 - **Mark done** puts a thread away in the Done list at the bottom of the sidebar; **Mark undone** brings it back, and so does sending a message in it. Hover a thread for the button, or press `⇧⌘D`.
 - **Models**: the model menu lists what the host's agents can run. Picking a model picks the agent. A thread stays with its agent but can switch between that agent's models.
 - **Access**: **Supervised** asks before commands and file changes (a turn that was refused a tool ends with an **Allow and continue** button), **Auto-accept edits**, **Auto** and **Full access**. **Plan mode** makes the agent only read and propose.
+- **Updates**: the app offers a new version at the bottom of the sidebar, downloads it there and restarts into it. A host that is behind shows an **Update** button next to its name; it installs the new version and restarts, which it only does while no agent is working.
 - A message sent while a turn is running waits and starts the next turn.
 - Attached files are uploaded to the host.
 
@@ -76,7 +77,9 @@ On the host, `motile status` shows its account, agents and service, `motile logs
 | --- | --- |
 | `↩` | Send |
 | `⇧↩` or `⌥↩` | New line |
-| `⌘N` | New thread |
+| `⌘K` | Command panel: commands, threads and projects |
+| `⌘N` | New thread: choose the project to start in |
+| `⌘P` | Go to a thread |
 | `⇧⌘D` | Mark done or undone |
 | `⌘.` | Stop the agent |
 | `⌃⌘S` | Toggle the sidebar |

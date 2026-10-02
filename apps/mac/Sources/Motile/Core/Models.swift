@@ -79,6 +79,8 @@ struct Host: Equatable, Identifiable {
     let path: String?
     let rttMs: Int?
     let home: String
+    /// The version of the host's program.
+    let version: String
     let models: [ModelInfo]
     /// The agents installed on the host, with their versions.
     let agents: [Agent: String]
@@ -96,6 +98,7 @@ struct Host: Equatable, Identifiable {
         let info = json.object("info")
         known = info != nil
         home = info?.string("home") ?? ""
+        version = info?.string("version") ?? ""
         models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
         var installed: [Agent: String] = [:]
         for agent in info?.objects("agents") ?? [] {

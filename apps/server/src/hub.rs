@@ -343,6 +343,10 @@ impl Hub {
         Ok(())
     }
 
+    pub async fn any_running(&self) -> bool {
+        self.threads.lock().await.values().any(|live| live.stored.thread.running)
+    }
+
     pub async fn add_project(&self, path: &str) -> anyhow::Result<()> {
         let path = if path.len() > 1 { path.trim_end_matches('/') } else { path };
         if !Path::new(path).is_absolute() || !Path::new(path).is_dir() {

@@ -84,6 +84,11 @@ pub enum Command {
         #[serde(default)]
         files: Vec<String>,
     },
+    /// Has the host install the latest release and restart. `host_update` events say how far the
+    /// download is; the answer comes when the host is about to restart.
+    UpdateHost {
+        host_id: String,
+    },
     /// Makes the image `file` on this device the project's icon. Without `file` the project
     /// goes back to the icon found in its folder.
     SetProjectIcon {
@@ -122,6 +127,12 @@ pub enum Event {
     Projects {
         host_id: String,
         projects: Vec<ProjectView>,
+    },
+    /// How far a host's download of its update is. `total` is missing when it isn't known.
+    HostUpdate {
+        host_id: String,
+        received: u64,
+        total: Option<u64>,
     },
     /// Replace `remove` rows at `start` with `rows`. With `reset` the app's rows are dropped first.
     Rows {

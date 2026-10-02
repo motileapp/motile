@@ -91,6 +91,11 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   token, and installs the systemd unit. The unit is a system unit that runs as the installing
   user; for root it sets `IS_SANDBOX=1`, without which Claude Code refuses full access.
 - `access.rs` asks the auth server which apps belong to the account, and caches the answer.
+- `icons.rs` finds a project's icon in its folder (a favicon, icon or logo file, also in the
+  `apps` and `packages` of a workspace). The path is kept with the project; the user can pick
+  another image instead.
+- `update.rs` replaces the host's own program with the latest release's and starts it again,
+  when an app asks. It refuses while an agent is working.
 - `tests/e2e.rs` runs the host against `scripts/fake-agent` over real iroh connections.
 
 ### crates/core
@@ -115,6 +120,11 @@ Rust library for tests.
 - `Views/Transcript/` is the transcript: `TranscriptView.swift` only keeps views for the rows on
   screen, `RowViews.swift` are the rows, `Rows.swift` builds their text off the main thread.
 - `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
+  `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P, and `Views/Shared` holds the
+  window's glass surface, the hover highlight and the agents' and projects' icons.
+- `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
+  it is signed by the developer who signed the running one, puts it in its place and restarts.
+  A copy that isn't signed with the Developer ID can't update itself.
 - `Demo/DemoDriver.swift` walks the app through a scripted demo; `scripts/ci-demo.sh` runs it
   in CI against a real auth server and host and collects screenshots and `checks.txt`.
 
@@ -187,9 +197,11 @@ the recorded output in `fixtures/` or makes up a turn, depending on the prompt.
 
 ## Releasing and deploying
 
-Pushing a tag `v*` runs the `Release` workflow, which publishes the host and the auth server for
-Linux and the Mac app as a GitHub release. The installer and the download button always fetch
-the latest release. The app in a release is signed with the Developer ID certificate and
+To release, set `version` in `Cargo.toml` to the new version, commit, and push the tag
+`v<version>`; the workflow refuses a tag that doesn't match. It publishes the host and the auth
+server for Linux and the Mac app as a GitHub release. The installer and the download button
+always fetch the latest release, and apps and hosts compare their own version with it to offer
+an update. The app in a release is signed with the Developer ID certificate and
 notarized, using the repository's `APPLE_*` secrets; running the `Mac` workflow by hand with
 `sign` does the same without a release.
 

@@ -28,6 +28,16 @@ enum PanelPage: Equatable {
     case threads
 }
 
+/// A host that is installing a new version of itself.
+struct HostUpdate: Equatable {
+    /// The version it had when the update began.
+    let from: String
+    /// How much of the download has arrived, when the host knows how much there is.
+    var fraction: Double?
+    /// The new version is installed and the host is starting it.
+    var restarting = false
+}
+
 struct UndoNotice: Equatable {
     let threadIDs: [String]
     let text: String
@@ -52,6 +62,7 @@ final class AppStore {
 
     // What the hosts hold
     private(set) var hosts: [Host] = []
+    private(set) var hostUpdates: [String: HostUpdate] = [:]
     private(set) var projects: [Project] = []
     private(set) var threads: [String: ThreadInfo] = [:]
 
@@ -66,6 +77,7 @@ final class AppStore {
     var drafts: [String: String] = [:]
     var attachments: [String] = []
 
+    let updater = AppUpdater()
     @ObservationIgnored let core = CoreBridge()
     @ObservationIgnored let transcript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
@@ -99,6 +111,7 @@ final class AppStore {
         if !core.start(config: config) {
             errorMessage = "Motile couldn't start. Its data folder may not be writable."
         }
+        if environment["MOTILE_DEMO"] != "1" { updater.start() }
     }
 
     // MARK: Events
@@ -126,6 +139,12 @@ final class AppStore {
             let hostID = event.string("host_id")
             let projects = event.objects("projects").map { Project(json: $0, hostID: hostID) }
             return { [weak self] in self?.apply(projects: projects, hostID: hostID) }
+        case "host_update":
+            let hostID = event.string("host_id")
+            let (received, total) = (event.double("received"), event.optionalDouble("total"))
+            return { [weak self] in
+                self?.hostUpdates[hostID]?.fraction = total.flatMap { $0 > 0 ? received / $0 : nil }
+            }
         case "rows":
             let threadID = event.string("thread_id")
             let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
@@ -176,6 +195,11 @@ final class AppStore {
         let known = Set(hosts.map(\.id))
         projects.removeAll { !known.contains($0.hostID) }
         threads = threads.filter { known.contains($0.value.hostID) }
+        // A host that is back with another version has finished updating.
+        for host in hosts where host.state == .connected {
+            guard let update = hostUpdates[host.id], update.restarting, host.version != update.from else { continue }
+            hostUpdates[host.id] = nil
+        }
         ensureNewThreadDefaults()
         // The host has arrived; the install command has done its job.
         if showsAddHost, hosts.count > addHostCount {
@@ -380,6 +404,31 @@ final class AppStore {
         core.send("watch_hosts", ["on": false])
         // A token links one host; the next host gets a new one.
         if hosts.count != addHostCount { enrollToken = nil }
+    }
+
+    /// Whether the host runs an older version than the newest release.
+    func isOutdated(_ host: Host) -> Bool {
+        host.state == .connected && Version.isOlder(host.version, than: updater.latest)
+    }
+
+    /// Has the host install the newest release and start it.
+    func update(_ host: Host) {
+        guard hostUpdates[host.id] == nil else { return }
+        hostUpdates[host.id] = HostUpdate(from: host.version)
+        core.send("update_host", ["host_id": host.id]) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                self.hostUpdates[host.id]?.restarting = true
+                // If the host never says it is back, the row stops waiting for it.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
+                    if self?.hostUpdates[host.id]?.restarting == true { self?.hostUpdates[host.id] = nil }
+                }
+            case .failure(let error):
+                self.hostUpdates[host.id] = nil
+                self.errorMessage = error.message
+            }
+        }
     }
 
     func removeHost(_ host: Host) {

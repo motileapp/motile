@@ -13,6 +13,13 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Updates") {
+                LabeledContent("Motile \(store.updater.current)") {
+                    Button("Check for Updates") { store.updater.check(asked: true) }
+                }
+                AppUpdateRow(updater: store.updater)
+            }
+
             Section("Appearance") {
                 Picker("Theme", selection: $appearance) {
                     ForEach(Appearance.allCases) { Text($0.label).tag($0) }
@@ -31,6 +38,7 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
+                            HostUpdateStatus(host: host) { EmptyView() }
                             Button("Remove") { store.removeHost(host) }
                         }
                     }
@@ -65,14 +73,14 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 460)
+        .frame(width: 520, height: 560)
     }
 
     private func description(of host: Host) -> String {
         let agents = host.agents.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.name) \($0.value)" }
         let installed = agents.isEmpty ? "no agent installed" : agents.joined(separator: ", ")
         switch host.state {
-        case .connected: return "Connected · \(installed)"
+        case .connected: return "Connected · version \(host.version) · \(installed)"
         case .connecting: return "Connecting…"
         case .disconnected: return "Offline"
         case .refused: return "This host no longer accepts this Mac"

@@ -224,8 +224,17 @@ struct CommandPanel: View {
         return items
     }
 
+    /// The hosts that run an older version than the newest release.
+    private var hostUpdates: [PanelItem] {
+        store.hosts.filter { store.isOutdated($0) && store.hostUpdates[$0.id] == nil }.map { host in
+            PanelItem(id: "update-\(host.id)", title: "Update \(host.name)", detail: "From version \(host.version) to \(store.updater.latest ?? "")", icon: .symbol("arrow.down.circle")) {
+                store.update(host)
+            }
+        }
+    }
+
     private var commands: [PanelItem] {
-        [
+        let always: [PanelItem] = [
             PanelItem(id: "new-thread", title: "New thread…", detail: "Choose a project to start in", icon: .symbol("square.and.pencil"), keepsOpen: true) {
                 open(.projects)
             },
@@ -236,10 +245,14 @@ struct CommandPanel: View {
             PanelItem(id: "add-host", title: "Add a host…", detail: "A machine that runs your agents", icon: .symbol("server.rack")) {
                 store.showsAddHost = true
             },
+            PanelItem(id: "check-updates", title: "Check for updates", detail: "Motile \(store.updater.current)", icon: .symbol("arrow.triangle.2.circlepath")) {
+                store.updater.check(asked: true)
+            },
             PanelItem(id: "settings", title: "Settings…", detail: "Appearance, hosts and projects", icon: .symbol("gearshape")) {
                 openSettings()
             },
         ]
+        return hostUpdates + always
     }
 
     // MARK: Acting

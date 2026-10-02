@@ -304,6 +304,23 @@ impl Link {
         }
     }
 
+    /// Has the host install the latest release, telling `progress` how far the download is.
+    pub async fn update(&self, mut progress: impl FnMut(u64, Option<u64>)) -> anyhow::Result<()> {
+        let mut follow = self.connection()?.follow(&Request::UpdateHost).await?;
+        loop {
+            // A host from before it could update itself closes the stream without an answer.
+            let Some(message) = follow.next().await? else {
+                anyhow::bail!("This host is too old to update itself. Run the install command on the machine again.");
+            };
+            match message {
+                Message::Updating { received, total } => progress(received, total),
+                Message::Ok => return Ok(()),
+                Message::Error { message } => anyhow::bail!(message),
+                other => anyhow::bail!("Unexpected answer from the host: {other:?}"),
+            }
+        }
+    }
+
     pub async fn upload(&self, path: &Path) -> anyhow::Result<String> {
         self.connection()?.upload(path).await
     }

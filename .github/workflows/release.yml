@@ -23,6 +23,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Check that the tag is the version in Cargo.toml
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Cargo.toml says $version, but the tag is $GITHUB_REF_NAME."
+            exit 1
+          fi
       - name: Toolchain
         run: |
           sudo apt-get update && sudo apt-get install -y musl-tools

@@ -25,6 +25,9 @@ struct MotileApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             SidebarCommands()
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { store.updater.check(asked: true) }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Thread…") { store.openPanel(.projects) }
                     .keyboardShortcut("n")

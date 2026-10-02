@@ -195,6 +195,9 @@ pub enum Request {
         name: String,
         size: u64,
     },
+    /// Replaces the host's program with the latest release and starts it again. The host answers
+    /// with `Updating` while it downloads, then `Ok` just before it restarts.
+    UpdateHost,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -303,6 +306,11 @@ pub enum Message {
     },
     Uploaded {
         path: String,
+    },
+    /// How far the download of the host's update is. `total` is missing when it isn't known.
+    Updating {
+        received: u64,
+        total: Option<u64>,
     },
     /// A project's icon: the file's bytes in base64.
     Icon {

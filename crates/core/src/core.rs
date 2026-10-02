@@ -822,6 +822,20 @@ impl Core {
                     reply(&sink, id, sent.await.map_err(error_text));
                 });
             }
+            Command::UpdateHost { host_id } => {
+                let link = match self.link(&host_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let events = sink.clone();
+                    let report = move |received, total| {
+                        events(Event::HostUpdate { host_id: host_id.clone(), received, total });
+                    };
+                    reply(&sink, id, link.update(report).await.map(|_| json!({})).map_err(error_text));
+                });
+            }
             Command::SetProjectIcon { host_id, project_id, file } => {
                 let link = match self.link(&host_id) {
                     Ok(link) => link,

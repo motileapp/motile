@@ -312,6 +312,7 @@ private struct SidebarFooter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            AppUpdateRow(updater: store.updater)
             if let undo = store.undo {
                 HStack(spacing: 6) {
                     Text(undo.text)
@@ -332,11 +333,14 @@ private struct SidebarFooter: View {
                         .font(.system(size: 12, weight: .medium))
                         .lineLimit(1)
                     Spacer(minLength: 4)
-                    Text(detail(of: host))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                        .monospacedDigit()
+                    HostUpdateStatus(host: host) {
+                        Text(detail(of: host))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                    }
                 }
+                .frame(height: 20)
                 .help(host.error ?? detail(of: host))
             }
             Menu {

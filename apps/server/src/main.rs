@@ -11,8 +11,8 @@ use motile_server::agents::environment::Environment;
 use motile_server::config::DataDir;
 use motile_server::hub::Hub;
 use motile_server::serve::{BindOptions, Server, bind};
-use motile_server::setup;
 use motile_server::store::Store;
+use motile_server::{setup, update};
 
 /// Runs coding agents on this machine for the Motile apps.
 #[derive(Parser)]
@@ -148,6 +148,11 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         _ = server.run(endpoint.clone()) => {}
         _ = tokio::signal::ctrl_c() => {}
         _ = terminated() => {}
+        program = update::restart_requested() => {
+            // Hanging up first tells the apps to dial again, which the new host answers.
+            endpoint.close().await;
+            update::restart(&program)
+        }
     }
     endpoint.close().await;
     Ok(())

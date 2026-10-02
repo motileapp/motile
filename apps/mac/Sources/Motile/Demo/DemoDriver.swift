@@ -193,6 +193,13 @@ private final class Demo {
         scrollTranscript(to: 0.5)
         await shoot("09-huge-thread")
 
+        // What updates look like, without one happening.
+        store.updater.show(.available("9.9.9"), latest: "9.9.9")
+        await shoot("09-update-available")
+        store.updater.show(.downloading("9.9.9", 0.42), latest: "9.9.9")
+        await shoot("09-update-downloading")
+        store.updater.show(.idle, latest: store.updater.current)
+
         store.openPanel(.commands)
         await wait(0.6)
         await shoot("09-panel-commands")
