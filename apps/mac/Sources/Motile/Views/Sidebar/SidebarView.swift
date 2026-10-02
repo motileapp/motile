@@ -46,7 +46,7 @@ struct SidebarView: View {
                 SidebarFooter()
             }
         }
-        .background(Color.themeGlassTint.ignoresSafeArea())
+        .background(GlassBackground())
         .toolbar {
             ToolbarItemGroup {
                 Button {

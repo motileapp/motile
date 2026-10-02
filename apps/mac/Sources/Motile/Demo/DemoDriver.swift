@@ -68,6 +68,16 @@ private final class Demo {
         process.waitUntilExit()
     }
 
+    /// The whole screen, to see the window's glass over what is behind it.
+    private func shootScreen(_ name: String) async {
+        await wait(0.5)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", output.appendingPathComponent("\(name).png").path]
+        try? process.run()
+        process.waitUntilExit()
+    }
+
     private var turnEnded: Bool {
         guard let last = store.transcript.rows.last, case .turnEnd = last.kind else { return false }
         return !store.activity.running
@@ -198,9 +208,11 @@ private final class Demo {
         store.setDone([first], done: true)
         await expect("a thread marked done is listed as done") { store.doneThreads.map(\.id) == [first] }
         await shoot("10-done")
+        await shootScreen("10-screen-light")
 
         NSApp.appearance = NSAppearance(named: .darkAqua)
         await shoot("11-dark-thread")
+        await shootScreen("11-screen-dark")
         store.setDone([first], done: false)
         await expect("a thread marked undone is active again") { store.doneThreads.isEmpty }
         store.startNewThread()
