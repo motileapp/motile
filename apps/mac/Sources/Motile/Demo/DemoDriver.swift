@@ -109,8 +109,14 @@ private final class Demo {
         guard let host = store.hosts.first else { return finish() }
         store.addProject(hostID: host.id, path: environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory())
         await expect("a folder on the host becomes a project") { store.project(store.newThread.projectID) != nil }
+        await expect("the project's icon is fetched from the host") { store.project(store.newThread.projectID)?.iconPath != nil }
         store.draft = "Add a rate limiter to the API"
         await shoot("04-new-thread")
+
+        store.openPanel(.projects)
+        await wait(0.6)
+        await shoot("04-panel-projects")
+        store.closePanel()
 
         store.send()
         await expect("sending the first message opens a thread") { store.selectedThread != nil }
@@ -176,6 +182,14 @@ private final class Demo {
         results.append(responsive("a thread of \(rowCount) rows is scrolled", hugeScrolling))
         scrollTranscript(to: 0.5)
         await shoot("09-huge-thread")
+
+        store.openPanel(.commands)
+        await wait(0.6)
+        await shoot("09-panel-commands")
+        store.openPanel(.threads)
+        await wait(0.6)
+        await shoot("09-panel-threads")
+        store.closePanel()
 
         // Marking the first thread done moves it to the Done shelf.
         UserDefaults.standard.set(true, forKey: "sidebar.doneExpanded")

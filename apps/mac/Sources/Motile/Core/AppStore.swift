@@ -2,6 +2,7 @@ import AppKit
 import AuthenticationServices
 import Foundation
 import Observation
+import UniformTypeIdentifiers
 
 enum Selection: Hashable {
     case newThread
@@ -15,6 +16,16 @@ struct NewThreadSettings: Equatable {
     var effort: String?
     var access: Access = .full
     var plan = false
+}
+
+/// Where the command panel opens.
+enum PanelPage: Equatable {
+    /// Everything that can be done from here.
+    case commands
+    /// The projects, to start a thread in one.
+    case projects
+    /// The threads, to open one.
+    case threads
 }
 
 struct UndoNotice: Equatable {
@@ -35,6 +46,9 @@ final class AppStore {
     private(set) var enrollToken: EnrollToken?
     var showsAddHost = false
     var showsFolderPicker = false
+    private(set) var panel: PanelPage?
+    /// Counts up when the composer should take the keyboard back.
+    private(set) var composerFocus = 0
 
     // What the hosts hold
     private(set) var hosts: [Host] = []
@@ -195,6 +209,7 @@ final class AppStore {
         projects.removeAll { $0.hostID == hostID }
         projects.append(contentsOf: new)
         projects.sort { $0.createdAt < $1.createdAt }
+        ImageFiles.shared.warm(new.compactMap(\.iconPath))
         ensureNewThreadDefaults()
     }
 
@@ -397,6 +412,43 @@ final class AppStore {
 
     func removeProject(_ project: Project) {
         request(project.hostID, ["type": "remove_project", "project_id": project.id])
+    }
+
+    /// Makes an image on this Mac the project's icon. Without one, the project goes back to the
+    /// icon found in its folder.
+    func setIcon(of project: Project, to file: URL?) {
+        var command: JSON = ["host_id": project.hostID, "project_id": project.id]
+        if let file { command["file"] = file.path }
+        core.send("set_project_icon", command) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
+    }
+
+    func chooseIcon(for project: Project) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose an icon for \(project.name)"
+        guard panel.runModal() == .OK, let file = panel.url else { return }
+        setIcon(of: project, to: file)
+    }
+
+    // MARK: Command panel
+
+    func openPanel(_ page: PanelPage) {
+        guard account.signedIn, !hosts.isEmpty else { return }
+        panel = page
+    }
+
+    func closePanel() {
+        guard panel != nil else { return }
+        panel = nil
+        composerFocus += 1
+    }
+
+    func startNewThread(in project: Project) {
+        setNewThreadProject(project.id)
+        select(.newThread)
     }
 
     // MARK: Threads

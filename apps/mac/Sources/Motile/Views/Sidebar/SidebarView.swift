@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Every thread on every host in one list: the active ones, then the ones marked done.
+/// Every active thread on every host in one list, with the ones marked done on a shelf at the
+/// bottom.
 struct SidebarView: View {
     @Environment(AppStore.self) private var store
     @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
@@ -13,52 +14,53 @@ struct SidebarView: View {
     var body: some View {
         let active = store.activeThreads.filter(matches)
         let done = store.doneThreads.filter(matches)
-        List(selection: selection) {
-            Section {
+        ScrollView {
+            LazyVStack(spacing: 2) {
                 ForEach(active) { thread in
                     ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 })
-                        .tag(Selection.thread(thread.id))
                 }
                 if active.isEmpty {
                     Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.themeTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
                         .padding(.vertical, 6)
-                        .selectionDisabled()
                 }
             }
-
-            if !done.isEmpty {
-                Section(isExpanded: search.isEmpty ? $doneExpanded : .constant(true)) {
-                    ForEach(done.prefix(doneLimit)) { thread in
-                        DoneRow(thread: thread, rename: beginRename, delete: { deleting = $0 })
-                            .tag(Selection.thread(thread.id))
-                    }
-                    if done.count > doneLimit {
-                        Button("Show \(min(done.count - doneLimit, 25)) more") { doneLimit += 25 }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Color.themeSecondary)
-                            .selectionDisabled()
-                    }
-                } header: {
-                    Text(doneExpanded || !search.isEmpty ? "Done" : "Done (\(done.count))")
-                }
-            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
         }
-        .listStyle(.sidebar)
         .searchable(text: $search, placement: .sidebar, prompt: "Search")
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            SidebarFooter()
+            VStack(spacing: 0) {
+                if !done.isEmpty {
+                    DoneShelf(
+                        threads: done,
+                        expanded: search.isEmpty ? $doneExpanded : .constant(true),
+                        limit: $doneLimit,
+                        rename: beginRename,
+                        delete: { deleting = $0 }
+                    )
+                }
+                SidebarFooter()
+            }
         }
+        .background(Color.themeGlassTint.ignoresSafeArea())
         .toolbar {
-            ToolbarItem {
+            ToolbarItemGroup {
+                Button {
+                    store.showsFolderPicker = true
+                } label: {
+                    Label("Add Project", systemImage: "folder.badge.plus")
+                }
+                .help("Add a project")
                 Button {
                     store.startNewThread()
                 } label: {
                     Label("New Thread", systemImage: "square.and.pencil")
                 }
-                .help("New thread (⌘N)")
+                .help("New thread")
             }
         }
         .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -80,13 +82,6 @@ struct SidebarView: View {
         } message: {
             Text("The thread and its transcript are removed from the host. Files the agent changed stay as they are.")
         }
-    }
-
-    private var selection: Binding<Selection?> {
-        Binding(
-            get: { store.selection == .newThread ? nil : store.selection },
-            set: { if let new = $0 { store.select(new) } }
-        )
     }
 
     /// Whether the thread's title or project matches what is being searched for.
@@ -130,37 +125,36 @@ private struct ThreadRow: View {
     @State private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
-                Image(systemName: "folder")
-                    .font(.system(size: 10, weight: .medium))
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                ProjectIcon(project: store.project(thread.projectID), size: 14)
                 Text(projectName)
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                 Spacer(minLength: 6)
                 if hovering && !thread.running {
-                    Button {
+                    IconOnlyButton(symbol: "checkmark", help: "Mark done", size: 22, symbolSize: 12) {
                         store.setDone([thread.id], done: true, fromSidebar: true)
-                    } label: {
-                        Label("Done", systemImage: "checkmark")
-                            .font(.system(size: 11, weight: .medium))
                     }
-                    .buttonStyle(.plain)
-                    .help("Mark done")
                 } else {
                     ThreadStatus(thread: thread)
                 }
             }
             .foregroundStyle(.secondary)
-            .frame(height: 15)
+            .frame(height: 22)
 
             Text(thread.title)
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
         }
-        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .padding(.top, 3)
+        .padding(.bottom, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+        .hoverHighlight(radius: 8, selected: store.selection == .thread(thread.id))
         .onHover { hovering = $0 }
+        .onTapGesture { store.select(.thread(thread.id)) }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
     }
 
@@ -168,6 +162,74 @@ private struct ThreadRow: View {
         let project = store.project(thread.projectID)?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
         guard store.hosts.count > 1, let host = store.host(thread.hostID) else { return project }
         return "\(project) · \(host.name)"
+    }
+}
+
+/// The threads marked done, at the bottom of the sidebar: a line that opens into their list.
+private struct DoneShelf: View {
+    private static let rowHeight: CGFloat = 30
+    private static let maxHeight: CGFloat = 250
+
+    let threads: [ThreadInfo]
+    @Binding var expanded: Bool
+    @Binding var limit: Int
+    let rename: (ThreadInfo) -> Void
+    let delete: (ThreadInfo) -> Void
+
+    var body: some View {
+        let shown = Array(threads.prefix(limit))
+        let more = threads.count - shown.count
+        VStack(spacing: 0) {
+            Divider()
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                        .frame(width: 14)
+                    Text("Done")
+                        .font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    Text("\(threads.count)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .frame(height: Self.rowHeight)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverHighlight(radius: 8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+
+            if expanded {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(shown) { thread in
+                            DoneRow(thread: thread, rename: rename, delete: delete)
+                                .frame(height: Self.rowHeight)
+                        }
+                        if more > 0 {
+                            Button("Show \(min(more, 25)) more") { limit += 25 }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.themeSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 8)
+                                .frame(height: Self.rowHeight)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 4)
+                }
+                .frame(height: min(Self.maxHeight, CGFloat(shown.count + (more > 0 ? 1 : 0)) * (Self.rowHeight + 2) + 4))
+            }
+        }
     }
 }
 
@@ -187,15 +249,10 @@ private struct DoneRow: View {
                 .foregroundStyle(.secondary)
             Spacer(minLength: 6)
             if hovering {
-                Button {
+                IconOnlyButton(symbol: "arrow.uturn.backward", help: "Mark undone", size: 22, symbolSize: 12) {
                     store.setDone([thread.id], done: false)
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 11, weight: .medium))
                 }
-                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("Mark undone")
             } else {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: context.date.timeIntervalSince1970))
@@ -204,9 +261,12 @@ private struct DoneRow: View {
                 }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .contentShape(Rectangle())
+        .hoverHighlight(radius: 8, selected: store.selection == .thread(thread.id))
         .onHover { hovering = $0 }
+        .onTapGesture { store.select(.thread(thread.id)) }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
     }
 }
@@ -236,7 +296,7 @@ private struct ThreadStatus: View {
     private func label(_ text: String, _ symbol: String, _ color: Color) -> some View {
         HStack(spacing: 3) {
             Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
             Text(text)
                 .font(.system(size: 11, weight: .medium))
                 .monospacedDigit()
@@ -281,25 +341,34 @@ private struct SidebarFooter: View {
             }
             Menu {
                 Button("Settings…") { openSettings() }
+                Button("Add a Project…") { store.showsFolderPicker = true }
                 Button("Add a Host…") { store.showsAddHost = true }
                 Divider()
                 Button("Sign Out") { store.signOut() }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     Image(systemName: "person.crop.circle")
+                        .font(.system(size: 14))
                     Text(store.account.email)
+                        .font(.system(size: 12))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    Spacer(minLength: 0)
                 }
-                .font(.system(size: 12))
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .frame(height: 30)
+                .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
+            .menuStyle(.button)
+            .buttonStyle(.plain)
             .menuIndicator(.hidden)
-            .fixedSize(horizontal: false, vertical: true)
+            .hoverHighlight(radius: 8)
+            .padding(.horizontal, -8)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeOut(duration: 0.15), value: store.undo)
     }

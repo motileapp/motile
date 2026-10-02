@@ -112,6 +112,8 @@ struct Project: Equatable, Identifiable {
     let path: String
     let name: String
     let branch: String?
+    /// The icon as a file on this Mac, once the core has fetched it.
+    let iconPath: String?
     let createdAt: Double
 
     init(json: JSON, hostID: String) {
@@ -120,6 +122,7 @@ struct Project: Equatable, Identifiable {
         path = json.string("path")
         name = json.string("name")
         branch = json.optionalString("branch")
+        iconPath = json.optionalString("icon_path")
         createdAt = json.double("created_at")
     }
 }

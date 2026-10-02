@@ -60,15 +60,22 @@ private func symbol(_ name: String, size: CGFloat = 12, weight: NSFont.Weight = 
     return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration)
 }
 
-/// A borderless button with an SF Symbol and, optionally, a title.
+/// A borderless button with an SF Symbol and, optionally, a title. It lights up under the
+/// pointer.
 final class IconButton: NSButton {
+    static let side: CGFloat = 28
+    private static let symbolSize: CGFloat = 14
+
     private var action_: (() -> Void)?
+    private var tracking: NSTrackingArea?
 
     convenience init(symbolName: String, title: String = "", tooltip: String, action: @escaping () -> Void) {
         self.init(frame: .zero)
         isBordered = false
         bezelStyle = .inline
-        image = symbol(symbolName)
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        image = symbol(symbolName, size: Self.symbolSize, weight: .medium)
         imagePosition = title.isEmpty ? .imageOnly : .imageLeading
         self.title = title
         font = Theme.smallFont
@@ -81,8 +88,26 @@ final class IconButton: NSButton {
     }
 
     func set(symbolName: String, title: String = "") {
-        image = symbol(symbolName)
+        image = symbol(symbolName, size: Self.symbolSize, weight: .medium)
         self.title = title
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = Theme.hover.cgColor
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        layer?.backgroundColor = nil
     }
 
     @objc private func pressed() {
@@ -309,7 +334,7 @@ final class CodeRowView: RowView {
         let height = Self.headerHeight + bodyHeight + Self.bottomPadding
         surface.frame = NSRect(x: 0, y: 4, width: width, height: height)
         language.frame = NSRect(x: 14, y: 9, width: width - 60, height: 15)
-        copyButton.frame = NSRect(x: width - 34, y: 5, width: 26, height: 22)
+        copyButton.frame = NSRect(x: width - IconButton.side - 4, y: 2, width: IconButton.side, height: IconButton.side)
         scroll.frame = NSRect(x: 0, y: Self.headerHeight, width: width, height: bodyHeight + Self.bottomPadding)
         let advance = Theme.codeFont.maximumAdvancement.width
         let textWidth = max(width - 28, CGFloat(widestLine) * advance + 8)
@@ -546,7 +571,7 @@ final class TurnEndRowView: RowView {
         }
         let summaryWidth = min(summary.intrinsicContentSize.width + 4, width - 40)
         summary.frame = NSRect(x: 0, y: y + 3, width: summaryWidth, height: 16)
-        copyButton.frame = NSRect(x: summaryWidth + 6, y: y, width: 24, height: 22)
+        copyButton.frame = NSRect(x: summaryWidth + 4, y: y - 3, width: IconButton.side, height: IconButton.side)
         rule.frame = NSRect(x: 0, y: y + 30, width: width, height: 1)
         return y + 30 + 1 + 14
     }

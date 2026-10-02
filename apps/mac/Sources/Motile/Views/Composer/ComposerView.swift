@@ -21,7 +21,7 @@ struct ComposerView: View {
                 text: $store.draft,
                 height: $textHeight,
                 placeholder: placeholder,
-                focusKey: store.draftKey,
+                focusKey: "\(store.draftKey)#\(store.composerFocus)",
                 onSubmit: { store.send() },
                 onFiles: { store.attach($0) }
             )
@@ -34,17 +34,11 @@ struct ComposerView: View {
                 effortMenu
                 accessMenu
                 Spacer(minLength: 8)
-                Button {
+                IconOnlyButton(symbol: "paperclip", help: "Attach files", size: 30, symbolSize: 15) {
                     chooseFiles()
-                } label: {
-                    Image(systemName: "paperclip")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color.themeSecondary)
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .help("Attach files")
+                .foregroundStyle(Color.themeSecondary)
+                .padding(.trailing, 4)
                 primaryButtons
             }
             .padding(.leading, 8)
@@ -99,13 +93,9 @@ struct ComposerView: View {
                         Image(systemName: "doc")
                         Text(URL(fileURLWithPath: path).lastPathComponent)
                             .lineLimit(1)
-                        Button {
+                        IconOnlyButton(symbol: "xmark", help: "Remove", size: 18, symbolSize: 10) {
                             store.attachments.removeAll { $0 == path }
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 9, weight: .bold))
                         }
-                        .buttonStyle(.plain)
                     }
                     .font(.system(size: 12))
                     .padding(.horizontal, 9)
@@ -118,23 +108,41 @@ struct ComposerView: View {
         .padding(.top, 12)
     }
 
-    private func control(_ title: String, symbol: String? = nil) -> some View {
-        HStack(spacing: 5) {
+    private func control(_ title: String, symbol: String? = nil, agent: Agent? = nil) -> some View {
+        HStack(spacing: 6) {
+            if let agent {
+                AgentIcon(agent: agent, size: 14)
+            }
             if let symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
             }
             Text(title)
                 .font(.system(size: 12.5, weight: .medium))
                 .lineLimit(1)
             Image(systemName: "chevron.down")
-                .font(.system(size: 8, weight: .bold))
+                .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(Color.themeTertiary)
         }
         .foregroundStyle(Color.themeSecondary)
-        .padding(.horizontal, 8)
-        .frame(height: 28)
+        .padding(.horizontal, 9)
+        .frame(height: 30)
         .contentShape(Rectangle())
+    }
+
+    /// A menu item with a check mark when it is the one in use.
+    private func choice(_ title: String, image: NSImage? = nil, chosen: Bool, choose: @escaping () -> Void) -> some View {
+        Toggle(isOn: Binding(get: { chosen }, set: { _ in choose() })) {
+            if let image {
+                Label {
+                    Text(title)
+                } icon: {
+                    Image(nsImage: image)
+                }
+            } else {
+                Text(title)
+            }
+        }
     }
 
     @ViewBuilder private var modelMenu: some View {
@@ -145,26 +153,21 @@ struct ComposerView: View {
                 if !ofAgent.isEmpty {
                     Section(agent.name) {
                         ForEach(ofAgent) { model in
-                            Button {
+                            choice(model.name, image: agent.menuLogo, chosen: model.id == store.composerModel?.id) {
                                 store.setModel(model)
-                            } label: {
-                                if model.id == store.composerModel?.id {
-                                    Label(model.name, systemImage: "checkmark")
-                                } else {
-                                    Text(model.name)
-                                }
                             }
                         }
                     }
                 }
             }
         } label: {
-            control(store.composerModel?.name ?? "No agent")
+            control(store.composerModel?.name ?? "No agent", agent: store.composerModel?.agent)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .hoverHighlight(radius: 9)
         .disabled(models.isEmpty)
     }
 
@@ -172,23 +175,18 @@ struct ComposerView: View {
         if let model = store.composerModel, !model.efforts.isEmpty {
             Menu {
                 ForEach(model.efforts, id: \.self) { effort in
-                    Button {
+                    choice(effortLabel(effort), chosen: effort == store.composerEffort) {
                         store.setEffort(effort)
-                    } label: {
-                        if effort == store.composerEffort {
-                            Label(effortLabel(effort), systemImage: "checkmark")
-                        } else {
-                            Text(effortLabel(effort))
-                        }
                     }
                 }
             } label: {
                 control(effortLabel(store.composerEffort ?? ""))
             }
             .menuStyle(.button)
-        .buttonStyle(.plain)
+            .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
+            .hoverHighlight(radius: 9)
         }
     }
 
@@ -203,14 +201,8 @@ struct ComposerView: View {
     private var accessMenu: some View {
         Menu {
             ForEach(Access.allCases) { access in
-                Button {
+                choice(access.label, image: NSImage(systemSymbolName: access.symbol, accessibilityDescription: nil), chosen: access == store.composerAccess) {
                     store.setAccess(access)
-                } label: {
-                    if access == store.composerAccess {
-                        Label(access.label, systemImage: "checkmark")
-                    } else {
-                        Text(access.label)
-                    }
                 }
                 .help(access.detail)
             }
@@ -223,6 +215,7 @@ struct ComposerView: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
+        .hoverHighlight(radius: 9)
         .help(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail)
     }
 

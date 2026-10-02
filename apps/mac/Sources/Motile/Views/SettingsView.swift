@@ -42,7 +42,8 @@ struct SettingsView: View {
                         Text("No projects yet").foregroundStyle(.secondary)
                     }
                     ForEach(store.projects) { project in
-                        HStack {
+                        HStack(spacing: 10) {
+                            ProjectIcon(project: project, size: 26)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(project.name)
                                 Text(project.path)
@@ -50,9 +51,16 @@ struct SettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
+                            Menu("Icon") {
+                                Button("Choose an Image…") { store.chooseIcon(for: project) }
+                                Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
+                            }
+                            .fixedSize()
                             Button("Remove") { store.removeProject(project) }
                         }
                     }
+                    Button("Add a Project…") { store.showsFolderPicker = true }
+                        .disabled(store.hosts.isEmpty)
                 }
             }
         }

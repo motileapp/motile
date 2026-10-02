@@ -26,7 +26,10 @@ enum Theme {
     static let raised = dynamic(hex(0xffffff), hex(0x1a1a1c))
     static let bubble = dynamic(hex(0xf1f1f3), hex(0x232326))
     static let codeBackground = dynamic(hex(0xf6f6f7), hex(0x18181a))
+    /// Over the blurred backdrop of the window: nearly opaque, so only a hint of it comes through.
+    static let glassTint = dynamic(hex(0xfcfcfc, alpha: 0.86), hex(0x0d0d0e, alpha: 0.86))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
+    static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
     static let border = dynamic(hex(0x000000, alpha: 0.09), white(0.09))
     static let strongBorder = dynamic(hex(0x000000, alpha: 0.14), white(0.14))
 
@@ -97,7 +100,9 @@ extension Color {
     static let themeBackground = Color(nsColor: Theme.background)
     static let themeRaised = Color(nsColor: Theme.raised)
     static let themeBubble = Color(nsColor: Theme.bubble)
+    static let themeGlassTint = Color(nsColor: Theme.glassTint)
     static let themeHover = Color(nsColor: Theme.hover)
+    static let themeSelected = Color(nsColor: Theme.selected)
     static let themeBorder = Color(nsColor: Theme.border)
     static let themeStrongBorder = Color(nsColor: Theme.strongBorder)
     static let themeText = Color(nsColor: Theme.text)

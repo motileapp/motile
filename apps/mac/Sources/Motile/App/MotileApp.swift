@@ -26,8 +26,12 @@ struct MotileApp: App {
         .commands {
             SidebarCommands()
             CommandGroup(replacing: .newItem) {
-                Button("New Thread") { store.startNewThread() }
+                Button("New Thread…") { store.openPanel(.projects) }
                     .keyboardShortcut("n")
+                Button("Go to Thread…") { store.openPanel(.threads) }
+                    .keyboardShortcut("p")
+                Button("Commands…") { store.openPanel(.commands) }
+                    .keyboardShortcut("k")
             }
             CommandMenu("Thread") {
                 Button(store.selectedThread?.isDone == true ? "Mark Undone" : "Mark Done") { store.toggleDone() }
@@ -37,6 +41,8 @@ struct MotileApp: App {
                     .keyboardShortcut(".")
                     .disabled(!store.activity.running)
                 Divider()
+                Button("Add a Project…") { store.showsFolderPicker = true }
+                    .disabled(store.hosts.isEmpty)
                 Button("Add a Host…") { store.showsAddHost = true }
                     .disabled(!store.account.signedIn)
             }
@@ -103,7 +109,13 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.themeBackground)
+        .background(GlassBackground())
+        .overlay {
+            if let page = store.panel {
+                CommandPanel(start: page)
+                    .id(page)
+            }
+        }
         .sheet(isPresented: $store.showsAddHost) {
             ConnectHostView(isFirst: false)
                 .frame(width: 620)
