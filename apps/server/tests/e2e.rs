@@ -187,7 +187,8 @@ struct Transcript {
     synced: Option<u64>,
     /// The latest revision seen once live.
     rev: u64,
-    deltas: usize,
+    /// The streamed pieces of text, as they arrived.
+    pieces: Vec<String>,
     resets: usize,
 }
 
@@ -208,7 +209,12 @@ impl Transcript {
                     }
                     match self.items.iter().position(|existing| existing.id == item.id) {
                         Some(position) => self.items[position] = item,
-                        None => self.items.push(item),
+                        None => {
+                            if let ItemKind::Assistant { text } = &item.kind {
+                                self.pieces.push(text.clone());
+                            }
+                            self.items.push(item)
+                        }
                     }
                 }
                 self.items.sort_by_key(|item| item.seq);
@@ -218,7 +224,7 @@ impl Transcript {
                 self.rev = rev;
             }
             Message::TextDelta { id, text, rev } => {
-                self.deltas += 1;
+                self.pieces.push(text.clone());
                 self.rev = rev;
                 let item = self.items.iter_mut().find(|item| item.id == id).expect("a delta for an unknown item");
                 let ItemKind::Assistant { text: current } = &mut item.kind else {
@@ -351,6 +357,28 @@ async fn a_codex_turn_shows_its_commands_and_edits() {
 }
 
 #[tokio::test]
+async fn a_streamed_reply_arrives_in_finished_blocks() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Add a rate limiter to the API").await;
+
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    transcript.follow_until_idle(&mut follow).await;
+
+    // The fake agent writes its long reply 24 characters at a time. What reaches the app are
+    // whole lines that end a paragraph, a list item or a line of code, a few times a second.
+    let reply = *transcript.texts().last().unwrap();
+    assert!(reply.starts_with("The API now limits each client") && reply.ends_with("in total.\n"), "{reply}");
+    let start = transcript.pieces.iter().position(|piece| piece.starts_with("The API now limits")).unwrap();
+    let pieces = &transcript.pieces[start..];
+    assert!(pieces.len() > 1 && pieces.len() < 12, "{} pieces", pieces.len());
+    assert!(pieces.iter().all(|piece| piece.ends_with('\n')), "{pieces:?}");
+    assert!(reply.starts_with(&pieces.concat()));
+}
+
+#[tokio::test]
 async fn an_app_that_reconnects_mid_turn_is_sent_only_what_it_missed() {
     let harness = Harness::start("fixtures/edit-and-run.jsonl", "0.02").await;
     let first = harness.connect().await;
@@ -359,7 +387,7 @@ async fn an_app_that_reconnects_mid_turn_is_sent_only_what_it_missed() {
 
     let mut transcript = Transcript::default();
     let mut follow = open(&first, &thread_id, 0).await;
-    while transcript.deltas < 3 {
+    while transcript.items.len() < 3 {
         transcript.apply(next(&mut follow).await);
     }
     first.close();

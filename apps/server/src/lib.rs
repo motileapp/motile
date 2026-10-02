@@ -4,6 +4,7 @@ pub mod config;
 pub mod files;
 pub mod hub;
 pub mod icons;
+pub mod pacing;
 pub mod serve;
 pub mod setup;
 pub mod store;

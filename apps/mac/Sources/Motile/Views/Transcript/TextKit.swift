@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 /// Draws what attributes alone can't: rounded backgrounds behind inline code, the bar beside a
 /// quote, horizontal rules, and the box around code inside a list.
@@ -160,6 +161,52 @@ final class RowTextView: NSTextView {
         layout.ensureLayout(for: container)
         let used = layout.usedRect(for: container)
         return NSSize(width: ceil(used.width), height: ceil(used.height))
+    }
+
+    /// Fades in the text under `oldHeight`, which was just added, and leaves the rest as it is.
+    func fadeIn(below oldHeight: CGFloat) {
+        wantsLayer = true
+        guard let layer, bounds.height > oldHeight,
+            let before = Self.mask(height: bounds.height, opaqueTop: oldHeight),
+            let after = Self.mask(height: 1, opaqueTop: 1)
+        else { return }
+        // An image in a layer is upright whichever way the layer's geometry runs.
+        let mask = CALayer()
+        mask.frame = CGRect(origin: .zero, size: bounds.size)
+        mask.contentsGravity = .resize
+        mask.contents = after
+        layer.mask = mask
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self] in
+            guard let self, self.layer?.mask === mask else { return }
+            self.layer?.mask = nil
+        }
+        let fade = CABasicAnimation(keyPath: "contents")
+        fade.fromValue = before
+        fade.toValue = after
+        fade.duration = 0.35
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        mask.add(fade, forKey: "fade")
+        CATransaction.commit()
+    }
+
+    /// A column of pixels, opaque from the top down to `opaqueTop`.
+    private static func mask(height: CGFloat, opaqueTop: CGFloat) -> CGImage? {
+        let rows = max(1, Int(height.rounded(.up)))
+        let context = CGContext(
+            data: nil,
+            width: 1,
+            height: rows,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )
+        guard let context else { return nil }
+        context.clear(CGRect(x: 0, y: 0, width: 1, height: rows))
+        context.setFillColor(CGColor(gray: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: CGFloat(rows) - opaqueTop, width: 1, height: opaqueTop))
+        return context.makeImage()
     }
 
     func clearSelection() {

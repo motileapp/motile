@@ -47,6 +47,12 @@ final class TranscriptView: FlippedView, RowHost {
     /// Whether the view follows the end of the transcript as it grows.
     private var pinned = true
     private var updating = false
+    /// Where the viewport was after the last scroll, to tell which way the next one goes.
+    private var lastScrollY: CGFloat = 0
+    /// Moves the viewport to the end in steps while a reply streams.
+    private var glide: Timer?
+    /// Rows that just arrived in a streaming reply; they fade in.
+    private var fresh: Set<String> = []
     private var layoutWidth: CGFloat = 0
 
     private struct Anchor {
@@ -102,6 +108,7 @@ final class TranscriptView: FlippedView, RowHost {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        glide?.invalidate()
     }
 
     // MARK: Geometry
@@ -169,10 +176,18 @@ final class TranscriptView: FlippedView, RowHost {
     }
 
     private func currentAnchor() -> Anchor? {
-        guard !rows.isEmpty, !pinned else { return nil }
+        pinned ? nil : viewportAnchor()
+    }
+
+    private func viewportAnchor() -> Anchor? {
+        guard !rows.isEmpty else { return nil }
         let top = scrollView.contentView.bounds.minY - Self.topPadding
         let index = self.index(at: top)
         return Anchor(id: rows[index].id, delta: top - offsets[index])
+    }
+
+    private var animates: Bool {
+        activity.running && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
     // MARK: Content
@@ -188,6 +203,7 @@ final class TranscriptView: FlippedView, RowHost {
         expanded.removeAll()
         requestedHighlight.removeAll()
         stale.removeAll()
+        stopGlide()
         pinned = true
         updateVisible()
     }
@@ -205,6 +221,9 @@ final class TranscriptView: FlippedView, RowHost {
         let kept = Set(new.map(\.id))
         for index in range where !kept.contains(rows[index].id) { recycle(rows[index].id) }
 
+        if animates {
+            fresh.formUnion(new.filter { known[$0.id] == nil && !$0.isUser }.map(\.id))
+        }
         rows.replaceSubrange(range, with: new)
         heights.replaceSubrange(range, with: new.map { known[$0.id] ?? RowView.estimatedHeight($0, width: columnWidth) })
         measured.replaceSubrange(range, with: [Bool](repeating: false, count: new.count))
@@ -218,9 +237,12 @@ final class TranscriptView: FlippedView, RowHost {
                 continue
             }
             view.configure(row)
+            view.fadesGrowth = animates
             stale.insert(row.id)
         }
         updateVisible(anchor: anchor)
+        // Only what came into view fades in; the rest is simply there when it is scrolled to.
+        fresh.removeAll()
     }
 
     /// Shows a message at the end before the host has confirmed it, or takes it away again.
@@ -276,6 +298,14 @@ final class TranscriptView: FlippedView, RowHost {
             document.addSubview(view)
         }
         view.configure(row)
+        view.alphaValue = 1
+        if fresh.remove(row.id) != nil {
+            view.alphaValue = 0
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.35
+                view.animator().alphaValue = 1
+            }
+        }
         views[row.id] = view
         stale.insert(row.id)
         if case .code(let content) = row.kind, !content.highlighted, !requestedHighlight.contains(row.id) {
@@ -311,17 +341,25 @@ final class TranscriptView: FlippedView, RowHost {
         }
     }
 
+    /// The user scrolled. Scrolling up, by however little, stops following the end; coming back
+    /// near the end follows it again. The viewport itself is left where they put it.
     @objc private func scrolled() {
         guard !updating else { return }
         let clip = scrollView.contentView.bounds
-        pinned = contentHeight - clip.maxY < 30
-        updateVisible()
+        let fromEnd = contentHeight - clip.maxY
+        if clip.minY < lastScrollY - 0.5, fromEnd > 1 {
+            pinned = false
+        } else if fromEnd < 30 {
+            pinned = true
+        }
+        lastScrollY = clip.minY
+        updateVisible(anchor: viewportAnchor(), follows: false)
     }
 
     /// Makes the views for the rows in and near the viewport, measures the ones that need it,
     /// and keeps the viewport where it was: at the end if it follows the end, otherwise with
     /// `anchor` in the same place.
-    private func updateVisible(anchor: Anchor? = nil) {
+    private func updateVisible(anchor: Anchor? = nil, follows: Bool = true) {
         guard !updating, bounds.width > 0 else { return }
         updating = true
         defer { updating = false }
@@ -332,7 +370,7 @@ final class TranscriptView: FlippedView, RowHost {
         // Measuring changes heights, which moves the viewport, which changes what is visible.
         // It settles in a pass or two.
         for _ in 0..<4 {
-            position(anchor: anchor)
+            position(anchor: anchor, follows: follows)
             let clip = scrollView.contentView.bounds
             let top = clip.minY - Self.topPadding - Self.overscan
             let bottom = clip.maxY - Self.topPadding + Self.overscan
@@ -362,7 +400,7 @@ final class TranscriptView: FlippedView, RowHost {
             guard let firstChanged else { break }
             recomputeOffsets(from: firstChanged)
         }
-        position(anchor: anchor)
+        position(anchor: anchor, follows: follows)
 
         working.frame = NSRect(x: x, y: Self.topPadding + (offsets.last ?? 0) + 2, width: width, height: Self.workingHeight)
         jumpButton.isHidden = pinned || rows.isEmpty
@@ -374,22 +412,60 @@ final class TranscriptView: FlippedView, RowHost {
     }
 
     /// Sizes the document and puts the viewport where it belongs.
-    private func position(anchor: Anchor?) {
+    private func position(anchor: Anchor?, follows: Bool) {
         let clip = scrollView.contentView
         let height = max(contentHeight, viewportHeight)
         if document.frame.height != height || document.frame.width != bounds.width {
             document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: height)
         }
+        let toEnd = pinned && follows
         var target = clip.bounds.minY
-        if pinned {
+        if toEnd {
             target = height - viewportHeight
         } else if let anchor, let index = rows.firstIndex(where: { $0.id == anchor.id }) {
             target = offsets[index] + anchor.delta + Self.topPadding
         }
         target = max(0, min(target, height - viewportHeight))
-        guard abs(target - clip.bounds.minY) > 0.5 else { return }
-        clip.scroll(to: NSPoint(x: 0, y: target))
-        scrollView.reflectScrolledClipView(clip)
+        let distance = target - clip.bounds.minY
+        guard abs(distance) > 0.5 else { return }
+        // A streaming reply pushes the end down a block at a time; the viewport glides after it.
+        if toEnd, animates || glide != nil, distance > 0, distance < viewportHeight {
+            startGlide()
+            return
+        }
+        scroll(to: target)
+    }
+
+    private func scroll(to y: CGFloat) {
+        let wasUpdating = updating
+        updating = true
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: y))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        lastScrollY = y
+        updating = wasUpdating
+    }
+
+    private func startGlide() {
+        guard glide == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.glideStep() }
+        RunLoop.main.add(timer, forMode: .common)
+        glide = timer
+    }
+
+    private func stopGlide() {
+        glide?.invalidate()
+        glide = nil
+    }
+
+    private func glideStep() {
+        let y = scrollView.contentView.bounds.minY
+        let remaining = max(0, document.frame.height - viewportHeight) - y
+        guard pinned, remaining > 0.5 else {
+            stopGlide()
+            return
+        }
+        scroll(to: y + min(remaining, max(2, remaining * 0.22)))
+        updateVisible(follows: false)
     }
 
     // MARK: RowHost

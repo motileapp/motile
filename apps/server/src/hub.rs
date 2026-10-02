@@ -24,7 +24,7 @@ use tokio::sync::{Mutex, broadcast};
 use crate::agents::environment::Environment;
 use crate::agents::{AgentEvent, Parser, Turn, claude, executable_name};
 use crate::store::{Store, StoredProject, StoredThread, TitleSource};
-use crate::{icons, title};
+use crate::{icons, pacing, title};
 
 const UPDATES_BUFFER: usize = 4096;
 const ROOT_BYPASS_REFUSAL: &str = "cannot be used with root/sudo privileges";
@@ -47,6 +47,9 @@ struct Live {
     /// Open items whose latest text isn't on disk yet.
     unsaved: HashSet<String>,
     last_flush: Instant,
+    /// Streamed text that isn't a finished block yet, by item.
+    held: HashMap<String, String>,
+    last_delivery: Option<Instant>,
     activity: Activity,
     updates: broadcast::Sender<Message>,
     run: Option<Run>,
@@ -544,6 +547,16 @@ impl Hub {
 
     fn apply_event(&self, live: &mut Live, event: AgentEvent) -> anyhow::Result<()> {
         let store = &self.store;
+        let more_text = matches!(
+            event,
+            AgentEvent::Session { .. }
+                | AgentEvent::TextStarted { .. }
+                | AgentEvent::TextDelta { .. }
+                | AgentEvent::Text { .. }
+        );
+        if !more_text {
+            live.release_held(store)?;
+        }
         match event {
             AgentEvent::Session { id } => {
                 if live.stored.session_id.as_deref() != Some(&id) {
@@ -552,8 +565,9 @@ impl Hub {
                 }
             }
             AgentEvent::TextStarted { .. } => live.set_thinking(false),
-            AgentEvent::TextDelta { id, text } => live.append_text(store, id, text)?,
+            AgentEvent::TextDelta { id, text } => live.hold_text(store, id, text)?,
             AgentEvent::Text { id, text } => {
+                live.held.remove(&id);
                 if text.is_empty() {
                     return Ok(());
                 }
@@ -654,6 +668,8 @@ impl Live {
             open: HashMap::new(),
             unsaved: HashSet::new(),
             last_flush: Instant::now(),
+            held: HashMap::new(),
+            last_delivery: None,
             activity: Activity::default(),
             updates,
             run: None,
@@ -723,11 +739,43 @@ impl Live {
         Ok(())
     }
 
-    fn append_text(&mut self, store: &Store, id: String, text: String) -> anyhow::Result<()> {
+    /// Takes streamed text and passes on the blocks it finishes.
+    fn hold_text(&mut self, store: &Store, id: String, text: String) -> anyhow::Result<()> {
         if text.is_empty() {
             return Ok(());
         }
         self.set_thinking(false);
+        let held = self.held.entry(id.clone()).or_default();
+        held.push_str(&text);
+        let too_soon = self.last_delivery.is_some_and(|last| last.elapsed() < pacing::DELIVER_EVERY);
+        if too_soon || !text.contains('\n') {
+            return Ok(());
+        }
+        let delivered = match self.open.get(&id) {
+            Some(Item { kind: ItemKind::Assistant { text }, .. }) => text.as_str(),
+            _ => "",
+        };
+        let ready = pacing::settled_len(&format!("{delivered}{held}")).saturating_sub(delivered.len());
+        if ready == 0 {
+            return Ok(());
+        }
+        let finished: String = held.drain(..ready).collect();
+        self.last_delivery = Some(Instant::now());
+        self.append_text(store, id, finished)
+    }
+
+    /// Passes on the text that was waiting to become a block; nothing more of it is coming.
+    fn release_held(&mut self, store: &Store) -> anyhow::Result<()> {
+        for (id, text) in std::mem::take(&mut self.held) {
+            self.append_text(store, id, text)?;
+        }
+        Ok(())
+    }
+
+    fn append_text(&mut self, store: &Store, id: String, text: String) -> anyhow::Result<()> {
+        if text.is_empty() {
+            return Ok(());
+        }
         let Some(Item { kind: ItemKind::Assistant { text: current }, .. }) = self.open.get_mut(&id) else {
             return self.upsert(store, id, ItemKind::Assistant { text });
         };
@@ -759,6 +807,7 @@ impl Live {
         stderr: &str,
         interrupted: bool,
     ) -> anyhow::Result<()> {
+        self.release_held(store)?;
         self.flush(store)?;
 
         // Tools that never reported back were cut off.

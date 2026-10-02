@@ -120,6 +120,8 @@ final class IconButton: NSButton {
 class RowView: FlippedView {
     weak var host: RowHost?
     private(set) var rowID = ""
+    /// Set when the row grew while its reply streams: the next layout fades the new part in.
+    var fadesGrowth = false
 
     func configure(_ row: RowModel) {
         rowID = row.id
@@ -252,8 +254,13 @@ final class ProseRowView: RowView {
     }
 
     override func layout(width: CGFloat) -> CGFloat {
+        let before = text.frame.size
         let height = text.height(forWidth: width)
         text.frame = NSRect(x: 0, y: 3, width: width, height: height)
+        if fadesGrowth, before.width == width, before.height > 0, height > before.height + 1 {
+            text.fadeIn(below: before.height)
+        }
+        fadesGrowth = false
         return height + 9
     }
 

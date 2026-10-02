@@ -45,7 +45,7 @@ struct ThreadPane: View {
         .overlay(alignment: .topLeading) { title }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
         .toolbar {
-            ToolbarItemGroup {
+            ToolbarItemGroup(placement: .primaryAction) {
                 if let thread = store.selectedThread {
                     Button {
                         store.toggleDone()
