@@ -5,8 +5,9 @@ import AppKit
 final class RowModel {
     enum Kind {
         case user(text: NSAttributedString, attachments: [String])
-        /// `uncoloured` when code inside it still waits for highlighting.
-        case prose(NSAttributedString, uncoloured: Bool)
+        /// `above` is the space it keeps from the row above it. `uncoloured` when code inside it
+        /// still waits for highlighting.
+        case prose(NSAttributedString, above: CGFloat, uncoloured: Bool)
         case code(CodeContent)
         case tool(ToolContent)
         case thinking(NSAttributedString)
@@ -39,7 +40,7 @@ final class RowModel {
             kind = .user(text: Typesetter.plain(json.string("text"), color: Theme.text), attachments: json.strings("attachments"))
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
-            kind = .prose(Typesetter.prose(json), uncoloured: uncoloured)
+            kind = .prose(Typesetter.prose(json), above: Typesetter.spaceAbove(json), uncoloured: uncoloured)
         case "code":
             kind = .code(CodeContent(language: json.string("language"), code: json.string("code"), spans: json["spans"] as? [NSNumber]))
         case "tool":
@@ -69,7 +70,7 @@ final class RowModel {
     /// The plain text of the row, for copying a whole reply.
     var plainText: String? {
         switch kind {
-        case .prose(let text, _): RowTextView.withLineBreaks(text.string)
+        case .prose(let text, _, _): RowTextView.withLineBreaks(text.string)
         case .code(let content): "```\(content.language)\n\(content.code)\n```"
         default: nil
         }
@@ -79,7 +80,7 @@ final class RowModel {
     var needsHighlight: Bool {
         switch kind {
         case .code(let content): !content.highlighted
-        case .prose(_, let uncoloured): uncoloured
+        case .prose(_, _, let uncoloured): uncoloured
         default: false
         }
     }
@@ -257,12 +258,38 @@ enum Typesetter {
         return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
     }
 
+    /// What a paragraph, a list, a quote and a table keep from what follows them.
+    private static let blockGap: CGFloat = 12
+    private static let headingGap: CGFloat = 14
+
     private static let bodyStyle: NSParagraphStyle = {
         let style = NSMutableParagraphStyle()
         style.lineSpacing = 7
-        style.paragraphSpacing = 12
+        style.paragraphSpacing = blockGap
         return style
     }()
+
+    /// A reply is cut into rows, and its rows are as far apart as its paragraphs.
+    static func spaceAbove(_ json: JSON) -> CGFloat {
+        let after = json.string("after")
+        guard !after.isEmpty else { return 0 }
+        let heading = json.objects("paras").first?.string("kind") == "heading" ? headingGap : 0
+        switch after {
+        case "prose": return bodyStyle.lineSpacing + blockGap - ProseRowView.gap + heading
+        case "table": return blockGap - ProseRowView.gap + heading
+        default: return heading
+        }
+    }
+
+    /// The list, quote or table a paragraph is part of.
+    private static func block(_ para: JSON) -> String {
+        switch para.string("kind") {
+        case "list_item": para.int("quote") > 0 ? "quote" : "list"
+        case "quote": "quote"
+        case "cell": "table \(para.int("table"))"
+        default: ""
+        }
+    }
 
     private static let monoStyle: NSParagraphStyle = {
         let style = NSMutableParagraphStyle()
@@ -351,7 +378,7 @@ enum Typesetter {
                 let font = Theme.heading(para.int("level"))
                 let style = NSMutableParagraphStyle()
                 style.lineSpacing = 3
-                style.paragraphSpacingBefore = range.location == 0 ? 0 : 14
+                style.paragraphSpacingBefore = range.location == 0 ? 0 : headingGap
                 style.paragraphSpacing = 8
                 result.addAttributes([.font: font, .foregroundColor: Theme.text, .paragraphStyle: style], range: range)
                 headingRanges.append((range, font))
@@ -438,14 +465,19 @@ enum Typesetter {
             }
         }
 
-        // A table's last row has no spacing of its own; what follows it brings the gap.
+        // A list, a quote and a table only keep their own paragraphs apart; what follows one
+        // brings the rest of the gap.
         let paras = json.objects("paras")
-        for (index, para) in paras.enumerated().dropFirst() where para.string("kind") != "cell" && paras[index - 1].string("kind") == "cell" {
-            guard let range = clamp(para.int("start"), para.int("len")),
+        for (index, para) in paras.enumerated().dropFirst() where para.string("kind") != "pre" {
+            let ended = block(paras[index - 1])
+            guard !ended.isEmpty, ended != block(para),
+                let range = clamp(para.int("start"), para.int("len")),
+                let last = clamp(paras[index - 1].int("start"), paras[index - 1].int("len")),
+                let above = result.attribute(.paragraphStyle, at: last.location, effectiveRange: nil) as? NSParagraphStyle,
                 let current = result.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle,
                 let style = current.mutableCopy() as? NSMutableParagraphStyle
             else { continue }
-            style.paragraphSpacingBefore = 12
+            style.paragraphSpacingBefore += blockGap - above.paragraphSpacing
             result.addAttribute(.paragraphStyle, value: style, range: range)
         }
 

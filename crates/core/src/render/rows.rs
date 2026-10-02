@@ -41,6 +41,9 @@ pub enum RowKind {
     Prose {
         #[serde(flatten)]
         prose: Prose,
+        /// What is right above it in the reply; the space above the row depends on it.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        after: Option<After>,
     },
     Code {
         language: String,
@@ -97,6 +100,35 @@ pub enum RowKind {
         /// The turn's fold says how long it took, so this row doesn't.
         folded: bool,
     },
+}
+
+#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum After {
+    Prose,
+    Table,
+    Code,
+    Media,
+    /// A tool call, thinking, or the row that stands for several of them.
+    Work,
+}
+
+impl After {
+    fn row(kind: &RowKind) -> Option<Self> {
+        match kind {
+            RowKind::Prose { prose, .. } => Some(match prose.paras.last().map(|para| &para.kind) {
+                Some(ParaKind::Cell { .. }) => Self::Table,
+                Some(ParaKind::Pre { .. }) => Self::Code,
+                _ => Self::Prose,
+            }),
+            RowKind::Code { .. } => Some(Self::Code),
+            RowKind::Media { .. } => Some(Self::Media),
+            RowKind::Tool { .. } | RowKind::Thinking { .. } | RowKind::Group { .. } | RowKind::Fold { .. } => {
+                Some(Self::Work)
+            }
+            _ => None,
+        }
+    }
 }
 
 /// A tool call, worded for a person.
@@ -309,7 +341,7 @@ impl Transcript {
                     language: language.clone(),
                     code: code.clone(),
                 }),
-                RowKind::Prose { prose } => {
+                RowKind::Prose { prose, .. } => {
                     for (index, para) in prose.paras.iter().enumerate() {
                         let ParaKind::Pre { language, code, spans: None, .. } = &para.kind else { continue };
                         found.push(Uncoloured {
@@ -344,7 +376,7 @@ impl Transcript {
     /// Stores the highlighting of code inside prose, and returns the row to show again.
     pub fn set_para_spans(&mut self, row_id: &str, para: usize, code: &str, spans: Spans) -> Option<Splice> {
         let row = self.rendered.iter_mut().flatten().find(|row| row.id == row_id)?;
-        let RowKind::Prose { prose } = &mut row.kind else { return None };
+        let RowKind::Prose { prose, .. } = &mut row.kind else { return None };
         let ParaKind::Pre { code: current, spans: slot, .. } = &mut prose.paras.get_mut(para)?.kind else {
             return None;
         };
@@ -369,7 +401,21 @@ fn present<'a>(items: &'a [Item], rendered: &'a [Vec<Row>], opened: &HashSet<Str
         present_turn(&items[start..end], &rendered[start..end], opened, &mut shown);
         start = end;
     }
+    join(&mut shown);
     shown
+}
+
+/// Tells every prose row what is right above it.
+fn join(shown: &mut [Cow<Row>]) {
+    let mut above = None;
+    for row in shown {
+        let after = std::mem::replace(&mut above, After::row(&row.kind));
+        if after.is_none() || !matches!(row.kind, RowKind::Prose { .. }) {
+            continue;
+        }
+        let RowKind::Prose { after: slot, .. } = &mut row.to_mut().kind else { continue };
+        *slot = after;
+    }
 }
 
 /// A turn is the user's message and what the agent did until it ended, or what an agent that
@@ -585,7 +631,7 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
                     let ParaKind::Pre { language, code, spans, .. } = &mut para.kind else { continue };
                     *spans = colour(&format!("{id}/{para_index}"), language, code, &mut streaming);
                 }
-                RowKind::Prose { prose }
+                RowKind::Prose { prose, after: None }
             }
             Block::Code { language, code } => {
                 let spans = colour(&id, &language, &code, &mut streaming);
@@ -802,8 +848,47 @@ mod tests {
                 name: "page.png".into(),
             }
         );
-        assert!(matches!(&rows[2].kind, RowKind::Prose { prose } if prose.text == "Gone" && prose.links.len() == 1));
+        assert!(
+            matches!(&rows[2].kind, RowKind::Prose { prose, .. } if prose.text == "Gone" && prose.links.len() == 1)
+        );
         assert_eq!(serde_json::to_value(&rows[1]).unwrap()["kind"], "media");
+    }
+
+    #[test]
+    fn prose_knows_what_is_right_above_it() {
+        let long = "word ".repeat(900);
+        let reply = format!(
+            "Intro\n\n```rust\nfn a() {{}}\n```\n\n## After code\n\n{long}\n\n## After a cut\n\n| A |\n|---|\n| 1 |"
+        );
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![
+            item("u", 0, ItemKind::User { text: "Hi".into(), attachments: Vec::new() }),
+            assistant("a", 1, &reply),
+            assistant("b", 2, "The next message"),
+            call("t", 3, "Read", serde_json::json!({ "file_path": "/srv/api/hello.py" }), ToolStatus::Succeeded),
+            assistant("c", 4, "## After a tool call"),
+        ]);
+
+        let prose: Vec<(&str, Option<After>)> = transcript
+            .rows()
+            .iter()
+            .filter_map(|row| match &row.kind {
+                RowKind::Prose { prose, after } => Some((prose.text.split('\n').next().unwrap_or_default(), *after)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            prose,
+            vec![
+                ("Intro", None),
+                ("After code", Some(After::Code)),
+                ("After a cut", Some(After::Prose)),
+                ("The next message", Some(After::Table)),
+                ("After a tool call", Some(After::Work)),
+            ]
+        );
+        let cut = transcript.rows().iter().find(|row| row.id == "a/3").unwrap();
+        assert_eq!(serde_json::to_value(cut).unwrap()["after"], "prose");
     }
 
     #[test]
@@ -825,7 +910,7 @@ mod tests {
 
         assert_eq!(shown, transcript.rows());
         assert!(matches!(&shown[0].kind, RowKind::User { attachments, .. } if attachments == &["notes.txt"]));
-        assert!(matches!(&shown[3].kind, RowKind::Prose { prose } if prose.text == "Outro"));
+        assert!(matches!(&shown[3].kind, RowKind::Prose { prose, .. } if prose.text == "Outro"));
         assert_eq!(shown[3].id, "a/2");
         assert!(transcript.refresh("a").is_none(), "nothing changed, nothing to send");
     }
@@ -848,7 +933,7 @@ mod tests {
     }
 
     fn pre_spans(row: &Row) -> Vec<Option<Spans>> {
-        let RowKind::Prose { prose } = &row.kind else { panic!("expected prose") };
+        let RowKind::Prose { prose, .. } = &row.kind else { panic!("expected prose") };
         let spans = prose.paras.iter().filter_map(|para| match &para.kind {
             ParaKind::Pre { spans, .. } => Some(spans.clone()),
             _ => None,
@@ -917,7 +1002,7 @@ mod tests {
     fn outline(transcript: &Transcript) -> Vec<String> {
         let rows = transcript.rows().iter().map(|row| match &row.kind {
             RowKind::User { .. } => "user".to_string(),
-            RowKind::Prose { prose } => prose.text.clone(),
+            RowKind::Prose { prose, .. } => prose.text.clone(),
             RowKind::Tool { tool } if row.nested => format!("  {} {}", tool.verb, tool.target),
             RowKind::Tool { tool } => format!("{} {}", tool.verb, tool.target),
             RowKind::Group { title, target, open, .. } => {

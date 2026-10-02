@@ -324,7 +324,6 @@ impl Builder<'_> {
                 self.open(ParaKind::Rule);
                 self.push_plain("\u{a0}");
                 self.close();
-                self.maybe_split();
             }
             Event::TaskListMarker(checked) => {
                 self.pending_marker = Some(if checked { "☑" } else { "☐" }.to_string());
@@ -413,10 +412,12 @@ impl Builder<'_> {
 
     fn end(&mut self, tag: TagEnd) {
         match tag {
-            TagEnd::Paragraph | TagEnd::Heading(_) => {
+            TagEnd::Paragraph => {
                 self.close();
                 self.maybe_split();
             }
+            // A heading stays in the block of what it heads.
+            TagEnd::Heading(_) => self.close(),
             TagEnd::BlockQuote(_) => {
                 self.close();
                 self.quotes = self.quotes.saturating_sub(1);

@@ -219,8 +219,8 @@ class RowView: FlippedView {
         switch row.kind {
         case .user(let text, let attachments):
             return estimatedTextHeight(text.length, width: width * 0.75) + 48 + (attachments.isEmpty ? 0 : 22)
-        case .prose(let text, _):
-            return estimatedTextHeight(text.length, width: width) + 9
+        case .prose(let text, let above, _):
+            return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + above
         case .code(let content):
             return CodeRowView.height(lines: content.lineCount)
         case .tool, .thinking, .group, .fold:
@@ -320,7 +320,11 @@ final class UserRowView: RowView {
 }
 
 final class ProseRowView: RowView {
+    /// The room a row has around its text, which is what keeps two rows apart.
+    static let gap: CGFloat = 9
+
     private let text = RowTextView.make()
+    private var above: CGFloat = 0
     private var headers: [CodeHeader] = []
 
     override init(frame: NSRect) {
@@ -336,20 +340,21 @@ final class ProseRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .prose(let content, _) = row.kind else { return }
+        guard case .prose(let content, let above, _) = row.kind else { return }
         text.content = content
+        self.above = above
     }
 
     override func layout(width: CGFloat) -> CGFloat {
         let before = text.frame.size
         let height = text.height(forWidth: width)
-        text.frame = NSRect(x: 0, y: 3, width: width, height: height)
+        text.frame = NSRect(x: 0, y: 3 + above, width: width, height: height)
         placeHeaders()
         if fadesGrowth, before.width == width, before.height > 0, height > before.height + 1 {
             text.fadeIn(below: before.height)
         }
         fadesGrowth = false
-        return height + 9
+        return height + Self.gap + above
     }
 
     /// Puts the language and a copy button in the top of every code box.
