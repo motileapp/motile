@@ -61,11 +61,30 @@ private final class Demo {
         window?.makeKeyAndOrderFront(nil)
         await wait(0.7)
         guard let window else { return }
+        capture(window, name)
+    }
+
+    private func capture(_ window: NSWindow, _ name: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         process.arguments = ["-x", "-o", "-l\(window.windowNumber)", output.appendingPathComponent("\(name).png").path]
         try? process.run()
         process.waitUntilExit()
+    }
+
+    /// The Settings window, opened from the app's menu as a person would.
+    private func shootSettings(_ name: String) async {
+        guard let menu = NSApp.mainMenu?.items.first?.submenu,
+            let item = menu.items.firstIndex(where: { $0.keyEquivalent == "," })
+        else { return }
+        menu.performActionForItem(at: item)
+        await wait(1)
+        guard let settings = NSApp.windows.first(where: { $0.isVisible && $0.identifier?.rawValue.contains("Settings") == true }) else {
+            results.append("FAIL the Settings window opens")
+            return
+        }
+        capture(settings, name)
+        settings.close()
     }
 
     /// The whole screen, to see the window's glass over what is behind it.
@@ -230,7 +249,10 @@ private final class Demo {
         await shoot("10-done")
         await shootScreen("10-screen-light")
 
+        await shootSettings("10-settings")
+
         NSApp.appearance = NSAppearance(named: .darkAqua)
+        await shootSettings("11-dark-settings")
         await shoot("11-dark-thread")
         await shootScreen("11-screen-dark")
         store.setDone([first], done: false)

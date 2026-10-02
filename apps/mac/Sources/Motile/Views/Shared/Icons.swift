@@ -60,12 +60,74 @@ final class ImageFiles {
 
     func load(_ path: String) async -> NSImage? {
         if let image = cached(path) { return image }
-        let data = await Task.detached(priority: .userInitiated) {
-            try? Data(contentsOf: URL(fileURLWithPath: path))
+        let image = await Task.detached(priority: .userInitiated) {
+            (try? Data(contentsOf: URL(fileURLWithPath: path))).flatMap(NSImage.init(data:)).map(Self.filling)
         }.value
-        guard let data, let image = NSImage(data: data) else { return nil }
+        guard let image else { return nil }
         cache.setObject(image, forKey: path as NSString)
         return image
+    }
+
+    /// The image as a square that its picture fills: drawn at one size and without the empty
+    /// margin some icons come with, so that every icon is as large as the next.
+    private static func filling(_ image: NSImage) -> NSImage {
+        let drawn = 256
+        let side = 128
+        guard image.size.width > 0, image.size.height > 0,
+            let canvas = bitmapContext(side: drawn)
+        else { return image }
+        let fit = min(CGFloat(drawn) / image.size.width, CGFloat(drawn) / image.size.height)
+        let size = NSSize(width: image.size.width * fit, height: image.size.height * fit)
+        let origin = NSPoint(x: (CGFloat(drawn) - size.width) / 2, y: (CGFloat(drawn) - size.height) / 2)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: canvas, flipped: false)
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(in: NSRect(origin: origin, size: size), from: .zero, operation: .sourceOver, fraction: 1)
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let picture = canvas.makeImage(),
+            let bounds = opaqueBounds(of: canvas, side: drawn),
+            let cropped = picture.cropping(to: bounds),
+            let result = bitmapContext(side: side)
+        else { return image }
+        let scale = min(CGFloat(side) / bounds.width, CGFloat(side) / bounds.height)
+        let target = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+        result.interpolationQuality = .high
+        result.draw(
+            cropped,
+            in: CGRect(x: (CGFloat(side) - target.width) / 2, y: (CGFloat(side) - target.height) / 2, width: target.width, height: target.height)
+        )
+        guard let filled = result.makeImage() else { return image }
+        return NSImage(cgImage: filled, size: NSSize(width: side, height: side))
+    }
+
+    private static func bitmapContext(side: Int) -> CGContext? {
+        CGContext(
+            data: nil,
+            width: side,
+            height: side,
+            bitsPerComponent: 8,
+            bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )
+    }
+
+    /// The part of the bitmap that isn't transparent, in the coordinates `CGImage.cropping` takes.
+    private static func opaqueBounds(of context: CGContext, side: Int) -> CGRect? {
+        guard let data = context.data else { return nil }
+        let pixels = data.bindMemory(to: UInt8.self, capacity: side * side * 4)
+        var (left, right, top, bottom) = (side, -1, side, -1)
+        for row in 0..<side {
+            for column in 0..<side where pixels[(row * side + column) * 4 + 3] > 24 {
+                left = min(left, column)
+                right = max(right, column)
+                top = min(top, row)
+                bottom = max(bottom, row)
+            }
+        }
+        guard right >= left, bottom >= top else { return nil }
+        return CGRect(x: left, y: top, width: right - left + 1, height: bottom - top + 1)
     }
 
     /// Reads the images now, so that menus, which can't wait, find them.

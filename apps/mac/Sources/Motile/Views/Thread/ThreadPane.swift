@@ -20,7 +20,7 @@ struct ThreadPane: View {
             if isStart {
                 start
             } else {
-                TranscriptRepresentable(store: store, bottomInset: composerHeight + 8)
+                TranscriptRepresentable(store: store, bottomInset: composerHeight + 16)
                     .mask { transcriptFade }
                 if store.transcriptIsEmpty && !store.activity.running {
                     Text("Send a message to start the conversation.")
@@ -33,15 +33,14 @@ struct ThreadPane: View {
                     .padding(.top, 24)
                     .padding(.bottom, 16)
                     .frame(maxWidth: .infinity)
-                    .background(
-                        GeometryReader { proxy in
-                            Color.clear.preference(key: ComposerHeightKey.self, value: proxy.size.height)
-                        }
-                    )
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        composerHeight = height
+                    }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onPreferenceChange(ComposerHeightKey.self) { composerHeight = $0 }
         .overlay(alignment: .topLeading) { title }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
         .toolbar {
@@ -194,12 +193,5 @@ struct ThreadPane: View {
             .padding(.horizontal, -8)
         }
         .font(.system(size: 28, weight: .regular))
-    }
-}
-
-private struct ComposerHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 120
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
