@@ -231,6 +231,8 @@ struct MainView: View {
                             projectButtons
                         }
                     }
+                    // The system places an item by its width, so it is the same shown and hidden.
+                    .frame(width: 3 * ToolbarButton.width, alignment: .leading)
                 }
                 .withoutSystemGlass()
                 // Without a title in the toolbar, this is what keeps the button at the right.
