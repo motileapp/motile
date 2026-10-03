@@ -58,6 +58,8 @@ struct PanelTabs: Equatable, Codable {
     var active: PanelTab?
     /// What the diff tab shows, once that was chosen.
     var scope: DiffScope?
+    /// The panel covers the thread.
+    var maximized: Bool?
 }
 
 /// The folder the panel looks into: the one the open thread works in, or the project's when a
@@ -139,7 +141,10 @@ final class SidePanel {
     @ObservationIgnored private let defaults = UserDefaults.standard
 
     var isOpen: Bool {
-        didSet { defaults.set(isOpen, forKey: "panel.open") }
+        didSet {
+            defaults.set(isOpen, forKey: "panel.open")
+            if !isOpen { change { $0.maximized = nil } }
+        }
     }
     private(set) var tabsByKey: [String: PanelTabs]
     /// The turns of the open thread that changed files, the first one first.
@@ -180,7 +185,7 @@ final class SidePanel {
         guard let key else { return }
         var tabs = tabsByKey[key] ?? PanelTabs()
         change(&tabs)
-        tabsByKey[key] = tabs.tabs.isEmpty && tabs.scope == nil ? nil : tabs
+        tabsByKey[key] = tabs.tabs.isEmpty && tabs.scope == nil && tabs.maximized == nil ? nil : tabs
         defaults.set(try? JSONEncoder().encode(tabsByKey), forKey: "panel.tabs")
     }
 
@@ -227,6 +232,17 @@ final class SidePanel {
         guard isOpen, let active = tabs.active else { return false }
         close(active)
         return true
+    }
+
+    /// The panel covers the thread, so the window shows the sidebar and the panel.
+    var isMaximized: Bool { isOpen && tabs.maximized == true }
+
+    func toggleMaximized() {
+        guard isOpen else { return }
+        let maximized = !isMaximized
+        change { $0.maximized = maximized ? true : nil }
+        // The composer is behind the panel now, and must not take what is typed.
+        if maximized { NSApp.keyWindow?.makeFirstResponder(nil) }
     }
 
     /// The tabs a draft had go to the thread it became.

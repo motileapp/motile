@@ -31,6 +31,9 @@ struct MotileApp: App {
                     .keyboardShortcut("s", modifiers: [.command, .control])
                 Button(store.sidePanel.isOpen ? "Hide Side Panel" : "Show Side Panel") { store.sidePanel.isOpen.toggle() }
                     .keyboardShortcut("b", modifiers: [.command, .option])
+                Button(store.sidePanel.isMaximized ? "Restore Side Panel" : "Maximize Side Panel") { store.sidePanel.toggleMaximized() }
+                    .keyboardShortcut("b", modifiers: [.command, .option, .shift])
+                    .disabled(!store.sidePanel.isOpen)
                 Button("Show Changes") { store.sidePanel.showDiff() }
                     .keyboardShortcut("d")
                     .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
@@ -176,6 +179,9 @@ struct MainView: View {
     private static let threadMinWidth = 500.0
     /// What the side panel leaves to the thread. Without that much room, it lies over the thread.
     private static let threadBesidePanel = 400.0
+    /// How far the top bar's content starts from the window's left edge while the sidebar is
+    /// hidden: past the window's buttons and the ones beside them.
+    private static let pastWindowButtons = 240.0
 
     @Environment(AppStore.self) private var store
     @AppStorage(MainView.sidebarHiddenKey) private var sidebarHidden = false
@@ -190,8 +196,10 @@ struct MainView: View {
             let shownWidth = min(widths.upperBound, max(widths.lowerBound, sidebarWidth))
             let panelOpen = store.sidePanel.isOpen
             let rest = Double(window.size.width) - (sidebarHidden ? 0 : shownWidth + 1)
-            let beside = panelOpen && rest - 1 - Self.threadBesidePanel >= SidePanel.widths.lowerBound
-            let panelWidths = SidePanel.widths.lowerBound...max(SidePanel.widths.lowerBound, beside ? rest - 1 - Self.threadBesidePanel : rest - 1)
+            let maximized = store.sidePanel.isMaximized
+            let fits = panelOpen && rest - 1 - Self.threadBesidePanel >= SidePanel.widths.lowerBound
+            let beside = fits && !maximized
+            let panelWidths = SidePanel.widths.lowerBound...max(SidePanel.widths.lowerBound, fits ? rest - 1 - Self.threadBesidePanel : rest - 1)
             let shownPanel = min(panelWidths.upperBound, max(panelWidths.lowerBound, panelWidth))
             HStack(spacing: 0) {
                 if !sidebarHidden {
@@ -206,9 +214,20 @@ struct MainView: View {
                     PaneDivider(width: $sidebarWidth, widths: widths)
                         .zIndex(1)
                 }
-                ThreadPane(titleInset: sidebarHidden ? 240 : 20, besidePanel: beside)
+                ThreadPane(titleInset: sidebarHidden ? Self.pastWindowButtons : 20, besidePanel: beside)
+                    // Behind the maximized panel the thread keeps the width it has beside it,
+                    // so the transcript isn't laid out again for a width nobody sees.
+                    .frame(width: maximized && fits ? rest - 1 - shownPanel : nil)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(maximized ? 0 : 1)
+                    .allowsHitTesting(!maximized)
+                    .overlay {
+                        if maximized {
+                            SidePanelView(topInset: window.safeAreaInsets.top, tabInset: sidebarHidden ? Self.pastWindowButtons : 0)
+                        }
+                    }
                     .overlay(alignment: .trailing) {
-                        if panelOpen && !beside {
+                        if panelOpen && !beside && !maximized {
                             panel(width: shownPanel, widths: panelWidths, topInset: window.safeAreaInsets.top)
                                 .background {
                                     Color.themeBackground
@@ -240,8 +259,18 @@ struct MainView: View {
                     Spacer()
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    ToolbarButton(symbol: "sidebar.right", help: panelOpen ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
-                        store.sidePanel.isOpen.toggle()
+                    HStack(spacing: 0) {
+                        if panelOpen {
+                            ToolbarButton(
+                                symbol: maximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                                help: maximized ? "Restore the side panel (⇧⌥⌘B)" : "Maximize the side panel (⇧⌥⌘B)"
+                            ) {
+                                store.sidePanel.toggleMaximized()
+                            }
+                        }
+                        ToolbarButton(symbol: "sidebar.right", help: panelOpen ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
+                            store.sidePanel.isOpen.toggle()
+                        }
                     }
                 }
                 .withoutSystemGlass()

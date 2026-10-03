@@ -232,7 +232,9 @@ Rust library for tests.
 - `Views/Panel` is the panel on the right of the thread, with tabs kept for each thread: the
   changes in the folder the thread works in, its files, and the files opened from either.
   `CodeView.swift` draws a diff or a file, and only the lines on screen. `Core/SidePanel.swift`
-  is the panel's state. A turn's changed files in the transcript open its diff there.
+  is the panel's state. A turn's changed files in the transcript open its diff there. The
+  panel can be maximized for a thread: it then covers the thread, which keeps its width behind
+  it, and the window shows the sidebar and the panel.
 - `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
   it is signed by the developer who signed the running one, puts it in its place and restarts.
   A copy that isn't signed with the Developer ID can't update itself.
