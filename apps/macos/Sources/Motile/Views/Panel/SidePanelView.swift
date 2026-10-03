@@ -517,13 +517,7 @@ struct FileSurface: View {
                     CodeViewRepresentable(document: document)
                 }
             case .ready(.image(let image)):
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(maxWidth: image.size.width, maxHeight: image.size.height)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ZoomableImage(image: image, size: image.size, margin: CGSize(width: 16, height: 16), keys: store.viewing == nil)
             case .ready(.binary(let size)):
                 PanelMessage(text: "This file isn't text, so it isn't shown. It is \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)).")
             }

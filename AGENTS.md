@@ -219,7 +219,8 @@ Rust library for tests.
   image or a video and a chip for any other file, each saying how far its upload is. A message
   can't be sent until its files are on the server.
   `Views/MediaViewer.swift` shows the images and videos of a message or of the composer one at
-  a time over the whole window, when one is clicked.
+  a time over the whole window, when one is clicked. Its `ZoomingScrollView` is how an image
+  zooms there and in the panel.
   `Views/Thread/GitControl.swift` is the git button in the top bar of a thread and its popover:
   the files and the message of a commit, or the title and text of a pull request, to change
   before they are used.
