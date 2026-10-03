@@ -306,7 +306,7 @@ private final class PinnedHeading: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        canvas?.drawHeading(of: file, in: bounds)
+        canvas?.drawHeading(of: file, in: bounds, lineAbove: false)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -462,7 +462,8 @@ final class CodeCanvas: NSView, NSMenuItemValidation {
         for block in blocks where block.bottom + Self.fileGap >= dirtyRect.minY && block.top <= dirtyRect.maxY {
             let file = document.files[block.file]
             if document.headed {
-                drawHeading(of: block.file, in: NSRect(x: visible.minX, y: block.top, width: visible.width, height: Self.headingHeight))
+                let heading = NSRect(x: visible.minX, y: block.top, width: visible.width, height: Self.headingHeight)
+                drawHeading(of: block.file, in: heading, lineAbove: block.file > 0)
             }
             guard block.rows > 0 else { continue }
             let first = max(0, Int(floor((dirtyRect.minY - block.linesTop) / Self.lineHeight)))
@@ -542,14 +543,15 @@ final class CodeCanvas: NSView, NSMenuItemValidation {
     }
 
     /// The name of the file with what happened to it and how many lines changed, and the
-    /// buttons that close its lines and open the file.
-    func drawHeading(of index: Int, in rect: NSRect) {
+    /// buttons that close its lines and open the file. A heading under the panel's bar has
+    /// the bar's line above it.
+    func drawHeading(of index: Int, in rect: NSRect, lineAbove: Bool) {
         guard let document, index < document.files.count else { return }
         let file = document.files[index]
         Theme.codeBackground.setFill()
         rect.fill()
         Theme.border.setFill()
-        NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: 1).fill()
+        if lineAbove { NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: 1).fill() }
         NSRect(x: rect.minX, y: rect.maxY - 1, width: rect.width, height: 1).fill()
 
         let closed = collapsed.contains(file.path)
