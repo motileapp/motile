@@ -506,7 +506,7 @@ private final class Demo {
     }
 
     /// Scrolls as a hand on a trackpad does while a reply streams: up, back down to just above
-    /// the end, held there, and let go.
+    /// the end, held there, then down to the end and let go.
     private func scrollByHandWhileStreaming() async {
         guard let scrollView = transcriptScrollView, let document = scrollView.documentView else { return }
         let clip = scrollView.contentView
@@ -523,8 +523,10 @@ private final class Demo {
         await wait(1)
         let stayed = abs(clip.bounds.minY - held) < 1
         results.append("\(stayed ? "PASS" : "FAIL") the transcript stays where it is scrolled to while a reply streams under it")
+        let reached = end()
+        clip.scroll(to: NSPoint(x: 0, y: reached))
         NotificationCenter.default.post(name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
-        await expect("let go near the end, the transcript follows the reply again", within: 5) { clip.bounds.minY > held + 5 }
+        await expect("let go at the end, the transcript follows the reply again", within: 5) { clip.bounds.minY > reached + 5 }
     }
 
     private func finish() {
