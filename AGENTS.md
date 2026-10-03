@@ -147,7 +147,8 @@ Rust library for tests.
   is there, and the messages that wait for the agent are the last rows, each saying how it
   waits).
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
-  terminal.
+  terminal, and `examples/seed.rs` signs a data folder in with the dev login and makes the dev
+  app's project and threads.
 
 ### apps/macos (Swift: SwiftUI, with AppKit for the transcript)
 
@@ -175,6 +176,8 @@ Rust library for tests.
   compiles it with `actool`, which also draws the flat icon older macOS versions show.
 - `Demo/DemoDriver.swift` walks the app through a scripted demo; `scripts/ci-demo.sh` runs it
   in CI against a real auth server and a real server and collects screenshots and `checks.txt`.
+- `scripts/dev-app.sh` opens the dev app, `scripts/shot.sh` takes a picture of its window and
+  `scripts/click.sh` clicks in it. See Development.
 
 ## General Rules:
 
@@ -229,7 +232,8 @@ web app. The Mac app needs Xcode 26 or later.
     pnpm --filter motile-web dev                # the web app on localhost:3001
     cargo run -p motile-server -- run           # a server, once linked with `motile setup <token>`
     cargo run -p motile-core --example drive    # the core, driven from a terminal
-    apps/macos/scripts/build-app.sh --open      # on a Mac
+    apps/macos/scripts/dev-app.sh               # on a Mac: the app, on an account of its own
+    apps/macos/scripts/build-app.sh --open      # on a Mac: the app, to sign in with Google
 
 Checks (`cargo test` needs the compose Postgres; it creates a throwaway database per test):
 
@@ -243,11 +247,22 @@ every push that touches them, runs the demo and uploads the app, the server and 
     gh run watch                                      # then
     gh run download --name screenshots
 
-To see a UI change on a Mac, drive the app by hand: `apps/macos/scripts/build-app.sh --open`
-opens it signed in, with this Mac's servers. Click to the state with `osascript` (System
-Events) and capture it with `screencapture -x`, then crop. Both need a permission the first
-time: Accessibility and Screen Recording, for the program that runs the agent. Use the demo
-(`scripts/ci-demo.sh`) only for the stall numbers or a clean account.
+To see a UI change on a Mac, use the dev app, from `apps/macos`:
+
+    scripts/dev-app.sh             # builds what changed and opens the app; seconds after the first run
+    scripts/shot.sh shot.png       # a picture of its window
+    scripts/click.sh 85 330        # a click, counted in points from the window's top left corner
+
+The dev app is signed in as `demo@motile.app` on an auth server with the dev login, and its
+server, `studio`, runs `scripts/fake-agent` and starts with a project and three finished
+threads. All of it lives in `apps/macos/build/dev` and keeps running between runs (Postgres on
+5436, the auth server on 3112, the server on 47614), so sessions in the same tree share it.
+`dev-app.sh` restarts only what was rebuilt, and `dev-app.sh --stop` stops everything. It never
+touches a real account. Reach other states by sending the fake agent's prompts below. Type with
+`osascript` (System Events `keystroke`), and address the app by the pid in `build/dev/app.pid`.
+A picture taken on a Retina display has two pixels per point. `osascript` needs Accessibility
+and the program that runs the agent needs Screen Recording, both granted once in System
+Settings. Use the demo (`scripts/ci-demo.sh`) only for the stall numbers.
 
 `scripts/fake-agent` stands in for Claude Code and Codex in the tests and the demo. It replays
 the recorded output in `fixtures/` or makes up a turn, depending on the prompt. Asked to
