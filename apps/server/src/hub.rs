@@ -19,8 +19,9 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, Agent, BranchInstructions, ChangedFile, GitAction, GitHubState, GitStage, GitStatus, Item, ItemKind,
-    Message, NewThread, Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall, ToolStatus, TurnSummary, Worktree,
+    Activity, Agent, BranchInstructions, ChangedFile, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
+    Item, ItemKind, Message, NewThread, Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall, ToolStatus,
+    TurnChanges, TurnSummary, Worktree,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -32,7 +33,7 @@ use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claud
 use crate::generate::Writer;
 use crate::media::MediaStore;
 use crate::store::{Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
-use crate::{drafts, git, github, icons, pacing, title};
+use crate::{drafts, files, git, github, icons, pacing, title};
 
 const UPDATES_BUFFER: usize = 4096;
 const ROOT_BYPASS_REFUSAL: &str = "cannot be used with root/sudo privileges";
@@ -77,6 +78,8 @@ pub struct Hub {
     text_model: std::sync::Mutex<Option<String>>,
     /// How the user wants branches named.
     branch_instructions: std::sync::Mutex<Option<String>>,
+    /// Held while a folder is kept as it is, so a thread's snapshots follow one another.
+    snapshotting: Mutex<()>,
     list_updates: broadcast::Sender<Message>,
 }
 
@@ -107,11 +110,20 @@ struct Live {
     activity: Activity,
     updates: broadcast::Sender<Message>,
     run: Option<Run>,
-    /// The thread's worktree is being made, and the turn starts when it is there.
-    preparing: Option<AbortHandle>,
+    /// The turn starts when its folder is ready.
+    preparing: Option<Preparing>,
+    /// The item that ended a turn whose changes haven't been read yet.
+    ended: Option<String>,
     /// Messages sent while the agent was working, until it takes them.
     queued: Vec<Queued>,
     title_needs_refinement: bool,
+}
+
+/// What happens before a turn's agent starts: the thread's worktree is made when it isn't
+/// there, and the folder is kept as the turn finds it.
+struct Preparing {
+    task: AbortHandle,
+    makes_worktree: bool,
 }
 
 struct Run {
@@ -167,6 +179,7 @@ impl Hub {
             text_model: std::sync::Mutex::new(store.setting(TEXT_MODEL)),
             branch_instructions: std::sync::Mutex::new(store.setting(BRANCH_INSTRUCTIONS)),
             worktrees: std::sync::Mutex::new(worktrees),
+            snapshotting: Mutex::default(),
             threads: Mutex::new(threads),
             store,
             media,
@@ -504,9 +517,11 @@ impl Hub {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
         if let Some(preparing) = live.preparing.take() {
-            preparing.abort();
+            preparing.task.abort();
             // What was made of the worktree so far may be half of it.
-            self.discard_worktree(&live.stored.thread).await;
+            if preparing.makes_worktree {
+                self.discard_worktree(&live.stored.thread).await;
+            }
             if let Err(error) = self.end_without_agent(live, None) {
                 tracing::error!(thread_id, "couldn't save the end of a turn: {error:#}");
             }
@@ -599,7 +614,13 @@ impl Hub {
             signal(run.process_id, libc::SIGKILL);
         }
         if let Some(preparing) = &live.preparing {
-            preparing.abort();
+            preparing.task.abort();
+        }
+        let thread = &live.stored.thread;
+        let repository = self.project_path(&thread.project_id).await.unwrap_or_else(|_| thread.cwd.clone());
+        if git::in_repository(&repository) {
+            let (environment, name) = (self.environment.clone(), thread_id.to_string());
+            tokio::spawn(async move { git::forget_snapshots(&repository, &environment, &name).await });
         }
         if self.lock_worktrees().remove(thread_id).is_some() {
             self.discard_worktree(&live.stored.thread).await;
@@ -794,7 +815,58 @@ impl Hub {
         Ok(Message::GitStatus { status, files })
     }
 
-    /// Where git works for the thread: its worktree, or the project's folder.
+    /// The changes in the folder the thread works in, or in the project's folder, as a patch.
+    pub async fn diff(&self, project_id: &str, thread_id: Option<&str>, scope: DiffScope) -> anyhow::Result<Message> {
+        let folder = self.git_folder(project_id, thread_id).await?;
+        let environment = &self.environment;
+        let (from, to) = match scope {
+            DiffScope::Turn { item_id } => {
+                let thread_id = thread_id.context("A turn's changes are asked for with its thread.")?;
+                let changes = match self.store.item(thread_id, &item_id)?.map(|item| item.kind) {
+                    Some(ItemKind::TurnEnd { summary }) => summary.changes,
+                    _ => None,
+                };
+                let snapshot = changes.context("What that turn changed is no longer known.")?.snapshot;
+                (git::before_snapshot(&snapshot), snapshot)
+            }
+            DiffScope::Uncommitted => git::uncommitted(&folder, environment).await?,
+            DiffScope::Branch => {
+                let base = match thread_id {
+                    Some(thread_id) => {
+                        let threads = self.threads.lock().await;
+                        threads
+                            .get(thread_id)
+                            .and_then(|live| live.stored.worktree.as_ref())
+                            .map(|own| own.base.clone())
+                    }
+                    None => None,
+                };
+                git::since_branching(&folder, environment, base.as_deref()).await?
+            }
+        };
+        let (patch, truncated) = git::patch_between(&folder, environment, &from, &to).await?;
+        Ok(Message::Diff { patch, truncated })
+    }
+
+    /// What is in a folder inside the one the thread works in, or inside the project's.
+    pub async fn list_files(&self, project_id: &str, thread_id: Option<&str>, path: &str) -> anyhow::Result<Message> {
+        let folder = self.git_folder(project_id, thread_id).await?;
+        files::list_files(&folder, path, &self.environment).await
+    }
+
+    /// A file inside the folder the thread works in, or inside the project's: what kind it is,
+    /// its size and how many of its bytes to send.
+    pub async fn open_file(
+        &self,
+        project_id: &str,
+        thread_id: Option<&str>,
+        path: &str,
+    ) -> anyhow::Result<(tokio::fs::File, FileKind, u64, u64)> {
+        let folder = self.git_folder(project_id, thread_id).await?;
+        files::open_file(&folder, path).await
+    }
+
+    /// Where the thread works: in its worktree, or in the project's folder.
     async fn git_folder(&self, project_id: &str, thread_id: Option<&str>) -> anyhow::Result<String> {
         let worktree = thread_id.and_then(|thread_id| self.lock_worktrees().get(thread_id).map(|own| own.path.clone()));
         match worktree {
@@ -1000,25 +1072,71 @@ impl Hub {
         self.worktrees.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Makes the thread's worktree, which takes a while, and starts the turn when it is there.
-    fn start_after_worktree(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
-        self.announce_working(live)?;
-        let making = tokio::spawn(self.clone().start_in_worktree(live.stored.thread.id.clone(), prompt));
-        live.preparing = Some(making.abort_handle());
-        Ok(())
-    }
-
-    async fn start_in_worktree(self: Arc<Self>, thread_id: String, prompt: String) {
-        let made = self.make_worktree(&thread_id, &prompt).await;
+    /// Makes the thread's worktree when it isn't there, which takes a while, keeps the folder as
+    /// the turn finds it, and starts the agent.
+    async fn prepare_and_start(
+        self: Arc<Self>,
+        thread_id: String,
+        folder: String,
+        prompt: String,
+        makes_worktree: bool,
+    ) {
+        let made = match makes_worktree {
+            true => self.make_worktree(&thread_id, &prompt).await,
+            false => Ok(()),
+        };
+        if made.is_ok() {
+            self.snapshot(&thread_id, &folder).await;
+        }
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(&thread_id) else { return };
         live.preparing = None;
         let started = match made {
-            Ok(()) => self.start_turn(live, prompt),
+            Ok(()) => self.start_agent(live, prompt),
             Err(error) => self.end_without_agent(live, Some(format!("{error:#}"))),
         };
         if let Err(error) = started {
-            tracing::error!(thread_id, "couldn't start a turn in its worktree: {error:#}");
+            tracing::error!(thread_id, "couldn't start a turn: {error:#}");
+        }
+    }
+
+    /// Keeps the thread's folder as it is now, when it is in a repository: the snapshot, and the
+    /// one before it.
+    async fn snapshot(&self, thread_id: &str, folder: &str) -> Option<(String, Option<String>)> {
+        if !git::in_repository(folder) {
+            return None;
+        }
+        let _one_at_a_time = self.snapshotting.lock().await;
+        match git::snapshot(folder, &self.environment, thread_id).await {
+            Ok(snapshot) => Some(snapshot),
+            Err(error) => {
+                tracing::debug!(thread_id, "couldn't keep a folder as it is: {error:#}");
+                None
+            }
+        }
+    }
+
+    /// Has what the turn that just ended changed read, away from the thread's updates.
+    fn read_changes(self: &Arc<Self>, live: &mut Live) {
+        let Some(item_id) = live.ended.take() else { return };
+        let thread = &live.stored.thread;
+        tokio::spawn(self.clone().record_changes(thread.id.clone(), thread.cwd.clone(), item_id));
+    }
+
+    /// Adds what a turn changed in the thread's folder to the item that ended it.
+    async fn record_changes(self: Arc<Self>, thread_id: String, folder: String, item_id: String) {
+        let Some((snapshot, Some(before))) = self.snapshot(&thread_id, &folder).await else { return };
+        if snapshot == before {
+            return;
+        }
+        let files = match git::changed_between(&folder, &self.environment, &before, &snapshot).await {
+            Ok(files) => files,
+            Err(error) => return tracing::debug!(thread_id, "couldn't read a turn's changes: {error:#}"),
+        };
+        let mut threads = self.threads.lock().await;
+        let Some(live) = threads.get_mut(&thread_id) else { return };
+        if let Err(error) = live.set_changes(&self.store, &item_id, TurnChanges { snapshot, files }) {
+            tracing::error!(thread_id, "couldn't save a turn's changes: {error:#}");
         }
     }
 
@@ -1152,6 +1270,8 @@ impl Hub {
             Some(message) => live.append(&self.store, ItemKind::Error { message })?,
             None => live.settle(&self.store, None, None, "", true)?,
         }
+        // No agent ran, so nothing changed.
+        live.ended = None;
         let thread = &mut live.stored.thread;
         thread.running = false;
         thread.updated_at = now();
@@ -1172,9 +1292,18 @@ impl Hub {
     }
 
     fn start_turn(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
-        if live.stored.worktree.is_some() && !Path::new(&live.stored.thread.cwd).is_dir() {
-            return self.start_after_worktree(live, prompt);
+        let thread = &live.stored.thread;
+        let makes_worktree = live.stored.worktree.is_some() && !Path::new(&thread.cwd).is_dir();
+        if !makes_worktree && !git::in_repository(&thread.cwd) {
+            return self.start_agent(live, prompt);
         }
+        let preparing = self.clone().prepare_and_start(thread.id.clone(), thread.cwd.clone(), prompt, makes_worktree);
+        self.announce_working(live)?;
+        live.preparing = Some(Preparing { task: tokio::spawn(preparing).abort_handle(), makes_worktree });
+        Ok(())
+    }
+
+    fn start_agent(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
         let thread = &live.stored.thread;
         let agent = thread.agent;
         let turn = Turn {
@@ -1351,6 +1480,7 @@ impl Hub {
         if ended && let Err(error) = self.rest(live) {
             tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
         }
+        self.read_changes(live);
         if was_running && live.stored.thread.monitoring {
             self.after_turn(live).await;
         }
@@ -1438,7 +1568,7 @@ impl Hub {
                 }
                 live.activity.approvals.clear();
                 live.stored.thread.needs_approval = false;
-                live.append(store, ItemKind::TurnEnd { summary })?;
+                live.end_turn(store, summary)?;
             }
             AgentEvent::Approval(approval) => {
                 live.set_thinking(false);
@@ -1488,6 +1618,7 @@ impl Hub {
         if let Err(error) = live.settle(&self.store, run.as_ref(), exit_code, stderr, interrupted) {
             tracing::error!(thread_id, "couldn't save the end of a turn: {error:#}");
         }
+        self.read_changes(live);
         let thread = &mut live.stored.thread;
         // A thread that was monitoring has told of its turn's end already.
         if !thread.monitoring {
@@ -1558,6 +1689,7 @@ impl Live {
             updates,
             run: None,
             preparing: None,
+            ended: None,
             queued: Vec::new(),
             title_needs_refinement: false,
         }
@@ -1660,6 +1792,25 @@ impl Live {
     /// Adds an item that won't change again.
     fn append(&mut self, store: &Store, kind: ItemKind) -> anyhow::Result<()> {
         let item = self.new_item(new_id(), kind);
+        store.save_item(&self.stored.thread.id, &item)?;
+        let _ = self.updates.send(Message::Items { items: vec![item] });
+        Ok(())
+    }
+
+    /// Adds the item that ends a turn. What the turn changed joins it once that has been read.
+    fn end_turn(&mut self, store: &Store, summary: TurnSummary) -> anyhow::Result<()> {
+        let item = self.new_item(new_id(), ItemKind::TurnEnd { summary });
+        store.save_item(&self.stored.thread.id, &item)?;
+        self.ended = Some(item.id.clone());
+        let _ = self.updates.send(Message::Items { items: vec![item] });
+        Ok(())
+    }
+
+    fn set_changes(&mut self, store: &Store, item_id: &str, changes: TurnChanges) -> anyhow::Result<()> {
+        let Some(mut item) = store.item(&self.stored.thread.id, item_id)? else { return Ok(()) };
+        let ItemKind::TurnEnd { summary } = &mut item.kind else { return Ok(()) };
+        summary.changes = Some(changes);
+        item.rev = self.next_rev();
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
@@ -1816,7 +1967,7 @@ impl Live {
             }
             let duration_ms = run.map(|run| run.started.elapsed().as_millis() as u64);
             let summary = TurnSummary { duration_ms, stopped: true, ..TurnSummary::default() };
-            return self.append(store, ItemKind::TurnEnd { summary });
+            return self.end_turn(store, summary);
         }
         if received_result {
             return Ok(());

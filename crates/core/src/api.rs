@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
-use motile_protocol::wire::{Activity, GitAction, GitStage, NewThread, Project, Request, ServerInfo, Thread};
+use motile_protocol::wire::{
+    Activity, DiffScope, GitAction, GitStage, NewThread, Project, Request, ServerInfo, Thread,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -119,6 +121,26 @@ pub enum Command {
         #[serde(default)]
         new_branch: bool,
     },
+    /// The changes in the folder the thread works in, or in the project's folder, read for
+    /// drawing. Answers with the `files`, each a `render::diff::FileDiff`, and `truncated` when
+    /// the server cut them short. A `code_spans` event follows for each file's highlighting.
+    Diff {
+        server_id: String,
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        scope: DiffScope,
+    },
+    /// The file at `path` in that folder. Answers with its `kind` and `size`, and for a text
+    /// with its `lines` and `truncated` when they are only its start, for an image with the
+    /// `file` it is in on this device. A `code_spans` event follows with a text's highlighting.
+    File {
+        server_id: String,
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        path: String,
+    },
     /// Picks the model that writes titles, commit messages and pull requests on the server.
     /// Without `model` the lightest model of the thread's agent writes.
     SetTextModel {
@@ -219,6 +241,13 @@ pub enum Event {
         thread_id: String,
         row_id: String,
         spans: Spans,
+    },
+    /// The highlighting of what the command `id` answered with: the spans of each line of its
+    /// file number `file`, counted from the line's start.
+    CodeSpans {
+        id: u64,
+        file: usize,
+        lines: Vec<Vec<u32>>,
     },
     Activity {
         thread_id: String,

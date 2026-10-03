@@ -8,7 +8,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use motile_protocol::wire::{Approval, Item, ItemKind, Queued, ToolCall, ToolStatus};
+use motile_protocol::wire::{Approval, Change, ChangedFile, Item, ItemKind, Queued, ToolCall, ToolStatus, TurnChanges};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -17,6 +17,8 @@ use super::markdown::{self, Block, ParaKind, Prose};
 
 /// Tool output beyond this is cut; nobody reads more of it in a chat.
 const MAX_OUTPUT_CHARS: usize = 20_000;
+/// A turn that changed more files than this shows them with their folders closed.
+const OPEN_UP_TO_FILES: usize = 12;
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct Row {
@@ -92,6 +94,17 @@ pub enum RowKind {
     Error {
         message: String,
     },
+    /// What a finished turn changed in the thread's folder. The row's item is the one that ends
+    /// the turn, which names the turn when its diff is asked for.
+    Changes {
+        files: usize,
+        added: u32,
+        removed: u32,
+        /// When the turn ended.
+        at: f64,
+        /// The files under their folders, each folder before what is in it.
+        entries: Vec<ChangeEntry>,
+    },
     TurnEnd {
         duration_ms: Option<u64>,
         cost_usd: Option<f64>,
@@ -138,6 +151,24 @@ impl After {
             _ => None,
         }
     }
+}
+
+/// A file a turn changed, or a folder with such files in it.
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct ChangeEntry {
+    /// What opens and closes a folder, through `Transcript::toggle`.
+    pub id: String,
+    /// A folder with nothing else in it is named together with the one inside it: `src/render`.
+    pub name: String,
+    pub path: String,
+    pub depth: usize,
+    pub folder: bool,
+    pub open: bool,
+    /// How a file changed.
+    pub change: Option<Change>,
+    /// The lines added and removed in the file, or in all the files of the folder.
+    pub added: u32,
+    pub removed: u32,
 }
 
 /// A tool call, worded for a person.
@@ -309,7 +340,7 @@ impl Transcript {
         self.show()
     }
 
-    /// Opens or closes a group or a fold.
+    /// Opens or closes a group, a fold, or a folder of changed files.
     pub fn toggle(&mut self, row_id: &str) -> Option<Splice> {
         if !self.opened.remove(row_id) {
             self.opened.insert(row_id.to_string());
@@ -520,6 +551,7 @@ fn present_turn<'a>(
 
     while index < items.len() {
         if !is_work(&items[index]) {
+            shown.extend(changes_row(&items[index], opened).map(Cow::Owned));
             shown.extend(rendered[index].iter().map(|row| match &row.kind {
                 RowKind::TurnEnd { .. } if fold.is_some() => Cow::Owned(folded(row)),
                 _ => Cow::Borrowed(row),
@@ -544,6 +576,91 @@ fn present_turn<'a>(
             shown.extend(run.iter().flatten().map(|row| Cow::Owned(Row { nested: true, ..row.clone() })));
         }
     }
+}
+
+/// The row that says what the turn changed, for the item that ends a turn which changed something.
+fn changes_row(item: &Item, opened: &HashSet<String>) -> Option<Row> {
+    let ItemKind::TurnEnd { summary } = &item.kind else { return None };
+    let TurnChanges { files, .. } = summary.changes.as_ref().filter(|changes| !changes.files.is_empty())?;
+    let id = format!("{}/changes", item.id);
+    let mut entries = Vec::new();
+    let tree = Tree { row_id: &id, opened, open: files.len() <= OPEN_UP_TO_FILES };
+    tree.list(&files.iter().collect::<Vec<_>>(), "", 0, &mut entries);
+    let kind = RowKind::Changes {
+        files: files.len(),
+        added: files.iter().map(|file| file.added).sum(),
+        removed: files.iter().map(|file| file.removed).sum(),
+        at: item.created_at,
+        entries,
+    };
+    Some(Row { id, item: item.id.clone(), nested: false, kind })
+}
+
+/// How the changed files of a turn are listed under their folders.
+struct Tree<'a> {
+    row_id: &'a str,
+    /// The folders that were opened or closed by hand.
+    opened: &'a HashSet<String>,
+    /// Whether a folder is open until then.
+    open: bool,
+}
+
+impl Tree<'_> {
+    /// Lists `files`, which are all inside `folder`: its folders first, then its files, each by name.
+    fn list(&self, files: &[&ChangedFile], folder: &str, depth: usize, entries: &mut Vec<ChangeEntry>) {
+        let inside = |file: &ChangedFile| file.path[folder.len()..].split_once('/').map(|(name, _)| name.to_string());
+        let mut folders: Vec<String> = files.iter().filter_map(|file| inside(file)).collect();
+        folders.sort_by_key(|name| name.to_lowercase());
+        folders.dedup();
+        for name in folders {
+            let within: Vec<&ChangedFile> =
+                files.iter().copied().filter(|file| inside(file).as_deref() == Some(name.as_str())).collect();
+            let path = shared_folder(&within);
+            let id = format!("{}/{path}", self.row_id);
+            let open = self.open != self.opened.contains(&id);
+            entries.push(ChangeEntry {
+                id,
+                name: path[folder.len()..].to_string(),
+                path: path.clone(),
+                depth,
+                folder: true,
+                open,
+                change: None,
+                added: within.iter().map(|file| file.added).sum(),
+                removed: within.iter().map(|file| file.removed).sum(),
+            });
+            if open {
+                self.list(&within, &format!("{path}/"), depth + 1, entries);
+            }
+        }
+        let mut direct: Vec<&ChangedFile> = files.iter().copied().filter(|file| inside(file).is_none()).collect();
+        direct.sort_by_key(|file| file.path.to_lowercase());
+        for file in direct {
+            entries.push(ChangeEntry {
+                id: format!("{}/{}", self.row_id, file.path),
+                name: file.path[folder.len()..].to_string(),
+                path: file.path.clone(),
+                depth,
+                folder: false,
+                open: false,
+                change: Some(file.change),
+                added: file.added,
+                removed: file.removed,
+            });
+        }
+    }
+}
+
+/// The deepest folder all the files are in.
+fn shared_folder(files: &[&ChangedFile]) -> String {
+    let folder_of = |file: &ChangedFile| file.path.rsplit_once('/').map_or("", |(folder, _)| folder).to_string();
+    let mut shared = files.first().map(|file| folder_of(file)).unwrap_or_default();
+    for file in files {
+        while !file.path.starts_with(&format!("{shared}/")) {
+            shared = shared.rsplit_once('/').map_or("", |(above, _)| above).to_string();
+        }
+    }
+    shared
 }
 
 fn is_work(item: &Item) -> bool {
@@ -749,7 +866,7 @@ fn short_path(path: &str, cwd: &str) -> String {
     }
 }
 
-fn language_of(path: &str) -> String {
+pub(crate) fn language_of(path: &str) -> String {
     let name = file_name(path);
     match name.rsplit_once('.') {
         Some((_, extension)) => extension.to_lowercase(),
@@ -1199,6 +1316,58 @@ mod tests {
         assert_eq!(
             outline(&transcript),
             ["user", "fold open", "Looking.", "[Read 2 files]", "user", "fold", "Done.", "end folded"]
+        );
+    }
+
+    #[test]
+    fn what_a_turn_changed_is_listed_under_its_folders_before_the_turn_ends() {
+        let file = |path: &str, added, removed| ChangedFile {
+            path: path.to_string(),
+            from: None,
+            change: Change::Modified,
+            added,
+            removed,
+        };
+        let files = vec![
+            file("README.md", 1, 1),
+            file("apps/server/src/git.rs", 40, 2),
+            file("apps/server/src/hub.rs", 10, 0),
+            file("crates/core/src/render/rows.rs", 5, 5),
+        ];
+        let changes = TurnChanges { snapshot: "abc".into(), files };
+        let summary = motile_protocol::wire::TurnSummary { changes: Some(changes), ..Default::default() };
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![
+            item("u", 0, ItemKind::User { text: "Go".into(), attachments: Vec::new() }),
+            assistant("a", 1, "Done."),
+            item("e", 2, ItemKind::TurnEnd { summary }),
+        ]);
+
+        let listed = |transcript: &Transcript| {
+            let row = &transcript.rows()[2];
+            let RowKind::Changes { files, added, removed, entries, .. } = &row.kind else { panic!("the changes") };
+            assert_eq!((row.id.as_str(), row.item.as_str(), *files, *added, *removed), ("e/changes", "e", 4, 56, 8));
+            let line = |entry: &ChangeEntry| format!("{}{} +{}", "  ".repeat(entry.depth), entry.name, entry.added);
+            entries.iter().map(line).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            listed(&transcript),
+            [
+                "apps/server/src +50",
+                "  git.rs +40",
+                "  hub.rs +10",
+                "crates/core/src/render +5",
+                "  rows.rs +5",
+                "README.md +1"
+            ]
+        );
+        assert!(matches!(transcript.rows()[3].kind, RowKind::TurnEnd { .. }));
+
+        let splice = transcript.toggle("e/changes/apps/server/src").unwrap();
+        assert_eq!((splice.start, splice.remove, splice.rows.len()), (2, 1, 1));
+        assert_eq!(
+            listed(&transcript),
+            ["apps/server/src +50", "crates/core/src/render +5", "  rows.rs +5", "README.md +1"]
         );
     }
 

@@ -29,6 +29,21 @@ struct MotileApp: App {
             CommandGroup(replacing: .sidebar) {
                 Button(sidebarHidden ? "Show Sidebar" : "Hide Sidebar") { sidebarHidden.toggle() }
                     .keyboardShortcut("s", modifiers: [.command, .control])
+                Button(store.sidePanel.isOpen ? "Hide Side Panel" : "Show Side Panel") { store.sidePanel.isOpen.toggle() }
+                    .keyboardShortcut("b", modifiers: [.command, .option])
+                Button("Show Changes") { store.sidePanel.showDiff() }
+                    .keyboardShortcut("d")
+                    .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
+                Button("Show Files") { store.sidePanel.open(.files) }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(store.panelUnavailable != nil)
+                Divider()
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("Close") {
+                    if !store.sidePanel.closeActive() { NSApp.keyWindow?.performClose(nil) }
+                }
+                .keyboardShortcut("w")
             }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { store.updater.check(asked: true) }
@@ -154,10 +169,13 @@ struct MainView: View {
     private static let sidebarWidths: ClosedRange<Double> = 240...420
     /// What the sidebar always leaves to the thread, however wide it was dragged.
     private static let threadMinWidth = 500.0
+    /// What the side panel leaves to the thread. Without that much room, it lies over the thread.
+    private static let threadBesidePanel = 400.0
 
     @Environment(AppStore.self) private var store
     @AppStorage(MainView.sidebarHiddenKey) private var sidebarHidden = false
     @AppStorage("sidebar.width") private var sidebarWidth = 280.0
+    @AppStorage("panel.width") private var panelWidth = 460.0
 
     var body: some View {
         @Bindable var store = store
@@ -165,6 +183,11 @@ struct MainView: View {
             let widest = min(Self.sidebarWidths.upperBound, Double(window.size.width) - 1 - Self.threadMinWidth)
             let widths = Self.sidebarWidths.lowerBound...max(Self.sidebarWidths.lowerBound, widest)
             let shownWidth = min(widths.upperBound, max(widths.lowerBound, sidebarWidth))
+            let panelOpen = store.sidePanel.isOpen
+            let rest = Double(window.size.width) - (sidebarHidden ? 0 : shownWidth + 1)
+            let beside = panelOpen && rest - 1 - Self.threadBesidePanel >= SidePanel.widths.lowerBound
+            let panelWidths = SidePanel.widths.lowerBound...max(SidePanel.widths.lowerBound, beside ? rest - 1 - Self.threadBesidePanel : rest - 1)
+            let shownPanel = min(panelWidths.upperBound, max(panelWidths.lowerBound, panelWidth))
             HStack(spacing: 0) {
                 if !sidebarHidden {
                     SidebarView()
@@ -175,10 +198,23 @@ struct MainView: View {
                                 .offset(y: -window.safeAreaInsets.top)
                                 .padding(.trailing, SidebarView.rowInset - ToolbarButton.margin)
                         }
-                    SidebarDivider(width: $sidebarWidth, widths: widths)
+                    PaneDivider(width: $sidebarWidth, widths: widths)
                         .zIndex(1)
                 }
-                ThreadPane(titleInset: sidebarHidden ? 240 : 20)
+                ThreadPane(titleInset: sidebarHidden ? 240 : 20, besidePanel: beside)
+                    .overlay(alignment: .trailing) {
+                        if panelOpen && !beside {
+                            panel(width: shownPanel, widths: panelWidths, topInset: window.safeAreaInsets.top)
+                                .background {
+                                    Color.themeBackground
+                                        .ignoresSafeArea()
+                                        .shadow(color: .black.opacity(0.18), radius: 14, x: -4)
+                                }
+                        }
+                    }
+                if beside {
+                    panel(width: shownPanel, widths: panelWidths, topInset: window.safeAreaInsets.top)
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .navigation) {
@@ -192,11 +228,31 @@ struct MainView: View {
                     }
                 }
                 .withoutSystemGlass()
+                // Without a title in the toolbar, this is what keeps the button at the right.
+                ToolbarItem {
+                    Spacer()
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    ToolbarButton(symbol: "sidebar.right", help: panelOpen ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
+                        store.sidePanel.isOpen.toggle()
+                    }
+                }
+                .withoutSystemGlass()
             }
         }
         .onDrop(of: [UTType.fileURL] + ImageFiles.attachable, isTargeted: $store.dropTargeted) { providers in
             store.attach(dropped: providers)
             return true
+        }
+    }
+
+    /// The side panel behind the line that resizes it.
+    private func panel(width: Double, widths: ClosedRange<Double>, topInset: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            PaneDivider(width: $panelWidth, widths: widths, growsLeft: true)
+                .zIndex(1)
+            SidePanelView(topInset: topInset)
+                .frame(width: width)
         }
     }
 
@@ -215,10 +271,13 @@ struct MainView: View {
     }
 }
 
-/// The line between the sidebar and the thread. Dragging it makes the sidebar wider or narrower.
-private struct SidebarDivider: View {
+/// The line between the thread and what is beside it. Dragging it makes the sidebar or the side
+/// panel wider or narrower.
+private struct PaneDivider: View {
     @Binding var width: Double
     let widths: ClosedRange<Double>
+    /// The pane is on the right of the line, so it grows when the line goes left.
+    var growsLeft = false
     @State private var widthAtStart: Double?
 
     var body: some View {
@@ -238,7 +297,8 @@ private struct SidebarDivider: View {
                             .onChanged { drag in
                                 let start = widthAtStart ?? min(widths.upperBound, max(widths.lowerBound, width))
                                 widthAtStart = start
-                                width = min(widths.upperBound, max(widths.lowerBound, start + drag.translation.width))
+                                let moved = growsLeft ? -drag.translation.width : drag.translation.width
+                                width = min(widths.upperBound, max(widths.lowerBound, start + moved))
                             }
                             .onEnded { _ in widthAtStart = nil }
                     )

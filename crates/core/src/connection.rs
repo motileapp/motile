@@ -11,9 +11,12 @@ use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use motile_protocol::ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::wire::{Message, Request};
+use motile_protocol::wire::{FileKind, Message, Request};
 use serde::Serialize;
 use tokio::io::AsyncWriteExt;
+
+/// More than a server sends of any file.
+const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
 /// A server's key, optionally with an address to reach it at directly: `key` or `key@ip:port`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -148,6 +151,26 @@ impl Connection {
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to an upload: {other:?}"),
         }
+    }
+
+    /// A file in a folder threads work in: what kind it is, its size, and the bytes the server
+    /// sends of it.
+    pub async fn file(&self, request: &Request) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
+        let (mut send, mut recv) = self.inner.open_bi().await?;
+        write_frame(&mut send, request).await?;
+        send.finish()?;
+        let (kind, size, sent) =
+            match read_frame(&mut recv).await?.context("The server closed the stream without answering.")? {
+                Message::File { kind, size, sent } => (kind, size, sent),
+                Message::Error { message } => bail!("{message}"),
+                other => bail!("Unexpected answer to a file request: {other:?}"),
+            };
+        if sent > MAX_FILE_BYTES {
+            bail!("The file is too large to show.");
+        }
+        let mut bytes = vec![0; sent as usize];
+        recv.read_exact(&mut bytes).await.context("The file was cut off.")?;
+        Ok((kind, size, bytes))
     }
 
     /// Fetches the server's copy of an image or a video into `file`, telling `progress` how many

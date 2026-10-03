@@ -20,6 +20,14 @@ final class TranscriptModel {
 
     var isEmpty: Bool { rows.isEmpty && pending == nil }
 
+    /// The turns that changed files, the first one first.
+    var turns: [TurnChange] {
+        rows.compactMap { row in
+            guard case .changes(let content) = row.kind else { return nil }
+            return TurnChange(id: row.itemID, at: content.at, files: content.files)
+        }
+    }
+
     func attach(_ hooks: Hooks, owner: AnyObject) {
         self.hooks = hooks
         self.owner = ObjectIdentifier(owner)

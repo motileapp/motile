@@ -15,6 +15,8 @@ final class TranscriptView: FlippedView, RowOwner {
     /// A queued message is to be given to the agent now, or taken back.
     var onSendQueued: ((String) -> Void)?
     var onCancelQueued: ((String) -> Void)?
+    /// The diff of the turn that ended with the item is to be shown, with a file in view.
+    var onOpenDiff: ((String, String?) -> Void)?
 
     /// Room left under the last row for what floats over the transcript's end.
     var bottomInset: CGFloat = 0 {
@@ -447,6 +449,7 @@ final class TranscriptView: FlippedView, RowOwner {
         case is ToolRowView: "tool"
         case is MediaRowView: "media"
         case is ErrorRowView: "error"
+        case is ChangesRowView: "changes"
         case is QueuedRowView: "queued"
         default: "turnEnd"
         }
@@ -653,6 +656,14 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     func sendQueued(messageID: String) { onSendQueued?(messageID) }
+
+    func toggleFolder(id: String, rowID: String) {
+        guard let index = rows.firstIndex(where: { $0.id == rowID }) else { return }
+        toggled = Anchor(id: rowID, delta: scrollView.contentView.bounds.minY - Self.topPadding - offsets[index])
+        onToggleRow?(id)
+    }
+
+    func openDiff(turn itemID: String, path: String?) { onOpenDiff?(itemID, path) }
 
     func cancelQueued(messageID: String) { onCancelQueued?(messageID) }
 

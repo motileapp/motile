@@ -9,6 +9,8 @@ struct ThreadPane: View {
     /// How far the title starts from the pane's left edge: past the window's buttons when the
     /// sidebar is hidden.
     var titleInset: CGFloat = 20
+    /// The side panel is beside the pane, so the window's last button isn't over it.
+    var besidePanel = false
 
     private var isStart: Bool {
         guard let draft = store.selectedDraft else { return false }
@@ -35,20 +37,8 @@ struct ThreadPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topLeading) { title }
+        .overlay(alignment: .topLeading) { topBar }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
-        .toolbar {
-            // Without a title in the toolbar, this is what keeps the button at the right.
-            ToolbarItem {
-                Spacer()
-            }
-            ToolbarItem(placement: .primaryAction) {
-                if let project = store.gitProject, let control = project.gitControl {
-                    GitButton(project: project, control: control)
-                }
-            }
-            .withoutSystemGlass()
-        }
         .sheet(item: $store.committingProject) { project in
             CommitSheet(project: project)
         }
@@ -71,30 +61,42 @@ struct ThreadPane: View {
     /// The room above the composer, which the transcript fades out in.
     static let composerGap: CGFloat = 24
 
-    /// The thread's project and name, drawn in the window's top bar over this pane.
-    private var title: some View {
+    /// The thread's project and name and its git button, drawn in the window's top bar over
+    /// this pane.
+    private var topBar: some View {
         GeometryReader { proxy in
-            VStack(alignment: .leading, spacing: 2) {
-                if let projectLine {
-                    HStack(spacing: 6) {
-                        ProjectIcon(project: titleProject, size: 14)
-                        Text(projectLine)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Color.themeSecondary)
-                    }
+            HStack(spacing: 8) {
+                title
+                    .allowsHitTesting(false)
+                Spacer(minLength: 0)
+                if let project = store.gitProject, let control = project.gitControl {
+                    GitButton(project: project, control: control)
                 }
-                Text(store.selectedThread?.title ?? "New thread")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.themeText)
             }
-            .lineLimit(1)
             .padding(.leading, titleInset)
-            .padding(.trailing, store.gitProject?.gitControl == nil ? 28 : 218)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Room for the button that shows the side panel, which is at the window's edge.
+            .padding(.trailing, besidePanel ? 4 : ToolbarButton.width + 12)
+            .frame(maxWidth: .infinity)
             .frame(height: proxy.safeAreaInsets.top)
             .offset(y: -proxy.safeAreaInsets.top)
         }
-        .allowsHitTesting(false)
+    }
+
+    private var title: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let projectLine {
+                HStack(spacing: 6) {
+                    ProjectIcon(project: titleProject, size: 14)
+                    Text(projectLine)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.themeSecondary)
+                }
+            }
+            Text(store.selectedThread?.title ?? "New thread")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.themeText)
+        }
+        .lineLimit(1)
     }
 
     private var titleProject: Project? {

@@ -320,6 +320,33 @@ private final class Demo {
             store.dismissGitNotice()
         }
 
+        // What a turn changed in its folder is listed under its reply, and opens beside the
+        // thread as a diff, next to the folder's files.
+        store.startNewThread()
+        send("Greet by name.")
+        await expect("the files a turn changed are listed under its reply") {
+            turnEnded && store.transcript.rows.contains { $0.kindName == "changes" }
+        }
+        await shoot("07-changes")
+        if let turn = store.sidePanel.turns.last {
+            store.sidePanel.showDiff(.turn(turn.id), revealing: "greet.py")
+            await expect("the turn's diff opens beside the thread, highlighted") {
+                let files = store.sidePanel.diff.value?.files ?? []
+                return files.count == 2 && files.contains { !$0.spans.isEmpty }
+            }
+            await shoot("07-diff")
+            store.sidePanel.open(.files)
+            await expect("the folder the thread works in is listed") { store.sidePanel.nodes.contains { $0.name == "greet.py" } }
+            store.sidePanel.open(.file("greet.py"))
+            await expect("a file of the folder opens in a tab of its own") {
+                guard case .text(let document, _) = store.sidePanel.contents["greet.py"]?.value else { return false }
+                return document.files.first?.lines.first == "def greet(name):"
+            }
+            await shoot("07-file")
+            store.sidePanel.closeAll()
+            store.sidePanel.isOpen = false
+        }
+
         // A long reply full of code, to see that the window keeps up.
         store.startNewThread()
         store.setAccess(.full)
@@ -455,7 +482,7 @@ private final class Demo {
         func scrollViews(in view: NSView) -> [NSScrollView] {
             ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
         }
-        guard let content = window?.contentView else { return nil }
+        guard let content = transcriptView else { return nil }
         return scrollViews(in: content).max {
             ($0.documentView?.frame.height ?? 0) < ($1.documentView?.frame.height ?? 0)
         }
@@ -518,6 +545,7 @@ extension RowModel {
         case .group: "group"
         case .fold: "fold"
         case .error: "error"
+        case .changes: "changes"
         case .turnEnd: "turn_end"
         case .queued: "queued"
         }
