@@ -43,6 +43,7 @@ enum Theme {
 
     // Meaning
     static let primary = dynamic(hex(0x2a5bd7), hex(0x4f7cff))
+    static let primaryHover = dynamic(hex(0x2a5bd7, alpha: 0.1), hex(0x4f7cff, alpha: 0.18))
     static let link = dynamic(hex(0x1d4ed8), hex(0x7aa2ff))
     static let danger = dynamic(hex(0xc62828), hex(0xff7b72))
     static let dangerBackground = dynamic(hex(0xdc2626, alpha: 0.07), hex(0xff5c5c, alpha: 0.1))
@@ -115,6 +116,7 @@ extension Color {
     static let themeSecondary = Color(nsColor: Theme.secondary)
     static let themeTertiary = Color(nsColor: Theme.tertiary)
     static let themePrimary = Color(nsColor: Theme.primary)
+    static let themePrimaryHover = Color(nsColor: Theme.primaryHover)
     static let themeDanger = Color(nsColor: Theme.danger)
     static let themeWarning = Color(nsColor: Theme.warning)
     static let themeSuccess = Color(nsColor: Theme.success)

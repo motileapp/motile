@@ -72,6 +72,10 @@ struct SidebarView: View {
                 }
                 .padding(.vertical, 4 - rowGap / 2)
             }
+            if let undo = store.undo {
+                UndoRow(notice: undo)
+                    .transition(.opacity)
+            }
             if !done.isEmpty {
                 DoneShelf(
                     threads: done,
@@ -84,6 +88,7 @@ struct SidebarView: View {
             SidebarFooter()
         }
         .clipped()
+        .animation(.easeOut(duration: 0.15), value: store.undo)
     }
 
     /// Whether the thread's title or project matches what is being searched for.
@@ -318,6 +323,45 @@ private struct DraftRow: View {
     }
 }
 
+/// The offer to undo marking threads done: a line above the done threads.
+private struct UndoRow: View {
+    @Environment(AppStore.self) private var store
+    let notice: UndoNotice
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Button {
+                store.performUndo()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 14)
+                    Text("Undo")
+                        .font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(notice.text)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(Color.themeSuccess)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 18)
+                .frame(height: DoneShelf.rowHeight)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverHighlight(radius: 0)
+        }
+    }
+}
+
 /// The threads marked done, at the bottom of the sidebar: a line that opens into their list.
 private struct DoneShelf: View {
     static let rowHeight = 30.0
@@ -504,7 +548,7 @@ private struct ThreadStatus: View {
     }
 }
 
-/// The servers and how the app reaches them, the account, and the offer to undo.
+/// The servers and how the app reaches them, and the account.
 private struct SidebarFooter: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openSettings) private var openSettings
@@ -515,17 +559,6 @@ private struct SidebarFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             AppUpdateRow(updater: store.updater)
-            if let undo = store.undo {
-                HStack(spacing: 6) {
-                    Text(undo.text)
-                        .foregroundStyle(.secondary)
-                    Button("Undo") { store.performUndo() }
-                        .buttonStyle(.link)
-                    Spacer()
-                }
-                .font(.system(size: 12))
-                .transition(.opacity)
-            }
             ForEach(store.servers) { server in
                 HStack(spacing: 7) {
                     Circle()
@@ -579,7 +612,6 @@ private struct SidebarFooter: View {
         .padding(.top, 10)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.easeOut(duration: 0.15), value: store.undo)
     }
 
     private func color(of server: Server) -> Color {

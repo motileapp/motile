@@ -102,6 +102,8 @@ struct ComposerView: View {
         return "Ask anything, or describe what to build"
     }
 
+    private static let undoneButtonPadding = 9.0
+
     private func doneBanner(_ thread: ThreadInfo) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle")
@@ -111,11 +113,23 @@ struct ComposerView: View {
             Text("Send a message to bring it back.")
                 .foregroundStyle(Color.themeSecondary)
             Spacer()
-            Button("Mark Undone") { store.setDone([thread.id], done: false) }
-                .buttonStyle(.link)
+            Button {
+                store.setDone([thread.id], done: false)
+            } label: {
+                Text("Mark Undone")
+                    .fontWeight(.medium)
+                    .foregroundStyle(Color.themePrimary)
+                    .padding(.horizontal, Self.undoneButtonPadding)
+                    .frame(height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverHighlight(radius: 7, color: .themePrimaryHover)
+            .padding(.vertical, -4)
         }
         .font(.system(size: 12.5))
-        .padding(.horizontal, 16)
+        .padding(.leading, 16)
+        .padding(.trailing, 16 - Self.undoneButtonPadding)
         .padding(.top, 12)
     }
 

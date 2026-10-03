@@ -6,6 +6,7 @@ private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
     let inset: EdgeInsets
+    let color: Color
     @State private var hovering = false
 
     func body(content: Content) -> some View {
@@ -20,13 +21,13 @@ private struct HoverHighlight: ViewModifier {
 
     private var fill: Color {
         if selected { return Color.themeSelected }
-        return hovering ? Color.themeHover : Color.clear
+        return hovering ? color : Color.clear
     }
 }
 
 extension View {
-    func hoverHighlight(radius: CGFloat = 7, selected: Bool = false, inset: EdgeInsets = EdgeInsets()) -> some View {
-        modifier(HoverHighlight(radius: radius, selected: selected, inset: inset))
+    func hoverHighlight(radius: CGFloat = 7, selected: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover) -> some View {
+        modifier(HoverHighlight(radius: radius, selected: selected, inset: inset, color: color))
     }
 }
 
