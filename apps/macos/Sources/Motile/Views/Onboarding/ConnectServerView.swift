@@ -53,8 +53,7 @@ struct ConnectServerView: View {
                 Spacer()
                 HStack(spacing: 6) {
                     Text("Signed in as \(store.account.email)")
-                    Button("Sign out") { store.signOut() }
-                        .buttonStyle(.link)
+                    LinkButton("Sign out") { store.signOut() }
                 }
                 .font(.system(size: 12))
                 .foregroundStyle(Color.themeTertiary)
