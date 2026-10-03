@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 // What the core sends, read from its JSON. The shapes are defined in crates/core/src/api.rs and
 // crates/protocol/src/wire.rs.
@@ -498,12 +499,117 @@ struct QueuedMessage: Equatable, Identifiable {
     let text: String
     /// The files attached to it, as paths on the server.
     let attachments: [String]
+    /// The images and videos among them, by their path.
+    let media: [String: AttachedFile]
 
     init(json: JSON) {
         id = json.string("id")
         text = json.string("text")
         attachments = json.strings("attachments")
+        let shown = json.objects("media").map { media in
+            let file = AttachedFile(name: "", media: media.string("id"), video: media.bool("video"), poster: media.optionalString("poster"))
+            return (media.string("src"), file)
+        }
+        media = Dictionary(shown, uniquingKeysWith: { first, _ in first })
     }
+}
+
+/// A file attached to a message, as the transcript shows it. An image or a video names the file
+/// the core has it under, and a video the image that stands for it until it plays.
+struct AttachedFile: Equatable {
+    let name: String
+    let media: String?
+    let video: Bool
+    let poster: String?
+
+    /// The image a tile of it shows.
+    var picture: String? { video ? poster : media }
+}
+
+extension AttachedFile {
+    init(json: JSON) {
+        self.init(name: json.string("name"), media: json.optionalString("media"), video: json.bool("video"), poster: json.optionalString("poster"))
+    }
+}
+
+/// A file in the composer: on its way to the server, or there and ready to be sent.
+struct Attachment: Equatable, Identifiable {
+    enum State: Equatable {
+        case uploading(Double)
+        case ready
+        case failed(String)
+    }
+
+    let id: String
+    /// Where it is on this Mac. A file that came back from a queued message is only on its server.
+    let file: URL?
+    let name: String
+    let bytes: Int64?
+    let video: Bool
+    /// Shown as a tile with its picture, not by its name.
+    let pictured: Bool
+    var serverID: String
+    var state: State
+    /// Where it is on the server, once it is there.
+    var path: String?
+    var media: String?
+    var poster: String?
+
+    init(file: URL, serverID: String) {
+        id = UUID().uuidString
+        self.file = file
+        name = file.lastPathComponent
+        bytes = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+        let type = UTType(filenameExtension: file.pathExtension)
+        video = type?.conforms(to: .movie) == true
+        pictured = video || type?.conforms(to: .image) == true
+        self.serverID = serverID
+        state = .uploading(0)
+    }
+
+    init(path: String, shown: AttachedFile?, serverID: String) {
+        id = UUID().uuidString
+        file = nil
+        name = (path as NSString).lastPathComponent
+        bytes = nil
+        video = shown?.video == true
+        pictured = shown != nil
+        self.serverID = serverID
+        state = .ready
+        self.path = path
+        media = shown?.media
+        poster = shown?.poster
+    }
+
+    var attached: AttachedFile {
+        AttachedFile(name: name, media: media, video: media != nil && video, poster: poster)
+    }
+
+    var viewed: ViewedMedia? {
+        if let file { return ViewedMedia(name: name, video: video, source: .file(file)) }
+        return media.map { ViewedMedia(name: name, video: video, source: .media($0)) }
+    }
+}
+
+/// An image or a video the viewer shows: a file on this Mac, or one the core has or fetches.
+struct ViewedMedia: Equatable {
+    enum Source: Equatable {
+        case file(URL)
+        case media(String)
+    }
+
+    let name: String
+    let video: Bool
+    let source: Source
+}
+
+/// What the viewer has open: the images and videos of one message or of the composer, and
+/// which of them is shown.
+struct Viewing: Equatable {
+    let items: [ViewedMedia]
+    var index: Int
+
+    var item: ViewedMedia { items[index] }
 }
 
 /// A tool call the turn waits with until the user has answered it.

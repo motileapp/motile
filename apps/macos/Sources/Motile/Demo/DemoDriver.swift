@@ -395,6 +395,7 @@ private final class Demo {
         store.startNewThread()
         store.draft = "Why is the sync slow on large threads?\n\nLook at how the server answers `Open` first:\n- what it reads from SQLite\n- how many items it sends"
         store.attach([URL(fileURLWithPath: "/tmp/motile-demo/api/greet.py")])
+        await expect("an attached file is on the server before its message is sent") { store.attachments.first?.state == .ready && store.canSend }
         await shoot("12-dark-new-thread")
 
         // A new thread that was written in stays in the sidebar as a draft until it is sent or discarded.

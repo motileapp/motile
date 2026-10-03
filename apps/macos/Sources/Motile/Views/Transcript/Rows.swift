@@ -4,7 +4,7 @@ import AppKit
 /// here, off the main thread, so showing a row costs the main thread nothing but drawing.
 final class RowModel {
     enum Kind {
-        case user(text: NSAttributedString, attachments: [String])
+        case user(text: NSAttributedString, attachments: [AttachedFile])
         /// `above` is the space it keeps from the row above it. `uncoloured` when code inside it
         /// still waits for highlighting.
         case prose(NSAttributedString, above: CGFloat, uncoloured: Bool)
@@ -38,7 +38,7 @@ final class RowModel {
         nested = json.bool("nested")
         switch json.string("kind") {
         case "user":
-            kind = .user(text: Typesetter.plain(json.string("text"), color: Theme.text), attachments: json.strings("attachments"))
+            kind = .user(text: Typesetter.plain(json.string("text"), color: Theme.text), attachments: json.objects("attachments").map(AttachedFile.init(json:)))
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
             kind = .prose(Typesetter.prose(json), above: Typesetter.spaceAbove(json), uncoloured: uncoloured)
@@ -66,8 +66,8 @@ final class RowModel {
     }
 
     /// A user message shown the moment it is sent, before the server has it.
-    static func pending(text: String) -> RowModel {
-        RowModel(id: "pending", itemID: "pending", kind: .user(text: Typesetter.plain(text, color: Theme.text), attachments: []))
+    static func pending(text: String, attachments: [AttachedFile]) -> RowModel {
+        RowModel(id: "pending", itemID: "pending", kind: .user(text: Typesetter.plain(text, color: Theme.text), attachments: attachments))
     }
 
     /// The plain text of the row, for copying a whole reply.
@@ -221,7 +221,7 @@ struct FoldContent {
 /// A message that waits for the agent to take it. The row's item is the message.
 struct QueuedContent {
     let text: NSAttributedString
-    let attachments: [String]
+    let attachments: [AttachedFile]
     /// How it waits: queued, held, or being given to the agent.
     let status: String
     /// The agent is being given it, so it can no longer be sent now or taken back.
@@ -229,7 +229,7 @@ struct QueuedContent {
 
     init(json: JSON) {
         text = Typesetter.plain(json.string("text"), color: Theme.prose)
-        attachments = json.strings("attachments")
+        attachments = json.objects("attachments").map(AttachedFile.init(json:))
         status = json.string("status")
         sending = json.bool("sending")
     }

@@ -6,6 +6,7 @@ pub mod auth_api;
 pub mod auth_client;
 pub mod frame;
 pub mod identity;
+pub mod media;
 #[cfg(feature = "auth-client")]
 pub mod tls;
 pub mod wire;

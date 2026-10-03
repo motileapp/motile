@@ -173,25 +173,20 @@ struct ComposerView: View {
 
     private var attachments: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(store.attachments, id: \.self) { path in
-                    HStack(spacing: 5) {
-                        Image(systemName: "doc")
-                        Text(URL(fileURLWithPath: path).lastPathComponent)
-                            .lineLimit(1)
-                        IconOnlyButton(symbol: "xmark", help: "Remove", size: 18, symbolSize: 10) {
-                            store.attachments.removeAll { $0 == path }
-                        }
+            HStack(alignment: .bottom, spacing: 8) {
+                let pictured = store.attachments.filter(\.pictured)
+                ForEach(pictured) { attachment in
+                    AttachmentTile(attachment: attachment) {
+                        store.view(pictured.compactMap(\.viewed), at: pictured.firstIndex(of: attachment) ?? 0)
                     }
-                    .font(.system(size: 12))
-                    .padding(.leading, 9)
-                    .padding([.vertical, .trailing], 5)
-                    .background(Color.themeBubble, in: Capsule())
+                }
+                ForEach(store.attachments.filter { !$0.pictured }) { attachment in
+                    AttachmentChip(attachment: attachment)
                 }
             }
             .padding(.horizontal, 14)
+            .padding(.top, 12)
         }
-        .padding(.top, 12)
     }
 
     /// The row under the text. When it is too narrow for all of it, the model and the access
@@ -366,7 +361,7 @@ struct ComposerView: View {
             }
             .buttonStyle(SendButtonStyle())
             .disabled(!store.canSend)
-            .help(running ? "Queue message" : "Send")
+            .help(store.attachmentsHold ?? (running ? "Queue message" : "Send"))
         }
     }
 

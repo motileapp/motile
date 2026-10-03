@@ -19,6 +19,7 @@ struct TranscriptRepresentable: NSViewRepresentable {
             store.core.send("toggle_row", ["thread_id": threadID, "row_id": rowID])
         }
         view.onNeedMedia = { id, done in store.media(id, done: done) }
+        view.onViewMedia = { media, index in store.view(media, at: index) }
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
         let hooks = TranscriptModel.Hooks(

@@ -130,7 +130,14 @@ async fn serve(
     let executables = HashMap::from([(Agent::Claude, fake_agent.clone()), (Agent::Codex, fake_agent)]);
     let environment = Environment::fixed(variables.clone(), executables);
     let store = Store::open(&dir.path().join("motile.sqlite")).unwrap();
-    let hub = Hub::new(store, dir.path().join("media"), dir.path().join("worktrees"), environment).unwrap();
+    let hub = Hub::new(
+        store,
+        dir.path().join("media"),
+        dir.path().join("attachments"),
+        dir.path().join("worktrees"),
+        environment,
+    )
+    .unwrap();
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
@@ -1686,4 +1693,62 @@ async fn an_image_the_agent_shows_is_kept_as_it_was_and_goes_with_its_thread() {
     let delete = Request::Delete { thread_id: thread_id.clone() };
     assert_eq!(connection.request(&delete).await.unwrap(), Message::Ok);
     assert!(!kept.exists());
+}
+
+#[tokio::test]
+async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thread() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let local = harness.dir.path().join("local");
+    std::fs::create_dir_all(&local).unwrap();
+    // The start of a PNG that is 640 by 400; enough to read its size from.
+    let mut png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR".to_vec();
+    png.extend([0, 0, 2, 128, 0, 0, 1, 144, 8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    for (name, bytes) in [("shot.png", &png[..]), ("demo.mov", b"a video"), ("notes.txt", b"notes")] {
+        std::fs::write(local.join(name), bytes).unwrap();
+    }
+
+    let mut progress = Vec::new();
+    let (shot, shot_id) =
+        connection.upload(&local.join("shot.png"), None, |sent, size| progress.push((sent, size))).await.unwrap();
+    assert_eq!(progress.last(), Some(&(png.len() as u64, png.len() as u64)));
+    let (video, video_id) = connection.upload(&local.join("demo.mov"), None, |_, _| {}).await.unwrap();
+    let (poster, poster_id) = connection.upload(&local.join("shot.png"), Some(video.clone()), |_, _| {}).await.unwrap();
+    let (notes, notes_id) = connection.upload(&local.join("notes.txt"), None, |_, _| {}).await.unwrap();
+    let (unsent, _) = connection.upload(&local.join("notes.txt"), None, |_, _| {}).await.unwrap();
+    assert_eq!(notes_id, None);
+
+    let attachments = vec![shot.clone(), video.clone(), notes.clone()];
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let request = Request::Send { thread_id: None, new_thread, text: "Look".to_string(), attachments };
+    let Message::Sent { thread_id } = connection.request(&request).await.unwrap() else { panic!("not sent") };
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    // The app that sent the files named their contents the way the server did.
+    let message = &transcript.items[0];
+    let shown: Vec<_> =
+        message.media.iter().map(|media| (media.src.as_str(), Some(&media.id), media.poster.as_ref())).collect();
+    assert_eq!(
+        shown,
+        vec![(shot.as_str(), shot_id.as_ref(), None), (video.as_str(), video_id.as_ref(), poster_id.as_ref())]
+    );
+    assert_eq!((message.media[1].width, message.media[1].height), (Some(640), Some(400)));
+
+    let gone = Request::Send {
+        thread_id: None,
+        new_thread: None,
+        text: String::new(),
+        attachments: vec![poster.clone() + "x"],
+    };
+    assert!(matches!(connection.request(&gone).await.unwrap(), Message::Error { .. }));
+
+    let kept = harness.dir.path().join("media").join(shot_id.unwrap());
+    assert!(kept.is_file());
+    let delete = Request::Delete { thread_id: thread_id.clone() };
+    assert_eq!(connection.request(&delete).await.unwrap(), Message::Ok);
+    assert!(!kept.exists());
+    for path in [&shot, &video, &poster, &notes] {
+        assert!(!Path::new(path).exists(), "{path} went with its thread");
+    }
+    assert!(Path::new(&unsent).exists(), "a file that was never sent waits for its message");
 }

@@ -8,12 +8,12 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, bail};
 use iroh::endpoint::{ConnectionError, RecvStream, presets};
 use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
-use motile_protocol::ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{Message, Request};
+use motile_protocol::{ALPN, media};
 use serde::Serialize;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// A server's key, optionally with an address to reach it at directly: `key` or `key@ip:port`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -132,19 +132,43 @@ impl Connection {
         Ok(Follow { recv })
     }
 
-    /// Sends a file to the server and returns its path there.
-    pub async fn upload(&self, path: &Path) -> anyhow::Result<String> {
+    /// Sends a file to the server, telling `progress` how many of its bytes have gone. Returns
+    /// its path there, and the name the server gives its contents if it is an image or a video.
+    pub async fn upload(
+        &self,
+        path: &Path,
+        poster_of: Option<String>,
+        mut progress: impl FnMut(u64, u64),
+    ) -> anyhow::Result<(String, Option<String>)> {
         let name = path.file_name().and_then(|name| name.to_str()).context("The attachment needs a file name.")?;
         let mut file =
             tokio::fs::File::open(path).await.with_context(|| format!("{} can't be read.", path.display()))?;
         let size = file.metadata().await?.len();
+        // The server keeps every poster as a JPEG.
+        let poster = poster_of.as_ref().map(|_| ("jpg".to_string(), false));
+        let shown = poster.or_else(|| media::kind(path)).filter(|_| size > 0 && size <= media::MAX_SIZE);
 
         let (mut send, mut recv) = self.inner.open_bi().await?;
-        write_frame(&mut send, &Request::Upload { name: name.to_string(), size }).await?;
-        tokio::io::copy(&mut file, &mut send).await?;
+        write_frame(&mut send, &Request::Upload { name: name.to_string(), size, poster_of }).await?;
+        let mut namer = media::Namer::default();
+        let mut buffer = vec![0u8; 64 * 1024];
+        let mut sent = 0;
+        while sent < size {
+            let read = file.read(&mut buffer).await?;
+            if read == 0 {
+                bail!("{} changed while it was sent.", path.display());
+            }
+            send.write_all(&buffer[..read]).await?;
+            if shown.is_some() {
+                namer.update(&buffer[..read]);
+            }
+            sent += read as u64;
+            progress(sent, size);
+        }
         send.finish()?;
+        let media_id = shown.map(|(extension, _)| namer.id(&extension));
         match read_frame(&mut recv).await?.context("The server closed the stream without answering.")? {
-            Message::Uploaded { path } => Ok(path),
+            Message::Uploaded { path } => Ok((path, media_id)),
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to an upload: {other:?}"),
         }

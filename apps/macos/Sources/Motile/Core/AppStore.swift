@@ -142,10 +142,9 @@ final class AppStore {
     /// Unknown until Settings asks for it.
     private(set) var mediaStorage: MediaStorage?
     private var drafts: [String: String] = [:]
-    private var attachmentsByKey: [String: [String]] = [:]
-    /// The attached files that are on their server already: those of a queued message that was
-    /// taken back.
-    private var uploaded: Set<String> = []
+    private var attachmentsByKey: [String: [Attachment]] = [:]
+    /// The images and videos the viewer has open over the window.
+    private(set) var viewing: Viewing?
 
     let updater = AppUpdater()
     @ObservationIgnored let core = CoreBridge()
@@ -229,6 +228,15 @@ final class AppStore {
             return { [weak self] in
                 guard self?.gitStages[projectID] != nil else { return }
                 self?.gitStages[projectID] = stage
+            }
+        case "upload_progress":
+            let (key, sent, size) = (event.string("key"), event.double("sent"), event.double("size"))
+            guard size > 0 else { return nil }
+            return { [weak self] in
+                self?.changeAttachment(key) { attachment in
+                    guard case .uploading = attachment.state else { return }
+                    attachment.state = .uploading(sent / size)
+                }
             }
         case "media_progress":
             let (id, received, size) = (event.string("id"), event.double("received"), event.double("size"))
@@ -451,10 +459,7 @@ final class AppStore {
         set { setText(newValue, for: draftKey) }
     }
 
-    var attachments: [String] {
-        get { attachmentsByKey[draftKey] ?? [] }
-        set { attachmentsByKey[draftKey] = newValue.isEmpty ? nil : newValue }
-    }
+    var attachments: [Attachment] { attachmentsByKey[draftKey] ?? [] }
 
     private func setText(_ text: String, for key: String) {
         drafts[key] = text.isEmpty ? nil : text
@@ -1044,6 +1049,7 @@ final class AppStore {
             $0.projectID = id
             $0.base = nil
         }
+        uploadToComposerServer()
         readGit(fetch: true)
     }
 
@@ -1059,16 +1065,24 @@ final class AppStore {
     var canSend: Bool {
         guard !sendingDraftIDs.contains(draftKey), let server = composerServer, server.state == .connected else { return false }
         if selectedThread == nil && project(selectedDraft?.projectID) == nil { return false }
+        guard attachments.allSatisfy({ $0.state == .ready && $0.serverID == server.id }) else { return false }
         return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+    }
+
+    /// Why a message with these attachments can't be sent yet.
+    var attachmentsHold: String? {
+        if attachments.contains(where: { if case .failed = $0.state { true } else { false } }) {
+            return "Try the attachment that failed again, or remove it"
+        }
+        return attachments.contains { $0.state != .ready } ? "Waiting for the attachments to upload" : nil
     }
 
     func send() {
         guard canSend else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let attached = attachments
-        let files = attached.filter { !uploaded.contains($0) }
         let key = draftKey
-        var command: JSON = ["text": text, "files": files, "attachments": attached.filter { uploaded.contains($0) }]
+        var command: JSON = ["text": text, "attachments": attached.compactMap(\.path)]
         let existing = selectedThread
         if let thread = existing {
             command["server_id"] = thread.serverID
@@ -1095,8 +1109,8 @@ final class AppStore {
         }
         let serverID = command.string("server_id")
         draft = ""
-        attachments = []
-        transcript.setPending(text)
+        attachmentsByKey[key] = nil
+        transcript.setPending(text, attachments: attached.map(\.attached))
         transcriptIsEmpty = false
 
         core.send("send", command) { [weak self] result in
@@ -1139,8 +1153,8 @@ final class AppStore {
     /// The file of an image or a video the open thread shows. The core fetches it from the
     /// thread's server if this Mac doesn't have it.
     func media(_ id: String, done: @escaping (URL?) -> Void) {
-        guard let thread = selectedThread else { return done(nil) }
-        core.send("media", ["server_id": thread.serverID, "media_id": id]) { result in
+        guard let serverID = selectedThread?.serverID ?? composerServer?.id else { return done(nil) }
+        core.send("media", ["server_id": serverID, "media_id": id]) { result in
             guard case .success(let value) = result, let path = value["path"] as? String else { return done(nil) }
             done(URL(fileURLWithPath: path))
         }
@@ -1186,8 +1200,8 @@ final class AppStore {
             guard let self else { return }
             let written = [self.drafts[key] ?? "", message.text].filter { !$0.isEmpty }
             self.setText(written.joined(separator: "\n\n"), for: key)
-            self.uploaded.formUnion(message.attachments)
-            let attached = (self.attachmentsByKey[key] ?? []) + message.attachments.filter { !(self.attachmentsByKey[key] ?? []).contains($0) }
+            let back = message.attachments.map { Attachment(path: $0, shown: message.media[$0], serverID: thread.serverID) }
+            let attached = (self.attachmentsByKey[key] ?? []) + back
             self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
             self.composerFocus += 1
         })
@@ -1308,10 +1322,122 @@ final class AppStore {
 
     // MARK: Attachments
 
+    /// Adds the files to what is being written and starts sending them to its server, so they
+    /// are there when the message is sent.
     func attach(_ urls: [URL]) {
-        for url in urls where url.isFileURL && !attachments.contains(url.path) {
-            attachments.append(url.path)
+        guard let server = composerServer else { return }
+        let key = draftKey
+        for url in urls where url.isFileURL && !attachments.contains(where: { $0.file == url }) {
+            let attachment = Attachment(file: url, serverID: server.id)
+            attachmentsByKey[key, default: []].append(attachment)
+            upload(attachment.id)
         }
+    }
+
+    func removeAttachment(_ id: String) {
+        if case .uploading = attachments.first(where: { $0.id == id })?.state {
+            core.send("cancel_upload", ["key": id])
+        }
+        attachmentsByKey[draftKey]?.removeAll { $0.id == id }
+        if attachmentsByKey[draftKey]?.isEmpty == true { attachmentsByKey[draftKey] = nil }
+    }
+
+    func retryAttachment(_ id: String) {
+        upload(id)
+    }
+
+    private func changeAttachment(_ id: String, _ change: (inout Attachment) -> Void) {
+        for (key, attached) in attachmentsByKey {
+            guard let index = attached.firstIndex(where: { $0.id == id }) else { continue }
+            change(&attachmentsByKey[key]![index])
+            return
+        }
+    }
+
+    private func upload(_ id: String) {
+        guard let attachment = attachmentsByKey.values.joined().first(where: { $0.id == id }), let file = attachment.file else { return }
+        let serverID = attachment.serverID
+        changeAttachment(id) { $0.state = .uploading(0) }
+        core.send("upload", ["server_id": serverID, "key": id, "file": file.path]) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(let error):
+                self.changeAttachment(id) { attachment in
+                    // An upload that was stopped to go to another server is on its way there.
+                    guard attachment.serverID == serverID else { return }
+                    attachment.state = .failed(error.message)
+                }
+            case .success(let value):
+                let (path, media) = (value.string("path"), value.optionalString("media"))
+                self.changeAttachment(id) {
+                    $0.path = path
+                    $0.media = media
+                }
+                guard attachment.video, media != nil else { return self.changeAttachment(id) { $0.state = .ready } }
+                self.uploadPoster(of: id, file: file, path: path, serverID: serverID)
+            }
+        }
+    }
+
+    /// Sends the first frame of a video after it, which stands for it wherever it isn't played.
+    /// A video without one is sent all the same.
+    private func uploadPoster(of id: String, file: URL, path: String, serverID: String) {
+        let ready = { [weak self] (poster: String?) in
+            self?.changeAttachment(id) { attachment in
+                guard attachment.path == path else { return }
+                attachment.poster = poster
+                attachment.state = .ready
+            }
+            return
+        }
+        Pictures.firstFrame(file, id: "poster:\(id)", maxPixels: 1280) { [weak self] image in
+            guard let self, let image else { return ready(nil) }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let poster = Pictures.writeJPEG(image)
+                DispatchQueue.main.async {
+                    guard let poster else { return ready(nil) }
+                    let upload: JSON = ["server_id": serverID, "key": "\(id).poster", "file": poster.path, "poster_of": path]
+                    self.core.send("upload", upload) { result in
+                        try? FileManager.default.removeItem(at: poster)
+                        guard case .success(let value) = result else { return ready(nil) }
+                        ready(value.optionalString("media"))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Sends the open draft's files again when its project is on another server than they are.
+    private func uploadToComposerServer() {
+        guard let server = composerServer else { return }
+        for attachment in attachments where attachment.serverID != server.id && attachment.file != nil {
+            core.send("cancel_upload", ["key": attachment.id])
+            changeAttachment(attachment.id) {
+                $0.serverID = server.id
+                $0.path = nil
+                $0.media = nil
+                $0.poster = nil
+            }
+            upload(attachment.id)
+        }
+    }
+
+    // MARK: Viewer
+
+    func view(_ media: [ViewedMedia], at index: Int) {
+        guard media.indices.contains(index) else { return }
+        viewing = Viewing(items: media, index: index)
+    }
+
+    /// Shows the image or video before or after the one that is shown, around the ends.
+    func viewNext(_ step: Int) {
+        guard let count = viewing?.items.count, count > 1, let index = viewing?.index else { return }
+        viewing?.index = (index + step + count) % count
+    }
+
+    func closeViewer() {
+        viewing = nil
+        composerFocus += 1
     }
 
     /// Attaches what was dropped on the window: files, and images that aren't files yet.
