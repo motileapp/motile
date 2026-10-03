@@ -164,11 +164,13 @@ struct PullRequest: Equatable {
     let number: Int
     let title: String
     let url: String
+    let merged: Bool
 
     init(json: JSON) {
         number = json.int("number")
         title = json.string("title")
         url = json.string("url")
+        merged = json.bool("merged")
     }
 }
 

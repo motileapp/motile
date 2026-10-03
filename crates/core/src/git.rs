@@ -63,9 +63,8 @@ fn quick(status: &GitStatus) -> Quick {
     };
     let off =
         |label: &str, hint: &str| Quick { label: label.to_string(), hint: Some(hint.to_string()), ..Quick::default() };
-    let has_pull_request = status.pull_request.is_some();
     // Without `gh` a pull request can't be opened, so the branch is only pushed.
-    let pushes_only = has_pull_request || status.default || !status.pull_requests;
+    let pushes_only = has_open_pull_request(status) || status.default || !status.pull_requests;
 
     if status.branch.is_none() {
         return off("Commit", "Check out a branch before pushing or opening a pull request.");
@@ -110,6 +109,10 @@ fn quick(status: &GitStatus) -> Quick {
     off("Commit", UP_TO_DATE)
 }
 
+fn has_open_pull_request(status: &GitStatus) -> bool {
+    status.pull_request.as_ref().is_some_and(|pull_request| !pull_request.merged)
+}
+
 fn menu(status: &GitStatus) -> Vec<Item> {
     let item = |label: &str, action, reason: Option<&str>| Item {
         label: label.to_string(),
@@ -135,9 +138,13 @@ fn menu(status: &GitStatus) -> Vec<Item> {
         None
     };
     let push = item("Push", GitAction::Push, push_reason);
-    if status.pull_request.is_some() {
+    if has_open_pull_request(status) {
         return vec![commit, push];
     }
+    let merged = status
+        .pull_request
+        .as_ref()
+        .map(|merged| format!("PR #{} is merged. Commit new work before creating another.", merged.number));
 
     let pull_request_reason = if !status.pull_requests {
         Some("Install GitHub's gh on your server to open pull requests.")
@@ -145,6 +152,8 @@ fn menu(status: &GitStatus) -> Vec<Item> {
         Some("Check out a branch before creating a pull request.")
     } else if status.changed > 0 {
         Some("Commit your changes before creating a pull request.")
+    } else if merged.is_some() {
+        merged.as_deref()
     } else if status.behind > 0 {
         Some("The branch is behind the remote. Pull before creating a pull request.")
     } else if status.ahead_of_default.max(status.ahead) == 0 {
@@ -210,7 +219,17 @@ mod tests {
     }
 
     fn open() -> Option<PullRequest> {
-        Some(PullRequest { number: 12, title: "Log in".to_string(), url: "https://x/12".to_string(), draft: false })
+        Some(PullRequest {
+            number: 12,
+            title: "Log in".to_string(),
+            url: "https://x/12".to_string(),
+            draft: false,
+            merged: false,
+        })
+    }
+
+    fn merged() -> Option<PullRequest> {
+        open().map(|open| PullRequest { merged: true, ..open })
     }
 
     fn quick_of(status: GitStatus) -> (String, Option<GitAction>) {
@@ -255,6 +274,25 @@ mod tests {
             (opened.label.as_str(), opened.url.as_deref(), opened.action),
             ("PR #12", Some("https://x/12"), None)
         );
+    }
+
+    #[test]
+    fn a_merged_pull_request_is_shown_instead_of_creating_another() {
+        // A squash merge leaves the branch ahead of the default one.
+        let status = GitStatus { ahead_of_default: 2, pull_request: merged(), ..branch() };
+        let control = control(&status);
+        assert_eq!(
+            (control.quick.label.as_str(), control.quick.url.as_deref(), control.quick.action),
+            ("PR #12", Some("https://x/12"), None)
+        );
+        assert_eq!(control.menu[2].label, "Create PR");
+        assert_eq!(
+            control.menu[2].reason.as_deref(),
+            Some("PR #12 is merged. Commit new work before creating another.")
+        );
+
+        let changed = GitStatus { changed: 1, ..status };
+        assert_eq!(quick_of(changed), runs("Commit, push & PR", GitAction::CommitPushPr));
     }
 
     #[test]

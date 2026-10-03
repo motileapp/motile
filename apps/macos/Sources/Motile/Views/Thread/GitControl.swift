@@ -19,6 +19,7 @@ struct GitButton: View {
         let stage = store.gitStages[project.id]
         let quick = control.quick
         let runs = quick.action != nil || quick.url != nil
+        let merged = quick.url != nil && project.git?.pullRequest?.merged == true
         HStack(spacing: 0) {
             Button {
                 store.runQuickGit(in: project)
@@ -32,6 +33,7 @@ struct GitButton: View {
                     } else {
                         Image(systemName: GitSymbol.name(for: quick.action))
                             .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(merged ? Color.purple : runs ? Color.themeText : Color.themeTertiary)
                     }
                     Text(stage?.label ?? quick.label)
                         .font(.system(size: 12, weight: .medium))

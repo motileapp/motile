@@ -1466,6 +1466,18 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     let recorded = std::fs::read_to_string(root.join("arguments.txt")).unwrap();
     let written_by: Vec<String> = recorded.lines().last().map(|line| serde_json::from_str(line).unwrap()).unwrap();
     assert!(written_by.windows(2).any(|pair| pair[0] == "--model" && pair[1] == model), "{written_by:?}");
+
+    // A merged pull request stays the branch's until the branch has a commit it doesn't.
+    let head = git_says(&repository, &["rev-parse", "HEAD"]);
+    let merged = format!(
+        r#"{{"number": 7, "title": "Greet", "url": "https://github.com/acme/app/pull/7", "state": "MERGED", "isDraft": false, "headRefOid": "{head}"}}"#
+    );
+    std::fs::write(bin.join("pull-request"), merged).unwrap();
+    let (status, _) = git_status(&connection, &project.id, true).await;
+    assert_eq!(status.pull_request.map(|merged| (merged.number, merged.merged)), Some((7, true)));
+    std::fs::write(repository.join("notes.txt"), "now\n").unwrap();
+    git(&repository, &["commit", "-q", "-am", "Note it now"]);
+    assert_eq!(git_status(&connection, &project.id, false).await.0.pull_request, None);
 }
 
 fn git_says(folder: &Path, arguments: &[&str]) -> String {

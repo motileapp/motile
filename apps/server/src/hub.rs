@@ -937,7 +937,9 @@ impl Hub {
         let (pull_request, pull_request_read) = match known {
             Some(known) if known.1.elapsed() < PULL_REQUEST_FRESH => known,
             _ if status.pull_requests && status.branch.is_some() && pushed => {
-                (git::pull_request(path, &self.environment).await, Instant::now())
+                let found = git::pull_request(path, &self.environment).await;
+                // On the default branch a merged one is another branch's history.
+                (found.filter(|found| !found.merged || !status.default), Instant::now())
             }
             _ => (None, Instant::now()),
         };
@@ -1041,7 +1043,7 @@ impl Hub {
             pushed = git::upstream(path, environment).await;
         }
         if opens {
-            if let Some(open) = git::pull_request(path, environment).await {
+            if let Some(open) = git::pull_request(path, environment).await.filter(|found| !found.merged) {
                 return done(format!("PR #{} is already open", open.number), Some(open.title), Some(open.url), None);
             }
             started(GitStage::PullRequestText);
@@ -1052,7 +1054,11 @@ impl Hub {
             return done(format!("Created PR #{number}"), Some(title), Some(url), None);
         }
         if let Some(upstream) = pushed {
-            let opened = self.lock_git().get(path).is_some_and(|read| read.status.pull_request.is_some());
+            let opened = self
+                .lock_git()
+                .get(path)
+                .and_then(|read| read.status.pull_request.as_ref().map(|found| !found.merged))
+                .unwrap_or(false);
             let next = (!status.default && status.pull_requests && !opened).then_some(GitAction::CreatePr);
             return done(format!("Pushed {commit} to {upstream}"), Some(subject), None, next);
         }
