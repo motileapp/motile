@@ -49,8 +49,15 @@ jobs:
           name: linux-${{ matrix.target }}
           path: "*.tar.gz"
 
+  macos:
+    uses: ./.github/workflows/macos.yml
+    with:
+      sign: true
+    secrets: inherit
+
+  # The release is the latest one as soon as it exists, so it is made once, with every file.
   publish:
-    needs: linux
+    needs: [linux, macos]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -60,25 +67,4 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes artifacts/*.tar.gz
-
-  macos:
-    uses: ./.github/workflows/macos.yml
-    with:
-      sign: true
-    secrets: inherit
-
-  attach-macos:
-    needs: [publish, macos]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: Motile
-      - uses: actions/download-artifact@v4
-        with:
-          name: server-aarch64-apple-darwin
-      - name: Attach the app and the server
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" Motile.zip motile-aarch64-apple-darwin.tar.gz --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes artifacts/*.tar.gz artifacts/Motile.zip
