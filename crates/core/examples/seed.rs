@@ -121,7 +121,6 @@ async fn main() -> anyhow::Result<()> {
                 thread_id: None,
                 new_thread: Some(new_thread),
                 text: prompt.to_string(),
-                files: Vec::new(),
                 attachments: Vec::new(),
             })
             .await?;

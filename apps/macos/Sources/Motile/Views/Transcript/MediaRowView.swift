@@ -1,6 +1,7 @@
 import AVKit
 import AppKit
 import ImageIO
+import UniformTypeIdentifiers
 
 /// An image or a video a reply shows. The core says how large it is, so the row has its place
 /// before the file is on this Mac.
@@ -75,6 +76,28 @@ enum Pictures {
             DispatchQueue.main.async { done(image) }
         }
     }
+
+    /// Calls `done` on the main thread with the first frame of a video, no larger than `maxPixels`
+    /// on a side.
+    static func firstFrame(_ video: URL, id: String, maxPixels: CGFloat, done: @escaping (CGImage?) -> Void) {
+        let frames = AVAssetImageGenerator(asset: AVURLAsset(url: video))
+        frames.appliesPreferredTrackTransform = true
+        frames.maximumSize = CGSize(width: maxPixels, height: maxPixels)
+        frames.generateCGImageAsynchronously(for: .zero) { image, _, _ in
+            if let image {
+                cache.setObject(image, forKey: id as NSString, cost: image.bytesPerRow * image.height)
+            }
+            DispatchQueue.main.async { done(image) }
+        }
+    }
+
+    /// Writes the image as a JPEG to a file that goes when the Mac clears its temporary files.
+    static func writeJPEG(_ image: CGImage) -> URL? {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("motile-poster-\(UUID().uuidString).jpg")
+        guard let destination = CGImageDestinationCreateWithURL(file as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? file : nil
+    }
 }
 
 /// The box an image or a video is shown in: empty until the picture is there.
@@ -82,6 +105,8 @@ final class PictureView: NSView {
     static let radius: CGFloat = 10
 
     var picture: CGImage? { didSet { needsDisplay = true } }
+    /// Fills the box with the picture, cutting off what doesn't fit, instead of showing all of it.
+    var fills = false { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -95,7 +120,7 @@ final class PictureView: NSView {
 
     override func updateLayer() {
         layer?.contents = picture
-        layer?.contentsGravity = .resizeAspect
+        layer?.contentsGravity = fills ? .resizeAspectFill : .resizeAspect
         layer?.backgroundColor = Theme.codeBackground.cgColor
         layer?.cornerRadius = Self.radius
         layer?.cornerCurve = .continuous
@@ -219,10 +244,7 @@ final class MediaRowView: RowView {
         guard let media = content else { return }
         guard media.video else {
             guard picture.picture != nil else { return loadPicture(media) }
-            fetch { file in
-                guard let file else { return }
-                NSWorkspace.shared.open(file)
-            }
+            owner?.view([ViewedMedia(name: media.name, video: false, source: .media(media.id))], at: 0)
             return
         }
         guard !downloading else { return }

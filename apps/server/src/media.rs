@@ -1,18 +1,17 @@
-//! The images and videos agents show in their replies. The server copies each one when it is shown,
-//! named by its contents, so a thread keeps showing it after the file has changed or gone.
+//! The images and videos agents show in their replies and users attach to their messages. The
+//! server copies each one when it is shown, named by its contents, so a thread keeps showing it
+//! after the file has changed or gone.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
+use motile_protocol::media::{MAX_SIZE, Namer, is_id, kind};
 use motile_protocol::wire::Media;
 use pulldown_cmark::{Event, Options, Parser, Tag};
-use sha2::{Digest, Sha256};
 
-const IMAGES: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
-const VIDEOS: [&str; 4] = ["mp4", "mov", "m4v", "webm"];
-const MAX_SIZE: u64 = 200 * 1024 * 1024;
-const HASH_LENGTH: usize = 64;
+/// The image an app made to stand for a video it attached, in the video's folder.
+pub const POSTER: &str = ".poster.jpg";
 
 #[derive(Clone)]
 pub struct MediaStore {
@@ -40,13 +39,28 @@ impl MediaStore {
         captured
     }
 
+    /// Copies the images and videos among the files attached to a message, each video with the
+    /// poster that was uploaded for it.
+    pub fn capture_attached(&self, attachments: &[String]) -> Vec<Media> {
+        let mut captured: Vec<Media> = Vec::new();
+        for path in attachments {
+            if captured.iter().any(|media| &media.src == path) {
+                continue;
+            }
+            let Some(mut media) = self.capture(path, "/") else { continue };
+            let poster = Path::new(path).with_file_name(POSTER);
+            if let Some(poster) = poster.to_str().filter(|_| media.video).and_then(|poster| self.capture(poster, "/")) {
+                (media.width, media.height) = (poster.width, poster.height);
+                media.poster = Some(poster.id);
+            }
+            captured.push(media);
+        }
+        captured
+    }
+
     fn capture(&self, src: &str, cwd: &str) -> Option<Media> {
         let path = self.file_shown(src, cwd)?;
-        let extension = path.extension()?.to_str()?.to_lowercase();
-        let video = VIDEOS.contains(&extension.as_str());
-        if !video && !IMAGES.contains(&extension.as_str()) {
-            return None;
-        }
+        let (extension, video) = kind(&path)?;
         let size = std::fs::metadata(&path).ok().filter(|file| file.is_file())?.len();
         if size == 0 || size > MAX_SIZE {
             return None;
@@ -59,7 +73,7 @@ impl MediaStore {
             }
         };
         if video {
-            return Some(Media { id, src: src.to_string(), video, size, width: None, height: None });
+            return Some(Media { id, src: src.to_string(), video, size, width: None, height: None, poster: None });
         }
         // A file that only has an image's name isn't shown as one.
         let Ok(dimensions) = imagesize::size(self.folder.join(&id)) else {
@@ -67,7 +81,7 @@ impl MediaStore {
             return None;
         };
         let (width, height) = (u32::try_from(dimensions.width).ok(), u32::try_from(dimensions.height).ok());
-        Some(Media { id, src: src.to_string(), video, size, width, height })
+        Some(Media { id, src: src.to_string(), video, size, width, height, poster: None })
     }
 
     /// The file a reply's image points at, if it is one on this machine.
@@ -93,7 +107,7 @@ impl MediaStore {
         let copied = (|| {
             let mut source = std::fs::File::open(path)?;
             let mut copy = std::fs::File::create(&unfinished)?;
-            let mut hasher = Sha256::new();
+            let mut namer = Namer::default();
             let mut buffer = vec![0u8; 64 * 1024];
             let mut size = 0u64;
             loop {
@@ -101,11 +115,11 @@ impl MediaStore {
                 if read == 0 {
                     break;
                 }
-                hasher.update(&buffer[..read]);
+                namer.update(&buffer[..read]);
                 copy.write_all(&buffer[..read])?;
                 size += read as u64;
             }
-            let id = format!("{:x}.{extension}", hasher.finalize());
+            let id = namer.id(extension);
             std::fs::rename(&unfinished, self.folder.join(&id))?;
             Ok((id, size))
         })();
@@ -129,14 +143,6 @@ impl MediaStore {
             let _ = std::fs::remove_file(self.folder.join(id));
         }
     }
-}
-
-/// Ids are made here and come back from apps, so they are held to the shape they are made in.
-fn is_id(id: &str) -> bool {
-    let Some((hash, extension)) = id.split_once('.') else { return false };
-    hash.len() == HASH_LENGTH
-        && hash.chars().all(|character| character.is_ascii_hexdigit())
-        && (IMAGES.contains(&extension) || VIDEOS.contains(&extension))
 }
 
 /// Where the images of a reply point, as the apps' Markdown parser reads them.
@@ -235,14 +241,5 @@ mod tests {
         assert_eq!(kept, vec![("shot.png", false), ("demo.mp4", true)]);
         assert_eq!(std::fs::read(dir.path().join("media").join(&captured[0].id)).unwrap(), png(10, 20));
         assert_eq!(std::fs::read_dir(dir.path().join("media")).unwrap().count(), 2);
-    }
-
-    #[test]
-    fn only_names_the_store_gives_are_ids() {
-        let hash = "a".repeat(HASH_LENGTH);
-        assert!(is_id(&format!("{hash}.png")));
-        assert!(!is_id(&format!("{hash}.sqlite")));
-        assert!(!is_id("../motile.sqlite"));
-        assert!(!is_id(&format!("../{hash}.png")));
     }
 }

@@ -12,6 +12,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0003_media.sql"),
     include_str!("../migrations/0004_settings.sql"),
     include_str!("../migrations/0005_worktrees.sql"),
+    include_str!("../migrations/0006_attachments.sql"),
 ];
 
 pub struct Store {
@@ -212,6 +213,20 @@ impl Store {
     /// Whether any thread still shows the file.
     pub fn shows_media(&self, media_id: &str) -> rusqlite::Result<bool> {
         self.connection().query_row("SELECT EXISTS (SELECT 1 FROM media WHERE id = ?1)", [media_id], |row| row.get(0))
+    }
+
+    pub fn save_attachment(&self, thread_id: &str, path: &str) -> rusqlite::Result<()> {
+        self.connection()
+            .execute("INSERT OR IGNORE INTO attachments (thread_id, path) VALUES (?1, ?2)", [thread_id, path])?;
+        Ok(())
+    }
+
+    /// The files attached to the thread's messages, or to those of every thread.
+    pub fn attachments(&self, thread_id: Option<&str>) -> rusqlite::Result<Vec<String>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare("SELECT path FROM attachments WHERE ?1 IS NULL OR thread_id = ?1")?;
+        let paths = statement.query_map([thread_id], |row| row.get(0))?;
+        paths.collect()
     }
 
     pub fn load_projects(&self) -> rusqlite::Result<Vec<StoredProject>> {

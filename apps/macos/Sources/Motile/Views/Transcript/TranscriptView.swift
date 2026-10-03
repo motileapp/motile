@@ -12,6 +12,7 @@ final class TranscriptView: FlippedView, RowOwner {
     var onToggleRow: ((String) -> Void)?
     /// A row needs the file of an image or a video; it is called back with it.
     var onNeedMedia: ((String, @escaping (URL?) -> Void) -> Void)?
+    var onViewMedia: (([ViewedMedia], Int) -> Void)?
     /// A queued message is to be given to the agent now, or taken back.
     var onSendQueued: ((String) -> Void)?
     var onCancelQueued: ((String) -> Void)?
@@ -659,6 +660,8 @@ final class TranscriptView: FlippedView, RowOwner {
         guard let onNeedMedia else { return done(nil) }
         onNeedMedia(id, done)
     }
+
+    func view(_ media: [ViewedMedia], at index: Int) { onViewMedia?(media, index) }
 
     func sendQueued(messageID: String) { onSendQueued?(messageID) }
 

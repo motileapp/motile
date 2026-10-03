@@ -67,8 +67,8 @@ final class TranscriptModel {
         hooks?.splice(start, remove, new)
     }
 
-    func setPending(_ text: String?) {
-        pending = text.map(RowModel.pending(text:))
+    func setPending(_ text: String?, attachments: [AttachedFile] = []) {
+        pending = text.map { RowModel.pending(text: $0, attachments: attachments) }
         hooks?.pending(pending)
     }
 

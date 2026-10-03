@@ -73,19 +73,22 @@ pub struct Item {
     pub kind: ItemKind,
 }
 
-/// An image or a video an agent showed. The server keeps the copy it took then, so the thread
-/// shows the same thing after the file has changed or gone.
+/// An image or a video an agent showed or the user attached. The server keeps the copy it took
+/// then, so the thread shows the same thing after the file has changed or gone.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Media {
     /// Names the contents, and ends in the file's extension.
     pub id: String,
-    /// The file as the agent wrote it in its reply.
+    /// The file as the agent wrote it in its reply, or the attachment's path.
     pub src: String,
     pub video: bool,
     pub size: u64,
-    /// In pixels, for an image.
+    /// In pixels, for an image, and for a video that has a poster.
     pub width: Option<u32>,
     pub height: Option<u32>,
+    /// The image that stands for a video until it plays, which the app that attached it made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poster: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -315,10 +318,13 @@ pub enum Request {
         project_id: String,
         script: Option<String>,
     },
-    /// The file's bytes follow on the same stream.
+    /// The file's bytes follow on the same stream. With `poster_of`, the path of a video that was
+    /// uploaded before, the file is the image that stands for that video.
     Upload {
         name: String,
         size: u64,
+        #[serde(default)]
+        poster_of: Option<String>,
     },
     /// The copy the server keeps of an image or a video. `Media` answers, and the bytes follow on
     /// the same stream.
@@ -530,6 +536,9 @@ pub struct Queued {
     pub id: String,
     pub text: String,
     pub attachments: Vec<String>,
+    /// The images and videos among them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<Media>,
     /// The turn it waited for was stopped; it goes when the user sends it.
     pub held: bool,
     /// The agent has been given it and hasn't taken it yet.
