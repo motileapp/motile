@@ -168,8 +168,9 @@ impl Server {
             Request::ListDir { path, icons, hidden } => {
                 files::list_dir(path.as_deref(), &hub.server_info().home, icons, hidden)
             }
-            Request::Upload { name, size } => {
-                let saved = files::receive_upload(&mut recv, &self.attachments, &name, size).await;
+            Request::Upload { name, size, poster_of } => {
+                let saved =
+                    files::receive_upload(&mut recv, &self.attachments, &name, size, poster_of.as_deref()).await;
                 saved.map(|path| Message::Uploaded { path })
             }
         };

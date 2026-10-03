@@ -106,7 +106,8 @@ impl App {
             | Event::ServerUpdate { .. }
             | Event::GitProgress { .. }
             | Event::MediaProgress { .. }
-            | Event::CodeSpans { .. } => {}
+            | Event::CodeSpans { .. }
+            | Event::UploadProgress { .. } => {}
         }
     }
 
@@ -156,7 +157,8 @@ async fn run_server(data: &DataDir, endpoint: iroh::Endpoint, key: DeviceKey) {
     ]);
     let executables = HashMap::from([(Agent::Claude, fake_agent.clone()), (Agent::Codex, fake_agent)]);
     let environment = Environment::fixed(variables, executables);
-    let hub = Hub::new(Store::open(&data.database()).unwrap(), data.media(), data.worktrees(), environment).unwrap();
+    let store = Store::open(&data.database()).unwrap();
+    let hub = Hub::new(store, data.media(), data.attachments(), data.worktrees(), environment).unwrap();
 
     let account = data.account().expect("setup linked the server");
     let access =
@@ -264,7 +266,6 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
         thread_id: None,
         new_thread: Some(new_thread.clone()),
         text: "Add a rate limiter to the API".into(),
-        files: Vec::new(),
         attachments: Vec::new(),
     };
     let sent = app.ask(send).await.unwrap();
@@ -328,7 +329,6 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
         thread_id: None,
         new_thread: Some(new_thread),
         text: "Show the screenshot".into(),
-        files: Vec::new(),
         attachments: Vec::new(),
     };
     let showing = app.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();

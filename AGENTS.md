@@ -42,6 +42,8 @@ What the three programs agree on.
 - `auth_api.rs` and `auth_client.rs` are the auth server's JSON and the client for it.
 - `identity.rs` is the device key and request signing: a linked device signs its requests to the
   auth server instead of holding a token.
+- `media.rs` names an image or a video by its contents, so that a server and the app that sent
+  it the file call it the same.
 
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
@@ -148,7 +150,12 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   image that points at a file on the server; the agents are told so when they start. The server
   copies the file then, named by its contents, and the item says what it shows and how large it
   is. So a thread shows the same thing after the file has changed or gone. An app asks for the
-  bytes by that name, and the copy goes when the last thread that shows it is deleted.
+  bytes by that name, and the copy goes when the last thread that shows it is deleted. The
+  images and videos attached to a user's message are kept the same way, each video with the
+  poster the app made of it.
+- `files.rs` takes the files an app uploads, each into a folder of its own in `attachments`. An
+  app uploads a file when it is attached, before the message is sent. The files go with the
+  thread their message is in, and one that was never sent goes after a day.
 - `update.rs` replaces the server's own program with the latest release's for this OS and CPU
   and starts it again, when an app asks. It refuses while an agent is working.
 - `tests/e2e.rs` runs the server against `scripts/fake-agent` over real iroh connections.
@@ -164,7 +171,8 @@ Rust library for tests.
 - `cache.rs` is the app's SQLite copy of its servers' threads.
 - `media.rs` is the images and videos the app has fetched from its servers, as files. They are
   fetched when a row that shows one is seen, and take at most 2 GB: past that, what was looked
-  at longest ago goes first. The servers keep them all, so the app can also clear them.
+  at longest ago goes first. The servers keep them all, so the app can also clear them. An
+  image or a video the app uploads is kept here too, so it shows without being fetched back.
 - `git.rs` says which git action a project's status calls for: commit, pull, push or a pull
   request. The apps show that one.
 - `render/diff.rs` reads a patch into files whose lines the apps draw, and highlights them a
@@ -176,8 +184,9 @@ Rust library for tests.
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
   are one row, a finished turn's work folds behind one, as does what the agent did before a
   message it took mid-turn, an image or a video is a row that knows its size before the file
-  is there, the files a turn changed are a row before the turn's end, under their folders, and
-  the messages that wait for the agent are the last rows, each saying how it waits).
+  is there, a message of the user names the images and videos attached to it, the files a turn
+  changed are a row before the turn's end, under their folders, and the messages that wait for
+  the agent are the last rows, each saying how it waits).
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
   terminal, and `examples/seed.rs` signs a data folder in with the dev login and makes the dev
   app's project and threads.
@@ -194,12 +203,18 @@ Rust library for tests.
   `MediaRowView.swift` is the row of an image or a video: images are decoded off the main
   thread at the size they are shown, and a video is downloaded when it is played. A queued
   message is a row under the line that says the agent is working, with the buttons that send
-  it now or take it back.
+  it now or take it back. `AttachedFilesView.swift` is the files in a message's bubble: tiles
+  of one size for the images and videos, and the names of the others.
 - `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
   `Views/Composer/ComposerStrips.swift` is the strips against the composer's top and bottom:
   that the agent is monitoring, and the server, folder and branch the thread works in, with the
   branch picker. A new thread chooses there between the project's folder and a new worktree,
   and then picks the branch the worktree starts from.
+  `Views/Composer/AttachmentViews.swift` is the attached files above the text: a tile for an
+  image or a video and a chip for any other file, each saying how far its upload is. A message
+  can't be sent until its files are on the server.
+  `Views/MediaViewer.swift` shows the images and videos of a message or of the composer one at
+  a time over the whole window, when one is clicked.
   `Views/Thread/GitControl.swift` is the git button in the top bar of a thread and its popover:
   the files and the message of a commit, or the title and text of a pull request, to change
   before they are used.

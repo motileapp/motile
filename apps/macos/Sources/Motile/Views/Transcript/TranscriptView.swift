@@ -12,6 +12,7 @@ final class TranscriptView: FlippedView, RowOwner {
     var onToggleRow: ((String) -> Void)?
     /// A row needs the file of an image or a video; it is called back with it.
     var onNeedMedia: ((String, @escaping (URL?) -> Void) -> Void)?
+    var onViewMedia: (([ViewedMedia], Int) -> Void)?
     /// A queued message is to be given to the agent now, or taken back.
     var onSendQueued: ((String) -> Void)?
     var onCancelQueued: ((String) -> Void)?
@@ -43,6 +44,9 @@ final class TranscriptView: FlippedView, RowOwner {
     private static let workingHeight = TurnEndRowView.height
     /// How close to the end a scroll has to come for the view to follow the end again.
     private static let pinDistance: CGFloat = 30
+
+    /// How far the end has to be below the viewport for the jump button to show.
+    private var jumpDistance: CGFloat { max(200, viewportHeight / 2) }
 
     private let scrollView = NSScrollView()
     private let document = FlippedView()
@@ -337,7 +341,7 @@ final class TranscriptView: FlippedView, RowOwner {
             pinned = false
             updateVisible(anchor: anchor)
             pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < Self.pinDistance
-            jumpButton.isHidden = pinned || rows.isEmpty
+            updateJumpButton()
         } else {
             updateVisible(anchor: anchor)
         }
@@ -552,7 +556,7 @@ final class TranscriptView: FlippedView, RowOwner {
         let workingY = firstLowered < offsets.count ? offsets[firstLowered] : 0
         working.frame = NSRect(x: x, y: Self.topPadding + workingY + 2, width: width, height: Self.workingHeight)
         working.isHidden = !showsWorking
-        jumpButton.isHidden = pinned || rows.isEmpty
+        updateJumpButton()
         if !pendingHighlight.isEmpty {
             let ids = pendingHighlight
             pendingHighlight.removeAll()
@@ -588,6 +592,11 @@ final class TranscriptView: FlippedView, RowOwner {
             return
         }
         scroll(to: target)
+    }
+
+    private func updateJumpButton() {
+        let distance = endY - scrollView.contentView.bounds.minY
+        jumpButton.isHidden = pinned || rows.isEmpty || distance < jumpDistance
     }
 
     private func scroll(to y: CGFloat) {
@@ -639,7 +648,7 @@ final class TranscriptView: FlippedView, RowOwner {
         pinned = false
         updateVisible(anchor: anchor)
         pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < Self.pinDistance
-        jumpButton.isHidden = pinned || rows.isEmpty
+        updateJumpButton()
     }
 
     func toggleRow(id: String) {
@@ -654,6 +663,8 @@ final class TranscriptView: FlippedView, RowOwner {
         guard let onNeedMedia else { return done(nil) }
         onNeedMedia(id, done)
     }
+
+    func view(_ media: [ViewedMedia], at index: Int) { onViewMedia?(media, index) }
 
     func sendQueued(messageID: String) { onSendQueued?(messageID) }
 

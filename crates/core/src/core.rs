@@ -18,6 +18,7 @@ use motile_protocol::now;
 use motile_protocol::wire::{Activity, FileKind, Item, Message, Project, Request, ServerInfo, Thread, Worktree};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
+use tokio::task::AbortHandle;
 
 use crate::api::{AccountView, Command, Config, Event, ProjectView, ServerView, ThreadView};
 use crate::browse;
@@ -103,6 +104,10 @@ enum Input {
         id: String,
         result: Result<String, String>,
     },
+    Uploaded {
+        key: String,
+        result: Result<Value, String>,
+    },
     Render,
     Tick,
     Stop,
@@ -152,6 +157,9 @@ struct Core {
     media: Arc<MediaCache>,
     /// The commands waiting for each image or video that is being fetched.
     media_waiting: HashMap<String, Vec<u64>>,
+    /// The files on their way to a server, by the key the app gave: the command that waits for
+    /// each, and what stops it.
+    uploads: HashMap<String, (u64, AbortHandle)>,
     /// The folders last listed for `browse`: of which server and directory, and whether with
     /// the hidden ones.
     browsed: Browsed,
@@ -193,6 +201,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         me: cache.account().unwrap_or_default(),
         media: Arc::new(MediaCache::new(config.data_dir.join("media"))),
         media_waiting: HashMap::new(),
+        uploads: HashMap::new(),
         browsed: Browsed::default(),
         config,
         sink,
@@ -296,6 +305,10 @@ impl Core {
                 for waiting in self.media_waiting.remove(&id).unwrap_or_default() {
                     self.reply(waiting, answer.clone());
                 }
+            }
+            Input::Uploaded { key, result } => {
+                let Some((id, _)) = self.uploads.remove(&key) else { return };
+                self.reply(id, result);
             }
             Input::Render => self.render(),
             Input::Stop => {}
@@ -682,6 +695,45 @@ impl Core {
         });
     }
 
+    /// Sends a file to the server and answers with its path there. An image or a video is kept
+    /// on this device too, so it shows without being fetched back.
+    fn upload(&mut self, id: u64, server_id: &str, key: String, file: String, poster_of: Option<String>) {
+        let link = match self.link(server_id) {
+            Ok(link) => link,
+            Err(error) => return self.reply(id, Err(error)),
+        };
+        let (cache, inputs, sink, told_key) = (self.media.clone(), self.inputs.clone(), self.sink.clone(), key.clone());
+        let upload = tokio::spawn(async move {
+            let key = &key;
+            let mut told = Instant::now();
+            let progress = |sent, size| {
+                if told.elapsed() < PROGRESS_EVERY && sent < size {
+                    return;
+                }
+                told = Instant::now();
+                sink(Event::UploadProgress { key: key.clone(), sent, size });
+            };
+            let file = PathBuf::from(file);
+            let sent = async {
+                let (path, media_id) = link.upload(&file, poster_of, progress).await?;
+                if let Some(media_id) = media_id.clone() {
+                    tokio::task::spawn_blocking(move || {
+                        cache.keep(&media_id, &file);
+                        cache.trim(media::LIMIT);
+                    })
+                    .await?;
+                }
+                anyhow::Ok(json!({ "path": path, "media": media_id }))
+            };
+            let result = sent.await.map_err(error_text);
+            let _ = inputs.send(Input::Uploaded { key: key.clone(), result });
+        });
+        if let Some((waiting, replaced)) = self.uploads.insert(told_key, (id, upload.abort_handle())) {
+            replaced.abort();
+            self.reply(waiting, Err("The upload was stopped.".to_string()));
+        }
+    }
+
     fn thread_view(&self, server_id: &str, thread: &Thread) -> ThreadView {
         ThreadView {
             unread: is_unread(thread, self.cache.seen_at(&thread.id)),
@@ -979,7 +1031,7 @@ impl Core {
                     reply(&sink, id, listing.map(|listing| serde_json::to_value(listing).unwrap_or_default()));
                 });
             }
-            Command::Send { server_id, thread_id, new_thread, text, files, mut attachments } => {
+            Command::Send { server_id, thread_id, new_thread, text, attachments } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
@@ -987,9 +1039,6 @@ impl Core {
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
                     let sent = async {
-                        for file in &files {
-                            attachments.push(link.upload(std::path::Path::new(file)).await?);
-                        }
                         match link.request(&Request::Send { thread_id, new_thread, text, attachments }).await? {
                             Message::Sent { thread_id } => Ok(json!({ "thread_id": thread_id })),
                             other => bail!("Unexpected answer from the server: {other:?}"),
@@ -1137,6 +1186,14 @@ impl Core {
                     })
                     .await;
                 });
+            }
+            Command::Upload { server_id, key, file, poster_of } => self.upload(id, &server_id, key, file, poster_of),
+            Command::CancelUpload { key } => {
+                if let Some((waiting, upload)) = self.uploads.remove(&key) {
+                    upload.abort();
+                    self.reply(waiting, Err("The upload was stopped.".to_string()));
+                }
+                self.reply(id, Ok(json!({})));
             }
             Command::Media { server_id, media_id } => self.find_media(id, &server_id, media_id),
             Command::Storage => {

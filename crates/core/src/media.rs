@@ -39,6 +39,17 @@ impl MediaCache {
         Some(self.file(id)?.with_added_extension(UNFINISHED))
     }
 
+    /// Keeps a copy of a file this device sent to a server, under the name the server gives it.
+    pub fn keep(&self, id: &str, file: &Path) {
+        let Some(unfinished) = self.unfinished(id) else { return };
+        if self.file(id).is_some_and(|kept| kept.exists()) {
+            return;
+        }
+        if std::fs::copy(file, &unfinished).is_err() || finish(&unfinished).is_err() {
+            let _ = std::fs::remove_file(&unfinished);
+        }
+    }
+
     pub fn size(&self) -> u64 {
         self.files().iter().map(|(_, size, _)| size).sum()
     }
@@ -124,6 +135,12 @@ mod tests {
 
         assert_eq!(finish(&unfinished).unwrap(), cache.file("shot.png").unwrap());
         assert_eq!(cache.size(), 100);
+
+        let sent = dir.path().join("sent.png");
+        std::fs::write(&sent, [0u8; 40]).unwrap();
+        cache.keep("sent.png", &sent);
+        assert_eq!(cache.size(), 140);
+
         cache.clear();
         assert_eq!(cache.size(), 0);
         assert!(cache.file("../cache.sqlite").is_none());

@@ -20,7 +20,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
     Activity, Agent, BranchInstructions, ChangedFile, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
-    Item, ItemKind, Message, NewThread, Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall, ToolStatus,
+    Item, ItemKind, Media, Message, NewThread, Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall, ToolStatus,
     TurnChanges, TurnSummary, Worktree,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -50,6 +50,9 @@ const SETUP_TIMEOUT: Duration = Duration::from_secs(900);
 const SETUP_OUTPUT_CHARS: usize = 4000;
 /// Starts the names of the branches made for worktrees until the writer has named them.
 const BRANCH_PREFIX: &str = "motile";
+/// How long an uploaded file waits for the message it is attached to.
+const UNSENT_UPLOADS_STAY: Duration = Duration::from_secs(24 * 3600);
+const SWEEP_UPLOADS_EVERY: Duration = Duration::from_secs(3600);
 
 /// What an app asked git to do in a project's folder.
 pub struct GitRun {
@@ -70,6 +73,8 @@ pub struct Hub {
     projects: Mutex<Vec<StoredProject>>,
     /// What git last said about each folder threads work in: the projects' and the worktrees'.
     git: std::sync::Mutex<HashMap<String, GitRead>>,
+    /// Where the files that apps upload are.
+    attachments_folder: PathBuf,
     /// Where the worktrees are made, each in a folder named after its project.
     worktrees_folder: PathBuf,
     /// The worktrees of the threads that work in one of their own, by thread.
@@ -154,11 +159,13 @@ pub struct ThreadSubscription {
 }
 
 impl Hub {
-    /// `media_folder` is where the images and videos that threads show are kept, and
-    /// `worktrees_folder` where the worktrees of threads are made.
+    /// `media_folder` is where the images and videos that threads show are kept,
+    /// `attachments_folder` where the files that apps upload are, and `worktrees_folder` where
+    /// the worktrees of threads are made.
     pub fn new(
         store: Store,
         media_folder: PathBuf,
+        attachments_folder: PathBuf,
         worktrees_folder: PathBuf,
         environment: Environment,
     ) -> anyhow::Result<Arc<Self>> {
@@ -186,6 +193,7 @@ impl Hub {
             environment,
             projects,
             git,
+            attachments_folder,
             worktrees_folder,
             list_updates,
         }))
@@ -242,6 +250,9 @@ impl Hub {
         if text.is_empty() && attachments.is_empty() {
             bail!("There is nothing to send.");
         }
+        if let Some(gone) = attachments.iter().find(|path| !Path::new(path).is_file()) {
+            bail!("{} is no longer on the server. Attach it again.", file_name(gone));
+        }
         let mut threads = self.threads.lock().await;
         let (thread_id, is_new) = match (thread_id, new_thread) {
             (Some(thread_id), _) => (thread_id, false),
@@ -258,9 +269,10 @@ impl Hub {
             (None, None) => bail!("No thread was given."),
         };
         let live = threads.get_mut(&thread_id).context("That thread no longer exists.")?;
+        let media = self.keep_attached(&thread_id, &attachments)?;
         let prompt = prompt(&text, &attachments);
         if live.preparing.is_some() {
-            live.queued.push(Queued { id: new_id(), text, attachments, held: false, sending: false });
+            live.queued.push(Queued { id: new_id(), text, attachments, media, held: false, sending: false });
             live.send_activity();
             return Ok(thread_id);
         }
@@ -268,20 +280,46 @@ impl Hub {
             // An agent that is only monitoring takes the message right away.
             let idle = run.received_result;
             if !idle || !live.write_prompt(&prompt, &new_id()) {
-                live.queued.push(Queued { id: new_id(), text, attachments, held: false, sending: false });
+                live.queued.push(Queued { id: new_id(), text, attachments, media, held: false, sending: false });
                 live.send_activity();
                 return Ok(thread_id);
             }
-            live.append(&self.store, ItemKind::User { text, attachments })?;
+            live.append_message(&self.store, text, attachments, media)?;
             self.resume(live)?;
             return Ok(thread_id);
         }
-        live.append(&self.store, ItemKind::User { text: text.clone(), attachments })?;
+        live.append_message(&self.store, text.clone(), attachments, media)?;
         self.start_turn(live, prompt)?;
         if is_new {
             tokio::spawn(self.clone().title_from_first_message(thread_id.clone(), text));
         }
         Ok(thread_id)
+    }
+
+    /// Notes that the thread has the files, and copies the images and videos among them.
+    fn keep_attached(&self, thread_id: &str, attachments: &[String]) -> anyhow::Result<Vec<Media>> {
+        for path in attachments {
+            self.store.save_attachment(thread_id, path)?;
+        }
+        let media = self.media.capture_attached(attachments);
+        for id in media.iter().flat_map(|media| std::iter::once(&media.id).chain(&media.poster)) {
+            self.store.save_media(thread_id, id)?;
+        }
+        Ok(media)
+    }
+
+    /// Removes the uploads that were never sent.
+    pub fn keep_uploads_swept(self: &Arc<Self>) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            loop {
+                match hub.store.attachments(None) {
+                    Ok(kept) => files::sweep_uploads(&hub.attachments_folder, &kept, UNSENT_UPLOADS_STAY),
+                    Err(error) => tracing::error!("couldn't read the attachments: {error:#}"),
+                }
+                tokio::time::sleep(SWEEP_UPLOADS_EVERY).await;
+            }
+        });
     }
 
     async fn new_thread(
@@ -628,7 +666,12 @@ impl Hub {
             self.announce_projects(&self.projects.lock().await);
         }
         let shown = self.store.media_of(thread_id)?;
+        let attached = self.store.attachments(Some(thread_id))?;
         self.store.delete_thread(thread_id)?;
+        let kept = self.store.attachments(None)?;
+        for path in attached.iter().filter(|path| !kept.contains(path)) {
+            files::remove_upload(&self.attachments_folder, path);
+        }
         for media_id in shown {
             if !self.store.shows_media(&media_id)? {
                 self.media.remove(&media_id);
@@ -1588,7 +1631,7 @@ impl Hub {
             AgentEvent::Taken { id } => {
                 let Some(index) = live.queued.iter().position(|queued| queued.id == id) else { return Ok(()) };
                 let queued = live.queued.remove(index);
-                live.append(store, ItemKind::User { text: queued.text, attachments: queued.attachments })?;
+                live.append_message(store, queued.text, queued.attachments, queued.media)?;
                 live.send_activity();
             }
             AgentEvent::Turn { id } => {
@@ -1654,7 +1697,7 @@ impl Hub {
 
     fn start_next_turn(self: &Arc<Self>, live: &mut Live, queued: Queued) -> anyhow::Result<()> {
         let prompt = prompt(&queued.text, &queued.attachments);
-        live.append(&self.store, ItemKind::User { text: queued.text, attachments: queued.attachments })?;
+        live.append_message(&self.store, queued.text, queued.attachments, queued.media)?;
         self.start_turn(live, prompt)
     }
 
@@ -1811,6 +1854,21 @@ impl Live {
         let ItemKind::TurnEnd { summary } = &mut item.kind else { return Ok(()) };
         summary.changes = Some(changes);
         item.rev = self.next_rev();
+        store.save_item(&self.stored.thread.id, &item)?;
+        let _ = self.updates.send(Message::Items { items: vec![item] });
+        Ok(())
+    }
+
+    /// Adds a message of the user with the images and videos attached to it.
+    fn append_message(
+        &mut self,
+        store: &Store,
+        text: String,
+        attachments: Vec<String>,
+        media: Vec<Media>,
+    ) -> anyhow::Result<()> {
+        let mut item = self.new_item(new_id(), ItemKind::User { text, attachments });
+        item.media = media;
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())

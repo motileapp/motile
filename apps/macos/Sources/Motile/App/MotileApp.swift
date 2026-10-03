@@ -147,6 +147,11 @@ struct RootView: View {
                     .id(page)
             }
         }
+        .overlay {
+            if let viewing = store.viewing {
+                MediaViewer(viewing: viewing)
+            }
+        }
         .sheet(isPresented: $store.showsAddServer) {
             ConnectServerView(isFirst: false)
                 .frame(width: 620)

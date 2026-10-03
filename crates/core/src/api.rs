@@ -86,17 +86,30 @@ pub enum Command {
         server_id: String,
         query: String,
     },
-    /// Uploads `files` from this device, then sends the message with them and with `attachments`,
-    /// which are on the server already. Answers with `thread_id`.
+    /// Sends the message with `attachments`, the paths `upload` answered with. Answers with
+    /// `thread_id`.
     Send {
         server_id: String,
         thread_id: Option<String>,
         new_thread: Option<NewThread>,
         text: String,
         #[serde(default)]
-        files: Vec<String>,
-        #[serde(default)]
         attachments: Vec<String>,
+    },
+    /// Sends a file of this device to the server, for a message to be sent with. Answers with
+    /// its `path` there, and for an image or a video with `media`, the name the `media` command
+    /// finds it under; `upload_progress` events with `key` say how far it is. With
+    /// `poster_of`, the path of a video on the server, the file is the image that stands for it.
+    Upload {
+        server_id: String,
+        key: String,
+        file: String,
+        #[serde(default)]
+        poster_of: Option<String>,
+    },
+    /// Stops the upload, which then answers with an error.
+    CancelUpload {
+        key: String,
     },
     /// Has the server install the latest release and restart. `server_update` events say how far the
     /// download is; the answer comes when the server is about to restart.
@@ -229,6 +242,12 @@ pub enum Event {
         received: u64,
         size: u64,
     },
+    /// How much of a file has been sent to its server.
+    UploadProgress {
+        key: String,
+        sent: u64,
+        size: u64,
+    },
     /// Replace `remove` rows at `start` with `rows`. With `reset` the app's rows are dropped first.
     Rows {
         thread_id: String,
@@ -332,7 +351,7 @@ mod tests {
             r#"{"id": 8, "type": "send", "server_id": "h", "thread_id": "t", "new_thread": null, "text": "hi"}"#,
         )
         .unwrap();
-        assert!(matches!(send.command, Command::Send { files, .. } if files.is_empty()));
+        assert!(matches!(send.command, Command::Send { attachments, .. } if attachments.is_empty()));
 
         let media: Envelope =
             serde_json::from_str(r#"{"id": 9, "type": "media", "server_id": "h", "media_id": "m.png"}"#).unwrap();

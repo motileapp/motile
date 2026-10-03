@@ -8,7 +8,9 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use motile_protocol::wire::{Approval, Change, ChangedFile, Item, ItemKind, Queued, ToolCall, ToolStatus, TurnChanges};
+use motile_protocol::wire::{
+    Approval, Change, ChangedFile, Item, ItemKind, Media, Queued, ToolCall, ToolStatus, TurnChanges,
+};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -32,12 +34,25 @@ pub struct Row {
     pub kind: RowKind,
 }
 
+/// A file attached to a message. An image or a video is shown: the app asks the core for the
+/// file `media` names, and for a video's `poster` until it plays.
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct Attached {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub video: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poster: Option<String>,
+}
+
 #[derive(Serialize, Clone, PartialEq, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RowKind {
     User {
         text: String,
-        attachments: Vec<String>,
+        attachments: Vec<Attached>,
         at: f64,
     },
     Prose {
@@ -116,7 +131,7 @@ pub enum RowKind {
     /// A message that waits for the agent to take it. The row's item is the message.
     Queued {
         text: String,
-        attachments: Vec<String>,
+        attachments: Vec<Attached>,
         /// How it waits: queued, held, or being given to the agent.
         status: &'static str,
         /// The agent is being given it, so it can no longer be sent now or taken back.
@@ -436,6 +451,19 @@ impl Transcript {
     }
 }
 
+fn attached(paths: &[String], media: &[Media]) -> Vec<Attached> {
+    let file = |path: &String| {
+        let shown = media.iter().find(|media| &media.src == path);
+        Attached {
+            name: file_name(path).to_string(),
+            media: shown.map(|media| media.id.clone()),
+            video: shown.is_some_and(|media| media.video),
+            poster: shown.and_then(|media| media.poster.clone()),
+        }
+    };
+    paths.iter().map(file).collect()
+}
+
 /// The queued messages as rows, each saying how it waits.
 fn queued_rows(queued: &[Queued]) -> Vec<Row> {
     let status = |message: &Queued| match (message.sending, message.held) {
@@ -449,7 +477,7 @@ fn queued_rows(queued: &[Queued]) -> Vec<Row> {
         nested: false,
         kind: RowKind::Queued {
             text: message.text.clone(),
-            attachments: message.attachments.iter().map(|path| file_name(path).to_string()).collect(),
+            attachments: attached(&message.attachments, &message.media),
             status: status(message),
             sending: message.sending,
         },
@@ -777,7 +805,7 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
     };
     match &item.kind {
         ItemKind::User { text, attachments } => {
-            let attachments = attachments.iter().map(|path| file_name(path).to_string()).collect();
+            let attachments = attached(attachments, &item.media);
             vec![row(0, RowKind::User { text: text.clone(), attachments, at: item.created_at })]
         }
         ItemKind::Assistant { text } => render_markdown(item, text, streaming),
@@ -1006,6 +1034,39 @@ mod tests {
     }
 
     #[test]
+    fn a_message_shows_the_images_and_videos_attached_to_it() {
+        use motile_protocol::wire::Media;
+        let attachments =
+            vec!["/up/1/shot.png".to_string(), "/up/2/notes.txt".to_string(), "/up/3/demo.mov".to_string()];
+        let media = |id: &str, src: &str, video, poster: Option<&str>| Media {
+            id: id.into(),
+            src: src.into(),
+            video,
+            size: 10,
+            width: None,
+            height: None,
+            poster: poster.map(str::to_string),
+        };
+        let mut message = item("u", 0, ItemKind::User { text: "Look".into(), attachments });
+        message.media = vec![
+            media("abc.png", "/up/1/shot.png", false, None),
+            media("def.mov", "/up/3/demo.mov", true, Some("fed.jpg")),
+        ];
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![message]);
+
+        let row = serde_json::to_value(&transcript.rows()[0]).unwrap();
+        assert_eq!(
+            row["attachments"],
+            serde_json::json!([
+                { "name": "shot.png", "media": "abc.png" },
+                { "name": "notes.txt" },
+                { "name": "demo.mov", "media": "def.mov", "video": true, "poster": "fed.jpg" },
+            ])
+        );
+    }
+
+    #[test]
     fn an_image_the_server_kept_is_a_row_with_its_size_and_any_other_is_a_link() {
         use motile_protocol::wire::Media;
         let mut reply = assistant("a", 0, "Done:\n\n![The page](/tmp/shots/page.png)\n\n![Gone](/tmp/gone.png)");
@@ -1016,6 +1077,7 @@ mod tests {
             size: 2048,
             width: Some(640),
             height: Some(400),
+            poster: None,
         };
         reply.media = vec![kept];
         let mut transcript = Transcript::new("/srv/api");
@@ -1096,7 +1158,7 @@ mod tests {
         apply(&mut shown, splice);
 
         assert_eq!(shown, transcript.rows());
-        assert!(matches!(&shown[0].kind, RowKind::User { attachments, .. } if attachments == &["notes.txt"]));
+        assert!(matches!(&shown[0].kind, RowKind::User { attachments, .. } if attachments[0].name == "notes.txt"));
         assert!(matches!(&shown[3].kind, RowKind::Prose { prose, .. } if prose.text == "Outro"));
         assert_eq!(shown[3].id, "a/2");
         assert!(transcript.refresh("a").is_none(), "nothing changed, nothing to send");
@@ -1377,6 +1439,7 @@ mod tests {
             id: id.into(),
             text: "Also this".into(),
             attachments: vec!["/tmp/a/notes.txt".into()],
+            media: Vec::new(),
             held,
             sending,
         };
@@ -1396,7 +1459,7 @@ mod tests {
         assert_eq!(statuses(&transcript), ["Held", "Queued", "Queued"]);
         let first = &transcript.rows()[1];
         assert_eq!((first.id.as_str(), first.item.as_str()), ("queued/m1", "m1"));
-        assert!(matches!(&first.kind, RowKind::Queued { attachments, .. } if attachments == &["notes.txt"]));
+        assert!(matches!(&first.kind, RowKind::Queued { attachments, .. } if attachments[0].name == "notes.txt"));
 
         transcript.set_queued(vec![message("m2", false, true), message("m3", false, false)]);
         assert_eq!(statuses(&transcript), ["Sending…", "Queued"]);

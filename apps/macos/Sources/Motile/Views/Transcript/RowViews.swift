@@ -11,6 +11,8 @@ protocol RowOwner: AnyObject {
     func copyReply(endingAt rowID: String)
     /// Hands over the file of an image or a video, or nothing when it can't be had.
     func media(id: String, done: @escaping (URL?) -> Void)
+    /// Opens the images and videos in the viewer, on the one at `index`.
+    func view(_ media: [ViewedMedia], at index: Int)
     /// Gives the agent a queued message now, or takes it back into the composer.
     func sendQueued(messageID: String)
     func cancelQueued(messageID: String)
@@ -307,7 +309,7 @@ class RowView: FlippedView {
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
         case .user(let text, let attachments):
-            return estimatedTextHeight(text.length, width: width * 0.75) + 48 + (attachments.isEmpty ? 0 : 22)
+            return estimatedTextHeight(text.length, width: width * 0.75) + 48 + AttachedFilesView.height(attachments, width: width)
         case .prose(let text, let above, _):
             return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + above
         case .code(let content):
@@ -323,7 +325,7 @@ class RowView: FlippedView {
         case .turnEnd:
             return TurnEndRowView.height
         case .queued(let content):
-            let attachments: CGFloat = content.attachments.isEmpty ? 0 : 22
+            let attachments = AttachedFilesView.height(content.attachments, width: width)
             return estimatedTextHeight(content.text.length, width: width * 0.75) + 48 + QueuedRowView.footHeight + attachments
         }
     }
@@ -365,8 +367,8 @@ class RowView: FlippedView {
 final class UserRowView: RowView {
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
-    private let attachments = label(Theme.smallFont, Theme.secondary)
-    private var hasAttachments = false
+    private let attachments = AttachedFilesView()
+    private var hasText = false
     private var pending = false
 
     override init(frame: NSRect) {
@@ -388,9 +390,9 @@ final class UserRowView: RowView {
         super.configure(row)
         guard case .user(let content, let files) = row.kind else { return }
         text.content = content
-        hasAttachments = !files.isEmpty
-        attachments.isHidden = !hasAttachments
-        attachments.stringValue = files.map { "📎 \($0)" }.joined(separator: "   ")
+        hasText = content.length > 0
+        text.isHidden = !hasText
+        attachments.show(files, owner: owner)
         pending = row.id == "pending"
         bubble.alphaValue = pending ? 0.6 : 1
     }
@@ -403,14 +405,18 @@ final class UserRowView: RowView {
             with: NSSize(width: widest, height: CGFloat.greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading]
         )
-        let attachmentsWidth = hasAttachments ? min(widest, attachments.intrinsicContentSize.width) : 0
-        let textWidth = min(widest, max(ceil(natural.width) + 2, attachmentsWidth, 12))
-        let textHeight = text.height(forWidth: textWidth)
-        let attachmentsHeight: CGFloat = hasAttachments ? 22 : 0
-        let bubbleSize = NSSize(width: textWidth + padding * 2, height: textHeight + 20 + attachmentsHeight)
+        let files = attachments.size(width: widest)
+        let textWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, 12))
+        let textHeight = hasText ? text.height(forWidth: textWidth) : 0
+        // The files stand above the text, with their own room around them.
+        let top: CGFloat = files.height > 0 ? padding : 10
+        let between: CGFloat = files.height > 0 && hasText ? 8 : 0
+        let bottom: CGFloat = hasText ? 10 : padding
+        let bubbleSize = NSSize(width: textWidth + padding * 2, height: top + files.height + between + textHeight + bottom)
         bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
-        text.frame = NSRect(x: padding, y: 10, width: textWidth, height: textHeight)
-        attachments.frame = NSRect(x: padding, y: 10 + textHeight + 6, width: textWidth, height: 16)
+        attachments.frame = NSRect(x: padding, y: top, width: textWidth, height: files.height)
+        attachments.layout(width: textWidth)
+        text.frame = NSRect(x: padding, y: top + files.height + between, width: textWidth, height: textHeight)
         return bubbleSize.height + 14 + 14
     }
 
@@ -425,14 +431,13 @@ final class QueuedRowView: RowView {
 
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
-    private let attachments = label(Theme.smallFont, Theme.secondary)
+    private let attachments = AttachedFilesView()
     private let clock = NSImageView()
     private let status = label(Theme.smallFont, Theme.secondary)
     private var sendButton: RowButton!
     private var cancelButton: RowButton!
     private var messageID = ""
     private var hasText = false
-    private var hasAttachments = false
     private var sending = false
 
     override init(frame: NSRect) {
@@ -480,9 +485,7 @@ final class QueuedRowView: RowView {
         text.content = content.text
         hasText = content.text.length > 0
         text.isHidden = !hasText
-        hasAttachments = !content.attachments.isEmpty
-        attachments.isHidden = !hasAttachments
-        attachments.stringValue = content.attachments.map { "📎 \($0)" }.joined(separator: "   ")
+        attachments.show(content.attachments, owner: owner)
         status.stringValue = content.status
         sending = content.sending
         sendButton.isHidden = sending
@@ -502,15 +505,17 @@ final class QueuedRowView: RowView {
         let buttonsWidth = sending ? 0 : sendButton.width + cancelButton.width
         let statusWidth = 18 + ceil(status.stringValue.size(withAttributes: [.font: Theme.smallFont]).width) + 8
         let footWidth = sending ? statusWidth : statusWidth + 10 + buttonsWidth - padding
-        let attachmentsWidth = hasAttachments ? min(widest, attachments.intrinsicContentSize.width) : 0
-        let innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, attachmentsWidth, footWidth, 12))
+        let files = attachments.size(width: widest)
+        let innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, footWidth, 12))
         let textHeight = hasText ? text.height(forWidth: innerWidth) : 0
-        let attachmentsHeight: CGFloat = hasAttachments ? 22 : 0
-        let footY = 10 + textHeight + attachmentsHeight + 2
+        let top: CGFloat = files.height > 0 ? padding : 10
+        let between: CGFloat = files.height > 0 && hasText ? 8 : 0
+        let footY = top + files.height + between + textHeight + 2
         let bubbleSize = NSSize(width: innerWidth + padding * 2, height: footY + Self.footHeight)
         bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
-        text.frame = NSRect(x: padding, y: 10, width: innerWidth, height: textHeight)
-        attachments.frame = NSRect(x: padding, y: 10 + textHeight + (hasText ? 6 : 0), width: innerWidth, height: 16)
+        attachments.frame = NSRect(x: padding, y: top, width: innerWidth, height: files.height)
+        attachments.layout(width: innerWidth)
+        text.frame = NSRect(x: padding, y: top + files.height + between, width: innerWidth, height: textHeight)
 
         cancelButton.frame = NSRect(x: bubbleSize.width - cancelButton.width, y: footY, width: cancelButton.width, height: Self.footHeight)
         sendButton.frame = NSRect(x: cancelButton.frame.minX - sendButton.width, y: footY, width: sendButton.width, height: Self.footHeight)
