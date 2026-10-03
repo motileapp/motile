@@ -243,6 +243,12 @@ every push that touches them, runs the demo and uploads the app, the server and 
     gh run watch                                      # then
     gh run download --name screenshots
 
+To see a UI change on a Mac, drive the app by hand: `apps/macos/scripts/build-app.sh --open`
+opens it signed in, with this Mac's servers. Click to the state with `osascript` (System
+Events) and capture it with `screencapture -x`, then crop. Both need a permission the first
+time: Accessibility and Screen Recording, for the program that runs the agent. Use the demo
+(`scripts/ci-demo.sh`) only for the stall numbers or a clean account.
+
 `scripts/fake-agent` stands in for Claude Code and Codex in the tests and the demo. It replays
 the recorded output in `fixtures/` or makes up a turn, depending on the prompt. Asked to
 "watch the deploy" it stays after its turn, as Claude Code does while it monitors, asked to
