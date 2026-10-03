@@ -230,13 +230,17 @@ final class RowButton: FlippedView {
     private let action: () -> Void
     private var tracking: NSTrackingArea?
 
-    init(title: String, tooltip: String, insets: NSEdgeInsets, action: @escaping () -> Void) {
+    /// The room between the words and the highlight's sides.
+    static let padding: CGFloat = 8
+
+    init(title: String, tooltip: String, radius: CGFloat, insets: NSEdgeInsets, action: @escaping () -> Void) {
         self.insets = insets
         self.action = action
         super.init(frame: .zero)
-        highlight.radius = 6
+        highlight.radius = radius
         addSubview(highlight)
         self.title.stringValue = title
+        self.title.alignment = .center
         highlight.addSubview(self.title)
         toolTip = tooltip
         setAccessibilityElement(true)
@@ -246,17 +250,16 @@ final class RowButton: FlippedView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    /// The label's own measure comes up a little short, so the words are measured directly.
     var width: CGFloat {
-        let words = ceil(title.stringValue.size(withAttributes: [.font: Theme.smallFont]).width) + 4
-        return words + 20 + insets.left + insets.right
+        let words = ceil(title.stringValue.size(withAttributes: [.font: Theme.smallFont]).width)
+        return words + 2 * Self.padding + insets.left + insets.right
     }
 
     override var frame: NSRect {
         didSet {
             let lit = NSSize(width: bounds.width - insets.left - insets.right, height: bounds.height - insets.top - insets.bottom)
             highlight.frame = NSRect(x: insets.left, y: insets.top, width: max(0, lit.width), height: max(0, lit.height))
-            title.frame = NSRect(x: 8, y: ((lit.height - 16) / 2).rounded(), width: max(0, lit.width - 16), height: 16)
+            title.frame = NSRect(x: 0, y: ((lit.height - 16) / 2).rounded(), width: max(0, lit.width), height: 16)
         }
     }
 
@@ -478,6 +481,10 @@ final class UserRowView: RowView {
 final class QueuedRowView: RowView {
     /// The strip under the message, down to the bubble's edge, that holds the status and the buttons.
     static let footHeight: CGFloat = 34
+    private static let radius: CGFloat = 18
+    /// The buttons' highlight is this far from the bubble's right and bottom, so that their words
+    /// end where the message's do.
+    private static let buttonMargin = BubbleFit.padding - RowButton.padding
 
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
@@ -494,7 +501,7 @@ final class QueuedRowView: RowView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         bubble.stroke = Theme.strongBorder
-        bubble.radius = 18
+        bubble.radius = Self.radius
         addSubview(bubble)
         bubble.addSubview(text)
         bubble.addSubview(attachments)
@@ -506,7 +513,8 @@ final class QueuedRowView: RowView {
         sendButton = RowButton(
             title: "Send now",
             tooltip: "Have the agent take it at once, in the turn that runs",
-            insets: NSEdgeInsets(top: 3, left: 2, bottom: 7, right: 2)
+            radius: Self.radius - Self.buttonMargin,
+            insets: NSEdgeInsets(top: 4, left: 2, bottom: Self.buttonMargin, right: 2)
         ) { [weak self] in
             guard let self else { return }
             self.owner?.sendQueued(messageID: self.messageID)
@@ -514,7 +522,8 @@ final class QueuedRowView: RowView {
         cancelButton = RowButton(
             title: "Cancel",
             tooltip: "Take it back into the composer",
-            insets: NSEdgeInsets(top: 3, left: 2, bottom: 7, right: 8)
+            radius: Self.radius - Self.buttonMargin,
+            insets: NSEdgeInsets(top: 4, left: 2, bottom: Self.buttonMargin, right: Self.buttonMargin)
         ) { [weak self] in
             guard let self else { return }
             self.owner?.cancelQueued(messageID: self.messageID)
@@ -565,8 +574,8 @@ final class QueuedRowView: RowView {
         cancelButton.frame = NSRect(x: bubbleSize.width - cancelButton.width, y: footY, width: cancelButton.width, height: Self.footHeight)
         sendButton.frame = NSRect(x: cancelButton.frame.minX - sendButton.width, y: footY, width: sendButton.width, height: Self.footHeight)
         let statusEnd = sending ? bubbleSize.width - padding : sendButton.frame.minX - 6
-        clock.frame = NSRect(x: padding, y: footY + 7, width: 14, height: 16)
-        status.frame = NSRect(x: padding + 18, y: footY + 7, width: max(0, statusEnd - padding - 18), height: 16)
+        clock.frame = NSRect(x: padding, y: footY + 8, width: 14, height: 16)
+        status.frame = NSRect(x: padding + 18, y: footY + 8, width: max(0, statusEnd - padding - 18), height: 16)
         return bubbleSize.height + 14 + 14
     }
 
@@ -934,6 +943,10 @@ final class ChangesRowView: RowView {
     fileprivate static let headHeight: CGFloat = 40
     fileprivate static let entryHeight: CGFloat = 26
     private static let bottomPadding: CGFloat = 6
+    private static let radius: CGFloat = 10
+    /// The button's highlight is this far from the top and the right, so that its words end as far
+    /// from the edge as the title starts.
+    private static let buttonMargin = 14 - RowButton.padding
 
     private let surface = SurfaceView()
     private let list = ChangesListView()
@@ -948,11 +961,14 @@ final class ChangesRowView: RowView {
         super.init(frame: frame)
         surface.fill = Theme.codeBackground
         surface.stroke = Theme.border
-        surface.radius = 10
+        surface.radius = Self.radius
         addSubview(surface)
         surface.addSubview(list)
         openButton = RowButton(
-            title: "Open diff", tooltip: "Show what this turn changed", insets: NSEdgeInsets(top: 7, left: 2, bottom: 7, right: 8)
+            title: "Open diff",
+            tooltip: "Show what this turn changed",
+            radius: Self.radius - Self.buttonMargin,
+            insets: NSEdgeInsets(top: Self.buttonMargin, left: 2, bottom: Self.buttonMargin, right: Self.buttonMargin)
         ) { [weak self] in
             guard let self else { return }
             self.owner?.openDiff(turn: self.itemID, path: nil)

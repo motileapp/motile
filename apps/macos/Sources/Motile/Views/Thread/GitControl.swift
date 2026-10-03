@@ -149,25 +149,18 @@ struct GitNoticeView: View {
     @Environment(AppStore.self) private var store
     let notice: GitNotice
 
+    private static let radius: CGFloat = 10
+    private static let padding: CGFloat = 12
+    private static let closeSize: CGFloat = 24
+    /// The close button is this far from the top and the right, and its corners follow the notice's.
+    private static let closeMargin: CGFloat = 5
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(notice.title)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Color.themeText)
-                Spacer(minLength: 8)
-                Button {
-                    store.dismissGitNotice()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.themeTertiary)
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Close")
-            }
+            Text(notice.title)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Color.themeText)
+                .padding(.trailing, Self.closeMargin + Self.closeSize + 4 - Self.padding)
             if let description = notice.description {
                 // The end is where a hook says what it found.
                 Text(description)
@@ -189,11 +182,18 @@ struct GitNoticeView: View {
                     .font(.system(size: 12))
             }
         }
-        .padding(12)
+        .padding(Self.padding)
         .frame(width: 300, alignment: .leading)
-        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+        }
+        .overlay(alignment: .topTrailing) {
+            IconOnlyButton(symbol: "xmark", help: "Close", size: Self.closeSize, symbolSize: 11, radius: Self.radius - Self.closeMargin) {
+                store.dismissGitNotice()
+            }
+            .foregroundStyle(Color.themeSecondary)
+            .padding(Self.closeMargin)
         }
         .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
     }
