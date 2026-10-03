@@ -343,6 +343,10 @@ private final class Demo {
                 return document.files.first?.lines.first == "def greet(name):"
             }
             await shoot("07-file")
+            store.sidePanel.toggleMaximized()
+            await expect("the maximized panel covers the thread") { store.sidePanel.isMaximized }
+            await shoot("07-maximized")
+            store.sidePanel.toggleMaximized()
             store.sidePanel.closeAll()
             store.sidePanel.isOpen = false
         }

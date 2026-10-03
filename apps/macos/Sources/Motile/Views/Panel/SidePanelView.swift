@@ -6,6 +6,9 @@ struct SidePanelView: View {
     @Environment(AppStore.self) private var store
     /// The height of the window's top bar, which the tabs are drawn in.
     let topInset: CGFloat
+    /// How far the tabs start from the panel's left edge: past the window's buttons when the
+    /// panel reaches them.
+    var tabInset: CGFloat = 0
 
     var body: some View {
         let tabs = store.sidePanel.tabs
@@ -16,6 +19,7 @@ struct SidePanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .top) {
             PanelTabStrip(tabs: tabs)
+                .padding(.leading, tabInset)
                 .frame(height: topInset)
                 .offset(y: -topInset)
         }
@@ -125,8 +129,8 @@ private struct PanelTabStrip: View {
                 strip.scrollTo(active.id)
             }
         }
-        // The button that hides the panel is at the window's edge.
-        .padding(.trailing, ToolbarButton.width + 14)
+        // The buttons that maximize and hide the panel are at the window's edge.
+        .padding(.trailing, 2 * ToolbarButton.width + 14)
     }
 
     private var add: some View {
