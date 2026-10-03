@@ -460,7 +460,8 @@ pub struct GitStatus {
     pub removed: u32,
     /// The server can open pull requests for this repository.
     pub pull_requests: bool,
-    /// The open pull request of the branch.
+    /// The pull request of the branch: the open one, or the merged one while the branch has no
+    /// commit since.
     pub pull_request: Option<PullRequest>,
 }
 
@@ -470,6 +471,8 @@ pub struct PullRequest {
     pub title: String,
     pub url: String,
     pub draft: bool,
+    #[serde(default)]
+    pub merged: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

@@ -263,18 +263,27 @@ pub async fn fetch(folder: &str, environment: &Environment) {
     }
 }
 
-/// The open pull request of the branch that is checked out, from GitHub's `gh`.
+/// The pull request of the branch that is checked out, from GitHub's `gh`: the open one, or the
+/// merged one while the branch has no commit since.
 pub async fn pull_request(folder: &str, environment: &Environment) -> Option<PullRequest> {
-    let view = command("gh", folder, environment, &["pr", "view", "--json", "number,title,url,state,isDraft"]);
+    let fields = "number,title,url,state,isDraft,headRefOid";
+    let view = command("gh", folder, environment, &["pr", "view", "--json", fields]);
     let answer: serde_json::Value = serde_json::from_str(&run(view, None, QUICK).await.ok()?).ok()?;
-    if answer["state"] != "OPEN" {
-        return None;
+    let merged = match answer["state"].as_str()? {
+        "OPEN" => false,
+        "MERGED" => true,
+        _ => return None,
+    };
+    if merged {
+        let head = answer["headRefOid"].as_str()?;
+        git(folder, environment, &["merge-base", "--is-ancestor", "HEAD", head]).await.ok()?;
     }
     Some(PullRequest {
         number: answer["number"].as_u64()?,
         title: answer["title"].as_str()?.to_string(),
         url: answer["url"].as_str()?.to_string(),
         draft: answer["isDraft"].as_bool().unwrap_or(false),
+        merged,
     })
 }
 
