@@ -358,14 +358,13 @@ struct ComposerView: View {
             } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(store.canSend ? Color.white : Color.themeSecondary)
                     .frame(width: 30, height: 30)
-                    .background(Color.themePrimary, in: Circle())
-                    .opacity(store.canSend ? 1 : 0.4)
+                    .background(store.canSend ? Color.themePrimary : Color.themeSelected, in: Circle())
                     .padding(Self.margin(leading: 4, trailing: 8))
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SendButtonStyle())
             .disabled(!store.canSend)
             .help(running ? "Queue message" : "Send")
         }
@@ -377,6 +376,13 @@ struct ComposerView: View {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK else { return }
         store.attach(panel.urls)
+    }
+}
+
+/// The plain style dims a disabled label; this one leaves the disabled look to the label.
+private struct SendButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 

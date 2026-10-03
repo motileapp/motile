@@ -43,7 +43,7 @@ struct ThreadPane: View {
                 Spacer()
             }
             ToolbarItem(placement: .primaryAction) {
-                if store.selectedThread != nil, let project = gitProject, let control = project.gitControl {
+                if let project = store.gitProject, let control = project.gitControl {
                     GitButton(project: project, control: control)
                 }
             }
@@ -53,7 +53,7 @@ struct ThreadPane: View {
             CommitSheet(project: project)
         }
         .overlay(alignment: .topTrailing) {
-            if let notice = store.gitNotice, notice.projectID == gitProject?.id {
+            if let notice = store.gitNotice, notice.projectID == store.gitProject?.id {
                 GitNoticeView(notice: notice)
                     .padding(.top, 6)
                     .padding(.trailing, 14)
@@ -89,18 +89,12 @@ struct ThreadPane: View {
             }
             .lineLimit(1)
             .padding(.leading, titleInset)
-            .padding(.trailing, gitProject?.gitControl == nil ? 28 : 218)
+            .padding(.trailing, store.gitProject?.gitControl == nil ? 28 : 218)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: proxy.safeAreaInsets.top)
             .offset(y: -proxy.safeAreaInsets.top)
         }
         .allowsHitTesting(false)
-    }
-
-    /// The open thread's project, when its server can commit and push from here.
-    private var gitProject: Project? {
-        guard let project = store.threadProject, store.canUseGit(of: project) else { return nil }
-        return project
     }
 
     private var titleProject: Project? {

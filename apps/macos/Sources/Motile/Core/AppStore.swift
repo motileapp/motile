@@ -332,7 +332,7 @@ final class AppStore {
         ensureDraftProject()
         openAwaitedProject()
         // A server that has just started hasn't read the repository yet.
-        if let project = threadProject, project.serverID == serverID, project.git == nil { readGit() }
+        if let project = gitProject, project.serverID == serverID, project.git == nil { readGit() }
     }
 
     // MARK: Lookups
@@ -401,6 +401,14 @@ final class AppStore {
     var threadProject: Project? {
         guard let thread = selectedThread else { return nil }
         return project(thread.projectID)?.seen(from: thread)
+    }
+
+    /// The project git works in from here: the open thread's, or the open draft's when its thread
+    /// would start in the project's folder.
+    var gitProject: Project? {
+        let project = threadProject ?? (draftUsesWorktree ? nil : project(selectedDraft?.projectID))
+        guard let project, canUseGit(of: project) else { return nil }
+        return project
     }
 
     /// The server the composer is talking to: the open thread's, or the open draft's project's.
@@ -777,6 +785,7 @@ final class AppStore {
 
     func setDraftWorktree(_ worktree: Bool) {
         updateDraft { $0.worktree = worktree }
+        readGit(fetch: true)
     }
 
     func setDraftBase(_ branch: String) {
@@ -817,11 +826,12 @@ final class AppStore {
         (server(project.serverID)?.protocolVersion ?? 0) >= 4
     }
 
-    /// Has the open thread's server read its project's repository again, which the project then
+    /// Has the server read the repository git works in from here again, which the project then
     /// arrives with. With `fetch` the remote is asked first.
     private func readGit(fetch: Bool = false, done: (([ChangedFile]) -> Void)? = nil) {
-        guard let thread = selectedThread, let project = project(thread.projectID), canUseGit(of: project) else { return }
-        let request: JSON = ["type": "git_status", "project_id": project.id, "thread_id": thread.id, "fetch": fetch]
+        guard let project = gitProject else { return }
+        var request: JSON = ["type": "git_status", "project_id": project.id, "fetch": fetch]
+        if let thread = selectedThread { request["thread_id"] = thread.id }
         core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
             switch result {
             case .success(let answer): done?(answer.objects("files").map { ChangedFile(json: $0) })
@@ -995,6 +1005,7 @@ final class AppStore {
             transcript.begin(threadID: nil)
             defaults.set(draftKey, forKey: "selection")
             ensureDraftProject()
+            readGit(fetch: true)
             return
         }
         open(thread)
@@ -1033,6 +1044,7 @@ final class AppStore {
             $0.projectID = id
             $0.base = nil
         }
+        readGit(fetch: true)
     }
 
     func discard(_ draft: ThreadDraft) {

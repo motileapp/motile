@@ -190,7 +190,7 @@ enum GitSymbol {
     static func name(for action: String?) -> String {
         switch action {
         case "pull": "icloud.and.arrow.down"
-        case "push": "icloud.and.arrow.up"
+        case "push", "commit_push", "commit_push_pr": "icloud.and.arrow.up"
         case "create_pr", nil: "arrow.triangle.merge"
         default: "smallcircle.filled.circle"
         }
