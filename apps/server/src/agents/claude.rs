@@ -291,7 +291,7 @@ fn parse_result(object: &Value) -> AgentEvent {
         duration_ms: object["duration_ms"].as_u64(),
         cost_usd: object["total_cost_usd"].as_f64(),
         is_error: object["is_error"].as_bool().unwrap_or(object["subtype"] != "success"),
-        stopped: false,
+        ..TurnSummary::default()
     };
     let reason = object["terminal_reason"].as_str().unwrap_or_default();
     AgentEvent::Completed {

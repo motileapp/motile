@@ -106,6 +106,7 @@ impl App {
             | Event::ServerUpdate { .. }
             | Event::GitProgress { .. }
             | Event::MediaProgress { .. }
+            | Event::CodeSpans { .. }
             | Event::UploadProgress { .. } => {}
         }
     }
@@ -178,6 +179,7 @@ fn kinds(app: &App) -> Vec<&'static str> {
         RowKind::Group { .. } => "group",
         RowKind::Fold { .. } => "fold",
         RowKind::Error { .. } => "error",
+        RowKind::Changes { .. } => "changes",
         RowKind::TurnEnd { .. } => "turn_end",
         RowKind::Queued { .. } => "queued",
     });

@@ -22,6 +22,7 @@ struct TranscriptRepresentable: NSViewRepresentable {
         view.onViewMedia = { media, index in store.view(media, at: index) }
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
+        view.onOpenDiff = { itemID, path in store.sidePanel.showDiff(.turn(itemID), revealing: path) }
         let hooks = TranscriptModel.Hooks(
             reset: { [weak view] rows in view?.reset(rows: rows) },
             splice: { [weak view] start, remove, rows in view?.splice(start: start, remove: remove, rows: rows) },

@@ -15,6 +15,7 @@ final class RowModel {
         case group(GroupContent)
         case fold(FoldContent)
         case error(NSAttributedString)
+        case changes(ChangesContent)
         case turnEnd(TurnEnd)
         case queued(QueuedContent)
     }
@@ -56,6 +57,8 @@ final class RowModel {
             kind = .fold(FoldContent(json: json))
         case "error":
             kind = .error(Typesetter.plain(json.string("message"), color: Theme.danger, size: 13))
+        case "changes":
+            kind = .changes(ChangesContent(json: json))
         case "turn_end":
             kind = .turnEnd(TurnEnd(json: json))
         case "queued":
@@ -215,6 +218,54 @@ struct FoldContent {
     init(json: JSON) {
         label = TurnEnd.label(stopped: json.bool("stopped"), durationMs: (json["duration_ms"] as? NSNumber)?.intValue)
         open = json.bool("open")
+    }
+}
+
+/// What a finished turn changed in the thread's folder: its files under their folders. The row's
+/// item is the one that ends the turn.
+struct ChangesContent {
+    struct Entry {
+        /// What opens and closes a folder.
+        let id: String
+        let path: String
+        let depth: Int
+        let folder: Bool
+        let open: Bool
+        let name: NSAttributedString
+        let counts: NSAttributedString
+    }
+
+    let files: Int
+    let at: Double
+    let title: NSAttributedString
+    let entries: [Entry]
+
+    private static let nameStyle: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingMiddle
+        return style
+    }()
+
+    init(json: JSON) {
+        files = json.int("files")
+        at = json.double("at")
+        let title = NSMutableAttributedString(
+            string: files == 1 ? "1 changed file" : "\(files) changed files",
+            attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: Theme.text])
+        title.append(NSAttributedString(string: "   "))
+        title.append(LineCountText.text(added: json.int("added"), removed: json.int("removed")))
+        self.title = title
+        entries = json.objects("entries").map { entry in
+            let folder = entry.bool("folder")
+            let name = NSAttributedString(
+                string: entry.string("name"),
+                attributes: [
+                    .font: Theme.smallMono, .foregroundColor: folder ? Theme.secondary : Theme.text, .paragraphStyle: Self.nameStyle,
+                ])
+            return Entry(
+                id: entry.string("id"), path: entry.string("path"), depth: entry.int("depth"), folder: folder, open: entry.bool("open"),
+                name: name, counts: LineCountText.text(added: entry.int("added"), removed: entry.int("removed")))
+        }
     }
 }
 

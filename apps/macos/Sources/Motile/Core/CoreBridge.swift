@@ -17,6 +17,10 @@ final class CoreBridge {
     private let decoding = DispatchQueue(label: "app.motile.events", qos: .userInitiated)
     private var nextID: UInt64 = 0
     private var replies: [UInt64: Reply] = [:]
+    /// What turns a large answer into what the app keeps, off the main thread, and where that goes.
+    private var readers: [UInt64: ([String: Any]) -> Any] = [:]
+    private var readReplies: [UInt64: (Result<Any, CoreError>) -> Void] = [:]
+    private let readersLock = NSLock()
 
     func start(config: [String: Any]) -> Bool {
         guard let json = Self.json(config) else { return false }
@@ -24,14 +28,35 @@ final class CoreBridge {
         return json.withCString { motile_start($0, coreEvent, context) }
     }
 
-    /// Sends a command. `reply` is called on the main thread with the answer.
-    func send(_ type: String, _ fields: [String: Any] = [:], reply: Reply? = nil) {
+    /// Sends a command. `reply` is called on the main thread with the answer. Answers with the
+    /// command's id, which the events that belong to it carry.
+    @discardableResult
+    func send(_ type: String, _ fields: [String: Any] = [:], reply: Reply? = nil) -> UInt64 {
         dispatchPrecondition(condition: .onQueue(.main))
         nextID += 1
+        if let reply { replies[nextID] = reply }
+        post(type, fields, id: nextID)
+        return nextID
+    }
+
+    /// Sends a command whose answer is large: `read` turns it into what the app keeps, off the
+    /// main thread, and `reply` gets that on the main thread.
+    @discardableResult
+    func send<Read>(
+        _ type: String, _ fields: [String: Any], read: @escaping ([String: Any]) -> Read, reply: @escaping (Result<Read, CoreError>) -> Void
+    ) -> UInt64 {
+        dispatchPrecondition(condition: .onQueue(.main))
+        nextID += 1
+        readersLock.withLock { readers[nextID] = read }
+        readReplies[nextID] = { result in reply(result.map { $0 as! Read }) }
+        post(type, fields, id: nextID)
+        return nextID
+    }
+
+    private func post(_ type: String, _ fields: [String: Any], id: UInt64) {
         var command = fields
         command["type"] = type
-        command["id"] = nextID
-        if let reply { replies[nextID] = reply }
+        command["id"] = id
         guard let json = Self.json(command) else { return }
         json.withCString { motile_send($0) }
     }
@@ -40,7 +65,11 @@ final class CoreBridge {
         decoding.async { [weak self] in
             guard let self, let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
             if event["type"] as? String == "reply" {
-                DispatchQueue.main.async { self.answer(event) }
+                let id = (event["id"] as? NSNumber)?.uint64Value ?? 0
+                let value = event["value"] as? [String: Any] ?? [:]
+                let reader = self.readersLock.withLock { self.readers.removeValue(forKey: id) }
+                let read = event["ok"] as? Bool == true ? reader?(value) : nil
+                DispatchQueue.main.async { self.answer(id: id, ok: event["ok"] as? Bool == true, value: value, read: read) }
                 return
             }
             guard let apply = self.decode?(event) else { return }
@@ -48,14 +77,14 @@ final class CoreBridge {
         }
     }
 
-    private func answer(_ event: [String: Any]) {
-        guard let id = (event["id"] as? NSNumber)?.uint64Value, let reply = replies.removeValue(forKey: id) else { return }
-        let value = event["value"] as? [String: Any] ?? [:]
-        if event["ok"] as? Bool == true {
-            reply(.success(value))
-        } else {
-            reply(.failure(CoreError(message: value["error"] as? String ?? "Something went wrong.")))
+    private func answer(id: UInt64, ok: Bool, value: [String: Any], read: Any?) {
+        let failure = CoreError(message: value["error"] as? String ?? "Something went wrong.")
+        if let reply = readReplies.removeValue(forKey: id) {
+            reply(read.map { .success($0) } ?? .failure(failure))
+            return
         }
+        guard let reply = replies.removeValue(forKey: id) else { return }
+        reply(ok ? .success(value) : .failure(failure))
     }
 
     private static func json(_ object: [String: Any]) -> String? {

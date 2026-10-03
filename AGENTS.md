@@ -100,6 +100,10 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   starts the agent. The branch has a temporary name until the writer has named it from the
   first message. A worktree that has gone is made again on its branch before the next turn,
   and it goes with its thread, while the branch stays.
+  In a repository, the folder is kept as it is before a turn's agent starts and when the turn
+  ends: a snapshot, which is a commit under a ref of the thread's own that the repository's
+  branches and index never see. What the turn changed is the difference between the two, and
+  joins the item that ends the turn once it has been read.
 - `pacing.rs` says how much of a streamed reply is finished. The hub passes text on in finished
   blocks (a paragraph, a list item, a line of code), not token by token.
 - `agents/` builds the command for a turn, the lines its process is given and parses its
@@ -131,6 +135,10 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   pulls, pushes and opens a pull request there when an app asks; pull requests are GitHub's,
   through `gh`. The status is read when a turn ends and when an app asks, never on a timer, and
   goes to the apps with the project. What git refuses reaches the user in git's words.
+  It takes the snapshots of the threads, and answers with the patch of a turn, of what isn't
+  committed, or of everything since the branch left the one it started from.
+- `files.rs` lists the server's folders for choosing a project, takes the attachments an app
+  sends, and lists and reads the files of the folder a thread works in, never outside it.
 - `github.rs` is the server's GitHub login, through `gh`: whether it is there, the repositories
   it reaches and cloning one. A project started from a name (a folder with `git init`) or
   cloned from GitHub goes in `~/projects` on the server.
@@ -167,6 +175,8 @@ Rust library for tests.
   image or a video the app uploads is kept here too, so it shows without being fetched back.
 - `git.rs` says which git action a project's status calls for: commit, pull, push or a pull
   request. The apps show that one.
+- `render/diff.rs` reads a patch into files whose lines the apps draw, and highlights them a
+  line at a time, as it does a whole file's.
 - `browse.rs` is browsing a server's folders by typing a path: the folders of the directory
   typed so far, narrowed by what follows its last slash.
 - `render/` turns transcripts into rows ready to draw: `markdown.rs` (text with style runs, in
@@ -174,8 +184,9 @@ Rust library for tests.
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
   are one row, a finished turn's work folds behind one, as does what the agent did before a
   message it took mid-turn, an image or a video is a row that knows its size before the file
-  is there, a message of the user names the images and videos attached to it, and the
-  messages that wait for the agent are the last rows, each saying how it waits).
+  is there, a message of the user names the images and videos attached to it, the files a turn
+  changed are a row before the turn's end, under their folders, and the messages that wait for
+  the agent are the last rows, each saying how it waits).
 - `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
   terminal, and `examples/seed.rs` signs a data folder in with the dev login and makes the dev
   app's project and threads.
@@ -212,6 +223,10 @@ Rust library for tests.
   browsed by typing its path. Rows that wait for a server are placeholders of the same size.
   `Views/Shared` holds the window's glass surface, the hover highlight and the agents' and
   projects' icons.
+- `Views/Panel` is the panel on the right of the thread, with tabs kept for each thread: the
+  changes in the folder the thread works in, its files, and the files opened from either.
+  `CodeView.swift` draws a diff or a file, and only the lines on screen. `Core/SidePanel.swift`
+  is the panel's state. A turn's changed files in the transcript open its diff there.
 - `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
   it is signed by the developer who signed the running one, puts it in its place and restarts.
   A copy that isn't signed with the Developer ID can't update itself.
@@ -311,7 +326,8 @@ Settings. Use the demo (`scripts/ci-demo.sh`) only for the stall numbers.
 the recorded output in `fixtures/` or makes up a turn, depending on the prompt. Asked to
 "watch the deploy" it stays after its turn, as Claude Code does while it monitors, asked to
 "run greet.py" under supervised access it asks before each tool call, and asked to "show the
-screenshot" it makes an image and shows it. "Which color" has it
+screenshot" it makes an image and shows it, and asked to "greet by name" it really changes
+files in its folder. "Which color" has it
 ask the user a question, and "plan the hello" present a plan to approve. A message sent now
 while it works is read after its next tool call, as both agents do, or stops a reply that
 streams, as Claude Code does; "run greet.py" ends its reply with it. Asked for a commit

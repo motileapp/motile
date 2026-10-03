@@ -15,7 +15,7 @@ use motile_protocol::auth_api::{Device, DeviceKind, Me};
 use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
-use motile_protocol::wire::{Activity, Item, Message, Project, Request, ServerInfo, Thread, Worktree};
+use motile_protocol::wire::{Activity, FileKind, Item, Message, Project, Request, ServerInfo, Thread, Worktree};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
@@ -27,6 +27,7 @@ use crate::connection::{ServerAddr, bind};
 use crate::git;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
+use crate::render::diff;
 use crate::render::highlight::{self, Spans};
 use crate::render::rows::{Splice, Transcript, Uncoloured};
 
@@ -38,6 +39,8 @@ const SAVE_EVERY: Duration = Duration::from_secs(1);
 const TICK: Duration = Duration::from_secs(2);
 /// How often the app is told how far a download is.
 const PROGRESS_EVERY: Duration = Duration::from_millis(200);
+/// Where the images among a server's files are kept while they are shown, in the data folder.
+const SHOWN_FILES: &str = "files";
 /// How many ticks pass between account checks when nobody is waiting for a server.
 const ACCOUNT_CHECK_TICKS: u64 = 30;
 
@@ -191,6 +194,8 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         }
     });
 
+    // The images of files that were looked at last time.
+    let _ = std::fs::remove_dir_all(config.data_dir.join(SHOWN_FILES));
     let mut core = Core {
         auth: AuthClient::new(&config.auth_url),
         me: cache.account().unwrap_or_default(),
@@ -1122,6 +1127,66 @@ impl Core {
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
             }
+            Command::Diff { server_id, project_id, thread_id, scope } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let (patch, truncated) = match link.request(&Request::Diff { project_id, thread_id, scope }).await {
+                        Ok(Message::Diff { patch, truncated }) => (patch, truncated),
+                        Ok(other) => {
+                            return reply(&sink, id, Err(format!("Unexpected answer from the server: {other:?}")));
+                        }
+                        Err(error) => return reply(&sink, id, Err(error_text(error))),
+                    };
+                    // Reading and highlighting a long patch takes a while.
+                    let _ = tokio::task::spawn_blocking(move || {
+                        let files = diff::parse(&patch);
+                        reply(&sink, id, Ok(json!({ "files": files, "truncated": truncated })));
+                        for (file, changed) in files.iter().enumerate() {
+                            let lines = diff::highlight(changed);
+                            if lines.iter().any(|spans| !spans.is_empty()) {
+                                sink(Event::CodeSpans { id, file, lines });
+                            }
+                        }
+                    })
+                    .await;
+                });
+            }
+            Command::File { server_id, project_id, thread_id, path } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let (sink, folder) = (self.sink.clone(), self.config.data_dir.join(SHOWN_FILES));
+                tokio::spawn(async move {
+                    let request = Request::ReadFile { project_id, thread_id, path: path.clone() };
+                    let (kind, size, bytes) = match link.file(&request).await {
+                        Ok(file) => file,
+                        Err(error) => return reply(&sink, id, Err(error_text(error))),
+                    };
+                    let _ = tokio::task::spawn_blocking(move || match kind {
+                        FileKind::Binary => reply(&sink, id, Ok(json!({ "kind": kind, "size": size }))),
+                        FileKind::Image => {
+                            let shown = show_file(&folder, &server_id, &path, &bytes).map_err(error_text);
+                            reply(&sink, id, shown.map(|file| json!({ "kind": kind, "size": size, "file": file })));
+                        }
+                        FileKind::Text => {
+                            let truncated = (bytes.len() as u64) < size;
+                            let lines = diff::lines_of(&String::from_utf8_lossy(&bytes), truncated);
+                            let answer = json!({ "kind": kind, "size": size, "lines": lines, "truncated": truncated });
+                            reply(&sink, id, Ok(answer));
+                            let lines = diff::highlight_lines(&path, &lines);
+                            if lines.iter().any(|spans| !spans.is_empty()) {
+                                sink(Event::CodeSpans { id, file: 0, lines });
+                            }
+                        }
+                    })
+                    .await;
+                });
+            }
             Command::Upload { server_id, key, file, poster_of } => self.upload(id, &server_id, key, file, poster_of),
             Command::CancelUpload { key } => {
                 if let Some((waiting, upload)) = self.uploads.remove(&key) {
@@ -1241,6 +1306,19 @@ fn activity_changed(thread_id: &str, transcript: &mut Transcript, activity: Acti
     let queued = transcript.set_queued(activity.queued.clone());
     let waiting = activity.approvals.iter().map(|approval| transcript.waiting(approval)).collect();
     (queued, Event::Activity { thread_id: thread_id.to_string(), activity, waiting })
+}
+
+/// Writes an image among a server's files where the app can read it, and answers with where
+/// that is. The same file is written to the same place.
+fn show_file(folder: &std::path::Path, server_id: &str, path: &str, bytes: &[u8]) -> anyhow::Result<String> {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (server_id, path).hash(&mut hasher);
+    let extension = std::path::Path::new(path).extension().and_then(|extension| extension.to_str()).unwrap_or("png");
+    let file = folder.join(format!("{:016x}.{extension}", hasher.finish()));
+    std::fs::create_dir_all(folder)?;
+    std::fs::write(&file, bytes)?;
+    Ok(file.to_string_lossy().into_owned())
 }
 
 fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8]) -> anyhow::Result<()> {

@@ -128,6 +128,18 @@ pub struct TurnSummary {
     /// The user stopped the turn.
     #[serde(default)]
     pub stopped: bool,
+    /// What the turn changed in the thread's folder, once the server has compared the folder
+    /// with how the turn found it. Missing when the folder is no repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes: Option<TurnChanges>,
+}
+
+/// The files a turn left different from how it found them.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct TurnChanges {
+    /// Names the folder as the turn left it, for asking for the turn's diff.
+    pub snapshot: String,
+    pub files: Vec<ChangedFile>,
 }
 
 /// A tool call that waits for the user to allow or refuse it.
@@ -302,6 +314,30 @@ pub enum Request {
         #[serde(default)]
         new_branch: bool,
     },
+    /// The changes in the folder the thread works in, or in the project's folder, as a patch.
+    /// `Diff` answers.
+    Diff {
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        scope: DiffScope,
+    },
+    /// What is in `path`, a folder inside the one the thread works in or inside the project's
+    /// folder, and relative to it. Empty for that folder itself. `Files` answers.
+    ListFiles {
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        path: String,
+    },
+    /// The file at `path` in that folder. `File` answers, and the bytes follow on the same
+    /// stream.
+    ReadFile {
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        path: String,
+    },
     /// Picks the model that writes thread titles, commit messages and pull requests on this
     /// server. `None` goes back to the lightest model of the thread's agent.
     SetTextModel {
@@ -453,6 +489,36 @@ pub enum Change {
     Modified,
     Deleted,
     Renamed,
+}
+
+/// Which changes a diff shows.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DiffScope {
+    /// What the turn that ended with the item changed.
+    Turn { item_id: String },
+    /// What isn't committed.
+    Uncommitted,
+    /// Everything since the branch left the one it started from, committed or not.
+    Branch,
+}
+
+/// A file or a folder in a folder threads work in.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct FileEntry {
+    pub name: String,
+    pub folder: bool,
+    /// Git ignores it.
+    pub ignored: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum FileKind {
+    Text,
+    Image,
+    /// Neither: its bytes aren't sent.
+    Binary,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -641,6 +707,22 @@ pub enum Message {
     /// `size` bytes of an image or a video follow.
     Media {
         size: u64,
+    },
+    /// `truncated` when the patch was cut for being too long.
+    Diff {
+        patch: String,
+        truncated: bool,
+    },
+    /// Folders first, each kind by name.
+    Files {
+        entries: Vec<FileEntry>,
+    },
+    /// `sent` bytes of a file of `size` bytes follow: all of an image, and the start of a long
+    /// text.
+    File {
+        kind: FileKind,
+        size: u64,
+        sent: u64,
     },
     /// A project's icon: the file's bytes in base64.
     Icon {

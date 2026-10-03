@@ -146,7 +146,12 @@ final class AppStore {
     /// The images and videos the viewer has open over the window.
     private(set) var viewing: Viewing?
 
+    /// Counts up when the folder the open thread works in may have changed: a turn ended there,
+    /// or git did something.
+    private(set) var workspaceVersion = 0
+
     let updater = AppUpdater()
+    let sidePanel = SidePanel()
     @ObservationIgnored let core = CoreBridge()
     @ObservationIgnored let transcript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
@@ -158,6 +163,7 @@ final class AppStore {
 
     init() {
         loadPreferences()
+        sidePanel.store = self
     }
 
     // MARK: Starting
@@ -256,7 +262,14 @@ final class AppStore {
                 // update, and rows arrive many times a second.
                 let isEmpty = self.transcript.isEmpty
                 if self.transcriptIsEmpty != isEmpty { self.transcriptIsEmpty = isEmpty }
+                let turns = self.transcript.turns
+                if self.sidePanel.turns != turns { self.sidePanel.turns = turns }
             }
+        case "code_spans":
+            let request = (event["id"] as? NSNumber)?.uint64Value ?? 0
+            let lines = (event["lines"] as? [[NSNumber]] ?? []).map { $0.map(\.int32Value) }
+            let file = event.int("file")
+            return { [weak self] in self?.sidePanel.colour(request: request, file: file, lines: lines) }
         case "spans":
             let (threadID, rowID) = (event.string("thread_id"), event.string("row_id"))
             let spans = event["spans"] as? [NSNumber] ?? []
@@ -317,8 +330,11 @@ final class AppStore {
     }
 
     private func upsert(_ thread: ThreadInfo) {
+        let before = threads[thread.id]
         threads[thread.id] = thread
         markOpenThreadSeen()
+        guard selection == .thread(thread.id), let before else { return }
+        if before.turnEndedAt != thread.turnEndedAt || (before.running && !thread.running) { workspaceVersion += 1 }
     }
 
     /// A reply in the open thread has been seen once Motile is in front.
@@ -329,10 +345,13 @@ final class AppStore {
 
     private func removeThread(_ id: String) {
         threads[id] = nil
+        sidePanel.forget(id)
         if selection == .thread(id) { openEmptyDraft() }
     }
 
     private func apply(projects new: [Project], serverID: String) {
+        let git = gitProject?.git
+        defer { if gitProject?.git != git { workspaceVersion += 1 } }
         projects.removeAll { $0.serverID == serverID }
         projects.append(contentsOf: new)
         projects.sort { $0.createdAt < $1.createdAt }
@@ -417,6 +436,25 @@ final class AppStore {
         let project = threadProject ?? (draftUsesWorktree ? nil : project(selectedDraft?.projectID))
         guard let project, canUseGit(of: project) else { return nil }
         return project
+    }
+
+    /// The folder the side panel looks into: the one the open thread works in, or the project's
+    /// when the open draft's thread would start there.
+    var panelTarget: PanelTarget? {
+        guard let project = threadProject ?? (draftUsesWorktree ? nil : project(selectedDraft?.projectID)) else { return nil }
+        return PanelTarget(
+            key: draftKey, serverID: project.serverID, projectID: project.id, threadID: selectedThread?.id,
+            name: URL(fileURLWithPath: project.worktree?.path ?? project.path).lastPathComponent,
+            repository: project.branch != nil, worktree: project.worktree != nil)
+    }
+
+    /// Why the side panel has nothing to show here, when it hasn't.
+    var panelUnavailable: String? {
+        guard let target = panelTarget else {
+            return draftUsesWorktree ? "The worktree is made when the thread starts." : "Add a project to see its files."
+        }
+        guard let server = server(target.serverID), server.state == .connected else { return "Your server isn't connected." }
+        return server.protocolVersion >= 7 ? nil : "Update \(server.name) to see files and changes."
     }
 
     /// The server the composer is talking to: the open thread's, or the open draft's project's.
@@ -1006,6 +1044,7 @@ final class AppStore {
         openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
         activity = Activity()
         transcriptIsEmpty = true
+        sidePanel.turns = []
         guard case .thread(let id) = new, let thread = threads[id] else {
             transcript.begin(threadID: nil)
             defaults.set(draftKey, forKey: "selection")
@@ -1139,6 +1178,7 @@ final class AppStore {
     private func openNewThread(id: String, serverID: String, draftID: String) {
         let wasOpen = selection == .draft(draftID)
         removeDraft(draftID)
+        sidePanel.move(from: draftID, to: id)
         guard wasOpen else { return }
         selection = .thread(id)
         openThreadID = id

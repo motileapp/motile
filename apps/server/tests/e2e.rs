@@ -8,8 +8,9 @@ use std::time::Duration;
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, Approval, GitAction, GitHubState, GitStage, GitStatus, Item, ItemKind, Message,
-    NewThread, NewWorktree, Project, Queued, Request, Thread, ThreadChange, ToolStatus, TurnSummary,
+    Access as AgentAccess, Agent, Approval, Change, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
+    Item, ItemKind, Message, NewThread, NewWorktree, Project, Queued, Request, Thread, ThreadChange, ToolStatus,
+    TurnChanges, TurnSummary,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -1589,6 +1590,148 @@ async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
     assert!(!worktree.exists());
     assert!(projects_now(&connection).await[0].worktrees.is_empty());
     assert_eq!(git_says(&repository, &["log", "-1", "--format=%s", branch]), "Take a screenshot");
+}
+
+/// The item that ends the thread's last turn and what that turn changed, once the server has read it.
+async fn last_turns_changes(connection: &Connection, thread_id: &str) -> (String, TurnChanges) {
+    let mut follow = open(connection, thread_id, 0).await;
+    let mut transcript = Transcript::default();
+    loop {
+        transcript.apply(next(&mut follow).await);
+        let Some(Item { id, kind: ItemKind::TurnEnd { summary }, .. }) = transcript.items.last() else { continue };
+        if let Some(changes) = &summary.changes {
+            return (id.clone(), changes.clone());
+        }
+    }
+}
+
+#[tokio::test]
+async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let repository = PathBuf::from(harness.folder("repository"));
+    git(&repository, &["init", "-q", "-b", "main"]);
+    git(&repository, &["config", "user.name", "Test"]);
+    git(&repository, &["config", "user.email", "test@example.com"]);
+    std::fs::write(repository.join("greet.py"), "print('hello')\n").unwrap();
+    std::fs::write(repository.join(".gitignore"), "build/\n").unwrap();
+    git(&repository, &["add", "."]);
+    git(&repository, &["commit", "-q", "-m", "Add the greeting"]);
+    // What the user left there before the turn isn't the turn's.
+    std::fs::write(repository.join("mine.txt"), "mine\n").unwrap();
+    std::fs::create_dir(repository.join("build")).unwrap();
+    std::fs::write(repository.join("build/out.bin"), [0, 1, 2]).unwrap();
+
+    let path = repository.to_string_lossy().into_owned();
+    assert_eq!(connection.request(&Request::AddProject { path }).await.unwrap(), Message::Ok);
+    let project = projects_now(&connection).await.remove(0);
+    let new_thread = NewThread {
+        project_id: project.id.clone(),
+        agent: Agent::Claude,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        plan: false,
+        worktree: None,
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
+    let (turn, changes) = last_turns_changes(&connection, &thread_id).await;
+    let files: Vec<_> =
+        changes.files.iter().map(|file| (file.path.as_str(), file.change, file.added, file.removed)).collect();
+    assert_eq!(files, [("docs/greeting.md", Change::Added, 3, 0), ("greet.py", Change::Modified, 5, 1)]);
+
+    let diff = async |scope: DiffScope| {
+        let request = Request::Diff { project_id: project.id.clone(), thread_id: Some(thread_id.clone()), scope };
+        match connection.request(&request).await.unwrap() {
+            Message::Diff { patch, truncated: false } => patch,
+            other => panic!("expected a diff, got {other:?}"),
+        }
+    };
+    let patch = diff(DiffScope::Turn { item_id: turn.clone() }).await;
+    assert!(patch.contains("+++ b/docs/greeting.md") && patch.contains("-print('hello')"), "{patch}");
+    assert!(patch.contains("+def greet(name):") && !patch.contains("mine.txt"), "{patch}");
+    // What isn't committed is the turn's work and the user's, without what git ignores.
+    for scope in [DiffScope::Uncommitted, DiffScope::Branch] {
+        let patch = diff(scope).await;
+        assert!(patch.contains("+++ b/mine.txt") && patch.contains("+++ b/greet.py"), "{patch}");
+        assert!(patch.contains("+++ b/docs/greeting.md") && !patch.contains("out.bin"), "{patch}");
+    }
+    // Nothing of it was staged in the repository.
+    assert_eq!(git_says(&repository, &["status", "--porcelain"]), "M greet.py\n?? docs/\n?? mine.txt");
+
+    // A turn that changes nothing has no changes, whatever the user did before it.
+    std::fs::write(repository.join("mine.txt"), "mine, changed\n").unwrap();
+    send(&connection, Some(thread_id.clone()), None, "What is in README.md?").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.turn_ends().len(), 2);
+    send(&connection, Some(thread_id.clone()), None, "Show the screenshot").await;
+    let (_, changes) = last_turns_changes(&connection, &thread_id).await;
+    assert_eq!(changes.files.iter().map(|file| file.path.as_str()).collect::<Vec<_>>(), ["screenshot.png"]);
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.turn_ends()[1].changes, None);
+    // The first turn's diff is still what it was.
+    assert_eq!(diff(DiffScope::Turn { item_id: turn }).await, patch);
+
+    // The folder's files are listed and read, and nothing outside it.
+    let list = async |path: &str| {
+        let request = Request::ListFiles {
+            project_id: project.id.clone(),
+            thread_id: Some(thread_id.clone()),
+            path: path.into(),
+        };
+        connection.request(&request).await.unwrap()
+    };
+    let Message::Files { entries } = list("").await else { panic!("expected the files") };
+    let listed: Vec<_> = entries.iter().map(|entry| (entry.name.as_str(), entry.folder, entry.ignored)).collect();
+    assert_eq!(
+        listed,
+        [
+            ("build", true, true),
+            ("docs", true, false),
+            (".gitignore", false, false),
+            ("greet.py", false, false),
+            ("mine.txt", false, false),
+            ("screenshot.png", false, false)
+        ]
+    );
+    let Message::Files { entries } = list("docs").await else { panic!("expected the files") };
+    assert_eq!(entries.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>(), ["greeting.md"]);
+    let read = async |path: &str| {
+        let request =
+            Request::ReadFile { project_id: project.id.clone(), thread_id: Some(thread_id.clone()), path: path.into() };
+        connection.file(&request).await
+    };
+    let (kind, size, bytes) = read("docs/greeting.md").await.unwrap();
+    assert_eq!((kind, size as usize), (FileKind::Text, bytes.len()));
+    assert!(String::from_utf8(bytes).unwrap().starts_with("# Greeting"));
+    let (kind, size, bytes) = read("screenshot.png").await.unwrap();
+    assert_eq!((kind, size as usize, &bytes[1..4]), (FileKind::Image, bytes.len(), &b"PNG"[..]));
+    let (kind, _, bytes) = read("build/out.bin").await.unwrap();
+    assert_eq!((kind, bytes.len()), (FileKind::Binary, 0));
+    for refused in ["../motile.sqlite", ".git/config", "/etc/hosts", "docs"] {
+        assert!(read(refused).await.is_err(), "{refused}");
+        assert!(matches!(list(&format!("{refused}/..")).await, Message::Error { .. }), "{refused}");
+    }
+
+    // The snapshots go with their thread.
+    assert!(git_says(&repository, &["for-each-ref", "refs/motile"]).contains(&thread_id));
+    connection.request(&Request::Delete { thread_id }).await.unwrap();
+    for _ in 0..50 {
+        if git_says(&repository, &["for-each-ref", "refs/motile"]).is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(git_says(&repository, &["for-each-ref", "refs/motile"]), "");
+
+    // A folder that is no repository has neither.
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await.unwrap();
+    let project_id = new_thread.project_id.clone();
+    let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.turn_ends()[0].changes, None);
+    let request = Request::Diff { project_id, thread_id: Some(thread_id), scope: DiffScope::Uncommitted };
+    assert!(matches!(connection.request(&request).await.unwrap(), Message::Error { .. }));
 }
 
 async fn projects_now(connection: &Connection) -> Vec<Project> {

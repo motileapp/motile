@@ -205,6 +205,35 @@ impl Incremental {
     }
 }
 
+/// Highlights lines one after the other, each with spans that count from its own start.
+pub struct ByLine {
+    lines: Option<Lines>,
+    highlighter: Highlighter<'static>,
+}
+
+impl ByLine {
+    pub fn new(language: &str) -> Self {
+        let highlighter = Highlighter::new(&THEME);
+        let lines = syntax_for(language).map(|syntax| Lines {
+            parse: ParseState::new(syntax),
+            highlight: HighlightState::new(&highlighter, ScopeStack::new()),
+        });
+        Self { lines, highlighter }
+    }
+
+    pub fn line(&mut self, line: &str) -> Vec<u32> {
+        let Some(lines) = &mut self.lines else { return Vec::new() };
+        let mut spans = Vec::new();
+        highlight_line(lines, &self.highlighter, &format!("{line}\n"), 0, &mut spans);
+        // The line break isn't part of the line.
+        let length = line.encode_utf16().count() as u32;
+        if let [.., start, len, _] = spans.as_mut_slice() {
+            *len = (*len).min(length.saturating_sub(*start));
+        }
+        spans
+    }
+}
+
 fn highlight_line(lines: &mut Lines, highlighter: &Highlighter, line: &str, offset: u32, spans: &mut Vec<u32>) {
     if line.len() > MAX_LINE_BYTES {
         return;

@@ -9,7 +9,7 @@ use std::time::Duration;
 use futures_lite::StreamExt;
 use iroh::Endpoint;
 use iroh::endpoint::PathEvent;
-use motile_protocol::wire::{GitStage, Message, Request};
+use motile_protocol::wire::{FileKind, GitStage, Message, Request};
 use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
@@ -343,6 +343,10 @@ impl Link {
         progress: impl FnMut(u64, u64),
     ) -> anyhow::Result<(String, Option<String>)> {
         self.connection()?.upload(path, poster_of, progress).await
+    }
+
+    pub async fn file(&self, request: &Request) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
+        self.connection()?.file(request).await
     }
 
     pub async fn media(&self, id: &str, file: &Path, progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {

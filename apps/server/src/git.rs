@@ -4,13 +4,13 @@
 //! program.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
 use motile_protocol::wire::{Branch, Change, ChangedFile, GitStatus, PullRequest};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::agents::environment::Environment;
@@ -22,7 +22,19 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
 const COMMIT_TIMEOUT: Duration = Duration::from_secs(600);
 /// A worktree of a large repository takes a while to check out.
 const WORKTREE_TIMEOUT: Duration = Duration::from_secs(300);
+/// Staging a folder reads every file in it that git hasn't seen.
+const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(120);
 const REFUSAL_CHARS: usize = 2000;
+/// The refs that keep the snapshots of the threads, each named after its thread.
+const SNAPSHOTS: &str = "refs/motile/threads";
+const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+/// A patch beyond this is cut; nobody reads more of it in an app.
+const MAX_PATCH_BYTES: usize = 4 * 1024 * 1024;
+
+/// Whether the folder is inside a git repository, read from the folders themselves.
+pub fn in_repository(folder: &str) -> bool {
+    Path::new(folder).ancestors().any(|folder| folder.join(".git").exists())
+}
 
 /// The branch checked out in the folder, read from git's own files.
 pub fn current_branch(path: &str) -> Option<String> {
@@ -199,9 +211,12 @@ fn change_of(state: &str) -> Change {
 
 /// Fills in the lines added and removed, from `git diff --numstat -z`.
 fn count_lines(files: &mut [ChangedFile], counts: &str) {
-    for entry in counts.split('\0') {
+    let mut entries = counts.split('\0');
+    while let Some(entry) = entries.next() {
         let mut fields = entry.splitn(3, '\t');
         let (Some(added), Some(removed), Some(path)) = (fields.next(), fields.next(), fields.next()) else { continue };
+        // A renamed file has no path there: where it was and where it is follow.
+        let path = if path.is_empty() { entries.nth(1).unwrap_or_default() } else { path };
         let Some(file) = files.iter_mut().find(|file| file.path == path) else { continue };
         file.added = added.parse().unwrap_or(0);
         file.removed = removed.parse().unwrap_or(0);
@@ -270,23 +285,211 @@ pub async fn pending_changes(
     environment: &Environment,
     paths: &[String],
 ) -> anyhow::Result<(String, String)> {
-    let index = git(folder, environment, &["rev-parse", "--git-path", "index"]).await?;
-    let copy = std::env::temp_dir().join(format!("motile-index-{}", uuid::Uuid::new_v4().simple()));
-    let _ = std::fs::copy(Path::new(folder).join(index.trim()), &copy);
-    let on_copy = |arguments: &[&str]| {
+    let index = IndexCopy::of(folder, environment).await?;
+    let on_copy = |arguments: &[&str]| run(index.git(folder, environment, arguments), None, QUICK);
+    on_copy(&add_arguments(paths)).await?;
+    let names = on_copy(&["diff", "--cached", "--name-status"]).await?;
+    let patch = on_copy(&["diff", "--cached", "--no-ext-diff", "--patch", "--minimal"]).await?;
+    Ok((names, patch))
+}
+
+/// A copy of the repository's index to stage changes in, so the repository's own is left alone.
+/// The file goes when this does.
+struct IndexCopy(PathBuf);
+
+impl IndexCopy {
+    async fn of(folder: &str, environment: &Environment) -> anyhow::Result<Self> {
+        let index = git(folder, environment, &["rev-parse", "--git-path", "index"]).await?;
+        let copy = Self(std::env::temp_dir().join(format!("motile-index-{}", uuid::Uuid::new_v4().simple())));
+        let _ = std::fs::copy(Path::new(folder).join(index.trim()), &copy.0);
+        Ok(copy)
+    }
+
+    fn git(&self, folder: &str, environment: &Environment, arguments: &[&str]) -> Command {
         let mut git = command("git", folder, environment, arguments);
-        git.env("GIT_INDEX_FILE", &copy);
-        run(git, None, QUICK)
+        git.env("GIT_INDEX_FILE", &self.0);
+        git
+    }
+}
+
+impl Drop for IndexCopy {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+        let _ = std::fs::remove_file(self.0.with_extension("lock"));
+    }
+}
+
+/// The folder as it is now, with the files git doesn't track yet, as a tree in the repository.
+async fn tree_of_folder(folder: &str, environment: &Environment) -> anyhow::Result<String> {
+    let index = IndexCopy::of(folder, environment).await?;
+    run(index.git(folder, environment, &["add", "-A"]), None, SNAPSHOT_TIMEOUT).await?;
+    let tree = run(index.git(folder, environment, &["write-tree"]), None, QUICK).await?;
+    Ok(tree.trim().to_string())
+}
+
+async fn commit_named(folder: &str, environment: &Environment, name: &str) -> Option<String> {
+    let commit = format!("{name}^{{commit}}");
+    let found = git(folder, environment, &["rev-parse", "--verify", "--quiet", &commit]).await.ok()?;
+    Some(found.trim().to_string())
+}
+
+/// Keeps the folder as it is now as the next of the snapshots named `name`, each a commit on
+/// the one before it, under a ref of their own. Answers with the snapshot and the one before
+/// it, which are the same when nothing changed in between.
+pub async fn snapshot(folder: &str, environment: &Environment, name: &str) -> anyhow::Result<(String, Option<String>)> {
+    let tree = tree_of_folder(folder, environment).await?;
+    let reference = format!("{SNAPSHOTS}/{name}");
+    let before = commit_named(folder, environment, &reference).await;
+    if let Some(before) = &before {
+        let kept = git(folder, environment, &["rev-parse", &format!("{before}^{{tree}}")]).await?;
+        if kept.trim() == tree {
+            return Ok((before.clone(), Some(before.clone())));
+        }
+    }
+    let mut arguments = vec!["-c", "commit.gpgsign=false", "commit-tree", &tree, "-m", "Motile snapshot"];
+    if let Some(before) = &before {
+        arguments.extend(["-p", before]);
+    }
+    let mut commit = command("git", folder, environment, &arguments);
+    for who in ["AUTHOR", "COMMITTER"] {
+        commit.env(format!("GIT_{who}_NAME"), "Motile").env(format!("GIT_{who}_EMAIL"), "snapshots@motile.app");
+    }
+    let commit = run(commit, None, QUICK).await?.trim().to_string();
+    git(folder, environment, &["update-ref", &reference, &commit]).await?;
+    Ok((commit, before))
+}
+
+/// Lets go of the snapshots named `name`.
+pub async fn forget_snapshots(folder: &str, environment: &Environment, name: &str) {
+    let _ = git(folder, environment, &["update-ref", "-d", &format!("{SNAPSHOTS}/{name}")]).await;
+}
+
+/// The commit a snapshot was taken on, to compare the snapshot with.
+pub fn before_snapshot(snapshot: &str) -> String {
+    format!("{snapshot}^")
+}
+
+/// What isn't committed: from the commit that is checked out to the folder as it is.
+pub async fn uncommitted(folder: &str, environment: &Environment) -> anyhow::Result<(String, String)> {
+    let head = commit_named(folder, environment, "HEAD").await.unwrap_or_else(|| EMPTY_TREE.to_string());
+    Ok((head, tree_of_folder(folder, environment).await?))
+}
+
+/// Everything since the branch left the one it started from, committed or not: `base` for a
+/// worktree's branch, and the remote's default branch otherwise.
+pub async fn since_branching(
+    folder: &str,
+    environment: &Environment,
+    base: Option<&str>,
+) -> anyhow::Result<(String, String)> {
+    let remote = remote(folder, environment).await;
+    let branch = match (base, &remote) {
+        (Some(base), _) => Some(base.to_string()),
+        (None, Some(remote)) => default_branch(folder, environment, remote).await,
+        (None, None) => None,
     };
-    let read = async {
-        on_copy(&add_arguments(paths)).await?;
-        let names = on_copy(&["diff", "--cached", "--name-status"]).await?;
-        let patch = on_copy(&["diff", "--cached", "--no-ext-diff", "--patch", "--minimal"]).await?;
-        Ok((names, patch))
+    let on_remote = remote.zip(branch.clone()).map(|(remote, branch)| format!("refs/remotes/{remote}/{branch}"));
+    let local = match &branch {
+        Some(branch) => vec![format!("refs/heads/{branch}")],
+        None => vec!["refs/heads/main".to_string(), "refs/heads/master".to_string()],
     };
-    let read = read.await;
-    let _ = std::fs::remove_file(&copy);
-    read
+    let mut start = None;
+    for candidate in on_remote.into_iter().chain(local) {
+        if commit_named(folder, environment, &candidate).await.is_some() {
+            start = Some(candidate);
+            break;
+        }
+    }
+    let start = start.context("Git doesn't know which branch this one started from.")?;
+    let fork = git(folder, environment, &["merge-base", &start, "HEAD"]).await?;
+    Ok((fork.trim().to_string(), tree_of_folder(folder, environment).await?))
+}
+
+/// The files that differ between two commits or trees, with the lines added and removed.
+pub async fn changed_between(
+    folder: &str,
+    environment: &Environment,
+    from: &str,
+    to: &str,
+) -> anyhow::Result<Vec<ChangedFile>> {
+    let names = git(folder, environment, &["diff", "--name-status", "-M", "-z", from, to]).await?;
+    let counts = git(folder, environment, &["diff", "--numstat", "-M", "-z", from, to]).await?;
+    let mut files = read_names(&names);
+    count_lines(&mut files, &counts);
+    Ok(files)
+}
+
+/// Reads `git diff --name-status -z`.
+fn read_names(names: &str) -> Vec<ChangedFile> {
+    let mut files = Vec::new();
+    let mut entries = names.split('\0');
+    while let Some(status) = entries.next() {
+        let renamed = status.starts_with('R') || status.starts_with('C');
+        let from = if renamed { entries.next().map(str::to_string) } else { None };
+        let Some(path) = entries.next() else { break };
+        let change = match status.chars().next() {
+            Some('A') => Change::Added,
+            Some('D') => Change::Deleted,
+            Some('R') => Change::Renamed,
+            _ => Change::Modified,
+        };
+        files.push(ChangedFile { path: path.to_string(), from, change, added: 0, removed: 0 });
+    }
+    files
+}
+
+/// The patch between two commits or trees, and whether it was cut for being too long.
+pub async fn patch_between(
+    folder: &str,
+    environment: &Environment,
+    from: &str,
+    to: &str,
+) -> anyhow::Result<(String, bool)> {
+    let arguments = [
+        "-c",
+        "core.quotePath=false",
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        "-M",
+        "--patch",
+        from,
+        to,
+    ];
+    let mut diff = command("git", folder, environment, &arguments);
+    diff.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    let mut child = diff.spawn().context("Git isn't installed on your server.")?;
+    let mut stdout = child.stdout.take().context("Git's answer can't be read.")?;
+    let mut patch = Vec::new();
+    let mut start = (&mut stdout).take(MAX_PATCH_BYTES as u64 + 1);
+    let Ok(read) = tokio::time::timeout(QUICK, start.read_to_end(&mut patch)).await else {
+        bail!("git took too long and was stopped.");
+    };
+    read?;
+    if patch.len() > MAX_PATCH_BYTES {
+        let _ = child.start_kill();
+        let whole_lines = patch[..MAX_PATCH_BYTES].iter().rposition(|byte| *byte == b'\n').map_or(0, |end| end + 1);
+        patch.truncate(whole_lines);
+        return Ok((String::from_utf8_lossy(&patch).into_owned(), true));
+    }
+    drop(stdout);
+    let output = child.wait_with_output().await?;
+    if !output.status.success() {
+        bail!("{}", refusal(&String::from_utf8_lossy(&output.stderr)));
+    }
+    Ok((String::from_utf8_lossy(&patch).into_owned(), false))
+}
+
+/// Which of the paths git ignores.
+pub async fn ignored(folder: &str, environment: &Environment, paths: &[String]) -> HashSet<String> {
+    if paths.is_empty() {
+        return HashSet::new();
+    }
+    let check = command("git", folder, environment, &["check-ignore", "-z", "--stdin"]);
+    // Git fails when it ignores none of them, and when the folder is no repository.
+    let found = run(check, Some(&paths.join("\0")), QUICK).await.unwrap_or_default();
+    found.split('\0').filter(|path| !path.is_empty()).map(str::to_string).collect()
 }
 
 fn add_arguments(paths: &[String]) -> Vec<&str> {
@@ -597,6 +800,28 @@ mod tests {
             ]
         );
         assert_eq!(read.files[2].from.as_deref(), Some("old name.rs"));
+    }
+
+    #[test]
+    fn the_files_between_two_commits_are_read_with_their_counts_and_renames() {
+        let mut files = read_names("M\0src/main.rs\0A\0notes with space.md\0D\0gone.rs\0R087\0old.rs\0new.rs\0");
+        count_lines(
+            &mut files,
+            "3\t1\tsrc/main.rs\x002\t0\tnotes with space.md\x000\t9\tgone.rs\x004\t2\t\0old.rs\0new.rs\0",
+        );
+
+        let read: Vec<_> =
+            files.iter().map(|file| (file.path.as_str(), file.change, file.added, file.removed)).collect();
+        assert_eq!(
+            read,
+            [
+                ("src/main.rs", Change::Modified, 3, 1),
+                ("notes with space.md", Change::Added, 2, 0),
+                ("gone.rs", Change::Deleted, 0, 9),
+                ("new.rs", Change::Renamed, 4, 2)
+            ]
+        );
+        assert_eq!(files[3].from.as_deref(), Some("old.rs"));
     }
 
     #[test]

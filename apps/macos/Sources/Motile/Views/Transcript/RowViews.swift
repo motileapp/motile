@@ -16,6 +16,10 @@ protocol RowOwner: AnyObject {
     /// Gives the agent a queued message now, or takes it back into the composer.
     func sendQueued(messageID: String)
     func cancelQueued(messageID: String)
+    /// Opens or closes a folder among a turn's changed files, in the row `rowID`.
+    func toggleFolder(id: String, rowID: String)
+    /// Shows what the turn that ended with the item changed, with the file at `path` in view.
+    func openDiff(turn itemID: String, path: String?)
 }
 
 /// A filled, rounded rectangle whose colours follow the appearance.
@@ -316,6 +320,8 @@ class RowView: FlippedView {
             return MediaRowView.height(content, width: width)
         case .error(let text):
             return estimatedTextHeight(text.length, width: width - 40) + 34
+        case .changes(let content):
+            return ChangesRowView.height(entries: content.entries.count)
         case .turnEnd:
             return TurnEndRowView.height
         case .queued(let content):
@@ -337,6 +343,7 @@ class RowView: FlippedView {
         case .tool, .thinking, .group, .fold: return ToolRowView()
         case .media: return MediaRowView()
         case .error: return ErrorRowView()
+        case .changes: return ChangesRowView()
         case .turnEnd: return TurnEndRowView()
         case .queued: return QueuedRowView()
         }
@@ -350,6 +357,7 @@ class RowView: FlippedView {
         case .tool, .thinking, .group, .fold: return "tool"
         case .media: return "media"
         case .error: return "error"
+        case .changes: return "changes"
         case .turnEnd: return "turnEnd"
         case .queued: return "queued"
         }
@@ -869,6 +877,154 @@ final class ErrorRowView: RowView {
     }
 
     override func clearSelection() { text.clearSelection() }
+}
+
+/// What a turn changed: how many files and lines, and the files under their folders. A click on
+/// a file shows the turn's diff with that file in view.
+final class ChangesRowView: RowView {
+    fileprivate static let headHeight: CGFloat = 40
+    fileprivate static let entryHeight: CGFloat = 26
+    private static let bottomPadding: CGFloat = 6
+
+    private let surface = SurfaceView()
+    private let list = ChangesListView()
+    private var openButton: RowButton!
+    private var itemID = ""
+
+    static func height(entries: Int) -> CGFloat {
+        4 + headHeight + CGFloat(entries) * entryHeight + bottomPadding + 14
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        surface.fill = Theme.codeBackground
+        surface.stroke = Theme.border
+        surface.radius = 10
+        addSubview(surface)
+        surface.addSubview(list)
+        openButton = RowButton(
+            title: "Open diff", tooltip: "Show what this turn changed", insets: NSEdgeInsets(top: 7, left: 2, bottom: 7, right: 8)
+        ) { [weak self] in
+            guard let self else { return }
+            self.owner?.openDiff(turn: self.itemID, path: nil)
+        }
+        surface.addSubview(openButton)
+        list.onClick = { [weak self] entry in
+            guard let self else { return }
+            guard entry.folder else {
+                self.owner?.openDiff(turn: self.itemID, path: entry.path)
+                return
+            }
+            self.owner?.toggleFolder(id: entry.id, rowID: self.rowID)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func configure(_ row: RowModel) {
+        super.configure(row)
+        guard case .changes(let content) = row.kind else { return }
+        itemID = row.itemID
+        list.content = content
+        openButton.dim()
+    }
+
+    override func layout(width: CGFloat) -> CGFloat {
+        let entries = list.content?.entries.count ?? 0
+        let height = Self.headHeight + CGFloat(entries) * Self.entryHeight + Self.bottomPadding
+        surface.frame = NSRect(x: 0, y: 4, width: width, height: height)
+        list.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        openButton.frame = NSRect(x: width - openButton.width, y: 0, width: openButton.width, height: Self.headHeight)
+        return height + 4 + 14
+    }
+
+    /// Draws the head and the entries, and lights the entry under the pointer.
+    private final class ChangesListView: FlippedView {
+        var content: ChangesContent? {
+            didSet {
+                hovered = nil
+                needsDisplay = true
+            }
+        }
+        var onClick: ((ChangesContent.Entry) -> Void)?
+        private var hovered: Int?
+        private var tracking: NSTrackingArea?
+        private let headHeight = ChangesRowView.headHeight
+        private let entryHeight = ChangesRowView.entryHeight
+
+        override func draw(_ dirtyRect: NSRect) {
+            guard let content else { return }
+            let titleSize = content.title.size()
+            content.title.draw(at: NSPoint(x: 14, y: ((headHeight - titleSize.height) / 2).rounded()))
+            for (index, entry) in content.entries.enumerated() {
+                let row = NSRect(x: 0, y: headHeight + CGFloat(index) * entryHeight, width: bounds.width, height: entryHeight)
+                guard row.intersects(dirtyRect) else { continue }
+                if hovered == index {
+                    Theme.hover.setFill()
+                    NSBezierPath(roundedRect: row.insetBy(dx: 6, dy: 1), xRadius: 6, yRadius: 6).fill()
+                }
+                var x = 12 + CGFloat(entry.depth) * 16
+                if entry.folder {
+                    let chevron = NSRect(x: x, y: row.minY, width: 12, height: row.height)
+                    TintedSymbol.draw(entry.open ? "chevron.down" : "chevron.right", size: 8, weight: .semibold, color: Theme.tertiary, in: chevron)
+                }
+                x += 16
+                let symbol = entry.folder ? "folder" : FileSymbol.name(for: entry.path)
+                TintedSymbol.draw(symbol, size: 11, color: Theme.secondary, in: NSRect(x: x, y: row.minY, width: 16, height: row.height))
+                x += 24
+                let counts = entry.counts.size()
+                let countsX = bounds.width - 14 - counts.width
+                entry.counts.draw(at: NSPoint(x: countsX, y: row.minY + ((row.height - counts.height) / 2).rounded()))
+                let height = ceil(entry.name.size().height)
+                entry.name.draw(
+                    with: NSRect(x: x, y: row.minY + ((row.height - height) / 2).rounded(), width: max(0, countsX - 12 - x), height: height),
+                    options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+            }
+        }
+
+        private func entry(at point: NSPoint) -> Int? {
+            guard let content, point.y >= headHeight else { return nil }
+            let index = Int((point.y - headHeight) / entryHeight)
+            return index < content.entries.count ? index : nil
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let inside = superview.map({ convert(point, from: $0) }), entry(at: inside) != nil else { return nil }
+            return self
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let content, let index = entry(at: convert(event.locationInWindow, from: nil)) else { return }
+            onClick?(content.entries[index])
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let tracking { removeTrackingArea(tracking) }
+            let options: NSTrackingArea.Options = [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow]
+            let area = NSTrackingArea(rect: bounds, options: options, owner: self)
+            addTrackingArea(area)
+            tracking = area
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            light(entry(at: convert(event.locationInWindow, from: nil)))
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            light(nil)
+        }
+
+        private func light(_ index: Int?) {
+            guard index != hovered else { return }
+            hovered = index
+            needsDisplay = true
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .arrow)
+        }
+    }
 }
 
 /// The line that closes a turn: how long it took, a way to copy the reply and, when the agent

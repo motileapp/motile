@@ -108,6 +108,9 @@ impl Server {
                 return git_run(send, hub.clone(), project_id, run).await;
             }
             Request::Media { id } => return send_media(send, &hub.media, &id).await,
+            Request::ReadFile { project_id, thread_id, path } => {
+                return send_file(send, hub, &project_id, thread_id.as_deref(), &path).await;
+            }
             Request::Open { thread_id, since } => match hub.open(&thread_id, since).await {
                 Ok(subscription) => return follow_thread(send, subscription).await,
                 Err(error) => Err(error),
@@ -142,6 +145,10 @@ impl Server {
             }
             Request::GitStatus { project_id, thread_id, fetch } => {
                 hub.git_status(&project_id, thread_id.as_deref(), fetch).await
+            }
+            Request::Diff { project_id, thread_id, scope } => hub.diff(&project_id, thread_id.as_deref(), scope).await,
+            Request::ListFiles { project_id, thread_id, path } => {
+                hub.list_files(&project_id, thread_id.as_deref(), &path).await
             }
             Request::SetTextModel { model } => hub.set_text_model(model).map(|_| Message::Ok),
             Request::SetBranchInstructions { instructions } => {
@@ -253,6 +260,27 @@ async fn send_media(mut send: SendStream, media: &MediaStore, id: &str) -> anyho
     };
     write_frame(&mut send, &Message::Media { size }).await?;
     tokio::io::copy(&mut file.take(size), &mut send).await?;
+    send.finish()?;
+    Ok(())
+}
+
+async fn send_file(
+    mut send: SendStream,
+    hub: &Hub,
+    project_id: &str,
+    thread_id: Option<&str>,
+    path: &str,
+) -> anyhow::Result<()> {
+    let (file, kind, size, sent) = match hub.open_file(project_id, thread_id, path).await {
+        Ok(opened) => opened,
+        Err(error) => {
+            write_frame(&mut send, &Message::Error { message: format!("{error:#}") }).await?;
+            send.finish()?;
+            return Ok(());
+        }
+    };
+    write_frame(&mut send, &Message::File { kind, size, sent }).await?;
+    tokio::io::copy(&mut file.take(sent), &mut send).await?;
     send.finish()?;
     Ok(())
 }
