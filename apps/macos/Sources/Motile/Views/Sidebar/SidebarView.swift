@@ -142,6 +142,28 @@ private struct ThreadMenu: View {
     }
 }
 
+private struct MarkDoneButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Mark Done")
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 5)
+            .frame(height: 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .hoverHighlight(radius: 6)
+    }
+}
+
 /// An active thread: its project and what it is doing on the first line, its title on the second,
 /// its project's branch, its server and its agent on the third.
 private struct ThreadRow: View {
@@ -165,10 +187,8 @@ private struct ThreadRow: View {
                     .layoutPriority(1)
                 Spacer(minLength: 6)
                 if hovering && !thread.busy {
-                    IconOnlyButton(symbol: "checkmark", help: "Mark done", size: 22, symbolSize: 12) {
-                        store.setDone([thread.id], done: true, fromSidebar: true)
-                    }
-                    .padding(.trailing, Self.topPadding - Self.sidePadding)
+                    MarkDoneButton { store.setDone([thread.id], done: true, fromSidebar: true) }
+                        .padding(.trailing, Self.topPadding - Self.sidePadding)
                 } else {
                     ThreadStatus(thread: thread)
                 }

@@ -22,7 +22,6 @@ struct ThreadPane: View {
                 start
             } else {
                 TranscriptRepresentable(store: store, bottomInset: composerHeight)
-                    .mask { transcriptFade }
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
                     .padding(.top, Self.composerGap)
@@ -81,21 +80,7 @@ struct ThreadPane: View {
     }
 
     /// The room above the composer, which the transcript fades out in.
-    private static let composerGap: CGFloat = 24
-
-    /// Fades the transcript out under the top bar, and above the composer, so nothing shows
-    /// through it or around it.
-    private var transcriptFade: some View {
-        VStack(spacing: 0) {
-            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                .frame(height: TranscriptView.topPadding)
-            Color.black
-            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: Self.composerGap)
-            Color.clear
-                .frame(height: max(0, composerHeight - Self.composerGap))
-        }
-    }
+    static let composerGap: CGFloat = 24
 
     /// The thread's project and name, drawn in the window's top bar over this pane.
     private var title: some View {

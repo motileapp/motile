@@ -22,11 +22,16 @@ final class TranscriptView: FlippedView, RowOwner {
             guard bottomInset != oldValue else { return }
             updateVisible()
             jumpButton.frame.origin.y = jumpButtonY
+            layoutFade()
         }
     }
 
-    /// Right above the inset, where the transcript starts to fade.
-    private var jumpButtonY: CGFloat { bounds.height - bottomInset - 32 }
+    private static let jumpButtonGap: CGFloat = 12
+
+    /// Above the composer, which starts `ThreadPane.composerGap` into the inset.
+    private var jumpButtonY: CGFloat {
+        bounds.height - bottomInset + ThreadPane.composerGap - Self.jumpButtonGap - 32
+    }
 
     /// Room above the first row, which the transcript fades out in.
     static let topPadding: CGFloat = 20
@@ -41,6 +46,9 @@ final class TranscriptView: FlippedView, RowOwner {
     private let document = FlippedView()
     private let working = WorkingView()
     private let jumpButton = SurfaceView()
+    /// Fades the rows out under the top bar and above the composer, so nothing shows through
+    /// it or around it. The jump button is not under it.
+    private let fade = CAGradientLayer()
 
     private var rows: [RowModel] = []
     private var hasPending = false
@@ -94,6 +102,9 @@ final class TranscriptView: FlippedView, RowOwner {
         scrollView.documentView = document
         scrollView.contentView.postsBoundsChangedNotifications = true
         addSubview(scrollView)
+        fade.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+        scrollView.wantsLayer = true
+        scrollView.layer?.mask = fade
         document.addSubview(working)
         working.isHidden = true
 
@@ -182,9 +193,21 @@ final class TranscriptView: FlippedView, RowOwner {
         return Self.topPadding + (offsets.last ?? 0) + workingHeight + bottomInset + 16
     }
 
+    private func layoutFade() {
+        guard bounds.height > 0 else { return }
+        let end = bounds.height - bottomInset
+        let stops = [0, Self.topPadding, end, end + ThreadPane.composerGap]
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        fade.frame = bounds
+        fade.locations = stops.map { NSNumber(value: Double(min(1, max(0, $0 / bounds.height)))) }
+        CATransaction.commit()
+    }
+
     override func layout() {
         super.layout()
         scrollView.frame = bounds
+        layoutFade()
         jumpButton.frame.origin = NSPoint(x: ((bounds.width - 32) / 2).rounded(), y: jumpButtonY)
         guard bounds.width != layoutWidth else {
             updateVisible()
