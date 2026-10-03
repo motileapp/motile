@@ -3,11 +3,12 @@
 use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
-use motile_protocol::wire::{Activity, NewThread, Project, Request, ServerInfo, Thread};
+use motile_protocol::wire::{Activity, GitAction, GitStage, NewThread, Project, Request, ServerInfo, Thread};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::connection::PathKind;
+use crate::git::Control;
 use crate::link::State;
 use crate::render::highlight::Spans;
 use crate::render::rows::{Row, Waiting};
@@ -75,6 +76,13 @@ pub enum Command {
         server_id: String,
         request: Request,
     },
+    /// The folders on the server under the path typed in `query`, which starts at `/` or `~/`:
+    /// those of its directory whose names start with what follows the last slash. Answers with
+    /// a `browse::Listing`.
+    Browse {
+        server_id: String,
+        query: String,
+    },
     /// Uploads `files` from this device, then sends the message with them and with `attachments`,
     /// which are on the server already. Answers with `thread_id`.
     Send {
@@ -91,6 +99,30 @@ pub enum Command {
     /// download is; the answer comes when the server is about to restart.
     UpdateServer {
         server_id: String,
+    },
+    /// Commits, pushes, opens a pull request or pulls in the project's folder; the server writes
+    /// the commit message that isn't given and the pull request. `git_progress` events say which
+    /// stage runs. Answers with `title`, `description`, the pull request's `url` and the `next`
+    /// action, where there is one.
+    GitRun {
+        server_id: String,
+        project_id: String,
+        action: GitAction,
+        #[serde(default)]
+        thread_id: Option<String>,
+        #[serde(default)]
+        message: Option<String>,
+        #[serde(default)]
+        paths: Vec<String>,
+        #[serde(default)]
+        new_branch: bool,
+    },
+    /// Picks the model that writes titles, commit messages and pull requests on the server.
+    /// Without `model` the lightest model of the thread's agent writes.
+    SetTextModel {
+        server_id: String,
+        #[serde(default)]
+        model: Option<String>,
     },
     /// Makes the image at `path` on the server the project's icon. Without `path` the project
     /// goes back to the icon found in its folder.
@@ -154,6 +186,11 @@ pub enum Event {
         server_id: String,
         received: u64,
         total: Option<u64>,
+    },
+    /// A stage of a project's `git_run` has started.
+    GitProgress {
+        project_id: String,
+        stage: GitStage,
     },
     /// How much of an image or a video has arrived from its server.
     MediaProgress {
@@ -222,6 +259,8 @@ pub struct ProjectView {
     pub project: Project,
     /// The project's icon as a file on this device, once it has been fetched from the server.
     pub icon_path: Option<String>,
+    /// The git button for its repository: what it does and the menu behind it.
+    pub git_control: Option<Control>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

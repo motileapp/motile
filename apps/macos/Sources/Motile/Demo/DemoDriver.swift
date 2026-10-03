@@ -145,10 +145,10 @@ private final class Demo {
         guard connected else { return finish() }
         await shoot("03-add-project")
 
-        store.showsFolderPicker = true
+        store.addProject()
         await wait(1)
-        await shoot("03-folder-picker")
-        store.showsFolderPicker = false
+        await shoot("03-add-project-panel")
+        store.closePanel()
         await wait(0.6)
 
         guard let server = store.servers.first else { return finish() }
@@ -303,6 +303,22 @@ private final class Demo {
         store.refreshMediaStorage()
         await expect("the image is fetched from the server and kept on this Mac") { (store.mediaStorage?.used ?? 0) > 0 }
         await shoot("07-image")
+
+        // What the agent left in the folder is committed from the top bar in one click, with a
+        // message the server has written for it.
+        await expect("the git button offers to commit what the agent changed") {
+            store.project(store.selectedThread?.projectID)?.gitControl?.quick.action == "commit"
+        }
+        if let project = store.project(store.selectedThread?.projectID) {
+            await shoot("07-git-button")
+            store.runQuickGit(in: project)
+            await expect("one click commits with a written message") {
+                store.gitNotice?.title.hasPrefix("Committed") == true
+                    && store.project(project.id)?.gitControl?.quick.action == nil
+            }
+            await shoot("07-committed")
+            store.dismissGitNotice()
+        }
 
         // A long reply full of code, to see that the window keeps up.
         store.startNewThread()

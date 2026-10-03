@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
     @AppStorage("appearance") private var appearance = Appearance.system
 
     var body: some View {
@@ -62,6 +63,7 @@ struct SettingsView: View {
 
                 if store.account.signedIn {
                     servers
+                    textGeneration
                     projects
                 }
             }
@@ -105,6 +107,39 @@ struct SettingsView: View {
         }
     }
 
+    /// The model that writes thread titles, commit messages and pull requests, by server.
+    @ViewBuilder private var textGeneration: some View {
+        let servers = store.servers.filter { $0.state == .connected && $0.protocolVersion >= 4 }
+        if !servers.isEmpty {
+            SettingsSection("Text generation") {
+                ForEach(servers) { server in
+                    SettingsRow {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(servers.count > 1 ? "Model on \(server.name)" : "Model")
+                            Text("Writes thread titles, commit messages and pull requests")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } trailing: {
+                        Picker("Model", selection: textModel(of: server)) {
+                            Text("Automatic").tag(String?.none)
+                            ForEach(server.models) { model in
+                                Text(model.name).tag(String?.some(model.id))
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    if server.id != servers.last?.id { SettingsDivider() }
+                }
+            }
+        }
+    }
+
+    private func textModel(of server: Server) -> Binding<String?> {
+        Binding { server.textModel } set: { store.setTextModel($0, on: server) }
+    }
+
     private var projects: some View {
         SettingsSection("Projects") {
             ForEach(store.projects) { project in
@@ -129,7 +164,10 @@ struct SettingsView: View {
                 SettingsDivider()
             }
             SettingsRow {
-                Button("Add a Project…") { store.showsFolderPicker = true }
+                Button("Add a Project…") {
+                    openWindow(id: "main")
+                    store.addProject()
+                }
                     .disabled(store.servers.isEmpty)
             } trailing: {
                 EmptyView()

@@ -443,7 +443,7 @@ private struct ThreadStatus: View {
             }
         } else if thread.running {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                label("Working \(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970))", Color.themeWorking) {
+                label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
                     symbol("circle.dashed")
                 }
             }
@@ -524,7 +524,7 @@ private struct SidebarFooter: View {
             }
             Menu {
                 Button("Settings…") { openSettings() }
-                Button("Add a Project…") { store.showsFolderPicker = true }
+                Button("Add a Project…") { store.addProject() }
                 Button("Add a Server…") { store.showsAddServer = true }
                 Divider()
                 Button("Sign Out") { store.signOut() }

@@ -20,8 +20,10 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use crate::api::{AccountView, Command, Config, Event, ProjectView, ServerView, ThreadView};
+use crate::browse;
 use crate::cache::Cache;
 use crate::connection::{ServerAddr, bind};
+use crate::git;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
 use crate::render::highlight::{self, Spans};
@@ -57,14 +59,42 @@ impl Handle {
 }
 
 enum Input {
-    Command { id: u64, command: Command },
+    Command {
+        id: u64,
+        command: Command,
+    },
     Link(String, LinkEvent),
-    Endpoint { key: String, result: Result<Endpoint, String> },
-    AccountChecked { key: String, result: Result<Me, String> },
-    SignedIn { id: u64, result: Result<Me, String> },
-    Highlighted { thread_id: String, row_id: String, para: Option<usize>, code: String, spans: Spans },
-    IconFetched { server_id: String },
-    MediaFetched { id: String, result: Result<String, String> },
+    Endpoint {
+        key: String,
+        result: Result<Endpoint, String>,
+    },
+    AccountChecked {
+        key: String,
+        result: Result<Me, String>,
+    },
+    SignedIn {
+        id: u64,
+        result: Result<Me, String>,
+    },
+    Highlighted {
+        thread_id: String,
+        row_id: String,
+        para: Option<usize>,
+        code: String,
+        spans: Spans,
+    },
+    IconFetched {
+        server_id: String,
+    },
+    /// The server took the model that writes its titles and commit messages.
+    TextModelSet {
+        server_id: String,
+        model: Option<String>,
+    },
+    MediaFetched {
+        id: String,
+        result: Result<String, String>,
+    },
     Render,
     Tick,
     Stop,
@@ -114,7 +144,12 @@ struct Core {
     media: Arc<MediaCache>,
     /// The commands waiting for each image or video that is being fetched.
     media_waiting: HashMap<String, Vec<u64>>,
+    /// The folders last listed for `browse`: of which server and directory, and whether with
+    /// the hidden ones.
+    browsed: Browsed,
 }
+
+type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool), Vec<String>)>>>;
 
 /// Starts the core on the current tokio runtime.
 pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
@@ -148,6 +183,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         me: cache.account().unwrap_or_default(),
         media: Arc::new(MediaCache::new(config.data_dir.join("media"))),
         media_waiting: HashMap::new(),
+        browsed: Browsed::default(),
         config,
         sink,
         inputs: inputs.clone(),
@@ -223,6 +259,14 @@ impl Core {
                 if let Some(splice) = open.transcript.set_para_spans(&row_id, para, &code, spans) {
                     self.emit_rows(&thread_id, false, splice);
                 }
+            }
+            Input::TextModelSet { server_id, model } => {
+                let Some(server) = self.server_mut(&server_id) else { return };
+                let Some(info) = &mut server.info else { return };
+                info.text_model = model;
+                let info = info.clone();
+                self.cache.set_server_info(&server_id, &info);
+                self.emit_servers();
             }
             Input::IconFetched { server_id } => {
                 let projects = self.cache.projects(&server_id);
@@ -543,7 +587,8 @@ impl Core {
         let view = |project: Project| {
             let file = project.icon.as_ref().map(|icon| folder.join(format!("{}-{icon}", project.id)));
             let icon_path = file.filter(|file| file.is_file()).map(|file| file.to_string_lossy().into_owned());
-            ProjectView { project, icon_path }
+            let git_control = project.git.as_ref().map(git::control);
+            ProjectView { project, icon_path, git_control }
         };
         let views: Vec<ProjectView> = projects.into_iter().map(view).collect();
         for view in views.iter().filter(|view| view.icon_path.is_none()) {
@@ -877,6 +922,42 @@ impl Core {
                     reply(&sink, id, answer.map(|message| serde_json::to_value(message).unwrap_or_default()));
                 });
             }
+            Command::Browse { server_id, query } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let server = self.servers.iter().find(|server| server.device.public_key == server_id);
+                let home = server.and_then(|server| server.info.as_ref()).map(|info| info.home.clone());
+                let Some(typed) = browse::typed(&query, &home.clone().unwrap_or_default()) else {
+                    return self.reply(id, Err("Start the path with / or ~/.".to_string()));
+                };
+                let (sink, browsed) = (self.sink.clone(), self.browsed.clone());
+                tokio::spawn(async move {
+                    let home = home.unwrap_or_default();
+                    // Typing a name narrows the folders that are here already.
+                    let key = (server_id, typed.directory.clone(), typed.leaf.starts_with('.'));
+                    let known =
+                        browsed.lock().unwrap().clone().filter(|(known, _)| *known == key && !typed.leaf.is_empty());
+                    let folders = match known {
+                        Some((_, folders)) => Ok(folders),
+                        None => {
+                            let list = Request::ListDir { path: Some(key.1.clone()), icons: false, hidden: key.2 };
+                            match link.request(&list).await {
+                                Ok(Message::Dir { folders, .. }) => {
+                                    *browsed.lock().unwrap() = Some((key, folders.clone()));
+                                    Ok(folders)
+                                }
+                                Ok(other) => Err(format!("Unexpected answer from the server: {other:?}")),
+                                Err(error) => Err(error_text(error)),
+                            }
+                        }
+                    };
+                    let listing =
+                        folders.map(|folders| browse::listing(&typed.directory, &typed.leaf, &folders, &home));
+                    reply(&sink, id, listing.map(|listing| serde_json::to_value(listing).unwrap_or_default()));
+                });
+            }
             Command::Send { server_id, thread_id, new_thread, text, files, mut attachments } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
@@ -908,6 +989,45 @@ impl Core {
                         events(Event::ServerUpdate { server_id: server_id.clone(), received, total });
                     };
                     reply(&sink, id, link.update(report).await.map(|_| json!({})).map_err(error_text));
+                });
+            }
+            Command::GitRun { server_id, project_id, action, thread_id, message, paths, new_branch } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let events = sink.clone();
+                    let started = |stage| events(Event::GitProgress { project_id: project_id.clone(), stage });
+                    let request = Request::GitRun {
+                        project_id: project_id.clone(),
+                        action,
+                        thread_id,
+                        message,
+                        paths,
+                        new_branch,
+                    };
+                    let done = link.git_run(&request, started).await;
+                    reply(
+                        &sink,
+                        id,
+                        done.map(|done| serde_json::to_value(done).unwrap_or_default()).map_err(error_text),
+                    );
+                });
+            }
+            Command::SetTextModel { server_id, model } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
+                tokio::spawn(async move {
+                    let set = link.request(&Request::SetTextModel { model: model.clone() }).await;
+                    if set.is_ok() {
+                        let _ = inputs.send(Input::TextModelSet { server_id, model });
+                    }
+                    reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
             }
             Command::SetProjectIcon { server_id, project_id, path } => {

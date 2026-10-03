@@ -28,13 +28,30 @@ struct ListedDraft: Identifiable {
 }
 
 /// Where the command panel opens.
-enum PanelPage: Equatable {
+enum PanelPage: Hashable {
     /// Everything that can be done from here.
     case commands
     /// The projects, to start a thread in one.
     case projects
     /// The threads, to open one.
     case threads
+    /// The servers, to add a project on one.
+    case servers
+    /// The ways to add a project on the server.
+    case sources(String)
+    case newProject(String)
+    /// The repositories of the server's GitHub login, to clone one.
+    case github(String)
+    /// What GitHub needs on the server before its repositories can be listed.
+    case githubSetup(String)
+    /// The server's folders, to add one.
+    case folder(String)
+}
+
+/// A project that a server is making or cloning.
+struct AddingProject: Equatable {
+    let serverID: String
+    let name: String
 }
 
 /// A server that is installing a new version of itself.
@@ -70,7 +87,6 @@ final class AppStore {
     var signInError: String?
     private(set) var enrollToken: EnrollToken?
     var showsAddServer = false
-    var showsFolderPicker = false
     /// The project an icon is being chosen for.
     var iconProject: Project?
     /// Files are being dragged over the window.
@@ -78,7 +94,26 @@ final class AppStore {
     /// The branch picker under the composer is open, on the branches it was opened with.
     var showsBranches = false
     private(set) var listedBranches: Result<[Branch], CoreBridge.CoreError> = .success([])
+    /// The project whose changes the commit sheet is open on, with the files it was opened with.
+    var committingProject: Project?
+    private(set) var gitFiles: [ChangedFile] = []
+    /// An action that pushes from the default branch, until the user says where it should happen.
+    var pendingGit: PendingGit?
+    /// The stage a project's git action is at, by project.
+    private(set) var gitStages: [String: GitStage] = [:]
+    private(set) var gitNotice: GitNotice?
     private(set) var panel: PanelPage?
+    /// What a server refused while the panel was adding a project.
+    var panelNotice: String?
+    /// Whether GitHub can be used on each server, as last heard.
+    private(set) var github: [String: GitHubState] = [:]
+    /// The GitHub repositories each server last listed, and why one couldn't.
+    private(set) var repos: [String: [Repo]] = [:]
+    private(set) var repoErrors: [String: String] = [:]
+    private(set) var addingProject: AddingProject?
+    /// Counts up when a project has been made or cloned.
+    private(set) var projectsAdded = 0
+    @ObservationIgnored private var awaitedProjectID: String?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
 
@@ -148,6 +183,7 @@ final class AppStore {
         if environment["MOTILE_DEMO"] != "1" { updater.start() }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             self?.markOpenThreadSeen()
+            self?.readGit(fetch: true)
         }
     }
 
@@ -186,6 +222,12 @@ final class AppStore {
             let (received, total) = (event.double("received"), event.optionalDouble("total"))
             return { [weak self] in
                 self?.serverUpdates[serverID]?.fraction = total.flatMap { $0 > 0 ? received / $0 : nil }
+            }
+        case "git_progress":
+            let (projectID, stage) = (event.string("project_id"), GitStage(rawValue: event.string("stage")))
+            return { [weak self] in
+                guard self?.gitStages[projectID] != nil else { return }
+                self?.gitStages[projectID] = stage
             }
         case "media_progress":
             let (id, received, size) = (event.string("id"), event.double("received"), event.double("size"))
@@ -287,6 +329,9 @@ final class AppStore {
         projects.sort { $0.createdAt < $1.createdAt }
         ImageFiles.shared.warm(new.compactMap(\.iconPath))
         ensureDraftProject()
+        openAwaitedProject()
+        // A server that has just started hasn't read the repository yet.
+        if let project = project(selectedThread?.projectID), project.serverID == serverID, project.git == nil { readGit() }
     }
 
     // MARK: Lookups
@@ -577,7 +622,7 @@ final class AppStore {
 
     // MARK: Projects
 
-    func listFolder(serverID: String, path: String?, icons: Bool = false, done: @escaping (Result<RemoteFolder, CoreBridge.CoreError>) -> Void) {
+    func listFolder(serverID: String, path: String?, icons: Bool, done: @escaping (Result<RemoteFolder, CoreBridge.CoreError>) -> Void) {
         var request: JSON = ["type": "list_dir", "icons": icons]
         if let path { request["path"] = path }
         core.send("request", ["server_id": serverID, "request": request]) { result in
@@ -595,6 +640,94 @@ final class AppStore {
                 self.setNewThreadProject(project.id)
             }
         }
+    }
+
+    /// Opens the panel on the ways to add a project, after the servers when there is a choice.
+    func addProject() {
+        openPanel(addProjectPage)
+    }
+
+    var addProjectPage: PanelPage {
+        let connected = servers.filter { $0.state == .connected }
+        guard connected.count == 1, let server = connected.first else { return .servers }
+        return .sources(server.id)
+    }
+
+    /// Whether the server can start a project from a name or from GitHub.
+    func startsProjects(_ server: Server?) -> Bool {
+        (server?.protocolVersion ?? 0) >= 5
+    }
+
+    func browse(serverID: String, query: String, done: @escaping (Result<FolderListing, CoreBridge.CoreError>) -> Void) {
+        core.send("browse", ["server_id": serverID, "query": query]) { result in
+            done(result.map { FolderListing(json: $0) })
+        }
+    }
+
+    func readGitHub(_ serverID: String) {
+        core.send("request", ["server_id": serverID, "request": ["type": "github_status"]]) { [weak self] result in
+            guard case .success(let answer) = result else { return }
+            self?.heard(github: answer, serverID: serverID)
+        }
+    }
+
+    private func heard(github answer: JSON, serverID: String) {
+        guard let state = GitHubState(rawValue: answer.string("state")) else { return }
+        github[serverID] = state
+        defaults.set(state.rawValue, forKey: "github-\(serverID)")
+    }
+
+    /// Asks the server for its GitHub repositories. The ones it listed before stay until then.
+    func loadRepos(_ serverID: String) {
+        repoErrors[serverID] = nil
+        core.send("request", ["server_id": serverID, "request": ["type": "github_repos"]]) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let answer) where answer.string("type") == "repos":
+                repos[serverID] = answer.objects("repos").map { Repo(json: $0) }
+            case .success(let answer):
+                repos[serverID] = nil
+                heard(github: answer, serverID: serverID)
+            case .failure(let error):
+                repoErrors[serverID] = error.message
+            }
+        }
+    }
+
+    func newProject(named name: String, on serverID: String) {
+        add(["type": "new_project", "name": name], named: name, on: serverID)
+    }
+
+    func clone(_ repo: String, on serverID: String) {
+        add(["type": "clone_repo", "repo": repo], named: repo, on: serverID)
+    }
+
+    private func add(_ request: JSON, named name: String, on serverID: String) {
+        guard addingProject == nil else { return }
+        addingProject = AddingProject(serverID: serverID, name: name)
+        panelNotice = nil
+        core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
+            guard let self else { return }
+            addingProject = nil
+            switch result {
+            case .success(let answer):
+                projectsAdded += 1
+                awaitedProjectID = answer.string("project_id")
+                openAwaitedProject()
+            case .failure(let error) where panel != nil:
+                panelNotice = error.message
+            case .failure(let error):
+                errorMessage = error.message
+            }
+        }
+    }
+
+    /// Starts a thread in the project that was just made, once the server has told about it.
+    private func openAwaitedProject() {
+        guard let project = project(awaitedProjectID) else { return }
+        awaitedProjectID = nil
+        guard selectedDraft == nil else { return setNewThreadProject(project.id) }
+        startNewThread(in: project)
     }
 
     // MARK: Branches
@@ -631,6 +764,120 @@ final class AppStore {
         }
     }
 
+    // MARK: Git
+
+    /// Whether the project's server is new enough to commit, push and open pull requests.
+    func canUseGit(of project: Project) -> Bool {
+        (server(project.serverID)?.protocolVersion ?? 0) >= 4
+    }
+
+    /// Has the open thread's server read its project's repository again, which the project then
+    /// arrives with. With `fetch` the remote is asked first.
+    private func readGit(fetch: Bool = false, done: (([ChangedFile]) -> Void)? = nil) {
+        guard let project = project(selectedThread?.projectID), canUseGit(of: project) else { return }
+        let request: JSON = ["type": "git_status", "project_id": project.id, "fetch": fetch]
+        core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
+            switch result {
+            case .success(let answer): done?(answer.objects("files").map { ChangedFile(json: $0) })
+            // Only said when the user is waiting for the answer.
+            case .failure(let error): if done != nil { self?.errorMessage = error.message }
+            }
+        }
+    }
+
+    /// What a click on the git button does: the one action the repository calls for, at once.
+    func runQuickGit(in project: Project) {
+        guard let quick = project.gitControl?.quick, gitStages[project.id] == nil else { return }
+        if let url = quick.url.flatMap({ URL(string: $0) }) {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        guard let action = quick.action else {
+            show(GitNotice(projectID: project.id, title: quick.hint ?? quick.label))
+            return
+        }
+        startGit(action, in: project, confirm: quick.confirm)
+    }
+
+    /// What a pick from the menu does: a commit opens its sheet, the others happen at once.
+    func chooseGit(_ item: GitMenuItem, in project: Project) {
+        guard item.reason == nil, gitStages[project.id] == nil else { return }
+        guard item.action == "commit" else { return startGit(item.action, in: project, confirm: item.confirm) }
+        // A sheet takes its size from what it opens with, so the files come first.
+        readGit { [weak self] files in
+            self?.gitFiles = files
+            self?.committingProject = project
+        }
+    }
+
+    /// Runs the action, after asking where when it would push from the default branch.
+    private func startGit(_ action: String, in project: Project, confirm: GitConfirm?) {
+        guard let confirm else { return runGit(action, in: project) }
+        pendingGit = PendingGit(project: project, action: action, confirm: confirm)
+    }
+
+    /// Carries on with the action that waited, on the default branch or on a branch made for it.
+    func confirmGit(_ pending: PendingGit, onNewBranch: Bool) {
+        runGit(pending.action, in: pending.project, message: pending.message, paths: pending.paths, newBranch: onNewBranch)
+    }
+
+    /// Has the project's server carry the action out. It writes the commit message when there
+    /// is none, and the pull request. What it did, or what git refused, shows under the button.
+    func runGit(_ action: String, in project: Project, message: String? = nil, paths: [String] = [], newBranch: Bool = false) {
+        guard gitStages[project.id] == nil else { return }
+        gitStages[project.id] = action == "pull" ? .pull : action == "push" ? .push : newBranch ? .branch : .message
+        gitNotice = nil
+        var command: JSON = [
+            "server_id": project.serverID, "project_id": project.id, "action": action, "paths": paths, "new_branch": newBranch,
+        ]
+        if let message, !message.isEmpty { command["message"] = message }
+        if let thread = selectedThread, thread.projectID == project.id { command["thread_id"] = thread.id }
+        core.send("git_run", command) { [weak self] result in
+            guard let self else { return }
+            self.gitStages[project.id] = nil
+            switch result {
+            case .success(let done):
+                let notice = GitNotice(
+                    projectID: project.id, title: done.string("title"), description: done.optionalString("description"),
+                    url: done.optionalString("url"), next: done.optionalString("next")
+                )
+                self.show(notice)
+            case .failure(let error):
+                self.show(GitNotice(projectID: project.id, title: "Git stopped", description: error.message, failed: true))
+            }
+        }
+    }
+
+    /// What worked goes away by itself; what failed stays until it is closed.
+    private func show(_ notice: GitNotice) {
+        gitNotice = notice
+        guard !notice.failed else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            if self?.gitNotice == notice { self?.gitNotice = nil }
+        }
+    }
+
+    func dismissGitNotice() {
+        gitNotice = nil
+    }
+
+    /// The action a notice says comes next, like the push after a commit.
+    func runNextGit() {
+        guard let notice = gitNotice, let next = notice.next, let project = project(notice.projectID) else { return }
+        let confirm = project.gitControl?.menu.first { $0.action == next }?.confirm
+        startGit(next, in: project, confirm: confirm)
+    }
+
+    /// Picks the model that writes titles, commit messages and pull requests on the server.
+    /// Without one, the lightest model of the thread's agent writes.
+    func setTextModel(_ model: String?, on server: Server) {
+        var command: JSON = ["server_id": server.id]
+        if let model { command["model"] = model }
+        core.send("set_text_model", command) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
+    }
+
     func removeProject(_ project: Project) {
         request(project.serverID, ["type": "remove_project", "project_id": project.id])
     }
@@ -650,11 +897,18 @@ final class AppStore {
     func openPanel(_ page: PanelPage) {
         guard account.signedIn, !servers.isEmpty else { return }
         panel = page
+        for server in servers where server.state == .connected && startsProjects(server) {
+            if github[server.id] == nil {
+                github[server.id] = defaults.string(forKey: "github-\(server.id)").flatMap(GitHubState.init)
+            }
+            readGitHub(server.id)
+        }
     }
 
     func closePanel() {
         guard panel != nil else { return }
         panel = nil
+        panelNotice = nil
         composerFocus += 1
     }
 
@@ -692,6 +946,7 @@ final class AppStore {
         defaults.set(thread.id, forKey: "selection")
         core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id])
         core.send("mark_seen", ["thread_id": thread.id])
+        readGit(fetch: true)
     }
 
     /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft

@@ -8,8 +8,8 @@ use std::time::Duration;
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, Approval, Item, ItemKind, Message, NewThread, Project, Queued, Request, Thread,
-    ThreadChange, ToolStatus, TurnSummary,
+    Access as AgentAccess, Agent, Approval, GitAction, GitHubState, GitStage, GitStatus, Item, ItemKind, Message,
+    NewThread, Project, Queued, Request, Thread, ThreadChange, ToolStatus, TurnSummary,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -39,7 +39,8 @@ impl Harness {
         let dir = tempfile::tempdir().unwrap();
         let arguments_file = dir.path().join("arguments.txt");
         let variables = HashMap::from([
-            ("PATH".to_string(), std::env::var("PATH").unwrap_or_default()),
+            // Programs a test stands in for, like GitHub's `gh`, are found in `bin` first.
+            ("PATH".to_string(), format!("{}/bin:{}", dir.path().display(), std::env::var("PATH").unwrap_or_default())),
             ("HOME".to_string(), dir.path().to_string_lossy().into_owned()),
             ("FAKE_AGENT_FIXTURE".to_string(), repo_file(fixture).to_string_lossy().into_owned()),
             ("FAKE_AGENT_DELAY".to_string(), delay.to_string()),
@@ -1034,7 +1035,7 @@ async fn a_device_outside_the_account_is_refused() {
 
     let closed = tokio::time::timeout(TIMEOUT, stranger.closed()).await.unwrap();
     assert!(closed.refused && closed.reason.contains("isn't linked"), "{}", closed.reason);
-    assert!(stranger.request(&Request::ListDir { path: None, icons: false }).await.is_err());
+    assert!(stranger.request(&Request::ListDir { path: None, icons: false, hidden: false }).await.is_err());
 }
 
 #[tokio::test]
@@ -1110,7 +1111,7 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
     let here = Some(harness.dir.path().to_string_lossy().into_owned());
     for (icons, images) in [(false, Vec::new()), (true, vec!["logo.png".to_string()])] {
         let Message::Dir { folders, files, .. } =
-            connection.request(&Request::ListDir { path: here.clone(), icons }).await.unwrap()
+            connection.request(&Request::ListDir { path: here.clone(), icons, hidden: false }).await.unwrap()
         else {
             panic!("expected the folder's contents")
         };
@@ -1121,6 +1122,68 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
     let remove = Request::RemoveProject { project_id: projects[0].id.clone() };
     assert_eq!(connection.request(&remove).await.unwrap(), Message::Ok);
     assert_eq!(next(&mut list).await, Message::Projects { projects: Vec::new() });
+}
+
+/// Stands in for a GitHub login with two repositories, once `signed-in` is next to it.
+const FAKE_GH_LOGIN: &str = r#"#!/bin/sh
+case "$1 $2" in
+"auth token")
+    [ -f "$(dirname "$0")/signed-in" ] || { echo "no oauth token found for github.com" >&2; exit 1; }
+    echo token ;;
+"api user/repos"*)
+    echo '[{"full_name": "acme/app", "description": "The app", "private": true},
+           {"full_name": "me/notes", "description": null, "private": false}]' ;;
+"repo clone")
+    git init --quiet "$4" && git -C "$4" remote add origin "https://github.com/$3.git" ;;
+esac
+"#;
+
+#[tokio::test]
+async fn a_project_is_started_from_a_name_or_cloned_from_github() {
+    use std::os::unix::fs::PermissionsExt;
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let bin = harness.dir.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(bin.join("gh"), FAKE_GH_LOGIN).unwrap();
+    std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let added = |answer: Message| match answer {
+        Message::ProjectAdded { project_id } => project_id,
+        other => panic!("expected the added project, got {other:?}"),
+    };
+    let path_of =
+        |projects: Vec<Project>, id: &str| projects.into_iter().find(|project| project.id == id).unwrap().path;
+    let projects = harness.dir.path().join("projects");
+
+    let named = added(connection.request(&Request::NewProject { name: "My App!".to_string() }).await.unwrap());
+    let folder = projects.join("my-app");
+    assert_eq!(path_of(projects_now(&connection).await, &named), folder.to_string_lossy());
+    assert!(folder.join(".git").is_dir());
+    let again = connection.request(&Request::NewProject { name: "my app".to_string() }).await.unwrap();
+    assert!(matches!(again, Message::Error { message } if message.contains("already there")));
+
+    // Nobody is signed in to gh yet.
+    let signed_out = Message::Github { state: GitHubState::SignedOut };
+    assert_eq!(connection.request(&Request::GithubStatus).await.unwrap(), signed_out);
+    assert_eq!(connection.request(&Request::GithubRepos).await.unwrap(), signed_out);
+
+    std::fs::write(bin.join("signed-in"), "").unwrap();
+    let ready = Message::Github { state: GitHubState::Ready };
+    assert_eq!(connection.request(&Request::GithubStatus).await.unwrap(), ready);
+    let Message::Repos { repos } = connection.request(&Request::GithubRepos).await.unwrap() else {
+        panic!("expected the repositories")
+    };
+    let listed: Vec<_> = repos.iter().map(|repo| (repo.name.as_str(), repo.private)).collect();
+    assert_eq!(listed, vec![("acme/app", true), ("me/notes", false)]);
+
+    let clone = Request::CloneRepo { repo: "acme/app".to_string() };
+    let cloned = added(connection.request(&clone).await.unwrap());
+    assert_eq!(path_of(projects_now(&connection).await, &cloned), projects.join("app").to_string_lossy());
+    // A folder that is the repository already is the same project.
+    assert_eq!(added(connection.request(&clone).await.unwrap()), cloned);
+    // One that is something else is left alone.
+    let other = connection.request(&Request::CloneRepo { repo: "acme/my-app".to_string() }).await.unwrap();
+    assert!(matches!(other, Message::Error { message } if message.contains("isn't acme/my-app")));
 }
 
 fn git(folder: &Path, arguments: &[&str]) {
@@ -1228,6 +1291,170 @@ async fn a_projects_branches_are_listed_switched_and_created() {
     let plain = projects_now(&connection).await.into_iter().find(|project| project.branch.is_none()).unwrap();
     let request = Request::Branches { project_id: plain.id };
     assert!(matches!(connection.request(&request).await.unwrap(), Message::Error { .. }));
+}
+
+const FAKE_GH: &str = r#"#!/bin/sh
+opened="$(dirname "$0")/pull-request"
+case "$1 $2" in
+"pr view")
+    [ -f "$opened" ] || { echo "no pull requests found for this branch" >&2; exit 1; }
+    cat "$opened" ;;
+"pr create")
+    cat > "$opened.body"
+    printf '{"number": 7, "title": "%s", "url": "https://github.com/acme/app/pull/7", "state": "OPEN", "isDraft": true}' "$4" > "$opened"
+    echo "https://github.com/acme/app/pull/7" ;;
+esac
+"#;
+
+async fn git_status(connection: &Connection, project_id: &str, fetch: bool) -> (GitStatus, Vec<String>) {
+    let request = Request::GitStatus { project_id: project_id.to_string(), fetch };
+    let Message::GitStatus { status, files } = connection.request(&request).await.unwrap() else {
+        panic!("expected the status")
+    };
+    (status.expect("the folder is a repository"), files.into_iter().map(|file| file.path).collect())
+}
+
+struct GitRun<'a> {
+    action: GitAction,
+    message: Option<&'a str>,
+    paths: &'a [&'a str],
+    new_branch: bool,
+}
+
+fn run(action: GitAction) -> GitRun<'static> {
+    GitRun { action, message: None, paths: &[], new_branch: false }
+}
+
+/// The stages the server went through, and how the run ended.
+async fn git_run(connection: &Connection, project_id: &str, run: GitRun<'_>) -> (Vec<GitStage>, Message) {
+    let request = Request::GitRun {
+        project_id: project_id.to_string(),
+        action: run.action,
+        thread_id: None,
+        message: run.message.map(str::to_string),
+        paths: run.paths.iter().map(|path| path.to_string()).collect(),
+        new_branch: run.new_branch,
+    };
+    let mut follow = connection.follow(&request).await.unwrap();
+    let mut stages = Vec::new();
+    loop {
+        match next(&mut follow).await {
+            Message::GitProgress { stage } => stages.push(stage),
+            end => return (stages, end),
+        }
+    }
+}
+
+/// What a run that worked said it did: its title, its description and what follows.
+fn done(end: Message) -> (String, String, Option<GitAction>) {
+    let Message::GitDone { title, description, next, .. } = end else { panic!("the run failed: {end:?}") };
+    (title, description.unwrap_or_default(), next)
+}
+
+#[tokio::test]
+async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
+    use std::os::unix::fs::PermissionsExt;
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.2").await;
+    let connection = harness.connect().await;
+    let root = harness.dir.path();
+    let bin = root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(bin.join("gh"), FAKE_GH).unwrap();
+    std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
+    git(root, &["clone", "-q", "origin.git", "repository"]);
+    let repository = root.join("repository");
+    git(&repository, &["config", "user.name", "Test"]);
+    git(&repository, &["config", "user.email", "test@example.com"]);
+    std::fs::write(repository.join("greet.py"), "print('hello')\n").unwrap();
+    git(&repository, &["add", "."]);
+    git(&repository, &["commit", "-q", "-m", "Add the greeting"]);
+    git(&repository, &["push", "-q", "-u", "origin", "main"]);
+
+    let path = repository.to_string_lossy().into_owned();
+    assert_eq!(connection.request(&Request::AddProject { path }).await.unwrap(), Message::Ok);
+    let project = projects_now(&connection).await.remove(0);
+    let (status, files) = git_status(&connection, &project.id, false).await;
+    assert_eq!(
+        (status.branch.as_deref(), status.default, status.upstream, status.changed),
+        (Some("main"), true, true, 0)
+    );
+    assert!(status.pull_requests && files.is_empty());
+
+    std::fs::write(repository.join("greet.py"), "name = 'you'\nprint(f'hello {name}')\n").unwrap();
+    std::fs::write(repository.join("notes.txt"), "later\n").unwrap();
+    let (status, files) = git_status(&connection, &project.id, false).await;
+    assert_eq!((status.changed, status.added, status.removed), (2, 2, 1));
+    assert_eq!(files, ["greet.py", "notes.txt"]);
+
+    // One run takes the picked file from the default branch to a pull request: the agent names
+    // the branch and writes the commit message and the pull request.
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let whole = GitRun { paths: &["greet.py"], new_branch: true, ..run(GitAction::CommitPushPr) };
+    let (stages, end) = git_run(&connection, &project.id, whole).await;
+    use GitStage::{Branch, Commit, Message as Written, Pull, PullRequest, PullRequestText, Push};
+    assert_eq!(stages, [Branch, Commit, Push, PullRequestText, PullRequest]);
+    let Message::GitDone { title, description, url, next: None } = end else { panic!("the run failed: {end:?}") };
+    assert_eq!((title.as_str(), description.as_deref()), ("Created PR #7", Some("Greet with an f-string")));
+    assert_eq!(url.as_deref(), Some("https://github.com/acme/app/pull/7"));
+    git(&root.join("origin.git"), &["rev-parse", "--verify", "-q", "refs/heads/greet-f-string"]);
+    let body = std::fs::read_to_string(bin.join("pull-request.body")).unwrap();
+    assert_eq!(body.trim(), "Greets by name.\n\nGreet with an f-string");
+
+    let (status, files) = git_status(&connection, &project.id, false).await;
+    assert_eq!((status.branch.as_deref(), status.default, status.upstream), (Some("greet-f-string"), false, true));
+    assert_eq!((status.ahead, status.ahead_of_default, files), (0, 1, vec!["notes.txt".to_string()]));
+    assert_eq!(
+        status.pull_request.map(|opened| (opened.number, opened.title)),
+        Some((7, "Greet with an f-string".to_string()))
+    );
+    let Message::Projects { projects } = next(&mut list).await else { panic!("expected the projects") };
+    assert_eq!(projects[0].git.as_ref().map(|git| git.ahead_of_default), Some(1));
+
+    // A message that is given is used as it is, and a commit says that a push follows.
+    let (stages, end) =
+        git_run(&connection, &project.id, GitRun { message: Some("Add notes"), ..run(GitAction::Commit) }).await;
+    let (title, description, follows) = done(end);
+    assert_eq!((stages, description.as_str(), follows), (vec![Commit], "Add notes", Some(GitAction::Push)));
+    assert!(title.starts_with("Committed "), "{title}");
+    let (stages, end) = git_run(&connection, &project.id, run(GitAction::Push)).await;
+    let (title, description, follows) = done(end);
+    assert_eq!((stages, description.as_str(), follows), (vec![Push], "Add notes", None));
+    assert!(title.starts_with("Pushed ") && title.ends_with(" to origin/greet-f-string"), "{title}");
+
+    // A commit on the remote is seen once it is fetched, and pulled.
+    git(root, &["clone", "-q", "-b", "greet-f-string", "origin.git", "other"]);
+    let other = root.join("other");
+    std::fs::write(other.join("greet.py"), "print('hi')\n").unwrap();
+    git(&other, &["commit", "-q", "-am", "Say hi"]);
+    git(&other, &["push", "-q"]);
+    assert_eq!(git_status(&connection, &project.id, false).await.0.behind, 0);
+    assert_eq!(git_status(&connection, &project.id, true).await.0.behind, 1);
+    let (stages, end) = git_run(&connection, &project.id, run(GitAction::Pull)).await;
+    assert_eq!((stages, done(end).0.as_str()), (vec![Pull], "Pulled"));
+    assert_eq!(std::fs::read_to_string(repository.join("greet.py")).unwrap(), "print('hi')\n");
+    assert_eq!(done(git_run(&connection, &project.id, run(GitAction::Pull)).await.1).0, "Already up to date");
+
+    let (_, end) = git_run(&connection, &project.id, run(GitAction::Commit)).await;
+    assert_eq!(end, Message::Error { message: "There is nothing to commit.".to_string() });
+
+    // The model picked for the server writes the next message.
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    let model = server.models.iter().find(|model| model.agent == Agent::Claude).unwrap().id.clone();
+    assert_eq!(server.text_model, None);
+    let unknown = Request::SetTextModel { model: Some("no-such-model".to_string()) };
+    assert!(matches!(connection.request(&unknown).await.unwrap(), Message::Error { .. }));
+    let pick = Request::SetTextModel { model: Some(model.clone()) };
+    assert_eq!(connection.request(&pick).await.unwrap(), Message::Ok);
+    std::fs::write(repository.join("notes.txt"), "sooner\n").unwrap();
+    let (stages, end) = git_run(&connection, &project.id, run(GitAction::Commit)).await;
+    assert_eq!((stages, done(end).1.as_str()), (vec![Written, Commit], "Greet with an f-string"));
+    let recorded = std::fs::read_to_string(root.join("arguments.txt")).unwrap();
+    let written_by: Vec<String> = recorded.lines().last().map(|line| serde_json::from_str(line).unwrap()).unwrap();
+    assert!(written_by.windows(2).any(|pair| pair[0] == "--model" && pair[1] == model), "{written_by:?}");
 }
 
 async fn projects_now(connection: &Connection) -> Vec<Project> {

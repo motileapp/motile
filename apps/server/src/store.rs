@@ -10,6 +10,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_project_icons.sql"),
     include_str!("../migrations/0003_media.sql"),
+    include_str!("../migrations/0004_settings.sql"),
 ];
 
 pub struct Store {
@@ -225,6 +226,24 @@ impl Store {
 
     pub fn remove_project(&self, project_id: &str) -> rusqlite::Result<()> {
         self.connection().execute("DELETE FROM projects WHERE id = ?1", [project_id])?;
+        Ok(())
+    }
+
+    pub fn setting(&self, name: &str) -> Option<String> {
+        let connection = self.connection();
+        connection.query_row("SELECT value FROM settings WHERE name = ?1", [name], |row| row.get(0)).ok()
+    }
+
+    /// Keeps the value, or forgets the setting when there is none.
+    pub fn set_setting(&self, name: &str, value: Option<&str>) -> rusqlite::Result<()> {
+        let connection = self.connection();
+        match value {
+            Some(value) => connection.execute(
+                "INSERT INTO settings (name, value) VALUES (?1, ?2) ON CONFLICT (name) DO UPDATE SET value = ?2",
+                params![name, value],
+            )?,
+            None => connection.execute("DELETE FROM settings WHERE name = ?1", [name])?,
+        };
         Ok(())
     }
 

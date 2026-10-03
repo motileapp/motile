@@ -118,6 +118,16 @@ system's light or dark appearance. They are one pnpm workspace; add components w
 - `git.rs` lists the branches of a project's folder and switches or creates one there, with the
   `git` program. A project is one folder, so its branch is the branch of all its threads; it
   refuses while an agent is working in the project.
+  It also reads what isn't committed or pushed there, and commits, pulls, pushes and opens a
+  pull request when an app asks; pull requests are GitHub's, through `gh`. The status is read
+  when a turn ends and when an app asks, never on a timer, and goes to the apps with the
+  project. What git refuses reaches the user in git's words.
+- `github.rs` is the server's GitHub login, through `gh`: whether it is there, the repositories
+  it reaches and cloning one. A project started from a name (a folder with `git init`) or
+  cloned from GitHub goes in `~/projects` on the server.
+- `drafts.rs` has an agent write the commit message or the pull request's text from the changes,
+  for the user to edit before it is used. `generate.rs` is how it and `title.rs` ask an agent's
+  CLI for a short answer as JSON.
 - `media.rs` keeps the images and videos agents show. An agent shows one by writing a Markdown
   image that points at a file on the server; the agents are told so when they start. The server
   copies the file then, named by its contents, and the item says what it shows and how large it
@@ -139,6 +149,10 @@ Rust library for tests.
 - `media.rs` is the images and videos the app has fetched from its servers, as files. They are
   fetched when a row that shows one is seen, and take at most 2 GB: past that, what was looked
   at longest ago goes first. The servers keep them all, so the app can also clear them.
+- `git.rs` says which git action a project's status calls for: commit, pull, push or a pull
+  request. The apps show that one.
+- `browse.rs` is browsing a server's folders by typing a path: the folders of the directory
+  typed so far, narrowed by what follows its last slash.
 - `render/` turns transcripts into rows ready to draw: `markdown.rs` (text with style runs, in
   UTF-16 offsets), `highlight.rs` (syntect; streaming code is highlighted incrementally) and
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
@@ -167,8 +181,14 @@ Rust library for tests.
   `Views/Composer/ComposerStrips.swift` is the strips against the composer's top and bottom:
   that the agent is monitoring, and the server, folder and branch the thread works in, with the
   branch picker.
-  `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P, and `Views/Shared` holds the
-  window's glass surface, the hover highlight and the agents' and projects' icons.
+  `Views/Thread/GitControl.swift` is the git button in the top bar of a thread and its popover:
+  the files and the message of a commit, or the title and text of a pull request, to change
+  before they are used.
+  `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P. A project is added there too:
+  a new one from a name, one of the user's GitHub repositories, or a folder of the server,
+  browsed by typing its path. Rows that wait for a server are placeholders of the same size.
+  `Views/Shared` holds the window's glass surface, the hover highlight and the agents' and
+  projects' icons.
 - `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
   it is signed by the developer who signed the running one, puts it in its place and restarts.
   A copy that isn't signed with the Developer ID can't update itself.
@@ -271,7 +291,8 @@ the recorded output in `fixtures/` or makes up a turn, depending on the prompt. 
 screenshot" it makes an image and shows it. "Which color" has it
 ask the user a question, and "plan the hello" present a plan to approve. A message sent now
 while it works is read after its next tool call, as both agents do, or stops a reply that
-streams, as Claude Code does; "run greet.py" ends its reply with it.
+streams, as Claude Code does; "run greet.py" ends its reply with it. Asked for a commit
+message or a pull request's text, the way it is asked for a title, it writes one.
 
 ## Releasing and deploying
 

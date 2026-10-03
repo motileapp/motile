@@ -45,22 +45,34 @@ struct ThreadPane: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 if let thread = store.selectedThread {
-                    ToolbarButton(
-                        symbol: thread.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
-                        help: thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)"
-                    ) {
-                        store.toggleDone()
+                    HStack(spacing: 0) {
+                        if let project = gitProject, let control = project.gitControl {
+                            GitButton(project: project, control: control)
+                        }
+                        ToolbarButton(
+                            symbol: thread.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
+                            help: thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)"
+                        ) {
+                            store.toggleDone()
+                        }
+                        .disabled(thread.busy)
                     }
-                    .disabled(thread.busy)
                 }
             }
             .withoutSystemGlass()
         }
-        .sheet(isPresented: $store.showsFolderPicker) {
-            if let server = store.composerServer {
-                FolderPicker(server: server)
+        .sheet(item: $store.committingProject) { project in
+            CommitSheet(project: project)
+        }
+        .overlay(alignment: .topTrailing) {
+            if let notice = store.gitNotice, notice.projectID == gitProject?.id {
+                GitNoticeView(notice: notice)
+                    .padding(.top, 6)
+                    .padding(.trailing, 14)
+                    .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.15), value: store.gitNotice)
         .sheet(item: $store.iconProject) { project in
             if let server = store.server(project.serverID) {
                 FolderPicker(server: server, iconFor: project)
@@ -103,12 +115,18 @@ struct ThreadPane: View {
             }
             .lineLimit(1)
             .padding(.leading, titleInset)
-            .padding(.trailing, 60)
+            .padding(.trailing, gitProject?.gitControl == nil ? 60 : 250)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: proxy.safeAreaInsets.top)
             .offset(y: -proxy.safeAreaInsets.top)
         }
         .allowsHitTesting(false)
+    }
+
+    /// The open thread's project, when its server can commit and push from here.
+    private var gitProject: Project? {
+        guard let project = store.project(store.selectedThread?.projectID), store.canUseGit(of: project) else { return nil }
+        return project
     }
 
     private var titleProject: Project? {
@@ -135,7 +153,7 @@ struct ThreadPane: View {
                         .font(.system(size: 14))
                         .foregroundStyle(Color.themeSecondary)
                     Button {
-                        store.showsFolderPicker = true
+                        store.addProject()
                     } label: {
                         Label("Add Project", systemImage: "folder.badge.plus")
                     }
@@ -178,7 +196,7 @@ struct ThreadPane: View {
                     }
                 }
                 Divider()
-                Button("Add Project…") { store.showsFolderPicker = true }
+                Button("Add Project…") { store.addProject() }
                 if let project = selected {
                     Button("Choose an Icon for “\(project.name)”…") { store.iconProject = project }
                     Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }

@@ -83,6 +83,8 @@ struct Server: Equatable, Identifiable {
     let version: String
     let protocolVersion: Int
     let models: [ModelInfo]
+    /// The model picked to write titles, commit messages and pull requests there.
+    let textModel: String?
     /// The agents installed on the server, with their versions.
     let agents: [Agent: String]
     /// Whether the server has ever told us about itself.
@@ -102,6 +104,7 @@ struct Server: Equatable, Identifiable {
         version = info?.string("version") ?? ""
         protocolVersion = (info?["protocol"] as? NSNumber)?.intValue ?? 0
         models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
+        textModel = info?.optionalString("text_model")
         var installed: [Agent: String] = [:]
         for agent in info?.objects("agents") ?? [] {
             guard let kind = Agent(rawValue: agent.string("agent")), let version = agent.optionalString("version") else { continue }
@@ -130,12 +133,194 @@ struct Branch: Equatable, Identifiable {
     }
 }
 
+struct GitStatus: Equatable {
+    /// `nil` when no branch is checked out.
+    let branch: String?
+    /// The checked-out branch is the one the remote starts new work from.
+    let isDefault: Bool
+    let remote: Bool
+    let added: Int
+    let removed: Int
+    let pullRequest: PullRequest?
+
+    init(json: JSON) {
+        branch = json.optionalString("branch")
+        isDefault = json.bool("default")
+        remote = json.bool("remote")
+        added = json.int("added")
+        removed = json.int("removed")
+        pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
+    }
+}
+
+struct PullRequest: Equatable {
+    let number: Int
+    let title: String
+    let url: String
+
+    init(json: JSON) {
+        number = json.int("number")
+        title = json.string("title")
+        url = json.string("url")
+    }
+}
+
+/// The git button of a project, as the core worked it out: what it does when clicked, the menu
+/// behind it and what is said under the menu.
+struct GitControl: Equatable {
+    let quick: GitQuick
+    let menu: [GitMenuItem]
+    let warning: String?
+
+    init(json: JSON) {
+        quick = GitQuick(json: json.object("quick") ?? [:])
+        menu = json.objects("menu").map { GitMenuItem(json: $0) }
+        warning = json.optionalString("warning")
+    }
+}
+
+/// Names what a git action or its icon stands for, as the server spells it: "commit_push".
+enum GitSymbol {
+    static func name(for action: String?) -> String {
+        switch action {
+        case "pull": "icloud.and.arrow.down"
+        case "push": "icloud.and.arrow.up"
+        case "create_pr", nil: "arrow.triangle.merge"
+        default: "smallcircle.filled.circle"
+        }
+    }
+}
+
+/// What the button does: an action, or opening the pull request at `url`. With neither it is
+/// off, and `hint` says why.
+struct GitQuick: Equatable {
+    let label: String
+    let action: String?
+    let url: String?
+    let hint: String?
+    let confirm: GitConfirm?
+
+    init(json: JSON) {
+        label = json.string("label")
+        action = json.optionalString("action")
+        url = json.optionalString("url")
+        hint = json.optionalString("hint")
+        confirm = json.object("confirm").map { GitConfirm(json: $0) }
+    }
+}
+
+struct GitMenuItem: Equatable, Identifiable {
+    let label: String
+    let action: String
+    /// Why it can't run now.
+    let reason: String?
+    let confirm: GitConfirm?
+
+    var id: String { action }
+
+    init(json: JSON) {
+        label = json.string("label")
+        action = json.string("action")
+        reason = json.optionalString("reason")
+        confirm = json.object("confirm").map { GitConfirm(json: $0) }
+    }
+}
+
+/// Asked before an action that pushes from the default branch.
+struct GitConfirm: Equatable {
+    let title: String
+    let description: String
+    let proceed: String
+    let branchOff: String
+
+    init(json: JSON) {
+        title = json.string("title")
+        description = json.string("description")
+        proceed = json.string("proceed")
+        branchOff = json.string("branch_off")
+    }
+}
+
+enum GitStage: String {
+    case branch
+    case message
+    case commit
+    case push
+    case pullRequestText = "pull_request_text"
+    case pullRequest = "pull_request"
+    case pull
+
+    var label: String {
+        switch self {
+        case .branch: "Branching"
+        case .message: "Writing"
+        case .commit: "Committing"
+        case .push: "Pushing"
+        case .pullRequestText: "Writing PR"
+        case .pullRequest: "Creating PR"
+        case .pull: "Pulling"
+        }
+    }
+}
+
+/// What a git action did, or why it couldn't, shown under the button until it is dismissed.
+struct GitNotice: Equatable {
+    let projectID: String
+    let title: String
+    var description: String?
+    var failed = false
+    /// The pull request to open.
+    var url: String?
+    /// The action that follows, like a push after a commit.
+    var next: String?
+
+    var nextLabel: String? {
+        switch next {
+        case "push": "Push"
+        case "create_pr": "Create PR"
+        default: nil
+        }
+    }
+}
+
+/// An action that waits for the user to say where it should happen.
+struct PendingGit: Equatable, Identifiable {
+    let project: Project
+    let action: String
+    let confirm: GitConfirm
+    var message: String?
+    var paths: [String] = []
+
+    var id: String { "\(project.id):\(action)" }
+}
+
+/// A file with changes that aren't committed.
+struct ChangedFile: Equatable, Identifiable {
+    let path: String
+    let change: String
+    let added: Int
+    let removed: Int
+
+    var id: String { path }
+
+    init(json: JSON) {
+        path = json.string("path")
+        change = json.string("change")
+        added = json.int("added")
+        removed = json.int("removed")
+    }
+}
+
 struct Project: Equatable, Identifiable {
     let id: String
     let serverID: String
     let path: String
     let name: String
     let branch: String?
+    /// What its server last read from git there.
+    let git: GitStatus?
+    /// The git button for its repository.
+    let gitControl: GitControl?
     /// The icon as a file on this Mac, once the core has fetched it.
     let iconPath: String?
     let createdAt: Double
@@ -146,6 +331,8 @@ struct Project: Equatable, Identifiable {
         path = json.string("path")
         name = json.string("name")
         branch = json.optionalString("branch")
+        git = json.object("git").map { GitStatus(json: $0) }
+        gitControl = json.object("git_control").map { GitControl(json: $0) }
         iconPath = json.optionalString("icon_path")
         createdAt = json.double("created_at")
     }
@@ -334,6 +521,47 @@ struct EnrollToken {
     init(json: JSON) {
         command = json.string("command")
         expiresAt = json.double("expires_at")
+    }
+}
+
+enum GitHubState: String {
+    case ready
+    case signedOut = "signed_out"
+    case missing
+}
+
+struct Repo: Equatable {
+    /// `owner/name`.
+    let name: String
+    let description: String?
+    let isPrivate: Bool
+
+    init(json: JSON) {
+        name = json.string("name")
+        description = json.optionalString("description")
+        isPrivate = json.bool("private")
+    }
+}
+
+/// The folders of a server under the path typed in the panel.
+struct FolderListing {
+    struct Folder {
+        let name: String
+        let path: String
+        /// What to type to look inside it.
+        let typed: String
+    }
+
+    let path: String
+    let typed: String
+    let parent: String?
+    let folders: [Folder]
+
+    init(json: JSON) {
+        path = json.string("path")
+        typed = json.string("typed")
+        parent = json.optionalString("parent")
+        folders = json.objects("folders").map { Folder(name: $0.string("name"), path: $0.string("path"), typed: $0.string("typed")) }
     }
 }
 

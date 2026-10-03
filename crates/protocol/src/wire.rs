@@ -210,6 +210,21 @@ pub enum Request {
     AddProject {
         path: String,
     },
+    /// Makes a folder named after `name` where the server keeps new projects, starts a git
+    /// repository in it and adds it as a project. `ProjectAdded` answers.
+    NewProject {
+        name: String,
+    },
+    /// Whether GitHub's `gh` can be used on the server. `Github` answers.
+    GithubStatus,
+    /// The repositories the server's GitHub login reaches, the last pushed first. `Repos`
+    /// answers, or `Github` when the login no longer works.
+    GithubRepos,
+    /// Clones `owner/name` from GitHub into where the server keeps new projects and adds it as a
+    /// project. `ProjectAdded` answers.
+    CloneRepo {
+        repo: String,
+    },
     /// Takes the folder off the list. Its threads stay.
     RemoveProject {
         project_id: String,
@@ -225,11 +240,13 @@ pub enum Request {
         path: Option<String>,
     },
     /// Folders inside `path`, or inside the home folder. With `icons`, also the files there that
-    /// can be a project's icon.
+    /// can be a project's icon, and with `hidden` the folders whose names start with a dot.
     ListDir {
         path: Option<String>,
         #[serde(default)]
         icons: bool,
+        #[serde(default)]
+        hidden: bool,
     },
     /// The branches of the project's repository. `Branches` answers.
     Branches {
@@ -242,6 +259,36 @@ pub enum Request {
         branch: String,
         #[serde(default)]
         create: bool,
+    },
+    /// What git says about the project's folder. With `fetch` the remote is asked first.
+    /// `GitStatus` answers.
+    GitStatus {
+        project_id: String,
+        #[serde(default)]
+        fetch: bool,
+    },
+    /// Commits, pushes, opens a pull request or pulls in the project's folder. The server writes
+    /// the commit message when `message` is missing, and the pull request's title and text. The
+    /// server answers with a `GitProgress` as each stage starts, then `GitDone`.
+    GitRun {
+        project_id: String,
+        action: GitAction,
+        /// The thread the work was done in, which tells the writer why.
+        #[serde(default)]
+        thread_id: Option<String>,
+        #[serde(default)]
+        message: Option<String>,
+        /// Only the changes at these paths are committed. Empty for all of them.
+        #[serde(default)]
+        paths: Vec<String>,
+        /// Makes a branch for the work first, named by the server, and carries on there.
+        #[serde(default)]
+        new_branch: bool,
+    },
+    /// Picks the model that writes thread titles, commit messages and pull requests on this
+    /// server. `None` goes back to the lightest model of the thread's agent.
+    SetTextModel {
+        model: Option<String>,
     },
     /// The file's bytes follow on the same stream.
     Upload {
@@ -274,11 +321,33 @@ pub struct Project {
     pub name: String,
     /// The git branch checked out there, if it is a repository.
     pub branch: Option<String>,
+    /// What the server last read from git there. Missing until it has, and when it is no repository.
+    #[serde(default)]
+    pub git: Option<GitStatus>,
     /// Names the icon's contents: it changes when the icon does, and ends in the file's
     /// extension. `None` when the project has no icon.
     #[serde(default)]
     pub icon: Option<String>,
     pub created_at: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum GitHubState {
+    Ready,
+    /// `gh` is installed and nobody is signed in to it.
+    SignedOut,
+    /// `gh` isn't installed.
+    Missing,
+}
+
+/// A repository on GitHub.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Repo {
+    /// `owner/name`.
+    pub name: String,
+    pub description: Option<String>,
+    pub private: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -289,6 +358,79 @@ pub struct Branch {
     pub default: bool,
     /// Only on the remote so far. Switching to it makes the local branch.
     pub remote: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct GitStatus {
+    /// `None` when no branch is checked out.
+    pub branch: Option<String>,
+    /// The checked-out branch is the one the remote starts new work from.
+    pub default: bool,
+    pub remote: bool,
+    pub upstream: bool,
+    /// Commits that aren't on the remote yet.
+    pub ahead: u32,
+    pub behind: u32,
+    pub ahead_of_default: u32,
+    /// Files with changes that aren't committed, and the lines added and removed in them.
+    pub changed: u32,
+    pub added: u32,
+    pub removed: u32,
+    /// The server can open pull requests for this repository.
+    pub pull_requests: bool,
+    /// The open pull request of the branch.
+    pub pull_request: Option<PullRequest>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct PullRequest {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub draft: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ChangedFile {
+    pub path: String,
+    /// Where a renamed file was.
+    pub from: Option<String>,
+    pub change: Change,
+    pub added: u32,
+    pub removed: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Change {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum GitAction {
+    Commit,
+    Push,
+    /// Pushes first when the remote doesn't have the branch's commits.
+    CreatePr,
+    CommitPush,
+    CommitPushPr,
+    Pull,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum GitStage {
+    Branch,
+    Message,
+    Commit,
+    Push,
+    PullRequestText,
+    PullRequest,
+    Pull,
 }
 
 /// A model an agent on the server can run, and the choices it offers.
@@ -311,6 +453,9 @@ pub struct ServerInfo {
     pub agents: Vec<AgentInfo>,
     /// The models of the installed agents, in the order to offer them.
     pub models: Vec<ModelInfo>,
+    /// The model that writes titles, commit messages and pull requests, when one was picked.
+    #[serde(default)]
+    pub text_model: Option<String>,
 }
 
 /// What a thread's agent is doing right now.
@@ -396,9 +541,35 @@ pub enum Message {
         #[serde(default)]
         files: Vec<String>,
     },
+    ProjectAdded {
+        project_id: String,
+    },
+    Github {
+        state: GitHubState,
+    },
+    Repos {
+        repos: Vec<Repo>,
+    },
     /// Local branches first, then the ones only on the remote.
     Branches {
         branches: Vec<Branch>,
+    },
+    /// `status` is missing when the folder is no repository.
+    GitStatus {
+        status: Option<GitStatus>,
+        files: Vec<ChangedFile>,
+    },
+    GitProgress {
+        stage: GitStage,
+    },
+    /// What a `GitRun` did, in words to show: "Committed 1a2b3c4" and the commit's subject.
+    GitDone {
+        title: String,
+        description: Option<String>,
+        /// The pull request that was opened, or was open already.
+        url: Option<String>,
+        /// What to do after it, if anything follows.
+        next: Option<GitAction>,
     },
     Uploaded {
         path: String,

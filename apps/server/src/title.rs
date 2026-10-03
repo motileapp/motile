@@ -2,25 +2,20 @@
 //! agent is asked for a better one. When the first message doesn't say what the thread is about,
 //! the title is generated again from the transcript once the first turn has ended.
 
-use std::path::Path;
-use std::process::Stdio;
 use std::time::Duration;
 
-use motile_protocol::wire::{Agent, Item, ItemKind};
+use motile_protocol::wire::{Item, ItemKind};
 use serde_json::{Value, json};
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 
 use crate::agents::environment::Environment;
+use crate::generate::{self, Writer};
 use crate::hub::file_name;
 
 pub const UNTITLED: &str = "New thread";
 const PLACEHOLDER_CHARS: usize = 50;
 const MAX_TITLE_CHARS: usize = 120;
 const MAX_PROMPT_CHARS: usize = 8000;
-const TIMEOUT: Duration = Duration::from_secs(180);
 const RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(4)];
-const CLAUDE_MODEL: &str = "claude-haiku-4-5";
 
 const INITIAL_PROMPT: &str = r#"Generate a title that will help the user recognize this Motile thread weeks later.
 Return JSON with keys title and needsRefinement.
@@ -83,14 +78,14 @@ pub fn placeholder(text: &str, attachments: &[String]) -> String {
     format!("{}...", shortened.trim_end())
 }
 
-pub async fn from_first_message(environment: &Environment, agent: Agent, message: &str) -> Option<Generated> {
+pub async fn from_first_message(environment: &Environment, writer: &Writer, message: &str) -> Option<Generated> {
     let prompt = format!("{INITIAL_PROMPT}\n\nUser message:\n{}", keep_ends(message));
-    generate(environment, agent, &prompt).await
+    generate(environment, writer, &prompt).await
 }
 
 pub async fn from_transcript(
     environment: &Environment,
-    agent: Agent,
+    writer: &Writer,
     previous_title: &str,
     items: &[Item],
 ) -> Option<Generated> {
@@ -100,16 +95,13 @@ pub async fn from_transcript(
          The previous title was {previous}.\n{REGENERATE_RULES}\n\nThread contents:\n{}",
         keep_end(&transcript(items))
     );
-    generate(environment, agent, &prompt).await
+    generate(environment, writer, &prompt).await
 }
 
-async fn generate(environment: &Environment, agent: Agent, prompt: &str) -> Option<Generated> {
+async fn generate(environment: &Environment, writer: &Writer, prompt: &str) -> Option<Generated> {
     for attempt in 0..=RETRY_DELAYS.len() {
-        let output = match agent {
-            Agent::Claude => ask_claude(environment, prompt).await,
-            Agent::Codex => ask_codex(environment, prompt).await,
-        };
-        match output {
+        let answer = generate::ask(environment, writer, prompt, &schema()).await;
+        match answer.and_then(|answer| parse(&answer).ok_or_else(|| anyhow::anyhow!("answered without a title"))) {
             Ok(generated) => return Some(generated),
             Err(error) => tracing::warn!("couldn't generate a thread title: {error:#}"),
         }
@@ -129,92 +121,9 @@ fn schema() -> Value {
     })
 }
 
-async fn ask_claude(environment: &Environment, prompt: &str) -> anyhow::Result<Generated> {
-    let executable = environment.executable(Agent::Claude).ok_or_else(|| anyhow::anyhow!("claude isn't installed"))?;
-    // The title needs only the prompt, not configuration from a checkout.
-    let folder = TempFolder::new("motile-title-")?;
-    let mut command = Command::new(executable);
-    command.args([
-        "-p",
-        "--output-format",
-        "json",
-        "--json-schema",
-        &schema().to_string(),
-        "--model",
-        CLAUDE_MODEL,
-        "--settings",
-        r#"{"disableAllHooks":true}"#,
-        "--tools",
-        "",
-        "--disable-slash-commands",
-        "--strict-mcp-config",
-        "--permission-mode",
-        "dontAsk",
-    ]);
-    let output = run(command, environment, folder.path(), prompt).await?;
-    let answer: Value = serde_json::from_str(output.trim())?;
-    parse(&answer["structured_output"])
-        .or_else(|| parse_text(answer["result"].as_str().unwrap_or_default()))
-        .ok_or_else(|| anyhow::anyhow!("claude answered without a title"))
-}
-
-async fn ask_codex(environment: &Environment, prompt: &str) -> anyhow::Result<Generated> {
-    let executable = environment.executable(Agent::Codex).ok_or_else(|| anyhow::anyhow!("codex isn't installed"))?;
-    let folder = TempFolder::new("motile-title-")?;
-    let schema_file = folder.path().join("schema.json");
-    let answer_file = folder.path().join("answer.json");
-    std::fs::write(&schema_file, schema().to_string())?;
-
-    let mut command = Command::new(executable);
-    command.args(["exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only"]);
-    command.args(["--config", "model_reasoning_effort=\"low\""]);
-    if let Some(model) = small_codex_model(environment) {
-        command.args(["--model", &model]);
-    }
-    command.arg("--output-schema").arg(&schema_file).arg("--output-last-message").arg(&answer_file).arg("-");
-    run(command, environment, folder.path(), prompt).await?;
-    let answer = std::fs::read_to_string(&answer_file)?;
-    parse_text(&answer).ok_or_else(|| anyhow::anyhow!("codex answered without a title"))
-}
-
-/// The lightest model Codex lists, which is plenty for a title.
-fn small_codex_model(environment: &Environment) -> Option<String> {
-    let models = environment.models().iter().filter(|model| model.agent == Agent::Codex);
-    let small = models.filter(|model| ["luna", "mini", "nano"].iter().any(|hint| model.id.contains(hint)));
-    small.map(|model| model.id.clone()).next()
-}
-
-async fn run(mut command: Command, environment: &Environment, cwd: &Path, prompt: &str) -> anyhow::Result<String> {
-    command
-        .current_dir(cwd)
-        .env_clear()
-        .envs(&environment.variables)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    let mut child = command.spawn()?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(prompt.as_bytes()).await?;
-    }
-    let output = tokio::time::timeout(TIMEOUT, child.wait_with_output()).await??;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("exited with {}: {}", output.status, stderr.trim().chars().take(400).collect::<String>());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-}
-
 fn parse(answer: &Value) -> Option<Generated> {
     let title = sanitize(answer["title"].as_str()?)?;
     Some(Generated { title, needs_refinement: answer["needsRefinement"].as_bool().unwrap_or(false) })
-}
-
-fn parse_text(text: &str) -> Option<Generated> {
-    let text = text.trim();
-    let start = text.find('{')?;
-    let end = text.rfind('}')?;
-    parse(&serde_json::from_str(text.get(start..=end)?).ok()?)
 }
 
 /// One line, without wrapping quotes, short enough for a sidebar. `None` when nothing is left.
@@ -262,26 +171,6 @@ fn keep_end(contents: &str) -> String {
     format!("[Earlier content truncated]\n{tail}")
 }
 
-struct TempFolder(std::path::PathBuf);
-
-impl TempFolder {
-    fn new(prefix: &str) -> std::io::Result<Self> {
-        let path = std::env::temp_dir().join(format!("{prefix}{}", uuid::Uuid::new_v4().simple()));
-        std::fs::create_dir_all(&path)?;
-        Ok(Self(path))
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for TempFolder {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -301,13 +190,6 @@ mod tests {
         assert_eq!(sanitize("New thread"), None);
         assert_eq!(sanitize("   "), None);
         assert_eq!(sanitize(&"x".repeat(200)).map(|title| title.chars().count()), Some(120));
-    }
-
-    #[test]
-    fn title_is_read_from_text_around_the_json() {
-        let generated = parse_text("Sure:\n{\"title\": \"Speed Up Sync\", \"needsRefinement\": true}\n").unwrap();
-        assert_eq!(generated.title, "Speed Up Sync");
-        assert!(generated.needs_refinement);
     }
 
     #[test]

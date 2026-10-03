@@ -9,7 +9,7 @@ use std::time::Duration;
 use futures_lite::StreamExt;
 use iroh::Endpoint;
 use iroh::endpoint::PathEvent;
-use motile_protocol::wire::{Message, Request};
+use motile_protocol::wire::{GitStage, Message, Request};
 use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
@@ -317,6 +317,21 @@ impl Link {
                 Message::Ok => return Ok(()),
                 Message::Error { message } => anyhow::bail!(message),
                 other => anyhow::bail!("Unexpected answer from the server: {other:?}"),
+            }
+        }
+    }
+
+    /// Sends a `GitRun`, telling `started` each stage, and answers with the server's `GitDone`.
+    pub async fn git_run(&self, request: &Request, mut started: impl FnMut(GitStage)) -> anyhow::Result<Message> {
+        let mut follow = self.connection()?.follow(request).await?;
+        loop {
+            let Some(message) = follow.next().await? else {
+                anyhow::bail!("The server closed the stream without answering.");
+            };
+            match message {
+                Message::GitProgress { stage } => started(stage),
+                Message::Error { message } => anyhow::bail!(message),
+                done => return Ok(done),
             }
         }
     }

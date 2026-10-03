@@ -54,7 +54,7 @@ struct MotileApp: App {
                     .keyboardShortcut(".")
                     .disabled(!store.activity.busy)
                 Divider()
-                Button("Add a Project…") { store.showsFolderPicker = true }
+                Button("Add a Project…") { store.addProject() }
                     .disabled(store.servers.isEmpty)
                 Button("Add a Server…") { store.showsAddServer = true }
                     .disabled(!store.account.signedIn)
@@ -208,7 +208,7 @@ struct MainView: View {
                 Spacer(minLength: 0)
             }
             ToolbarButton(symbol: "folder.badge.plus", help: "Add a project") {
-                store.showsFolderPicker = true
+                store.addProject()
             }
             ToolbarButton(symbol: "square.and.pencil", help: "New thread (⌘N). ⇧-click starts one in this project") {
                 guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true else { return store.newThread() }

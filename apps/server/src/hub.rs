@@ -19,8 +19,8 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, Agent, Item, ItemKind, Message, NewThread, Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall,
-    ToolStatus, TurnSummary,
+    Activity, Agent, ChangedFile, GitAction, GitHubState, GitStage, GitStatus, Item, ItemKind, Message, NewThread,
+    Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall, ToolStatus, TurnSummary,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -28,14 +28,28 @@ use tokio::sync::{Mutex, broadcast, mpsc};
 
 use crate::agents::environment::Environment;
 use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name};
+use crate::generate::Writer;
 use crate::media::MediaStore;
 use crate::store::{Store, StoredProject, StoredThread, TitleSource};
-use crate::{git, icons, pacing, title};
+use crate::{drafts, git, github, icons, pacing, title};
 
 const UPDATES_BUFFER: usize = 4096;
 const ROOT_BYPASS_REFUSAL: &str = "cannot be used with root/sudo privileges";
 /// Streamed text is written to disk at most this often, and when its block ends.
 const FLUSH_EVERY: Duration = Duration::from_secs(1);
+/// How long a branch's pull request is taken as known before GitHub is asked again.
+const PULL_REQUEST_FRESH: Duration = Duration::from_secs(60);
+const TEXT_MODEL: &str = "text_model";
+
+/// What an app asked git to do in a project's folder.
+pub struct GitRun {
+    pub action: GitAction,
+    /// The thread the work was done in.
+    pub thread_id: Option<String>,
+    pub message: Option<String>,
+    pub paths: Vec<String>,
+    pub new_branch: bool,
+}
 
 pub struct Hub {
     store: Store,
@@ -44,7 +58,18 @@ pub struct Hub {
     threads: Mutex<HashMap<String, Live>>,
     /// Locked after `threads` when both are needed.
     projects: Mutex<Vec<StoredProject>>,
+    /// What git last said about each project, by its id.
+    git: std::sync::Mutex<HashMap<String, GitRead>>,
+    /// The model the user picked to write titles, commit messages and pull requests.
+    text_model: std::sync::Mutex<Option<String>>,
     list_updates: broadcast::Sender<Message>,
+}
+
+struct GitRead {
+    status: GitStatus,
+    /// The commit that was checked out when the pull request was looked up, and when that was.
+    head: String,
+    pull_request_read: Instant,
 }
 
 struct Live {
@@ -107,7 +132,10 @@ impl Hub {
         }
         let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
-        Ok(Arc::new(Self { store, media, environment, threads: Mutex::new(threads), projects, list_updates }))
+        let git = std::sync::Mutex::default();
+        let text_model = std::sync::Mutex::new(store.setting(TEXT_MODEL));
+        let threads = Mutex::new(threads);
+        Ok(Arc::new(Self { store, media, environment, threads, projects, git, text_model, list_updates }))
     }
 
     pub fn server_info(&self) -> ServerInfo {
@@ -118,6 +146,7 @@ impl Hub {
             home: self.environment.variables.get("HOME").cloned().unwrap_or_default(),
             agents: self.environment.agents(),
             models: self.environment.models().to_vec(),
+            text_model: self.writer(Agent::Claude).model,
         }
     }
 
@@ -129,7 +158,7 @@ impl Hub {
             first: Message::Welcome {
                 server: self.server_info(),
                 threads: list,
-                projects: projects(&self.projects.lock().await),
+                projects: self.projects_of(&self.projects.lock().await),
             },
             updates: self.list_updates.subscribe(),
         }
@@ -230,7 +259,7 @@ impl Hub {
 
     async fn title_from_first_message(self: Arc<Self>, thread_id: String, text: String) {
         let Some(agent) = self.agent_of(&thread_id).await else { return };
-        match title::from_first_message(&self.environment, agent, &text).await {
+        match title::from_first_message(&self.environment, &self.writer(agent), &text).await {
             Some(generated) if !generated.needs_refinement => {
                 self.set_generated_title(&thread_id, generated.title).await
             }
@@ -257,10 +286,33 @@ impl Hub {
             let Ok(items) = self.store.items_since(&thread_id, 0) else { return };
             (live.stored.thread.title.clone(), items)
         };
-        let Some(generated) = title::from_transcript(&self.environment, agent, &previous_title, &items).await else {
+        let writer = self.writer(agent);
+        let Some(generated) = title::from_transcript(&self.environment, &writer, &previous_title, &items).await else {
             return;
         };
         self.set_generated_title(&thread_id, generated.title).await;
+    }
+
+    /// Who writes titles, commit messages and pull requests: the model the user picked, or the
+    /// lightest one of `agent`.
+    fn writer(&self, agent: Agent) -> Writer {
+        let picked = self.text_model.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+        let model = picked.and_then(|id| self.environment.models().iter().find(|model| model.id == id));
+        match model {
+            Some(model) => Writer { agent: model.agent, model: Some(model.id.clone()) },
+            None => Writer { agent, model: None },
+        }
+    }
+
+    pub fn set_text_model(&self, model: Option<String>) -> anyhow::Result<()> {
+        if let Some(id) = &model
+            && !self.environment.models().iter().any(|model| &model.id == id)
+        {
+            bail!("{id} isn't a model on your server.");
+        }
+        self.store.set_setting(TEXT_MODEL, model.as_deref())?;
+        *self.text_model.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = model;
+        Ok(())
     }
 
     async fn agent_of(&self, thread_id: &str) -> Option<Agent> {
@@ -467,14 +519,15 @@ impl Hub {
         self.threads.lock().await.values().any(|live| live.run.is_some())
     }
 
-    pub async fn add_project(&self, path: &str) -> anyhow::Result<()> {
+    /// Answers with the project's id, also when the folder was a project already.
+    pub async fn add_project(&self, path: &str) -> anyhow::Result<String> {
         let path = if path.len() > 1 { path.trim_end_matches('/') } else { path };
         if !Path::new(path).is_absolute() || !Path::new(path).is_dir() {
             bail!("{path} isn't a folder on the server.");
         }
         let mut projects = self.projects.lock().await;
-        if projects.iter().any(|project| project.path == path) {
-            return Ok(());
+        if let Some(project) = projects.iter().find(|project| project.path == path) {
+            return Ok(project.id.clone());
         }
         let project = StoredProject {
             id: new_id(),
@@ -483,10 +536,63 @@ impl Hub {
             icon: icons::find(Path::new(path)),
             icon_chosen: false,
         };
+        let id = project.id.clone();
         self.store.add_project(&project)?;
         projects.push(project);
         self.announce_projects(&projects);
-        Ok(())
+        Ok(id)
+    }
+
+    /// Where new projects and clones go: `projects` in the home folder.
+    fn projects_root(&self) -> anyhow::Result<PathBuf> {
+        let home = self.environment.variables.get("HOME").context("The server doesn't know its home folder.")?;
+        let root = Path::new(home).join("projects");
+        std::fs::create_dir_all(&root).with_context(|| format!("{} can't be made.", root.display()))?;
+        Ok(root)
+    }
+
+    /// Starts a git repository in a new folder named after `name` and adds it as a project.
+    pub async fn new_project(&self, name: &str) -> anyhow::Result<String> {
+        let folder = folder_name(name).context("A project needs a name with a letter or a digit in it.")?;
+        let path = self.projects_root()?.join(folder);
+        if let Err(error) = std::fs::create_dir(&path) {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                bail!("{} is already there. Pick another name, or add it as a local folder.", path.display());
+            }
+            return Err(error).with_context(|| format!("{} can't be made.", path.display()));
+        }
+        let path = path.to_string_lossy().into_owned();
+        if let Err(error) = git::init(&path, &self.environment).await {
+            let _ = std::fs::remove_dir(&path);
+            return Err(error);
+        }
+        self.add_project(&path).await
+    }
+
+    pub async fn github(&self) -> GitHubState {
+        github::state(&self.environment).await
+    }
+
+    pub async fn github_repos(&self) -> anyhow::Result<Message> {
+        github::repos(&self.environment).await
+    }
+
+    /// Clones `owner/name` from GitHub and adds it as a project. A folder that is that
+    /// repository already is only added.
+    pub async fn clone_repo(&self, repo: &str) -> anyhow::Result<String> {
+        let path = self.projects_root()?.join(github::repo_name(repo)?);
+        let folder = path.to_string_lossy().into_owned();
+        if !path.exists() {
+            github::clone(repo, &folder, &self.environment).await?;
+            return self.add_project(&folder).await;
+        }
+        let origin = git::origin(&folder, &self.environment).await.unwrap_or_default().to_lowercase();
+        let origin = origin.trim_end_matches('/').trim_end_matches(".git");
+        let repo = repo.to_lowercase();
+        if !origin.ends_with(&format!("/{repo}")) && !origin.ends_with(&format!(":{repo}")) {
+            bail!("{folder} is already there and isn't {repo}.");
+        }
+        self.add_project(&folder).await
     }
 
     pub async fn remove_project(&self, project_id: &str) -> anyhow::Result<()> {
@@ -541,15 +647,187 @@ impl Hub {
     /// Checks a branch out in the project's folder, which every thread of the project works in.
     pub async fn switch_branch(&self, project_id: &str, branch: &str, create: bool) -> anyhow::Result<()> {
         let path = self.project_path(project_id).await?;
+        self.refuse_while_working(project_id).await?;
+        git::switch(&path, &self.environment, branch, create).await?;
+        self.read_git(project_id, &path, false).await;
+        self.announce_projects(&self.projects.lock().await);
+        Ok(())
+    }
+
+    async fn refuse_while_working(&self, project_id: &str) -> anyhow::Result<()> {
         let threads = self.threads.lock().await;
         let working = threads.values().any(|live| live.stored.thread.project_id == project_id && live.activity.running);
-        drop(threads);
         if working {
             bail!("An agent is working in this project. Switch branches when it has finished.");
         }
-        git::switch(&path, &self.environment, branch, create).await?;
-        self.announce_projects(&self.projects.lock().await);
         Ok(())
+    }
+
+    /// What git says about the project's folder now, which every app is told when it has changed.
+    pub async fn git_status(&self, project_id: &str, fetch: bool) -> anyhow::Result<Message> {
+        let path = self.project_path(project_id).await?;
+        if fetch {
+            git::fetch(&path, &self.environment).await;
+        }
+        let (status, files) = self.read_git(project_id, &path, fetch).await;
+        Ok(Message::GitStatus { status, files })
+    }
+
+    /// Reads the folder's status. GitHub is asked for the branch's pull request when it was last
+    /// asked a while ago or for another commit, and always with `ask_again`.
+    async fn read_git(&self, project_id: &str, path: &str, ask_again: bool) -> (Option<GitStatus>, Vec<ChangedFile>) {
+        let Some((mut status, files, head)) = git::status(path, &self.environment).await else {
+            if self.lock_git().remove(project_id).is_some() {
+                self.announce_projects(&self.projects.lock().await);
+            }
+            return (None, Vec::new());
+        };
+        let known = match self.lock_git().get(project_id) {
+            Some(read) if !ask_again && read.head == head && read.status.branch == status.branch => {
+                Some((read.status.pull_request.clone(), read.pull_request_read))
+            }
+            _ => None,
+        };
+        let pushed = status.upstream || (status.ahead == 0 && !status.default);
+        let (pull_request, pull_request_read) = match known {
+            Some(known) if known.1.elapsed() < PULL_REQUEST_FRESH => known,
+            _ if status.pull_requests && status.branch.is_some() && pushed => {
+                (git::pull_request(path, &self.environment).await, Instant::now())
+            }
+            _ => (None, Instant::now()),
+        };
+        status.pull_request = pull_request;
+        let read = GitRead { status: status.clone(), head, pull_request_read };
+        let before = self.lock_git().insert(project_id.to_string(), read);
+        if before.map(|before| before.status).as_ref() != Some(&status) {
+            self.announce_projects(&self.projects.lock().await);
+        }
+        (Some(status), files)
+    }
+
+    fn lock_git(&self) -> std::sync::MutexGuard<'_, HashMap<String, GitRead>> {
+        self.git.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Who writes for the run and what its thread is about. Without a thread, the first agent
+    /// that is installed writes.
+    async fn writer_of(&self, thread_id: Option<&str>) -> anyhow::Result<(Writer, drafts::Thread)> {
+        let threads = self.threads.lock().await;
+        let Some(live) = thread_id.and_then(|thread_id| threads.get(thread_id)) else {
+            let installed =
+                [Agent::Claude, Agent::Codex].into_iter().find(|agent| self.environment.executable(*agent).is_some());
+            let agent = installed.context("No agent is installed on your server to write this.")?;
+            return Ok((self.writer(agent), drafts::Thread::default()));
+        };
+        let thread = &live.stored.thread;
+        let items = self.store.items_since(&thread.id, 0).unwrap_or_default();
+        let said = items.iter().filter_map(|item| match &item.kind {
+            ItemKind::User { text, .. } if !text.is_empty() => Some(format!("USER:\n{text}")),
+            _ => None,
+        });
+        let messages = said.collect::<Vec<_>>().join("\n\n");
+        Ok((self.writer(thread.agent), drafts::Thread { title: thread.title.clone(), messages }))
+    }
+
+    /// Carries the action out in the project's folder, telling `started` each stage as it starts,
+    /// and answers with what it did.
+    pub async fn git_run(&self, project_id: &str, run: GitRun, started: impl Fn(GitStage)) -> anyhow::Result<Message> {
+        let path = self.project_path(project_id).await?;
+        let done = self.git_stages(project_id, &path, &run, started).await;
+        self.read_git(project_id, &path, true).await;
+        done
+    }
+
+    async fn git_stages(
+        &self,
+        project_id: &str,
+        path: &str,
+        run: &GitRun,
+        started: impl Fn(GitStage),
+    ) -> anyhow::Result<Message> {
+        let environment = &self.environment;
+        let done = |title: String, description: Option<String>, url: Option<String>, next: Option<GitAction>| {
+            Ok(Message::GitDone { title, description: description.filter(|text| !text.is_empty()), url, next })
+        };
+        if run.action == GitAction::Pull {
+            started(GitStage::Pull);
+            let before = git::head(path, environment).await.ok();
+            git::pull(path, environment).await?;
+            let pulled = git::head(path, environment).await.ok() != before;
+            return done(if pulled { "Pulled" } else { "Already up to date" }.to_string(), None, None, None);
+        }
+
+        let read = git::status(path, environment).await.context("This folder isn't a git repository.")?;
+        let status = read.0;
+        let commits = matches!(run.action, GitAction::Commit | GitAction::CommitPush | GitAction::CommitPushPr);
+        let opens = matches!(run.action, GitAction::CreatePr | GitAction::CommitPushPr);
+        let pushes = run.action != GitAction::Commit;
+        if pushes && status.branch.is_none() {
+            bail!("Check out a branch before pushing.");
+        }
+        let (writer, thread) = self.writer_of(run.thread_id.as_deref()).await?;
+        let message = run.message.as_deref().map(str::trim).filter(|message| !message.is_empty());
+
+        let committed = commits && status.changed > 0;
+        if committed {
+            let draft = match (message, run.new_branch) {
+                (Some(_), false) => None,
+                _ => {
+                    started(if run.new_branch { GitStage::Branch } else { GitStage::Message });
+                    Some(drafts::commit_message(path, environment, &writer, &thread, &run.paths).await?)
+                }
+            };
+            if run.new_branch {
+                let suggested = draft.as_ref().and_then(|draft| draft.branch.clone());
+                self.branch_off(project_id, path, suggested).await?;
+            }
+            started(GitStage::Commit);
+            let message = message.map(str::to_string).or(draft.map(|draft| draft.message())).unwrap_or_default();
+            git::commit(path, environment, &message, &run.paths).await?;
+        } else if run.action == GitAction::Commit {
+            bail!("There is nothing to commit.");
+        } else if run.new_branch {
+            started(GitStage::Branch);
+            let subject = git::head(path, environment).await?.1;
+            self.branch_off(project_id, path, drafts::branch_name(&subject)).await?;
+        }
+
+        let (commit, subject) = git::head(path, environment).await?;
+        let mut pushed = None;
+        let status = git::status(path, environment).await.map(|read| read.0).unwrap_or(status);
+        if pushes && (!status.upstream || status.ahead > 0) {
+            started(GitStage::Push);
+            git::push(path, environment).await?;
+            pushed = git::upstream(path, environment).await;
+        }
+        if opens {
+            if let Some(open) = git::pull_request(path, environment).await {
+                return done(format!("PR #{} is already open", open.number), Some(open.title), Some(open.url), None);
+            }
+            started(GitStage::PullRequestText);
+            let (title, body) = drafts::pull_request(path, environment, &writer, &thread).await?;
+            started(GitStage::PullRequest);
+            let url = git::open_pull_request(path, environment, &title, &body).await?;
+            let number = url.rsplit('/').next().unwrap_or_default();
+            return done(format!("Created PR #{number}"), Some(title), Some(url), None);
+        }
+        if let Some(upstream) = pushed {
+            let opened = self.lock_git().get(project_id).is_some_and(|read| read.status.pull_request.is_some());
+            let next = (!status.default && status.pull_requests && !opened).then_some(GitAction::CreatePr);
+            return done(format!("Pushed {commit} to {upstream}"), Some(subject), None, next);
+        }
+        if committed {
+            return done(format!("Committed {commit}"), Some(subject), None, status.remote.then_some(GitAction::Push));
+        }
+        done("Already up to date".to_string(), None, None, None)
+    }
+
+    /// Makes a branch for the work from what is checked out and switches to it.
+    async fn branch_off(&self, project_id: &str, path: &str, suggested: Option<String>) -> anyhow::Result<()> {
+        self.refuse_while_working(project_id).await?;
+        let name = suggested.unwrap_or_else(|| "feature".to_string());
+        let name = git::free_branch_name(path, &self.environment, &name).await;
+        git::switch(path, &self.environment, &name, true).await
     }
 
     async fn project_path(&self, project_id: &str) -> anyhow::Result<String> {
@@ -559,7 +837,21 @@ impl Hub {
     }
 
     fn announce_projects(&self, stored: &[StoredProject]) {
-        let _ = self.list_updates.send(Message::Projects { projects: projects(stored) });
+        let _ = self.list_updates.send(Message::Projects { projects: self.projects_of(stored) });
+    }
+
+    fn projects_of(&self, stored: &[StoredProject]) -> Vec<Project> {
+        let git = self.lock_git();
+        let project = |stored: &StoredProject| Project {
+            id: stored.id.clone(),
+            path: stored.path.clone(),
+            name: file_name(&stored.path).to_string(),
+            branch: git::current_branch(&stored.path),
+            git: git.get(&stored.id).map(|read| read.status.clone()),
+            icon: stored.icon.as_deref().and_then(icons::version),
+            created_at: stored.created_at,
+        };
+        stored.iter().map(project).collect()
     }
 
     fn announce(&self, thread: &Thread) {
@@ -931,10 +1223,13 @@ impl Hub {
         }
         // The turn may have switched branches, or made the project an icon.
         let mut projects = self.projects.lock().await;
-        if let Some(project) = projects.iter_mut().find(|project| project.id == live.stored.thread.project_id) {
-            refresh_icon(&self.store, project);
-        }
+        let Some(project) = projects.iter_mut().find(|project| project.id == live.stored.thread.project_id) else {
+            return;
+        };
+        refresh_icon(&self.store, project);
+        let (hub, project_id, path) = (self.clone(), project.id.clone(), project.path.clone());
         self.announce_projects(&projects);
+        tokio::spawn(async move { hub.read_git(&project_id, &path, false).await });
     }
 }
 
@@ -1242,18 +1537,6 @@ fn checked(what: &str, value: Option<String>) -> anyhow::Result<Option<String>> 
     Ok(Some(value))
 }
 
-fn projects(stored: &[StoredProject]) -> Vec<Project> {
-    let project = |stored: &StoredProject| Project {
-        id: stored.id.clone(),
-        path: stored.path.clone(),
-        name: file_name(&stored.path).to_string(),
-        branch: git::current_branch(&stored.path),
-        icon: stored.icon.as_deref().and_then(icons::version),
-        created_at: stored.created_at,
-    };
-    stored.iter().map(project).collect()
-}
-
 /// Looks for the project's icon in its folder again, unless the user picked one that is still
 /// there.
 fn refresh_icon(store: &Store, project: &mut StoredProject) {
@@ -1300,6 +1583,15 @@ fn tail(text: &str, max_chars: usize) -> &str {
     text.char_indices().nth(skip).map_or("", |(index, _)| &text[index..])
 }
 
+/// The folder a project named `name` gets: its letters and digits in lowercase, with dashes
+/// for everything between them.
+fn folder_name(name: &str) -> Option<String> {
+    let words = name.split(|c: char| !c.is_ascii_alphanumeric()).filter(|word| !word.is_empty());
+    let folder: String = words.collect::<Vec<_>>().join("-").to_lowercase().chars().take(64).collect();
+    let folder = folder.trim_end_matches('-');
+    (!folder.is_empty()).then(|| folder.to_string())
+}
+
 pub(crate) fn file_name(path: &str) -> &str {
     Path::new(path).file_name().and_then(|name| name.to_str()).unwrap_or(path)
 }
@@ -1316,6 +1608,14 @@ fn prompt(text: &str, attachments: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_projects_folder_is_named_after_it() {
+        assert_eq!(folder_name("My App!").as_deref(), Some("my-app"));
+        assert_eq!(folder_name("  api_v2 / web ").as_deref(), Some("api-v2-web"));
+        assert_eq!(folder_name("../.."), None);
+        assert_eq!(folder_name(&"a".repeat(80)).map(|folder| folder.len()), Some(64));
+    }
 
     #[test]
     fn prompt_lists_attachments_after_the_text() {

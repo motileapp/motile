@@ -8,7 +8,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 const MAX_UPLOAD: u64 = 500 * 1024 * 1024;
 
-pub fn list_dir(path: Option<&str>, home: &str, icons: bool) -> anyhow::Result<Message> {
+pub fn list_dir(path: Option<&str>, home: &str, icons: bool, hidden: bool) -> anyhow::Result<Message> {
     let path = PathBuf::from(path.filter(|path| !path.is_empty()).unwrap_or(home));
     if !path.is_absolute() {
         bail!("{} isn't an absolute path.", path.display());
@@ -18,7 +18,7 @@ pub fn list_dir(path: Option<&str>, home: &str, icons: bool) -> anyhow::Result<M
     let mut files = Vec::new();
     for entry in entries.filter_map(Result::ok) {
         let Ok(name) = entry.file_name().into_string() else { continue };
-        if name.starts_with('.') {
+        if name.starts_with('.') && !hidden {
             continue;
         }
         if entry.path().is_dir() {

@@ -1,8 +1,11 @@
 pub mod access;
 pub mod agents;
 pub mod config;
+pub mod drafts;
 pub mod files;
+pub mod generate;
 pub mod git;
+pub mod github;
 pub mod hub;
 pub mod icons;
 pub mod media;

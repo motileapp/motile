@@ -17,7 +17,7 @@ use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::access::Access;
-use crate::hub::{Hub, ListSubscription, ThreadSubscription};
+use crate::hub::{GitRun, Hub, ListSubscription, ThreadSubscription};
 use crate::media::MediaStore;
 use crate::{files, update};
 
@@ -103,6 +103,10 @@ impl Server {
         let reply = match request {
             Request::Subscribe => return follow_list(send, hub.subscribe().await).await,
             Request::UpdateServer => return update_server(send, hub).await,
+            Request::GitRun { project_id, action, thread_id, message, paths, new_branch } => {
+                let run = GitRun { action, thread_id, message, paths, new_branch };
+                return git_run(send, hub.clone(), project_id, run).await;
+            }
             Request::Media { id } => return send_media(send, &hub.media, &id).await,
             Request::Open { thread_id, since } => match hub.open(&thread_id, since).await {
                 Ok(subscription) => return follow_thread(send, subscription).await,
@@ -136,7 +140,19 @@ impl Server {
             Request::SwitchBranch { project_id, branch, create } => {
                 hub.switch_branch(&project_id, &branch, create).await.map(|_| Message::Ok)
             }
-            Request::ListDir { path, icons } => files::list_dir(path.as_deref(), &hub.server_info().home, icons),
+            Request::GitStatus { project_id, fetch } => hub.git_status(&project_id, fetch).await,
+            Request::SetTextModel { model } => hub.set_text_model(model).map(|_| Message::Ok),
+            Request::NewProject { name } => {
+                hub.new_project(&name).await.map(|project_id| Message::ProjectAdded { project_id })
+            }
+            Request::GithubStatus => Ok(Message::Github { state: hub.github().await }),
+            Request::GithubRepos => hub.github_repos().await,
+            Request::CloneRepo { repo } => {
+                hub.clone_repo(&repo).await.map(|project_id| Message::ProjectAdded { project_id })
+            }
+            Request::ListDir { path, icons, hidden } => {
+                files::list_dir(path.as_deref(), &hub.server_info().home, icons, hidden)
+            }
             Request::Upload { name, size } => {
                 let saved = files::receive_upload(&mut recv, &self.attachments, &name, size).await;
                 saved.map(|path| Message::Uploaded { path })
@@ -195,6 +211,25 @@ async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     tracing::info!("updated; starting the new server");
     tokio::time::sleep(RESTART_AFTER).await;
     update::request_restart(program);
+    Ok(())
+}
+
+/// Commits, pushes and the like, telling the app each stage as it starts. The run goes on when
+/// the app has gone.
+async fn git_run(mut send: SendStream, hub: Arc<Hub>, project_id: String, run: GitRun) -> anyhow::Result<()> {
+    let (stages, mut started) = tokio::sync::mpsc::unbounded_channel();
+    let running = tokio::spawn(async move {
+        let report = |stage| {
+            let _ = stages.send(stage);
+        };
+        hub.git_run(&project_id, run, report).await
+    });
+    while let Some(stage) = started.recv().await {
+        let _ = write_frame(&mut send, &Message::GitProgress { stage }).await;
+    }
+    let reply = running.await?.unwrap_or_else(|error| Message::Error { message: format!("{error:#}") });
+    write_frame(&mut send, &reply).await?;
+    send.finish()?;
     Ok(())
 }
 

@@ -101,7 +101,11 @@ impl App {
             }
             Event::Activity { activity, .. } => self.running = activity.running,
             Event::ThreadError { message, .. } => panic!("a thread couldn't be opened: {message}"),
-            Event::Restored | Event::Reply { .. } | Event::ServerUpdate { .. } | Event::MediaProgress { .. } => {}
+            Event::Restored
+            | Event::Reply { .. }
+            | Event::ServerUpdate { .. }
+            | Event::GitProgress { .. }
+            | Event::MediaProgress { .. } => {}
         }
     }
 
