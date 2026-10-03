@@ -348,7 +348,6 @@ private struct UndoRow: View {
                             .font(.system(size: 11))
                             .lineLimit(1)
                     }
-                    .foregroundStyle(Color.themeSuccess)
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 18)
