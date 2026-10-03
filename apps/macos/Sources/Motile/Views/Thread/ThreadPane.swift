@@ -43,19 +43,8 @@ struct ThreadPane: View {
                 Spacer()
             }
             ToolbarItem(placement: .primaryAction) {
-                if let thread = store.selectedThread {
-                    HStack(spacing: 0) {
-                        if let project = gitProject, let control = project.gitControl {
-                            GitButton(project: project, control: control)
-                        }
-                        ToolbarButton(
-                            symbol: thread.isDone ? "arrow.uturn.backward.circle" : "checkmark.circle",
-                            help: thread.isDone ? "Mark undone (⇧⌘D)" : "Mark done (⇧⌘D)"
-                        ) {
-                            store.toggleDone()
-                        }
-                        .disabled(thread.busy)
-                    }
+                if store.selectedThread != nil, let project = gitProject, let control = project.gitControl {
+                    GitButton(project: project, control: control)
                 }
             }
             .withoutSystemGlass()
@@ -100,7 +89,7 @@ struct ThreadPane: View {
             }
             .lineLimit(1)
             .padding(.leading, titleInset)
-            .padding(.trailing, gitProject?.gitControl == nil ? 60 : 250)
+            .padding(.trailing, gitProject?.gitControl == nil ? 28 : 218)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: proxy.safeAreaInsets.top)
             .offset(y: -proxy.safeAreaInsets.top)
