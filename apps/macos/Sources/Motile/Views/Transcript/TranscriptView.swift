@@ -42,6 +42,9 @@ final class TranscriptView: FlippedView, RowOwner {
     /// How close to the end a scroll has to come for the view to follow the end again.
     private static let pinDistance: CGFloat = 30
 
+    /// How far the end has to be below the viewport for the jump button to show.
+    private var jumpDistance: CGFloat { max(200, viewportHeight / 2) }
+
     private let scrollView = NSScrollView()
     private let document = FlippedView()
     private let working = WorkingView()
@@ -335,7 +338,7 @@ final class TranscriptView: FlippedView, RowOwner {
             pinned = false
             updateVisible(anchor: anchor)
             pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < Self.pinDistance
-            jumpButton.isHidden = pinned || rows.isEmpty
+            updateJumpButton()
         } else {
             updateVisible(anchor: anchor)
         }
@@ -549,7 +552,7 @@ final class TranscriptView: FlippedView, RowOwner {
         let workingY = firstLowered < offsets.count ? offsets[firstLowered] : 0
         working.frame = NSRect(x: x, y: Self.topPadding + workingY + 2, width: width, height: Self.workingHeight)
         working.isHidden = !showsWorking
-        jumpButton.isHidden = pinned || rows.isEmpty
+        updateJumpButton()
         if !pendingHighlight.isEmpty {
             let ids = pendingHighlight
             pendingHighlight.removeAll()
@@ -585,6 +588,11 @@ final class TranscriptView: FlippedView, RowOwner {
             return
         }
         scroll(to: target)
+    }
+
+    private func updateJumpButton() {
+        let distance = endY - scrollView.contentView.bounds.minY
+        jumpButton.isHidden = pinned || rows.isEmpty || distance < jumpDistance
     }
 
     private func scroll(to y: CGFloat) {
@@ -636,7 +644,7 @@ final class TranscriptView: FlippedView, RowOwner {
         pinned = false
         updateVisible(anchor: anchor)
         pinned = wasPinned && contentHeight - scrollView.contentView.bounds.maxY < Self.pinDistance
-        jumpButton.isHidden = pinned || rows.isEmpty
+        updateJumpButton()
     }
 
     func toggleRow(id: String) {
