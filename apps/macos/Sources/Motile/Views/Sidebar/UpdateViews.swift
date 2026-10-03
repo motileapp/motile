@@ -9,6 +9,10 @@ struct AppUpdateRow: View {
         switch updater.state {
         case .idle:
             EmptyView()
+        case .checking:
+            line("Checking for updates…", symbol: "arrow.triangle.2.circlepath") {
+                ProgressView().controlSize(.small)
+            }
         case .upToDate:
             line("Motile \(updater.current) is the newest version", symbol: "checkmark.circle")
         case .available(let version):

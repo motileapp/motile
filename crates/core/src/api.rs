@@ -1,5 +1,6 @@
 //! What an app says to the core and what the core tells it, as JSON.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
@@ -100,7 +101,8 @@ pub enum Command {
     UpdateServer {
         server_id: String,
     },
-    /// Commits, pushes, opens a pull request or pulls in the project's folder; the server writes
+    /// Commits, pushes, opens a pull request or pulls in the project's folder, or in the worktree
+    /// of the thread; the server writes
     /// the commit message that isn't given and the pull request. `git_progress` events say which
     /// stage runs. Answers with `title`, `description`, the pull request's `url` and the `next`
     /// action, where there is one.
@@ -123,6 +125,13 @@ pub enum Command {
         server_id: String,
         #[serde(default)]
         model: Option<String>,
+    },
+    /// Says how the server's writer names the branches it makes. Without `instructions` the
+    /// server goes back to its own.
+    SetBranchInstructions {
+        server_id: String,
+        #[serde(default)]
+        instructions: Option<String>,
     },
     /// Makes the image at `path` on the server the project's icon. Without `path` the project
     /// goes back to the icon found in its folder.
@@ -261,6 +270,8 @@ pub struct ProjectView {
     pub icon_path: Option<String>,
     /// The git button for its repository: what it does and the menu behind it.
     pub git_control: Option<Control>,
+    /// The same for each of its worktrees that git has been read in, by the worktree's path.
+    pub worktree_controls: HashMap<String, Control>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

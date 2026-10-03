@@ -136,7 +136,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         }
     }
     let store = Store::open(&data_dir.database()).context("The thread database can't be opened.")?;
-    let hub = Hub::new(store, data_dir.media(), environment)?;
+    let hub = Hub::new(store, data_dir.media(), data_dir.worktrees(), environment)?;
     let endpoint = bind(&key, &options).await?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), key = key.public(), "serving");
     if options.local_only {

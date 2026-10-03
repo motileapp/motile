@@ -46,7 +46,10 @@ struct SidebarView: View {
                 deleting = nil
             }
         } message: {
-            Text("The thread and its transcript are removed from its server. Files the agent changed stay as they are.")
+            let inWorktree = deleting.map { thread in store.project(thread.projectID)?.seen(from: thread).worktree != nil } ?? false
+            Text(inWorktree
+                ? "The thread and its transcript are removed from its server, and so is its worktree with what isn't committed there. Its branch stays."
+                : "The thread and its transcript are removed from its server. Files the agent changed stay as they are.")
         }
     }
 
@@ -177,7 +180,7 @@ private struct ThreadRow: View {
     private static let topPadding: CGFloat = 3
 
     var body: some View {
-        let project = store.project(thread.projectID)
+        let project = store.project(thread.projectID)?.seen(from: thread)
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: 14)

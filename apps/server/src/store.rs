@@ -11,6 +11,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0002_project_icons.sql"),
     include_str!("../migrations/0003_media.sql"),
     include_str!("../migrations/0004_settings.sql"),
+    include_str!("../migrations/0005_worktrees.sql"),
 ];
 
 pub struct Store {
@@ -51,6 +52,16 @@ pub struct StoredThread {
     pub session_id: Option<String>,
     pub title_source: TitleSource,
     pub next_seq: u64,
+    /// Set when the thread works in a worktree of its own, which is its `cwd`.
+    pub worktree: Option<StoredWorktree>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct StoredWorktree {
+    /// The branch made for the thread, which the worktree is made again with when it has gone.
+    pub branch: String,
+    /// The branch that one started from.
+    pub base: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -62,6 +73,8 @@ pub struct StoredProject {
     pub icon: Option<String>,
     /// The user picked the icon; it isn't looked for in the project's folder again.
     pub icon_chosen: bool,
+    /// The shell script that runs in every new worktree.
+    pub setup: Option<String>,
 }
 
 fn as_text<T: serde::Serialize>(value: &T) -> String {
@@ -91,13 +104,14 @@ impl Store {
         let mut statement = connection.prepare(
             "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access, t.plan,
                     t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.undone_at,
-                    COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0)
+                    COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base
              FROM threads t LEFT JOIN items i ON i.thread_id = t.id
              GROUP BY t.id",
         )?;
         let threads = statement.query_map([], |row| {
             let rev: i64 = row.get(17)?;
             let next_seq: i64 = row.get(18)?;
+            let worktree: (Option<String>, Option<String>) = (row.get(19)?, row.get(20)?);
             Ok(StoredThread {
                 thread: Thread {
                     id: row.get(0)?,
@@ -122,6 +136,10 @@ impl Store {
                 session_id: row.get(10)?,
                 title_source: TitleSource::parse(&row.get::<_, String>(2)?),
                 next_seq: next_seq as u64,
+                worktree: match worktree {
+                    (Some(branch), Some(base)) => Some(StoredWorktree { branch, base }),
+                    _ => None,
+                },
             })
         })?;
         threads.collect()
@@ -131,8 +149,9 @@ impl Store {
         let thread = &stored.thread;
         self.connection().execute(
             "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access, plan,
-                                  session_id, created_at, updated_at, done_at, needs_approval, turn_ended_at, undone_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                                  session_id, created_at, updated_at, done_at, needs_approval, turn_ended_at, undone_at,
+                                  worktree_branch, worktree_base)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
@@ -145,7 +164,8 @@ impl Store {
                  done_at = excluded.done_at,
                  needs_approval = excluded.needs_approval,
                  turn_ended_at = excluded.turn_ended_at,
-                 undone_at = excluded.undone_at",
+                 undone_at = excluded.undone_at,
+                 worktree_branch = excluded.worktree_branch",
             params![
                 thread.id,
                 thread.title,
@@ -164,6 +184,8 @@ impl Store {
                 thread.needs_approval,
                 thread.turn_ended_at,
                 thread.undone_at,
+                stored.worktree.as_ref().map(|worktree| &worktree.branch),
+                stored.worktree.as_ref().map(|worktree| &worktree.base),
             ],
         )?;
         Ok(())
@@ -194,8 +216,8 @@ impl Store {
 
     pub fn load_projects(&self) -> rusqlite::Result<Vec<StoredProject>> {
         let connection = self.connection();
-        let mut statement =
-            connection.prepare("SELECT id, path, created_at, icon, icon_chosen FROM projects ORDER BY created_at")?;
+        let mut statement = connection
+            .prepare("SELECT id, path, created_at, icon, icon_chosen, setup FROM projects ORDER BY created_at")?;
         let projects = statement.query_map([], |row| {
             Ok(StoredProject {
                 id: row.get(0)?,
@@ -203,6 +225,7 @@ impl Store {
                 created_at: row.get(2)?,
                 icon: row.get(3)?,
                 icon_chosen: row.get(4)?,
+                setup: row.get(5)?,
             })
         })?;
         projects.collect()
@@ -221,6 +244,12 @@ impl Store {
             "UPDATE projects SET icon = ?2, icon_chosen = ?3 WHERE id = ?1",
             params![project.id, project.icon, project.icon_chosen],
         )?;
+        Ok(())
+    }
+
+    pub fn save_project_setup(&self, project: &StoredProject) -> rusqlite::Result<()> {
+        self.connection()
+            .execute("UPDATE projects SET setup = ?2 WHERE id = ?1", params![project.id, project.setup])?;
         Ok(())
     }
 

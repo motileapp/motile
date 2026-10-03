@@ -1,6 +1,7 @@
 //! A project's repository, read and changed with the `git` program: its branches, what isn't
-//! committed or pushed, and the commits, pushes and pull requests an app asks for. Pull requests
-//! are GitHub's, through its `gh` program.
+//! committed or pushed, the commits, pushes and pull requests an app asks for, and the worktrees
+//! of the threads that work in one of their own. Pull requests are GitHub's, through its `gh`
+//! program.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -19,6 +20,8 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
 /// A commit runs the repository's hooks, which may run its tests.
 const COMMIT_TIMEOUT: Duration = Duration::from_secs(600);
+/// A worktree of a large repository takes a while to check out.
+const WORKTREE_TIMEOUT: Duration = Duration::from_secs(300);
 const REFUSAL_CHARS: usize = 2000;
 
 /// The branch checked out in the folder, read from git's own files.
@@ -415,6 +418,59 @@ pub async fn free_branch_name(folder: &str, environment: &Environment, name: &st
         candidate = format!("{name}-{count}");
     }
     candidate
+}
+
+/// Makes the worktree at `path` on `branch`. A branch that isn't there yet is made from `base`,
+/// which the remote is asked for first. `true` when the branch was made.
+pub async fn add_worktree(
+    repository: &str,
+    environment: &Environment,
+    path: &str,
+    branch: &str,
+    base: &str,
+) -> anyhow::Result<bool> {
+    prune_worktrees(repository, environment).await;
+    let exists = async |name: &str| {
+        git(repository, environment, &["rev-parse", "--verify", "--quiet", &format!("{name}^{{commit}}")]).await.is_ok()
+    };
+    if exists(&format!("refs/heads/{branch}")).await {
+        let add = command("git", repository, environment, &["worktree", "add", "--quiet", path, branch]);
+        run(add, None, WORKTREE_TIMEOUT).await?;
+        return Ok(false);
+    }
+    let start = latest(repository, environment, base).await;
+    if !exists(&start).await {
+        bail!("{base} isn't a branch with a commit to start from.");
+    }
+    let arguments = ["worktree", "add", "--quiet", "--no-track", "-b", branch, path, &start];
+    run(command("git", repository, environment, &arguments), None, WORKTREE_TIMEOUT).await?;
+    // Where GitHub's gh opens the branch's pull request into.
+    let _ = git(repository, environment, &["config", &format!("branch.{branch}.gh-merge-base"), base]).await;
+    Ok(true)
+}
+
+/// The branch as the remote has it now, unless the local one has everything the remote has.
+async fn latest(repository: &str, environment: &Environment, branch: &str) -> String {
+    let Some(remote) = remote(repository, environment).await else { return branch.to_string() };
+    let on_remote = format!("refs/remotes/{remote}/{branch}");
+    let refspec = format!("+refs/heads/{branch}:{on_remote}");
+    let fetch = command("git", repository, environment, &["fetch", "--quiet", "--no-tags", &remote, &refspec]);
+    if let Err(error) = run(fetch, None, FETCH_TIMEOUT).await {
+        tracing::debug!(repository, "couldn't fetch {branch}: {error:#}");
+    }
+    let local = format!("refs/heads/{branch}");
+    let ahead = git(repository, environment, &["merge-base", "--is-ancestor", &on_remote, &local]).await.is_ok();
+    let known = git(repository, environment, &["rev-parse", "--verify", "--quiet", &on_remote]).await.is_ok();
+    if ahead || !known { branch.to_string() } else { on_remote }
+}
+
+/// Forgets the worktrees whose folders have gone.
+pub async fn prune_worktrees(repository: &str, environment: &Environment) {
+    let _ = git(repository, environment, &["worktree", "prune"]).await;
+}
+
+pub async fn rename_branch(repository: &str, environment: &Environment, from: &str, to: &str) -> anyhow::Result<()> {
+    git(repository, environment, &["branch", "-m", "--", from, to]).await.map(|_| ())
 }
 
 /// Starts a repository in the folder.

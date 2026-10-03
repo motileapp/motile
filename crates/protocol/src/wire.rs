@@ -144,6 +144,17 @@ pub struct NewThread {
     pub effort: Option<String>,
     pub access: Access,
     pub plan: bool,
+    /// The thread works in a git worktree of its own, on a branch of its own. Without it, it
+    /// works in the project's folder.
+    #[serde(default)]
+    pub worktree: Option<NewWorktree>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct NewWorktree {
+    /// The branch the worktree's branch starts from: as the remote has it, unless the local one
+    /// is ahead.
+    pub base: String,
 }
 
 /// Settings of a thread to change; `None` leaves one as it is.
@@ -260,20 +271,23 @@ pub enum Request {
         #[serde(default)]
         create: bool,
     },
-    /// What git says about the project's folder. With `fetch` the remote is asked first.
-    /// `GitStatus` answers.
+    /// What git says about the project's folder, or about the worktree of the thread. With
+    /// `fetch` the remote is asked first. `GitStatus` answers.
     GitStatus {
         project_id: String,
         #[serde(default)]
+        thread_id: Option<String>,
+        #[serde(default)]
         fetch: bool,
     },
-    /// Commits, pushes, opens a pull request or pulls in the project's folder. The server writes
+    /// Commits, pushes, opens a pull request or pulls in the project's folder, or in the worktree
+    /// of the thread. The server writes
     /// the commit message when `message` is missing, and the pull request's title and text. The
     /// server answers with a `GitProgress` as each stage starts, then `GitDone`.
     GitRun {
         project_id: String,
         action: GitAction,
-        /// The thread the work was done in, which tells the writer why.
+        /// The thread the work was done in, which tells the writer why and where.
         #[serde(default)]
         thread_id: Option<String>,
         #[serde(default)]
@@ -289,6 +303,17 @@ pub enum Request {
     /// server. `None` goes back to the lightest model of the thread's agent.
     SetTextModel {
         model: Option<String>,
+    },
+    /// How this server's writer is told to name the branches it makes. `None` goes back to the
+    /// server's own instructions.
+    SetBranchInstructions {
+        instructions: Option<String>,
+    },
+    /// The shell script that runs in every new worktree of the project before the agent starts
+    /// there, to install what the work needs. `None` runs nothing.
+    SetProjectSetup {
+        project_id: String,
+        script: Option<String>,
     },
     /// The file's bytes follow on the same stream.
     Upload {
@@ -328,7 +353,22 @@ pub struct Project {
     /// extension. `None` when the project has no icon.
     #[serde(default)]
     pub icon: Option<String>,
+    /// The worktrees the project's threads work in.
+    #[serde(default)]
+    pub worktrees: Vec<Worktree>,
+    /// The shell script that runs in every new worktree.
+    #[serde(default)]
+    pub setup: Option<String>,
     pub created_at: f64,
+}
+
+/// A git worktree of a project, made for one thread, which has it as its `cwd`.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Worktree {
+    pub path: String,
+    pub branch: Option<String>,
+    /// What the server last read from git there.
+    pub git: Option<GitStatus>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -456,6 +496,16 @@ pub struct ServerInfo {
     /// The model that writes titles, commit messages and pull requests, when one was picked.
     #[serde(default)]
     pub text_model: Option<String>,
+    #[serde(default)]
+    pub branch_instructions: BranchInstructions,
+}
+
+/// How the writer is told to name the branches it makes.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct BranchInstructions {
+    pub text: String,
+    /// What `text` is until the user changes it.
+    pub default: String,
 }
 
 /// What a thread's agent is doing right now.

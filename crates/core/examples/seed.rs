@@ -113,6 +113,7 @@ async fn main() -> anyhow::Result<()> {
             effort: None,
             access: Access::Full,
             plan: false,
+            worktree: None,
         };
         let sent = seed
             .command(Command::Send {

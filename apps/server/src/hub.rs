@@ -19,18 +19,19 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, Agent, ChangedFile, GitAction, GitHubState, GitStage, GitStatus, Item, ItemKind, Message, NewThread,
-    Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall, ToolStatus, TurnSummary,
+    Activity, Agent, BranchInstructions, ChangedFile, GitAction, GitHubState, GitStage, GitStatus, Item, ItemKind,
+    Message, NewThread, Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall, ToolStatus, TurnSummary, Worktree,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, broadcast, mpsc};
+use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
 use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name};
 use crate::generate::Writer;
 use crate::media::MediaStore;
-use crate::store::{Store, StoredProject, StoredThread, TitleSource};
+use crate::store::{Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::{drafts, git, github, icons, pacing, title};
 
 const UPDATES_BUFFER: usize = 4096;
@@ -40,6 +41,14 @@ const FLUSH_EVERY: Duration = Duration::from_secs(1);
 /// How long a branch's pull request is taken as known before GitHub is asked again.
 const PULL_REQUEST_FRESH: Duration = Duration::from_secs(60);
 const TEXT_MODEL: &str = "text_model";
+const BRANCH_INSTRUCTIONS: &str = "branch_instructions";
+const MAX_INSTRUCTIONS_CHARS: usize = 4000;
+const MAX_SETUP_CHARS: usize = 20_000;
+/// A worktree's setup script installs what the work needs, which can take minutes.
+const SETUP_TIMEOUT: Duration = Duration::from_secs(900);
+const SETUP_OUTPUT_CHARS: usize = 4000;
+/// Starts the names of the branches made for worktrees until the writer has named them.
+const BRANCH_PREFIX: &str = "motile";
 
 /// What an app asked git to do in a project's folder.
 pub struct GitRun {
@@ -58,11 +67,23 @@ pub struct Hub {
     threads: Mutex<HashMap<String, Live>>,
     /// Locked after `threads` when both are needed.
     projects: Mutex<Vec<StoredProject>>,
-    /// What git last said about each project, by its id.
+    /// What git last said about each folder threads work in: the projects' and the worktrees'.
     git: std::sync::Mutex<HashMap<String, GitRead>>,
+    /// Where the worktrees are made, each in a folder named after its project.
+    worktrees_folder: PathBuf,
+    /// The worktrees of the threads that work in one of their own, by thread.
+    worktrees: std::sync::Mutex<HashMap<String, ThreadWorktree>>,
     /// The model the user picked to write titles, commit messages and pull requests.
     text_model: std::sync::Mutex<Option<String>>,
+    /// How the user wants branches named.
+    branch_instructions: std::sync::Mutex<Option<String>>,
     list_updates: broadcast::Sender<Message>,
+}
+
+struct ThreadWorktree {
+    project_id: String,
+    path: String,
+    branch: String,
 }
 
 struct GitRead {
@@ -86,6 +107,8 @@ struct Live {
     activity: Activity,
     updates: broadcast::Sender<Message>,
     run: Option<Run>,
+    /// The thread's worktree is being made, and the turn starts when it is there.
+    preparing: Option<AbortHandle>,
     /// Messages sent while the agent was working, until it takes them.
     queued: Vec<Queued>,
     title_needs_refinement: bool,
@@ -119,11 +142,18 @@ pub struct ThreadSubscription {
 }
 
 impl Hub {
-    /// `media_folder` is where the images and videos that threads show are kept.
-    pub fn new(store: Store, media_folder: PathBuf, environment: Environment) -> anyhow::Result<Arc<Self>> {
+    /// `media_folder` is where the images and videos that threads show are kept, and
+    /// `worktrees_folder` where the worktrees of threads are made.
+    pub fn new(
+        store: Store,
+        media_folder: PathBuf,
+        worktrees_folder: PathBuf,
+        environment: Environment,
+    ) -> anyhow::Result<Arc<Self>> {
         let home = environment.variables.get("HOME").map(String::as_str).unwrap_or_default();
         let media = MediaStore::new(media_folder, home);
         let threads = store.load_threads()?;
+        let worktrees = threads.iter().filter_map(thread_worktree).collect();
         let live = |stored: StoredThread| (stored.thread.id.clone(), Live::new(stored, media.clone()));
         let threads = threads.into_iter().map(live).collect();
         let mut projects = store.load_projects()?;
@@ -133,9 +163,19 @@ impl Hub {
         let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
         let git = std::sync::Mutex::default();
-        let text_model = std::sync::Mutex::new(store.setting(TEXT_MODEL));
-        let threads = Mutex::new(threads);
-        Ok(Arc::new(Self { store, media, environment, threads, projects, git, text_model, list_updates }))
+        Ok(Arc::new(Self {
+            text_model: std::sync::Mutex::new(store.setting(TEXT_MODEL)),
+            branch_instructions: std::sync::Mutex::new(store.setting(BRANCH_INSTRUCTIONS)),
+            worktrees: std::sync::Mutex::new(worktrees),
+            threads: Mutex::new(threads),
+            store,
+            media,
+            environment,
+            projects,
+            git,
+            worktrees_folder,
+            list_updates,
+        }))
     }
 
     pub fn server_info(&self) -> ServerInfo {
@@ -147,6 +187,7 @@ impl Hub {
             agents: self.environment.agents(),
             models: self.environment.models().to_vec(),
             text_model: self.writer(Agent::Claude).model,
+            branch_instructions: self.branch_instructions(),
         }
     }
 
@@ -195,6 +236,9 @@ impl Hub {
                 let stored = self.new_thread(new_thread, &text, &attachments).await?;
                 self.store.save_thread(&stored)?;
                 let thread_id = stored.thread.id.clone();
+                if let Some((thread_id, worktree)) = thread_worktree(&stored) {
+                    self.lock_worktrees().insert(thread_id, worktree);
+                }
                 threads.insert(thread_id.clone(), Live::new(stored, self.media.clone()));
                 (thread_id, true)
             }
@@ -202,6 +246,11 @@ impl Hub {
         };
         let live = threads.get_mut(&thread_id).context("That thread no longer exists.")?;
         let prompt = prompt(&text, &attachments);
+        if live.preparing.is_some() {
+            live.queued.push(Queued { id: new_id(), text, attachments, held: false, sending: false });
+            live.send_activity();
+            return Ok(thread_id);
+        }
         if let Some(run) = &live.run {
             // An agent that is only monitoring takes the message right away.
             let idle = run.received_result;
@@ -234,11 +283,27 @@ impl Hub {
             .find(|project| project.id == new_thread.project_id)
             .context("That project is no longer on the server.")?;
         let created_at = now();
+        let worktree = match new_thread.worktree {
+            Some(new) if new.base.is_empty() || new.base.starts_with('-') => {
+                bail!("{} isn't a branch to start from.", new.base)
+            }
+            Some(new) => {
+                let name: String = uuid::Uuid::new_v4().simple().to_string().chars().take(8).collect();
+                let folder = self.worktrees_folder.join(file_name(&project.path)).join(&name);
+                let branch = temporary_branch(&folder.to_string_lossy());
+                Some((folder.to_string_lossy().into_owned(), StoredWorktree { branch, base: new.base }))
+            }
+            None => None,
+        };
+        let (cwd, worktree) = match worktree {
+            Some((folder, worktree)) => (folder, Some(worktree)),
+            None => (project.path.clone(), None),
+        };
         let thread = Thread {
             id: new_id(),
             title: title::placeholder(text, attachments),
             project_id: project.id.clone(),
-            cwd: project.path.clone(),
+            cwd,
             agent: new_thread.agent,
             model: checked("model", new_thread.model)?,
             effort: checked("effort", new_thread.effort)?,
@@ -254,7 +319,7 @@ impl Hub {
             turn_ended_at: None,
             rev: 0,
         };
-        Ok(StoredThread { thread, session_id: None, title_source: TitleSource::Placeholder, next_seq: 0 })
+        Ok(StoredThread { thread, session_id: None, title_source: TitleSource::Placeholder, next_seq: 0, worktree })
     }
 
     async fn title_from_first_message(self: Arc<Self>, thread_id: String, text: String) {
@@ -312,6 +377,23 @@ impl Hub {
         }
         self.store.set_setting(TEXT_MODEL, model.as_deref())?;
         *self.text_model.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = model;
+        Ok(())
+    }
+
+    fn branch_instructions(&self) -> BranchInstructions {
+        let picked = self.branch_instructions.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+        let default = drafts::BRANCH_INSTRUCTIONS.to_string();
+        BranchInstructions { text: picked.unwrap_or_else(|| default.clone()), default }
+    }
+
+    pub fn set_branch_instructions(&self, instructions: Option<String>) -> anyhow::Result<()> {
+        let instructions = instructions.map(|text| text.trim().to_string());
+        let instructions = instructions.filter(|text| !text.is_empty() && text != drafts::BRANCH_INSTRUCTIONS);
+        if instructions.as_ref().is_some_and(|text| text.chars().count() > MAX_INSTRUCTIONS_CHARS) {
+            bail!("The instructions can be at most {MAX_INSTRUCTIONS_CHARS} characters.");
+        }
+        self.store.set_setting(BRANCH_INSTRUCTIONS, instructions.as_deref())?;
+        *self.branch_instructions.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = instructions;
         Ok(())
     }
 
@@ -375,6 +457,9 @@ impl Hub {
         if live.queued[index].sending {
             return Ok(());
         }
+        if live.preparing.is_some() {
+            bail!("The agent can't take it yet.");
+        }
         let Some(run) = &live.run else {
             let queued = live.queued.remove(index);
             return self.start_next_turn(live, queued);
@@ -418,6 +503,15 @@ impl Hub {
     pub async fn stop(self: &Arc<Self>, thread_id: &str) {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
+        if let Some(preparing) = live.preparing.take() {
+            preparing.abort();
+            // What was made of the worktree so far may be half of it.
+            self.discard_worktree(&live.stored.thread).await;
+            if let Err(error) = self.end_without_agent(live, None) {
+                tracing::error!(thread_id, "couldn't save the end of a turn: {error:#}");
+            }
+            return;
+        }
         let Some(run) = &live.run else { return };
         run.interrupted.store(true, Ordering::Relaxed);
         let process_id = run.process_id;
@@ -504,6 +598,14 @@ impl Hub {
         if let Some(run) = &live.run {
             signal(run.process_id, libc::SIGKILL);
         }
+        if let Some(preparing) = &live.preparing {
+            preparing.abort();
+        }
+        if self.lock_worktrees().remove(thread_id).is_some() {
+            self.discard_worktree(&live.stored.thread).await;
+            self.lock_git().remove(&live.stored.thread.cwd);
+            self.announce_projects(&self.projects.lock().await);
+        }
         let shown = self.store.media_of(thread_id)?;
         self.store.delete_thread(thread_id)?;
         for media_id in shown {
@@ -516,7 +618,7 @@ impl Hub {
     }
 
     pub async fn any_running(&self) -> bool {
-        self.threads.lock().await.values().any(|live| live.run.is_some())
+        self.threads.lock().await.values().any(|live| live.run.is_some() || live.preparing.is_some())
     }
 
     /// Answers with the project's id, also when the folder was a project already.
@@ -535,6 +637,7 @@ impl Hub {
             created_at: now(),
             icon: icons::find(Path::new(path)),
             icon_chosen: false,
+            setup: None,
         };
         let id = project.id.clone();
         self.store.add_project(&project)?;
@@ -635,6 +738,23 @@ impl Hub {
         Ok(())
     }
 
+    /// Sets the shell script that runs in every new worktree of the project, or takes it away.
+    pub async fn set_project_setup(&self, project_id: &str, script: Option<String>) -> anyhow::Result<()> {
+        let script = script.map(|script| script.trim().to_string()).filter(|script| !script.is_empty());
+        if script.as_ref().is_some_and(|script| script.chars().count() > MAX_SETUP_CHARS) {
+            bail!("The script can be at most {MAX_SETUP_CHARS} characters.");
+        }
+        let mut projects = self.projects.lock().await;
+        let project = projects
+            .iter_mut()
+            .find(|project| project.id == project_id)
+            .context("That project is no longer on the server.")?;
+        project.setup = script;
+        self.store.save_project_setup(project)?;
+        self.announce_projects(&projects);
+        Ok(())
+    }
+
     /// The branches of the project's repository. The project is announced again too, since the
     /// branch may have been switched in a terminal.
     pub async fn branches(&self, project_id: &str) -> anyhow::Result<Message> {
@@ -644,45 +764,55 @@ impl Hub {
         Ok(Message::Branches { branches })
     }
 
-    /// Checks a branch out in the project's folder, which every thread of the project works in.
+    /// Checks a branch out in the project's folder, where its threads without a worktree work.
     pub async fn switch_branch(&self, project_id: &str, branch: &str, create: bool) -> anyhow::Result<()> {
         let path = self.project_path(project_id).await?;
-        self.refuse_while_working(project_id).await?;
+        self.refuse_while_working(&path).await?;
         git::switch(&path, &self.environment, branch, create).await?;
-        self.read_git(project_id, &path, false).await;
+        self.read_git(&path, false).await;
         self.announce_projects(&self.projects.lock().await);
         Ok(())
     }
 
-    async fn refuse_while_working(&self, project_id: &str) -> anyhow::Result<()> {
+    async fn refuse_while_working(&self, folder: &str) -> anyhow::Result<()> {
         let threads = self.threads.lock().await;
-        let working = threads.values().any(|live| live.stored.thread.project_id == project_id && live.activity.running);
+        let working = threads.values().any(|live| live.stored.thread.cwd == folder && live.activity.running);
         if working {
-            bail!("An agent is working in this project. Switch branches when it has finished.");
+            bail!("An agent is working there. Switch branches when it has finished.");
         }
         Ok(())
     }
 
-    /// What git says about the project's folder now, which every app is told when it has changed.
-    pub async fn git_status(&self, project_id: &str, fetch: bool) -> anyhow::Result<Message> {
-        let path = self.project_path(project_id).await?;
+    /// What git says now about the project's folder, or about the thread's worktree, which every
+    /// app is told when it has changed.
+    pub async fn git_status(&self, project_id: &str, thread_id: Option<&str>, fetch: bool) -> anyhow::Result<Message> {
+        let path = self.git_folder(project_id, thread_id).await?;
         if fetch {
             git::fetch(&path, &self.environment).await;
         }
-        let (status, files) = self.read_git(project_id, &path, fetch).await;
+        let (status, files) = self.read_git(&path, fetch).await;
         Ok(Message::GitStatus { status, files })
+    }
+
+    /// Where git works for the thread: its worktree, or the project's folder.
+    async fn git_folder(&self, project_id: &str, thread_id: Option<&str>) -> anyhow::Result<String> {
+        let worktree = thread_id.and_then(|thread_id| self.lock_worktrees().get(thread_id).map(|own| own.path.clone()));
+        match worktree {
+            Some(path) => Ok(path),
+            None => self.project_path(project_id).await,
+        }
     }
 
     /// Reads the folder's status. GitHub is asked for the branch's pull request when it was last
     /// asked a while ago or for another commit, and always with `ask_again`.
-    async fn read_git(&self, project_id: &str, path: &str, ask_again: bool) -> (Option<GitStatus>, Vec<ChangedFile>) {
+    async fn read_git(&self, path: &str, ask_again: bool) -> (Option<GitStatus>, Vec<ChangedFile>) {
         let Some((mut status, files, head)) = git::status(path, &self.environment).await else {
-            if self.lock_git().remove(project_id).is_some() {
+            if self.lock_git().remove(path).is_some() {
                 self.announce_projects(&self.projects.lock().await);
             }
             return (None, Vec::new());
         };
-        let known = match self.lock_git().get(project_id) {
+        let known = match self.lock_git().get(path) {
             Some(read) if !ask_again && read.head == head && read.status.branch == status.branch => {
                 Some((read.status.pull_request.clone(), read.pull_request_read))
             }
@@ -698,7 +828,7 @@ impl Hub {
         };
         status.pull_request = pull_request;
         let read = GitRead { status: status.clone(), head, pull_request_read };
-        let before = self.lock_git().insert(project_id.to_string(), read);
+        let before = self.lock_git().insert(path.to_string(), read);
         if before.map(|before| before.status).as_ref() != Some(&status) {
             self.announce_projects(&self.projects.lock().await);
         }
@@ -729,22 +859,16 @@ impl Hub {
         Ok((self.writer(thread.agent), drafts::Thread { title: thread.title.clone(), messages }))
     }
 
-    /// Carries the action out in the project's folder, telling `started` each stage as it starts,
-    /// and answers with what it did.
+    /// Carries the action out in the project's folder, or in the worktree of the run's thread,
+    /// telling `started` each stage as it starts, and answers with what it did.
     pub async fn git_run(&self, project_id: &str, run: GitRun, started: impl Fn(GitStage)) -> anyhow::Result<Message> {
-        let path = self.project_path(project_id).await?;
-        let done = self.git_stages(project_id, &path, &run, started).await;
-        self.read_git(project_id, &path, true).await;
+        let path = self.git_folder(project_id, run.thread_id.as_deref()).await?;
+        let done = self.git_stages(&path, &run, started).await;
+        self.read_git(&path, true).await;
         done
     }
 
-    async fn git_stages(
-        &self,
-        project_id: &str,
-        path: &str,
-        run: &GitRun,
-        started: impl Fn(GitStage),
-    ) -> anyhow::Result<Message> {
+    async fn git_stages(&self, path: &str, run: &GitRun, started: impl Fn(GitStage)) -> anyhow::Result<Message> {
         let environment = &self.environment;
         let done = |title: String, description: Option<String>, url: Option<String>, next: Option<GitAction>| {
             Ok(Message::GitDone { title, description: description.filter(|text| !text.is_empty()), url, next })
@@ -774,12 +898,13 @@ impl Hub {
                 (Some(_), false) => None,
                 _ => {
                     started(if run.new_branch { GitStage::Branch } else { GitStage::Message });
-                    Some(drafts::commit_message(path, environment, &writer, &thread, &run.paths).await?)
+                    let naming = self.branch_instructions().text;
+                    Some(drafts::commit_message(path, environment, &writer, &thread, &run.paths, &naming).await?)
                 }
             };
             if run.new_branch {
                 let suggested = draft.as_ref().and_then(|draft| draft.branch.clone());
-                self.branch_off(project_id, path, suggested).await?;
+                self.branch_off(path, suggested).await?;
             }
             started(GitStage::Commit);
             let message = message.map(str::to_string).or(draft.map(|draft| draft.message())).unwrap_or_default();
@@ -789,7 +914,7 @@ impl Hub {
         } else if run.new_branch {
             started(GitStage::Branch);
             let subject = git::head(path, environment).await?.1;
-            self.branch_off(project_id, path, drafts::branch_name(&subject)).await?;
+            self.branch_off(path, drafts::branch_name(&subject)).await?;
         }
 
         let (commit, subject) = git::head(path, environment).await?;
@@ -812,7 +937,7 @@ impl Hub {
             return done(format!("Created PR #{number}"), Some(title), Some(url), None);
         }
         if let Some(upstream) = pushed {
-            let opened = self.lock_git().get(project_id).is_some_and(|read| read.status.pull_request.is_some());
+            let opened = self.lock_git().get(path).is_some_and(|read| read.status.pull_request.is_some());
             let next = (!status.default && status.pull_requests && !opened).then_some(GitAction::CreatePr);
             return done(format!("Pushed {commit} to {upstream}"), Some(subject), None, next);
         }
@@ -823,8 +948,8 @@ impl Hub {
     }
 
     /// Makes a branch for the work from what is checked out and switches to it.
-    async fn branch_off(&self, project_id: &str, path: &str, suggested: Option<String>) -> anyhow::Result<()> {
-        self.refuse_while_working(project_id).await?;
+    async fn branch_off(&self, path: &str, suggested: Option<String>) -> anyhow::Result<()> {
+        self.refuse_while_working(path).await?;
         let name = suggested.unwrap_or_else(|| "feature".to_string());
         let name = git::free_branch_name(path, &self.environment, &name).await;
         git::switch(path, &self.environment, &name, true).await
@@ -842,16 +967,204 @@ impl Hub {
 
     fn projects_of(&self, stored: &[StoredProject]) -> Vec<Project> {
         let git = self.lock_git();
+        let status = |path: &str| git.get(path).map(|read| read.status.clone());
+        let worktrees = self.lock_worktrees();
+        let worktrees_of = |project_id: &str| {
+            let own = worktrees.values().filter(|own| own.project_id == project_id);
+            let mut list: Vec<Worktree> = own
+                .map(|own| Worktree {
+                    path: own.path.clone(),
+                    // The branch it gets is known before the worktree is there.
+                    branch: git::current_branch(&own.path).or_else(|| Some(own.branch.clone())),
+                    git: status(&own.path),
+                })
+                .collect();
+            list.sort_by(|a, b| a.path.cmp(&b.path));
+            list
+        };
         let project = |stored: &StoredProject| Project {
             id: stored.id.clone(),
             path: stored.path.clone(),
             name: file_name(&stored.path).to_string(),
             branch: git::current_branch(&stored.path),
-            git: git.get(&stored.id).map(|read| read.status.clone()),
+            git: status(&stored.path),
             icon: stored.icon.as_deref().and_then(icons::version),
+            worktrees: worktrees_of(&stored.id),
+            setup: stored.setup.clone(),
             created_at: stored.created_at,
         };
         stored.iter().map(project).collect()
+    }
+
+    fn lock_worktrees(&self) -> std::sync::MutexGuard<'_, HashMap<String, ThreadWorktree>> {
+        self.worktrees.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Makes the thread's worktree, which takes a while, and starts the turn when it is there.
+    fn start_after_worktree(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
+        self.announce_working(live)?;
+        let making = tokio::spawn(self.clone().start_in_worktree(live.stored.thread.id.clone(), prompt));
+        live.preparing = Some(making.abort_handle());
+        Ok(())
+    }
+
+    async fn start_in_worktree(self: Arc<Self>, thread_id: String, prompt: String) {
+        let made = self.make_worktree(&thread_id, &prompt).await;
+        let mut threads = self.threads.lock().await;
+        let Some(live) = threads.get_mut(&thread_id) else { return };
+        live.preparing = None;
+        let started = match made {
+            Ok(()) => self.start_turn(live, prompt),
+            Err(error) => self.end_without_agent(live, Some(format!("{error:#}"))),
+        };
+        if let Err(error) = started {
+            tracing::error!(thread_id, "couldn't start a turn in its worktree: {error:#}");
+        }
+    }
+
+    /// Makes the worktree on its branch, has the writer name a branch that is new, and runs the
+    /// project's setup script there.
+    async fn make_worktree(self: &Arc<Self>, thread_id: &str, message: &str) -> anyhow::Result<()> {
+        let (project_id, path, worktree) = {
+            let threads = self.threads.lock().await;
+            let stored = &threads.get(thread_id).context("That thread no longer exists.")?.stored;
+            let worktree = stored.worktree.clone().context("That thread has no worktree.")?;
+            (stored.thread.project_id.clone(), stored.thread.cwd.clone(), worktree)
+        };
+        let (repository, setup) = {
+            let projects = self.projects.lock().await;
+            let project = projects.iter().find(|project| project.id == project_id);
+            let project = project.context("That project is no longer on the server.")?;
+            (project.path.clone(), project.setup.clone())
+        };
+        if let Some(parent) = Path::new(&path).parent() {
+            std::fs::create_dir_all(parent).with_context(|| format!("{} can't be made.", parent.display()))?;
+        }
+        git::add_worktree(&repository, &self.environment, &path, &worktree.branch, &worktree.base).await?;
+        if !Path::new(&path).is_dir() {
+            bail!("Git didn't make the worktree at {path}.");
+        }
+        self.announce_projects(&self.projects.lock().await);
+        let (hub, folder) = (self.clone(), path.clone());
+        tokio::spawn(async move { hub.read_git(&folder, false).await });
+        if worktree.branch == temporary_branch(&path) {
+            tokio::spawn(self.clone().name_branch(thread_id.to_string(), message.to_string()));
+        }
+        if let Some(script) = setup {
+            self.run_setup(thread_id, &repository, &path, &script).await;
+        }
+        Ok(())
+    }
+
+    /// Runs the project's setup script in the new worktree, as a tool call of the turn. The agent
+    /// starts after it, also when it failed.
+    async fn run_setup(&self, thread_id: &str, repository: &str, worktree: &str, script: &str) {
+        let mut call = new_tool_call(new_id(), "Bash".to_string());
+        call.input = serde_json::json!({ "command": script }).to_string();
+        self.show_setup(thread_id, &call).await;
+        let mut command = Command::new("sh");
+        command
+            .args(["-c", script])
+            .current_dir(worktree)
+            .env_clear()
+            .envs(&self.environment.variables)
+            .env("MOTILE_PROJECT", repository)
+            .env("MOTILE_WORKTREE", worktree)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        let (succeeded, said) = match tokio::time::timeout(SETUP_TIMEOUT, command.output()).await {
+            Ok(Ok(output)) => {
+                let said = [output.stdout, output.stderr].concat();
+                (output.status.success(), String::from_utf8_lossy(&said).into_owned())
+            }
+            Ok(Err(error)) => (false, format!("The setup script couldn't be started: {error}")),
+            Err(_) => (false, "The setup script took too long and was stopped.".to_string()),
+        };
+        call.output = Some(tail(said.trim(), SETUP_OUTPUT_CHARS).to_string());
+        call.status = if succeeded { ToolStatus::Succeeded } else { ToolStatus::Failed };
+        self.show_setup(thread_id, &call).await;
+    }
+
+    async fn show_setup(&self, thread_id: &str, call: &ToolCall) {
+        let mut threads = self.threads.lock().await;
+        let Some(live) = threads.get_mut(thread_id) else { return };
+        if let Err(error) = live.upsert(&self.store, call.id.clone(), ItemKind::Tool { call: call.clone() }) {
+            tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
+        }
+    }
+
+    /// Renames the branch made for the thread's worktree to what the writer calls the work.
+    async fn name_branch(self: Arc<Self>, thread_id: String, message: String) {
+        let Some(agent) = self.agent_of(&thread_id).await else { return };
+        let instructions = self.branch_instructions().text;
+        let name = match drafts::branch_for(&self.environment, &self.writer(agent), &instructions, &message).await {
+            Ok(name) => name,
+            Err(error) => return tracing::warn!(thread_id, "couldn't name a branch: {error:#}"),
+        };
+        let mut threads = self.threads.lock().await;
+        let Some(live) = threads.get_mut(&thread_id) else { return };
+        let Some(worktree) = live.stored.worktree.clone() else { return };
+        let path = live.stored.thread.cwd.clone();
+        // The agent may have checked out another branch by now.
+        if git::current_branch(&path).as_deref() != Some(worktree.branch.as_str()) {
+            return;
+        }
+        let Ok(repository) = self.project_path(&live.stored.thread.project_id).await else { return };
+        let name = git::free_branch_name(&repository, &self.environment, &name).await;
+        if let Err(error) = git::rename_branch(&repository, &self.environment, &worktree.branch, &name).await {
+            return tracing::warn!(thread_id, "couldn't rename a branch: {error:#}");
+        }
+        if let Some(own) = self.lock_worktrees().get_mut(&thread_id) {
+            own.branch = name.clone();
+        }
+        live.stored.worktree = Some(StoredWorktree { branch: name, ..worktree });
+        if let Err(error) = self.store.save_thread(&live.stored) {
+            tracing::error!(thread_id, "couldn't save a thread: {error:#}");
+        }
+        drop(threads);
+        self.read_git(&path, false).await;
+        self.announce_projects(&self.projects.lock().await);
+    }
+
+    /// Takes the thread's worktree away with everything in it. Its branch stays.
+    async fn discard_worktree(&self, thread: &Thread) {
+        // Moved first, so nothing starts in a folder that is going.
+        let going = format!("{}.removed", thread.cwd);
+        if std::fs::rename(&thread.cwd, &going).is_err() {
+            return;
+        }
+        let repository = self.project_path(&thread.project_id).await.ok();
+        let environment = self.environment.clone();
+        tokio::spawn(async move {
+            let _ = tokio::fs::remove_dir_all(&going).await;
+            if let Some(repository) = repository {
+                git::prune_worktrees(&repository, &environment).await;
+            }
+        });
+    }
+
+    /// Ends a turn that has no agent's process: with what went wrong, or because the user
+    /// stopped it. The messages that waited stay until they are sent.
+    fn end_without_agent(&self, live: &mut Live, error: Option<String>) -> anyhow::Result<()> {
+        match error {
+            Some(message) => live.append(&self.store, ItemKind::Error { message })?,
+            None => live.settle(&self.store, None, None, "", true)?,
+        }
+        let thread = &mut live.stored.thread;
+        thread.running = false;
+        thread.updated_at = now();
+        thread.turn_ended_at = Some(now());
+        live.activity = Activity::default();
+        live.open.clear();
+        for queued in &mut live.queued {
+            queued.held = true;
+        }
+        self.store.save_thread(&live.stored)?;
+        live.send_activity();
+        self.announce(&live.stored.thread);
+        Ok(())
     }
 
     fn announce(&self, thread: &Thread) {
@@ -859,6 +1172,9 @@ impl Hub {
     }
 
     fn start_turn(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
+        if live.stored.worktree.is_some() && !Path::new(&live.stored.thread.cwd).is_dir() {
+            return self.start_after_worktree(live, prompt);
+        }
         let thread = &live.stored.thread;
         let agent = thread.agent;
         let turn = Turn {
@@ -871,13 +1187,7 @@ impl Hub {
         };
         let child = match self.spawn(&turn, &thread.cwd) {
             Ok(child) => child,
-            Err(error) => {
-                live.stored.thread.updated_at = now();
-                live.append(&self.store, ItemKind::Error { message: error.to_string() })?;
-                self.store.save_thread(&live.stored)?;
-                self.announce(&live.stored.thread);
-                return Ok(());
-            }
+            Err(error) => return self.end_without_agent(live, Some(error.to_string())),
         };
 
         let interrupted = Arc::new(AtomicBool::new(false));
@@ -1227,9 +1537,9 @@ impl Hub {
             return;
         };
         refresh_icon(&self.store, project);
-        let (hub, project_id, path) = (self.clone(), project.id.clone(), project.path.clone());
+        let (hub, path) = (self.clone(), live.stored.thread.cwd.clone());
         self.announce_projects(&projects);
-        tokio::spawn(async move { hub.read_git(&project_id, &path, false).await });
+        tokio::spawn(async move { hub.read_git(&path, false).await });
     }
 }
 
@@ -1247,6 +1557,7 @@ impl Live {
             activity: Activity::default(),
             updates,
             run: None,
+            preparing: None,
             queued: Vec::new(),
             title_needs_refinement: false,
         }
@@ -1553,6 +1864,22 @@ fn refresh_icon(store: &Store, project: &mut StoredProject) {
     if let Err(error) = store.save_project_icon(project) {
         tracing::error!(project_id = project.id, "couldn't save a project's icon: {error:#}");
     }
+}
+
+fn thread_worktree(stored: &StoredThread) -> Option<(String, ThreadWorktree)> {
+    let worktree = stored.worktree.as_ref()?;
+    let thread = &stored.thread;
+    let own = ThreadWorktree {
+        project_id: thread.project_id.clone(),
+        path: thread.cwd.clone(),
+        branch: worktree.branch.clone(),
+    };
+    Some((thread.id.clone(), own))
+}
+
+/// The branch a worktree is made on, named after its folder until the writer names it.
+fn temporary_branch(worktree: &str) -> String {
+    format!("{BRANCH_PREFIX}/{}", file_name(worktree))
 }
 
 fn new_tool_call(id: String, name: String) -> ToolCall {

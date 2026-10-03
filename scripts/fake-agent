@@ -32,14 +32,15 @@ asked. There "run greet.py" asks before each of the two under the `untrusted` ap
 to implement it.
 
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
-answers with FAKE_AGENT_TITLE, and asked the same way for a commit message or a pull request's text
-it writes one. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
+answers with FAKE_AGENT_TITLE, and asked the same way for a commit message, a pull request's text
+or a branch's name it writes one. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
 per call, and what it was told while it ran, one JSON object each: the settings Claude Code was
 told to change, and the threads and turns Codex was asked for.
 """
 import json
 import os
 import queue
+import re
 import struct
 import sys
 import threading
@@ -141,6 +142,9 @@ def title_answer():
         return {"subject": subject + ".", "body": "", "branch": "Greet F-String"}
     if prompt.startswith("Write the title and the description of a pull request"):
         return {"title": "Greet with an f-string", "body": "Greets by name.\n\n" + prompt.split("Commits:")[-1].split("\n")[1]}
+    if prompt.startswith("Name the git branch"):
+        prefix = re.search(r"Start it with (\S+?/)", prompt)
+        return {"branch": (prefix.group(1) if prefix else "") + "Greet F-String"}
     if prompt.startswith("Regenerate"):
         return {"title": os.environ.get("FAKE_AGENT_REFINED_TITLE", "Refined From Transcript"), "needsRefinement": False}
     message = prompt.split("User message:")[-1].lower()

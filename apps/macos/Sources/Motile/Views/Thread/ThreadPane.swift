@@ -110,12 +110,12 @@ struct ThreadPane: View {
 
     /// The open thread's project, when its server can commit and push from here.
     private var gitProject: Project? {
-        guard let project = store.project(store.selectedThread?.projectID), store.canUseGit(of: project) else { return nil }
+        guard let project = store.threadProject, store.canUseGit(of: project) else { return nil }
         return project
     }
 
     private var titleProject: Project? {
-        store.project(store.selectedThread?.projectID ?? store.selectedDraft?.projectID)
+        store.composerProject
     }
 
     private var projectLine: String? {
@@ -147,12 +147,7 @@ struct ThreadPane: View {
                     .padding(.top, 8)
                 }
             } else {
-                VStack(spacing: 8) {
-                    headline
-                    if store.servers.count > 1, let server = store.server(store.project(store.selectedDraft?.projectID)?.serverID) {
-                        ServerLabel(server: server, size: 13)
-                    }
-                }
+                headline
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
             }
@@ -188,18 +183,26 @@ struct ThreadPane: View {
                     Button("Remove “\(project.name)” from Projects") { store.removeProject(project) }
                 }
             } label: {
-                Text(selected?.name ?? "a project")
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
+                HStack(spacing: 8) {
+                    ProjectIcon(project: selected, size: 22)
+                    Text(selected?.name ?? "a project")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.themeTertiary)
+                }
+                .padding(.leading, 9)
+                .padding(.trailing, 11)
+                .padding(.vertical, 3)
+                .contentShape(Rectangle())
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
             .hoverHighlight(radius: 10)
-            // The highlight's margin takes no room, so the words are what is centred.
-            .padding(.horizontal, -8)
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+            }
         }
         .font(.system(size: Self.headlineSize, weight: .regular))
     }

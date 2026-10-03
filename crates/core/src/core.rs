@@ -15,7 +15,7 @@ use motile_protocol::auth_api::{Device, DeviceKind, Me};
 use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
-use motile_protocol::wire::{Activity, Item, Message, Project, Request, ServerInfo, Thread};
+use motile_protocol::wire::{Activity, Item, Message, Project, Request, ServerInfo, Thread, Worktree};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
@@ -90,6 +90,11 @@ enum Input {
     TextModelSet {
         server_id: String,
         model: Option<String>,
+    },
+    /// The server took the instructions for naming its branches, or went back to its own.
+    BranchInstructionsSet {
+        server_id: String,
+        instructions: Option<String>,
     },
     MediaFetched {
         id: String,
@@ -264,6 +269,15 @@ impl Core {
                 let Some(server) = self.server_mut(&server_id) else { return };
                 let Some(info) = &mut server.info else { return };
                 info.text_model = model;
+                let info = info.clone();
+                self.cache.set_server_info(&server_id, &info);
+                self.emit_servers();
+            }
+            Input::BranchInstructionsSet { server_id, instructions } => {
+                let Some(server) = self.server_mut(&server_id) else { return };
+                let Some(info) = &mut server.info else { return };
+                let naming = &mut info.branch_instructions;
+                naming.text = instructions.unwrap_or_else(|| naming.default.clone());
                 let info = info.clone();
                 self.cache.set_server_info(&server_id, &info);
                 self.emit_servers();
@@ -588,7 +602,9 @@ impl Core {
             let file = project.icon.as_ref().map(|icon| folder.join(format!("{}-{icon}", project.id)));
             let icon_path = file.filter(|file| file.is_file()).map(|file| file.to_string_lossy().into_owned());
             let git_control = project.git.as_ref().map(git::control);
-            ProjectView { project, icon_path, git_control }
+            let controlled = |worktree: &Worktree| Some((worktree.path.clone(), git::control(worktree.git.as_ref()?)));
+            let worktree_controls = project.worktrees.iter().filter_map(controlled).collect();
+            ProjectView { project, icon_path, git_control, worktree_controls }
         };
         let views: Vec<ProjectView> = projects.into_iter().map(view).collect();
         for view in views.iter().filter(|view| view.icon_path.is_none()) {
@@ -1026,6 +1042,22 @@ impl Core {
                     let set = link.request(&Request::SetTextModel { model: model.clone() }).await;
                     if set.is_ok() {
                         let _ = inputs.send(Input::TextModelSet { server_id, model });
+                    }
+                    reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
+                });
+            }
+            Command::SetBranchInstructions { server_id, instructions } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let instructions = instructions.map(|text| text.trim().to_string()).filter(|text| !text.is_empty());
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
+                tokio::spawn(async move {
+                    let request = Request::SetBranchInstructions { instructions: instructions.clone() };
+                    let set = link.request(&request).await;
+                    if set.is_ok() {
+                        let _ = inputs.send(Input::BranchInstructionsSet { server_id, instructions });
                     }
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });

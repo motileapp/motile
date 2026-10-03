@@ -42,7 +42,7 @@ final class SurfaceView: FlippedView {
 
     /// A clickable surface takes the clicks on the labels and icons inside it.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard onClick != nil else { return super.hitTest(point) }
+        guard onClick != nil, !isHidden else { return super.hitTest(point) }
         return frame.contains(point) ? self : nil
     }
 
@@ -252,7 +252,8 @@ final class RowButton: FlippedView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        frame.contains(point) ? self : nil
+        guard !isHidden else { return nil }
+        return frame.contains(point) ? self : nil
     }
 
     override func mouseDown(with event: NSEvent) {

@@ -9,7 +9,7 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, Approval, GitAction, GitHubState, GitStage, GitStatus, Item, ItemKind, Message,
-    NewThread, Project, Queued, Request, Thread, ThreadChange, ToolStatus, TurnSummary,
+    NewThread, NewWorktree, Project, Queued, Request, Thread, ThreadChange, ToolStatus, TurnSummary,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -96,6 +96,7 @@ impl Harness {
             effort: None,
             access: AgentAccess::Supervised,
             plan: false,
+            worktree: None,
         })
     }
 
@@ -129,7 +130,7 @@ async fn serve(
     let executables = HashMap::from([(Agent::Claude, fake_agent.clone()), (Agent::Codex, fake_agent)]);
     let environment = Environment::fixed(variables.clone(), executables);
     let store = Store::open(&dir.path().join("motile.sqlite")).unwrap();
-    let hub = Hub::new(store, dir.path().join("media"), environment).unwrap();
+    let hub = Hub::new(store, dir.path().join("media"), dir.path().join("worktrees"), environment).unwrap();
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
@@ -1056,6 +1057,7 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
         effort: Some("xhigh".to_string()),
         access: AgentAccess::Full,
         plan: false,
+        worktree: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "What is in README.md?").await;
     finished_transcript(&connection, &thread_id).await;
@@ -1278,6 +1280,7 @@ async fn a_projects_branches_are_listed_switched_and_created() {
         effort: None,
         access: AgentAccess::Supervised,
         plan: false,
+        worktree: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Look at the README").await;
     let Message::Error { message } = switch(&connection, &project.id, "main", false).await else {
@@ -1307,7 +1310,7 @@ esac
 "#;
 
 async fn git_status(connection: &Connection, project_id: &str, fetch: bool) -> (GitStatus, Vec<String>) {
-    let request = Request::GitStatus { project_id: project_id.to_string(), fetch };
+    let request = Request::GitStatus { project_id: project_id.to_string(), thread_id: None, fetch };
     let Message::GitStatus { status, files } = connection.request(&request).await.unwrap() else {
         panic!("expected the status")
     };
@@ -1455,6 +1458,130 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     let recorded = std::fs::read_to_string(root.join("arguments.txt")).unwrap();
     let written_by: Vec<String> = recorded.lines().last().map(|line| serde_json::from_str(line).unwrap()).unwrap();
     assert!(written_by.windows(2).any(|pair| pair[0] == "--model" && pair[1] == model), "{written_by:?}");
+}
+
+fn git_says(folder: &Path, arguments: &[&str]) -> String {
+    let output = std::process::Command::new("git").args(arguments).current_dir(folder).output().unwrap();
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+#[tokio::test]
+async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let root = harness.dir.path();
+    git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
+    git(root, &["clone", "-q", "origin.git", "repository"]);
+    let repository = root.join("repository");
+    git(&repository, &["config", "user.name", "Test"]);
+    git(&repository, &["config", "user.email", "test@example.com"]);
+    std::fs::write(repository.join("greet.py"), "print('hello')\n").unwrap();
+    git(&repository, &["add", "."]);
+    git(&repository, &["commit", "-q", "-m", "Add the greeting"]);
+    git(&repository, &["push", "-q", "-u", "origin", "main"]);
+    // The remote is a commit ahead of the project's folder.
+    git(root, &["clone", "-q", "origin.git", "other"]);
+    std::fs::write(root.join("other/greet.py"), "print('hi')\n").unwrap();
+    git(&root.join("other"), &["commit", "-q", "-am", "Say hi"]);
+    git(&root.join("other"), &["push", "-q"]);
+    let latest = git_says(&root.join("other"), &["rev-parse", "HEAD"]);
+
+    let path = repository.to_string_lossy().into_owned();
+    assert_eq!(connection.request(&Request::AddProject { path: path.clone() }).await.unwrap(), Message::Ok);
+    let project = projects_now(&connection).await.remove(0);
+    let script = "echo \"$MOTILE_PROJECT\" > setup.txt; echo ready".to_string();
+    let setup = Request::SetProjectSetup { project_id: project.id.clone(), script: Some(script.clone()) };
+    assert_eq!(connection.request(&setup).await.unwrap(), Message::Ok);
+    let instructions = Some("Start it with team/ and say what the work is.".to_string());
+    let named = Request::SetBranchInstructions { instructions: instructions.clone() };
+    assert_eq!(connection.request(&named).await.unwrap(), Message::Ok);
+
+    let new_thread = NewThread {
+        project_id: project.id.clone(),
+        agent: Agent::Claude,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        plan: false,
+        worktree: Some(NewWorktree { base: "main".to_string() }),
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Show the screenshot").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    // The agent worked in the worktree, which started from what the remote has, after the
+    // project's setup script ran there. The project's folder is as it was.
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { server, threads, projects } = next(&mut list).await else {
+        panic!("the list starts with a welcome")
+    };
+    let worktree = PathBuf::from(&threads[0].cwd);
+    assert!(worktree.starts_with(root.join("worktrees/repository")), "{worktree:?}");
+    assert!(worktree.join("screenshot.png").is_file() && !repository.join("screenshot.png").exists());
+    assert_eq!(std::fs::read_to_string(worktree.join("greet.py")).unwrap(), "print('hi')\n");
+    assert_eq!(std::fs::read_to_string(worktree.join("setup.txt")).unwrap().trim(), path);
+    let ItemKind::Tool { call } = &transcript.items[1].kind else { panic!("the setup script is shown first") };
+    assert_eq!(
+        (call.input.as_str(), call.output.as_deref()),
+        (json!({ "command": script }).to_string().as_str(), Some("ready"))
+    );
+    assert_eq!(call.status, ToolStatus::Succeeded);
+    assert_eq!(git_says(&repository, &["status", "--porcelain", "--branch"]), "## main...origin/main [behind 1]");
+    assert_eq!(server.branch_instructions.text, instructions.clone().unwrap());
+
+    // The writer named the branch the way the instructions say.
+    let branch = "team/greet-f-string";
+    let mut worktrees = projects[0].worktrees.clone();
+    while worktrees[0].branch.as_deref() != Some(branch) {
+        let Message::Projects { projects } = next(&mut list).await else { continue };
+        worktrees = projects[0].worktrees.clone();
+    }
+    assert_eq!((worktrees.len(), worktrees[0].path.as_str()), (1, threads[0].cwd.as_str()));
+    assert_eq!(git_says(&worktree, &["rev-parse", "--abbrev-ref", "HEAD"]), branch);
+    assert_eq!(
+        git_says(&repository, &["rev-parse", "main", branch]),
+        format!("{}\n{latest}", git_says(&repository, &["rev-parse", "main"]))
+    );
+
+    // Git works in the thread's worktree.
+    let status =
+        Request::GitStatus { project_id: project.id.clone(), thread_id: Some(thread_id.clone()), fetch: false };
+    let Message::GitStatus { status: Some(status), files } = connection.request(&status).await.unwrap() else {
+        panic!("expected the status")
+    };
+    assert_eq!((status.branch.as_deref(), status.default, status.changed), (Some(branch), false, files.len() as u32));
+    let commit = Request::GitRun {
+        project_id: project.id.clone(),
+        action: GitAction::Commit,
+        thread_id: Some(thread_id.clone()),
+        message: Some("Take a screenshot".to_string()),
+        paths: Vec::new(),
+        new_branch: false,
+    };
+    let mut follow = connection.follow(&commit).await.unwrap();
+    assert_eq!(next(&mut follow).await, Message::GitProgress { stage: GitStage::Commit });
+    assert!(matches!(next(&mut follow).await, Message::GitDone { .. }));
+    assert_eq!(git_says(&repository, &["log", "-1", "--format=%s", branch]), "Take a screenshot");
+    assert_eq!(git_says(&repository, &["log", "-1", "--format=%s", "main"]), "Add the greeting");
+
+    // A worktree that has gone is made again on its branch for the next turn.
+    std::fs::remove_dir_all(&worktree).unwrap();
+    send(&connection, Some(thread_id.clone()), None, "What is in README.md?").await;
+    finished_transcript(&connection, &thread_id).await;
+    assert_eq!(git_says(&worktree, &["log", "-1", "--format=%s"]), "Take a screenshot");
+
+    // Taking the instructions back names branches the server's own way again.
+    let reset = Request::SetBranchInstructions { instructions: None };
+    assert_eq!(connection.request(&reset).await.unwrap(), Message::Ok);
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    assert_eq!(server.branch_instructions.text, server.branch_instructions.default);
+    assert!(server.branch_instructions.default.contains("motile/"));
+
+    // The worktree goes with its thread, and the branch stays.
+    connection.request(&Request::Delete { thread_id }).await.unwrap();
+    assert!(!worktree.exists());
+    assert!(projects_now(&connection).await[0].worktrees.is_empty());
+    assert_eq!(git_says(&repository, &["log", "-1", "--format=%s", branch]), "Take a screenshot");
 }
 
 async fn projects_now(connection: &Connection) -> Vec<Project> {

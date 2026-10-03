@@ -85,6 +85,9 @@ struct Server: Equatable, Identifiable {
     let models: [ModelInfo]
     /// The model picked to write titles, commit messages and pull requests there.
     let textModel: String?
+    /// How the writer there is told to name branches, and what that is until it is changed.
+    let branchInstructions: String
+    let defaultBranchInstructions: String
     /// The agents installed on the server, with their versions.
     let agents: [Agent: String]
     /// Whether the server has ever told us about itself.
@@ -105,6 +108,9 @@ struct Server: Equatable, Identifiable {
         protocolVersion = (info?["protocol"] as? NSNumber)?.intValue ?? 0
         models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
         textModel = info?.optionalString("text_model")
+        let naming = info?.object("branch_instructions")
+        branchInstructions = naming?.string("text") ?? ""
+        defaultBranchInstructions = naming?.string("default") ?? ""
         var installed: [Agent: String] = [:]
         for agent in info?.objects("agents") ?? [] {
             guard let kind = Agent(rawValue: agent.string("agent")), let version = agent.optionalString("version") else { continue }
@@ -311,16 +317,29 @@ struct ChangedFile: Equatable, Identifiable {
     }
 }
 
+/// A git worktree of a project, made for the thread whose `cwd` it is.
+struct Worktree: Equatable {
+    let path: String
+    let branch: String?
+    let git: GitStatus?
+    let gitControl: GitControl?
+}
+
 struct Project: Equatable, Identifiable {
     let id: String
     let serverID: String
     let path: String
     let name: String
-    let branch: String?
+    private(set) var branch: String?
     /// What its server last read from git there.
-    let git: GitStatus?
+    private(set) var git: GitStatus?
     /// The git button for its repository.
-    let gitControl: GitControl?
+    private(set) var gitControl: GitControl?
+    /// The worktree of the thread the project is seen from, when it works in one.
+    private(set) var worktree: Worktree?
+    let worktrees: [Worktree]
+    /// The shell script that runs in every new worktree.
+    let setup: String?
     /// The icon as a file on this Mac, once the core has fetched it.
     let iconPath: String?
     let createdAt: Double
@@ -333,8 +352,28 @@ struct Project: Equatable, Identifiable {
         branch = json.optionalString("branch")
         git = json.object("git").map { GitStatus(json: $0) }
         gitControl = json.object("git_control").map { GitControl(json: $0) }
+        let controls = json.object("worktree_controls")
+        worktrees = json.objects("worktrees").map { worktree in
+            let path = worktree.string("path")
+            return Worktree(
+                path: path, branch: worktree.optionalString("branch"), git: worktree.object("git").map { GitStatus(json: $0) },
+                gitControl: controls?.object(path).map { GitControl(json: $0) })
+        }
+        setup = json.optionalString("setup")
         iconPath = json.optionalString("icon_path")
         createdAt = json.double("created_at")
+    }
+
+    /// The project as the thread works in it: with the branch and the git state of its worktree,
+    /// when it has one.
+    func seen(from thread: ThreadInfo) -> Project {
+        guard let worktree = worktrees.first(where: { $0.path == thread.cwd }) else { return self }
+        var seen = self
+        seen.worktree = worktree
+        seen.branch = worktree.branch
+        seen.git = worktree.git
+        seen.gitControl = worktree.gitControl
+        return seen
     }
 }
 

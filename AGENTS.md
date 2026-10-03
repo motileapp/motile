@@ -92,6 +92,12 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   until they are sent. The queue is only in memory. Claude Code's process stays after a turn while something it started is still
   running (a monitor, a background shell): the thread is then `monitoring`, the process takes
   the next messages itself, and it starts turns of its own when what it watches reports.
+  A thread can work in a git worktree of its own instead of the project's folder: its first turn
+  makes the worktree in the server's data folder, on a branch that starts from the branch the
+  user picked as the remote has it, runs the project's setup script there as a tool call, and
+  starts the agent. The branch has a temporary name until the writer has named it from the
+  first message. A worktree that has gone is made again on its branch before the next turn,
+  and it goes with its thread, while the branch stays.
 - `pacing.rs` says how much of a streamed reply is finished. The hub passes text on in finished
   blocks (a paragraph, a list item, a line of code), not token by token.
 - `agents/` builds the command for a turn, the lines its process is given and parses its
@@ -116,17 +122,19 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   `apps` and `packages` of a workspace). The path is kept with the project; the user can pick
   another image instead.
 - `git.rs` lists the branches of a project's folder and switches or creates one there, with the
-  `git` program. A project is one folder, so its branch is the branch of all its threads; it
-  refuses while an agent is working in the project.
-  It also reads what isn't committed or pushed there, and commits, pulls, pushes and opens a
-  pull request when an app asks; pull requests are GitHub's, through `gh`. The status is read
-  when a turn ends and when an app asks, never on a timer, and goes to the apps with the
-  project. What git refuses reaches the user in git's words.
+  `git` program. The project's folder has one branch for all the threads that work in it; it
+  refuses while an agent is working there. It also makes the worktrees of the threads that
+  work in one of their own.
+  It also reads what isn't committed or pushed in the folder a thread works in, and commits,
+  pulls, pushes and opens a pull request there when an app asks; pull requests are GitHub's,
+  through `gh`. The status is read when a turn ends and when an app asks, never on a timer, and
+  goes to the apps with the project. What git refuses reaches the user in git's words.
 - `github.rs` is the server's GitHub login, through `gh`: whether it is there, the repositories
   it reaches and cloning one. A project started from a name (a folder with `git init`) or
   cloned from GitHub goes in `~/projects` on the server.
 - `drafts.rs` has an agent write the commit message or the pull request's text from the changes,
-  for the user to edit before it is used. `generate.rs` is how it and `title.rs` ask an agent's
+  for the user to edit before it is used, and name branches the way the server's instructions
+  say, which the user can change in the app's settings and put back. `generate.rs` is how it and `title.rs` ask an agent's
   CLI for a short answer as JSON.
 - `media.rs` keeps the images and videos agents show. An agent shows one by writing a Markdown
   image that points at a file on the server; the agents are told so when they start. The server
@@ -180,7 +188,8 @@ Rust library for tests.
 - `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
   `Views/Composer/ComposerStrips.swift` is the strips against the composer's top and bottom:
   that the agent is monitoring, and the server, folder and branch the thread works in, with the
-  branch picker.
+  branch picker. A new thread chooses there between the project's folder and a new worktree,
+  and then picks the branch the worktree starts from.
   `Views/Thread/GitControl.swift` is the git button in the top bar of a thread and its popover:
   the files and the message of a commit, or the title and text of a pull request, to change
   before they are used.
@@ -292,7 +301,8 @@ screenshot" it makes an image and shows it. "Which color" has it
 ask the user a question, and "plan the hello" present a plan to approve. A message sent now
 while it works is read after its next tool call, as both agents do, or stops a reply that
 streams, as Claude Code does; "run greet.py" ends its reply with it. Asked for a commit
-message or a pull request's text, the way it is asked for a title, it writes one.
+message, a pull request's text or a branch's name, the way it is asked for a title, it writes
+one.
 
 ## Releasing and deploying
 

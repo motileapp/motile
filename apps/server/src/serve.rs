@@ -140,8 +140,16 @@ impl Server {
             Request::SwitchBranch { project_id, branch, create } => {
                 hub.switch_branch(&project_id, &branch, create).await.map(|_| Message::Ok)
             }
-            Request::GitStatus { project_id, fetch } => hub.git_status(&project_id, fetch).await,
+            Request::GitStatus { project_id, thread_id, fetch } => {
+                hub.git_status(&project_id, thread_id.as_deref(), fetch).await
+            }
             Request::SetTextModel { model } => hub.set_text_model(model).map(|_| Message::Ok),
+            Request::SetBranchInstructions { instructions } => {
+                hub.set_branch_instructions(instructions).map(|_| Message::Ok)
+            }
+            Request::SetProjectSetup { project_id, script } => {
+                hub.set_project_setup(&project_id, script).await.map(|_| Message::Ok)
+            }
             Request::NewProject { name } => {
                 hub.new_project(&name).await.map(|project_id| Message::ProjectAdded { project_id })
             }

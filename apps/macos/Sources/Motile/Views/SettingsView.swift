@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @AppStorage("appearance") private var appearance = Appearance.system
+    @State private var setupProject: Project?
 
     var body: some View {
         ScrollView {
@@ -25,6 +26,7 @@ struct SettingsView: View {
                         Text("Motile \(store.updater.current)")
                     } trailing: {
                         Button("Check for Updates") { store.updater.check(asked: true) }
+                            .disabled(store.updater.state == .checking)
                     }
                     if store.updater.state != .idle {
                         SettingsDivider()
@@ -71,6 +73,9 @@ struct SettingsView: View {
         }
         .frame(width: 520, height: 560)
         .onAppear { store.refreshMediaStorage() }
+        .sheet(item: $setupProject) { project in
+            SetupSheet(project: project)
+        }
     }
 
     /// The servers keep every image and video; the ones on this Mac only make threads open with them.
@@ -107,19 +112,17 @@ struct SettingsView: View {
         }
     }
 
-    /// The model that writes thread titles, commit messages and pull requests, by server.
+    /// The model that writes thread titles, branch names, commit messages and pull requests, and
+    /// how it names branches, by server.
     @ViewBuilder private var textGeneration: some View {
         let servers = store.servers.filter { $0.state == .connected && $0.protocolVersion >= 4 }
         if !servers.isEmpty {
-            SettingsSection("Text generation") {
+            SettingsSection("Text generation", caption: "The model that writes thread titles, branch names, commit messages and pull requests") {
                 ForEach(servers) { server in
                     SettingsRow {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(servers.count > 1 ? "Model on \(server.name)" : "Model")
-                            Text("Writes thread titles, commit messages and pull requests")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Image(systemName: "server.rack")
+                            .foregroundStyle(.secondary)
+                        Text(server.name)
                     } trailing: {
                         Picker("Model", selection: textModel(of: server)) {
                             Text("Automatic").tag(String?.none)
@@ -129,6 +132,9 @@ struct SettingsView: View {
                         }
                         .labelsHidden()
                         .fixedSize()
+                    }
+                    if server.protocolVersion >= 6 {
+                        BranchInstructionsEditor(server: server)
                     }
                     if server.id != servers.last?.id { SettingsDivider() }
                 }
@@ -159,6 +165,10 @@ struct SettingsView: View {
                         Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
                     }
                     .fixedSize()
+                    if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
+                        Button("Setup…") { setupProject = project }
+                            .help("The script that runs in each new worktree of \(project.name)")
+                    }
                     Button("Remove") { store.removeProject(project) }
                 }
                 SettingsDivider()
@@ -189,22 +199,109 @@ struct SettingsView: View {
 
 private let settingsInset: CGFloat = 12
 
+/// How a server's writer is told to name the branches it makes, to change and to put back.
+private struct BranchInstructionsEditor: View {
+    @Environment(AppStore.self) private var store
+    let server: Server
+    @State private var text = ""
+
+    private var changed: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines) != server.branchInstructions }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("Branch names")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Reset") {
+                    text = server.defaultBranchInstructions
+                    store.setBranchInstructions(nil, on: server)
+                }
+                .disabled(server.branchInstructions == server.defaultBranchInstructions && !changed)
+                Button("Save") { store.setBranchInstructions(text, on: server) }
+                    .disabled(!changed)
+            }
+            .controlSize(.small)
+            TextEditor(text: $text)
+                .font(.system(size: 12))
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .frame(height: 64)
+                .background(Color.themeComposer, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeBorder, lineWidth: 1) }
+        }
+        .padding(.horizontal, settingsInset)
+        .padding(.bottom, 10)
+        .onAppear { text = server.branchInstructions }
+        .onChange(of: server.branchInstructions) { text = server.branchInstructions }
+    }
+}
+
+/// The shell script that runs in each new worktree of a project before the agent starts there.
+private struct SetupSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let project: Project
+    @State private var script = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Worktree setup for \(project.name)")
+                .font(.system(size: 13, weight: .semibold))
+            Text("A shell script that runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder, as in: cp \"$MOTILE_PROJECT/.env\" . && pnpm install")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextEditor(text: $script)
+                .font(.system(size: 12, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .frame(height: 140)
+                .background(Color.themeComposer, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeBorder, lineWidth: 1) }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    store.setSetup(of: project, to: script)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 440)
+        .onAppear { script = project.setup ?? "" }
+    }
+}
+
 /// A titled box of rows. The system's grouped form leaves more room under a row than over it,
 /// so the rows are laid out here.
 private struct SettingsSection<Content: View>: View {
     private let title: String
+    private let caption: String?
     private let content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
+    init(_ title: String, caption: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.caption = caption
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .padding(.horizontal, settingsInset)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                if let caption {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, settingsInset)
             VStack(spacing: 0) {
                 content
             }

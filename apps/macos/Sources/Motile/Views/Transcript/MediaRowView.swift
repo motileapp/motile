@@ -211,7 +211,7 @@ final class MediaRowView: RowView {
 
     /// The box takes the clicks, until a player with controls of its own is in it.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard player == nil, picture.frame.contains(convert(point, from: superview)) else { return super.hitTest(point) }
+        guard !isHidden, player == nil, picture.frame.contains(convert(point, from: superview)) else { return super.hitTest(point) }
         return self
     }
 

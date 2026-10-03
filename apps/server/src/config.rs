@@ -38,6 +38,11 @@ impl DataDir {
         self.0.join("attachments")
     }
 
+    /// The git worktrees of the threads that work in one of their own.
+    pub fn worktrees(&self) -> PathBuf {
+        self.0.join("worktrees")
+    }
+
     /// The copies of the images and videos that threads show.
     pub fn media(&self) -> PathBuf {
         self.0.join("media")

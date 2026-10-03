@@ -25,6 +25,8 @@ enum Version {
 final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     enum State: Equatable {
         case idle
+        /// The user asked and the answer isn't here yet.
+        case checking
         case upToDate
         case available(String)
         case downloading(String, Double)
@@ -60,9 +62,10 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     /// `asked` is for when the user wants to know: finding nothing new is then said too.
     func check(asked: Bool = false) {
         switch state {
-        case .downloading, .installing, .ready: return
+        case .checking, .downloading, .installing, .ready: return
         default: break
         }
+        if asked { state = .checking }
         var request = URLRequest(url: Self.latestRelease)
         request.httpMethod = "HEAD"
         request.cachePolicy = .reloadIgnoringLocalCacheData

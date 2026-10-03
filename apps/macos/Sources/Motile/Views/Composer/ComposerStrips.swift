@@ -53,8 +53,9 @@ private struct StripShape: Shape {
     }
 }
 
-/// Where the composer's thread works: the server, the folder, and the branch checked out there,
-/// which opens the picker to switch.
+/// Where the composer's thread works: the server, the folder or a worktree of its own, and the
+/// branch checked out there, which opens the picker to switch. A thread that starts in a new
+/// worktree picks the branch it starts from there instead.
 struct ContextStrip: View {
     @Environment(AppStore.self) private var store
     let project: Project
@@ -70,9 +71,7 @@ struct ContextStrip: View {
                 }
                 .padding(.leading, 14)
                 .help("On \(server.name)")
-                Rectangle()
-                    .fill(Color.themeBorder)
-                    .frame(width: 1, height: 14)
+                divider
                     .padding(.horizontal, 10)
             }
             part(project.name) {
@@ -80,19 +79,24 @@ struct ContextStrip: View {
             }
             .padding(.leading, server == nil ? 14 : 0)
             .help(project.path)
+            workspace
             Spacer(minLength: 8)
-            if let branch = project.branch {
-                if store.canSwitchBranches(of: project) {
+            let startsInWorktree = store.draftUsesWorktree
+            if let branch = startsInWorktree ? store.draftBase : project.branch {
+                if project.worktree != nil {
+                    branchLabel(branch, opens: false)
+                        .help("The branch of this thread's worktree")
+                } else if store.canSwitchBranches(of: project) {
                     Button {
                         store.showBranches(of: project)
                     } label: {
-                        branchLabel(branch, opens: true)
+                        branchLabel(startsInWorktree ? "From \(branch)" : branch, opens: true)
                     }
                     .buttonStyle(.plain)
                     .hoverHighlight(radius: 7, inset: ComposerStrip.margin)
-                    .help("Switch the branch of \(project.name)")
+                    .help(startsInWorktree ? "The branch the worktree's branch starts from" : "Switch the branch of \(project.name)")
                     .popover(isPresented: $store.showsBranches, arrowEdge: .bottom) {
-                        BranchPicker(project: project)
+                        BranchPicker(project: project, base: startsInWorktree ? branch : nil)
                     }
                 } else {
                     branchLabel(branch, opens: false)
@@ -101,6 +105,69 @@ struct ContextStrip: View {
             }
         }
         .modifier(ComposerStrip(edge: .bottom))
+    }
+
+    /// Where a new thread starts, to choose, and where a thread that has started works.
+    @ViewBuilder private var workspace: some View {
+        if let worktree = project.worktree {
+            working(in: "Worktree", symbol: "folder.badge.gearshape")
+                .help(worktree.path)
+        } else if store.selectedThread != nil, project.branch != nil {
+            working(in: "Local checkout", symbol: "folder")
+                .help("The thread works in the project's folder")
+        } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
+            let inWorktree = store.draftUsesWorktree
+            let margin = EdgeInsets(top: 4, leading: 3, bottom: 4, trailing: 3)
+            divider
+                .padding(.leading, 10)
+            Menu {
+                Section("Workspace") {
+                    Toggle(isOn: Binding(get: { !inWorktree }, set: { _ in store.setDraftWorktree(false) })) {
+                        Label("Current checkout", systemImage: "folder")
+                    }
+                    Toggle(isOn: Binding(get: { inWorktree }, set: { _ in store.setDraftWorktree(true) })) {
+                        Label("New worktree", systemImage: "folder.badge.plus")
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: inWorktree ? "folder.badge.plus" : "folder")
+                        .font(.system(size: 11, weight: .medium))
+                    Text(inWorktree ? "New worktree" : "Current checkout")
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.themeTertiary)
+                }
+                .foregroundStyle(Color.themeSecondary)
+                .padding(.horizontal, 9)
+                .frame(height: 24)
+                .padding(margin)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .hoverHighlight(radius: 7, inset: margin)
+            .help(inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder")
+        }
+    }
+
+    @ViewBuilder private func working(in title: String, symbol: String) -> some View {
+        divider
+            .padding(.horizontal, 10)
+        part(title) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .medium))
+        }
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.themeBorder)
+            .frame(width: 1, height: 14)
     }
 
     private func part(_ title: String, @ViewBuilder icon: () -> some View) -> some View {
@@ -137,10 +204,12 @@ struct ContextStrip: View {
 }
 
 /// The branches of the project's repository, to switch to one or make a new one. What is typed
-/// narrows the list, and becomes the name of a branch to make when it matches none.
+/// narrows the list, and becomes the name of a branch to make when it matches none. With `base`
+/// it picks the branch a new worktree starts from instead, and switches nothing.
 struct BranchPicker: View {
     @Environment(AppStore.self) private var store
     let project: Project
+    var base: String?
     @State private var query = ""
     @State private var problem: String?
     @State private var highlighted = 0
@@ -163,7 +232,7 @@ struct BranchPicker: View {
         }
     }
 
-    private var working: Bool { store.isWorking(in: project) }
+    private var working: Bool { base == nil && store.isWorking(in: project) }
 
     private var branches: [Branch]? { try? store.listedBranches.get() }
 
@@ -183,7 +252,7 @@ struct BranchPicker: View {
         let needle = query.trimmingCharacters(in: .whitespaces)
         let matching = branches.filter { needle.isEmpty || $0.name.localizedCaseInsensitiveContains(needle) }
         var choices = matching.map(Choice.branch)
-        if !needle.isEmpty, !branches.contains(where: { $0.name == needle }) {
+        if base == nil, !needle.isEmpty, !branches.contains(where: { $0.name == needle }) {
             choices.append(.create(needle))
         }
         return choices
@@ -196,7 +265,7 @@ struct BranchPicker: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.themeTertiary)
-                TextField("Switch or create a branch…", text: $query)
+                TextField(base == nil ? "Switch or create a branch…" : "Start from a branch…", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .focused($searching)
@@ -277,9 +346,10 @@ struct BranchPicker: View {
         HStack(spacing: 7) {
             switch choice {
             case .branch(let branch):
-                Image(systemName: branch.current ? "checkmark" : "arrow.triangle.branch")
+                let chosen = base.map { $0 == branch.name } ?? branch.current
+                Image(systemName: chosen ? "checkmark" : "arrow.triangle.branch")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(branch.current ? Color.themeText : Color.themeTertiary)
+                    .foregroundStyle(chosen ? Color.themeText : Color.themeTertiary)
                     .frame(width: 14)
                 Text(branch.name)
                     .lineLimit(1)
@@ -317,6 +387,11 @@ struct BranchPicker: View {
         let (name, create) = switch choices[index] {
         case .branch(let branch): (branch.name, false)
         case .create(let name): (name, true)
+        }
+        if base != nil {
+            store.setDraftBase(name)
+            store.showsBranches = false
+            return
         }
         if !create, branches?.first(where: { $0.name == name })?.current == true {
             store.showsBranches = false

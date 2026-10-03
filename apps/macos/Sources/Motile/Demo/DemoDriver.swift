@@ -397,12 +397,12 @@ private final class Demo {
         store.attach([URL(fileURLWithPath: "/tmp/motile-demo/api/greet.py")])
         await shoot("12-dark-new-thread")
 
-        // Every new thread stays in the sidebar as a draft until it is sent or discarded.
+        // A new thread that was written in stays in the sidebar as a draft until it is sent or discarded.
         store.select(.thread(first))
         await expect("a new thread that was written but not sent is listed as a draft") { store.listedDrafts.count == 1 }
         store.startNewThread()
         store.startNewThread()
-        await expect("new threads opened one after the other are each listed as a draft") { store.listedDrafts.count == 3 }
+        await expect("new threads with nothing written in them are not listed") { store.listedDrafts.count == 1 }
         await shoot("12-dark-draft")
         if let written = store.listedDrafts.last { store.select(.draft(written.id)) }
         await expect("the draft opens with what was written in it") { store.draft.hasPrefix("Why is the sync slow") && store.attachments.count == 1 }

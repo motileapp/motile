@@ -24,7 +24,7 @@ Return JSON with keys subject, body and branch.
 
 - subject: what the change does, in the imperative, at most 72 characters, without a trailing period. Word it the way the repository's recent commits are worded, including any prefix they share.
 - body: an empty string unless the change needs explaining. Then a few short plain sentences or bullet points about what changed and why, not a list of files.
-- branch: a short git branch name for this work, in lowercase words joined by hyphens.
+- branch: a git branch name for this work, named the way it is said below.
 - Do not mention yourself, an AI or the tools used, and add no trailers."#;
 
 const PULL_REQUEST_PROMPT: &str = r#"Write the title and the description of a pull request for the branch below.
@@ -33,6 +33,16 @@ Return JSON with keys title and body.
 - title: what the branch changes, at most 72 characters, without a trailing period. Word it the way the repository's recent commits are worded.
 - body: Markdown. Say what changes and why in a few short sentences or bullet points, then how it was tested if the commits say so. If a template is given, fill it in instead.
 - Do not mention yourself, an AI or the tools used."#;
+
+const BRANCH_PROMPT: &str = "Name the git branch for the work the message below asks for.
+Return JSON with key branch.";
+
+/// How the writer names a branch until the user says otherwise.
+pub const BRANCH_INSTRUCTIONS: &str = "Name the branch after the work, in 2 to 5 lowercase words joined by hyphens.
+Start it with motile/, as in motile/fix-login-redirect.";
+
+const MAX_MESSAGE_CHARS: usize = 8000;
+const MAX_BRANCH_CHARS: usize = 80;
 
 /// What the thread the work was done in is about, to say why the change was made.
 #[derive(Default)]
@@ -63,13 +73,15 @@ pub async fn commit_message(
     writer: &Writer,
     thread: &Thread,
     paths: &[String],
+    branch_instructions: &str,
 ) -> anyhow::Result<CommitDraft> {
     let (names, patch) = git::pending_changes(folder, environment, paths).await?;
     if names.trim().is_empty() {
         anyhow::bail!("There is nothing to commit.");
     }
     let prompt = format!(
-        "{COMMIT_PROMPT}{}{}\n\nChanged files:\n{}\n\nPatch:\n{}",
+        "{COMMIT_PROMPT}{}{}{}\n\nChanged files:\n{}\n\nPatch:\n{}",
+        section("How to name the branch", branch_instructions),
         section("Recent commits", &git::recent_subjects(folder, environment).await),
         about(thread),
         capped(&names, MAX_LIST_CHARS),
@@ -84,6 +96,18 @@ pub async fn commit_message(
     }
     let body = answer["body"].as_str().unwrap_or_default().trim().to_string();
     Ok(CommitDraft { subject, body, branch: branch_name(answer["branch"].as_str().unwrap_or_default()) })
+}
+
+/// A name for the branch of the work the thread's first message asks for.
+pub async fn branch_for(
+    environment: &Environment,
+    writer: &Writer,
+    instructions: &str,
+    message: &str,
+) -> anyhow::Result<String> {
+    let prompt = format!("{BRANCH_PROMPT}\n\n{instructions}\n\nUser message:\n{}", capped(message, MAX_MESSAGE_CHARS));
+    let answer = generate::ask(environment, writer, &prompt, &schema(&["branch"])).await?;
+    branch_name(answer["branch"].as_str().unwrap_or_default()).context("The branch's name came back empty.")
 }
 
 /// The title and the text of a pull request for the branch.
@@ -145,6 +169,7 @@ fn first_line(text: &str) -> String {
 pub fn branch_name(suggested: &str) -> Option<String> {
     let allowed = |character: char| character.is_ascii_alphanumeric() || "-_/.".contains(character);
     let kept: String = suggested.trim().to_lowercase().replace(' ', "-").chars().filter(|c| allowed(*c)).collect();
+    let kept: String = kept.chars().take(MAX_BRANCH_CHARS).collect();
     let name = kept.trim_matches(|character| "-/.".contains(character)).replace("..", ".").replace("//", "/");
     (!name.is_empty()).then_some(name)
 }
@@ -158,6 +183,7 @@ mod tests {
         assert_eq!(branch_name(" Fix Login Redirect ").as_deref(), Some("fix-login-redirect"));
         assert_eq!(branch_name("-feature/pay~ments.").as_deref(), Some("feature/payments"));
         assert_eq!(branch_name("?!"), None);
+        assert_eq!(branch_name(&"a".repeat(200)).map(|name| name.len()), Some(MAX_BRANCH_CHARS));
     }
 
     #[test]

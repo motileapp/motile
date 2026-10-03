@@ -17,6 +17,9 @@ struct ThreadDraft: Identifiable, Equatable, Codable {
     var effort: String?
     var access: Access = .full
     var plan = false
+    /// The thread starts in a new worktree, on a branch that starts from `base`.
+    var worktree: Bool?
+    var base: String?
 }
 
 /// A draft as the sidebar lists it.
@@ -153,8 +156,6 @@ final class AppStore {
     @ObservationIgnored private let defaults = UserDefaults.standard
     /// The thread that was open when the app was last closed, until it has been opened again.
     @ObservationIgnored private var lastSelection: String?
-    /// The draft the app opened by itself. It is dropped if it is left empty.
-    @ObservationIgnored private var landingDraftID: String?
 
     init() {
         loadPreferences()
@@ -331,7 +332,7 @@ final class AppStore {
         ensureDraftProject()
         openAwaitedProject()
         // A server that has just started hasn't read the repository yet.
-        if let project = project(selectedThread?.projectID), project.serverID == serverID, project.git == nil { readGit() }
+        if let project = threadProject, project.serverID == serverID, project.git == nil { readGit() }
     }
 
     // MARK: Lookups
@@ -354,12 +355,13 @@ final class AppStore {
         return threadDrafts.first { $0.id == id }
     }
 
-    /// Every draft that isn't being sent, newest first. The open one is listed as it was when it
-    /// was opened.
+    /// Every draft with something written in it that isn't being sent, newest first. The open
+    /// one is listed as it was when it was opened.
     var listedDrafts: [ListedDraft] {
-        threadDrafts.reversed().filter { !sendingDraftIDs.contains($0.id) }.map { draft -> ListedDraft in
+        threadDrafts.reversed().compactMap { draft -> ListedDraft? in
+            guard !sendingDraftIDs.contains(draft.id) else { return nil }
             let written = selection == .draft(draft.id) ? openedDraftPreview : preview(of: draft)
-            return ListedDraft(draft: draft, preview: written ?? "New thread")
+            return written.map { ListedDraft(draft: draft, preview: $0) }
         }
     }
 
@@ -392,7 +394,13 @@ final class AppStore {
 
     /// The project the composer's thread works in, or the one the open draft would start in.
     var composerProject: Project? {
-        project(selectedThread?.projectID ?? selectedDraft?.projectID)
+        threadProject ?? project(selectedDraft?.projectID)
+    }
+
+    /// The open thread's project, as the thread works in it.
+    var threadProject: Project? {
+        guard let thread = selectedThread else { return nil }
+        return project(thread.projectID)?.seen(from: thread)
     }
 
     /// The server the composer is talking to: the open thread's, or the open draft's project's.
@@ -451,7 +459,7 @@ final class AppStore {
         drafts = defaults.dictionary(forKey: "drafts") as? [String: String] ?? [:]
         lastSelection = defaults.string(forKey: "selection")
         let saved = defaults.data(forKey: "threadDrafts").flatMap { try? JSONDecoder().decode([ThreadDraft].self, from: $0) }
-        threadDrafts = saved ?? []
+        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil }
         let opened = threadDrafts.first { $0.id == lastSelection } ?? emptyDraft()
         selection = .draft(opened.id)
         openedDraftPreview = preview(of: opened)
@@ -465,21 +473,35 @@ final class AppStore {
     private func addDraft() -> ThreadDraft {
         var draft = ThreadDraft()
         draft.projectID = defaults.string(forKey: "new.project")
-        draft.model = defaults.string(forKey: "new.model")
-        draft.effort = defaults.string(forKey: "new.effort")
-        draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
+        draft.worktree = defaults.bool(forKey: "new.worktree")
+        applyLastSettings(to: &draft)
         threadDrafts.append(draft)
         saveThreadDrafts()
         return draft
     }
 
-    /// A draft with nothing in it: one that is already there, or a new one that is dropped again
-    /// if it is left empty.
+    private func applyLastSettings(to draft: inout ThreadDraft) {
+        draft.model = defaults.string(forKey: "new.model")
+        draft.effort = defaults.string(forKey: "new.effort")
+        draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
+    }
+
+    private func rememberSettings(model: String?, effort: String?, access: Access) {
+        defaults.set(model, forKey: "new.model")
+        defaults.set(effort, forKey: "new.effort")
+        defaults.set(access.rawValue, forKey: "new.access")
+    }
+
+    /// A draft with nothing in it: the one that is already there, or a new one.
     private func emptyDraft() -> ThreadDraft {
-        if let empty = threadDrafts.last(where: { preview(of: $0) == nil && !sendingDraftIDs.contains($0.id) }) { return empty }
-        let draft = addDraft()
-        landingDraftID = draft.id
-        return draft
+        if let index = threadDrafts.lastIndex(where: { preview(of: $0) == nil && !sendingDraftIDs.contains($0.id) }) {
+            var empty = threadDrafts[index]
+            applyLastSettings(to: &empty)
+            threadDrafts[index] = empty
+            saveThreadDrafts()
+            return empty
+        }
+        return addDraft()
     }
 
     /// Changes the open draft, and has the next draft start with the same choices.
@@ -488,9 +510,8 @@ final class AppStore {
         change(&threadDrafts[index])
         let draft = threadDrafts[index]
         defaults.set(draft.projectID, forKey: "new.project")
-        defaults.set(draft.model, forKey: "new.model")
-        defaults.set(draft.effort, forKey: "new.effort")
-        defaults.set(draft.access.rawValue, forKey: "new.access")
+        defaults.set(draft.worktree == true, forKey: "new.worktree")
+        rememberSettings(model: draft.model, effort: draft.effort, access: draft.access)
         saveThreadDrafts()
     }
 
@@ -732,9 +753,34 @@ final class AppStore {
 
     // MARK: Branches
 
-    /// Whether a turn is running in the project, which is when its branch can't be switched.
+    /// Whether a turn is running in the project's folder, which is when its branch can't be
+    /// switched.
     func isWorking(in project: Project) -> Bool {
-        threads.values.contains { $0.projectID == project.id && $0.running }
+        threads.values.contains { $0.projectID == project.id && $0.running && $0.cwd == project.path }
+    }
+
+    /// Whether the project's server is new enough to start threads in worktrees of their own.
+    func canUseWorktrees(of project: Project) -> Bool {
+        project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 6
+    }
+
+    /// Whether the open draft starts its thread in a new worktree.
+    var draftUsesWorktree: Bool {
+        guard let draft = selectedDraft, let project = project(draft.projectID) else { return false }
+        return draft.worktree == true && canUseWorktrees(of: project)
+    }
+
+    /// The branch the open draft's worktree starts from: the one picked, or the one checked out.
+    var draftBase: String? {
+        selectedDraft?.base ?? project(selectedDraft?.projectID)?.branch
+    }
+
+    func setDraftWorktree(_ worktree: Bool) {
+        updateDraft { $0.worktree = worktree }
+    }
+
+    func setDraftBase(_ branch: String) {
+        updateDraft { $0.base = branch }
     }
 
     /// Whether the project's server is new enough to list and switch branches.
@@ -774,8 +820,8 @@ final class AppStore {
     /// Has the open thread's server read its project's repository again, which the project then
     /// arrives with. With `fetch` the remote is asked first.
     private func readGit(fetch: Bool = false, done: (([ChangedFile]) -> Void)? = nil) {
-        guard let project = project(selectedThread?.projectID), canUseGit(of: project) else { return }
-        let request: JSON = ["type": "git_status", "project_id": project.id, "fetch": fetch]
+        guard let thread = selectedThread, let project = project(thread.projectID), canUseGit(of: project) else { return }
+        let request: JSON = ["type": "git_status", "project_id": project.id, "thread_id": thread.id, "fetch": fetch]
         core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
             switch result {
             case .success(let answer): done?(answer.objects("files").map { ChangedFile(json: $0) })
@@ -878,6 +924,23 @@ final class AppStore {
         }
     }
 
+    /// Says how the server's writer names branches. Without instructions the server goes back
+    /// to its own.
+    func setBranchInstructions(_ instructions: String?, on server: Server) {
+        var command: JSON = ["server_id": server.id]
+        if let instructions { command["instructions"] = instructions }
+        core.send("set_branch_instructions", command) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
+    }
+
+    /// Sets the shell script that runs in every new worktree of the project, or takes it away.
+    func setSetup(of project: Project, to script: String) {
+        var change: JSON = ["type": "set_project_setup", "project_id": project.id]
+        if !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { change["script"] = script }
+        request(project.serverID, change)
+    }
+
     func removeProject(_ project: Project) {
         request(project.serverID, ["type": "remove_project", "project_id": project.id])
     }
@@ -924,10 +987,7 @@ final class AppStore {
         }
         let left = selectedDraft
         selection = new
-        if let left, left.id == landingDraftID {
-            landingDraftID = nil
-            if preview(of: left) == nil, !sendingDraftIDs.contains(left.id) { removeDraft(left.id) }
-        }
+        if let left, preview(of: left) == nil, !sendingDraftIDs.contains(left.id) { removeDraft(left.id) }
         openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
         activity = Activity()
         transcriptIsEmpty = true
@@ -956,11 +1016,10 @@ final class AppStore {
         openPanel(.projects)
     }
 
-    /// Opens a new draft. It and the one that was open stay in the sidebar until they are sent or
-    /// discarded.
+    /// Opens an empty draft. The one that was open stays in the sidebar if something was written
+    /// in it.
     func startNewThread(in project: Project? = nil) {
-        landingDraftID = nil
-        select(.draft(addDraft().id))
+        openEmptyDraft()
         if let project { setNewThreadProject(project.id) }
     }
 
@@ -970,7 +1029,10 @@ final class AppStore {
     }
 
     func setNewThreadProject(_ id: String?) {
-        updateDraft { $0.projectID = id }
+        updateDraft {
+            $0.projectID = id
+            $0.base = nil
+        }
     }
 
     func discard(_ draft: ThreadDraft) {
@@ -1012,6 +1074,7 @@ final class AppStore {
                 "plan": draft.plan,
             ]
             if let effort = composerEffort { settings["effort"] = effort }
+            if draftUsesWorktree, let base = draftBase { settings["worktree"] = ["base": base] }
             command["server_id"] = project.serverID
             command["new_thread"] = settings
             sendingDraftIDs.insert(draft.id)
@@ -1136,6 +1199,7 @@ final class AppStore {
             }
             return
         }
+        rememberSettings(model: model.id, effort: nil, access: thread.access)
         update(thread, ["model": model.id, "effort": ""]) {
             $0.model = model.id
             $0.effort = nil
@@ -1147,6 +1211,7 @@ final class AppStore {
             updateDraft { $0.effort = effort }
             return
         }
+        rememberSettings(model: thread.model ?? composerModel?.id, effort: effort, access: thread.access)
         update(thread, ["effort": effort]) { $0.effort = effort }
     }
 
@@ -1155,6 +1220,7 @@ final class AppStore {
             updateDraft { $0.access = access }
             return
         }
+        rememberSettings(model: thread.model ?? composerModel?.id, effort: thread.effort, access: access)
         update(thread, ["access": access.rawValue]) { $0.access = access }
     }
 
