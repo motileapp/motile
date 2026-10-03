@@ -152,6 +152,7 @@ private struct ThreadMenu: View {
 
 private struct MarkDoneButton: View {
     let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
@@ -162,6 +163,7 @@ private struct MarkDoneButton: View {
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
             }
+            .foregroundStyle(hovering ? .primary : .secondary)
             .padding(.horizontal, 5)
             .frame(height: 22)
             .contentShape(Rectangle())
@@ -169,6 +171,7 @@ private struct MarkDoneButton: View {
         .buttonStyle(.plain)
         .fixedSize()
         .hoverHighlight(radius: 6)
+        .onHover { hovering = $0 }
     }
 }
 
