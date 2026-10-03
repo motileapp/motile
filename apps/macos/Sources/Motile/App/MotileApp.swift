@@ -37,6 +37,9 @@ struct MotileApp: App {
                 Button("Show Files") { store.sidePanel.open(.files) }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
                     .disabled(store.panelUnavailable != nil)
+                Button("Show Agents") { store.sidePanel.open(.agents) }
+                    .keyboardShortcut("a", modifiers: [.command, .shift])
+                    .disabled(store.panelUnavailable != nil)
                 Divider()
             }
             CommandGroup(replacing: .saveItem) {

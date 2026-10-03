@@ -107,6 +107,8 @@ impl App {
             | Event::GitProgress { .. }
             | Event::MediaProgress { .. }
             | Event::CodeSpans { .. }
+            | Event::Agents { .. }
+            | Event::AgentRows { .. }
             | Event::UploadProgress { .. } => {}
         }
     }

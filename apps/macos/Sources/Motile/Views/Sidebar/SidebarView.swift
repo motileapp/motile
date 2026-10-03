@@ -511,9 +511,17 @@ private struct ThreadStatus: View {
                 symbol("questionmark.circle")
             }
         } else if thread.running {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
-                    symbol("circle.dashed")
+            HStack(spacing: 6) {
+                if thread.agents > 0 {
+                    label("\(thread.agents)", Color.themeWorking) {
+                        symbol("person.2")
+                    }
+                    .help(thread.agents == 1 ? "1 agent is working" : "\(thread.agents) agents are working")
+                }
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
+                        symbol("circle.dashed")
+                    }
                 }
             }
         } else if thread.monitoring {

@@ -26,11 +26,14 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case files
     /// One file, by its path in the folder.
     case file(String)
+    /// The agents the thread's agent has started, and what one of them did.
+    case agents
 
     var id: String {
         switch self {
         case .diff: "diff"
         case .files: "files"
+        case .agents: "agents"
         case .file(let path): "file:\(path)"
         }
     }
@@ -39,6 +42,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         switch self {
         case .diff: "Diff"
         case .files: "Files"
+        case .agents: "Agents"
         case .file(let path): URL(fileURLWithPath: path).lastPathComponent
         }
     }
@@ -47,6 +51,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         switch self {
         case .diff: "plusminus"
         case .files: "folder"
+        case .agents: "person.2"
         case .file(let path): FileSymbol.name(for: path)
         }
     }
@@ -144,6 +149,8 @@ final class SidePanel {
     private(set) var tabsByKey: [String: PanelTabs]
     /// The turns of the open thread that changed files, the first one first.
     var turns: [TurnChange] = []
+    /// The agent whose transcript the agents tab shows. Without one it lists them.
+    private(set) var shownAgent: String?
 
     private(set) var diff: Loaded<CodeDocument> = .loading
     /// The files of the diff that are closed, by path.
@@ -238,6 +245,35 @@ final class SidePanel {
 
     func forget(_ key: String) {
         tabsByKey[key] = nil
+    }
+
+    // MARK: Agents
+
+    /// Opens the agents tab on what the agent did that the tool call started.
+    func showAgent(_ id: String) {
+        guard let store, let threadID = store.transcript.threadID else { return }
+        shownAgent = id
+        store.agentTranscript.begin(threadID: threadID)
+        agentsChanged()
+        store.core.send("open_agent", ["thread_id": threadID, "agent_id": id])
+        open(.agents)
+    }
+
+    /// Goes back to the list of agents.
+    func showAgents() {
+        guard let store, shownAgent != nil else { return }
+        shownAgent = nil
+        if let threadID = store.agentTranscript.threadID { store.core.send("close_agent", ["thread_id": threadID]) }
+        store.agentTranscript.begin(threadID: nil)
+    }
+
+    /// The shown agent's transcript says that it works for as long as it does.
+    func agentsChanged() {
+        guard let store, let agent = store.agents.first(where: { $0.id == shownAgent }) else { return }
+        var activity = Activity()
+        activity.running = agent.working
+        activity.startedAt = agent.startedAt
+        if store.agentTranscript.activity != activity { store.agentTranscript.setActivity(activity) }
     }
 
     // MARK: Diff

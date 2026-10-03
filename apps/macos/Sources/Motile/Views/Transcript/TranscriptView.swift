@@ -23,6 +23,11 @@ final class TranscriptView: FlippedView, RowOwner {
     var onTrimEarlier: ((Int, @escaping () -> Void) -> Void)?
     /// The diff of the turn that ended with the item is to be shown, with a file in view.
     var onOpenDiff: ((String, String?) -> Void)?
+    /// What the agent did that the item's tool call started is to be shown.
+    var onOpenAgent: ((String) -> Void)?
+    /// Whether rows are measured for this view's width as they are decoded. Only one transcript
+    /// can have that; another measures its rows when they arrive.
+    var measuresAhead = true
 
     /// Room left under the last row for what floats over the transcript's end.
     var bottomInset: CGFloat = 0 {
@@ -198,11 +203,12 @@ final class TranscriptView: FlippedView, RowOwner {
     private var endY: CGFloat { max(0, document.frame.height - viewportHeight) }
 
     /// Whether the line that says the agent is at work shows under the rows. The row that ends
-    /// a turn replaces it right away, a moment before the server says that the agent stopped.
-    /// An agent that only monitors is shown by the composer instead.
+    /// a turn replaces it right away, a moment before the server says that the agent stopped,
+    /// unless agents it started work on. An agent that only monitors is shown by the composer
+    /// instead.
     private var showsWorking: Bool {
         guard activity.running else { return false }
-        return endOfRunningTurn == nil || rows.last?.id != endOfRunningTurn
+        return activity.agents > 0 || endOfRunningTurn == nil || rows.last?.id != endOfRunningTurn
     }
 
     /// The row the working line goes above: the first of the messages that wait for the agent,
@@ -240,7 +246,7 @@ final class TranscriptView: FlippedView, RowOwner {
             return
         }
         layoutWidth = bounds.width
-        TranscriptColumn.width = columnWidth
+        if measuresAhead { TranscriptColumn.width = columnWidth }
         // Wrapping changes with the width, so every height is an estimate again.
         let anchor = currentAnchor()
         for index in measured.indices { measured[index] = false }
@@ -792,6 +798,8 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     func openDiff(turn itemID: String, path: String?) { onOpenDiff?(itemID, path) }
+
+    func openAgent(itemID: String) { onOpenAgent?(itemID) }
 
     func cancelQueued(messageID: String) { onCancelQueued?(messageID) }
 

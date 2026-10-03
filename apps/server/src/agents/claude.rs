@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Approval, TurnSummary};
+use motile_protocol::wire::{Access, Approval, Subagent, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
 
 use super::{AgentEvent, Background, Turn};
@@ -119,14 +119,17 @@ pub struct Parser {
     anonymous_blocks: u64,
     /// The turn has ended; the next one starts in the same process.
     ended: bool,
+    /// The agents it started, by its name for each: the tool call that started one, and whether
+    /// it still works.
+    tasks: HashMap<String, (String, bool)>,
+    compacting: bool,
 }
 
 impl Parser {
     pub fn parse(&mut self, line: &str) -> Vec<AgentEvent> {
         let Ok(object) = serde_json::from_str::<Value>(line) else { return vec![] };
-        // Only the main conversation is shown, not what subagents do.
-        if object["parent_tool_use_id"].is_string() {
-            return vec![];
+        if let Some(parent) = object["parent_tool_use_id"].as_str() {
+            return self.parse_subagent(parent, &object);
         }
         match object["type"].as_str() {
             Some("system") => self.parse_system(&object),
@@ -152,8 +155,65 @@ impl Parser {
         }
     }
 
+    /// What an agent the thread's agent started says and does, which arrives in whole messages.
+    fn parse_subagent(&mut self, parent: &str, object: &Value) -> Vec<AgentEvent> {
+        let events = match object["type"].as_str() {
+            Some("assistant") => self.parse_assistant(&object["message"]),
+            Some("user") => parse_user(&object["message"]),
+            Some("control_request") => return parse_control_request(object),
+            _ => vec![],
+        };
+        let sub = |event| AgentEvent::Sub { parent: parent.to_string(), event: Box::new(event) };
+        events.into_iter().map(sub).collect()
+    }
+
+    fn task_started(&mut self, object: &Value) -> Vec<AgentEvent> {
+        let kind = object["task_type"].as_str().unwrap_or_default();
+        if WATCH_TASKS.contains(&kind) || IDLE_TASKS.contains(&kind) {
+            return vec![];
+        }
+        let (Some(task_id), Some(tool_id)) = (object["task_id"].as_str(), object["tool_use_id"].as_str()) else {
+            return vec![];
+        };
+        // An agent that is sent a message later starts again; it stays with the call that made it.
+        let task = self.tasks.entry(task_id.to_string()).or_insert_with(|| (tool_id.to_string(), true));
+        task.1 = true;
+        let agent = Subagent { kind: text(&object["subagent_type"]), ..subagent(ToolStatus::Running, object) };
+        vec![AgentEvent::Task { tool_id: task.0.clone(), agent }]
+    }
+
+    fn task_progress(&mut self, object: &Value) -> Vec<AgentEvent> {
+        let Some((tool_id, true)) = self.tasks.get(object["task_id"].as_str().unwrap_or_default()) else {
+            return vec![];
+        };
+        let agent = Subagent { progress: text(&object["description"]), ..subagent(ToolStatus::Running, object) };
+        vec![AgentEvent::Task { tool_id: tool_id.clone(), agent }]
+    }
+
+    fn task_ended(&mut self, object: &Value) -> Vec<AgentEvent> {
+        let Some((tool_id, working)) = self.tasks.get_mut(object["task_id"].as_str().unwrap_or_default()) else {
+            return vec![];
+        };
+        *working = false;
+        let status = if object["status"] == "completed" { ToolStatus::Succeeded } else { ToolStatus::Failed };
+        let agent = Subagent { result: text(&object["summary"]), ..subagent(status, object) };
+        vec![AgentEvent::Task { tool_id: tool_id.clone(), agent }]
+    }
+
+    fn set_compacting(&mut self, active: bool) -> Vec<AgentEvent> {
+        if std::mem::replace(&mut self.compacting, active) == active {
+            return vec![];
+        }
+        vec![AgentEvent::Compacting { active }]
+    }
+
     fn parse_system(&mut self, object: &Value) -> Vec<AgentEvent> {
         match object["subtype"].as_str() {
+            Some("task_started") => self.task_started(object),
+            Some("task_progress") => self.task_progress(object),
+            Some("task_notification") => self.task_ended(object),
+            Some("status") => self.set_compacting(object["status"] == "compacting"),
+            Some("compact_boundary") => self.set_compacting(false),
             Some("init") => {
                 let session_id = object["session_id"].as_str();
                 let session = session_id.map(|id| AgentEvent::Session { id: id.to_string() });
@@ -265,6 +325,24 @@ fn parse_user(message: &Value) -> Vec<AgentEvent> {
         .collect()
 }
 
+fn text(value: &Value) -> Option<String> {
+    value.as_str().filter(|text| !text.is_empty()).map(String::from)
+}
+
+/// What a message about an agent says of how much it has used.
+fn subagent(status: ToolStatus, object: &Value) -> Subagent {
+    let usage = &object["usage"];
+    Subagent {
+        kind: None,
+        status,
+        progress: None,
+        result: None,
+        tokens: usage["total_tokens"].as_u64(),
+        tool_uses: usage["tool_uses"].as_u64(),
+        duration_ms: usage["duration_ms"].as_u64(),
+    }
+}
+
 fn background(tasks: &Value) -> Background {
     let tasks = tasks.as_array().map(Vec::as_slice).unwrap_or_default();
     let kinds = tasks.iter().map(|task| task["task_type"].as_str().unwrap_or_default());
@@ -345,6 +423,69 @@ mod tests {
         assert!(matches!(ended[..], [AgentEvent::Completed { .. }]));
         assert_eq!(parser.parse(init), vec![session.clone(), AgentEvent::Woke]);
         assert_eq!(parser.parse(init), vec![session]);
+    }
+
+    #[test]
+    fn an_agent_it_starts_reports_how_far_it_is_and_what_it_does() {
+        let mut parser = Parser::default();
+        let started = r#"{"type":"system","subtype":"task_started","task_id":"a1","tool_use_id":"toolu_1",
+            "description":"Count the files","subagent_type":"Explore","task_type":"local_agent"}"#;
+        let shell = r#"{"type":"system","subtype":"task_started","task_id":"b1","tool_use_id":"toolu_2",
+            "task_type":"local_bash"}"#;
+        let read = r#"{"type":"assistant","parent_tool_use_id":"toolu_1","message":{"id":"m1","content":[
+            {"type":"tool_use","id":"toolu_3","name":"Read","input":{"file_path":"a.txt"}}]}}"#;
+        let progress = r#"{"type":"system","subtype":"task_progress","task_id":"a1","description":"Reading a.txt",
+            "usage":{"total_tokens":20840,"tool_uses":3,"duration_ms":29021}}"#;
+        let ended = r#"{"type":"system","subtype":"task_notification","task_id":"a1","status":"completed",
+            "summary":"Three files","usage":{"total_tokens":21059,"tool_uses":3,"duration_ms":30714}}"#;
+        let agent = |status| Subagent {
+            kind: None,
+            status,
+            progress: None,
+            result: None,
+            tokens: None,
+            tool_uses: None,
+            duration_ms: None,
+        };
+        let task = |agent| vec![AgentEvent::Task { tool_id: "toolu_1".to_string(), agent }];
+
+        let explore = Subagent { kind: Some("Explore".into()), ..agent(ToolStatus::Running) };
+        assert_eq!(parser.parse(started), task(explore));
+        assert_eq!(parser.parse(shell), vec![]);
+        let input = AgentEvent::ToolInput {
+            id: "toolu_3".into(),
+            name: "Read".into(),
+            input: r#"{"file_path":"a.txt"}"#.into(),
+        };
+        let sub = AgentEvent::Sub { parent: "toolu_1".into(), event: Box::new(input) };
+        assert_eq!(parser.parse(read), vec![sub]);
+        let reading = Subagent {
+            progress: Some("Reading a.txt".into()),
+            tokens: Some(20840),
+            tool_uses: Some(3),
+            duration_ms: Some(29021),
+            ..agent(ToolStatus::Running)
+        };
+        assert_eq!(parser.parse(progress), task(reading));
+        let done = Subagent {
+            result: Some("Three files".into()),
+            tokens: Some(21059),
+            tool_uses: Some(3),
+            duration_ms: Some(30714),
+            ..agent(ToolStatus::Succeeded)
+        };
+        assert_eq!(parser.parse(ended), task(done));
+        assert_eq!(parser.parse(progress), vec![]);
+    }
+
+    #[test]
+    fn it_says_when_it_makes_its_conversation_shorter() {
+        let mut parser = Parser::default();
+        let status = |status: &str| format!(r#"{{"type":"system","subtype":"status","status":{status}}}"#);
+
+        assert_eq!(parser.parse(&status(r#""requesting""#)), vec![]);
+        assert_eq!(parser.parse(&status(r#""compacting""#)), vec![AgentEvent::Compacting { active: true }]);
+        assert_eq!(parser.parse(&status("null")), vec![AgentEvent::Compacting { active: false }]);
     }
 
     #[test]

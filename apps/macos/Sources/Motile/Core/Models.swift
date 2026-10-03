@@ -435,6 +435,8 @@ struct ThreadInfo: Equatable, Identifiable {
     /// The turn is over, but the agent still watches something it left running.
     let monitoring: Bool
     let needsApproval: Bool
+    /// How many agents the thread's agent has started that still work.
+    let agents: Int
     let turnEndedAt: Double?
     let unread: Bool
 
@@ -456,6 +458,7 @@ struct ThreadInfo: Equatable, Identifiable {
         running = json.bool("running")
         monitoring = json.bool("monitoring")
         needsApproval = json.bool("needs_approval")
+        agents = json.int("agents")
         turnEndedAt = json.optionalDouble("turn_ended_at")
         unread = json.bool("unread")
     }
@@ -474,6 +477,10 @@ struct Activity: Equatable {
     var running = false
     var monitoring = false
     var thinking = false
+    /// The agent is making its conversation shorter to go on with it.
+    var compacting = false
+    /// How many agents it has started that still work.
+    var agents = 0
     var startedAt: Double?
     /// The tool calls the running turn waits with until they are allowed or refused.
     var approvals: [Approval] = []
@@ -488,9 +495,52 @@ struct Activity: Equatable {
         running = json.bool("running")
         monitoring = json.bool("monitoring")
         thinking = json.bool("thinking")
+        compacting = json.bool("compacting")
+        agents = json.int("agents")
         startedAt = json.optionalDouble("started_at")
         approvals = waiting.map { Approval(json: $0) }
         queued = json.objects("queued").map { QueuedMessage(json: $0) }
+    }
+}
+
+/// An agent the thread's agent started. What it did is a transcript of its own.
+struct AgentInfo: Equatable, Identifiable {
+    /// The tool call that started it.
+    let id: String
+    /// The agent that started it, when the thread's own didn't.
+    let parent: String?
+    let title: String
+    let kind: String?
+    let status: ToolContent.Status
+    /// What it is doing now, or what it reported once it has ended.
+    let detail: String
+    let startedAt: Double
+    let durationMs: Int?
+    let tokens: Int?
+    let toolUses: Int?
+
+    init(json: JSON) {
+        let number = { (key: String) in (json[key] as? NSNumber)?.intValue }
+        id = json.string("id")
+        parent = json.optionalString("parent")
+        title = json.string("title")
+        kind = json.optionalString("kind")
+        status = ToolContent.Status(rawValue: json.string("status")) ?? .succeeded
+        detail = json.string("detail")
+        startedAt = json.double("started_at")
+        durationMs = number("duration_ms")
+        tokens = number("tokens")
+        toolUses = number("tool_uses")
+    }
+
+    var working: Bool { status == .running }
+
+    /// "3 tools · 21k tokens", as far as either is known.
+    var usage: String? {
+        let tools = toolUses.map { "\($0) \($0 == 1 ? "tool" : "tools")" }
+        let spent = tokens.map { $0 < 1000 ? "\($0) tokens" : "\($0 / 1000)k tokens" }
+        let parts = [tools, spent].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 

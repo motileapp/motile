@@ -249,7 +249,9 @@ impl Cache {
     /// The turns right before the item at `before`, or the thread's last ones.
     pub fn page(&self, thread_id: &str, before: Option<u64>) -> Page {
         let connection = self.connection();
-        let query = "SELECT payload FROM items WHERE thread_id = ?1 AND seq < ?2 ORDER BY seq DESC";
+        let query = "SELECT payload FROM items
+                     WHERE thread_id = ?1 AND seq < ?2 AND json_extract(payload, '$.parent') IS NULL
+                     ORDER BY seq DESC";
         let Ok(mut statement) = connection.prepare(query) else { return Page::default() };
         let before = before.map_or(i64::MAX, |seq| seq as i64);
         let Ok(rows) = statement.query_map(params![thread_id, before], |row| row.get::<_, String>(0)) else {
@@ -270,6 +272,29 @@ impl Cache {
         }
         page.items.reverse();
         page
+    }
+
+    /// The tool calls of the thread that started an agent, in order.
+    pub fn agents(&self, thread_id: &str) -> Vec<Item> {
+        self.items_where(thread_id, "json_extract(payload, '$.call.agent') IS NOT NULL", None)
+    }
+
+    /// What the agent that the tool call `parent` started said and did, in order.
+    pub fn agent_items(&self, thread_id: &str, parent: &str) -> Vec<Item> {
+        self.items_where(thread_id, "json_extract(payload, '$.parent') = ?2", Some(parent))
+    }
+
+    fn items_where(&self, thread_id: &str, condition: &str, value: Option<&str>) -> Vec<Item> {
+        let connection = self.connection();
+        let query = format!("SELECT payload FROM items WHERE thread_id = ?1 AND {condition} ORDER BY seq");
+        let Ok(mut statement) = connection.prepare(&query) else { return Vec::new() };
+        let payload = |row: &rusqlite::Row| row.get::<_, String>(0);
+        let rows = match value {
+            Some(value) => statement.query_map(params![thread_id, value], payload),
+            None => statement.query_map(params![thread_id], payload),
+        };
+        let Ok(rows) = rows else { return Vec::new() };
+        rows.flatten().filter_map(|text| serde_json::from_str(&text).ok()).collect()
     }
 
     /// Stores the items and, in the same step, how far the copy is now complete. `synced_rev`
@@ -400,6 +425,53 @@ mod tests {
     }
 
     #[test]
+    fn what_an_agent_did_is_kept_apart_from_the_thread_and_found_by_the_call_that_started_it() {
+        use motile_protocol::wire::{Subagent, ToolCall, ToolStatus};
+
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(&dir.path().join("cache.sqlite")).unwrap();
+        let agent = Subagent {
+            kind: None,
+            status: ToolStatus::Running,
+            progress: None,
+            result: None,
+            tokens: None,
+            tool_uses: None,
+            duration_ms: None,
+        };
+        let call = |id: &str, agent| ToolCall {
+            id: id.into(),
+            name: "Agent".into(),
+            input: "{}".into(),
+            output: None,
+            status: ToolStatus::Running,
+            agent,
+        };
+        let item = |id: &str, seq, parent: Option<&str>, kind| Item {
+            id: id.into(),
+            seq,
+            rev: seq + 1,
+            created_at: 0.0,
+            media: Vec::new(),
+            parent: parent.map(String::from),
+            kind,
+        };
+        let items = [
+            item("u", 0, None, ItemKind::User { text: "Go".into(), attachments: Vec::new() }),
+            item("a", 1, None, ItemKind::Tool { call: call("a", Some(agent)) }),
+            item("r", 2, Some("a"), ItemKind::Tool { call: call("r", None) }),
+            item("s", 3, Some("a"), ItemKind::Assistant { text: "Found it".into() }),
+        ];
+        cache.save_items("t", &items.iter().collect::<Vec<_>>(), None);
+        let ids = |items: Vec<Item>| items.into_iter().map(|item| item.id).collect::<Vec<_>>();
+
+        assert_eq!(ids(cache.page("t", None).items), ["u", "a"]);
+        assert_eq!(ids(cache.agents("t")), ["a"]);
+        assert_eq!(ids(cache.agent_items("t", "a")), ["r", "s"]);
+        assert_eq!(ids(cache.agent_items("t", "r")), Vec::<String>::new());
+    }
+
+    #[test]
     fn a_thread_is_read_a_few_whole_turns_at_a_time() {
         use motile_protocol::wire::TurnSummary;
 
@@ -412,7 +484,7 @@ mod tests {
                 100 => ItemKind::TurnEnd { summary: TurnSummary::default() },
                 _ => ItemKind::Assistant { text: "Done".into() },
             };
-            Item { id: seq.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), kind }
+            Item { id: seq.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), parent: None, kind }
         };
         let items: Vec<Item> = (0..303).map(item).collect();
         cache.save_items("t", &items.iter().collect::<Vec<_>>(), None);

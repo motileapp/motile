@@ -15,7 +15,9 @@ use motile_protocol::auth_api::{Device, DeviceKind, Me};
 use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
-use motile_protocol::wire::{Activity, FileKind, Item, Message, Project, Request, ServerInfo, Thread, Worktree};
+use motile_protocol::wire::{
+    Activity, FileKind, Item, ItemKind, Message, Project, Request, ServerInfo, Thread, ToolStatus, Worktree,
+};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
@@ -27,6 +29,7 @@ use crate::connection::{ServerAddr, bind};
 use crate::git;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
+use crate::render::agents;
 use crate::render::diff;
 use crate::render::highlight::{self, Spans};
 use crate::render::rows::{Splice, Transcript, Uncoloured};
@@ -129,6 +132,10 @@ struct OpenThread {
     /// Whether the catch-up is done and updates now arrive in revision order.
     live: bool,
     rev: u64,
+    /// The tool calls that started an agent, in order.
+    agents: Vec<Item>,
+    /// The agent whose transcript the app shows: the tool call that started it, and what it did.
+    agent: Option<(String, Transcript)>,
     /// Items whose streamed text hasn't been rendered yet.
     unrendered: HashSet<String>,
     /// Items whose streamed text isn't in the cache yet.
@@ -271,14 +278,21 @@ impl Core {
             Input::SignedIn { id, result } => self.signed_in(id, result),
             Input::Highlighted { thread_id, row_id, para, code, spans } => {
                 let Some(open) = self.open.get_mut(&thread_id) else { return };
+                let of_agent = open.agent.as_mut().map(|(_, transcript)| transcript);
                 let Some(para) = para else {
-                    if open.transcript.set_spans(&row_id, &code, spans.clone()) {
+                    let stored = open.transcript.set_spans(&row_id, &code, spans.clone())
+                        || of_agent.is_some_and(|transcript| transcript.set_spans(&row_id, &code, spans.clone()));
+                    if stored {
                         self.emit(Event::Spans { thread_id, row_id, spans });
                     }
                     return;
                 };
-                if let Some(splice) = open.transcript.set_para_spans(&row_id, para, &code, spans) {
-                    self.emit_rows(&thread_id, false, splice);
+                if let Some(splice) = open.transcript.set_para_spans(&row_id, para, &code, spans.clone()) {
+                    return self.emit_rows(&thread_id, false, splice);
+                }
+                let splice = of_agent.and_then(|transcript| transcript.set_para_spans(&row_id, para, &code, spans));
+                if let Some(splice) = splice {
+                    self.emit_agent_rows(&thread_id, false, splice);
                 }
             }
             Input::TextModelSet { server_id, model } => {
@@ -810,6 +824,10 @@ impl Core {
                 open.live = false;
                 if reset {
                     open.transcript.clear();
+                    open.agents.clear();
+                    if let Some((_, transcript)) = &mut open.agent {
+                        transcript.clear();
+                    }
                     open.earlier = false;
                     open.rev = 0;
                     open.unrendered.clear();
@@ -820,6 +838,8 @@ impl Core {
                 if reset {
                     self.cache.clear_items(thread_id);
                     self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows: Vec::new() });
+                    self.emit_agent_rows(thread_id, true, Splice { start: 0, remove: 0, rows: Vec::new() });
+                    self.emit(Event::Agents { thread_id: thread_id.to_string(), agents: Vec::new() });
                 }
                 if let Some(queued) = queued {
                     self.emit_rows(thread_id, false, queued);
@@ -829,10 +849,25 @@ impl Core {
             Message::Items { items } => {
                 let live = open.live;
                 let mut splices = Vec::new();
+                let mut agent_splices = Vec::new();
+                let mut agents_changed = false;
                 for item in &items {
                     open.rev = if live { open.rev.max(item.rev) } else { open.rev };
                     open.unrendered.remove(&item.id);
                     open.unsaved.remove(&item.id);
+                    if let Some(agent) = agents::view(item) {
+                        agents_changed = true;
+                        note_agent(&mut open.agents, item);
+                        let shown = open.agent.as_mut().filter(|(id, _)| id == &item.id);
+                        let settled = agent.status != ToolStatus::Running;
+                        agent_splices.extend(shown.and_then(|(_, transcript)| transcript.set_settled(settled)));
+                    }
+                    // What an agent did only goes to the cache, unless that agent is being shown.
+                    if let Some(parent) = &item.parent {
+                        let shown = open.agent.as_mut().filter(|(id, _)| id == parent);
+                        agent_splices.extend(shown.and_then(|(_, transcript)| transcript.upsert(item.clone(), false)));
+                        continue;
+                    }
                     // An item before the loaded turns only goes to the cache.
                     let loaded = !open.earlier || open.transcript.first_seq().is_none_or(|first| item.seq >= first);
                     if !loaded {
@@ -850,8 +885,15 @@ impl Core {
                 to_save.extend(&unsaved);
                 self.cache.save_items(thread_id, &to_save, synced);
                 open.saved_at = Instant::now();
+                let agents = agents_changed.then(|| agents_event(thread_id, &open.agents));
                 for splice in merge(splices) {
                     self.emit_rows(thread_id, false, splice);
+                }
+                for splice in merge(agent_splices) {
+                    self.emit_agent_rows(thread_id, false, splice);
+                }
+                if let Some(agents) = agents {
+                    self.emit(agents);
                 }
             }
             Message::Synced { rev } => {
@@ -896,6 +938,38 @@ impl Core {
             rows: splice.rows,
             earlier: self.open.get(thread_id).is_some_and(|open| open.earlier),
         });
+    }
+
+    fn emit_agent_rows(&self, thread_id: &str, reset: bool, splice: Splice) {
+        let Some((agent_id, _)) = self.open.get(thread_id).and_then(|open| open.agent.as_ref()) else { return };
+        self.emit(Event::AgentRows {
+            thread_id: thread_id.to_string(),
+            agent_id: agent_id.clone(),
+            reset,
+            start: splice.start,
+            remove: splice.remove,
+            rows: splice.rows,
+        });
+    }
+
+    fn open_agent(&mut self, thread_id: &str, agent_id: &str) {
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        let call = open.agents.iter().find(|item| item.id == agent_id);
+        let started = call.and_then(agents::view);
+        let mut items = self.cache.agent_items(thread_id, agent_id);
+        // What the agent was asked to do is the message its transcript starts with.
+        if let (Some(call), Some(agent)) = (call, &started)
+            && !agent.prompt.is_empty()
+        {
+            let kind = ItemKind::User { text: agent.prompt.clone(), attachments: Vec::new() };
+            items.insert(0, Item { id: format!("{agent_id}/prompt"), kind, ..call.clone() });
+        }
+        let mut transcript = open.transcript.beside();
+        transcript.set_settled(started.is_none_or(|agent| agent.status != ToolStatus::Running));
+        transcript.load(items);
+        let rows = transcript.rows().to_vec();
+        open.agent = Some((agent_id.to_string(), transcript));
+        self.emit_agent_rows(thread_id, true, Splice { start: 0, remove: 0, rows });
     }
 
     fn schedule_render(&mut self) {
@@ -1225,6 +1299,20 @@ impl Core {
                 if let Some(splice) = splice {
                     self.emit_rows(&thread_id, false, splice);
                 }
+                let of_agent = self.open.get_mut(&thread_id).and_then(|open| open.agent.as_mut());
+                if let Some(splice) = of_agent.and_then(|(_, transcript)| transcript.toggle(&row_id)) {
+                    self.emit_agent_rows(&thread_id, false, splice);
+                }
+                self.reply(id, Ok(json!({})));
+            }
+            Command::OpenAgent { thread_id, agent_id } => {
+                self.open_agent(&thread_id, &agent_id);
+                self.reply(id, Ok(json!({})));
+            }
+            Command::CloseAgent { thread_id } => {
+                if let Some(open) = self.open.get_mut(&thread_id) {
+                    open.agent = None;
+                }
                 self.reply(id, Ok(json!({})));
             }
             Command::LoadEarlier { thread_id } => {
@@ -1258,7 +1346,9 @@ impl Core {
     fn open_thread(&mut self, server_id: &str, thread_id: &str) -> Result<(), String> {
         if let Some(open) = self.open.get(thread_id) {
             let rows = open.transcript.rows().to_vec();
+            let agents = agents_event(thread_id, &open.agents);
             self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows });
+            self.emit(agents);
             return Ok(());
         }
         let server =
@@ -1296,9 +1386,13 @@ impl Core {
             self.emit(event);
         }
 
+        let agents = self.cache.agents(thread_id);
+        self.emit(agents_event(thread_id, &agents));
         let open = OpenThread {
             server_id: server_id.to_string(),
             transcript,
+            agents,
+            agent: None,
             earlier,
             live: false,
             rev: since,
@@ -1332,7 +1426,10 @@ impl Core {
 
     fn highlight(&self, thread_id: &str, row_ids: &[String]) {
         let Some(open) = self.open.get(thread_id) else { return };
-        for Uncoloured { row_id, para, language, code } in open.transcript.unhighlighted(row_ids) {
+        let of_agent = open.agent.iter().flat_map(|(_, transcript)| transcript.unhighlighted(row_ids));
+        for Uncoloured { row_id, para, language, code } in
+            open.transcript.unhighlighted(row_ids).into_iter().chain(of_agent)
+        {
             let (inputs, thread_id) = (self.inputs.clone(), thread_id.to_string());
             tokio::task::spawn_blocking(move || {
                 let spans = highlight::highlight(&language, &code);
@@ -1379,6 +1476,21 @@ fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8
         let _ = std::fs::remove_file(entry.path());
     }
     Ok(())
+}
+
+fn agents_event(thread_id: &str, started: &[Item]) -> Event {
+    Event::Agents { thread_id: thread_id.to_string(), agents: started.iter().filter_map(agents::view).collect() }
+}
+
+/// Keeps the tool call that started an agent, in the place the thread has it.
+fn note_agent(started: &mut Vec<Item>, item: &Item) {
+    match started.iter_mut().find(|known| known.id == item.id) {
+        Some(known) => *known = item.clone(),
+        None => {
+            let index = started.partition_point(|known| known.seq <= item.seq);
+            started.insert(index, item.clone());
+        }
+    }
 }
 
 fn save_streamed(cache: &Cache, thread_id: &str, open: &mut OpenThread) {
@@ -1484,6 +1596,7 @@ mod tests {
             running,
             monitoring,
             needs_approval,
+            agents: 0,
             turn_ended_at: None,
             rev: 3,
         }

@@ -20,8 +20,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::now;
 use motile_protocol::wire::{
     Activity, Agent, BranchInstructions, ChangedFile, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
-    Item, ItemKind, Media, Message, NewThread, Project, Queued, ServerInfo, Thread, ThreadChange, ToolCall, ToolStatus,
-    TurnChanges, TurnSummary, Worktree,
+    Item, ItemKind, Media, Message, NewThread, Project, Queued, ServerInfo, Subagent, Thread, ThreadChange, ToolCall,
+    ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -114,6 +114,8 @@ struct Live {
     last_delivery: Option<Instant>,
     activity: Activity,
     updates: broadcast::Sender<Message>,
+    /// The tool call that started the agent whose items are being added.
+    parent: Option<String>,
     run: Option<Run>,
     /// The turn starts when its folder is ready.
     preparing: Option<Preparing>,
@@ -367,6 +369,7 @@ impl Hub {
             running: false,
             monitoring: false,
             needs_approval: false,
+            agents: 0,
             turn_ended_at: None,
             rev: 0,
         };
@@ -1398,7 +1401,8 @@ impl Hub {
         if thread.done_at.take().is_some() {
             thread.undone_at = Some(now());
         }
-        live.activity = Activity { running: true, started_at: Some(now()), ..Activity::default() };
+        let agents = live.stored.thread.agents;
+        live.activity = Activity { running: true, started_at: Some(now()), agents, ..Activity::default() };
         self.store.save_thread(&live.stored)?;
         live.send_activity();
         self.announce(&live.stored.thread);
@@ -1547,6 +1551,8 @@ impl Hub {
             event,
             AgentEvent::Session { .. }
                 | AgentEvent::Background(_)
+                | AgentEvent::Sub { .. }
+                | AgentEvent::Task { .. }
                 | AgentEvent::TextStarted { .. }
                 | AgentEvent::TextDelta { .. }
                 | AgentEvent::Text { .. }
@@ -1579,20 +1585,27 @@ impl Hub {
                     live.upsert(store, id.clone(), ItemKind::Tool { call: new_tool_call(id, name) })?;
                 }
             }
-            AgentEvent::ToolInput { id, name, input } => {
-                let mut call = live.tool_call(&id).unwrap_or_else(|| new_tool_call(id.clone(), name));
-                call.input = input;
-                live.upsert(store, id, ItemKind::Tool { call })?;
-            }
-            AgentEvent::ToolResult { id, output, is_error } => {
-                let Some(mut call) = live.tool_call(&id) else { return Ok(()) };
-                call.output = Some(output);
-                call.status = if is_error { ToolStatus::Failed } else { ToolStatus::Succeeded };
-                live.upsert(store, id, ItemKind::Tool { call })?;
-            }
+            AgentEvent::ToolInput { id, name, input } => live.tool_input(store, id, name, input)?,
+            AgentEvent::ToolResult { id, output, is_error } => live.tool_result(store, id, output, is_error)?,
             AgentEvent::Tool { call } => {
                 live.set_thinking(false);
                 live.upsert(store, call.id.clone(), ItemKind::Tool { call })?;
+            }
+            AgentEvent::Sub { parent, event } => {
+                live.parent = Some(parent);
+                let added = live.add_from_subagent(store, *event);
+                live.parent = None;
+                added?;
+            }
+            AgentEvent::Task { tool_id, agent } => {
+                live.update_subagent(store, &tool_id, agent)?;
+                self.count_agents(live);
+            }
+            AgentEvent::Compacting { active } => {
+                if live.activity.compacting != active {
+                    live.activity.compacting = active;
+                    live.send_activity();
+                }
             }
             AgentEvent::Completed { mut summary, result_text, preempted } => {
                 live.set_thinking(false);
@@ -1660,6 +1673,19 @@ impl Hub {
         Ok(())
     }
 
+    /// Tells the apps how many of the agents the thread's agent started still work.
+    fn count_agents(&self, live: &mut Live) {
+        let working = |item: &&Item| matches!(&item.kind, ItemKind::Tool { call } if call.agent.as_ref().is_some_and(|agent| agent.status == ToolStatus::Running));
+        let agents = live.open.values().filter(working).count() as u32;
+        if live.stored.thread.agents == agents {
+            return;
+        }
+        live.stored.thread.agents = agents;
+        live.activity.agents = agents;
+        live.send_activity();
+        self.announce(&live.stored.thread);
+    }
+
     async fn finish_turn(self: &Arc<Self>, thread_id: &str, exit_code: Option<i32>, stderr: &str, interrupted: bool) {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
@@ -1676,6 +1702,7 @@ impl Hub {
         thread.running = false;
         thread.monitoring = false;
         thread.needs_approval = false;
+        thread.agents = 0;
         thread.updated_at = now();
         live.activity = Activity::default();
         live.open.clear();
@@ -1736,6 +1763,7 @@ impl Live {
             last_delivery: None,
             activity: Activity::default(),
             updates,
+            parent: None,
             run: None,
             preparing: None,
             ended: None,
@@ -1830,6 +1858,50 @@ impl Live {
         input.is_some_and(|input| input.send(line).is_ok())
     }
 
+    fn tool_input(&mut self, store: &Store, id: String, name: String, input: String) -> anyhow::Result<()> {
+        let mut call = self.tool_call(&id).unwrap_or_else(|| new_tool_call(id.clone(), name));
+        call.input = input;
+        self.upsert(store, id, ItemKind::Tool { call })
+    }
+
+    fn tool_result(&mut self, store: &Store, id: String, output: String, is_error: bool) -> anyhow::Result<()> {
+        let Some(mut call) = self.tool_call(&id) else { return Ok(()) };
+        call.output = Some(output);
+        call.status = if is_error { ToolStatus::Failed } else { ToolStatus::Succeeded };
+        self.upsert(store, id, ItemKind::Tool { call })
+    }
+
+    /// Adds what an agent the thread's agent started said or did to that agent's transcript.
+    fn add_from_subagent(&mut self, store: &Store, event: AgentEvent) -> anyhow::Result<()> {
+        match event {
+            AgentEvent::Text { id, text } if !text.is_empty() => self.upsert(store, id, ItemKind::Assistant { text }),
+            AgentEvent::ThinkingText { id, text } => self.upsert(store, id, ItemKind::Thinking { text }),
+            AgentEvent::ToolInput { id, name, input } => self.tool_input(store, id, name, input),
+            AgentEvent::ToolResult { id, output, is_error } => self.tool_result(store, id, output, is_error),
+            AgentEvent::Tool { call } => self.upsert(store, call.id.clone(), ItemKind::Tool { call }),
+            _ => Ok(()),
+        }
+    }
+
+    /// Notes how far the agent is that the tool call started.
+    fn update_subagent(&mut self, store: &Store, tool_id: &str, update: Subagent) -> anyhow::Result<()> {
+        let Some(mut call) = self.tool_call(tool_id) else { return Ok(()) };
+        let agent = match call.agent.take() {
+            Some(known) => Subagent {
+                kind: update.kind.or(known.kind),
+                status: update.status,
+                progress: update.progress.or(known.progress),
+                result: update.result.or(known.result),
+                tokens: update.tokens.or(known.tokens),
+                tool_uses: update.tool_uses.or(known.tool_uses),
+                duration_ms: update.duration_ms.or(known.duration_ms),
+            },
+            None => update,
+        };
+        call.agent = Some(agent);
+        self.upsert(store, tool_id.to_string(), ItemKind::Tool { call })
+    }
+
     fn set_thinking(&mut self, thinking: bool) {
         if self.activity.thinking == thinking {
             return;
@@ -1883,7 +1955,7 @@ impl Live {
     fn new_item(&mut self, id: String, kind: ItemKind) -> Item {
         let seq = self.stored.next_seq;
         self.stored.next_seq += 1;
-        Item { id, seq, rev: self.next_rev(), created_at: now(), media: Vec::new(), kind }
+        Item { id, seq, rev: self.next_rev(), created_at: now(), media: Vec::new(), parent: self.parent.clone(), kind }
     }
 
     /// Adds the item, or replaces what the running turn said about it before.
@@ -2007,21 +2079,29 @@ impl Live {
         self.release_held(store)?;
         self.flush(store)?;
 
-        // Tools that never reported back were cut off.
-        let cut_off: Vec<(String, ToolCall)> = self
+        // Tools and agents that never reported back were cut off.
+        let working = |call: &ToolCall| {
+            let agent_works = call.agent.as_ref().is_some_and(|agent| agent.status == ToolStatus::Running);
+            call.status == ToolStatus::Running || agent_works
+        };
+        let cut_off: Vec<Item> = self
             .open
             .values()
-            .filter_map(|item| match &item.kind {
-                ItemKind::Tool { call } if call.status == ToolStatus::Running => Some((item.id.clone(), call.clone())),
-                _ => None,
-            })
+            .filter(|item| matches!(&item.kind, ItemKind::Tool { call } if working(call)))
+            .cloned()
             .collect();
-        for (id, mut call) in cut_off {
-            call.status = ToolStatus::Failed;
-            if interrupted {
-                call.output.get_or_insert_with(|| "Interrupted".to_string());
+        for item in cut_off {
+            let ItemKind::Tool { mut call } = item.kind else { continue };
+            if call.status == ToolStatus::Running {
+                call.status = ToolStatus::Failed;
+                if interrupted {
+                    call.output.get_or_insert_with(|| "Interrupted".to_string());
+                }
             }
-            self.upsert(store, id, ItemKind::Tool { call })?;
+            if let Some(agent) = &mut call.agent {
+                agent.status = ToolStatus::Failed;
+            }
+            self.upsert(store, item.id, ItemKind::Tool { call })?;
         }
 
         let received_result = run.is_some_and(|run| run.received_result);
@@ -2098,7 +2178,7 @@ fn temporary_branch(worktree: &str) -> String {
 }
 
 fn new_tool_call(id: String, name: String) -> ToolCall {
-    ToolCall { id, name, input: "{}".to_string(), output: None, status: ToolStatus::Running }
+    ToolCall { id, name, input: "{}".to_string(), output: None, status: ToolStatus::Running, agent: None }
 }
 
 fn new_id() -> String {

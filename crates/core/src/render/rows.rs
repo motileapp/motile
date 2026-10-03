@@ -99,6 +99,9 @@ pub enum RowKind {
         running: bool,
         failed: bool,
         open: bool,
+        /// When the latest one that still runs started.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        started_at: Option<f64>,
     },
     /// Stands for everything a finished turn did before its last message.
     Fold {
@@ -200,6 +203,15 @@ pub struct Tool {
     pub input: String,
     pub input_language: String,
     pub output: Option<String>,
+    /// When it started, while it runs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<f64>,
+    /// It started an agent, whose transcript is named by the row's item.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub agent: bool,
+    /// What that agent is doing now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<String>,
 }
 
 /// The tool call Claude Code presents its plan with. Allowing it lets the agent carry the plan out.
@@ -258,6 +270,8 @@ pub struct Transcript {
     streaming: HashMap<String, Incremental>,
     /// The messages that wait for the agent; their rows come after everything else.
     queued: Vec<Queued>,
+    /// Nothing more is coming, as in the transcript of an agent that has ended.
+    settled: bool,
 }
 
 /// Code that came without highlighting: a code row, or the code paragraph `para` of a prose row.
@@ -281,6 +295,11 @@ impl Transcript {
         self.items.iter().rfind(|item| item.id == id)
     }
 
+    /// An empty transcript for something else that happened in the same folder.
+    pub fn beside(&self) -> Self {
+        Self::new(&self.cwd)
+    }
+
     pub fn clear(&mut self) {
         *self = Self::new(&self.cwd);
     }
@@ -292,8 +311,9 @@ impl Transcript {
             input: approval.input.clone(),
             output: None,
             status: ToolStatus::Running,
+            agent: None,
         };
-        let tool = describe(&call, &self.cwd);
+        let tool = describe(&call, &self.cwd, 0.0);
         let (title, target, allow, refuse) = match approval.tool_name.as_str() {
             PLAN_TOOL => ("The plan is ready".to_string(), String::new(), "Implement", "Keep planning"),
             QUESTION_TOOL => ("The agent has a question".to_string(), String::new(), "Answer", "Skip"),
@@ -366,6 +386,13 @@ impl Transcript {
         self.rerender(index, true)
     }
 
+    /// Says whether more is coming. The last tool calls of a transcript that has ended are
+    /// summed up like the ones before them.
+    pub fn set_settled(&mut self, settled: bool) -> Option<Splice> {
+        self.settled = settled;
+        self.show()
+    }
+
     pub fn set_queued(&mut self, queued: Vec<Queued>) -> Option<Splice> {
         self.queued = queued;
         self.show()
@@ -387,7 +414,7 @@ impl Transcript {
 
     /// Works out the rows to show and returns how they differ from the ones shown before.
     fn show(&mut self) -> Option<Splice> {
-        let mut shown = present(&self.items, &self.rendered, &self.opened);
+        let mut shown = present(&self.items, &self.rendered, &self.opened, self.settled);
         shown.extend(queued_rows(&self.queued).into_iter().map(Cow::Owned));
         let same_start = self.rows.iter().zip(&shown).take_while(|(before, after)| *before == after.as_ref()).count();
         if same_start == self.rows.len() && same_start == shown.len() {
@@ -502,7 +529,12 @@ fn queued_rows(queued: &[Queued]) -> Vec<Row> {
 }
 
 /// The rows to show for the items: each turn's, one turn after the other.
-fn present<'a>(items: &'a [Item], rendered: &'a [Vec<Row>], opened: &HashSet<String>) -> Vec<Cow<'a, Row>> {
+fn present<'a>(
+    items: &'a [Item],
+    rendered: &'a [Vec<Row>],
+    opened: &HashSet<String>,
+    settled: bool,
+) -> Vec<Cow<'a, Row>> {
     let mut shown = Vec::new();
     let mut start = 0;
     while start < items.len() {
@@ -515,7 +547,7 @@ fn present<'a>(items: &'a [Item], rendered: &'a [Vec<Row>], opened: &HashSet<Str
         let went_on = !items[start..end].iter().any(is_turn_end);
         let part = Part {
             took_message: start > 0 && !is_turn_end(&items[start - 1]),
-            last: end == items.len(),
+            last: end == items.len() && !settled,
             // The user said more while the agent worked, and the turn has ended since.
             ended_after: items[end..].first().filter(|_| went_on && items[end..].iter().any(is_turn_end)),
         };
@@ -544,7 +576,7 @@ fn join(shown: &mut [Cow<Row>]) {
 struct Part<'a> {
     /// It starts with a message the agent took while it worked.
     took_message: bool,
-    /// Nothing comes after it.
+    /// Nothing comes after it, and more may.
     last: bool,
     /// The message the agent took after this part, once the turn that went on with it has ended.
     ended_after: Option<&'a Item>,
@@ -752,14 +784,16 @@ fn group(run: &[Vec<Row>], live: bool, open: bool) -> RowKind {
             _ => None,
         })
         .collect();
-    let running = tools.iter().any(|tool| tool.status == ToolStatus::Running);
+    let started_at = tools.iter().rev().find_map(|tool| tool.started_at);
     let failed = tools.iter().any(|tool| tool.status == ToolStatus::Failed);
     let one_icon = tools.first().map(|tool| tool.icon).filter(|icon| tools.iter().all(|tool| tool.icon == *icon));
+    let agents = tools.iter().filter(|tool| tool.agent && tool.started_at.is_some()).count();
     let (title, target, icon) = match (live, run.last().and_then(|rows| rows.first()).map(|row| &row.kind)) {
+        _ if agents > 1 => (format!("Running {agents} agents"), String::new(), "agent"),
         (true, Some(RowKind::Tool { tool })) => (tool.verb.clone(), tool.target.clone(), tool.icon),
         _ => (summary(&tools), String::new(), one_icon.unwrap_or("tool")),
     };
-    RowKind::Group { title, target, icon, running, failed, open }
+    RowKind::Group { title, target, icon, running: started_at.is_some(), failed, open, started_at }
 }
 
 /// What the calls did, by kind and in the order the kinds first appear: "Read 3 files, ran 2
@@ -831,7 +865,7 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
             let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
             render_markdown(item, input["plan"].as_str().unwrap_or_default(), streaming)
         }
-        ItemKind::Tool { call } => vec![row(0, RowKind::Tool { tool: describe(call, cwd) })],
+        ItemKind::Tool { call } => vec![row(0, RowKind::Tool { tool: describe(call, cwd, item.created_at) })],
         ItemKind::Error { message } => vec![row(0, RowKind::Error { message: message.clone() })],
         ItemKind::TurnEnd { summary } => vec![row(
             0,
@@ -937,10 +971,12 @@ fn diff(old: &str, new: &str) -> String {
     removed.chain(added).collect::<Vec<_>>().join("\n")
 }
 
-fn describe(call: &ToolCall, cwd: &str) -> Tool {
+/// `at` is when the call started. A call that started an agent runs for as long as that agent.
+fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
     let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
     let text = |key: &str| input[key].as_str().unwrap_or_default().to_string();
-    let running = call.status == ToolStatus::Running;
+    let status = call.agent.as_ref().map_or(call.status, |agent| agent.status);
+    let running = status == ToolStatus::Running;
     let verb = |doing: &str, did: &str| if running { doing.to_string() } else { did.to_string() };
     let path = short_path(&text("file_path"), cwd);
 
@@ -1021,10 +1057,13 @@ fn describe(call: &ToolCall, cwd: &str) -> Tool {
         icon,
         verb,
         target,
-        status: call.status,
+        status,
         input: cap(&shown_input),
         input_language,
         output: call.output.as_deref().filter(|output| !output.trim().is_empty()).map(cap),
+        started_at: running.then_some(at),
+        agent: call.agent.is_some(),
+        progress: call.agent.as_ref().filter(|_| running).and_then(|agent| agent.progress.clone()),
     }
 }
 
@@ -1033,7 +1072,7 @@ mod tests {
     use super::*;
 
     fn item(id: &str, seq: u64, kind: ItemKind) -> Item {
-        Item { id: id.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), kind }
+        Item { id: id.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), parent: None, kind }
     }
 
     fn assistant(id: &str, seq: u64, text: &str) -> Item {
@@ -1041,8 +1080,9 @@ mod tests {
     }
 
     fn tool(name: &str, input: Value, status: ToolStatus) -> Tool {
-        let call = ToolCall { id: "t".into(), name: name.into(), input: input.to_string(), output: None, status };
-        describe(&call, "/srv/api")
+        let call =
+            ToolCall { id: "t".into(), name: name.into(), input: input.to_string(), output: None, status, agent: None };
+        describe(&call, "/srv/api", 0.0)
     }
 
     fn apply(rows: &mut Vec<Row>, splice: Splice) {
@@ -1284,7 +1324,8 @@ mod tests {
     }
 
     fn call(id: &str, seq: u64, name: &str, input: Value, status: ToolStatus) -> Item {
-        let call = ToolCall { id: id.into(), name: name.into(), input: input.to_string(), output: None, status };
+        let call =
+            ToolCall { id: id.into(), name: name.into(), input: input.to_string(), output: None, status, agent: None };
         item(id, seq, ItemKind::Tool { call })
     }
 
@@ -1343,6 +1384,51 @@ mod tests {
         apply(&mut shown, transcript.toggle("t1/group").unwrap());
         assert_eq!(shown, transcript.rows());
         assert_eq!(shown.len(), 5);
+    }
+
+    fn agent_call(id: &str, seq: u64, description: &str, progress: Option<&str>, status: ToolStatus) -> Item {
+        let mut item = call(id, seq, "Agent", serde_json::json!({"description": description}), ToolStatus::Succeeded);
+        let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+        call.agent = Some(motile_protocol::wire::Subagent {
+            kind: None,
+            status,
+            progress: progress.map(String::from),
+            result: None,
+            tokens: None,
+            tool_uses: None,
+            duration_ms: None,
+        });
+        item
+    }
+
+    #[test]
+    fn an_agent_that_goes_on_after_its_call_returned_still_runs_and_says_what_it_does() {
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![agent_call("t1", 0, "Review", Some("Reading a.rs"), ToolStatus::Running)]);
+        let RowKind::Tool { tool } = &transcript.rows()[0].kind else { panic!() };
+        assert_eq!((tool.verb.as_str(), tool.status, tool.agent), ("Running an agent:", ToolStatus::Running, true));
+        assert_eq!((tool.progress.as_deref(), tool.started_at), (Some("Reading a.rs"), Some(0.0)));
+
+        transcript.upsert(agent_call("t2", 1, "Test", None, ToolStatus::Running), true);
+        assert_eq!(outline(&transcript), ["[Running 2 agents]"]);
+        transcript.upsert(agent_call("t1", 0, "Review", Some("Reading a.rs"), ToolStatus::Succeeded), true);
+        transcript.upsert(agent_call("t2", 1, "Test", None, ToolStatus::Succeeded), true);
+        assert_eq!(outline(&transcript), ["[Ran an agent: Test]"]);
+        let RowKind::Group { running, started_at, .. } = &transcript.rows()[0].kind else { panic!() };
+        assert_eq!((*running, *started_at), (false, None));
+    }
+
+    #[test]
+    fn the_last_tool_calls_of_a_transcript_that_has_ended_are_summed_up() {
+        let done = ToolStatus::Succeeded;
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![
+            call("t1", 0, "Read", serde_json::json!({"file_path": "a.rs"}), done),
+            call("t2", 1, "Read", serde_json::json!({"file_path": "b.rs"}), done),
+        ]);
+        assert_eq!(outline(&transcript), ["[Read b.rs]"]);
+        transcript.set_settled(true);
+        assert_eq!(outline(&transcript), ["[Read 2 files]"]);
     }
 
     #[test]

@@ -26,12 +26,14 @@ made up on the spot instead:
 - "show the screenshot": a turn that writes `screenshot.png` in its folder and shows it in the reply.
 - "greet by name": a turn that really changes its folder: it rewrites `greet.py` and adds
   `docs/greeting.md`.
+- "ask two agents": a turn that starts two agents at once. Each says what it does, a step every
+  FAKE_AGENT_STEP seconds, and reports.
 
 Called as `app-server` it is Codex: it answers the requests that start a thread and its turns,
 takes a prompt steered into a running turn after the turn's next tool call, and stops a turn when
 asked. There "run greet.py" asks before each of the two under the `untrusted` approval policy,
-"which color" asks its question, and "plan the hello" presents a plan and carries it out when told
-to implement it.
+"which color" asks its question, "plan the hello" presents a plan and carries it out when told
+to implement it, and "ask an agent" starts an agent, whose work comes as a thread of its own.
 
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
 answers with FAKE_AGENT_TITLE, and asked the same way for a commit message, a pull request's text
@@ -239,6 +241,42 @@ class Turn:
         self.told += take_waiting()
         return allowed
 
+    def start_agent(self, description, kind, prompt):
+        """Starts an agent with the Agent tool, and answers with the call that started it."""
+        message_id = self._start()
+        tool_id = f"toolu_{self.messages:04d}"
+        block = {"type": "tool_use", "id": tool_id, "name": "Agent", "input": {}}
+        emit({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": block}})
+        block = dict(block, input={"description": description, "prompt": prompt, "subagent_type": kind})
+        emit({"type": "assistant", "message": {"id": message_id, "content": [block]}})
+        emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}})
+        emit({"type": "system", "subtype": "task_started", "task_id": f"task_{tool_id}", "tool_use_id": tool_id,
+              "description": description, "subagent_type": kind, "task_type": "local_agent"})
+        return tool_id
+
+    def _usage(self, uses):
+        return {"total_tokens": 9000 + 1400 * uses, "tool_uses": uses, "duration_ms": int(1000 * AGENT_STEP * uses)}
+
+    def agent_tool(self, agent, uses, name, tool_input, output, progress):
+        """A tool call of the agent that `agent` started, its `uses`th."""
+        Turn.messages += 1
+        block = {"type": "tool_use", "id": f"toolu_{self.messages:04d}", "name": name, "input": tool_input}
+        message = {"id": f"msg_{self.messages:04d}", "content": [block]}
+        emit({"type": "assistant", "parent_tool_use_id": agent, "message": message})
+        emit({"type": "system", "subtype": "task_progress", "task_id": f"task_{agent}", "tool_use_id": agent,
+              "description": progress, "usage": self._usage(uses), "last_tool_name": name}, AGENT_STEP)
+        result = {"type": "tool_result", "tool_use_id": block["id"], "content": output, "is_error": False}
+        emit({"type": "user", "parent_tool_use_id": agent, "message": {"content": [result]}})
+
+    def agent_report(self, agent, uses, report):
+        Turn.messages += 1
+        message = {"id": f"msg_{self.messages:04d}", "content": [{"type": "text", "text": report}]}
+        emit({"type": "assistant", "parent_tool_use_id": agent, "message": message})
+        emit({"type": "system", "subtype": "task_notification", "task_id": f"task_{agent}", "tool_use_id": agent,
+              "status": "completed", "summary": report, "usage": self._usage(uses)})
+        result = {"type": "tool_result", "tool_use_id": agent, "content": report, "is_error": False}
+        emit({"type": "user", "message": {"content": [result]}})
+
     def _answer(self, name, tool_input, tool_id):
         request = {"subtype": "can_use_tool", "tool_name": name, "input": tool_input, "tool_use_id": tool_id}
         emit({"type": "control_request", "request_id": f"request_{self.messages:04d}", "request": request})
@@ -414,6 +452,26 @@ def watch_the_deploy():
     turn.done()
 
 
+AGENT_STEP = float(os.environ.get("FAKE_AGENT_STEP", "0.4"))
+
+
+def ask_two_agents():
+    turn = Turn("00000000-0000-4000-8000-0000000a6e27")
+    turn.text("I'll have two agents look at this at once.")
+    reader = turn.start_agent("Read greet.py", "Explore", "Read greet.py and say what it does.")
+    tester = turn.start_agent("Run the tests", "general-purpose", "Run the tests and report what fails.")
+    code = "1\tdef greet(name):\n2\t    return \"Hello, \" + name + \"!\"\n"
+    turn.agent_tool(reader, 1, "Read", {"file_path": "/srv/api/greet.py"}, code, "Reading greet.py")
+    turn.agent_tool(tester, 1, "Bash", {"command": "ls tests"}, "test_greet.py", "Running ls tests")
+    turn.agent_tool(reader, 2, "Grep", {"pattern": "greet("}, "greet.py:1\ngreet.py:5", "Searching for greet(")
+    turn.agent_tool(tester, 2, "Bash", {"command": "python3 -m pytest -q"}, "2 passed in 0.03s",
+                    "Running python3 -m pytest -q")
+    turn.agent_report(reader, 2, "`greet.py` defines `greet(name)`, which returns a greeting, and prints one.")
+    turn.agent_report(tester, 2, "Both tests pass.")
+    turn.text("Both agents are done: `greet.py` greets by name, and its tests pass.")
+    turn.done()
+
+
 def run_greet():
     asks = "default" in sys.argv
     turn = Turn("00000000-0000-4000-8000-00000000a5c0")
@@ -571,9 +629,9 @@ class Codex:
         if self.stopping.wait(seconds):
             raise Stopped()
 
-    def item(self, kind, **fields):
+    def item(self, type, **fields):
         self.items += 1
-        return dict(fields, type=kind, id=f"item-{self.process}-{self.items}")
+        return dict(fields, type=type, id=f"item-{self.process}-{self.items}")
 
     def user_message(self, params):
         item = self.item("userMessage", clientId=params.get("clientUserMessageId"), content=params["input"])
@@ -635,6 +693,26 @@ class Codex:
         item = self.item("fileChange", changes=[{"path": path, "kind": {"type": kind}, "diff": diff}])
         return self.work(item, "item/fileChange/requestApproval", {})
 
+    AGENT = "01a0f557-4a9b-74a0-b330-f6c4d13b2999"
+
+    def ask_an_agent(self, params):
+        self.text("I'll have an agent read it.")
+        activity = {"kind": "started", "agentThreadId": self.AGENT, "agentPath": "/root/read_greet"}
+        started = self.item("subAgentActivity", **activity)
+        self.notify("item/started", item=started)
+        self.notify("item/completed", item=started)
+        turn = {"id": f"turn-agent-{self.process}", "status": "inProgress"}
+        self.notify("turn/started", threadId=self.AGENT, turn=turn)
+        command = self.item("commandExecution", command="/bin/bash -lc 'cat greet.py'")
+        self.notify("item/started", threadId=self.AGENT, item=dict(command, status="inProgress"))
+        self.pause(0.3)
+        done = dict(command, status="completed", aggregatedOutput="def greet(name):\n", exitCode=0)
+        self.notify("item/completed", threadId=self.AGENT, item=done)
+        report = self.item("agentMessage", text="`greet.py` defines `greet(name)`.")
+        self.notify("item/completed", threadId=self.AGENT, item=report)
+        self.notify("turn/completed", threadId=self.AGENT, turn=dict(turn, status="completed", durationMs=300))
+        self.text("The agent read it: `greet.py` defines `greet(name)`.")
+
     def run_greet(self, params):
         self.text("I'll switch `greet` to an f-string and run it.")
         edited = self.edit("/srv/api/greet.py", "update", '-    return "Hello, " + name + "!"\n+    return f"Hello, {name}!"')
@@ -679,6 +757,9 @@ class Codex:
                 item = event.get("item", {})
                 if message["method"].startswith("turn/") or item.get("type") == "userMessage":
                     continue
+                # The recording is of another thread; what happens here happens in this one.
+                if "threadId" in event:
+                    event["threadId"] = self.thread.get("threadId", self.THREAD)
                 if "itemId" in event:
                     event["itemId"] = f"{self.process}-{event['itemId']}"
                 if item:
@@ -693,6 +774,7 @@ class Codex:
         "which color": which_color,
         "plan the hello": plan_hello,
         "implement the plan": implement,
+        "ask an agent": ask_an_agent,
         "long reply with a lot of code": long_reply,
     }
 
@@ -727,6 +809,7 @@ if APP_SERVER:
 SCRIPTED = {
     "show the screenshot": show_screenshot,
     "greet by name": greet_by_name,
+    "ask two agents": ask_two_agents,
     "run greet.py": run_greet,
     "which color": which_color,
     "plan the hello": plan_hello,

@@ -13,6 +13,7 @@ use serde_json::Value;
 use crate::connection::PathKind;
 use crate::git::Control;
 use crate::link::State;
+use crate::render::agents::AgentView;
 use crate::render::highlight::Spans;
 use crate::render::rows::{Row, Waiting};
 
@@ -197,6 +198,15 @@ pub enum Command {
         thread_id: String,
         row_id: String,
     },
+    /// Sends the rows of what the agent did that the tool call `agent_id` started, as
+    /// `agent_rows` events, then keeps them current. One agent of a thread is open at a time.
+    OpenAgent {
+        thread_id: String,
+        agent_id: String,
+    },
+    CloseAgent {
+        thread_id: String,
+    },
     /// Asks for the turns before the first row, when the rows said there are some.
     LoadEarlier {
         thread_id: String,
@@ -267,6 +277,20 @@ pub enum Event {
         remove: usize,
         rows: Vec<Row>,
         earlier: bool,
+    },
+    /// The agents the thread's agent has started, in the order it started them.
+    Agents {
+        thread_id: String,
+        agents: Vec<AgentView>,
+    },
+    /// The same as `rows`, for the transcript of the agent that is open.
+    AgentRows {
+        thread_id: String,
+        agent_id: String,
+        reset: bool,
+        start: usize,
+        remove: usize,
+        rows: Vec<Row>,
     },
     Spans {
         thread_id: String,

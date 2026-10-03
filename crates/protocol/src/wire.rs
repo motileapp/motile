@@ -52,6 +52,9 @@ pub struct Thread {
     pub monitoring: bool,
     /// A tool call waits for the user to allow or refuse it.
     pub needs_approval: bool,
+    /// How many agents the thread's agent has started that still work.
+    #[serde(default)]
+    pub agents: u32,
     /// When the last turn ended, for telling the user about replies they haven't seen.
     pub turn_ended_at: Option<f64>,
     /// The transcript's revision; an app whose copy is older has catching up to do.
@@ -69,6 +72,10 @@ pub struct Item {
     /// The images and videos the item shows.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<Media>,
+    /// The tool call that started the agent which said or did this. Such an item belongs to
+    /// that agent's transcript, not to the thread's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
     #[serde(flatten)]
     pub kind: ItemKind,
 }
@@ -118,6 +125,25 @@ pub struct ToolCall {
     pub input: String,
     pub output: Option<String>,
     pub status: ToolStatus,
+    /// Set when the call started an agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<Subagent>,
+}
+
+/// An agent the thread's agent started with a tool call, and how far it is. It can go on after
+/// the call has returned.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Subagent {
+    /// The kind of agent it was started as, in the agent's own words: "Explore".
+    pub kind: Option<String>,
+    pub status: ToolStatus,
+    /// What it is doing now.
+    pub progress: Option<String>,
+    /// What it reported when it ended.
+    pub result: Option<String>,
+    pub tokens: Option<u64>,
+    pub tool_uses: Option<u64>,
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
@@ -590,6 +616,12 @@ pub struct Activity {
     #[serde(default)]
     pub monitoring: bool,
     pub thinking: bool,
+    /// The agent is making its conversation shorter to go on with it.
+    #[serde(default)]
+    pub compacting: bool,
+    /// How many agents it has started that still work.
+    #[serde(default)]
+    pub agents: u32,
     pub started_at: Option<f64>,
     /// The running turn stands still until these are answered.
     #[serde(default)]
@@ -748,6 +780,7 @@ mod tests {
             rev: 7,
             created_at: 1.0,
             media: Vec::new(),
+            parent: None,
             kind: ItemKind::Assistant { text: "hi".into() },
         };
         let json = serde_json::to_value(&item).unwrap();
