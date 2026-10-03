@@ -131,6 +131,8 @@ final class AppStore {
     private(set) var selection: Selection = .draft("")
     private(set) var activity = Activity()
     private(set) var transcriptIsEmpty = true
+    /// The agents the open thread's agent has started, in the order it started them.
+    private(set) var agents: [AgentInfo] = []
     /// The drafts whose first message is on its way to the server.
     private(set) var sendingDraftIDs: Set<String> = []
     var errorMessage: String?
@@ -154,6 +156,8 @@ final class AppStore {
     let sidePanel = SidePanel()
     @ObservationIgnored let core = CoreBridge()
     @ObservationIgnored let transcript = TranscriptModel()
+    /// What the agent did that the side panel shows.
+    @ObservationIgnored let agentTranscript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
     @ObservationIgnored private var undoTimer: Timer?
     @ObservationIgnored private var openThreadID: String?
@@ -266,6 +270,22 @@ final class AppStore {
                 let turns = self.transcript.turns
                 if self.sidePanel.turns != turns { self.sidePanel.turns = turns }
             }
+        case "agents":
+            let threadID = event.string("thread_id")
+            let agents = event.objects("agents").map { AgentInfo(json: $0) }
+            return { [weak self] in
+                guard let self, self.transcript.threadID == threadID else { return }
+                if self.agents != agents { self.agents = agents }
+                self.sidePanel.agentsChanged()
+            }
+        case "agent_rows":
+            let (threadID, agentID) = (event.string("thread_id"), event.string("agent_id"))
+            let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
+            let rows = event.objects("rows").compactMap { RowModel(json: $0) }
+            return { [weak self] in
+                guard let self, self.transcript.threadID == threadID, self.sidePanel.shownAgent == agentID else { return }
+                self.agentTranscript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: false)
+            }
         case "code_spans":
             let request = (event["id"] as? NSNumber)?.uint64Value ?? 0
             let lines = (event["lines"] as? [[NSNumber]] ?? []).map { $0.map(\.int32Value) }
@@ -277,6 +297,7 @@ final class AppStore {
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
                 self.transcript.apply(spans: spans, rowID: rowID)
+                self.agentTranscript.apply(spans: spans, rowID: rowID)
             }
         case "activity":
             let threadID = event.string("thread_id")
@@ -1046,6 +1067,8 @@ final class AppStore {
         activity = Activity()
         transcriptIsEmpty = true
         sidePanel.turns = []
+        sidePanel.showAgents()
+        agents = []
         guard case .thread(let id) = new, let thread = threads[id] else {
             transcript.begin(threadID: nil)
             defaults.set(draftKey, forKey: "selection")

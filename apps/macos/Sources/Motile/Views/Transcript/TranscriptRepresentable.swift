@@ -1,36 +1,44 @@
 import SwiftUI
 
-/// Puts the AppKit transcript in SwiftUI and joins it to the store's transcript model.
+/// Puts the AppKit transcript in SwiftUI and joins it to one of the store's transcript models:
+/// the open thread's, or that of an agent the thread started.
 struct TranscriptRepresentable: NSViewRepresentable {
     let store: AppStore
+    var ofAgent = false
     /// The height of what floats over the end of the transcript.
     let bottomInset: CGFloat
 
+    private var model: TranscriptModel { ofAgent ? store.agentTranscript : store.transcript }
+
     func makeNSView(context: Context) -> TranscriptView {
         let view = TranscriptView()
-        let store = store
+        let (store, model) = (store, model)
         view.bottomInset = bottomInset
+        view.measuresAhead = !ofAgent
         view.onNeedHighlight = { rowIDs in
-            guard let threadID = store.transcript.threadID else { return }
+            guard let threadID = model.threadID else { return }
             store.core.send("highlight", ["thread_id": threadID, "row_ids": rowIDs])
         }
         view.onToggleRow = { rowID in
-            guard let threadID = store.transcript.threadID else { return }
+            guard let threadID = model.threadID else { return }
             store.core.send("toggle_row", ["thread_id": threadID, "row_id": rowID])
         }
         view.onNeedMedia = { id, done in store.media(id, done: done) }
         view.onViewMedia = { media, index in store.view(media, at: index) }
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
-        view.onNeedEarlier = { done in
-            guard let threadID = store.transcript.threadID else { return done() }
-            store.core.send("load_earlier", ["thread_id": threadID]) { _ in done() }
+        view.onOpenAgent = { itemID in store.sidePanel.showAgent(itemID) }
+        if !ofAgent {
+            view.onNeedEarlier = { done in
+                guard let threadID = model.threadID else { return done() }
+                store.core.send("load_earlier", ["thread_id": threadID]) { _ in done() }
+            }
+            view.onTrimEarlier = { keepRows, done in
+                guard let threadID = model.threadID else { return done() }
+                store.core.send("trim_earlier", ["thread_id": threadID, "keep_rows": keepRows]) { _ in done() }
+            }
+            view.onOpenDiff = { itemID, path in store.sidePanel.showDiff(.turn(itemID), revealing: path) }
         }
-        view.onTrimEarlier = { keepRows, done in
-            guard let threadID = store.transcript.threadID else { return done() }
-            store.core.send("trim_earlier", ["thread_id": threadID, "keep_rows": keepRows]) { _ in done() }
-        }
-        view.onOpenDiff = { itemID, path in store.sidePanel.showDiff(.turn(itemID), revealing: path) }
         let hooks = TranscriptModel.Hooks(
             reset: { [weak view] rows in view?.reset(rows: rows) },
             splice: { [weak view] start, remove, rows in view?.splice(start: start, remove: remove, rows: rows) },
@@ -39,8 +47,8 @@ struct TranscriptRepresentable: NSViewRepresentable {
             recolor: { [weak view] rowID, content in view?.recolor(rowID: rowID, content: content) },
             earlier: { [weak view] earlier in view?.setEarlier(earlier) }
         )
-        store.transcript.attach(hooks, owner: view)
-        context.coordinator.store = store
+        model.attach(hooks, owner: view)
+        context.coordinator.model = model
         return view
     }
 
@@ -49,12 +57,12 @@ struct TranscriptRepresentable: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ view: TranscriptView, coordinator: Coordinator) {
-        coordinator.store?.transcript.detach(owner: view)
+        coordinator.model?.detach(owner: view)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
-        var store: AppStore?
+        var model: TranscriptModel?
     }
 }

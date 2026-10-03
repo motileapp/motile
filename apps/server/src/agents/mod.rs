@@ -10,7 +10,7 @@ pub mod models;
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Agent, Approval, ToolCall, TurnSummary};
+use motile_protocol::wire::{Access, Agent, Approval, Subagent, ToolCall, TurnSummary};
 
 const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedding it in your reply as a \
      Markdown image with the absolute path of the file, like ![what it shows](/path/to/file.png).";
@@ -90,6 +90,19 @@ pub enum AgentEvent {
     /// The agent no longer waits for that answer.
     ApprovalWithdrawn {
         id: String,
+    },
+    /// Something an agent did that the thread's agent started with the tool call `parent`.
+    Sub {
+        parent: String,
+        event: Box<AgentEvent>,
+    },
+    /// How far the agent is that the tool call `tool_id` started. What is `None` is as it was.
+    Task {
+        tool_id: String,
+        agent: Subagent,
+    },
+    Compacting {
+        active: bool,
     },
     /// What the agent has running in the background, whenever that changes.
     Background(Background),

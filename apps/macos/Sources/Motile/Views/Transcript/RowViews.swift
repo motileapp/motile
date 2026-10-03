@@ -20,6 +20,8 @@ protocol RowOwner: AnyObject {
     func toggleFolder(id: String, rowID: String)
     /// Shows what the turn that ended with the item changed, with the file at `path` in view.
     func openDiff(turn itemID: String, path: String?)
+    /// Shows what the agent did that the item's tool call started.
+    func openAgent(itemID: String)
 }
 
 /// A filled, rounded rectangle whose colours follow the appearance.
@@ -304,12 +306,14 @@ final class RowButton: FlippedView {
 class RowView: FlippedView {
     weak var owner: RowOwner?
     private(set) var rowID = ""
+    private(set) var itemID = ""
     private(set) var nested = false
     /// Set when the row grew while its reply streams: the next layout fades the new part in.
     var fadesGrowth = false
 
     func configure(_ row: RowModel) {
         rowID = row.id
+        itemID = row.itemID
         nested = row.nested
     }
 
@@ -767,6 +771,12 @@ final class ToolRowView: RowView {
     private let title = label(NSFont.systemFont(ofSize: 13), Theme.secondary)
     private let shine = ShimmerLabel.make(NSFont.systemFont(ofSize: 13))
     private let chevron = NSImageView()
+    /// How long a call that still runs has been running.
+    private let elapsed = label(NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular), Theme.tertiary)
+    private var startedAt: Double?
+    private var timer: Timer?
+    /// The call started an agent: the row opens what that agent did.
+    private var opensAgent = false
     private let detailSurface = SurfaceView()
     private let detail = RowTextView.make()
     private var detailText: (() -> NSAttributedString)?
@@ -788,6 +798,7 @@ final class ToolRowView: RowView {
         chevron.contentTintColor = Theme.tertiary
         chevron.imageScaling = .scaleNone
         header.addSubview(chevron)
+        header.addSubview(elapsed)
 
         detailSurface.fill = Theme.codeBackground
         detailSurface.radius = 8
@@ -800,6 +811,10 @@ final class ToolRowView: RowView {
         }
         header.onClick = { [weak self] in
             guard let self, self.hasDetail else { return }
+            guard !self.opensAgent else {
+                self.owner?.openAgent(itemID: self.itemID)
+                return
+            }
             guard self.open == nil else {
                 self.owner?.toggleRow(id: self.rowID)
                 return
@@ -810,16 +825,22 @@ final class ToolRowView: RowView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    deinit { timer?.invalidate() }
+
     override func configure(_ row: RowModel) {
         super.configure(row)
         loadedDetail = false
         open = nil
+        startedAt = nil
+        opensAgent = false
         switch row.kind {
         case .tool(let tool):
             icon.image = symbol(tool.symbol)
             running = tool.status == .running
-            setTitle(tool.verb, target: tool.target, failed: tool.status == .failed)
-            hasDetail = tool.hasDetail
+            startedAt = tool.startedAt
+            opensAgent = tool.agent
+            setTitle(tool.verb, target: tool.target, note: tool.progress, failed: tool.status == .failed)
+            hasDetail = tool.hasDetail || tool.agent
             detailText = { tool.detail() }
         case .thinking(let thought):
             icon.image = symbol("brain")
@@ -830,6 +851,7 @@ final class ToolRowView: RowView {
         case .group(let group):
             icon.image = symbol(ToolContent.symbol(for: group.icon))
             running = group.running
+            startedAt = group.startedAt
             setTitle(group.title, target: group.target, failed: group.failed)
             hasDetail = true
             detailText = nil
@@ -845,16 +867,41 @@ final class ToolRowView: RowView {
             break
         }
         shine.sweeps = running
+        keepTime()
     }
 
-    /// A running call's title is all muted, so the band shows on every part of it.
-    private func setTitle(_ words: String, target: String = "", failed: Bool = false) {
+    /// Counts the seconds of a call that still runs, for as long as the row is on screen.
+    private func keepTime() {
+        timer?.invalidate()
+        timer = nil
+        elapsed.isHidden = startedAt == nil
+        guard let startedAt else { return }
+        elapsed.stringValue = Time.elapsed(since: startedAt)
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] timer in
+            guard let self, self.superview != nil else { return timer.invalidate() }
+            self.elapsed.stringValue = Time.elapsed(since: startedAt)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    /// A running call's title is all muted, so the band shows on every part of it. `note` is
+    /// what an agent the call started is doing.
+    private func setTitle(_ words: String, target: String = "", note: String? = nil, failed: Bool = false) {
         let text = NSMutableAttributedString(
             string: target.isEmpty ? words : words + " ",
             attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.secondary]
         )
         let targetColor = failed ? Theme.danger : running ? Theme.secondary : Theme.prose
         text.append(NSAttributedString(string: target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
+        if let note {
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.tertiary]
+            text.append(NSAttributedString(string: "  \(note)", attributes: attributes))
+        }
+        // Without this a title too long for the row wraps, and loses its last words unseen.
+        let cut = NSMutableParagraphStyle()
+        cut.lineBreakMode = .byTruncatingTail
+        text.addAttribute(.paragraphStyle, value: cut, range: NSRange(location: 0, length: text.length))
         title.attributedStringValue = text
         title.lineBreakMode = .byTruncatingTail
         guard running else { return }
@@ -870,12 +917,14 @@ final class ToolRowView: RowView {
         let width = width - inset
         header.frame = NSRect(x: inset - 6, y: 1, width: width + 12, height: Self.rowHeight - 2)
         icon.frame = NSRect(x: 6, y: 5, width: 16, height: 16)
-        let titleWidth = min(title.intrinsicContentSize.width + 4, width - 60)
+        let timeWidth: CGFloat = startedAt == nil ? 0 : 58
+        let titleWidth = min(title.intrinsicContentSize.width + 4, width - 60 - timeWidth)
         title.frame = NSRect(x: 30, y: 4, width: titleWidth, height: 18)
         shine.frame = title.frame
         chevron.isHidden = !hasDetail
         chevron.image = symbol(open ?? expanded ? "chevron.down" : "chevron.right", size: 9, weight: .semibold)
         chevron.frame = NSRect(x: 30 + titleWidth + 2, y: 5, width: 14, height: 16)
+        elapsed.frame = NSRect(x: chevron.frame.maxX + 6, y: 5, width: timeWidth, height: 16)
 
         detailSurface.isHidden = !expanded
         guard expanded else { return Self.rowHeight }
@@ -951,7 +1000,6 @@ final class ChangesRowView: RowView {
     private let surface = SurfaceView()
     private let list = ChangesListView()
     private var openButton: RowButton!
-    private var itemID = ""
 
     static func height(entries: Int) -> CGFloat {
         4 + headHeight + CGFloat(entries) * entryHeight + bottomPadding + 14
@@ -989,7 +1037,6 @@ final class ChangesRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .changes(let content) = row.kind else { return }
-        itemID = row.itemID
         list.content = content
         openButton.dim()
     }
@@ -1181,7 +1228,7 @@ final class WorkingView: FlippedView {
     }
 
     private func refresh() {
-        let verb = activity.thinking ? "Thinking" : "Working"
+        let verb = activity.compacting ? "Compacting" : activity.thinking ? "Thinking" : "Working"
         guard let started = activity.startedAt else {
             show("\(verb)…")
             return

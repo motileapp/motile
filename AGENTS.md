@@ -104,6 +104,10 @@ system's light or dark appearance. They are one pnpm workspace; add components w
   ends: a snapshot, which is a commit under a ref of the thread's own that the repository's
   branches and index never see. What the turn changed is the difference between the two, and
   joins the item that ends the turn once it has been read.
+  An agent the thread's agent starts (Claude Code's Agent tool, a thread Codex spawns) is kept
+  with the tool call that started it: the call says how far the agent is, and what the agent
+  said and did are items that name the call as their `parent`. Those stay out of the thread's
+  transcript. The thread and its activity count the agents that still work.
 - `pacing.rs` says how much of a streamed reply is finished. The hub passes text on in finished
   blocks (a paragraph, a list item, a line of code), not token by token.
 - `agents/` builds the command for a turn, the lines its process is given and parses its
@@ -172,6 +176,7 @@ Rust library for tests.
   at a time: whole turns, about 150 items. An open thread holds its last turns, the ones
   before them come when the app scrolls near the first row, and the app has the turns far
   above let go again while it shows the end. So a thread of any length costs what is looked at.
+  What an agent the thread started did is read only when the app opens that agent.
 - `media.rs` is the images and videos the app has fetched from its servers, as files. They are
   fetched when a row that shows one is seen, and take at most 2 GB: past that, what was looked
   at longest ago goes first. The servers keep them all, so the app can also clear them. An
@@ -184,8 +189,10 @@ Rust library for tests.
   typed so far, narrowed by what follows its last slash.
 - `render/` turns transcripts into rows ready to draw: `markdown.rs` (text with style runs, in
   UTF-16 offsets), `highlight.rs` (syntect; streaming code is highlighted incrementally) and
+  `agents.rs` (the agents a thread's agent started, as the list an app shows) and
   `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
-  are one row, a finished turn's work folds behind one, as does what the agent did before a
+  are one row, one that still runs says since when, one that started an agent says what that
+  agent does, a finished turn's work folds behind one, as does what the agent did before a
   message it took mid-turn, an image or a video is a row that knows its size before the file
   is there, a message of the user names the images and videos attached to it, the files a turn
   changed are a row before the turn's end, under their folders, and the messages that wait for
@@ -229,7 +236,9 @@ Rust library for tests.
   `Views/Shared` holds the window's glass surface, the hover highlight and the agents' and
   projects' icons.
 - `Views/Panel` is the panel on the right of the thread, with tabs kept for each thread: the
-  changes in the folder the thread works in, its files, and the files opened from either.
+  changes in the folder the thread works in, its files, the files opened from either, and the
+  agents the thread started (`AgentsView.swift`), each of which opens into a transcript of what
+  it did. A tool call that started an agent opens it there too.
   `CodeView.swift` draws a diff or a file, and only the lines on screen. `Core/SidePanel.swift`
   is the panel's state. A turn's changed files in the transcript open its diff there.
 - `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
@@ -332,7 +341,8 @@ the recorded output in `fixtures/` or makes up a turn, depending on the prompt. 
 "watch the deploy" it stays after its turn, as Claude Code does while it monitors, asked to
 "run greet.py" under supervised access it asks before each tool call, and asked to "show the
 screenshot" it makes an image and shows it, and asked to "greet by name" it really changes
-files in its folder. "Which color" has it
+files in its folder, and asked to "ask two agents" (Claude Code) or to "ask an agent" (Codex) it
+starts agents that say what they do and report. "Which color" has it
 ask the user a question, and "plan the hello" present a plan to approve. A message sent now
 while it works is read after its next tool call, as both agents do, or stops a reply that
 streams, as Claude Code does; "run greet.py" ends its reply with it. Asked for a commit

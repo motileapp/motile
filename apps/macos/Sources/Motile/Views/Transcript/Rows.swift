@@ -156,6 +156,12 @@ struct ToolContent {
     let input: String
     let inputLanguage: String
     let output: String?
+    /// When it started, while it runs.
+    let startedAt: Double?
+    /// It started an agent, whose transcript the row's item names.
+    let agent: Bool
+    /// What that agent is doing now.
+    let progress: String?
 
     init(json: JSON) {
         name = json.string("name")
@@ -166,6 +172,9 @@ struct ToolContent {
         input = json.string("input")
         inputLanguage = json.string("input_language")
         output = json.optionalString("output")
+        startedAt = json.optionalDouble("started_at")
+        agent = json.bool("agent")
+        progress = json.optionalString("progress")
     }
 
     var symbol: String { Self.symbol(for: icon) }
@@ -216,8 +225,11 @@ struct GroupContent {
     let running: Bool
     let failed: Bool
     let open: Bool
+    /// When the latest of them that still runs started.
+    let startedAt: Double?
 
     init(json: JSON) {
+        startedAt = json.optionalDouble("started_at")
         title = json.string("title")
         target = json.string("target")
         icon = json.string("icon")

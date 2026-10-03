@@ -30,6 +30,7 @@ struct SidePanelView: View {
             case .diff: DiffSurface(target: target)
             case .files: FilesSurface(target: target)
             case .file(let path): FileSurface(target: target, path: path).id(path)
+            case .agents: AgentsSurface()
             case nil: PanelLauncher(target: target)
             }
         }
@@ -133,6 +134,7 @@ private struct PanelTabStrip: View {
             Button("Files") { store.sidePanel.open(.files) }
             Button("Diff") { store.sidePanel.showDiff() }
                 .disabled(store.panelTarget?.repository != true)
+            Button("Agents") { store.sidePanel.open(.agents) }
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 12, weight: .medium))
@@ -229,6 +231,7 @@ private struct PanelLauncher: View {
                 row("plusminus", "Diff", keys: "⌘D", reason: target.repository ? nil : "Available in git repositories.") {
                     store.sidePanel.showDiff()
                 }
+                row("person.2", "Agents", keys: "⇧⌘A", reason: nil) { store.sidePanel.open(.agents) }
             }
             .frame(width: 250)
         }

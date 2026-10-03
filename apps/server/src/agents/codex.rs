@@ -3,11 +3,12 @@
 //! back as notifications. It asks before a command or an edit that needs approval and waits for
 //! the answer. A prompt steered into a running turn joins it after its next tool call, and comes
 //! back as an item when it does; one that comes once the turn has ended starts the next turn. A
-//! plan is presented when its turn has ended, and carried out in a turn of its own.
+//! plan is presented when its turn has ended, and carried out in a turn of its own. An agent it
+//! starts is a thread of its own, whose notifications arrive among the others.
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Approval, ToolCall, ToolStatus, TurnSummary};
+use motile_protocol::wire::{Access, Approval, Subagent, ToolCall, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
 
 use super::{AgentEvent, PLAN_TOOL, Turn};
@@ -142,6 +143,10 @@ pub struct Parser {
     edits: HashMap<String, Value>,
     /// What the process waits for an answer to, by its request.
     asked: HashMap<String, String>,
+    /// The agents it started, by the thread of each: the item that started it.
+    agents: HashMap<String, String>,
+    /// What each of them said last, which is what it reports.
+    reports: HashMap<String, String>,
 }
 
 impl Parser {
@@ -174,6 +179,8 @@ impl Parser {
             presented: None,
             edits: HashMap::new(),
             asked: HashMap::new(),
+            agents: HashMap::new(),
+            reports: HashMap::new(),
         }
     }
 
@@ -221,6 +228,10 @@ impl Parser {
     }
 
     fn parse_notification(&mut self, method: &str, params: &Value) -> Vec<AgentEvent> {
+        let own = self.thread_id.as_deref();
+        if let Some(thread_id) = params["threadId"].as_str().filter(|id| own.is_some_and(|own| own != *id)) {
+            return self.parse_subagent(method, thread_id, params);
+        }
         match method {
             "turn/started" => {
                 self.presented = None;
@@ -240,6 +251,46 @@ impl Parser {
                 Some(id) => vec![AgentEvent::ApprovalWithdrawn { id }],
                 None => vec![],
             },
+            _ => vec![],
+        }
+    }
+
+    /// What happens in the thread of an agent it started.
+    fn parse_subagent(&mut self, method: &str, thread_id: &str, params: &Value) -> Vec<AgentEvent> {
+        let Some(parent) = self.agents.get(thread_id).cloned() else { return vec![] };
+        let task = |status, result| {
+            let agent = Subagent {
+                kind: None,
+                status,
+                progress: None,
+                result,
+                tokens: None,
+                tool_uses: None,
+                duration_ms: params["turn"]["durationMs"].as_u64(),
+            };
+            vec![AgentEvent::Task { tool_id: parent.clone(), agent }]
+        };
+        match method {
+            "turn/started" => task(ToolStatus::Running, None),
+            "turn/completed" => {
+                let failed = params["turn"]["status"] == "failed";
+                let status = if failed { ToolStatus::Failed } else { ToolStatus::Succeeded };
+                task(status, self.reports.remove(thread_id))
+            }
+            "item/started" | "item/completed" => {
+                let events = self.parse_item(&params["item"], method == "item/completed");
+                let shown = events.into_iter().filter(|event| {
+                    matches!(event, AgentEvent::Text { .. } | AgentEvent::ThinkingText { .. } | AgentEvent::Tool { .. })
+                });
+                let mut events = Vec::new();
+                for event in shown {
+                    if let AgentEvent::Text { text, .. } = &event {
+                        self.reports.insert(thread_id.to_string(), text.clone());
+                    }
+                    events.push(AgentEvent::Sub { parent: parent.clone(), event: Box::new(event) });
+                }
+                events
+            }
             _ => vec![],
         }
     }
@@ -275,7 +326,14 @@ impl Parser {
             _ => ToolStatus::Running,
         };
         let tool = |name: &str, input: Value, output: Option<String>| {
-            let call = ToolCall { id: id.clone(), name: name.to_string(), input: input.to_string(), output, status };
+            let call = ToolCall {
+                id: id.clone(),
+                name: name.to_string(),
+                input: input.to_string(),
+                output,
+                status,
+                agent: None,
+            };
             vec![AgentEvent::Thinking { active: false }, AgentEvent::Tool { call }]
         };
 
@@ -336,6 +394,29 @@ impl Parser {
                 tool(&name, input, output)
             }
             Some("webSearch") => tool("WebSearch", json!({ "query": item["query"] }), None),
+            Some("subAgentActivity") if item["kind"] == "started" && !completed => {
+                let Some(thread_id) = item["agentThreadId"].as_str() else { return vec![] };
+                self.agents.insert(thread_id.to_string(), id.clone());
+                let agent = Subagent {
+                    kind: None,
+                    status: ToolStatus::Running,
+                    progress: None,
+                    result: None,
+                    tokens: None,
+                    tool_uses: None,
+                    duration_ms: None,
+                };
+                let description = agent_title(item["agentPath"].as_str().unwrap_or_default());
+                let call = ToolCall {
+                    id: id.clone(),
+                    name: "Agent".to_string(),
+                    input: json!({ "description": description }).to_string(),
+                    output: None,
+                    status: ToolStatus::Succeeded,
+                    agent: Some(agent),
+                };
+                vec![AgentEvent::Thinking { active: false }, AgentEvent::Tool { call }]
+            }
             Some("plan") if completed && self.plan => {
                 let plan = item["text"].as_str().unwrap_or_default();
                 self.presented = Some(plan.to_string());
@@ -390,6 +471,16 @@ impl Parser {
     }
 }
 
+/// Codex names an agent by a path, `/root/review_auth`; this is its last part as words.
+fn agent_title(path: &str) -> String {
+    let name = path.trim_end_matches('/').rsplit('/').next().unwrap_or_default().replace('_', " ");
+    let mut letters = name.chars();
+    match letters.next() {
+        Some(first) => first.to_uppercase().chain(letters).collect(),
+        None => "Agent".to_string(),
+    }
+}
+
 /// A file change as the `Edit` tool call it is shown as.
 fn edit_input(item: &Value) -> Value {
     let changed = item["changes"].as_array().map(Vec::as_slice).unwrap_or_default();
@@ -419,6 +510,7 @@ fn todo_list(params: &Value) -> Vec<AgentEvent> {
         input: json!({ "todos": todos }).to_string(),
         output: None,
         status: ToolStatus::Succeeded,
+        agent: None,
     };
     vec![AgentEvent::Tool { call }]
 }
@@ -448,6 +540,39 @@ mod tests {
             _ => None,
         });
         lines.flatten().collect()
+    }
+
+    #[test]
+    fn what_an_agent_it_started_does_stays_out_of_its_own_turn() {
+        let mut parser = parser(turn(Access::Full, false));
+        parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
+        let started = parser.parse(
+            r#"{"method":"item/started","params":{"threadId":"t1","item":{"type":"subAgentActivity","id":"c1",
+                "kind":"started","agentThreadId":"t2","agentPath":"/root/read_a"}}}"#,
+        );
+        let [_, AgentEvent::Tool { call }] = &started[..] else { panic!("{started:?}") };
+        assert_eq!((call.name.as_str(), call.input.as_str()), ("Agent", r#"{"description":"Read a"}"#));
+        assert_eq!(call.agent.as_ref().map(|agent| agent.status), Some(ToolStatus::Running));
+
+        let ran = parser.parse(
+            r#"{"method":"item/completed","params":{"threadId":"t2","item":{"type":"commandExecution","id":"e1",
+                "command":"/bin/zsh -lc ls","status":"completed","aggregatedOutput":"a.txt\n","exitCode":0}}}"#,
+        );
+        assert!(matches!(&ran[..], [AgentEvent::Sub { parent, event }]
+            if parent == "c1" && matches!(&**event, AgentEvent::Tool { call } if call.name == "Bash")));
+        parser.parse(
+            r#"{"method":"item/completed","params":{"threadId":"t2","item":{"type":"agentMessage","id":"m1",
+                "text":"It says hi"}}}"#,
+        );
+        let ended = parser.parse(
+            r#"{"method":"turn/completed","params":{"threadId":"t2","turn":{"status":"completed","durationMs":1800}}}"#,
+        );
+        let [AgentEvent::Task { tool_id, agent }] = &ended[..] else { panic!("{ended:?}") };
+        assert_eq!((tool_id.as_str(), agent.status, agent.duration_ms), ("c1", ToolStatus::Succeeded, Some(1800)));
+        assert_eq!(agent.result.as_deref(), Some("It says hi"));
+
+        let stranger = r#"{"method":"turn/completed","params":{"threadId":"t9","turn":{"status":"completed"}}}"#;
+        assert_eq!(parser.parse(stranger), vec![]);
     }
 
     #[test]

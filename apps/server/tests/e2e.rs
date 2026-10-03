@@ -9,8 +9,8 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, Approval, Change, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
-    Item, ItemKind, Message, NewThread, NewWorktree, Project, Queued, Request, Thread, ThreadChange, ToolStatus,
-    TurnChanges, TurnSummary,
+    Item, ItemKind, Message, NewThread, NewWorktree, Project, Queued, Request, Thread, ThreadChange, ToolCall,
+    ToolStatus, TurnChanges, TurnSummary,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -977,6 +977,80 @@ async fn an_agent_that_monitors_takes_messages_and_wakes_by_itself() {
     assert_eq!(transcript.tools(), vec![("Monitor", ToolStatus::Succeeded)]);
     assert!(transcript.errors().is_empty());
     assert_eq!(harness.recorded_turns().len(), 1, "the process that monitors takes the message");
+}
+
+#[tokio::test]
+async fn what_the_agents_claude_starts_do_is_kept_apart_under_the_calls_that_started_them() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "Ask two agents").await;
+
+    let working = thread_where(&mut list, |thread| thread.agents == 2).await;
+    assert!(working.running);
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(thread_where(&mut list, |thread| !thread.running).await.agents, 0);
+
+    let own: Vec<&Item> = transcript.items.iter().filter(|item| item.parent.is_none()).collect();
+    let started: Vec<(&Item, &ToolCall)> = own
+        .iter()
+        .filter_map(|item| match &item.kind {
+            ItemKind::Tool { call } => Some((*item, call)),
+            _ => None,
+        })
+        .collect();
+    let [(reader, read), (_, tested)] = &started[..] else { panic!("expected two calls, got {started:?}") };
+    let agent = read.agent.as_ref().expect("the call started an agent");
+    assert_eq!((agent.kind.as_deref(), agent.status), (Some("Explore"), ToolStatus::Succeeded));
+    assert_eq!((agent.progress.as_deref(), agent.tool_uses), (Some("Searching for greet("), Some(2)));
+    assert_eq!(tested.agent.as_ref().and_then(|agent| agent.result.as_deref()), Some("Both tests pass."));
+
+    let did = |parent: &str| -> Vec<String> {
+        let of_agent = transcript.items.iter().filter(|item| item.parent.as_deref() == Some(parent));
+        let said = of_agent.map(|item| match &item.kind {
+            ItemKind::Tool { call } => format!("{} {:?}", call.name, call.status),
+            ItemKind::Assistant { text } => text.clone(),
+            other => panic!("unexpected item of an agent: {other:?}"),
+        });
+        said.collect()
+    };
+    assert_eq!(
+        did(&reader.id),
+        [
+            "Read Succeeded",
+            "Grep Succeeded",
+            "`greet.py` defines `greet(name)`, which returns a greeting, and prints one."
+        ]
+    );
+    assert_eq!(messages_and_turn_ends(&transcript), ["Ask two agents", "(turn end)"]);
+}
+
+#[tokio::test]
+async fn what_an_agent_codex_starts_does_neither_joins_its_turn_nor_ends_it() {
+    let harness = Harness::start(fixture(Agent::Codex), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await;
+    let thread_id = send(&connection, None, new_thread, "Ask an agent").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    let tools = |of_agent: bool| -> Vec<&ToolCall> {
+        let items = transcript.items.iter().filter(|item| item.parent.is_some() == of_agent);
+        let calls = items.filter_map(|item| match &item.kind {
+            ItemKind::Tool { call } => Some(call),
+            _ => None,
+        });
+        calls.collect()
+    };
+    let [started] = &tools(false)[..] else { panic!("expected the call that started the agent") };
+    let agent = started.agent.as_ref().expect("the call started an agent");
+    assert_eq!((started.input.as_str(), agent.status), (r#"{"description":"Read greet"}"#, ToolStatus::Succeeded));
+    assert_eq!(agent.result.as_deref(), Some("`greet.py` defines `greet(name)`."));
+    assert_eq!(tools(true).iter().map(|call| call.name.as_str()).collect::<Vec<_>>(), ["Bash"]);
+    assert_eq!(messages_and_turn_ends(&transcript), ["Ask an agent", "(turn end)"]);
+    let last = transcript.items.iter().rfind(|item| matches!(item.kind, ItemKind::Assistant { .. })).unwrap();
+    assert_eq!(last.parent, None);
 }
 
 #[tokio::test]

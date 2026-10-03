@@ -131,6 +131,7 @@ impl Store {
                     running: false,
                     monitoring: false,
                     needs_approval: row.get(14)?,
+                    agents: 0,
                     turn_ended_at: row.get(15)?,
                     rev: rev as u64,
                 },
