@@ -33,7 +33,7 @@ struct GitButton: View {
                         Image(systemName: GitSymbol.name(for: quick.action))
                             .font(.system(size: 12, weight: .medium))
                     }
-                    Text(stage.map { "\($0.label)…" } ?? quick.label)
+                    Text(stage?.label ?? quick.label)
                         .font(.system(size: 12, weight: .medium))
                 }
                 .foregroundStyle(runs || stage != nil ? Color.themeText : Color.themeTertiary)
