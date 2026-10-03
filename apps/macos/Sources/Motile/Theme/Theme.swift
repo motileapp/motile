@@ -117,6 +117,8 @@ extension Color {
     static let themeTertiary = Color(nsColor: Theme.tertiary)
     static let themePrimary = Color(nsColor: Theme.primary)
     static let themePrimaryHover = Color(nsColor: Theme.primaryHover)
+    static let themeLink = Color(nsColor: .linkColor)
+    static let themeLinkHover = Color(nsColor: .linkColor).opacity(0.12)
     static let themeDanger = Color(nsColor: Theme.danger)
     static let themeWarning = Color(nsColor: Theme.warning)
     static let themeSuccess = Color(nsColor: Theme.success)

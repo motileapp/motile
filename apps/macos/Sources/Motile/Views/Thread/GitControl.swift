@@ -172,14 +172,10 @@ struct GitNoticeView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let url = notice.url.flatMap({ URL(string: $0) }) {
-                Button("View PR") { NSWorkspace.shared.open(url) }
-                    .buttonStyle(.link)
-                    .font(.system(size: 12))
+                LinkButton("View PR") { NSWorkspace.shared.open(url) }
             }
             if let next = notice.nextLabel {
-                Button(next) { store.runNextGit() }
-                    .buttonStyle(.link)
-                    .font(.system(size: 12))
+                LinkButton(next) { store.runNextGit() }
             }
         }
         .padding(Self.padding)
@@ -268,13 +264,12 @@ struct CommitSheet: View {
                 }
                 Spacer()
                 if editing {
-                    Button(excluded.isEmpty ? "Select None" : "Select All") {
+                    LinkButton(excluded.isEmpty ? "Select None" : "Select All") {
                         excluded = excluded.isEmpty ? Set(files.map(\.path)) : []
                     }
-                    .buttonStyle(.link)
+                    .padding(.trailing, 2 * LinkButton.padding - 8)
                 }
-                Button(editing ? "Done" : "Edit") { editing.toggle() }
-                    .buttonStyle(.link)
+                LinkButton(editing ? "Done" : "Edit") { editing.toggle() }
             }
             .font(.system(size: 12))
             ScrollView {

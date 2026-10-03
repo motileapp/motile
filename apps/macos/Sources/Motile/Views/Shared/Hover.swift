@@ -56,6 +56,44 @@ struct IconOnlyButton: View {
     }
 }
 
+/// A button that is only its text, in the color of a link. It takes the room of the text alone:
+/// the background under the pointer and the room to hit reach past it, into the space around.
+struct LinkButton: View {
+    static let height: CGFloat = 30
+    static let padding: CGFloat = 8
+
+    let title: String
+    let action: () -> Void
+
+    init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    var body: some View {
+        text
+            .hidden()
+            .overlay {
+                Button(action: action) {
+                    text
+                        .foregroundStyle(Color.themeLink)
+                        .padding(.horizontal, Self.padding)
+                        .frame(minWidth: Self.height, minHeight: Self.height)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .hoverHighlight(radius: 6, color: .themeLinkHover)
+                .fixedSize()
+            }
+    }
+
+    private var text: some View {
+        Text(title)
+            .font(.system(size: 12))
+            .lineLimit(1)
+    }
+}
+
 /// A button in the window's toolbar. It lights up as a rounded rectangle, like a row of the
 /// sidebar, and the buttons touch: the space seen between them is theirs.
 struct ToolbarButton: View {
