@@ -198,7 +198,7 @@ struct BranchPicker: View {
                         return .handled
                     }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 16)
             .frame(height: 38)
             Divider()
             list(choices)
@@ -209,7 +209,7 @@ struct BranchPicker: View {
                     .font(.system(size: 11.5))
                     .foregroundStyle(working ? Color.themeSecondary : Color.themeDanger)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 16)
                     .padding(.vertical, 8)
             }
         }
@@ -227,13 +227,13 @@ struct BranchPicker: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(problem == nil ? Color.themeSecondary : Color.themeDanger)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+                .padding(16)
         } else if choices.isEmpty {
             Text("No branch matches.")
                 .font(.system(size: 12.5))
                 .foregroundStyle(Color.themeSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+                .padding(16)
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -245,7 +245,7 @@ struct BranchPicker: View {
                                 .id(index)
                         }
                     }
-                    .padding(4)
+                    .padding(8)
                 }
                 .frame(maxHeight: 300)
                 .onChange(of: highlighted) { proxy.scrollTo(highlighted) }
@@ -285,9 +285,9 @@ struct BranchPicker: View {
         .font(.system(size: 12.5))
         .foregroundStyle(Color.themeText)
         .padding(.horizontal, 8)
-        .frame(height: 28)
+        .frame(height: 30)
         .frame(maxWidth: .infinity)
-        .background(index == highlighted ? Color.themeSelected : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(index == highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
         .opacity(working ? 0.5 : 1)
     }
