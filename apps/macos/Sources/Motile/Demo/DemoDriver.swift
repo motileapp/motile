@@ -282,7 +282,9 @@ private final class Demo {
 
         // The branch under the composer opens the picker, and a branch made there is checked out
         // on the server.
-        store.showsBranches = true
+        if let project = store.composerProject {
+            store.showBranches(of: project)
+        }
         await wait(1)
         await shoot("07-branches")
         store.showsBranches = false

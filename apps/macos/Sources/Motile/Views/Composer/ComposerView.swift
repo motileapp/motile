@@ -59,7 +59,7 @@ struct ComposerView: View {
         }
         .overlay(
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .stroke(store.dropTargeted ? Color.themePrimary : Color.themeStrongBorder, lineWidth: store.dropTargeted ? 2 : 1)
+                .strokeBorder(store.dropTargeted ? Color.themePrimary : Color.themeStrongBorder, lineWidth: store.dropTargeted ? 2 : 1)
         )
     }
 

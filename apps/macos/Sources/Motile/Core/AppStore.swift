@@ -75,8 +75,9 @@ final class AppStore {
     var iconProject: Project?
     /// Files are being dragged over the window.
     var dropTargeted = false
-    /// The branch picker under the composer is open.
+    /// The branch picker under the composer is open, on the branches it was opened with.
     var showsBranches = false
+    private(set) var listedBranches: Result<[Branch], CoreBridge.CoreError> = .success([])
     private(set) var panel: PanelPage?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
@@ -608,10 +609,13 @@ final class AppStore {
         project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 3
     }
 
-    func listBranches(of project: Project, done: @escaping (Result<[Branch], CoreBridge.CoreError>) -> Void) {
+    /// Opens the branch picker once the branches are known: a popover finds its place by the
+    /// size it opens with.
+    func showBranches(of project: Project) {
         let request: JSON = ["type": "branches", "project_id": project.id]
-        core.send("request", ["server_id": project.serverID, "request": request]) { result in
-            done(result.map { $0.objects("branches").map { Branch(json: $0) } })
+        core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
+            self?.listedBranches = result.map { $0.objects("branches").map { Branch(json: $0) } }
+            self?.showsBranches = true
         }
     }
 

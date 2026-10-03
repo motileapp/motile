@@ -84,7 +84,7 @@ struct ContextStrip: View {
             if let branch = project.branch {
                 if store.canSwitchBranches(of: project) {
                     Button {
-                        store.showsBranches = true
+                        store.showBranches(of: project)
                     } label: {
                         branchLabel(branch, opens: true)
                     }
@@ -142,11 +142,14 @@ struct BranchPicker: View {
     @Environment(AppStore.self) private var store
     let project: Project
     @State private var query = ""
-    @State private var branches: [Branch]?
     @State private var problem: String?
     @State private var highlighted = 0
     @State private var switching = false
     @FocusState private var searching: Bool
+
+    private static let rowHeight: CGFloat = 30
+    private static let listPadding: CGFloat = 8
+    private static let maxListHeight: CGFloat = 300
 
     private enum Choice: Identifiable {
         case branch(Branch)
@@ -161,6 +164,19 @@ struct BranchPicker: View {
     }
 
     private var working: Bool { store.isWorking(in: project) }
+
+    private var branches: [Branch]? { try? store.listedBranches.get() }
+
+    /// The height of all the branches, also while fewer match: a popover that shrinks leaves
+    /// the button it opened from.
+    private var listHeight: CGFloat {
+        min(Self.maxListHeight, CGFloat(branches?.count ?? 0) * Self.rowHeight + 2 * Self.listPadding)
+    }
+
+    private var listProblem: String? {
+        guard case .failure(let error) = store.listedBranches else { return nil }
+        return error.message
+    }
 
     private var choices: [Choice] {
         guard let branches else { return [] }
@@ -208,6 +224,7 @@ struct BranchPicker: View {
                 Text(note)
                     .font(.system(size: 11.5))
                     .foregroundStyle(working ? Color.themeSecondary : Color.themeDanger)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
@@ -216,16 +233,16 @@ struct BranchPicker: View {
         .frame(width: 300)
         .onAppear {
             DispatchQueue.main.async { searching = true }
-            load()
         }
         .onChange(of: query) { highlighted = 0 }
     }
 
     @ViewBuilder private func list(_ choices: [Choice]) -> some View {
-        if branches == nil {
-            Text(problem ?? "Loading…")
+        if let listProblem {
+            Text(listProblem)
                 .font(.system(size: 12.5))
-                .foregroundStyle(problem == nil ? Color.themeSecondary : Color.themeDanger)
+                .foregroundStyle(Color.themeDanger)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
         } else if choices.isEmpty {
@@ -242,13 +259,16 @@ struct BranchPicker: View {
                             row(choice, index: index)
                                 .onTapGesture { choose(choices, at: index) }
                                 .onHover { if $0 { highlighted = index } }
-                                .id(index)
+                                .id(choice.id)
                         }
                     }
-                    .padding(8)
+                    .padding(Self.listPadding)
                 }
-                .frame(maxHeight: 300)
-                .onChange(of: highlighted) { proxy.scrollTo(highlighted) }
+                .frame(height: listHeight)
+                .onChange(of: highlighted) {
+                    guard choices.indices.contains(highlighted) else { return }
+                    proxy.scrollTo(choices[highlighted].id)
+                }
             }
         }
     }
@@ -285,20 +305,11 @@ struct BranchPicker: View {
         .font(.system(size: 12.5))
         .foregroundStyle(Color.themeText)
         .padding(.horizontal, 8)
-        .frame(height: 30)
+        .frame(height: Self.rowHeight)
         .frame(maxWidth: .infinity)
         .background(index == highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
         .opacity(working ? 0.5 : 1)
-    }
-
-    private func load() {
-        store.listBranches(of: project) { result in
-            switch result {
-            case .success(let listed): branches = listed
-            case .failure(let error): problem = error.message
-            }
-        }
     }
 
     private func choose(_ choices: [Choice], at index: Int) {
