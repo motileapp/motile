@@ -310,6 +310,22 @@ impl Transcript {
         self.show();
     }
 
+    /// Where the first loaded item stands in the thread.
+    pub fn first_seq(&self) -> Option<u64> {
+        self.items.first().map(|item| item.seq)
+    }
+
+    /// Lets go of the turns before the one that has the first of the last `keep_rows` rows.
+    pub fn trim(&mut self, keep_rows: usize) -> Option<Splice> {
+        let kept = &self.rows[self.rows.len().checked_sub(keep_rows)?].item;
+        let index = self.items.iter().position(|item| &item.id == kept)?;
+        let is_turn_end = |item: &Item| matches!(item.kind, ItemKind::TurnEnd { .. });
+        let cut = (1..=index).rev().find(|&index| is_turn_end(&self.items[index - 1]))?;
+        self.items.drain(..cut);
+        self.rendered.drain(..cut);
+        self.show()
+    }
+
     /// Puts earlier items in front of the ones already loaded.
     pub fn prepend(&mut self, items: Vec<Item>) -> Option<Splice> {
         let rendered: Vec<Vec<Row>> = items.iter().map(|item| render(item, &self.cwd, None)).collect();
@@ -1221,6 +1237,31 @@ mod tests {
         assert_eq!(splice.start, 1);
         let ids: Vec<&str> = transcript.rows().iter().map(|row| row.item.as_str()).collect();
         assert_eq!(ids, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn earlier_turns_are_let_go_whole_and_come_back_in_front() {
+        let turn = |start: u64| {
+            vec![
+                item(&format!("u{start}"), start, ItemKind::User { text: "Go on".into(), attachments: Vec::new() }),
+                assistant(&format!("a{start}"), start + 1, "Done."),
+                item(&format!("e{start}"), start + 2, ItemKind::TurnEnd { summary: Default::default() }),
+            ]
+        };
+        let mut transcript = Transcript::new("");
+        transcript.load((0..4).flat_map(|index| turn(index * 3)).collect());
+        let whole = transcript.rows().to_vec();
+
+        assert!(transcript.trim(12).is_none());
+        let splice = transcript.trim(4).unwrap();
+
+        assert_eq!((splice.start, splice.remove, splice.rows.len()), (0, 6, 0));
+        assert_eq!(transcript.first_seq(), Some(6));
+
+        let splice = transcript.prepend(turn(0).into_iter().chain(turn(3)).collect()).unwrap();
+
+        assert_eq!((splice.start, splice.remove, splice.rows.len()), (0, 0, 6));
+        assert_eq!(transcript.rows(), whole);
     }
 
     #[test]

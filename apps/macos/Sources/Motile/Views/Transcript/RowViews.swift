@@ -73,9 +73,16 @@ private func label(_ font: NSFont, _ color: NSColor) -> NSTextField {
     return field
 }
 
+/// The rows ask for the same few symbols every time one scrolls in, so each is made once.
+private var symbols: [String: NSImage] = [:]
+
 private func symbol(_ name: String, size: CGFloat = 12, weight: NSFont.Weight = .regular) -> NSImage? {
+    let key = "\(name)/\(size)/\(weight.rawValue)"
+    if let made = symbols[key] { return made }
     let configuration = NSImage.SymbolConfiguration(pointSize: size, weight: weight)
-    return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration)
+    let made = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration)
+    symbols[key] = made
+    return made
 }
 
 /// A bright copy of a label, laid over it and seen only through a soft band that sweeps across.
@@ -190,10 +197,11 @@ final class IconButton: NSButton {
         self.title = title
     }
 
+    // One area that follows the view, so that moving a row doesn't make another.
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+        guard tracking == nil else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area)
         tracking = area
     }
@@ -266,10 +274,11 @@ final class RowButton: FlippedView {
         action()
     }
 
+    // One area that follows the view, so that moving a row doesn't make another.
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+        guard tracking == nil else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area)
         tracking = area
     }
@@ -305,7 +314,23 @@ class RowView: FlippedView {
 
     func clearSelection() {}
 
-    /// What the row would be without measuring it, to place rows nobody has scrolled to yet.
+    /// How tall the row is in a column `width` wide, as its view lays it out closed. It runs off
+    /// the main thread. A queued message is only estimated: it is always among the last rows.
+    class func height(_ row: RowModel, width: CGFloat) -> CGFloat {
+        switch row.kind {
+        case .user(let text, let attachments):
+            let fit = BubbleFit(text: text, attachments: attachments, width: width)
+            return UserRowView.height(fit, textHeight: fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0)
+        case .prose(let text, let above, _):
+            return TextMeasure.height(of: text, width: width) + ProseRowView.gap + above
+        case .error(let text):
+            return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
+        case .code, .tool, .thinking, .group, .fold, .media, .changes, .turnEnd, .queued:
+            return estimatedHeight(row, width: width)
+        }
+    }
+
+    /// What the row would be without measuring its text, until it has been measured.
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
         case .user(let text, let attachments):
@@ -319,7 +344,7 @@ class RowView: FlippedView {
         case .media(let content):
             return MediaRowView.height(content, width: width)
         case .error(let text):
-            return estimatedTextHeight(text.length, width: width - 40) + 34
+            return estimatedTextHeight(text.length, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .changes(let content):
             return ChangesRowView.height(entries: content.entries.count)
         case .turnEnd:
@@ -364,11 +389,36 @@ class RowView: FlippedView {
     }
 }
 
+/// How a message fits its bubble in a column `width` wide. The bubble is as wide as its text, up
+/// to the widest it may be, and the files stand above the text with their own room around them.
+struct BubbleFit {
+    static let padding: CGFloat = 14
+
+    let hasText: Bool
+    let files: NSSize
+    let innerWidth: CGFloat
+    let top: CGFloat
+    let between: CGFloat
+
+    init(text: NSAttributedString, attachments: [AttachedFile], width: CGFloat, least: CGFloat = 12) {
+        let widest = max(120, width * 0.8) - Self.padding * 2
+        let natural = text.boundingRect(
+            with: NSSize(width: widest, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        hasText = text.length > 0
+        files = AttachedFilesView.size(attachments, width: widest)
+        innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, least))
+        top = files.height > 0 ? Self.padding : 10
+        between = files.height > 0 && hasText ? 8 : 0
+    }
+}
+
 final class UserRowView: RowView {
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
     private let attachments = AttachedFilesView()
-    private var hasText = false
+    private var files: [AttachedFile] = []
     private var pending = false
 
     override init(frame: NSRect) {
@@ -390,34 +440,34 @@ final class UserRowView: RowView {
         super.configure(row)
         guard case .user(let content, let files) = row.kind else { return }
         text.content = content
-        hasText = content.length > 0
-        text.isHidden = !hasText
+        self.files = files
+        text.isHidden = content.length == 0
         attachments.show(files, owner: owner)
         pending = row.id == "pending"
         bubble.alphaValue = pending ? 0.6 : 1
     }
 
+    private static let margin: CGFloat = 14
+
+    static func height(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
+        bubbleHeight(fit, textHeight: textHeight) + margin * 2
+    }
+
+    private static func bubbleHeight(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
+        let bottom: CGFloat = fit.hasText ? 10 : BubbleFit.padding
+        return fit.top + fit.files.height + fit.between + textHeight + bottom
+    }
+
     override func layout(width: CGFloat) -> CGFloat {
-        let padding: CGFloat = 14
-        let widest = max(120, width * 0.8) - padding * 2
-        // The bubble is as wide as its text, up to the widest it may be.
-        let natural = text.content.boundingRect(
-            with: NSSize(width: widest, height: CGFloat.greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-        let files = attachments.size(width: widest)
-        let textWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, 12))
-        let textHeight = hasText ? text.height(forWidth: textWidth) : 0
-        // The files stand above the text, with their own room around them.
-        let top: CGFloat = files.height > 0 ? padding : 10
-        let between: CGFloat = files.height > 0 && hasText ? 8 : 0
-        let bottom: CGFloat = hasText ? 10 : padding
-        let bubbleSize = NSSize(width: textWidth + padding * 2, height: top + files.height + between + textHeight + bottom)
-        bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
-        attachments.frame = NSRect(x: padding, y: top, width: textWidth, height: files.height)
-        attachments.layout(width: textWidth)
-        text.frame = NSRect(x: padding, y: top + files.height + between, width: textWidth, height: textHeight)
-        return bubbleSize.height + 14 + 14
+        let padding = BubbleFit.padding
+        let fit = BubbleFit(text: text.content, attachments: files, width: width)
+        let textHeight = fit.hasText ? text.height(forWidth: fit.innerWidth) : 0
+        let bubbleSize = NSSize(width: fit.innerWidth + padding * 2, height: Self.bubbleHeight(fit, textHeight: textHeight))
+        bubble.frame = NSRect(x: width - bubbleSize.width, y: Self.margin, width: bubbleSize.width, height: bubbleSize.height)
+        attachments.frame = NSRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
+        attachments.layout(width: fit.innerWidth)
+        text.frame = NSRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: textHeight)
+        return Self.height(fit, textHeight: textHeight)
     }
 
     override func clearSelection() { text.clearSelection() }
@@ -437,6 +487,7 @@ final class QueuedRowView: RowView {
     private var sendButton: RowButton!
     private var cancelButton: RowButton!
     private var messageID = ""
+    private var attached: [AttachedFile] = []
     private var hasText = false
     private var sending = false
 
@@ -485,6 +536,7 @@ final class QueuedRowView: RowView {
         text.content = content.text
         hasText = content.text.length > 0
         text.isHidden = !hasText
+        attached = content.attachments
         attachments.show(content.attachments, owner: owner)
         status.stringValue = content.status
         sending = content.sending
@@ -495,21 +547,14 @@ final class QueuedRowView: RowView {
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let padding: CGFloat = 14
-        let widest = max(120, width * 0.8) - padding * 2
-        let natural = text.content.boundingRect(
-            with: NSSize(width: widest, height: CGFloat.greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
+        let padding = BubbleFit.padding
         // The buttons reach the bubble's edge, so they take the padding on that side too.
         let buttonsWidth = sending ? 0 : sendButton.width + cancelButton.width
         let statusWidth = 18 + ceil(status.stringValue.size(withAttributes: [.font: Theme.smallFont]).width) + 8
         let footWidth = sending ? statusWidth : statusWidth + 10 + buttonsWidth - padding
-        let files = attachments.size(width: widest)
-        let innerWidth = min(widest, max(hasText ? ceil(natural.width) + 2 : 0, files.width, footWidth, 12))
+        let fit = BubbleFit(text: text.content, attachments: attached, width: width, least: max(footWidth, 12))
+        let (innerWidth, top, between, files) = (fit.innerWidth, fit.top, fit.between, fit.files)
         let textHeight = hasText ? text.height(forWidth: innerWidth) : 0
-        let top: CGFloat = files.height > 0 ? padding : 10
-        let between: CGFloat = files.height > 0 && hasText ? 8 : 0
         let footY = top + files.height + between + textHeight + 2
         let bubbleSize = NSSize(width: innerWidth + padding * 2, height: footY + Self.footHeight)
         bubble.frame = NSRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
@@ -840,6 +885,10 @@ final class ToolRowView: RowView {
 }
 
 final class ErrorRowView: RowView {
+    /// The room beside the text, and the room above and under it.
+    static let textInset: CGFloat = 36 + 14
+    static let padding: CGFloat = 20 + 14
+
     private let surface = SurfaceView()
     private let icon = NSImageView()
     private let text = RowTextView.make()
@@ -868,12 +917,12 @@ final class ErrorRowView: RowView {
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let inner = width - 36 - 14
+        let inner = width - Self.textInset
         let height = text.height(forWidth: inner)
         surface.frame = NSRect(x: 0, y: 4, width: width, height: height + 20)
         icon.frame = NSRect(x: 12, y: 10, width: 16, height: 18)
         text.frame = NSRect(x: 36, y: 10, width: inner, height: height)
-        return height + 20 + 14
+        return height + Self.padding
     }
 
     override func clearSelection() { text.clearSelection() }
@@ -1000,9 +1049,9 @@ final class ChangesRowView: RowView {
 
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
-            if let tracking { removeTrackingArea(tracking) }
-            let options: NSTrackingArea.Options = [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow]
-            let area = NSTrackingArea(rect: bounds, options: options, owner: self)
+            guard tracking == nil else { return }
+            let options: NSTrackingArea.Options = [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect]
+            let area = NSTrackingArea(rect: .zero, options: options, owner: self)
             addTrackingArea(area)
             tracking = area
         }

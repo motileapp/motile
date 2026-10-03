@@ -1,10 +1,11 @@
 import AppKit
+import os
 
 /// The transcript: a scrolling column of rows of which only the ones on screen exist as views.
 ///
-/// Every row has a height: measured once it has been shown, estimated until then. A row's views
-/// are made when it scrolls in and reused when it scrolls out, so a thread of any length costs
-/// what is on screen. When heights above the viewport turn out different from their estimates,
+/// Every row has a height, measured off the main thread before the row is scrolled to. A row's
+/// views are made when it scrolls in and reused when it scrolls out, so a thread of any length
+/// costs what is on screen. When heights above the viewport change, as they do with the width,
 /// the scroll position is corrected in the same pass, so nothing on screen moves.
 final class TranscriptView: FlippedView, RowOwner {
     /// Rows that came into view with code that isn't highlighted.
@@ -16,6 +17,10 @@ final class TranscriptView: FlippedView, RowOwner {
     /// A queued message is to be given to the agent now, or taken back.
     var onSendQueued: ((String) -> Void)?
     var onCancelQueued: ((String) -> Void)?
+    /// Asks for the turns before the first row, and is called back once they are among the rows.
+    var onNeedEarlier: ((@escaping () -> Void) -> Void)?
+    /// Lets go of the turns before the last rows, that many, and is called back once they are gone.
+    var onTrimEarlier: ((Int, @escaping () -> Void) -> Void)?
     /// The diff of the turn that ended with the item is to be shown, with a file in view.
     var onOpenDiff: ((String, String?) -> Void)?
 
@@ -43,7 +48,7 @@ final class TranscriptView: FlippedView, RowOwner {
     /// As tall as the row that ends a turn, which takes the working line's place.
     private static let workingHeight = TurnEndRowView.height
     /// How close to the end a scroll has to come for the view to follow the end again.
-    private static let pinDistance: CGFloat = 30
+    private static let pinDistance: CGFloat = 1
 
     /// How far the end has to be below the viewport for the jump button to show.
     private var jumpDistance: CGFloat { max(200, viewportHeight / 2) }
@@ -83,13 +88,24 @@ final class TranscriptView: FlippedView, RowOwner {
     private var updating = false
     /// Where the viewport was after the last scroll, to tell which way the next one goes.
     private var lastScrollY: CGFloat = 0
-    /// Moves the viewport to the end in steps while a reply streams.
-    private var glide: Timer?
+    /// Moves the viewport to the end with every frame while a reply streams.
+    private var glide: CADisplayLink?
+    /// Whether the thread has turns before the first row. They are asked for when the viewport
+    /// comes within `earlierDistance` of the first row, and let go when it rests on the end
+    /// with more than `trimDistance` above it.
+    private var hasEarlier = false
+    private var loadingEarlier = false
+    private var trimming = false
+    /// Where the viewport was when rows came in front of it while it bounced at the top.
+    private var heldAnchor: Anchor?
     /// Rows that just arrived in a streaming reply; they fade in.
     private var fresh: Set<String> = []
     /// The group or fold that was just clicked. It stays where it is while its rows come and go.
     private var toggled: Anchor?
     private var layoutWidth: CGFloat = 0
+    private static let measuring = DispatchQueue(label: "app.motile.heights", qos: .userInitiated)
+    /// Stops the measuring that is under way, when rows or the width it measures for are gone.
+    private var measuringStopped: OSAllocatedUnfairLock<Bool>?
 
     private struct Anchor {
         let id: String
@@ -159,6 +175,7 @@ final class TranscriptView: FlippedView, RowOwner {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        measuringStopped?.withLock { $0 = true }
         glide?.invalidate()
     }
 
@@ -173,6 +190,9 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     private var viewportHeight: CGFloat { scrollView.contentView.bounds.height }
+
+    private var earlierDistance: CGFloat { viewportHeight * 3 }
+    private var trimDistance: CGFloat { viewportHeight * 12 }
 
     /// Where the viewport's top is when it shows the end.
     private var endY: CGFloat { max(0, document.frame.height - viewportHeight) }
@@ -220,11 +240,13 @@ final class TranscriptView: FlippedView, RowOwner {
             return
         }
         layoutWidth = bounds.width
+        TranscriptColumn.width = columnWidth
         // Wrapping changes with the width, so every height is an estimate again.
         let anchor = currentAnchor()
         for index in measured.indices { measured[index] = false }
         stale.formUnion(views.keys)
         updateVisible(anchor: anchor)
+        measureRows()
     }
 
     private func recomputeOffsets(from start: Int) {
@@ -269,6 +291,56 @@ final class TranscriptView: FlippedView, RowOwner {
         return Anchor(id: rows[index].id, delta: top - offsets[index])
     }
 
+    private func height(of row: RowModel) -> CGFloat {
+        measuredHeight(of: row) ?? RowView.estimatedHeight(row, width: columnWidth)
+    }
+
+    /// The row's height when it was measured for this width. An open row and a queued message
+    /// have the heights their views give them.
+    private func measuredHeight(of row: RowModel) -> CGFloat? {
+        guard let measured = row.measured, measured.width == columnWidth, !expanded.contains(row.id), !row.isQueued else { return nil }
+        return measured.height
+    }
+
+    /// Measures the rows that weren't measured for this width, off the main thread and the last
+    /// ones first, and takes their heights as they come.
+    private func measureRows() {
+        measuringStopped?.withLock { $0 = true }
+        measuringStopped = nil
+        let width = columnWidth
+        let waiting = rows.filter { $0.measured?.width != width }
+        guard !waiting.isEmpty, bounds.width > 0 else { return }
+        let stopped = OSAllocatedUnfairLock(initialState: false)
+        measuringStopped = stopped
+        Self.measuring.async { [weak self] in
+            var batch: [(RowModel, CGFloat)] = []
+            for (count, row) in waiting.reversed().enumerated() {
+                guard !stopped.withLock({ $0 }) else { return }
+                batch.append((row, RowView.height(row, width: width)))
+                guard batch.count == 50 || count == waiting.count - 1 else { continue }
+                let measured = batch
+                batch = []
+                DispatchQueue.main.async { self?.take(measured, width: width) }
+            }
+        }
+    }
+
+    private func take(_ measured: [(RowModel, CGFloat)], width: CGFloat) {
+        guard width == columnWidth else { return }
+        for (row, height) in measured { row.measured = (width, height) }
+        let anchor = currentAnchor()
+        var firstChanged: Int?
+        // A row on screen has the height its view gave it.
+        for index in rows.indices where views[rows[index].id] == nil {
+            guard let height = measuredHeight(of: rows[index]), abs(height - heights[index]) > 0.5 else { continue }
+            heights[index] = height
+            firstChanged = firstChanged ?? index
+        }
+        guard let firstChanged else { return }
+        recomputeOffsets(from: firstChanged)
+        updateVisible(anchor: anchor)
+    }
+
     private var reducesMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
     private var animates: Bool { activity.running && !reducesMotion }
@@ -279,17 +351,21 @@ final class TranscriptView: FlippedView, RowOwner {
         for id in Array(views.keys) { recycle(id) }
         rows = new
         hasPending = false
-        heights = new.map { RowView.estimatedHeight($0, width: columnWidth) }
+        expanded.removeAll()
+        heights = new.map(height(of:))
         measured = [Bool](repeating: false, count: new.count)
         offsets = []
         recomputeOffsets(from: 0)
-        expanded.removeAll()
         requestedHighlight.removeAll()
         stale.removeAll()
         endOfRunningTurn = nil
+        loadingEarlier = false
+        trimming = false
+        heldAnchor = nil
         stopGlide()
         pin()
         updateVisible()
+        measureRows()
     }
 
     func splice(start: Int, remove: Int, rows new: [RowModel]) {
@@ -318,7 +394,7 @@ final class TranscriptView: FlippedView, RowOwner {
             endOfRunningTurn = last.id
         }
         heights.replaceSubrange(range, with: new.map { row in
-            known[row.id] ?? (row.isSentMessage ? sentHeight : nil) ?? RowView.estimatedHeight(row, width: columnWidth)
+            measuredHeight(of: row) ?? known[row.id] ?? (row.isSentMessage ? sentHeight : nil) ?? height(of: row)
         })
         measured.replaceSubrange(range, with: [Bool](repeating: false, count: new.count))
         offsets = []
@@ -347,6 +423,34 @@ final class TranscriptView: FlippedView, RowOwner {
         }
         // Only what came into view fades in; the rest is simply there when it is scrolled to.
         fresh.removeAll()
+        if start == 0, anchor != nil, scrollView.contentView.bounds.minY < -0.5 { heldAnchor = anchor }
+        trimEarlierIfFar()
+        guard new.contains(where: { $0.measured?.width != columnWidth }) else { return }
+        measureRows()
+    }
+
+    func setEarlier(_ earlier: Bool) {
+        hasEarlier = earlier
+        loadEarlierIfNear()
+    }
+
+    private func loadEarlierIfNear() {
+        guard hasEarlier, !loadingEarlier, !rows.isEmpty, bounds.width > 0 else { return }
+        let y = scrollView.contentView.bounds.minY
+        // Rows that come in front while the view bounces at the top can't be scrolled past.
+        guard y > -0.5, y < earlierDistance else { return }
+        loadingEarlier = true
+        onNeedEarlier? { [weak self] in
+            self?.loadingEarlier = false
+            self?.loadEarlierIfNear()
+        }
+    }
+
+    private func trimEarlierIfFar() {
+        guard pinned, !userScrolling, !trimming, endY > trimDistance else { return }
+        let keptFrom = index(at: endY - trimDistance / 2 - Self.topPadding)
+        trimming = true
+        onTrimEarlier?(rows.count - keptFrom) { [weak self] in self?.trimming = false }
     }
 
     /// Shows a message at the end before the server has confirmed it, or takes it away again.
@@ -354,7 +458,7 @@ final class TranscriptView: FlippedView, RowOwner {
         removePending()
         if let row {
             rows.append(row)
-            heights.append(RowView.estimatedHeight(row, width: columnWidth))
+            heights.append(height(of: row))
             measured.append(false)
             hasPending = true
             pin()
@@ -389,6 +493,7 @@ final class TranscriptView: FlippedView, RowOwner {
     func scrollToEnd() {
         pin()
         updateVisible()
+        trimEarlierIfFar()
     }
 
     /// Follows the end from now on, whatever the user was doing with the viewport.
@@ -477,8 +582,15 @@ final class TranscriptView: FlippedView, RowOwner {
         }
         if let settled = bounceEnd, y < settled + 0.5 { bounceEnd = nil }
         lastScrollY = y
-        updateVisible(anchor: viewportAnchor(), follows: false)
+        var anchor = viewportAnchor()
+        if let held = heldAnchor, y > -0.5 {
+            anchor = held
+            heldAnchor = nil
+        }
+        updateVisible(anchor: anchor, follows: false)
         land()
+        loadEarlierIfNear()
+        trimEarlierIfFar()
     }
 
     @objc private func userScrollBegan() {
@@ -489,6 +601,7 @@ final class TranscriptView: FlippedView, RowOwner {
     @objc private func userScrollEnded() {
         userScrolling = false
         land()
+        trimEarlierIfFar()
     }
 
     /// Brings a view that follows the end to rest on it, once the user has let go of it.
@@ -611,9 +724,9 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private func startGlide() {
         guard glide == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.glideStep() }
-        RunLoop.main.add(timer, forMode: .common)
-        glide = timer
+        let link = displayLink(target: self, selector: #selector(glideStep))
+        link.add(to: .main, forMode: .common)
+        glide = link
     }
 
     private func stopGlide() {
@@ -621,14 +734,18 @@ final class TranscriptView: FlippedView, RowOwner {
         glide = nil
     }
 
-    private func glideStep() {
+    /// Goes a little over a fifth of the way in every sixtieth of a second, whatever the display's
+    /// rate, and never slower than two points in that time.
+    @objc private func glideStep(_ link: CADisplayLink) {
         let y = scrollView.contentView.bounds.minY
         let remaining = endY - y
         guard pinned, !userScrolling, remaining > 0.5 else {
             stopGlide()
             return
         }
-        scroll(to: y + min(remaining, max(2, remaining * 0.22)))
+        let sixtieths = max(0.25, (link.targetTimestamp - link.timestamp) * 60)
+        let step = max(2 * sixtieths, remaining * (1 - pow(0.78, sixtieths)))
+        scroll(to: y + min(remaining, step))
         updateVisible(follows: false)
     }
 

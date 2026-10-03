@@ -22,7 +22,7 @@ use tokio::task::AbortHandle;
 
 use crate::api::{AccountView, Command, Config, Event, ProjectView, ServerView, ThreadView};
 use crate::browse;
-use crate::cache::Cache;
+use crate::cache::{Cache, Page};
 use crate::connection::{ServerAddr, bind};
 use crate::git;
 use crate::link::{Link, LinkEvent, State, Status};
@@ -124,6 +124,8 @@ struct Server {
 struct OpenThread {
     server_id: String,
     transcript: Transcript,
+    /// Whether the thread has turns before the ones in the transcript. They are in the cache.
+    earlier: bool,
     /// Whether the catch-up is done and updates now arrive in revision order.
     live: bool,
     rev: u64,
@@ -808,6 +810,7 @@ impl Core {
                 open.live = false;
                 if reset {
                     open.transcript.clear();
+                    open.earlier = false;
                     open.rev = 0;
                     open.unrendered.clear();
                     open.unsaved.clear();
@@ -830,6 +833,11 @@ impl Core {
                     open.rev = if live { open.rev.max(item.rev) } else { open.rev };
                     open.unrendered.remove(&item.id);
                     open.unsaved.remove(&item.id);
+                    // An item before the loaded turns only goes to the cache.
+                    let loaded = !open.earlier || open.transcript.first_seq().is_none_or(|first| item.seq >= first);
+                    if !loaded {
+                        continue;
+                    }
                     splices.extend(open.transcript.upsert(item.clone(), live));
                 }
                 let synced = live.then_some(open.rev);
@@ -886,6 +894,7 @@ impl Core {
             start: splice.start,
             remove: splice.remove,
             rows: splice.rows,
+            earlier: self.open.get(thread_id).is_some_and(|open| open.earlier),
         });
     }
 
@@ -914,6 +923,7 @@ impl Core {
                     start: splice.start,
                     remove: splice.remove,
                     rows: splice.rows,
+                    earlier: open.earlier,
                 });
             }
             if open.unsaved.is_empty() || open.saved_at.elapsed() < SAVE_EVERY {
@@ -1217,7 +1227,32 @@ impl Core {
                 }
                 self.reply(id, Ok(json!({})));
             }
+            Command::LoadEarlier { thread_id } => {
+                self.load_earlier(&thread_id);
+                self.reply(id, Ok(json!({})));
+            }
+            Command::TrimEarlier { thread_id, keep_rows } => {
+                self.trim_earlier(&thread_id, keep_rows);
+                self.reply(id, Ok(json!({})));
+            }
         }
+    }
+
+    /// The turns let go stay in the cache, once their streamed text is there.
+    fn trim_earlier(&mut self, thread_id: &str, keep_rows: usize) {
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        save_streamed(&self.cache, thread_id, open);
+        let Some(splice) = open.transcript.trim(keep_rows) else { return };
+        open.earlier = true;
+        self.emit_rows(thread_id, false, splice);
+    }
+
+    fn load_earlier(&mut self, thread_id: &str) {
+        let Some(open) = self.open.get_mut(thread_id).filter(|open| open.earlier) else { return };
+        let page = self.cache.page(thread_id, open.transcript.first_seq());
+        open.earlier = page.earlier;
+        let splice = open.transcript.prepend(page.items).unwrap_or(Splice { start: 0, remove: 0, rows: Vec::new() });
+        self.emit_rows(thread_id, false, splice);
     }
 
     fn open_thread(&mut self, server_id: &str, thread_id: &str) -> Result<(), String> {
@@ -1232,23 +1267,31 @@ impl Core {
         let cwd = thread.as_ref().map(|thread| thread.cwd.clone()).unwrap_or_default();
         let link = server.link.clone();
 
-        let mut items = self.cache.items(thread_id);
+        let Page { mut items, earlier } = self.cache.page(thread_id, None);
         let since = self.cache.synced_rev(thread_id);
         let newest = items.split_off(items.len().saturating_sub(FIRST_ITEMS));
         let mut transcript = Transcript::new(&cwd);
         transcript.load(newest);
-        self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows: transcript.rows().to_vec() });
+        let rows = |reset, splice: Splice| Event::Rows {
+            thread_id: thread_id.to_string(),
+            reset,
+            start: splice.start,
+            remove: splice.remove,
+            rows: splice.rows,
+            earlier,
+        };
+        self.emit(rows(true, Splice { start: 0, remove: 0, rows: transcript.rows().to_vec() }));
         if !items.is_empty()
-            && let Some(earlier) = transcript.prepend(items)
+            && let Some(rest) = transcript.prepend(items)
         {
-            self.emit_rows(thread_id, false, earlier);
+            self.emit(rows(false, rest));
         }
         // What the agent was last seen doing, until the server says what it does now.
         if let Some(thread) = thread {
             let activity = restored_activity(&thread, self.cache.activity(thread_id));
             let (queued, event) = activity_changed(thread_id, &mut transcript, activity);
             if let Some(queued) = queued {
-                self.emit_rows(thread_id, false, queued);
+                self.emit(rows(false, queued));
             }
             self.emit(event);
         }
@@ -1256,6 +1299,7 @@ impl Core {
         let open = OpenThread {
             server_id: server_id.to_string(),
             transcript,
+            earlier,
             live: false,
             rev: since,
             unrendered: HashSet::new(),

@@ -31,7 +31,7 @@ final class AttachedFilesView: FlippedView {
         return height > 0 ? height + 8 : 0
     }
 
-    private static func size(_ files: [AttachedFile], width: CGFloat) -> NSSize {
+    static func size(_ files: [AttachedFile], width: CGFloat) -> NSSize {
         let pictured = files.filter { $0.media != nil }.count
         let named = files.count - pictured
         let perRow = max(1, Int((width + gap) / (tile.width + gap)))
@@ -71,10 +71,6 @@ final class AttachedFilesView: FlippedView {
             file.media.map { ViewedMedia(name: file.name, video: file.video, source: .media($0)) }
         }
         owner?.view(viewed, at: index)
-    }
-
-    func size(width: CGFloat) -> NSSize {
-        Self.size(files, width: width)
     }
 
     func layout(width: CGFloat) {

@@ -9,11 +9,14 @@ final class TranscriptModel {
         let pending: (RowModel?) -> Void
         let activity: (Activity) -> Void
         let recolor: (String, CodeContent) -> Void
+        /// Whether the thread has turns before the first row.
+        let earlier: (Bool) -> Void
     }
 
     private(set) var threadID: String?
     private(set) var rows: [RowModel] = []
     private(set) var activity = Activity()
+    private var hasEarlier = false
     private var pending: RowModel?
     private var hooks: Hooks?
     private var owner: ObjectIdentifier?
@@ -34,6 +37,7 @@ final class TranscriptModel {
         hooks.reset(rows)
         hooks.pending(pending)
         hooks.activity(activity)
+        hooks.earlier(hasEarlier)
     }
 
     /// Lets go of the view, unless another one has attached since.
@@ -49,6 +53,7 @@ final class TranscriptModel {
         rows = []
         pending = nil
         activity = Activity()
+        hasEarlier = false
         hooks?.reset([])
         hooks?.activity(activity)
     }
@@ -58,7 +63,9 @@ final class TranscriptModel {
         self.threadID = threadID
     }
 
-    func apply(reset: Bool, start: Int, remove: Int, rows new: [RowModel]) {
+    func apply(reset: Bool, start: Int, remove: Int, rows new: [RowModel], earlier: Bool) {
+        hasEarlier = earlier
+        defer { hooks?.earlier(earlier) }
         // The server has the message now, so the copy shown while it travelled goes. The view lets
         // go of its own with these rows, so that the message doesn't move.
         let sent = pending != nil && new.contains(where: \.isSentMessage)

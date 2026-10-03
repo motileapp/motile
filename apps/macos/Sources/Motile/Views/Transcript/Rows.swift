@@ -1,4 +1,15 @@
 import AppKit
+import os
+
+/// How wide the transcript's column is, for measuring rows on the thread that decodes them.
+enum TranscriptColumn {
+    private static let shared = OSAllocatedUnfairLock<CGFloat>(initialState: 0)
+
+    static var width: CGFloat {
+        get { shared.withLock { $0 } }
+        set { shared.withLock { $0 = newValue } }
+    }
+}
 
 /// One row of the transcript, decoded from the core's JSON. Its text is laid out for display
 /// here, off the main thread, so showing a row costs the main thread nothing but drawing.
@@ -25,6 +36,9 @@ final class RowModel {
     /// The row belongs to the group above it, which is open.
     let nested: Bool
     let kind: Kind
+    /// How tall the row is in a column of that width. It is set while the row is decoded, and
+    /// after that only on the main thread.
+    var measured: (width: CGFloat, height: CGFloat)?
 
     init(id: String, itemID: String, kind: Kind) {
         self.id = id
@@ -66,6 +80,9 @@ final class RowModel {
         default:
             return nil
         }
+        let width = TranscriptColumn.width
+        guard width > 0 else { return }
+        measured = (width, RowView.height(self, width: width))
     }
 
     /// A user message shown the moment it is sent, before the server has it.

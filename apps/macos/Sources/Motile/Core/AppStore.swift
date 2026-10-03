@@ -255,9 +255,10 @@ final class AppStore {
             let threadID = event.string("thread_id")
             let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
             let rows = event.objects("rows").compactMap { RowModel(json: $0) }
+            let earlier = event.bool("earlier")
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
-                self.transcript.apply(reset: reset, start: start, remove: remove, rows: rows)
+                self.transcript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: earlier)
                 // Assigned only when it changes: every assignment makes the views that read it
                 // update, and rows arrive many times a second.
                 let isEmpty = self.transcript.isEmpty

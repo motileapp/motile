@@ -197,6 +197,16 @@ pub enum Command {
         thread_id: String,
         row_id: String,
     },
+    /// Asks for the turns before the first row, when the rows said there are some.
+    LoadEarlier {
+        thread_id: String,
+    },
+    /// Lets go of the turns before the one that has the first of the last `keep_rows` rows.
+    /// The app asks while it shows the end of a thread; the turns come back with `LoadEarlier`.
+    TrimEarlier {
+        thread_id: String,
+        keep_rows: usize,
+    },
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -249,12 +259,14 @@ pub enum Event {
         size: u64,
     },
     /// Replace `remove` rows at `start` with `rows`. With `reset` the app's rows are dropped first.
+    /// `earlier` says that the thread has turns before the first row.
     Rows {
         thread_id: String,
         reset: bool,
         start: usize,
         remove: usize,
         rows: Vec<Row>,
+        earlier: bool,
     },
     Spans {
         thread_id: String,

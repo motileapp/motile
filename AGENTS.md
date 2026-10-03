@@ -168,7 +168,10 @@ Rust library for tests.
 - `core.rs` is one loop that owns all state. Commands from the app and events from the servers
   arrive on one channel; anything that waits on the network runs in its own task.
 - `link.rs` keeps one server connected and follows its thread list and the open threads.
-- `cache.rs` is the app's SQLite copy of its servers' threads.
+- `cache.rs` is the app's SQLite copy of its servers' threads. A thread is read from it a page
+  at a time: whole turns, about 150 items. An open thread holds its last turns, the ones
+  before them come when the app scrolls near the first row, and the app has the turns far
+  above let go again while it shows the end. So a thread of any length costs what is looked at.
 - `media.rs` is the images and videos the app has fetched from its servers, as files. They are
   fetched when a row that shows one is seen, and take at most 2 GB: past that, what was looked
   at longest ago goes first. The servers keep them all, so the app can also clear them. An
@@ -199,7 +202,9 @@ Rust library for tests.
   surface, with a line between them. It is not a `NavigationSplitView`, whose sidebar the system
   draws as a floating panel.
 - `Views/Transcript/` is the transcript: `TranscriptView.swift` only keeps views for the rows on
-  screen, `RowViews.swift` are the rows, `Rows.swift` builds their text off the main thread.
+  screen, `RowViews.swift` are the rows, `Rows.swift` builds their text and measures their
+  height off the main thread, so a row's height is known before it is scrolled to. The view
+  asks the core for the turns before its first row when it is scrolled near them.
   `MediaRowView.swift` is the row of an image or a video: images are decoded off the main
   thread at the size they are shown, and a video is downloaded when it is played. A queued
   message is a row under the line that says the agent is working, with the buttons that send

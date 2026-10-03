@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use motile_protocol::auth_api::Me;
-use motile_protocol::wire::{Activity, Item, Project, ServerInfo, Thread};
+use motile_protocol::wire::{Activity, Item, ItemKind, Project, ServerInfo, Thread};
 use rusqlite::{Connection, OptionalExtension, params};
 
 const SCHEMA: &str = "
@@ -41,6 +41,18 @@ CREATE INDEX IF NOT EXISTS items_by_seq ON items(thread_id, seq);
 
 pub struct Cache {
     connection: Mutex<Connection>,
+}
+
+/// How much of a thread is read at a time: whole turns, until they come to this many items or
+/// bytes. A thread of any length then costs what is looked at.
+const PAGE_ITEMS: usize = 150;
+const PAGE_BYTES: usize = 1 << 20;
+
+/// Some turns of a thread, in order, and whether the thread has items before them.
+#[derive(Default)]
+pub struct Page {
+    pub items: Vec<Item>,
+    pub earlier: bool,
 }
 
 pub struct CachedThread {
@@ -234,14 +246,30 @@ impl Cache {
         rev.unwrap_or(0) as u64
     }
 
-    pub fn items(&self, thread_id: &str) -> Vec<Item> {
+    /// The turns right before the item at `before`, or the thread's last ones.
+    pub fn page(&self, thread_id: &str, before: Option<u64>) -> Page {
         let connection = self.connection();
-        let Ok(mut statement) = connection.prepare("SELECT payload FROM items WHERE thread_id = ?1 ORDER BY seq")
-        else {
-            return Vec::new();
+        let query = "SELECT payload FROM items WHERE thread_id = ?1 AND seq < ?2 ORDER BY seq DESC";
+        let Ok(mut statement) = connection.prepare(query) else { return Page::default() };
+        let before = before.map_or(i64::MAX, |seq| seq as i64);
+        let Ok(rows) = statement.query_map(params![thread_id, before], |row| row.get::<_, String>(0)) else {
+            return Page::default();
         };
-        let Ok(rows) = statement.query_map([thread_id], |row| row.get::<_, String>(0)) else { return Vec::new() };
-        rows.flatten().filter_map(|text| serde_json::from_str(&text).ok()).collect()
+        let mut page = Page::default();
+        let mut bytes = 0;
+        for text in rows.flatten() {
+            let Ok(item) = serde_json::from_str::<Item>(&text) else { continue };
+            // The item that ends a turn is where the turn after it starts.
+            let full = page.items.len() >= PAGE_ITEMS || bytes >= PAGE_BYTES;
+            if full && matches!(item.kind, ItemKind::TurnEnd { .. }) {
+                page.earlier = true;
+                break;
+            }
+            bytes += text.len();
+            page.items.push(item);
+        }
+        page.items.reverse();
+        page
     }
 
     /// Stores the items and, in the same step, how far the copy is now complete. `synced_rev`
@@ -369,5 +397,31 @@ mod tests {
         cache.set_threads("s", std::slice::from_ref(&thread));
         cache.upsert_thread("s", &thread);
         assert_eq!(cache.activity("t"), Some(activity));
+    }
+
+    #[test]
+    fn a_thread_is_read_a_few_whole_turns_at_a_time() {
+        use motile_protocol::wire::TurnSummary;
+
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(&dir.path().join("cache.sqlite")).unwrap();
+        // Three turns of a message, 99 replies and an end.
+        let item = |seq: u64| {
+            let kind = match seq % 101 {
+                0 => ItemKind::User { text: "Go on".into(), attachments: Vec::new() },
+                100 => ItemKind::TurnEnd { summary: TurnSummary::default() },
+                _ => ItemKind::Assistant { text: "Done".into() },
+            };
+            Item { id: seq.to_string(), seq, rev: seq + 1, created_at: 0.0, media: Vec::new(), kind }
+        };
+        let items: Vec<Item> = (0..303).map(item).collect();
+        cache.save_items("t", &items.iter().collect::<Vec<_>>(), None);
+        let seqs = |page: &Page| (page.items.first().map(|item| item.seq), page.items.last().map(|item| item.seq));
+
+        let last = cache.page("t", None);
+        assert_eq!((seqs(&last), last.earlier), ((Some(101), Some(302)), true));
+
+        let first = cache.page("t", Some(101));
+        assert_eq!((seqs(&first), first.earlier), ((Some(0), Some(100)), false));
     }
 }

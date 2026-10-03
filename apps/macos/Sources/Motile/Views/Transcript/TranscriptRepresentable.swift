@@ -22,13 +22,22 @@ struct TranscriptRepresentable: NSViewRepresentable {
         view.onViewMedia = { media, index in store.view(media, at: index) }
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
+        view.onNeedEarlier = { done in
+            guard let threadID = store.transcript.threadID else { return done() }
+            store.core.send("load_earlier", ["thread_id": threadID]) { _ in done() }
+        }
+        view.onTrimEarlier = { keepRows, done in
+            guard let threadID = store.transcript.threadID else { return done() }
+            store.core.send("trim_earlier", ["thread_id": threadID, "keep_rows": keepRows]) { _ in done() }
+        }
         view.onOpenDiff = { itemID, path in store.sidePanel.showDiff(.turn(itemID), revealing: path) }
         let hooks = TranscriptModel.Hooks(
             reset: { [weak view] rows in view?.reset(rows: rows) },
             splice: { [weak view] start, remove, rows in view?.splice(start: start, remove: remove, rows: rows) },
             pending: { [weak view] row in view?.setPending(row) },
             activity: { [weak view] activity in view?.setActivity(activity) },
-            recolor: { [weak view] rowID, content in view?.recolor(rowID: rowID, content: content) }
+            recolor: { [weak view] rowID, content in view?.recolor(rowID: rowID, content: content) },
+            earlier: { [weak view] earlier in view?.setEarlier(earlier) }
         )
         store.transcript.attach(hooks, owner: view)
         context.coordinator.store = store

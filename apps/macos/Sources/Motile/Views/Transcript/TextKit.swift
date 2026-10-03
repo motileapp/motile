@@ -133,7 +133,8 @@ final class RowTextView: NSTextView {
     /// Called when the user starts selecting here, so other rows can let go of their selection.
     var onSelect: (() -> Void)?
 
-    static func make(wraps: Bool = true) -> RowTextView {
+    /// The text system of a row's text. `TextMeasure` uses the same one, so both lay text out alike.
+    fileprivate static func textSystem() -> (storage: NSTextStorage, layout: NSLayoutManager, container: NSTextContainer) {
         let storage = NSTextStorage()
         let layout = DecoratingLayoutManager()
         layout.allowsNonContiguousLayout = true
@@ -143,8 +144,14 @@ final class RowTextView: NSTextView {
         container.widthTracksTextView = false
         container.heightTracksTextView = false
         layout.addTextContainer(container)
+        return (storage, layout, container)
+    }
 
-        let view = RowTextView(frame: .zero, textContainer: container)
+    static func make(wraps: Bool = true) -> RowTextView {
+        let system = textSystem()
+        let container = system.container
+        // The view takes the storage as its own while it is made.
+        let view = withExtendedLifetime(system.storage) { RowTextView(frame: .zero, textContainer: container) }
         view.isEditable = false
         view.isSelectable = true
         view.drawsBackground = false
@@ -203,7 +210,7 @@ final class RowTextView: NSTextView {
 
     /// Lays the text out at `width` and returns how tall it is.
     func height(forWidth width: CGFloat) -> CGFloat {
-        guard let container = textContainer, let layout = layoutManager else { return 0 }
+        guard let container = textContainer, let layout = layoutManager, content.length > 0 else { return 0 }
         if container.size.width != width {
             container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
         }
@@ -327,6 +334,28 @@ final class RowTextView: NSTextView {
     override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric) }
 }
 
+/// Says how tall text is in a `RowTextView` of some width, without a view, so that rows can be
+/// measured off the main thread. Its one text system is used by a thread at a time.
+enum TextMeasure {
+    private static let lock = NSLock()
+    private static let system: (storage: NSTextStorage, layout: NSLayoutManager, container: NSTextContainer) = {
+        let system = RowTextView.textSystem()
+        // Background layout runs on the main thread, where this text system must not be touched.
+        system.layout.backgroundLayoutEnabled = false
+        return system
+    }()
+
+    static func height(of text: NSAttributedString, width: CGFloat) -> CGFloat {
+        guard text.length > 0 else { return 0 }
+        lock.lock()
+        defer { lock.unlock() }
+        system.storage.setAttributedString(text)
+        system.container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        system.layout.ensureLayout(for: system.container)
+        return ceil(system.layout.usedRect(for: system.container).height)
+    }
+}
+
 /// Shows code that is wider than the column and moves it sideways under the pointer. It is a
 /// plain clipping view rather than a scroll view: a scroll view inside the transcript's own
 /// doesn't redraw what the transcript scrolls into view.
@@ -334,6 +363,9 @@ final class SidewaysClipView: NSView {
     private weak var content: NSView?
     private var contentWidth: CGFloat = 0
     private var offset: CGFloat = 0
+    /// Whether the gesture under way moves the code sideways. A gesture keeps the way it set out,
+    /// as it does in a scroll view, so one that scrolls the transcript never drags the code along.
+    private var gestureIsSideways: Bool?
 
     override var isFlipped: Bool { true }
 
@@ -352,10 +384,18 @@ final class SidewaysClipView: NSView {
         view.frame = NSRect(x: -offset, y: 0, width: size.width, height: size.height)
     }
 
+    private func isSideways(_ event: NSEvent) -> Bool {
+        let sideways = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
+        // A wheel that isn't a gesture says so with every notch.
+        guard !event.phase.isEmpty || !event.momentumPhase.isEmpty else { return sideways }
+        if event.phase.contains(.began) || event.phase.contains(.mayBegin) { gestureIsSideways = nil }
+        if gestureIsSideways == nil, event.scrollingDeltaX != 0 || event.scrollingDeltaY != 0 { gestureIsSideways = sideways }
+        return gestureIsSideways ?? false
+    }
+
     override func scrollWheel(with event: NSEvent) {
         let overflow = contentWidth - bounds.width
-        let sideways = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
-        guard sideways, overflow > 0, let content else {
+        guard isSideways(event), overflow > 0, let content else {
             nextResponder?.scrollWheel(with: event)
             return
         }
