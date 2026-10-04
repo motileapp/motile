@@ -2,7 +2,7 @@
 import SwiftUI
 import UIKit
 
-/// Drives the app without a finger, for looking at it in the simulator: `MOTILE_DEMO_SCRIPT` names
+/// Drives the client without a finger, for looking at it in the simulator: `MOTILE_DEMO_SCRIPT` names
 /// a file of steps, one a line, that is read again whenever it changes.
 ///
 ///     sidebar open | sidebar close      shows or hides the sidebar

@@ -1,4 +1,4 @@
-//! The C functions the apps call. Everything crossing the boundary is JSON text: commands go in
+//! The C functions the clients call. Everything crossing the boundary is JSON text: commands go in
 //! through `motile_send`, events come out through the callback given to `motile_start`.
 
 use std::ffi::{CStr, CString, c_char, c_void};
@@ -20,7 +20,7 @@ struct Running {
 
 static RUNNING: OnceLock<Running> = OnceLock::new();
 
-/// The app's context pointer, which it promises is safe to hand to any thread.
+/// The client's context pointer, which it promises is safe to hand to any thread.
 struct Context(*mut c_void);
 unsafe impl Send for Context {}
 unsafe impl Sync for Context {}

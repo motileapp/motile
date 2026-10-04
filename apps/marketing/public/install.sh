@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://motile.app/install.sh | sh -s -- <token>
 #
-# The token comes from the install command the Motile app shows. MOTILE_AUTH_URL links the server
+# The token comes from the install command the Motile client shows. MOTILE_AUTH_URL links the server
 # with another auth server than Motile's, and MOTILE_DOWNLOAD_URL downloads it from another place
 # than the latest release. On Linux the binary goes to /usr/local/bin, on a Mac to ~/.local/bin,
 # where the server can update itself without a password.

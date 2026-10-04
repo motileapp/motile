@@ -375,7 +375,7 @@ private struct WindowTitleHider: NSViewRepresentable {
     }
 }
 
-/// The app's icon. Its tile is 824 of the image's 1024 points; the frame makes the tile `size`
+/// The client's icon. Its tile is 824 of the image's 1024 points; the frame makes the tile `size`
 /// wide.
 struct LogoView: View {
     let size: CGFloat

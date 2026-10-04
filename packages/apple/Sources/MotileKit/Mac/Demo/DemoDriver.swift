@@ -1,7 +1,7 @@
 #if os(macOS)
 import AppKit
 
-/// A scripted walk through the app, used by CI to take screenshots and to check that the window
+/// A scripted walk through the client, used by CI to take screenshots and to check that the window
 /// stays responsive. Runs only when `MOTILE_DEMO=1`.
 ///
 /// It expects an auth server that allows the dev login. Once signed in it writes the install
@@ -73,7 +73,7 @@ private final class Demo {
         process.waitUntilExit()
     }
 
-    /// The Settings window, opened from the app's menu as a person would.
+    /// The Settings window, opened from the client's menu as a person would.
     private func shootSettings(_ name: String) async {
         guard let menu = NSApp.mainMenu?.items.first?.submenu,
             let item = menu.items.firstIndex(where: { $0.keyEquivalent == "," })

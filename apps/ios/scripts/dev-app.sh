@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Opens the app in the simulator, signed in to the account of the Mac's dev app: the local auth
+# Opens the client in the simulator, signed in to the account of the Mac's dev app: the local auth
 # server with the dev login and the local server whose agent is scripts/fake-agent
 # (apps/macos/scripts/dev-stack.sh). The simulator needs no window, so it works with the Mac's
 # screen locked.
 #
-#   scripts/dev-app.sh           build, start what isn't running, open the app
+#   scripts/dev-app.sh           build, start what isn't running, open the client
 #   scripts/dev-app.sh --stop    shut the simulator down, stop the servers and PostgreSQL
 #
 # MOTILE_SIM names the simulator (default "iPhone 17"), as `xcrun simctl list devices` does.
@@ -23,7 +23,7 @@ fi
 
 start_stack
 
-echo "▸ Building the app…"
+echo "▸ Building the client…"
 if ! xcodebuild -project Motile.xcodeproj -scheme Motile -configuration Debug \
     -destination "platform=iOS Simulator,name=$SIM" -derivedDataPath build/derived build > "$DEV/ios-build.log" 2>&1; then
     grep -E "error:" "$DEV/ios-build.log" | sort -u >&2
@@ -31,10 +31,10 @@ if ! xcodebuild -project Motile.xcodeproj -scheme Motile -configuration Debug \
 fi
 APP="build/derived/Build/Products/Debug-iphonesimulator/Motile.app"
 
-echo "▸ Opening the app in ${SIM}…"
+echo "▸ Opening the client in ${SIM}…"
 xcrun simctl bootstatus "$SIM" -b >/dev/null
 xcrun simctl install "$SIM" "$APP"
-# The steps scripts/do.sh gives the app are read from here.
+# The steps scripts/do.sh gives the client are read from here.
 : > "$DEV/ios.steps"
 SIMCTL_CHILD_MOTILE_AUTH_URL="$AUTH_URL" SIMCTL_CHILD_MOTILE_LOCAL=1 \
     SIMCTL_CHILD_MOTILE_SERVER_ADDR="127.0.0.1:$SERVER_PORT" \

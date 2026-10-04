@@ -1,4 +1,4 @@
-//! A patch as git writes it, read into files whose lines an app draws one under the other, and
+//! A patch as git writes it, read into files whose lines a client draws one under the other, and
 //! a file's text as such lines. Highlighting comes separately, a list of spans for each line.
 
 use motile_protocol::wire::Change;

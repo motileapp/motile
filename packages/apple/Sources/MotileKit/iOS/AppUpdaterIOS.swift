@@ -2,7 +2,7 @@
 import Foundation
 import Observation
 
-/// Finds out about new releases, which the servers are compared with. The app itself is
+/// Finds out about new releases, which the servers are compared with. The client itself is
 /// updated by TestFlight and the App Store.
 @Observable
 final class AppUpdater {

@@ -111,7 +111,7 @@ impl Auth {
         self.get(&format!("{}/auth/google/callback?code=google-code&state={}", self.base, query["state"])).await
     }
 
-    /// The code the app is handed back after `account` signed in.
+    /// The code the client is handed back after `account` signed in.
     async fn sign_in_code(&self, verifier: &str, account: &GoogleAccount) -> String {
         let response = self.through_google(verifier, "app-state", account).await;
         let back = Url::parse(response.headers()[LOCATION].to_str().unwrap()).unwrap();
@@ -121,8 +121,8 @@ impl Auth {
         query["code"].clone()
     }
 
-    /// A new app signed in as `account`.
-    async fn app(&self, account: &GoogleAccount) -> (DeviceKey, Me) {
+    /// A new client signed in as `account`.
+    async fn new_client(&self, account: &GoogleAccount) -> (DeviceKey, Me) {
         let key = DeviceKey::generate();
         let verifier = random_token();
         let code = self.sign_in_code(&verifier, account).await;

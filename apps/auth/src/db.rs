@@ -189,7 +189,7 @@ pub async fn complete_sign_in(db: &PgPool, id: &str, user_id: Uuid, code_hash: &
 }
 
 /// Takes the sign-in the code belongs to. A code works once, and only for what it was started
-/// for: `web` to open a session, otherwise to link an app.
+/// for: `web` to open a session, otherwise to link a client.
 pub async fn take_sign_in(db: &PgPool, code_hash: &str, web: bool) -> Result<Option<SignIn>, sqlx::Error> {
     sqlx::query_as(
         "DELETE FROM sign_ins WHERE code_hash = $1 AND web = $2 AND expires_at > now()

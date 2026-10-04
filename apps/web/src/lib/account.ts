@@ -20,7 +20,7 @@ export type Device = {
 export type Account = {
   user: { email: string; name: string | null; picture: string | null }
   servers: Array<Device>
-  apps: Array<Device>
+  clients: Array<Device>
 }
 
 export type InstallCommand = { command: string; expires_at: number }
@@ -38,7 +38,7 @@ export const getAccount = createServerFn().handler(
     return {
       user: me.user,
       servers: me.devices.filter((device) => device.kind === "server"),
-      apps: me.devices.filter((device) => device.kind === "client"),
+      clients: me.devices.filter((device) => device.kind === "client"),
     }
   }
 )

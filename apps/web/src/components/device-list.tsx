@@ -91,8 +91,8 @@ function RemoveDevice({ device }: { device: Device }) {
           <AlertDialogTitle>Remove {device.name}?</AlertDialogTitle>
           <AlertDialogDescription>
             {device.kind === "server"
-              ? "Your apps will no longer reach this server. Its threads stay on the machine, and it can be added again with a new install command."
-              : "This app is signed out and can no longer reach your servers."}
+              ? "Your clients will no longer reach this server. Its threads stay on the machine, and it can be added again with a new install command."
+              : "This client is signed out and can no longer reach your servers."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

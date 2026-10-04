@@ -52,7 +52,7 @@ async fn me(auth: &Auth, token: &str) -> Me {
 #[sqlx::test]
 async fn signing_in_on_the_web_opens_a_session_that_sees_the_account(db: PgPool) {
     let auth = Auth::start(db).await;
-    auth.app(&ANN).await;
+    auth.new_client(&ANN).await;
 
     let token = session(&auth, &ANN).await;
     let account = me(&auth, &token).await;
@@ -77,7 +77,7 @@ async fn a_web_code_works_once_and_only_with_the_secret_that_started_the_sign_in
 }
 
 #[sqlx::test]
-async fn a_web_sign_in_never_links_a_device_and_an_apps_never_opens_a_session(db: PgPool) {
+async fn a_web_sign_in_never_links_a_device_and_a_clients_never_opens_a_session(db: PgPool) {
     let auth = Auth::start(db).await;
     let key = DeviceKey::generate();
     let verifier = random_token();
@@ -86,8 +86,8 @@ async fn a_web_sign_in_never_links_a_device_and_an_apps_never_opens_a_session(db
     assert!(auth.client.exchange(&key, &web, &verifier, &MAC).await.is_err());
     assert_eq!(auth.client.me(&key).await.unwrap().user, None);
 
-    let app = auth.sign_in_code(&verifier, &ANN).await;
-    assert_eq!(open_session(&auth, &app, &verifier).await.status(), StatusCode::BAD_REQUEST);
+    let client = auth.sign_in_code(&verifier, &ANN).await;
+    assert_eq!(open_session(&auth, &client, &verifier).await.status(), StatusCode::BAD_REQUEST);
 }
 
 #[sqlx::test]

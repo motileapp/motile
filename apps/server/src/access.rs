@@ -1,5 +1,5 @@
-//! Which devices may connect: the apps linked to the server's account, as listed by the auth
-//! server. The list is kept on disk so the server still accepts its apps while the auth server is
+//! Which devices may connect: the clients linked to the server's account, as listed by the auth
+//! server. The list is kept on disk so the server still accepts its clients while the auth server is
 //! unreachable.
 
 use std::collections::HashSet;
@@ -71,7 +71,7 @@ impl Access {
         account.last_refresh.lock().await.is_some_and(|at| at.elapsed() < MIN_REFRESH_GAP)
     }
 
-    /// Asks the auth server which apps belong to the account.
+    /// Asks the auth server which clients belong to the account.
     pub async fn refresh(&self) {
         let Some(account) = &self.account else { return };
         *account.last_refresh.lock().await = Some(Instant::now());
@@ -84,10 +84,10 @@ impl Access {
             }
         };
         if me.user.is_none() {
-            tracing::warn!("this server is no longer linked to an account; no app may connect");
+            tracing::warn!("this server is no longer linked to an account; no client may connect");
         }
-        let apps = me.devices.into_iter().filter(|device| device.kind == DeviceKind::Client);
-        let keys: HashSet<String> = apps.map(|device| device.public_key).collect();
+        let clients = me.devices.into_iter().filter(|device| device.kind == DeviceKind::Client);
+        let keys: HashSet<String> = clients.map(|device| device.public_key).collect();
         if let Ok(text) = serde_json::to_string(&keys) {
             let _ = std::fs::write(&account.cache, text);
         }

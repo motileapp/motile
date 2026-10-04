@@ -8,7 +8,7 @@ use sqlx::PgPool;
 use super::{ANN, Auth, BOB, GOOGLE_CLIENT_ID, GoogleAccount, MAC, emails, names};
 
 #[sqlx::test]
-async fn signing_in_with_google_links_the_app_that_started_it(db: PgPool) {
+async fn signing_in_with_google_links_the_client_that_started_it(db: PgPool) {
     let auth = Auth::start(db).await;
     let key = DeviceKey::generate();
     let verifier = random_token();
@@ -37,7 +37,7 @@ async fn a_code_works_once_and_only_with_the_secret_that_started_the_sign_in(db:
 
     let code = auth.sign_in_code(&verifier, &ANN).await;
     let stolen = auth.client.exchange(&DeviceKey::generate(), &code, "a-guess", &MAC).await;
-    assert_eq!(stolen.unwrap_err().to_string(), "This sign-in was started by another app.");
+    assert_eq!(stolen.unwrap_err().to_string(), "This sign-in was started by another client.");
 
     // The failed attempt used the code up.
     let late = auth.client.exchange(&key, &code, &verifier, &MAC).await;
@@ -51,7 +51,7 @@ async fn a_code_works_once_and_only_with_the_secret_that_started_the_sign_in(db:
 }
 
 #[sqlx::test]
-async fn the_code_is_only_ever_sent_to_the_app(db: PgPool) {
+async fn the_code_is_only_ever_sent_to_the_client(db: PgPool) {
     let auth = Auth::start(db).await;
     let challenge = sha256_hex(b"verifier");
 
@@ -72,7 +72,7 @@ async fn the_code_is_only_ever_sent_to_the_app(db: PgPool) {
 }
 
 #[sqlx::test]
-async fn a_sign_in_google_did_not_complete_goes_back_to_the_app_without_a_code(db: PgPool) {
+async fn a_sign_in_google_did_not_complete_goes_back_to_the_client_without_a_code(db: PgPool) {
     let auth = Auth::start(db).await;
     let google = auth.open_sign_in(&random_token(), "app-state").await;
     let query: HashMap<String, String> = google.query_pairs().into_owned().collect();
@@ -99,9 +99,9 @@ async fn an_unverified_google_address_is_turned_away(db: PgPool) {
 #[sqlx::test]
 async fn signing_in_again_keeps_the_account_and_another_person_gets_their_own(db: PgPool) {
     let auth = Auth::start(db).await;
-    let (first, _) = auth.app(&ANN).await;
-    let (_, second) = auth.app(&ANN).await;
-    let (_, other) = auth.app(&BOB).await;
+    let (first, _) = auth.new_client(&ANN).await;
+    let (_, second) = auth.new_client(&ANN).await;
+    let (_, other) = auth.new_client(&BOB).await;
 
     assert_eq!(second.devices.len(), 2);
     assert!(second.devices.iter().any(|device| device.public_key == first.public()));

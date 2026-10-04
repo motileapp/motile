@@ -32,7 +32,7 @@ pub async fn setup(data_dir: &DataDir, options: Options) -> anyhow::Result<()> {
         return Ok(());
     }
     if service::install(data_dir.path())? {
-        println!("\nMotile is running on this machine. It shows up in the app in a moment.");
+        println!("\nMotile is running on this machine. It shows up in your clients in a moment.");
     }
     Ok(())
 }
@@ -108,7 +108,7 @@ async fn enroll(data_dir: &DataDir, options: &Options) -> anyhow::Result<()> {
                 println!("Already linked to {}.", account.email);
                 Ok(())
             }
-            None => bail!("This server isn't linked to an account yet. Copy the install command from the Motile app."),
+            None => bail!("This server isn't linked to an account yet. Copy the install command from a Motile client."),
         };
     };
     let key = data_dir.device_key()?;

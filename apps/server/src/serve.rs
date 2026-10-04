@@ -1,4 +1,4 @@
-//! The iroh endpoint apps connect to. A connection is accepted only from a device linked to the
+//! The iroh endpoint clients connect to. A connection is accepted only from a device linked to the
 //! server's account; every stream on it carries one request.
 
 use std::path::PathBuf;
@@ -23,9 +23,9 @@ use crate::{files, update};
 
 const NOT_LINKED: u32 = 403;
 const RECHECK_ACCESS_EVERY: Duration = Duration::from_secs(30);
-/// Long enough for the app to hear that the update is installed.
+/// Long enough for the client to hear that the update is installed.
 const RESTART_AFTER: Duration = Duration::from_millis(500);
-/// A long transcript is sent in pieces so the app can show the first ones while the rest travel.
+/// A long transcript is sent in pieces so the client can show the first ones while the rest travel.
 const ITEMS_PER_MESSAGE: usize = 200;
 
 #[derive(Default)]
@@ -72,7 +72,7 @@ impl Server {
             connection.close(NOT_LINKED.into(), b"This device isn't linked to the server's account.");
             return;
         }
-        tracing::info!(device, "app connected");
+        tracing::info!(device, "client connected");
         let mut recheck = tokio::time::interval(RECHECK_ACCESS_EVERY);
         loop {
             tokio::select! {
@@ -94,7 +94,7 @@ impl Server {
                 }
             }
         }
-        tracing::info!(device, "app disconnected");
+        tracing::info!(device, "client disconnected");
     }
 
     async fn handle_stream(self, mut send: SendStream, mut recv: RecvStream) -> anyhow::Result<()> {
@@ -181,7 +181,7 @@ impl Server {
     }
 }
 
-/// Installs the latest release while telling the app how far the download is, then starts the
+/// Installs the latest release while telling the client how far the download is, then starts the
 /// new program in this one's place.
 async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     static UPDATING: AtomicBool = AtomicBool::new(false);
@@ -212,7 +212,7 @@ async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
         }
     });
     while let Some((received, total)) = progress.recv().await {
-        // The app may have gone; the update goes on without it.
+        // The client may have gone; the update goes on without it.
         let _ = write_frame(&mut send, &Message::Updating { received, total }).await;
     }
     let installed = installing.await?;
@@ -230,8 +230,8 @@ async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Commits, pushes and the like, telling the app each stage as it starts. The run goes on when
-/// the app has gone.
+/// Commits, pushes and the like, telling the client each stage as it starts. The run goes on when
+/// the client has gone.
 async fn git_run(mut send: SendStream, hub: Arc<Hub>, project_id: String, run: GitRun) -> anyhow::Result<()> {
     let (stages, mut started) = tokio::sync::mpsc::unbounded_channel();
     let running = tokio::spawn(async move {
@@ -300,13 +300,13 @@ async fn follow_thread(mut send: SendStream, subscription: ThreadSubscription) -
     follow(send, subscription.updates).await
 }
 
-/// Sends every update until the app stops listening.
+/// Sends every update until the client stops listening.
 async fn follow(mut send: SendStream, mut updates: tokio::sync::broadcast::Receiver<Message>) -> anyhow::Result<()> {
     loop {
         tokio::select! {
             update = updates.recv() => match update {
                 Ok(message) => write_frame(&mut send, &message).await?,
-                // An app that fell behind opens the stream again and catches up from its revision.
+                // A client that fell behind opens the stream again and catches up from its revision.
                 Err(RecvError::Lagged(_)) | Err(RecvError::Closed) => break,
             },
             _ = send.stopped() => break,

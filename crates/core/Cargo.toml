@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [lib]
-# The apps link the static library; the Rust tests and the server's tests use the rlib.
+# The clients link the static library; the Rust tests and the server's tests use the rlib.
 crate-type = ["rlib", "staticlib"]
 
 [dependencies]

@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 
-/// The app's icon: its mark on its tile, `size` wide.
+/// The client's icon: its mark on its tile, `size` wide.
 struct LogoView: View {
     let size: CGFloat
 

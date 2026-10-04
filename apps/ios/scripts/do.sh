@@ -9,5 +9,5 @@ cd "$(dirname "$0")/.."
 for step in "$@"; do
     echo "$step" >> ../macos/build/dev/ios.steps
 done
-# The app reads the steps a few times a second.
+# The client reads the steps a few times a second.
 sleep 1

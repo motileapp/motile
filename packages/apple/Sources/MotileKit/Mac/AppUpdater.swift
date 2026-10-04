@@ -4,8 +4,8 @@ import Foundation
 import Observation
 import Security
 
-/// Finds out about new releases and replaces this app with one: it downloads the release's
-/// app, checks that it is signed by whoever signed this one, puts it in this one's place and
+/// Finds out about new releases and replaces this client with one: it downloads the release's
+/// client, checks that it is signed by whoever signed this one, puts it in this one's place and
 /// starts it.
 @Observable
 final class AppUpdater: NSObject, URLSessionDownloadDelegate {
@@ -17,7 +17,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
         case available(String)
         case downloading(String, Double)
         case installing(String)
-        /// Installed; the running app is still the old one.
+        /// Installed; the running client is still the old one.
         case ready(String)
         case failed(String)
     }
@@ -188,7 +188,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
         return (information as? [String: Any])?[kSecCodeInfoTeamIdentifier as String] as? String
     }
 
-    /// The new app has to be intact and meet this app's own requirement: the same identifier,
+    /// The new client has to be intact and meet this client's own requirement: the same identifier,
     /// signed by the same developer.
     private static func verify(_ app: URL) throws {
         let notOurs = Failure(message: "The download isn’t signed by Motile’s developer, so it wasn’t installed.")

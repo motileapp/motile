@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Archives the app for devices and uploads it to TestFlight, with the version in Cargo.toml and
+# Archives the client for devices and uploads it to TestFlight, with the version in Cargo.toml and
 # a build number that counts up by the minute. It is signed with the Apple Distribution
 # certificate in the keychain and the given profile, so no machine makes a certificate of its own.
 #
 #   APPLE_TEAM_ID=… IOS_BUNDLE_ID=… IOS_PROVISIONING_PROFILE=… APPLE_API_KEY=… APPLE_API_KEY_ID=… \
 #       APPLE_API_ISSUER_ID=… scripts/testflight.sh
 #
-# IOS_BUNDLE_ID is the bundle identifier of the app's record in App Store Connect,
+# IOS_BUNDLE_ID is the bundle identifier of the client's record in App Store Connect,
 # IOS_PROVISIONING_PROFILE its App Store profile in base64. APPLE_API_KEY is an App Store Connect
-# API key (the .p8's text) that may upload the app.
+# API key (the .p8's text) that may upload the client.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -1,4 +1,4 @@
-//! The server and an app's connection talking over real iroh connections on this machine, with
+//! The server and a client's connection talking over real iroh connections on this machine, with
 //! `scripts/fake-agent` standing in for Claude Code and Codex.
 
 use std::collections::HashMap;
@@ -79,7 +79,7 @@ impl Harness {
         folder.to_string_lossy().into_owned()
     }
 
-    /// A project to start threads in, added the way the app adds one.
+    /// A project to start threads in, added the way the client adds one.
     async fn project(&self, connection: &Connection) -> Project {
         let path = self.folder("project");
         assert_eq!(connection.request(&Request::AddProject { path: path.clone() }).await.unwrap(), Message::Ok);
@@ -205,7 +205,7 @@ async fn update(connection: &Connection, thread_id: &str, change: ThreadChange) 
     connection.request(&Request::Update { thread_id: thread_id.to_string(), change }).await.unwrap()
 }
 
-/// Applies a thread's updates the way the app does.
+/// Applies a thread's updates the way the client does.
 #[derive(Default)]
 struct Transcript {
     items: Vec<Item>,
@@ -422,7 +422,7 @@ async fn a_streamed_reply_arrives_in_finished_blocks() {
     let mut follow = open(&connection, &thread_id, 0).await;
     transcript.follow_until_idle(&mut follow).await;
 
-    // The fake agent writes its long reply 24 characters at a time. What reaches the app are
+    // The fake agent writes its long reply 24 characters at a time. What reaches the client are
     // whole lines that end a paragraph, a list item or a line of code, a few times a second.
     let reply = *transcript.texts().last().unwrap();
     assert!(reply.starts_with("The API now limits each client") && reply.ends_with("in total.\n"), "{reply}");
@@ -434,7 +434,7 @@ async fn a_streamed_reply_arrives_in_finished_blocks() {
 }
 
 #[tokio::test]
-async fn an_app_that_reconnects_mid_turn_is_sent_only_what_it_missed() {
+async fn a_client_that_reconnects_mid_turn_is_sent_only_what_it_missed() {
     let harness = Harness::start("fixtures/edit-and-run.jsonl", "0.02").await;
     let first = harness.connect().await;
     let new_thread = harness.new_thread(&first, Agent::Claude).await;
@@ -448,7 +448,7 @@ async fn an_app_that_reconnects_mid_turn_is_sent_only_what_it_missed() {
     first.close();
     let had = transcript.items.len();
 
-    // The turn keeps running without the app. Back again, it asks for what came after its revision.
+    // The turn keeps running without the client. Back again, it asks for what came after its revision.
     tokio::time::sleep(Duration::from_millis(300)).await;
     let second = harness.connect().await;
     let mut follow = open(&second, &thread_id, transcript.rev).await;
@@ -476,7 +476,7 @@ async fn an_app_that_reconnects_mid_turn_is_sent_only_what_it_missed() {
 }
 
 #[tokio::test]
-async fn an_app_ahead_of_the_server_starts_over() {
+async fn a_client_ahead_of_the_server_starts_over() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
@@ -1954,7 +1954,7 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
     let Message::Sent { thread_id } = connection.request(&request).await.unwrap() else { panic!("not sent") };
     let transcript = finished_transcript(&connection, &thread_id).await;
 
-    // The app that sent the files named their contents the way the server did.
+    // The client that sent the files named their contents the way the server did.
     let message = &transcript.items[0];
     let shown: Vec<_> =
         message.media.iter().map(|media| (media.src.as_str(), Some(&media.id), media.poster.as_ref())).collect();

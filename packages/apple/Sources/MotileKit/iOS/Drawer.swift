@@ -127,7 +127,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         sidebar.view.isHidden = progress == 0
     }
 
-    /// Opens or closes as the app's state says, unless a finger is moving the card.
+    /// Opens or closes as the client's state says, unless a finger is moving the card.
     func follow(_ open: Bool) {
         guard pan.state != .began, pan.state != .changed, isOpen != open else { return }
         setOpen(open, animated: true)

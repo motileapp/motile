@@ -1,5 +1,5 @@
 //! Signs a data folder in with the dev login and fills its account's server with a project and a
-//! few finished threads. `apps/macos/scripts/dev-app.sh` runs it once; the app it then opens on
+//! few finished threads. `apps/macos/scripts/dev-app.sh` runs it once; the client it then opens on
 //! the same data folder is signed in.
 //!
 //!     cargo run -p motile-core --example seed -- <data dir> <auth url> <project folder>

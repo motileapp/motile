@@ -8,7 +8,7 @@ pub enum DeviceKind {
     /// A machine that runs the agents. Up to 0.1.6 it was called a host.
     #[serde(alias = "host")]
     Server,
-    /// An app that drives servers.
+    /// A client that drives servers.
     Client,
 }
 
@@ -100,7 +100,7 @@ pub struct EnrollResponse {
 pub struct DevLoginRequest {
     pub challenge: String,
     pub email: String,
-    /// The code is for the web app, to open a session with, rather than for an app to link itself.
+    /// The code is for the web app, to open a session with, rather than for a client to link itself.
     #[serde(default)]
     pub web: bool,
 }

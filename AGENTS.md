@@ -1,28 +1,28 @@
 ## What is this?
 
 Motile is the open-source command center for coding agents. The agents (Claude Code and Codex)
-run on machines the user owns, called servers. Native apps drive them: an app connects straight to
+run on machines the user owns, called servers. Native clients drive them: a client connects straight to
 its servers over [iroh](https://www.iroh.computer), which needs no open ports, and keeps a local
-copy of every thread so it opens where it was left. There is no local mode; an app always talks
+copy of every thread so it opens where it was left. There is no local mode; a client always talks
 to a server.
 
-These programs make it up, plus the code the apps share:
+These programs make it up, plus the code the clients share:
 
 | Program | Where it runs | What it does |
 | --- | --- | --- |
 | Auth server (`apps/auth`) | auth.motile.app | Signs people in with Google, records which devices belong to an account |
 | Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/install.sh` |
-| Web app (`apps/web`) | app.motile.app | Lists an account's servers and apps, adds servers, removes devices |
-| Server (`apps/server`, the `motile` binary) | The user's Linux machines and Macs | Runs the agents, stores threads in SQLite, serves the account's apps |
+| Web app (`apps/web`) | app.motile.app | Lists an account's servers and clients, adds servers, removes devices |
+| Server (`apps/server`, the `motile` binary) | The user's Linux machines and Macs | Runs the agents, stores threads in SQLite, serves the account's clients |
 | Mac app (`apps/macos`) | The user's Mac | The interface |
 | iOS app (`apps/ios`) | The user's iPhone and iPad | The interface |
 | Apple kit (`packages/apple`) | Inside the Mac and the iOS app | Their state and their views |
 | GPUI app (`apps/gpui`) | The user's Mac | The Mac app again, in Rust with GPUI. A trial: no workflow builds it |
-| Core (`crates/core`) | Inside every app | Account, connections, sync, the local cache, rendering transcripts |
+| Core (`crates/core`) | Inside every client | Account, connections, sync, the local cache, rendering transcripts |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
 keys belong to one account; it never sees a thread. A server accepts connections only from its
-account's apps. The web app is not a device: it holds a session, which can manage the account
+account's clients. The web app is not a device: it holds a session, which can manage the account
 but can never connect to a server. README.md covers how a user sets things up.
 
 Production is the `Motile` project on Unbind:
@@ -40,8 +40,8 @@ Production is the `Motile` project on Unbind:
 
 What the programs agree on.
 
-- `wire.rs`: every message between an app and a server. Bump `PROTOCOL_VERSION` when an old
-  app or server could no longer understand the other.
+- `wire.rs`: every message between a client and a server. Bump `PROTOCOL_VERSION` when an old
+  client or server could no longer understand the other.
 - `auth_api.rs`, `auth_client.rs`: the auth server's JSON and the client for it.
 - `identity.rs`: the device key and request signing.
 - `media.rs`: names an image or a video by its contents.
@@ -49,7 +49,7 @@ What the programs agree on.
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
 - `sign_in.rs`: the browser's side of a sign-in. `google.rs` is the OIDC exchange.
-- `api.rs`: what apps, servers and the web app call. A caller is a device that signed the
+- `api.rs`: what clients, servers and the web app call. A caller is a device that signed the
   request or a session's `Bearer` token.
 - `config.rs`: builds the install command a token comes with.
 - `pages.rs`: the page a failed sign-in ends on.
@@ -78,7 +78,7 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `models.rs` lists Claude's models by hand.
 - `store.rs`: SQLite. Every item has a position (`seq`) and the revision that last changed it
-  (`rev`); an app asks for what changed after the revision it has.
+  (`rev`); a client asks for what changed after the revision it has.
 - `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),
   snapshots and patches.
 - `files.rs`: browses the server's folders, takes uploads, and reads the files of a thread's
@@ -88,33 +88,33 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   branch names, through `generate.rs`.
 - `github.rs`: the server's GitHub login, its repositories and cloning one.
 - `icons.rs`: finds a project's icon in its folder.
-- `access.rs`: asks the auth server which apps belong to the account.
+- `access.rs`: asks the auth server which clients belong to the account.
 - `setup.rs`, `service.rs`: what the installer runs, and the systemd or launchd service.
 - `update.rs`: replaces the server's own program with the latest release.
 - `tests/e2e.rs`: runs the server against `scripts/fake-agent` over real iroh connections.
 
 ### crates/core
 
-A static library for the apps (`ffi.rs`: JSON commands in, JSON events out) and a Rust library
+A static library for the clients (`ffi.rs`: JSON commands in, JSON events out) and a Rust library
 for tests.
 
 - `core.rs`: one loop that owns all state. Anything that waits on the network runs in its own
   task.
 - `link.rs`: keeps one server connected and follows its threads.
-- `cache.rs`: the app's SQLite copy of its servers' threads, read a page of whole turns at a
+- `cache.rs`: the client's SQLite copy of its servers' threads, read a page of whole turns at a
   time.
-- `media.rs`: the images and videos the app has fetched, as files, with a size limit.
+- `media.rs`: the images and videos the client has fetched, as files, with a size limit.
 - `git.rs`: which git action a project's status calls for.
 - `browse.rs`: browsing a server's folders by typing a path.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
-- `api.rs`: the JSON the app and the core exchange.
+- `api.rs`: the JSON the client and the core exchange.
 - `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev app's
   account, project and threads.
 
 ### packages/apple (Swift: SwiftUI, with AppKit and UIKit for the transcript)
 
-`MotileKit`, the Swift package both apps are made of. `Sources/MotileKit/Shared` is what both
+`MotileKit`, the Swift package both clients are made of. `Sources/MotileKit/Shared` is what both
 use, `Mac` and `iOS` what only one does, each file of those inside `#if os(…)`. A view that has
 to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMac.swift`,
 `KitIOS.swift`); what the two do is written once, in `Shared`, on top of them.
@@ -132,16 +132,16 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   `CodeView.swift` draws a diff or a file.
 - `Mac/`: `MotileApp.swift` lays out the window, `MediaViewer.swift`, `AppUpdater.swift`,
   `Glass.swift`, `Demo/DemoDriver.swift`.
-- `iOS/`: `MotileAppIOS.swift` is the app and its layout, `Drawer.swift` the sidebar under the
+- `iOS/`: `MotileAppIOS.swift` is the client and its layout, `Drawer.swift` the sidebar under the
   thread, `PanelScreen.swift`, `ThreadScreen.swift`, `SidebarScreen.swift`, `Tables.swift`,
   `DemoDriverIOS.swift` the steps `do.sh` runs.
 
 ### apps/macos and apps/ios
 
 - `apps/macos`: the Mac app's executable and what builds it (`scripts/build-app.sh`).
-  `Resources/AppIcon.icon` is the icon of both apps. `scripts/ci-demo.sh` runs the demo in CI.
+  `Resources/AppIcon.icon` is the icon of both clients. `scripts/ci-demo.sh` runs the demo in CI.
 - `apps/ios`: the Xcode project, for iOS 18 and later. `scripts/build-core.sh` builds the core
-  for iOS, `MotileUITests` uses the app with fingers, `scripts/testflight.sh` uploads a build.
+  for iOS, `MotileUITests` uses the client with fingers, `scripts/testflight.sh` uploads a build.
 - The dev app scripts of both are under Development.
 
 ### apps/gpui (Rust: GPUI with GPUI Kit)
@@ -182,7 +182,10 @@ Mac app.
 - A machine that runs agents is a server, in the code and in what the user reads. What the user
   reads says "your server" or its name, not "the server" alone, which sounds like ours. The auth
   server is always called the auth server.
-- Rendering logic belongs in `crates/core`, not in an app, so that every future app (Android,
+- A program that drives servers is a client, in the code and in what the user reads. "App" is
+  only said with what it is: the Mac app, the iOS app, the web app (which is not a client), the
+  dev app.
+- Rendering logic belongs in `crates/core`, not in a client, so that every future client (Android,
   Windows, Linux) gets it.
 - The Mac app and the iOS app do the same things. What one gets, the other gets in the same
   change, and what both do is written once, in `packages/apple/Sources/MotileKit/Shared`. Only
@@ -240,25 +243,25 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
 
-The `Release` workflow runs the demo on every push to `main` that touches the app or the server:
+The `Release` workflow runs the demo on every push to `main` that touches the client or the server:
 
     gh run watch                                      # then
     gh run download --name screenshots
 
 ### The dev apps
 
-To see a UI change, use the dev app. A change to a view both apps share is looked at in both.
+To see a UI change, use the dev app. A change to a view both clients share is looked at in both.
 
     # from apps/macos
-    scripts/dev-app.sh             # builds what changed and opens the app
+    scripts/dev-app.sh             # builds what changed and opens the client
     scripts/dev-app.sh --stop      # stops everything
     scripts/shot.sh shot.png       # a picture of its window, two pixels per point on Retina
     scripts/click.sh 85 330        # a click, in points from the window's top left corner
 
     # from apps/ios, in the simulator; works with the Mac's screen locked
-    scripts/dev-app.sh                      # builds what changed and opens the app
+    scripts/dev-app.sh                      # builds what changed and opens the client
     scripts/shot.sh shot.png                # a picture of its screen
-    scripts/do.sh "sidebar open"            # has the app do something; the steps are in DemoDriverIOS.swift
+    scripts/do.sh "sidebar open"            # has the client do something; the steps are in DemoDriverIOS.swift
     scripts/do.sh "type run greet.py" send
     scripts/ui-test.sh                      # the tests that swipe and tap (MotileUITests)
     MOTILE_SIM="iPad Pro 13-inch (M5)" scripts/dev-app.sh    # another simulator
@@ -267,13 +270,13 @@ Both are signed in as `demo@motile.app` on an auth server with the dev login, ne
 account. Their server, `studio`, runs `scripts/fake-agent` and starts with a project and three
 finished threads. All of it lives in `apps/macos/build/dev` and keeps running until you stop it,
 which you do when your task is done; its ports are in `build/dev/ports`. On the Mac, type with `osascript` (System Events
-`keystroke`, which needs Accessibility; pictures need Screen Recording) and address the app by
+`keystroke`, which needs Accessibility; pictures need Screen Recording) and address the client by
 the pid in `build/dev/app.pid`. Use the demo (`scripts/ci-demo.sh`) only for the stall numbers.
 
 ### The fake agent
 
 `scripts/fake-agent` stands in for Claude Code and Codex in the tests, the demo and the dev
-apps. It replays the recorded output in `fixtures/` or makes up a turn, depending on the prompt:
+clients. It replays the recorded output in `fixtures/` or makes up a turn, depending on the prompt:
 
 | Prompt | What it does |
 | --- | --- |
@@ -293,11 +296,11 @@ name, it writes one.
 
 Every push to `main` that touches the server, the auth server or the Mac app is a release, for
 now. The `Release` workflow publishes the server and the auth server for Linux, and the server and
-the app for Macs, as a GitHub release. Its version is the first two numbers of `version` in
+the client for Macs, as a GitHub release. Its version is the first two numbers of `version` in
 `Cargo.toml` and the number of commits as the third (`scripts/release-version.sh`), so set
 `version` only to change the first two. The installer and the download button always fetch the
-latest release, and apps and servers compare their own version with it to offer an update. The
-app in a release is signed with the Developer ID certificate and notarized, using the repository's
+latest release, and clients and servers compare their own version with it to offer an update. The
+client in a release is signed with the Developer ID certificate and notarized, using the repository's
 `APPLE_*` secrets; running the `macOS` workflow by hand with `sign` does the same without a
 release.
 
@@ -314,7 +317,7 @@ push that touches their files.
 Commit messages start with the part of the system they touched, followed by a short imperative
 sentence describing the change:
 
-    auth: Refuse a sign-in code that was started by another app
+    auth: Refuse a sign-in code that was started by another client
     macos: Show the server's round-trip time in the sidebar
     server | core | macos: Stream replies in finished blocks
 

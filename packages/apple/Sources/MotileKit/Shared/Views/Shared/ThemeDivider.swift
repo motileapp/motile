@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A horizontal line in the colour of the app's other borders.
+/// A horizontal line in the colour of the client's other borders.
 struct ThemeDivider: View {
     var body: some View {
         Rectangle()
