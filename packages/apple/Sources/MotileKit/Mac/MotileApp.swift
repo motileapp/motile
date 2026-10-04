@@ -133,6 +133,17 @@ struct RootView: View {
         .toolbarBackground(.hidden, for: .windowToolbar)
         .modifier(HiddenWindowTitle())
         .overlay {
+            ZStack {
+                if store.panel != nil {
+                    Color.black.opacity(0.32)
+                        .ignoresSafeArea()
+                        .onTapGesture { store.closePanel() }
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: store.panel != nil)
+        }
+        .overlay {
             if let page = store.panel {
                 CommandPanel(start: page)
                     .id(page)
