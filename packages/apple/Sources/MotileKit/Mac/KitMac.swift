@@ -560,6 +560,11 @@ final class TranscriptScroller: NSView {
     var viewportHeight: CGFloat { scrollView.contentView.bounds.height }
     var documentSize: CGSize { document.frame.size }
 
+    /// Keeps the scroller clear of what covers the transcript's ends.
+    func setIndicatorInsets(top: CGFloat, bottom: CGFloat) {
+        scrollView.scrollerInsets = NSEdgeInsets(top: top, left: 0, bottom: bottom, right: 0)
+    }
+
     func setDocument(width: CGFloat, height: CGFloat) {
         guard document.frame.height != height || document.frame.width != width else { return }
         document.frame = NSRect(x: 0, y: 0, width: width, height: height)

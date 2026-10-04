@@ -18,7 +18,7 @@ struct ComposerStrip: ViewModifier {
     func body(content: Content) -> some View {
         content
             .frame(height: Self.height)
-            .background { StripShape(edge: edge, closed: true).fill(Color.themeComposer) }
+            .glassSurface(in: StripShape(edge: edge, closed: true))
             .overlay { StripShape(edge: edge, closed: false).stroke(Color.themeStrongBorder, lineWidth: 1) }
             .padding(.horizontal, ComposerView.radius)
     }

@@ -9,6 +9,10 @@ struct ThreadScreen: View {
     /// The sidebar is under the thread, so the top bar has the button that shows it.
     var overSidebar = true
     @State private var composerHeight: CGFloat = 120
+    /// Where the composer starts and the transcript ends, on the screen. The transcript goes on
+    /// under the composer to the screen's edge, or to the keyboard.
+    @State private var composerTop: CGFloat = 0
+    @State private var transcriptBottom: CGFloat = 0
 
     private var isStart: Bool {
         guard let draft = store.selectedDraft else { return false }
@@ -21,8 +25,13 @@ struct ThreadScreen: View {
                 start
             } else {
                 GeometryReader { proxy in
-                    TranscriptRepresentable(store: store, topInset: proxy.safeAreaInsets.top, bottomInset: composerHeight)
-                        .ignoresSafeArea(.container, edges: .top)
+                    TranscriptRepresentable(store: store, topInset: proxy.safeAreaInsets.top, bottomInset: max(0, transcriptBottom - composerTop))
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .global).maxY
+                        } action: { bottom in
+                            transcriptBottom = bottom
+                        }
+                        .ignoresSafeArea(.container, edges: [.top, .bottom])
                 }
             }
             if !isStart || !store.projects.isEmpty {
@@ -31,10 +40,11 @@ struct ThreadScreen: View {
                     .padding(.top, TranscriptView.composerGap)
                     .padding(.bottom, 8)
                     .frame(maxWidth: .infinity)
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { height in
-                        composerHeight = height
+                    .onGeometryChange(for: CGRect.self) { proxy in
+                        proxy.frame(in: .global)
+                    } action: { frame in
+                        composerHeight = frame.height
+                        composerTop = frame.minY
                     }
             }
         }

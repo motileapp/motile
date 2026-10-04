@@ -10,12 +10,12 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       {
         name: "theme-color",
-        content: "#ffffff",
+        content: "#f8f9fc",
         media: "(prefers-color-scheme: light)",
       },
       {
         name: "theme-color",
-        content: "#0a0a0a",
+        content: "#08090d",
         media: "(prefers-color-scheme: dark)",
       },
       { title: "Motile" },

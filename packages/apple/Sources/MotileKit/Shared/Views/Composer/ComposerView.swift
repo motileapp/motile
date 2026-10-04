@@ -14,16 +14,18 @@ struct ComposerView: View {
     #endif
 
     var body: some View {
-        VStack(spacing: 0) {
-            if store.selectedThread != nil, store.activity.monitoring {
-                monitoringStrip
+        GlassGroup {
+            VStack(spacing: 0) {
+                if store.selectedThread != nil, store.activity.monitoring {
+                    monitoringStrip
+                }
+                box
+                #if os(macOS)
+                if let project = store.composerProject {
+                    ContextStrip(project: project, server: store.server(project.serverID))
+                }
+                #endif
             }
-            box
-            #if os(macOS)
-            if let project = store.composerProject {
-                ContextStrip(project: project, server: store.server(project.serverID))
-            }
-            #endif
         }
         .frame(maxWidth: Theme.contentWidth)
     }
@@ -70,11 +72,7 @@ struct ComposerView: View {
             .animation(.easeOut(duration: 0.22), value: collapsed)
             #endif
         }
-        .background {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .fill(Color.themeComposer)
-                .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
-        }
+        .glassSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
                 .strokeBorder(store.dropTargeted ? Color.themePrimary : Color.themeStrongBorder, lineWidth: store.dropTargeted ? 2 : 1)

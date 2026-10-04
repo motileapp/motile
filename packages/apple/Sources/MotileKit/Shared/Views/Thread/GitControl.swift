@@ -367,7 +367,7 @@ struct CommitSheet: View {
                 .padding(.vertical, 4)
             }
             .frame(height: min(CGFloat(files.count) * Self.rowHeight, 192) + 8)
-            .background(Color.themeComposer, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
             }
@@ -456,7 +456,7 @@ private struct CommitMessageBox: View {
             .padding(.horizontal, 4)
             .padding(.vertical, 6)
             .frame(height: 84)
-            .background(Color.themeComposer, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
             }

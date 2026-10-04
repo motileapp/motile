@@ -48,7 +48,7 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private static let jumpButtonGap: CGFloat = 12
 
-    /// The room above the composer, which the transcript fades out in.
+    /// The room between the last row and the composer.
     static let composerGap: CGFloat = 24
 
     /// Above the composer, which starts `composerGap` into the inset.
@@ -83,8 +83,7 @@ final class TranscriptView: FlippedView, RowOwner {
     private var document: FlippedView { scroller.document }
     private let working = WorkingView()
     private let jumpButton = SurfaceView()
-    /// Fades the rows out under the top bar and above the composer, so nothing shows through
-    /// it or around it. The jump button is not under it.
+    /// Fades the rows out under the top bar. The jump button is not under it.
     private let fade = CAGradientLayer()
 
     private var rows: [RowModel] = []
@@ -146,7 +145,7 @@ final class TranscriptView: FlippedView, RowOwner {
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(scroller)
-        fade.colors = [PlatformColor.clear.cgColor, PlatformColor.black.cgColor, PlatformColor.black.cgColor, PlatformColor.clear.cgColor]
+        fade.colors = [PlatformColor.clear.cgColor, PlatformColor.black.cgColor]
         scroller.fadeMask = fade
         document.addSubview(working)
         working.isHidden = true
@@ -223,16 +222,13 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private var contentHeight: CGFloat {
         let workingHeight = showsWorking ? Self.workingHeight : 0
-        return topPadding + (offsets.last ?? 0) + workingHeight + bottomInset + 16
+        return topPadding + (offsets.last ?? 0) + workingHeight + bottomInset
     }
 
     private func layoutFade() {
         guard bounds.height > 0 else { return }
-        #if os(iOS)
         scroller.setIndicatorInsets(top: topInset, bottom: bottomInset)
-        #endif
-        let end = bounds.height - bottomInset
-        let stops = [topInset, topPadding, end, end + Self.composerGap]
+        let stops = [topInset, topPadding]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fade.frame = bounds
