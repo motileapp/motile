@@ -1,4 +1,4 @@
-//! The browser's side of a sign-in. An app or the web app opens `/auth/start`, Google signs the
+//! The browser's side of a sign-in. A client or the web app opens `/auth/start`, Google signs the
 //! person in, and the browser is sent back to where it came from with a one-time code. Only
 //! whoever started the sign-in can use the code: it must present the secret behind the challenge
 //! it started with.
@@ -20,7 +20,7 @@ fn is_sha256_hex(text: &str) -> bool {
     text.len() == 64 && text.chars().all(|character| character.is_ascii_hexdigit())
 }
 
-/// Sends the browser back to whoever started the sign-in: the app, or the web app.
+/// Sends the browser back to whoever started the sign-in: the client, or the web app.
 fn back(config: &Config, web: bool, parameters: &[(&str, &str)]) -> Response {
     let target = match web {
         true => config.web_redirect(),
@@ -39,7 +39,7 @@ fn failed(message: &str) -> Response {
 pub async fn start(State(state): State<AppState>, Query(query): Query<HashMap<String, String>>) -> Response {
     let text = |key: &str| query.get(key).map(String::as_str).unwrap_or_default();
     let (challenge, app_state, redirect) = (text("challenge"), text("state"), text("redirect"));
-    // The code is only ever sent to the app's own address or to the web app.
+    // The code is only ever sent to the client's own address or to the web app.
     let web = state.config.web_redirect().is_some_and(|web_redirect| web_redirect == redirect);
     if redirect != APP_REDIRECT && !web {
         return failed("This sign-in link doesn't lead back to Motile.");

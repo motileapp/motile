@@ -1,5 +1,5 @@
 //! Syntax highlighting. A span is `[start, length, colour]` in UTF-16 units, where the colour is
-//! an index into the palette the apps share (`Colour`), so one result serves light and dark.
+//! an index into the palette the clients share (`Colour`), so one result serves light and dark.
 
 use std::collections::HashMap;
 use std::str::FromStr;

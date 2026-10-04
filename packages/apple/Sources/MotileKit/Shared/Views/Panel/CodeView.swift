@@ -121,17 +121,15 @@ final class CodeDocument {
 /// are drawn, and what is selected. The view around it scrolls it and takes the clicks.
 final class CodeSheet {
     static let headingHeight: CGFloat = scaled(34)
-    static let lineHeight = Theme.codeLineHeight
+    /// Lines are as small on iOS as on the Mac, so that as much of one fits.
+    static let lineHeight: CGFloat = 18
     private static let fileGap: CGFloat = 12
     private static let textInset: CGFloat = 12
-    private static let numberFont = PlatformFont.uiDigits(11)
-    private static let advance = Theme.codeFont.letterWidth
+    private static let font = PlatformFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
+    private static let numberFont = PlatformFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+    private static let advance = font.letterWidth
     /// How far under a line's top its text stands.
-    private static let baseline: CGFloat = {
-        guard Platform.scale > 1 else { return 13 }
-        let font = Theme.codeFont
-        return ((lineHeight - (font.ascender - font.descender)) / 2 + font.ascender).rounded()
-    }()
+    private static let baseline: CGFloat = 13
     private static let addedFill = Theme.dynamic(Theme.hex(0x1a7f37, alpha: 0.11), Theme.hex(0x3fb950, alpha: 0.15))
     private static let removedFill = Theme.dynamic(Theme.hex(0xcf222e, alpha: 0.09), Theme.hex(0xf85149, alpha: 0.15))
     private static let selectionFill = Theme.dynamic(Theme.hex(0x2a5bd7, alpha: 0.22), Theme.hex(0x4f7cff, alpha: 0.35))
@@ -209,7 +207,7 @@ final class CodeSheet {
         }
         self.blocks = blocks
         let digits = max(2, String(lastNumber).count)
-        numberWidth = CGFloat(digits) * 6.8 * Platform.scale + 12
+        numberWidth = CGFloat(digits) * 6.8 + 12
         gutter = (document.headed ? 2 : 1) * numberWidth + 4
         contentSize = CGSize(width: gutter + Self.textInset + CGFloat(columns) * Self.advance + 24, height: y + 8)
     }
@@ -323,7 +321,7 @@ final class CodeSheet {
         let text = NSMutableAttributedString(
             string: file.lines[line],
             attributes: [
-                .font: Theme.codeFont, .foregroundColor: (note ? Theme.secondary : Theme.text).drawn, .paragraphStyle: Self.lineStyle,
+                .font: Self.font, .foregroundColor: (note ? Theme.secondary : Theme.text).drawn, .paragraphStyle: Self.lineStyle,
             ])
         if line < file.spans.count {
             let spans = file.spans[line]

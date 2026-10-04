@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the app's scripted demo against a real auth server and a real server on this machine, with
+# Runs the client's scripted demo against a real auth server and a real server on this machine, with
 # scripts/fake-agent as the server's agent, and collects screenshots in apps/macos/screenshots.
 #
 # Needs target/release/{motile,motile-auth}, build/Motile.app and a PostgreSQL to run.
@@ -52,14 +52,14 @@ git -C "$PROJECT" config user.name Demo && git -C "$PROJECT" config user.email d
 git -C "$PROJECT" -c user.name=Demo -c user.email=demo@motile.app add -A && git -C "$PROJECT" -c user.name=Demo -c user.email=demo@motile.app commit -q -m "Start" || true
 git -C "$PROJECT" branch release 2>/dev/null || true
 
-echo "▸ Starting the app…"
+echo "▸ Starting the client…"
 defaults delete app.motile.mac >/dev/null 2>&1 || true
 MOTILE_DEMO=1 MOTILE_DEMO_OUTPUT="$OUT" MOTILE_DEMO_TOKEN_FILE="$WORK/token" MOTILE_DEMO_PROJECT="$PROJECT" \
     MOTILE_DATA_DIR="$WORK/app" MOTILE_AUTH_URL="$AUTH_URL" MOTILE_LOCAL=1 MOTILE_SERVER_ADDR="127.0.0.1:$SERVER_PORT" \
     "$APP" > "$OUT/app.log" 2>&1 &
 APP_PID=$!
 
-# The app writes the token of the install command it shows; the server is set up with it, as
+# The client writes the token of the install command it shows; the server is set up with it, as
 # the installer would.
 for _ in $(seq 1 300); do
     [ -s "$WORK/token" ] && break

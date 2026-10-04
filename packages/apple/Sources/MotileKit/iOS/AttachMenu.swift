@@ -5,7 +5,7 @@ import UIKit
 import UniformTypeIdentifiers
 
 /// The button that attaches files to what is being written: from the photo library, from the
-/// camera, or from the Files app. What is picked is copied into the app's own folder first, which
+/// camera, or from the Files app. What is picked is copied into the client's own folder first, which
 /// is where the core reads it from.
 struct AttachMenu: View {
     @Environment(AppStore.self) private var store
@@ -84,7 +84,7 @@ struct AttachMenu: View {
     }
 }
 
-/// A file the user picked, copied to where the app can keep reading it.
+/// A file the user picked, copied to where the client can keep reading it.
 struct PickedFile: Transferable {
     let url: URL
 

@@ -54,7 +54,7 @@ const BRANCH_PREFIX: &str = "motile";
 const UNSENT_UPLOADS_STAY: Duration = Duration::from_secs(24 * 3600);
 const SWEEP_UPLOADS_EVERY: Duration = Duration::from_secs(3600);
 
-/// What an app asked git to do in a project's folder.
+/// What a client asked git to do in a project's folder.
 pub struct GitRun {
     pub action: GitAction,
     /// The thread the work was done in.
@@ -73,7 +73,7 @@ pub struct Hub {
     projects: Mutex<Vec<StoredProject>>,
     /// What git last said about each folder threads work in: the projects' and the worktrees'.
     git: std::sync::Mutex<HashMap<String, GitRead>>,
-    /// Where the files that apps upload are.
+    /// Where the files that clients upload are.
     attachments_folder: PathBuf,
     /// Where the worktrees are made, each in a folder named after its project.
     worktrees_folder: PathBuf,
@@ -162,7 +162,7 @@ pub struct ThreadSubscription {
 
 impl Hub {
     /// `media_folder` is where the images and videos that threads show are kept,
-    /// `attachments_folder` where the files that apps upload are, and `worktrees_folder` where
+    /// `attachments_folder` where the files that clients upload are, and `worktrees_folder` where
     /// the worktrees of threads are made.
     pub fn new(
         store: Store,
@@ -234,7 +234,7 @@ impl Hub {
         let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
         live.flush(&self.store)?;
         let rev = live.stored.thread.rev;
-        // An app ahead of the server has a copy from before the server's data was replaced.
+        // A client ahead of the server has a copy from before the server's data was replaced.
         let reset = since > rev;
         let items = self.store.items_since(thread_id, if reset { 0 } else { since })?;
         Ok(ThreadSubscription { reset, activity: live.activity(), items, rev, updates: live.updates.subscribe() })
@@ -856,7 +856,7 @@ impl Hub {
     }
 
     /// What git says now about the project's folder, or about the thread's worktree, which every
-    /// app is told when it has changed.
+    /// client is told when it has changed.
     pub async fn git_status(&self, project_id: &str, thread_id: Option<&str>, fetch: bool) -> anyhow::Result<Message> {
         let path = self.git_folder(project_id, thread_id).await?;
         if fetch {
@@ -1739,7 +1739,7 @@ impl Hub {
         Ok(())
     }
 
-    /// Tells the apps how many of the agents the thread's agent started still work.
+    /// Tells the clients how many of the agents the thread's agent started still work.
     fn count_agents(&self, live: &mut Live) {
         let working = |item: &&Item| matches!(&item.kind, ItemKind::Tool { call } if call.agent.as_ref().is_some_and(|agent| agent.status == ToolStatus::Running));
         let agents = live.open.values().filter(working).count() as u32;

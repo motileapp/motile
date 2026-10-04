@@ -20,7 +20,11 @@ struct ComposerStrip: ViewModifier {
             .frame(height: Self.height)
             .glassSurface(in: StripShape(edge: edge))
             .padding(.horizontal, ComposerView.radius)
+            .padding(edge == .top ? .bottom : .top, -Self.overlap)
     }
+
+    /// How far the strip's open edge goes under the composer, so their outlines do not double.
+    static let overlap: CGFloat = 1
 }
 
 /// The strip's outline, rounded on the two outer corners.
@@ -303,7 +307,7 @@ struct BranchPicker: View {
         #else
         // A screen of the thread's settings, where the keyboard only comes when the field is tapped.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.themeBackground)
+        .background(Color.themeSheet)
         .navigationTitle(base == nil ? "Branch" : "Start from")
         .navigationBarTitleDisplayMode(.inline)
         #endif

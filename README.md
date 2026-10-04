@@ -1,6 +1,6 @@
 # Motile
 
-The command center for coding agents. [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and Codex run on machines you own; a native app drives them from wherever you are. Open source, under the MIT license.
+The command center for coding agents. [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) and Codex run on machines you own; a native client drives them from wherever you are. Open source, under the MIT license.
 
 ![A thread in Motile](docs/screenshots/thread.png)
 
@@ -9,9 +9,9 @@ The command center for coding agents. [Claude Code](https://docs.claude.com/en/d
 | ![Starting a thread](docs/screenshots/new-thread.png) | ![An agent at work](docs/screenshots/working.png) |
 | ![A turn waiting for approval](docs/screenshots/approval.png) | ![Dark mode, with a thread marked done](docs/screenshots/done-dark.png) |
 
-- **Your machines do the work.** The Motile server is a small program that runs the agents on a Linux machine or a Mac and keeps the threads there. A turn keeps running when you close the app.
-- **No ports to open.** The app connects straight to your server over [iroh](https://www.iroh.computer), encrypted end to end. It works behind a home router, and falls back to a relay when a direct path isn't possible.
-- **Opens where you left off.** The app keeps a local copy of every thread and shows it before it has connected to anything.
+- **Your machines do the work.** The Motile server is a small program that runs the agents on a Linux machine or a Mac and keeps the threads there. A turn keeps running when you close the client.
+- **No ports to open.** The client connects straight to your server over [iroh](https://www.iroh.computer), encrypted end to end. It works behind a home router, and falls back to a relay when a direct path isn't possible.
+- **Opens where you left off.** The client keeps a local copy of every thread and shows it before it has connected to anything.
 - **Built not to stall.** Long threads, long replies and big code blocks stay smooth: only the rows on screen exist, and parsing and highlighting happen off the main thread.
 
 These are its programs:
@@ -20,26 +20,26 @@ These are its programs:
 | --- | --- | --- |
 | Motile.app (`apps/macos`) | Your Mac | The interface |
 | Motile for iOS (`apps/ios`) | Your iPhone and iPad | The interface. In TestFlight for now |
-| `motile` (`apps/server`) | Your Linux machines and Macs | Runs the agents, stores the threads, serves your apps |
+| `motile` (`apps/server`) | Your Linux machines and Macs | Runs the agents, stores the threads, serves your clients |
 | Auth server (`apps/auth`) | auth.motile.app | Signs you in and records which devices are yours. It never sees a thread |
-| Web app (`apps/web`) | [app.motile.app](https://app.motile.app) | Lists your servers and apps, adds a server, removes a device |
+| Web app (`apps/web`) | [app.motile.app](https://app.motile.app) | Lists your servers and clients, adds a server, removes a device |
 | Marketing site (`apps/marketing`) | [motile.app](https://motile.app) | The landing page, the download and the installer |
 
-Apps for Android, Windows and Linux are planned. They will share the Rust core the Mac and iOS apps are built on (`crates/core`).
+Clients for Android, Windows and Linux are planned. They will share the Rust core the Mac and iOS apps are built on (`crates/core`).
 
 ## Getting started
 
-### 1. Install the app
+### 1. Install the client
 
-Download **Motile.zip** from [motile.app](https://motile.app) or the [latest release](https://github.com/motileapp/motile/releases/latest), unzip it and move Motile to Applications. It needs an Apple silicon Mac with macOS 14 or later. The app is signed and notarized, and updates itself from then on.
+Download **Motile.zip** from [motile.app](https://motile.app) or the [latest release](https://github.com/motileapp/motile/releases/latest), unzip it and move Motile to Applications. It needs an Apple silicon Mac with macOS 14 or later. The client is signed and notarized, and updates itself from then on.
 
 ### 2. Sign in
 
-Open the app and sign in with Google. This links the Mac to your account.
+Open the client and sign in with Google. This links the Mac to your account.
 
 ### 3. Add a server
 
-With no server yet, the app shows one command. Run it on the Linux machine or the Mac where the agents should work:
+With no server yet, the client shows one command. Run it on the Linux machine or the Mac where the agents should work:
 
 ```sh
 curl -fsSL https://motile.app/install.sh | sh -s -- <token>
@@ -52,7 +52,7 @@ The installer:
 3. Links the machine to your account with the token in the command.
 4. Installs and starts a service that survives reboots and crashes. On Linux it is `motile.service`, a systemd unit that runs as the user who ran the installer, with that user's sign-ins. On a Mac it is `app.motile.server`, a launchd agent in that user's desktop session, so the agents can use the Keychain, the simulators and code signing.
 
-The server appears in the app a moment later. The token works for one machine, for an hour; **Thread → Add a Server…** gives you a new command for the next machine, and so does [app.motile.app](https://app.motile.app).
+The server appears in the client a moment later. The token works for one machine, for an hour; **Thread → Add a Server…** gives you a new command for the next machine, and so does [app.motile.app](https://app.motile.app).
 
 When the server runs as root on Linux, the service sets `IS_SANDBOX=1`. Claude Code refuses full access as root without it.
 
@@ -68,7 +68,7 @@ On the server, `motile status` shows its account, agents and service, `motile lo
 - **Mark done** puts a thread away in the Done list at the bottom of the sidebar; **Mark undone** brings it back, and so does sending a message in it. Hover a thread for the button, or press `⇧⌘D`.
 - **Models**: the model menu lists what the server's agents can run. Picking a model picks the agent. A thread stays with its agent but can switch between that agent's models.
 - **Access**: **Supervised** asks before commands and file changes (the turn waits until you allow or refuse each one), **Auto-accept edits**, **Auto** and **Full access**. **Plan mode** makes the agent only read and propose; **Implement** on a finished plan lets it carry the plan out.
-- **Updates**: the app offers a new version at the bottom of the sidebar, downloads it there and restarts into it. A server that is behind shows an **Update** button next to its name; it installs the new version and restarts, which it only does while no agent is working.
+- **Updates**: the client offers a new version at the bottom of the sidebar, downloads it there and restarts into it. A server that is behind shows an **Update** button next to its name; it installs the new version and restarts, which it only does while no agent is working.
 - A message sent while a turn is running waits and starts the next turn.
 - **Monitoring**: Claude Code can keep watching something after its turn, such as a deploy or a pull request's checks. The thread then shows **Monitoring**; it answers messages right away and reports by itself when what it watches changes. **Stop** ends the watch.
 - **Questions**: when the agent asks you something with options, pick one or type your own answer, and the turn goes on with it.
@@ -88,19 +88,19 @@ On the server, `motile status` shows its account, agents and service, `motile lo
 
 ## How it works
 
-- **Devices**: every app and every server has an ed25519 key, which is also its iroh address. Signing in links an app's key to your account; the install command links a server's. A server asks the auth server which apps belong to its account and accepts only those.
+- **Devices**: every client and every server has an ed25519 key, which is also its iroh address. Signing in links a client's key to your account; the install command links a server's. A server asks the auth server which clients belong to its account and accepts only those.
 - **A turn** is one run of the agent's CLI: `claude -p --output-format stream-json …` or `codex app-server`, resumed with the agent's own session. The server turns both outputs into the same transcript items.
 - **Follow-ups**: a message sent while the agent works waits in a queue on your server until the turn ends, then starts the next one. Until then it can be taken back, or sent now: the agent takes it at once and carries on in the same turn.
-- **Sync**: every transcript item carries the revision that last changed it. An app asks for what changed after the revision it has, so opening a thread it already knows costs almost nothing, however long the thread is.
+- **Sync**: every transcript item carries the revision that last changed it. A client asks for what changed after the revision it has, so opening a thread it already knows costs almost nothing, however long the thread is.
 - **Streaming**: the server holds a reply's text until a block of it is finished, and passes blocks on a few times a second, so text doesn't flicker in word by word.
-- **Rendering**: the core parses Markdown, highlights code, groups tool calls and folds finished turns, and sends the app rows that are ready to draw. While a reply streams, only the rows that changed are sent, and code is highlighted incrementally.
-- **Relays**: when an app and a server can't reach each other directly, iroh's public relays carry the (still encrypted) traffic. Motile doesn't run relays of its own yet.
-- **On the web**: [app.motile.app](https://app.motile.app) shows the servers and apps on your account and removes the ones you no longer use. It can manage the account, but it isn't a device and can't connect to a server.
+- **Rendering**: the core parses Markdown, highlights code, groups tool calls and folds finished turns, and sends the client rows that are ready to draw. While a reply streams, only the rows that changed are sent, and code is highlighted incrementally.
+- **Relays**: when a client and a server can't reach each other directly, iroh's public relays carry the (still encrypted) traffic. Motile doesn't run relays of its own yet.
+- **On the web**: [app.motile.app](https://app.motile.app) shows the servers and clients on your account and removes the ones you no longer use. It can manage the account, but it isn't a device and can't connect to a server.
 - **Titles** are generated by the thread's own agent (Claude Haiku, or Codex's lightest model). When the first message doesn't say what the thread is about, the title is generated again from the transcript once the first turn has ended.
 
 ## Running your own auth server
 
-The app and the servers use auth.motile.app by default. To run your own:
+The client and the servers use auth.motile.app by default. To run your own:
 
 1. Create a Google OAuth client with the redirect URI `https://<your-address>/auth/google/callback`.
 2. Run `motile-auth` (from the release, or `docker build .`) with a Postgres database and these variables:
@@ -113,7 +113,7 @@ The app and the servers use auth.motile.app by default. To run your own:
    | `WEB_URL` | Optional: the address of your web app, which may then start sign-ins |
 
    It listens on `PORT` (3000) and answers `/healthz`.
-3. Build the app for it: `MOTILE_AUTH_URL=https://<your-address> apps/macos/scripts/build-app.sh`.
+3. Build the client for it: `MOTILE_AUTH_URL=https://<your-address> apps/macos/scripts/build-app.sh`.
    The install command your auth server hands out already tells the installer to link servers with your address.
 4. Optionally run the web app (`docker build -f apps/web/Dockerfile .`) with `AUTH_URL=https://<your-address>` and `PUBLIC_URL` set to its own address.
 
@@ -131,7 +131,7 @@ apps/gpui        The Mac app in Rust with GPUI
 apps/ios         The iOS app
 packages/apple   The state and views the Mac and iOS apps share
 crates/protocol  Messages, device keys and request signing, shared by every program
-crates/core      What every app shares: account, connections, sync, cache, rendering
+crates/core      What every client shares: account, connections, sync, cache, rendering
 scripts          fake-agent, which stands in for the agents in tests
 fixtures         Recorded agent output
 ```

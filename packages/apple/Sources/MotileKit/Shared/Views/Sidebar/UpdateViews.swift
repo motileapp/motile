@@ -1,7 +1,7 @@
 import SwiftUI
 
 #if os(macOS)
-/// A new version of the app, where the sidebar ends: the offer, the download as it goes, and
+/// A new version of the client, where the sidebar ends: the offer, the download as it goes, and
 /// the restart that finishes it.
 struct AppUpdateRow: View {
     let updater: AppUpdater

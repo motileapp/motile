@@ -84,7 +84,7 @@ struct ThreadPane: View {
                 HStack(spacing: 6) {
                     ProjectIcon(project: titleProject, size: 14)
                     Text(projectLine)
-                        .font(.ui(size: 11, weight: .medium))
+                        .font(.ui(size: 11))
                         .foregroundStyle(Color.themeSecondary)
                 }
             }

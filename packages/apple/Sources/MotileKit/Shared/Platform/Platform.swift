@@ -78,7 +78,7 @@ enum Platform {
         #endif
     }
 
-    /// Whether the app is in front, which is when a reply counts as seen.
+    /// Whether the client is in front, which is when a reply counts as seen.
     static var isActive: Bool {
         #if os(macOS)
         NSApp.isActive

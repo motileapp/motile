@@ -14,7 +14,7 @@ use motile_server::serve::{BindOptions, Server, bind};
 use motile_server::store::Store;
 use motile_server::{service, setup, update};
 
-/// Runs coding agents on this machine for the Motile apps.
+/// Runs coding agents on this machine for the Motile clients.
 #[derive(Parser)]
 #[command(name = "motile", version)]
 struct Cli {
@@ -30,11 +30,11 @@ struct Cli {
 enum CliCommand {
     /// Checks for agents, links this machine to your account and starts the service.
     Setup {
-        /// The token from the install command the app shows. Not needed once linked.
+        /// The token from the install command the client shows. Not needed once linked.
         token: Option<String>,
         #[arg(long, env = "MOTILE_AUTH_URL", default_value = DEFAULT_AUTH_URL)]
         auth_url: String,
-        /// How the server appears in the app. Defaults to the hostname.
+        /// How the server appears in the client. Defaults to the hostname.
         #[arg(long)]
         name: Option<String>,
         /// Ask nothing.
@@ -44,12 +44,12 @@ enum CliCommand {
         #[arg(long)]
         no_service: bool,
     },
-    /// Serves the account's apps until stopped. The service runs this.
+    /// Serves the account's clients until stopped. The service runs this.
     Run {
         /// Also accept this device key, account or not.
         #[arg(long = "allow-key")]
         allow_keys: Vec<String>,
-        /// Skip relays and address lookup; apps must be given this machine's address.
+        /// Skip relays and address lookup; clients must be given this machine's address.
         #[arg(long)]
         local: bool,
         #[arg(long)]
@@ -123,7 +123,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         None => None,
     };
     if account.is_none() && allow_keys.is_empty() {
-        tracing::warn!("this server isn't linked to an account, so no app may connect; run `motile setup <token>`");
+        tracing::warn!("this server isn't linked to an account, so no client may connect; run `motile setup <token>`");
     }
     let access = Access::new(allow_keys, account);
     access.keep_fresh();
@@ -151,7 +151,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         _ = tokio::signal::ctrl_c() => {}
         _ = terminated() => {}
         program = update::restart_requested() => {
-            // Hanging up first tells the apps to dial again, which the new server answers.
+            // Hanging up first tells the clients to dial again, which the new server answers.
             endpoint.close().await;
             update::restart(&program)
         }
@@ -173,10 +173,10 @@ async fn status(data_dir: &DataDir) -> anyhow::Result<()> {
     match data_dir.account() {
         Some(account) => {
             println!("Account:   {} at {}", account.email, account.auth_url);
-            // The app can remove this server; only the auth server knows.
+            // The client can remove this server; only the auth server knows.
             match AuthClient::new(&account.auth_url).me(&device_key).await {
                 Ok(me) if me.user.is_some() => {}
-                Ok(_) => println!("           It no longer lists this server. Link it again from the app."),
+                Ok(_) => println!("           It no longer lists this server. Link it again from a client."),
                 Err(error) => println!("           Couldn't check with it: {error:#}"),
             }
         }

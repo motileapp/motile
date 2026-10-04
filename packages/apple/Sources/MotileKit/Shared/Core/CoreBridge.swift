@@ -1,7 +1,7 @@
 import CMotileCore
 import Foundation
 
-/// The app's end of the Rust core: commands go in as JSON, events come out as JSON. Events are
+/// The client's end of the Rust core: commands go in as JSON, events come out as JSON. Events are
 /// decoded on a background queue, in the order they were sent, and handed to the main thread.
 final class CoreBridge {
     typealias Reply = (Result<[String: Any], CoreError>) -> Void
@@ -17,7 +17,7 @@ final class CoreBridge {
     private let decoding = DispatchQueue(label: "app.motile.events", qos: .userInitiated)
     private var nextID: UInt64 = 0
     private var replies: [UInt64: Reply] = [:]
-    /// What turns a large answer into what the app keeps, off the main thread, and where that goes.
+    /// What turns a large answer into what the client keeps, off the main thread, and where that goes.
     private var readers: [UInt64: ([String: Any]) -> Any] = [:]
     private var readReplies: [UInt64: (Result<Any, CoreError>) -> Void] = [:]
     private let readersLock = NSLock()
@@ -39,7 +39,7 @@ final class CoreBridge {
         return nextID
     }
 
-    /// Sends a command whose answer is large: `read` turns it into what the app keeps, off the
+    /// Sends a command whose answer is large: `read` turns it into what the client keeps, off the
     /// main thread, and `reply` gets that on the main thread.
     @discardableResult
     func send<Read>(

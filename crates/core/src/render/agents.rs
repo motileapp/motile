@@ -1,4 +1,4 @@
-//! The agents a thread's agent started, as the list an app shows. Each has a transcript of its
+//! The agents a thread's agent started, as the list a client shows. Each has a transcript of its
 //! own: the items whose `parent` is the tool call that started it.
 
 use motile_protocol::wire::{Item, ItemKind, ToolStatus};

@@ -512,7 +512,7 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { onUserScroll?(false) }
 }
 
-/// What is done with the file of an image or a video outside the app.
+/// What is done with the file of an image or a video outside the client.
 enum MediaFiles {
     static let saveTitle = "Share…"
 

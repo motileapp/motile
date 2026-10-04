@@ -1,4 +1,4 @@
-//! Drives the core from a terminal, the way an app does: one JSON command per line on stdin,
+//! Drives the core from a terminal, the way a client does: one JSON command per line on stdin,
 //! one JSON event per line on stdout.
 //!
 //!     cargo run -p motile-core --example drive -- /tmp/motile-app http://localhost:3000

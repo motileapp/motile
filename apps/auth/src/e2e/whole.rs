@@ -1,5 +1,5 @@
-//! The three programs together: an app's core signs in, the install command's token links a
-//! server, the server accepts the app because the auth server says they share an account, and a
+//! The three programs together: a client's core signs in, the install command's token links a
+//! server, the server accepts the client because the auth server says they share an account, and a
 //! thread runs with `scripts/fake-agent` as its agent.
 
 use std::collections::HashMap;
@@ -32,8 +32,8 @@ fn repo_file(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(path).canonicalize().unwrap()
 }
 
-/// An app: the core, and what the app would be showing from the events it has been sent.
-struct App {
+/// A client: the core, and what the client would be showing from the events it has been sent.
+struct Client {
     handle: Handle,
     events: mpsc::UnboundedReceiver<Event>,
     next_id: u64,
@@ -46,7 +46,7 @@ struct App {
     live: bool,
 }
 
-impl App {
+impl Client {
     fn start(data_dir: &Path, auth_url: &str, server_port: u16) -> Self {
         let config = Config {
             data_dir: data_dir.to_path_buf(),
@@ -117,8 +117,8 @@ impl App {
         }
     }
 
-    /// Takes events until the app's state is as wanted.
-    async fn until(&mut self, what: &str, wanted: impl Fn(&App) -> bool) {
+    /// Takes events until the client's state is as wanted.
+    async fn until(&mut self, what: &str, wanted: impl Fn(&Client) -> bool) {
         while !wanted(self) {
             let event = tokio::time::timeout(TIMEOUT, self.events.recv()).await;
             let event = event.unwrap_or_else(|_| panic!("timed out waiting until {what}")).expect("the core stopped");
@@ -174,8 +174,8 @@ async fn run_server(data: &DataDir, endpoint: iroh::Endpoint, key: DeviceKey) {
     tokio::spawn(server.run(endpoint));
 }
 
-fn kinds(app: &App) -> Vec<&'static str> {
-    let kinds = app.rows.iter().map(|row| match &row.kind {
+fn kinds(client: &Client) -> Vec<&'static str> {
+    let kinds = client.rows.iter().map(|row| match &row.kind {
         RowKind::User { .. } => "user",
         RowKind::Prose { .. } => "prose",
         RowKind::Code { .. } => "code",
@@ -193,7 +193,7 @@ fn kinds(app: &App) -> Vec<&'static str> {
 }
 
 #[sqlx::test]
-async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_restart(db: PgPool) {
+async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_restart(db: PgPool) {
     let auth = Auth::start(db).await;
     let folder = tempfile::tempdir().unwrap();
     let server_data = DataDir::new(Some(folder.path().join("server"))).unwrap();
@@ -203,17 +203,17 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
     let server_port = server_endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
 
     // Signed out at first, then signed in, with no servers yet.
-    let app_data = folder.path().join("app");
-    let mut app = App::start(&app_data, &auth.base, server_port);
-    app.until("the account is known", |app| !app.account.device_key.is_empty()).await;
-    assert!(!app.account.signed_in);
-    app.ask(Command::DevSignIn { email: "ann@example.com".into() }).await.unwrap();
-    assert_eq!(app.account.user.as_ref().unwrap().email, "ann@example.com");
-    assert!(app.servers.is_empty());
+    let client_data = folder.path().join("app");
+    let mut client = Client::start(&client_data, &auth.base, server_port);
+    client.until("the account is known", |client| !client.account.device_key.is_empty()).await;
+    assert!(!client.account.signed_in);
+    client.ask(Command::DevSignIn { email: "ann@example.com".into() }).await.unwrap();
+    assert_eq!(client.account.user.as_ref().unwrap().email, "ann@example.com");
+    assert!(client.servers.is_empty());
 
-    // The install command's token links the server, and the app notices.
-    app.ask(Command::WatchServers { on: true }).await.unwrap();
-    let token = app.ask(Command::CreateEnrollToken).await.unwrap();
+    // The install command's token links the server, and the client notices.
+    client.ask(Command::WatchServers { on: true }).await.unwrap();
+    let token = client.ask(Command::CreateEnrollToken).await.unwrap();
     assert!(token["command"].as_str().unwrap().ends_with(token["token"].as_str().unwrap()));
     let setup_options = setup::Options {
         token: Some(token["token"].as_str().unwrap().to_string()),
@@ -225,8 +225,8 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
     setup::setup(&server_data, setup_options).await.unwrap();
     run_server(&server_data, server_endpoint.clone(), server_data.device_key().unwrap()).await;
 
-    app.until("the server is connected", App::connected).await;
-    let server = app.servers[0].clone();
+    client.until("the server is connected", Client::connected).await;
+    let server = client.servers[0].clone();
     assert_eq!((server.name.as_str(), server.platform.as_str()), ("build-box", std::env::consts::OS));
     assert_eq!(server.id, server_key.public());
     assert!(server.info.as_ref().unwrap().models.iter().any(|model| model.agent == Agent::Claude));
@@ -236,30 +236,31 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
     std::fs::create_dir_all(&project_folder).unwrap();
     std::fs::write(project_folder.join("favicon.svg"), "<svg>api</svg>").unwrap();
     let add = Request::AddProject { path: project_folder.to_string_lossy().into_owned() };
-    app.ask(Command::Request { server_id: server.id.clone(), request: add }).await.unwrap();
-    app.until("the project is listed", |app| app.projects.len() == 1).await;
-    assert_eq!(app.projects[0].project.name, "api");
+    client.ask(Command::Request { server_id: server.id.clone(), request: add }).await.unwrap();
+    client.until("the project is listed", |client| client.projects.len() == 1).await;
+    assert_eq!(client.projects[0].project.name, "api");
 
     // Its icon is fetched from the server into a file, and so is another image picked on the server.
-    app.until("the project's icon arrives", |app| app.projects[0].icon_path.is_some()).await;
-    assert_eq!(std::fs::read_to_string(app.projects[0].icon_path.as_ref().unwrap()).unwrap(), "<svg>api</svg>");
+    client.until("the project's icon arrives", |client| client.projects[0].icon_path.is_some()).await;
+    assert_eq!(std::fs::read_to_string(client.projects[0].icon_path.as_ref().unwrap()).unwrap(), "<svg>api</svg>");
     let picked = folder.path().join("picked.png");
     std::fs::write(&picked, "picked").unwrap();
-    let project_id = app.projects[0].project.id.clone();
+    let project_id = client.projects[0].project.id.clone();
     let pick = Command::SetProjectIcon {
         server_id: server.id.clone(),
         project_id,
         path: Some(picked.to_string_lossy().into_owned()),
     };
-    app.ask(pick).await.unwrap();
-    app.until("the picked icon arrives", |app| {
-        app.projects[0].icon_path.as_ref().is_some_and(|path| path.ends_with(".png"))
-    })
-    .await;
-    assert_eq!(std::fs::read_to_string(app.projects[0].icon_path.as_ref().unwrap()).unwrap(), "picked");
+    client.ask(pick).await.unwrap();
+    client
+        .until("the picked icon arrives", |client| {
+            client.projects[0].icon_path.as_ref().is_some_and(|path| path.ends_with(".png"))
+        })
+        .await;
+    assert_eq!(std::fs::read_to_string(client.projects[0].icon_path.as_ref().unwrap()).unwrap(), "picked");
 
     let new_thread = NewThread {
-        project_id: app.projects[0].project.id.clone(),
+        project_id: client.projects[0].project.id.clone(),
         agent: Agent::Claude,
         model: None,
         effort: None,
@@ -274,32 +275,32 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
         text: "Add a rate limiter to the API".into(),
         attachments: Vec::new(),
     };
-    let sent = app.ask(send).await.unwrap();
+    let sent = client.ask(send).await.unwrap();
     let thread_id = sent["thread_id"].as_str().unwrap().to_string();
-    app.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: thread_id.clone() }).await.unwrap();
-    app.ask(Command::MarkSeen { thread_id: thread_id.clone() }).await.unwrap();
-    app.until("the turn has ended", App::turn_ended).await;
-    app.until("the thread has caught up with its server", |app| app.live).await;
+    client.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: thread_id.clone() }).await.unwrap();
+    client.ask(Command::MarkSeen { thread_id: thread_id.clone() }).await.unwrap();
+    client.until("the turn has ended", Client::turn_ended).await;
+    client.until("the thread has caught up with its server", |client| client.live).await;
 
     // The finished turn shows its last message; what led to it is behind the fold.
-    assert_eq!(kinds(&app), ["user", "fold", "prose", "code", "prose", "code", "prose", "turn_end"]);
+    assert_eq!(kinds(&client), ["user", "fold", "prose", "code", "prose", "code", "prose", "turn_end"]);
     for (open, len) in [("fold", 12), ("group", 14), ("group", 17)] {
         let closed = |row: &&Row| match &row.kind {
             RowKind::Fold { open, .. } | RowKind::Group { open, .. } => !open,
             _ => false,
         };
-        let row_id = app.rows.iter().find(closed).unwrap().id.clone();
-        app.ask(Command::ToggleRow { thread_id: thread_id.clone(), row_id }).await.unwrap();
-        app.until(&format!("the {open} has opened"), |app| app.rows.len() == len).await;
+        let row_id = client.rows.iter().find(closed).unwrap().id.clone();
+        client.ask(Command::ToggleRow { thread_id: thread_id.clone(), row_id }).await.unwrap();
+        client.until(&format!("the {open} has opened"), |client| client.rows.len() == len).await;
     }
     assert_eq!(
-        kinds(&app),
+        kinds(&client),
         [
             "user", "fold", "prose", "group", "tool", "tool", "prose", "group", "tool", "tool", "tool", "prose",
             "code", "prose", "code", "prose", "turn_end"
         ]
     );
-    let tools: Vec<(&str, &str, ToolStatus)> = app
+    let tools: Vec<(&str, &str, ToolStatus)> = client
         .rows
         .iter()
         .filter_map(|row| match &row.kind {
@@ -309,25 +310,26 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
         .collect();
     assert_eq!(tools[1], ("Read", "/srv/api/src/middleware.rs", ToolStatus::Succeeded));
     assert_eq!(tools[4], ("Ran", "cargo test --quiet", ToolStatus::Succeeded));
-    let highlighted = app
+    let highlighted = client
         .rows
         .iter()
         .filter(|row| matches!(&row.kind, RowKind::Code { spans: Some(spans), .. } if !spans.is_empty()));
     assert_eq!(highlighted.count(), 2, "code that streamed in arrives highlighted");
 
-    app.until("the thread has its generated title", |app| {
-        app.threads[&thread_id].thread.title == "Add API Rate Limiting"
-    })
-    .await;
-    app.until("the thread is at rest", |app| !app.threads[&thread_id].thread.running).await;
-    assert!(app.threads[&thread_id].thread.turn_ended_at.is_some());
+    client
+        .until("the thread has its generated title", |client| {
+            client.threads[&thread_id].thread.title == "Add API Rate Limiting"
+        })
+        .await;
+    client.until("the thread is at rest", |client| !client.threads[&thread_id].thread.running).await;
+    assert!(client.threads[&thread_id].thread.turn_ended_at.is_some());
 
     // Closed and opened again with the server gone: everything is there from the cache, folded as
     // a finished turn is.
-    let fold = app.rows.iter().find(|row| matches!(row.kind, RowKind::Fold { .. })).unwrap().id.clone();
-    app.ask(Command::ToggleRow { thread_id: thread_id.clone(), row_id: fold }).await.unwrap();
-    app.until("the fold has closed", |app| app.rows.len() == 8).await;
-    let before = app.rows.clone();
+    let fold = client.rows.iter().find(|row| matches!(row.kind, RowKind::Fold { .. })).unwrap().id.clone();
+    client.ask(Command::ToggleRow { thread_id: thread_id.clone(), row_id: fold }).await.unwrap();
+    client.until("the fold has closed", |client| client.rows.len() == 8).await;
+    let before = client.rows.clone();
 
     // An image the agent shows has its size before the file is here. The file is fetched from
     // the server when it is asked for, and kept.
@@ -338,33 +340,33 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
         text: "Show the screenshot".into(),
         attachments: Vec::new(),
     };
-    let showing = app.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
-    app.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: showing }).await.unwrap();
-    app.until("the image is shown", |app| app.turn_ended() && kinds(app).contains(&"media")).await;
-    assert_eq!(kinds(&app), ["user", "fold", "prose", "media", "prose", "turn_end"]);
-    let RowKind::Media { media, width, height, size, alt, name, .. } = app.rows[3].kind.clone() else {
+    let showing = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
+    client.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: showing }).await.unwrap();
+    client.until("the image is shown", |client| client.turn_ended() && kinds(client).contains(&"media")).await;
+    assert_eq!(kinds(&client), ["user", "fold", "prose", "media", "prose", "turn_end"]);
+    let RowKind::Media { media, width, height, size, alt, name, .. } = client.rows[3].kind.clone() else {
         panic!("the reply shows an image")
     };
     assert_eq!((width, height), (Some(960), Some(600)));
     assert_eq!((alt.as_str(), name.as_str()), ("The landing page", "screenshot.png"));
     let screenshot = std::fs::read(project_folder.join("screenshot.png")).unwrap();
     let find = || Command::Media { server_id: server.id.clone(), media_id: media.clone() };
-    let fetched = app.ask(find()).await.unwrap()["path"].as_str().unwrap().to_string();
-    assert!(Path::new(&fetched).starts_with(&app_data));
+    let fetched = client.ask(find()).await.unwrap()["path"].as_str().unwrap().to_string();
+    assert!(Path::new(&fetched).starts_with(&client_data));
     assert_eq!(std::fs::read(&fetched).unwrap(), screenshot);
-    let storage = app.ask(Command::Storage).await.unwrap();
+    let storage = client.ask(Command::Storage).await.unwrap();
     assert_eq!((storage["media_bytes"].as_u64(), storage["media_limit"].as_u64()), (Some(size), Some(2_000_000_000)));
 
-    app.handle.stop();
+    client.handle.stop();
     server_endpoint.close().await;
-    let mut reopened = App::start(&app_data, &auth.base, server_port);
-    reopened.until("the cached thread is listed", |app| app.threads.contains_key(&thread_id)).await;
+    let mut reopened = Client::start(&client_data, &auth.base, server_port);
+    reopened.until("the cached thread is listed", |client| client.threads.contains_key(&thread_id)).await;
     assert!(reopened.account.signed_in);
     assert_eq!(reopened.servers[0].name, "build-box");
     assert_eq!(reopened.projects.len(), 1);
     assert!(reopened.projects[0].icon_path.is_some(), "the icon is shown from the cache, without the server");
     reopened.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: thread_id.clone() }).await.unwrap();
-    reopened.until("the cached rows are shown", |app| app.rows.len() == before.len()).await;
+    reopened.until("the cached rows are shown", |client| client.rows.len() == before.len()).await;
     assert!(!reopened.live, "rows from the cache are not news");
     reopened
         .ask(Command::Highlight {
@@ -373,7 +375,7 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
         })
         .await
         .unwrap();
-    reopened.until("the code is highlighted again", |app| app.rows == before).await;
+    reopened.until("the code is highlighted again", |client| client.rows == before).await;
 
     // The image is here without the server, until the copies on this device are cleared.
     assert_eq!(reopened.ask(find()).await.unwrap()["path"], fetched.as_str());
@@ -381,10 +383,10 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
     assert_eq!(reopened.ask(Command::Storage).await.unwrap()["media_bytes"], 0);
     assert!(reopened.ask(find()).await.is_err());
 
-    // Signing out makes the device a stranger and empties the app.
+    // Signing out makes the device a stranger and empties the client.
     let old_key = reopened.account.device_key.clone();
     reopened.ask(Command::SignOut).await.unwrap();
-    reopened.until("the app is signed out", |app| !app.account.signed_in && app.threads.is_empty()).await;
+    reopened.until("the client is signed out", |client| !client.account.signed_in && client.threads.is_empty()).await;
     assert_ne!(reopened.account.device_key, old_key);
     assert!(reopened.servers.is_empty());
 }

@@ -295,6 +295,7 @@ private struct SetupSheet: View {
         #else
         .frame(maxHeight: .infinity, alignment: .top)
         .presentationDetents([.medium, .large])
+        .presentationBackground(Color.themeSheet)
         #endif
         .onAppear { script = project.setup ?? "" }
     }

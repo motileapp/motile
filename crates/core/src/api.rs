@@ -1,4 +1,4 @@
-//! What an app says to the core and what the core tells it, as JSON.
+//! What a client says to the core and what the core tells it, as JSON.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -59,7 +59,7 @@ pub enum Command {
     },
     SignOut,
     RefreshAccount,
-    /// The app is in front again after `away_secs` in the background, where the system may have
+    /// The client is in front again after `away_secs` in the background, where the system may have
     /// cut its connections without a word. After a long time away every server is dialed again.
     Foreground {
         away_secs: u64,
@@ -226,7 +226,7 @@ pub enum Command {
         thread_id: String,
     },
     /// Lets go of the turns before the one that has the first of the last `keep_rows` rows.
-    /// The app asks while it shows the end of a thread; the turns come back with `LoadEarlier`.
+    /// The client asks while it shows the end of a thread; the turns come back with `LoadEarlier`.
     TrimEarlier {
         thread_id: String,
         keep_rows: usize,
@@ -244,7 +244,7 @@ pub enum Event {
     Servers {
         servers: Vec<ServerView>,
     },
-    /// All of a server's threads, replacing what the app had for it.
+    /// All of a server's threads, replacing what the client had for it.
     Threads {
         server_id: String,
         threads: Vec<ThreadView>,
@@ -283,7 +283,7 @@ pub enum Event {
         sent: u64,
         size: u64,
     },
-    /// Replace `remove` rows at `start` with `rows`. With `reset` the app's rows are dropped first.
+    /// Replace `remove` rows at `start` with `rows`. With `reset` the client's rows are dropped first.
     /// `earlier` says that the thread has turns before the first row.
     Rows {
         thread_id: String,

@@ -1,4 +1,4 @@
-//! How the images and videos a thread shows are named: by their contents, so a server and an app
+//! How the images and videos a thread shows are named: by their contents, so a server and a client
 //! that both have a file call it the same.
 
 use sha2::{Digest, Sha256};
@@ -29,7 +29,7 @@ impl Namer {
     }
 }
 
-/// Ids come back from apps, so they are held to the shape they are made in.
+/// Ids come back from clients, so they are held to the shape they are made in.
 pub fn is_id(id: &str) -> bool {
     let Some((hash, extension)) = id.split_once('.') else { return false };
     hash.len() == HASH_LENGTH

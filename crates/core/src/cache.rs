@@ -1,4 +1,4 @@
-//! The app's copy of what its servers hold, in SQLite, so the app shows where it left off before
+//! The client's copy of what its servers hold, in SQLite, so the client shows where it left off before
 //! it has connected to anything.
 
 use std::path::Path;

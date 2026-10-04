@@ -95,9 +95,9 @@ final class AppStore {
     var signInError: String?
     private(set) var enrollToken: EnrollToken?
     var showsAddServer = false
-    /// The settings are open over the app, where they aren't a window of their own.
+    /// The settings are open over the client, where they aren't a window of their own.
     var showsSettings = false
-    /// The thread's settings are open over the app, where they aren't around the composer.
+    /// The thread's settings are open over the client, where they aren't around the composer.
     var showsThreadSettings = false
     /// The project an icon is being chosen for.
     var iconProject: Project?
@@ -190,7 +190,7 @@ final class AppStore {
     @ObservationIgnored private var undoTimer: Timer?
     @ObservationIgnored private var openThreadID: String?
     @ObservationIgnored private let defaults = UserDefaults.standard
-    /// The thread that was open when the app was last closed, until it has been opened again.
+    /// The thread that was open when the client was last closed, until it has been opened again.
     @ObservationIgnored private var lastSelection: String?
 
     init() {
@@ -669,7 +669,7 @@ final class AppStore {
         updateDraft { $0.projectID = first.id }
     }
 
-    /// Opens the thread that was open when the app was last closed, once it is known.
+    /// Opens the thread that was open when the client was last closed, once it is known.
     private func restoreSelection() {
         guard let wanted = lastSelection, threads[wanted] != nil else { return }
         lastSelection = nil
@@ -1179,7 +1179,7 @@ final class AppStore {
         if let project { setNewThreadProject(project.id) }
     }
 
-    /// Where the app goes when what was open is gone.
+    /// Where the client goes when what was open is gone.
     private func openEmptyDraft() {
         select(.draft(emptyDraft().id))
     }
@@ -1258,7 +1258,7 @@ final class AppStore {
             if existing == nil { self.sendingDraftIDs.remove(key) }
             switch result {
             case .failure(let error):
-                // The message goes back to where it was written, wherever the app is now.
+                // The message goes back to where it was written, wherever the client is now.
                 self.setText(text, for: key)
                 self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
                 self.errorMessage = error.message
@@ -1440,7 +1440,7 @@ final class AppStore {
         setDone(notice.threadIDs, done: false)
     }
 
-    /// Changes a thread on its server, and here at once so the app doesn't wait for the answer.
+    /// Changes a thread on its server, and here at once so the client doesn't wait for the answer.
     private func update(_ thread: ThreadInfo, _ change: JSON, locally: (inout ThreadInfo) -> Void) {
         var changed = thread
         locally(&changed)

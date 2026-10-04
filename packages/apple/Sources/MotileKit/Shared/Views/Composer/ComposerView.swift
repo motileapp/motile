@@ -20,6 +20,7 @@ struct ComposerView: View {
                     monitoringStrip
                 }
                 box
+                    .zIndex(1)
                 #if os(macOS)
                 if let project = store.composerProject {
                     ContextStrip(project: project, server: store.server(project.serverID))

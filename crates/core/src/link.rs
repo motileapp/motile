@@ -1,5 +1,5 @@
-//! Keeps the app connected to one server: reconnects when the connection drops, and follows the
-//! thread list and the threads the app has open, catching each up from the revision it had.
+//! Keeps the client connected to one server: reconnects when the connection drops, and follows the
+//! thread list and the threads the client has open, catching each up from the revision it had.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -77,7 +77,7 @@ struct Inner {
 }
 
 struct OpenThread {
-    /// The revision the app has everything up to; a reconnect asks for what came after.
+    /// The revision the client has everything up to; a reconnect asks for what came after.
     synced: u64,
     follower: Option<AbortHandle>,
 }
@@ -130,7 +130,7 @@ impl Link {
         self.drop_connection();
     }
 
-    /// Lets go of the connection and dials again at once. For when the app comes back after a
+    /// Lets go of the connection and dials again at once. For when the client comes back after a
     /// time in which the system may have cut the connection without saying so.
     pub fn redial(&self) {
         let connection = {
@@ -228,7 +228,7 @@ impl Link {
     }
 
     async fn follow_list(self: Arc<Self>, connection: Connection) {
-        // The stream ends when the app fell behind; following again starts from a fresh list.
+        // The stream ends when the client fell behind; following again starts from a fresh list.
         while let Ok(mut follow) = connection.follow(&Request::Subscribe).await {
             while let Ok(Some(message)) = follow.next().await {
                 let welcomed = matches!(message, Message::Welcome { .. });

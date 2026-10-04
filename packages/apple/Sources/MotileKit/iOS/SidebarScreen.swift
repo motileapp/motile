@@ -66,6 +66,8 @@ struct SidebarScreen: View {
             }
             footer
         }
+        .contentShape(Rectangle())
+        .onTapGesture { Platform.endEditing() }
         .animation(.easeOut(duration: 0.15), value: store.undo)
         .alert(busy, isPresented: $showsBusy) {
             Button("OK", role: .cancel) {}
@@ -159,7 +161,7 @@ struct SidebarScreen: View {
         }
     }
 
-    /// The servers and how the app reaches them, and under them the account, the search and
+    /// The servers and how the client reaches them, and under them the account, the search and
     /// the way to a new thread.
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {

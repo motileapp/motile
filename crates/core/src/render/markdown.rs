@@ -1,7 +1,10 @@
-//! Markdown to blocks an app can draw without parsing anything: stretches of styled text, and
-//! code blocks. Offsets are in UTF-16 units, which is what the apps' text systems count in.
+//! Markdown to blocks a client can draw without parsing anything: stretches of styled text, and
+//! code blocks. Offsets are in UTF-16 units, which is what the clients' text systems count in.
 
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+use std::ops::Range;
+
+use linkify::{LinkFinder, LinkKind};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMergeStream};
 use serde::Serialize;
 
 use super::highlight::Spans;
@@ -23,7 +26,7 @@ pub enum Block {
         language: String,
         code: String,
     },
-    /// An image the app has a file for. It stands on its own, after the text it was written in.
+    /// An image the client has a file for. It stands on its own, after the text it was written in.
     Image {
         src: String,
         alt: String,
@@ -144,10 +147,35 @@ pub fn parse(markdown: &str) -> Vec<Block> {
 pub fn parse_showing(markdown: &str, shown: &[&str]) -> Vec<Block> {
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let mut builder = Builder { shown, ..Builder::default() };
-    for event in Parser::new_ext(markdown, options) {
+    for event in TextMergeStream::new(Parser::new_ext(markdown, options)) {
         builder.event(event);
     }
     builder.finish()
+}
+
+/// Where the web addresses written out in `text` are, in bytes.
+fn urls(text: &str) -> Vec<Range<usize>> {
+    let mut finder = LinkFinder::new();
+    finder.kinds(&[LinkKind::Url]);
+    finder
+        .links(text)
+        .filter(|link| link.as_str().starts_with("https://") || link.as_str().starts_with("http://"))
+        .map(|link| link.start()..link.end())
+        .collect()
+}
+
+/// The web addresses written out in plain text, as links.
+pub fn links_in(text: &str) -> Vec<Link> {
+    let mut links = Vec::new();
+    let (mut seen, mut start) = (0, 0);
+    for url in urls(text) {
+        start += utf16_len(&text[seen..url.start]);
+        let len = utf16_len(&text[url.clone()]);
+        links.push(Link { start, len, url: text[url.clone()].to_string() });
+        start += len;
+        seen = url.end;
+    }
+    links
 }
 
 fn utf16_len(text: &str) -> u32 {
@@ -188,6 +216,23 @@ impl Builder<'_> {
             Some(run) if run[0] + run[1] == start && run[2] == style => run[1] += len,
             _ => self.prose.runs.push([start, len, style]),
         }
+    }
+
+    /// Pushes text with the web addresses written out in it as links.
+    fn push_linked(&mut self, text: &str, style: u32) {
+        if !self.links.is_empty() {
+            self.push_text(text, style);
+            return;
+        }
+        let mut seen = 0;
+        for url in urls(text) {
+            self.push_text(&text[seen..url.start], style);
+            let start = self.length;
+            self.push_text(&text[url.clone()], style | LINK);
+            self.prose.links.push(Link { start, len: self.length - start, url: text[url.clone()].to_string() });
+            seen = url.end;
+        }
+        self.push_text(&text[seen..], style);
     }
 
     fn para_kind(&mut self) -> ParaKind {
@@ -305,11 +350,15 @@ impl Builder<'_> {
             Event::End(tag) => self.end(tag),
             Event::Text(text) => {
                 self.ensure_open();
-                self.push_text(&text, 0);
+                self.push_linked(&text, 0);
             }
             Event::Code(text) => {
                 self.ensure_open();
-                self.push_text(&text, CODE);
+                if urls(&text).first().is_some_and(|url| url.len() == text.len()) {
+                    self.push_linked(&text, CODE);
+                } else {
+                    self.push_text(&text, CODE);
+                }
             }
             Event::InlineMath(text) | Event::DisplayMath(text) | Event::InlineHtml(text) | Event::Html(text) => {
                 self.ensure_open();
@@ -533,6 +582,51 @@ mod tests {
         );
         assert_eq!(prose.links, vec![Link { start: 28, len: 4, url: "https://motile.app".into() }]);
         assert_eq!(prose.paras, vec![Para { start: 0, len: 33, kind: ParaKind::Body }]);
+    }
+
+    fn linked(markdown: &str) -> Vec<String> {
+        let blocks = parse(markdown);
+        let prose = prose(&blocks, 0);
+        for link in &prose.links {
+            assert_eq!(utf16_slice(&prose.text, link.start, link.len), link.url);
+        }
+        prose.links.iter().map(|link| link.url.clone()).collect()
+    }
+
+    #[test]
+    fn web_addresses_written_out_become_links() {
+        assert_eq!(linked("See https://google.com."), ["https://google.com"]);
+        assert_eq!(linked("😀 (http://localhost:3000/a) ok"), ["http://localhost:3000/a"]);
+        assert_eq!(
+            linked("At https://x.com/a_b_c?d=1&e=2 and **https://motile.app**"),
+            ["https://x.com/a_b_c?d=1&e=2", "https://motile.app"]
+        );
+        assert_eq!(linked("Run `https://motile.app/install.sh`"), ["https://motile.app/install.sh"]);
+
+        let blocks = parse("See https://google.com.");
+        assert_eq!(prose(&blocks, 0).runs, vec![[4, 18, LINK]]);
+    }
+
+    #[test]
+    fn only_whole_web_addresses_outside_links_and_code_become_links() {
+        assert_eq!(linked("google.com, www.google.com, main.rs:12, localhost:3000 and ssh://host"), [""; 0]);
+        assert_eq!(linked("Run `curl https://motile.app/install.sh`"), [""; 0]);
+        assert_eq!(linked("Intro\n\n    https://google.com"), [""; 0]);
+
+        let blocks = parse("[https://google.com](https://motile.app) <https://google.com>");
+        let urls: Vec<&str> = prose(&blocks, 0).links.iter().map(|link| link.url.as_str()).collect();
+        assert_eq!(urls, ["https://motile.app", "https://google.com"]);
+    }
+
+    #[test]
+    fn links_in_plain_text_count_utf16_units() {
+        assert_eq!(
+            links_in("😀 https://google.com, then\nhttp://localhost:3000/c"),
+            vec![
+                Link { start: 3, len: 18, url: "https://google.com".into() },
+                Link { start: 28, len: 23, url: "http://localhost:3000/c".into() },
+            ]
+        );
     }
 
     #[test]

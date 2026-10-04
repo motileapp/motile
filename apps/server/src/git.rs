@@ -1,5 +1,5 @@
 //! A project's repository, read and changed with the `git` program: its branches, what isn't
-//! committed or pushed, the commits, pushes and pull requests an app asks for, and the worktrees
+//! committed or pushed, the commits, pushes and pull requests a client asks for, and the worktrees
 //! of the threads that work in one of their own. Pull requests are GitHub's, through its `gh`
 //! program.
 
@@ -28,7 +28,7 @@ const REFUSAL_CHARS: usize = 2000;
 /// The refs that keep the snapshots of the threads, each named after its thread.
 const SNAPSHOTS: &str = "refs/motile/threads";
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-/// A patch beyond this is cut; nobody reads more of it in an app.
+/// A patch beyond this is cut; nobody reads more of it in a client.
 const MAX_PATCH_BYTES: usize = 4 * 1024 * 1024;
 
 /// Whether the folder is inside a git repository, read from the folders themselves.

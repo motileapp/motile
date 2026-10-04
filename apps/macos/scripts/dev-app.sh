@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Opens the app signed in to an account that only exists on this Mac: a local auth server with
+# Opens the client signed in to an account that only exists on this Mac: a local auth server with
 # the dev login, and a local server whose agent is scripts/fake-agent, with a project and a few
 # threads (scripts/dev-stack.sh). All of it is kept in build/dev and left running, so the next
 # run only builds what changed and restarts what was rebuilt.
 #
-#   scripts/dev-app.sh           build, start what isn't running, open the app
-#   scripts/dev-app.sh --stop    stop the app, the servers and PostgreSQL
+#   scripts/dev-app.sh           build, start what isn't running, open the client
+#   scripts/dev-app.sh --stop    stop the client, the servers and PostgreSQL
 #
 # Needs Xcode 26 or later, Rust and PostgreSQL (`brew install postgresql@17`). Removing
 # build/dev after --stop starts over.
@@ -27,7 +27,7 @@ scripts/build-app.sh
 # installed Motile's. Signing changes the copy, so the version is that of what was built.
 BUILT="$(swift build -c release --show-bin-path)/Motile"
 if ! current app "$BUILT"; then
-    echo "▸ Opening the app…"
+    echo "▸ Opening the client…"
     stop app
     rm -rf "$APP"
     cp -R build/Motile.app "$APP"

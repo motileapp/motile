@@ -548,7 +548,7 @@ def show_screenshot():
         f.write(png(960, 600))
     command = "npx playwright screenshot http://localhost:3000 screenshot.png"
     turn.tool("Bash", {"command": command, "description": "Take a screenshot"}, "Saved screenshot.png", seconds=0.1)
-    turn.text(f"Here is the page as it looks now:\n\n![The landing page]({path})\n\nThe header is in place.")
+    turn.text(f"Here is http://localhost:3000 as it looks now:\n\n![The landing page]({path})\n\nThe header is in place.")
     turn.done()
 
 

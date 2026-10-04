@@ -2,7 +2,7 @@
 import PackageDescription
 
 // What the Mac app and the iOS app share: the bridge to the Rust core, the state, and the views.
-// The apps link the core's static library themselves.
+// The clients link the core's static library themselves.
 let package = Package(
     name: "MotileKit",
     platforms: [.macOS(.v14), .iOS("18.0")],

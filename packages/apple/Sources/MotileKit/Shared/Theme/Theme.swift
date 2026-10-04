@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Colours and type for the whole app. Colours are dynamic, so text built once follows the
+/// Colours and type for the whole client. Colours are dynamic, so text built once follows the
 /// appearance without being built again.
 enum Theme {
     static func dynamic(_ light: PlatformColor, _ dark: PlatformColor) -> PlatformColor {
@@ -24,6 +24,7 @@ enum Theme {
     // Surfaces
     static let background = dynamic(hex(0xf8f9fc), hex(0x08090d))
     static let raised = dynamic(hex(0xffffff), hex(0x15171d))
+    static let sheet = dynamic(hex(0xf8f9fc), hex(0x0e1015))
     static let field = dynamic(hex(0xffffff), white(0.04))
     static let bubble = dynamic(hex(0xeceef4), hex(0x15171d))
     static let codeBackground = dynamic(hex(0xf1f3f8), hex(0x101218))
@@ -116,6 +117,7 @@ enum Theme {
 extension Color {
     static let themeBackground = Color(platform: Theme.background)
     static let themeRaised = Color(platform: Theme.raised)
+    static let themeSheet = Color(platform: Theme.sheet)
     static let themeField = Color(platform: Theme.field)
     static let themeBubble = Color(platform: Theme.bubble)
     static let themeGlassTint = Color(platform: Theme.glassTint)

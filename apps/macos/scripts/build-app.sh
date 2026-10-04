@@ -3,8 +3,8 @@
 #
 #   scripts/build-app.sh [--open]
 #
-# MOTILE_AUTH_URL, if set, becomes the auth server the app signs in with (default https://auth.motile.app).
-# MOTILE_SIGN_IDENTITY, if set, is the Developer ID certificate the app is signed with.
+# MOTILE_AUTH_URL, if set, becomes the auth server the client signs in with (default https://auth.motile.app).
+# MOTILE_SIGN_IDENTITY, if set, is the Developer ID certificate the client is signed with.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -22,7 +22,7 @@ if [ -n "$LINK_FLAGS" ]; then
     export MOTILE_CORE_LINK_FLAGS="$LINK_FLAGS"
 fi
 
-echo "▸ Building the app…"
+echo "▸ Building the client…"
 swift build -c release
 BINARY="$(swift build -c release --show-bin-path)/Motile"
 
