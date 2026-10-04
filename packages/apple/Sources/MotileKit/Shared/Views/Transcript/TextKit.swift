@@ -147,9 +147,11 @@ final class TextSystem {
         layout.addTextContainer(container)
     }
 
-    /// Lets every line be as long as it is.
+    /// Lets every line be as long as it is. Its height is counted in lines and never laid out, so
+    /// a part that is drawn lays out the lines before it too, rather than guessing where it is.
     func unwrap() {
         container.size = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        layout.allowsNonContiguousLayout = false
     }
 
     /// Replaces the text, touching only what follows the part that stayed the same. Streamed

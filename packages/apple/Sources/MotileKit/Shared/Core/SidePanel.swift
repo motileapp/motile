@@ -269,7 +269,7 @@ final class SidePanel {
     func showAgent(_ id: String) {
         guard let store, let threadID = store.transcript.threadID else { return }
         shownAgent = id
-        store.agentTranscript.begin(threadID: threadID)
+        store.agentTranscript.begin(threadID: threadID, live: store.transcript.live)
         agentsChanged()
         store.core.send("open_agent", ["thread_id": threadID, "agent_id": id])
         open(.agents)

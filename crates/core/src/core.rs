@@ -861,6 +861,7 @@ impl Core {
                 if let Some(queued) = queued {
                     self.emit_rows(thread_id, false, queued);
                 }
+                self.emit(Event::Live { thread_id: thread_id.to_string(), live: false });
                 self.emit(event);
             }
             Message::Items { items } => {
@@ -917,6 +918,7 @@ impl Core {
                 open.live = true;
                 open.rev = rev;
                 self.cache.save_items(thread_id, &[], Some(rev));
+                self.emit(Event::Live { thread_id: thread_id.to_string(), live: true });
             }
             Message::TextDelta { id, text, rev } => {
                 if !open.transcript.append_text(&id, &text, rev) {
@@ -1373,7 +1375,9 @@ impl Core {
         if let Some(open) = self.open.get(thread_id) {
             let rows = open.transcript.rows().to_vec();
             let agents = agents_event(thread_id, &open.agents);
+            let live = open.live;
             self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows });
+            self.emit(Event::Live { thread_id: thread_id.to_string(), live });
             self.emit(agents);
             return Ok(());
         }
