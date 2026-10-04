@@ -21,6 +21,7 @@ struct MotileApp: App {
             RootView()
                 .environment(store)
                 .environment(drawer)
+                .foregroundStyle(Color.themeText)
                 .onAppear {
                     guard !delegate.started else { return }
                     delegate.started = true
@@ -299,6 +300,7 @@ struct MainScreen: View {
             SidebarScreen()
                 .environment(store)
                 .environment(drawer)
+                .foregroundStyle(Color.themeText)
         } content: {
             NavigationStack {
                 ThreadScreen()
@@ -308,6 +310,7 @@ struct MainScreen: View {
             }
             .environment(store)
             .environment(drawer)
+            .foregroundStyle(Color.themeText)
         }
         .ignoresSafeArea()
         .onChange(of: panel.isOpen, initial: true) { drawer.isEnabled = !panel.isOpen }

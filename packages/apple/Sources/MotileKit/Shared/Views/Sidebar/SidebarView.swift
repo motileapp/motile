@@ -172,7 +172,7 @@ private struct MarkDoneButton: View {
                     .font(.ui(size: 11, weight: .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(hovering ? .primary : .secondary)
+            .foregroundStyle(hovering ? Color.themeText : Color.themeSecondary)
             .padding(.horizontal, 5)
             .frame(height: 22)
             .contentShape(Rectangle())
@@ -220,7 +220,7 @@ struct ThreadRow: View {
                 ThreadStatus(thread: thread)
                 #endif
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.themeSecondary)
             .frame(height: scaled(22))
 
             Text(thread.title)
@@ -240,7 +240,7 @@ struct ThreadRow: View {
                 }
                 AgentIcon(agent: thread.agent, size: 12)
             }
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(Color.themeTertiary)
             .frame(height: scaled(16))
         }
         .padding(.horizontal, Self.sidePadding)
@@ -321,7 +321,7 @@ private struct DraftRow: View {
                     .foregroundStyle(Color.themeSecondary)
                 }
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.themeSecondary)
             .frame(height: scaled(22))
 
             Text(listed.preview)
@@ -368,7 +368,7 @@ struct UndoRow: View {
                             .lineLimit(1)
                     }
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 18)
                 .frame(height: doneRowHeight)
                 .padding(.vertical, 4)
@@ -418,10 +418,10 @@ private struct DoneShelf: View {
                     Spacer()
                     Text("\(threads.count)")
                         .font(.ui(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.themeTertiary)
                         .monospacedDigit()
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 18)
                 .frame(height: Self.rowHeight)
                 .padding(.top, 4)
@@ -494,19 +494,19 @@ struct DoneRow: View {
             Text(thread.title)
                 .font(.ui(size: 13))
                 .lineLimit(1)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
             Spacer(minLength: 6)
             if hovering {
                 IconOnlyButton(symbol: "arrow.uturn.backward", help: "Mark undone", size: Self.buttonSize, symbolSize: 12) {
                     store.setDone([thread.id], done: false)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.trailing, (doneRowHeight - Self.buttonSize) / 2 - Self.sidePadding)
             } else {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
                     Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: context.date.timeIntervalSince1970))
                         .font(.ui(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.themeTertiary)
                 }
             }
         }
@@ -556,7 +556,7 @@ struct ThreadStatus: View {
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 Text(Time.ago(thread.updatedAt, now: context.date.timeIntervalSince1970))
                     .font(.ui(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.themeTertiary)
             }
         }
     }
@@ -593,7 +593,7 @@ struct ServerLine: View {
             ServerUpdateStatus(server: server) {
                 Text(detail)
                     .font(.ui(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.themeTertiary)
                     .monospacedDigit()
             }
         }
@@ -650,7 +650,7 @@ private struct SidebarFooter: View {
                         .truncationMode(.middle)
                     Spacer(minLength: 0)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 8)
                 .frame(height: 30)
                 .padding(Self.accountMargin)

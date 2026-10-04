@@ -16,7 +16,7 @@ struct SettingsView: View {
                         Text("Signed in as")
                     } trailing: {
                         Text(store.account.signedIn ? store.account.email : "Not signed in")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.themeSecondary)
                         if store.account.signedIn {
                             Button("Sign Out") { store.signOut() }
                         }
@@ -67,7 +67,7 @@ struct SettingsView: View {
                             Text("Images and videos")
                             Text(storageDescription)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.themeSecondary)
                         }
                     } trailing: {
                         Button("Clear") { store.clearMedia() }
@@ -110,7 +110,7 @@ struct SettingsView: View {
                         Text(server.name)
                         Text(description(of: server))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.themeSecondary)
                     }
                 } trailing: {
                     ServerUpdateStatus(server: server) { EmptyView() }
@@ -135,7 +135,7 @@ struct SettingsView: View {
                 ForEach(servers) { server in
                     SettingsRow {
                         Image(systemName: "server.rack")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.themeSecondary)
                         Text(server.name)
                     } trailing: {
                         Picker("Model", selection: textModel(of: server)) {
@@ -169,7 +169,7 @@ struct SettingsView: View {
                         Text(project.name)
                         Text(project.path)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.themeSecondary)
                             .lineLimit(1)
                             .truncationMode(.head)
                     }
@@ -230,7 +230,7 @@ private struct BranchInstructionsEditor: View {
             HStack(spacing: 8) {
                 Text("Branch names")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.themeSecondary)
                 Spacer()
                 Button("Reset") {
                     text = server.defaultBranchInstructions
@@ -269,7 +269,7 @@ private struct SetupSheet: View {
                 .font(.ui(size: 13, weight: .semibold))
             Text("A shell script that runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder, as in: cp \"$MOTILE_PROJECT/.env\" . && pnpm install")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             TextEditor(text: $script)
                 .font(.ui(size: 12, design: .monospaced))
@@ -321,7 +321,7 @@ private struct SettingsSection<Content: View>: View {
                 if let caption {
                     Text(caption)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.themeSecondary)
                 }
             }
             .padding(.horizontal, settingsInset)
