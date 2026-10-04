@@ -114,11 +114,11 @@ struct ComposerView: View {
 
     private var placeholder: String {
         guard let server = store.composerServer else { return "Ask anything" }
-        if store.selectedThread?.isDone == true { return "Send a message to bring it back" }
-        if server.state != .connected { return "Waiting for \(server.name) to connect…" }
-        if server.models.isEmpty && server.known { return "Install Claude Code or Codex on \(server.name) to start" }
-        if store.activity.running { return "Send a follow-up; it waits for the agent's turn to end" }
-        return "Ask anything, or describe what to build"
+        if store.selectedThread?.isDone == true { return "Message to bring it back" }
+        if server.state != .connected { return "Waiting for \(server.name)…" }
+        if server.models.isEmpty && server.known { return "Install Claude Code or Codex" }
+        if store.activity.running { return "Send a follow-up" }
+        return "Ask anything"
     }
 
     private static let undoneButtonPadding = 9.0
