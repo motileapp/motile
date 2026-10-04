@@ -1,7 +1,7 @@
 name: Release
 
 # Builds the server and the auth server for Linux, and the server and the app for Macs, and publishes
-# them as a GitHub release. The installer downloads the server from the latest release, and the
+# them as a GitHub release. The iOS app is uploaded to TestFlight. The installer downloads the server from the latest release, and the
 # download button on motile.app links to the app in it.
 on:
   push:
@@ -53,6 +53,11 @@ jobs:
     uses: ./.github/workflows/macos.yml
     with:
       sign: true
+    secrets: inherit
+
+  # The iOS app goes to TestFlight, not into the release, so the release doesn't wait for it.
+  ios:
+    uses: ./.github/workflows/ios.yml
     secrets: inherit
 
   # The release is the latest one as soon as it exists, so it is made once, with every file.

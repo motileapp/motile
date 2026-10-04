@@ -19,12 +19,13 @@ These are its programs:
 | Program | Where it runs | What it does |
 | --- | --- | --- |
 | Motile.app (`apps/macos`) | Your Mac | The interface |
+| Motile for iOS (`apps/ios`) | Your iPhone and iPad | The interface. In TestFlight for now |
 | `motile` (`apps/server`) | Your Linux machines and Macs | Runs the agents, stores the threads, serves your apps |
 | Auth server (`apps/auth`) | auth.motile.app | Signs you in and records which devices are yours. It never sees a thread |
 | Web app (`apps/web`) | [app.motile.app](https://app.motile.app) | Lists your servers and apps, adds a server, removes a device |
 | Marketing site (`apps/marketing`) | [motile.app](https://motile.app) | The landing page, the download and the installer |
 
-Apps for iOS, Android, Windows and Linux are planned. They will share the Rust core the Mac app is built on (`crates/core`).
+Apps for Android, Windows and Linux are planned. They will share the Rust core the Mac and iOS apps are built on (`crates/core`).
 
 ## Getting started
 

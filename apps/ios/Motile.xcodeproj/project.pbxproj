@@ -1,0 +1,439 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1F0000000000000000000A1 /* MotileKit in Frameworks */ = {isa = PBXBuildFile; productRef = A1F0000000000000000000B1 /* MotileKit */; };
+		A1F0000000000000000000A2 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A1F0000000000000000000C2 /* AppIcon.icon */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A1F0000000000000000000C1 /* Motile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Motile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1F0000000000000000000C3 /* MotileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MotileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1F0000000000000000000C2 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = AppIcon.icon; path = ../macos/Resources/AppIcon.icon; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A1F0000000000000000000D1 /* Exceptions for "Motile" folder in "Motile" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A1F0000000000000000000E1 /* Motile */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXContainerItemProxy section */
+		A1F000000000000000000401 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1F000000000000000000301 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1F0000000000000000000E1;
+			remoteInfo = Motile;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A1F0000000000000000000D3 /* MotileUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MotileUITests;
+			sourceTree = "<group>";
+		};
+		A1F0000000000000000000D2 /* Motile */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1F0000000000000000000D1 /* Exceptions for "Motile" folder in "Motile" target */,
+			);
+			path = Motile;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A1F0000000000000000000F1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1F0000000000000000000A1 /* MotileKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1F000000000000000000101 = {
+			isa = PBXGroup;
+			children = (
+				A1F0000000000000000000D2 /* Motile */,
+				A1F0000000000000000000D3 /* MotileUITests */,
+				A1F0000000000000000000C2 /* AppIcon.icon */,
+				A1F000000000000000000102 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A1F000000000000000000102 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1F0000000000000000000C1 /* Motile.app */,
+				A1F0000000000000000000C3 /* MotileUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1F0000000000000000000E1 /* Motile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1F000000000000000000201 /* Build configuration list for PBXNativeTarget "Motile" */;
+			buildPhases = (
+				A1F0000000000000000000F4 /* Build the Rust core */,
+				A1F0000000000000000000F2 /* Sources */,
+				A1F0000000000000000000F1 /* Frameworks */,
+				A1F0000000000000000000F3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1F0000000000000000000D2 /* Motile */,
+			);
+			name = Motile;
+			packageProductDependencies = (
+				A1F0000000000000000000B1 /* MotileKit */,
+			);
+			productName = Motile;
+			productReference = A1F0000000000000000000C1 /* Motile.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A1F0000000000000000000E2 /* MotileUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1F000000000000000000203 /* Build configuration list for PBXNativeTarget "MotileUITests" */;
+			buildPhases = (
+				A1F0000000000000000000F5 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1F000000000000000000402 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A1F0000000000000000000D3 /* MotileUITests */,
+			);
+			name = MotileUITests;
+			productName = MotileUITests;
+			productReference = A1F0000000000000000000C3 /* MotileUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A1F000000000000000000301 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A1F0000000000000000000E1 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					A1F0000000000000000000E2 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = A1F0000000000000000000E1;
+					};
+				};
+			};
+			buildConfigurationList = A1F000000000000000000202 /* Build configuration list for PBXProject "Motile" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A1F000000000000000000101;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A1F0000000000000000000B2 /* XCLocalSwiftPackageReference "../../packages/apple" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A1F000000000000000000102 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A1F0000000000000000000E1 /* Motile */,
+				A1F0000000000000000000E2 /* MotileUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1F0000000000000000000F3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1F0000000000000000000A2 /* AppIcon.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A1F0000000000000000000F4 /* Build the Rust core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build the Rust core";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/scripts/build-core.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1F0000000000000000000F2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1F0000000000000000000F5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1F000000000000000000402 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1F0000000000000000000E1 /* Motile */;
+			targetProxy = A1F000000000000000000401 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A1F000000000000000000211 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A1F000000000000000000212 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A1F000000000000000000213 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Motile/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Motile;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Motile attaches the photos you take to your messages.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Motile connects straight to your server when it is on the same network.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Motile saves the images and videos you choose to keep.";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../../target/aarch64-apple-ios/release";
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../../target/aarch64-apple-ios-sim/release";
+				MARKETING_VERSION = 0.0.0;
+				OTHER_LDFLAGS = (
+					"-lmotile_core",
+					"-framework",
+					Network,
+					"-framework",
+					SystemConfiguration,
+					"-framework",
+					Security,
+					"-liconv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.motile.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1F000000000000000000214 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Motile/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Motile;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Motile attaches the photos you take to your messages.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Motile connects straight to your server when it is on the same network.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Motile saves the images and videos you choose to keep.";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = "$(SRCROOT)/../../target/aarch64-apple-ios/release";
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = "$(SRCROOT)/../../target/aarch64-apple-ios-sim/release";
+				MARKETING_VERSION = 0.0.0;
+				OTHER_LDFLAGS = (
+					"-lmotile_core",
+					"-framework",
+					Network,
+					"-framework",
+					SystemConfiguration,
+					"-framework",
+					Security,
+					"-liconv",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.motile.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A1F000000000000000000215 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.motile.ios.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Motile;
+			};
+			name = Debug;
+		};
+		A1F000000000000000000216 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.motile.ios.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Motile;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1F000000000000000000201 /* Build configuration list for PBXNativeTarget "Motile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1F000000000000000000213 /* Debug */,
+				A1F000000000000000000214 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1F000000000000000000202 /* Build configuration list for PBXProject "Motile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1F000000000000000000211 /* Debug */,
+				A1F000000000000000000212 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1F000000000000000000203 /* Build configuration list for PBXNativeTarget "MotileUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1F000000000000000000215 /* Debug */,
+				A1F000000000000000000216 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A1F0000000000000000000B2 /* XCLocalSwiftPackageReference "../../packages/apple" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../packages/apple;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1F0000000000000000000B1 /* MotileKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MotileKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A1F000000000000000000301 /* Project object */;
+}

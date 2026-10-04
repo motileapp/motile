@@ -1,0 +1,150 @@
+#if os(iOS)
+import SwiftUI
+import UIKit
+import UniformTypeIdentifiers
+
+/// The composer's text: grows with what is typed and takes pasted images and files. Return is a
+/// line break on the screen's keyboard and sends from a keyboard with keys.
+struct ComposerTextView: UIViewRepresentable {
+    static let font = UIFont.systemFont(ofSize: 17)
+    static let verticalInset: CGFloat = 8
+    /// One line: a phone has no room to spare, and the composer grows with what is typed.
+    static let minimumHeight: CGFloat = ceil(font.lineHeight) + verticalInset * 2
+    static let maximumHeight: CGFloat = 180
+
+    @Binding var text: String
+    @Binding var height: CGFloat
+    let placeholder: String
+    /// Changes when another thread's draft is shown. The keyboard only comes when the text is tapped.
+    let focusKey: String
+    let onSubmit: () -> Void
+    let onFiles: ([URL]) -> Void
+    let onFileDrag: (Bool) -> Void
+
+    func makeUIView(context: Context) -> ComposerUITextView {
+        let view = ComposerUITextView()
+        view.delegate = context.coordinator
+        view.font = Self.font
+        view.textColor = Theme.text
+        view.tintColor = Theme.primary
+        view.backgroundColor = .clear
+        view.textContainerInset = UIEdgeInsets(top: Self.verticalInset, left: 0, bottom: Self.verticalInset, right: 0)
+        view.textContainer.lineFragmentPadding = 2
+        view.showsVerticalScrollIndicator = false
+        view.onSubmit = onSubmit
+        view.onFiles = onFiles
+        view.placeholder = placeholder
+        view.text = text
+        context.coordinator.textView = view
+        DispatchQueue.main.async { context.coordinator.measure() }
+        return view
+    }
+
+    func updateUIView(_ view: ComposerUITextView, context: Context) {
+        context.coordinator.parent = self
+        view.onSubmit = onSubmit
+        view.onFiles = onFiles
+        view.placeholder = placeholder
+        guard view.text != text else { return }
+        view.text = text
+        view.showPlaceholder()
+        context.coordinator.measure()
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: ComposerTextView
+        weak var textView: ComposerUITextView?
+
+        init(_ parent: ComposerTextView) {
+            self.parent = parent
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text
+            self.textView?.showPlaceholder()
+            measure()
+        }
+
+        /// Makes the composer as tall as its text, within limits.
+        func measure() {
+            guard let view = textView, view.bounds.width > 0 else { return }
+            let fitted = view.sizeThatFits(CGSize(width: view.bounds.width, height: .greatestFiniteMagnitude)).height
+            let height = min(ComposerTextView.maximumHeight, max(ComposerTextView.minimumHeight, ceil(fitted)))
+            view.isScrollEnabled = fitted > ComposerTextView.maximumHeight
+            guard abs(parent.height - height) > 0.5 else { return }
+            DispatchQueue.main.async { self.parent.height = height }
+        }
+    }
+}
+
+final class ComposerUITextView: UITextView {
+    var onSubmit: (() -> Void)?
+    var onFiles: (([URL]) -> Void)?
+    var placeholder = "" {
+        didSet { placeholderLabel.text = placeholder }
+    }
+    private let placeholderLabel = UILabel()
+    private var laidOutWidth: CGFloat = 0
+
+    init() {
+        super.init(frame: .zero, textContainer: nil)
+        placeholderLabel.font = ComposerTextView.font
+        placeholderLabel.textColor = Theme.tertiary
+        placeholderLabel.numberOfLines = 1
+        placeholderLabel.lineBreakMode = .byTruncatingTail
+        addSubview(placeholderLabel)
+        isScrollEnabled = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func showPlaceholder() {
+        placeholderLabel.isHidden = !text.isEmpty
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let inset = textContainerInset
+        let padding = textContainer.lineFragmentPadding
+        placeholderLabel.frame = CGRect(x: padding, y: inset.top, width: max(0, bounds.width - 2 * padding), height: ceil(ComposerTextView.font.lineHeight))
+        showPlaceholder()
+        guard bounds.width != laidOutWidth else { return }
+        laidOutWidth = bounds.width
+        (delegate as? ComposerTextView.Coordinator)?.measure()
+    }
+
+    // Return sends from a keyboard with keys; with Shift or Option it is a line break.
+    override var keyCommands: [UIKeyCommand]? {
+        let send = UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(submit))
+        send.wantsPriorityOverSystemBehavior = true
+        return [send]
+    }
+
+    @objc private func submit() {
+        guard markedTextRange == nil else { return }
+        onSubmit?()
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(paste(_:)), UIPasteboard.general.hasImages || UIPasteboard.general.hasURLs { return true }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    /// A copied image is attached; anything else is pasted as plain text.
+    override func paste(_ sender: Any?) {
+        let pasteboard = UIPasteboard.general
+        guard !pasteboard.hasStrings, pasteboard.hasImages, let image = pasteboard.image else {
+            guard let text = pasteboard.string else { return }
+            insertText(text)
+            return
+        }
+        let onFiles = onFiles
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let png = image.pngData(), let file = ImageFiles.saveForAttaching(png, type: .png) else { return }
+            DispatchQueue.main.async { onFiles?([file]) }
+        }
+    }
+}
+#endif

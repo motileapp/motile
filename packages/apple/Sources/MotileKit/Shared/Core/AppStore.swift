@@ -1,0 +1,1584 @@
+import AuthenticationServices
+import Foundation
+import Observation
+import UniformTypeIdentifiers
+
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
+
+enum Selection: Hashable {
+    case draft(String)
+    case thread(String)
+}
+
+/// A thread that hasn't been sent yet: where it will start and with what. Its text is in `drafts`.
+struct ThreadDraft: Identifiable, Equatable, Codable {
+    var id = UUID().uuidString
+    var projectID: String?
+    var model: String?
+    var effort: String?
+    var access: Access = .full
+    var plan = false
+    /// The thread starts in a new worktree, on a branch that starts from `base`.
+    var worktree: Bool?
+    var base: String?
+}
+
+/// A draft as the sidebar lists it.
+struct ListedDraft: Identifiable {
+    let draft: ThreadDraft
+    let preview: String
+
+    var id: String { draft.id }
+}
+
+/// Where the command panel opens.
+enum PanelPage: Hashable {
+    /// Everything that can be done from here.
+    case commands
+    /// The projects, to start a thread in one.
+    case projects
+    /// The threads, to open one.
+    case threads
+    /// The servers, to add a project on one.
+    case servers
+    /// The ways to add a project on the server.
+    case sources(String)
+    case newProject(String)
+    /// The repositories of the server's GitHub login, to clone one.
+    case github(String)
+    /// What GitHub needs on the server before its repositories can be listed.
+    case githubSetup(String)
+    /// The server's folders, to add one.
+    case folder(String)
+}
+
+/// A project that a server is making or cloning.
+struct AddingProject: Equatable {
+    let serverID: String
+    let name: String
+}
+
+/// A server that is installing a new version of itself.
+struct ServerUpdate: Equatable {
+    /// The version it had when the update began.
+    let from: String
+    /// How much of the download has arrived, when the server knows how much there is.
+    var fraction: Double?
+    /// The new version is installed and the server is starting it.
+    var restarting = false
+}
+
+/// What the images and videos fetched from the servers take on this Mac, and what they may take.
+struct MediaStorage: Equatable {
+    let used: Int64
+    let limit: Int64
+}
+
+struct UndoNotice: Equatable {
+    let threadIDs: [String]
+    let text: String
+}
+
+/// Everything the views show. It mirrors the core: commands go to it, and its events change the
+/// state here. All of it is used on the main thread.
+@Observable
+final class AppStore {
+    // Account
+    private(set) var account = Account()
+    /// Whether the core has sent what it remembers from last time. Until then the window is hidden.
+    private(set) var ready = false
+    private(set) var signingIn = false
+    var signInError: String?
+    private(set) var enrollToken: EnrollToken?
+    var showsAddServer = false
+    /// The settings are open over the app, where they aren't a window of their own.
+    var showsSettings = false
+    /// The project an icon is being chosen for.
+    var iconProject: Project?
+    /// Files are being dragged over the window.
+    var dropTargeted = false
+    /// The branch picker under the composer is open, on the branches it was opened with.
+    var showsBranches = false
+    private(set) var listedBranches: Result<[Branch], CoreBridge.CoreError> = .success([])
+    /// The project whose changes the commit sheet is open on, with the files it was opened with.
+    var committingProject: Project?
+    private(set) var gitFiles: [ChangedFile] = []
+    /// An action that pushes from the default branch, until the user says where it should happen.
+    var pendingGit: PendingGit?
+    /// The stage a project's git action is at, by project.
+    private(set) var gitStages: [String: GitStage] = [:]
+    private(set) var gitNotice: GitNotice?
+    private(set) var panel: PanelPage?
+    /// What a server refused while the panel was adding a project.
+    var panelNotice: String?
+    /// Whether GitHub can be used on each server, as last heard.
+    private(set) var github: [String: GitHubState] = [:]
+    /// The GitHub repositories each server last listed, and why one couldn't.
+    private(set) var repos: [String: [Repo]] = [:]
+    private(set) var repoErrors: [String: String] = [:]
+    private(set) var addingProject: AddingProject?
+    /// Counts up when a project has been made or cloned.
+    private(set) var projectsAdded = 0
+    @ObservationIgnored private var awaitedProjectID: String?
+    /// Counts up when the composer should take the keyboard back.
+    private(set) var composerFocus = 0
+
+    // What the servers hold
+    private(set) var servers: [Server] = []
+    private(set) var serverUpdates: [String: ServerUpdate] = [:]
+    private(set) var projects: [Project] = []
+    private(set) var threads: [String: ThreadInfo] = [:]
+
+    // The open thread
+    /// Always a draft or a thread; `loadPreferences` opens the first draft.
+    private(set) var selection: Selection = .draft("")
+    private(set) var activity = Activity()
+    private(set) var transcriptIsEmpty = true
+    /// The agents the open thread's agent has started, in the order it started them.
+    private(set) var agents: [AgentInfo] = []
+    /// The drafts whose first message is on its way to the server.
+    private(set) var sendingDraftIDs: Set<String> = []
+    var errorMessage: String?
+    private(set) var threadDrafts: [ThreadDraft] = []
+    /// What the open draft said when it was opened, if it said anything. Its row in the sidebar
+    /// shows this, so the sidebar doesn't change while the draft is being written.
+    private(set) var openedDraftPreview: String?
+    private(set) var undo: UndoNotice?
+    /// Unknown until Settings asks for it.
+    private(set) var mediaStorage: MediaStorage?
+    private var drafts: [String: String] = [:]
+    private var attachmentsByKey: [String: [Attachment]] = [:]
+    /// The images and videos the viewer has open over the window.
+    private(set) var viewing: Viewing?
+
+    /// Counts up when the folder the open thread works in may have changed: a turn ended there,
+    /// or git did something.
+    private(set) var workspaceVersion = 0
+
+    let updater = AppUpdater()
+    let sidePanel = SidePanel()
+    @ObservationIgnored let core = CoreBridge()
+    @ObservationIgnored let transcript = TranscriptModel()
+    /// What the agent did that the side panel shows.
+    @ObservationIgnored let agentTranscript = TranscriptModel()
+    @ObservationIgnored private var signInSession: SignInSession?
+    @ObservationIgnored private var undoTimer: Timer?
+    @ObservationIgnored private var openThreadID: String?
+    @ObservationIgnored private let defaults = UserDefaults.standard
+    /// The thread that was open when the app was last closed, until it has been opened again.
+    @ObservationIgnored private var lastSelection: String?
+
+    init() {
+        loadPreferences()
+        sidePanel.store = self
+    }
+
+    // MARK: Starting
+
+    func start() {
+        core.decode = { [weak self] event in self?.decode(event) }
+        let environment = ProcessInfo.processInfo.environment
+        let dataDir = environment["MOTILE_DATA_DIR"] ?? Self.dataFolder()
+        let bundled = Bundle.main.object(forInfoDictionaryKey: "MotileAuthURL") as? String
+        let authURL = environment["MOTILE_AUTH_URL"] ?? bundled.flatMap { $0.isEmpty ? nil : $0 } ?? "https://auth.motile.app"
+        var config: JSON = [
+            "data_dir": dataDir,
+            "auth_url": authURL,
+            "device_name": Platform.deviceName,
+            "platform": Platform.name,
+            "local_only": environment["MOTILE_LOCAL"] == "1",
+        ]
+        if let address = environment["MOTILE_SERVER_ADDR"] { config["direct_addr"] = address }
+        #if os(iOS)
+        // A phone has less room for the images and videos it keeps than a Mac.
+        config["media_limit"] = 500_000_000
+        #endif
+        if !core.start(config: config) {
+            errorMessage = "Motile couldn't start. Its data folder may not be writable."
+        }
+        if environment["MOTILE_DEMO"] != "1" { updater.start() }
+        NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { [weak self] _ in
+            self?.markOpenThreadSeen()
+            self?.readGit(fetch: true)
+        }
+    }
+
+    /// Where the core keeps the device's key, the copy of the threads and the fetched files.
+    private static func dataFolder() -> String {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        guard let folder = support?.appendingPathComponent("Motile") else { return NSTemporaryDirectory() }
+        #if os(iOS)
+        // The key is this device's alone: a backup restored on another one must not bring it.
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var excluded = folder
+        try? excluded.setResourceValues(values)
+        #endif
+        return folder.path
+    }
+
+    // MARK: Events
+
+    /// Runs off the main thread: reads the event and returns what to do with it on the main thread.
+    private func decode(_ event: JSON) -> (() -> Void)? {
+        switch event.string("type") {
+        case "account":
+            let account = Account(json: event.object("account") ?? [:])
+            return { [weak self] in self?.apply(account) }
+        case "restored":
+            return { [weak self] in
+                self?.ready = true
+                self?.ensureDraftProject()
+            }
+        case "servers":
+            let servers = event.objects("servers").map { Server(json: $0) }
+            return { [weak self] in self?.apply(servers: servers) }
+        case "threads":
+            let serverID = event.string("server_id")
+            let threads = event.objects("threads").map { ThreadInfo(json: $0) }
+            return { [weak self] in self?.apply(threads: threads, serverID: serverID) }
+        case "thread_upsert":
+            let thread = ThreadInfo(json: event.object("thread") ?? [:])
+            return { [weak self] in self?.upsert(thread) }
+        case "thread_deleted":
+            let threadID = event.string("thread_id")
+            return { [weak self] in self?.removeThread(threadID) }
+        case "projects":
+            let serverID = event.string("server_id")
+            let projects = event.objects("projects").map { Project(json: $0, serverID: serverID) }
+            return { [weak self] in self?.apply(projects: projects, serverID: serverID) }
+        case "server_update":
+            let serverID = event.string("server_id")
+            let (received, total) = (event.double("received"), event.optionalDouble("total"))
+            return { [weak self] in
+                self?.serverUpdates[serverID]?.fraction = total.flatMap { $0 > 0 ? received / $0 : nil }
+            }
+        case "git_progress":
+            let (projectID, stage) = (event.string("project_id"), GitStage(rawValue: event.string("stage")))
+            return { [weak self] in
+                guard self?.gitStages[projectID] != nil else { return }
+                self?.gitStages[projectID] = stage
+            }
+        case "upload_progress":
+            let (key, sent, size) = (event.string("key"), event.double("sent"), event.double("size"))
+            guard size > 0 else { return nil }
+            return { [weak self] in
+                self?.changeAttachment(key) { attachment in
+                    guard case .uploading = attachment.state else { return }
+                    attachment.state = .uploading(sent / size)
+                }
+            }
+        case "media_progress":
+            let (id, received, size) = (event.string("id"), event.double("received"), event.double("size"))
+            guard size > 0 else { return nil }
+            return {
+                let progress: [String: Any] = ["id": id, "fraction": received / size]
+                NotificationCenter.default.post(name: .mediaProgress, object: nil, userInfo: progress)
+            }
+        case "rows":
+            let threadID = event.string("thread_id")
+            let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
+            let rows = event.objects("rows").compactMap { RowModel(json: $0) }
+            let earlier = event.bool("earlier")
+            return { [weak self] in
+                guard let self, self.transcript.threadID == threadID else { return }
+                self.transcript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: earlier)
+                // Assigned only when it changes: every assignment makes the views that read it
+                // update, and rows arrive many times a second.
+                let isEmpty = self.transcript.isEmpty
+                if self.transcriptIsEmpty != isEmpty { self.transcriptIsEmpty = isEmpty }
+                let turns = self.transcript.turns
+                if self.sidePanel.turns != turns { self.sidePanel.turns = turns }
+            }
+        case "agents":
+            let threadID = event.string("thread_id")
+            let agents = event.objects("agents").map { AgentInfo(json: $0) }
+            return { [weak self] in
+                guard let self, self.transcript.threadID == threadID else { return }
+                if self.agents != agents { self.agents = agents }
+                self.sidePanel.agentsChanged()
+            }
+        case "agent_rows":
+            let (threadID, agentID) = (event.string("thread_id"), event.string("agent_id"))
+            let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
+            let rows = event.objects("rows").compactMap { RowModel(json: $0) }
+            return { [weak self] in
+                guard let self, self.transcript.threadID == threadID, self.sidePanel.shownAgent == agentID else { return }
+                self.agentTranscript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: false)
+            }
+        case "code_spans":
+            let request = (event["id"] as? NSNumber)?.uint64Value ?? 0
+            let lines = (event["lines"] as? [[NSNumber]] ?? []).map { $0.map(\.int32Value) }
+            let file = event.int("file")
+            return { [weak self] in self?.sidePanel.colour(request: request, file: file, lines: lines) }
+        case "spans":
+            let (threadID, rowID) = (event.string("thread_id"), event.string("row_id"))
+            let spans = event["spans"] as? [NSNumber] ?? []
+            return { [weak self] in
+                guard let self, self.transcript.threadID == threadID else { return }
+                self.transcript.apply(spans: spans, rowID: rowID)
+                self.agentTranscript.apply(spans: spans, rowID: rowID)
+            }
+        case "activity":
+            let threadID = event.string("thread_id")
+            let activity = Activity(json: event.object("activity") ?? [:], waiting: event.objects("waiting"))
+            return { [weak self] in
+                guard let self, self.transcript.threadID == threadID else { return }
+                if self.activity != activity { self.activity = activity }
+                self.transcript.setActivity(activity)
+            }
+        case "thread_error":
+            let message = event.string("message")
+            return { [weak self] in self?.errorMessage = message }
+        default:
+            return nil
+        }
+    }
+
+    private func apply(_ account: Account) {
+        let wasSignedIn = self.account.signedIn
+        self.account = account
+        if wasSignedIn && !account.signedIn {
+            openEmptyDraft()
+            enrollToken = nil
+        }
+    }
+
+    private func apply(servers: [Server]) {
+        self.servers = servers
+        let known = Set(servers.map(\.id))
+        projects.removeAll { !known.contains($0.serverID) }
+        threads = threads.filter { known.contains($0.value.serverID) }
+        // A server that is back with another version has finished updating.
+        for server in servers where server.state == .connected {
+            guard let update = serverUpdates[server.id], update.restarting, server.version != update.from else { continue }
+            serverUpdates[server.id] = nil
+        }
+        ensureDraftProject()
+        // The server has arrived; the install command has done its job.
+        if showsAddServer, servers.count > addServerCount {
+            showsAddServer = false
+        }
+    }
+
+    private func apply(threads new: [ThreadInfo], serverID: String) {
+        threads = threads.filter { $0.value.serverID != serverID }
+        for thread in new { threads[thread.id] = thread }
+        if case .thread(let id) = selection, threads[id] == nil {
+            openEmptyDraft()
+        }
+        markOpenThreadSeen()
+        restoreSelection()
+    }
+
+    private func upsert(_ thread: ThreadInfo) {
+        let before = threads[thread.id]
+        threads[thread.id] = thread
+        markOpenThreadSeen()
+        guard selection == .thread(thread.id), let before else { return }
+        if before.turnEndedAt != thread.turnEndedAt || (before.running && !thread.running) { workspaceVersion += 1 }
+    }
+
+    /// A reply in the open thread has been seen once Motile is in front.
+    private func markOpenThreadSeen() {
+        guard Platform.isActive, let thread = selectedThread, thread.unread else { return }
+        core.send("mark_seen", ["thread_id": thread.id])
+    }
+
+    private func removeThread(_ id: String) {
+        threads[id] = nil
+        sidePanel.forget(id)
+        if selection == .thread(id) { openEmptyDraft() }
+    }
+
+    private func apply(projects new: [Project], serverID: String) {
+        let git = gitProject?.git
+        defer { if gitProject?.git != git { workspaceVersion += 1 } }
+        projects.removeAll { $0.serverID == serverID }
+        projects.append(contentsOf: new)
+        projects.sort { $0.createdAt < $1.createdAt }
+        ImageFiles.shared.warm(new.compactMap(\.iconPath))
+        ensureDraftProject()
+        openAwaitedProject()
+        // A server that has just started hasn't read the repository yet.
+        if let project = gitProject, project.serverID == serverID, project.git == nil { readGit() }
+    }
+
+    // MARK: Lookups
+
+    var activeThreads: [ThreadInfo] {
+        threads.values.filter { !$0.isDone }.sorted { ($0.activeOrder, $0.id) > ($1.activeOrder, $1.id) }
+    }
+
+    var doneThreads: [ThreadInfo] {
+        threads.values.filter(\.isDone).sorted { ($0.doneAt ?? 0, $0.id) > ($1.doneAt ?? 0, $1.id) }
+    }
+
+    var selectedThread: ThreadInfo? {
+        guard case .thread(let id) = selection else { return nil }
+        return threads[id]
+    }
+
+    var selectedDraft: ThreadDraft? {
+        guard case .draft(let id) = selection else { return nil }
+        return threadDrafts.first { $0.id == id }
+    }
+
+    /// Every draft with something written in it that isn't being sent, newest first. The open
+    /// one is listed as it was when it was opened.
+    var listedDrafts: [ListedDraft] {
+        threadDrafts.reversed().compactMap { draft -> ListedDraft? in
+            guard !sendingDraftIDs.contains(draft.id) else { return nil }
+            let written = selection == .draft(draft.id) ? openedDraftPreview : preview(of: draft)
+            return written.map { ListedDraft(draft: draft, preview: $0) }
+        }
+    }
+
+    /// The first line of what was written in a draft, or what is attached to it. Nothing for a
+    /// draft that is still empty.
+    private func preview(of draft: ThreadDraft) -> String? {
+        let text = (drafts[draft.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let line = text.split(separator: "\n").first { return String(line) }
+        guard let files = attachmentsByKey[draft.id] else { return nil }
+        return files.count == 1 ? "1 attachment" : "\(files.count) attachments"
+    }
+
+    func project(_ id: String?) -> Project? {
+        projects.first { $0.id == id }
+    }
+
+    /// The projects, the one a thread was last started in first. A project without threads
+    /// counts from when it was added.
+    var recentProjects: [Project] {
+        var lastUsed: [String: Double] = [:]
+        for thread in threads.values {
+            lastUsed[thread.projectID] = max(lastUsed[thread.projectID] ?? 0, thread.createdAt)
+        }
+        return projects.sorted { (lastUsed[$0.id] ?? $0.createdAt, $0.id) > (lastUsed[$1.id] ?? $1.createdAt, $1.id) }
+    }
+
+    func server(_ id: String?) -> Server? {
+        servers.first { $0.id == id }
+    }
+
+    /// The project the composer's thread works in, or the one the open draft would start in.
+    var composerProject: Project? {
+        threadProject ?? project(selectedDraft?.projectID)
+    }
+
+    /// The open thread's project, as the thread works in it.
+    var threadProject: Project? {
+        guard let thread = selectedThread else { return nil }
+        return project(thread.projectID)?.seen(from: thread)
+    }
+
+    /// The project git works in from here: the open thread's, or the open draft's when its thread
+    /// would start in the project's folder.
+    var gitProject: Project? {
+        let project = threadProject ?? (draftUsesWorktree ? nil : project(selectedDraft?.projectID))
+        guard let project, canUseGit(of: project) else { return nil }
+        return project
+    }
+
+    /// The folder the side panel looks into: the one the open thread works in, or the project's
+    /// when the open draft's thread would start there.
+    var panelTarget: PanelTarget? {
+        guard let project = threadProject ?? (draftUsesWorktree ? nil : project(selectedDraft?.projectID)) else { return nil }
+        return PanelTarget(
+            key: draftKey, serverID: project.serverID, projectID: project.id, threadID: selectedThread?.id,
+            name: URL(fileURLWithPath: project.worktree?.path ?? project.path).lastPathComponent,
+            repository: project.branch != nil, worktree: project.worktree != nil)
+    }
+
+    /// Why the side panel has nothing to show here, when it hasn't.
+    var panelUnavailable: String? {
+        guard let target = panelTarget else {
+            return draftUsesWorktree ? "The worktree is made when the thread starts." : "Add a project to see its files."
+        }
+        guard let server = server(target.serverID), server.state == .connected else { return "Your server isn't connected." }
+        return server.protocolVersion >= 7 ? nil : "Update \(server.name) to see files and changes."
+    }
+
+    /// The server the composer is talking to: the open thread's, or the open draft's project's.
+    var composerServer: Server? {
+        if let thread = selectedThread { return server(thread.serverID) }
+        return server(project(selectedDraft?.projectID)?.serverID) ?? servers.first
+    }
+
+    /// The models the composer offers: an open thread stays with its agent.
+    var composerModels: [ModelInfo] {
+        let models = composerServer?.models ?? []
+        guard let thread = selectedThread else { return models }
+        return models.filter { $0.agent == thread.agent }
+    }
+
+    var composerModel: ModelInfo? {
+        let id = selectedThread.map { $0.model } ?? selectedDraft?.model
+        return composerModels.first { $0.id == id } ?? composerModels.first
+    }
+
+    var composerEffort: String? {
+        let effort = selectedThread.map { $0.effort } ?? selectedDraft?.effort
+        guard let model = composerModel, !model.efforts.isEmpty else { return nil }
+        if let effort, model.efforts.contains(effort) { return effort }
+        return model.defaultEffort ?? model.efforts.first
+    }
+
+    var composerAccess: Access { selectedThread?.access ?? selectedDraft?.access ?? .full }
+    var composerPlan: Bool { selectedThread?.plan ?? selectedDraft?.plan ?? false }
+
+    /// What the composer's text and attachments are kept under: the open draft or thread.
+    var draftKey: String {
+        switch selection {
+        case .draft(let id), .thread(let id): return id
+        }
+    }
+
+    var draft: String {
+        get { drafts[draftKey] ?? "" }
+        set { setText(newValue, for: draftKey) }
+    }
+
+    var attachments: [Attachment] { attachmentsByKey[draftKey] ?? [] }
+
+    private func setText(_ text: String, for key: String) {
+        drafts[key] = text.isEmpty ? nil : text
+        defaults.set(drafts, forKey: "drafts")
+    }
+
+    // MARK: Preferences
+
+    private func loadPreferences() {
+        drafts = defaults.dictionary(forKey: "drafts") as? [String: String] ?? [:]
+        lastSelection = defaults.string(forKey: "selection")
+        let saved = defaults.data(forKey: "threadDrafts").flatMap { try? JSONDecoder().decode([ThreadDraft].self, from: $0) }
+        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil }
+        let opened = threadDrafts.first { $0.id == lastSelection } ?? emptyDraft()
+        selection = .draft(opened.id)
+        openedDraftPreview = preview(of: opened)
+    }
+
+    private func saveThreadDrafts() {
+        defaults.set(try? JSONEncoder().encode(threadDrafts), forKey: "threadDrafts")
+    }
+
+    /// A draft that starts with what the last one was set to.
+    private func addDraft() -> ThreadDraft {
+        var draft = ThreadDraft()
+        draft.projectID = defaults.string(forKey: "new.project")
+        draft.worktree = defaults.bool(forKey: "new.worktree")
+        applyLastSettings(to: &draft)
+        threadDrafts.append(draft)
+        saveThreadDrafts()
+        return draft
+    }
+
+    private func applyLastSettings(to draft: inout ThreadDraft) {
+        draft.model = defaults.string(forKey: "new.model")
+        draft.effort = defaults.string(forKey: "new.effort")
+        draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
+    }
+
+    private func rememberSettings(model: String?, effort: String?, access: Access) {
+        defaults.set(model, forKey: "new.model")
+        defaults.set(effort, forKey: "new.effort")
+        defaults.set(access.rawValue, forKey: "new.access")
+    }
+
+    /// A draft with nothing in it: the one that is already there, or a new one.
+    private func emptyDraft() -> ThreadDraft {
+        if let index = threadDrafts.lastIndex(where: { preview(of: $0) == nil && !sendingDraftIDs.contains($0.id) }) {
+            var empty = threadDrafts[index]
+            applyLastSettings(to: &empty)
+            threadDrafts[index] = empty
+            saveThreadDrafts()
+            return empty
+        }
+        return addDraft()
+    }
+
+    /// Changes the open draft, and has the next draft start with the same choices.
+    private func updateDraft(_ change: (inout ThreadDraft) -> Void) {
+        guard let index = threadDrafts.firstIndex(where: { selection == .draft($0.id) }) else { return }
+        change(&threadDrafts[index])
+        let draft = threadDrafts[index]
+        defaults.set(draft.projectID, forKey: "new.project")
+        defaults.set(draft.worktree == true, forKey: "new.worktree")
+        rememberSettings(model: draft.model, effort: draft.effort, access: draft.access)
+        saveThreadDrafts()
+    }
+
+    private func removeDraft(_ id: String) {
+        threadDrafts.removeAll { $0.id == id }
+        attachmentsByKey[id] = nil
+        setText("", for: id)
+        saveThreadDrafts()
+    }
+
+    /// Keeps the open draft pointing at a project that exists, once the projects are known.
+    private func ensureDraftProject() {
+        guard ready, let draft = selectedDraft, project(draft.projectID) == nil, let first = projects.first else { return }
+        updateDraft { $0.projectID = first.id }
+    }
+
+    /// Opens the thread that was open when the app was last closed, once it is known.
+    private func restoreSelection() {
+        guard let wanted = lastSelection, threads[wanted] != nil else { return }
+        lastSelection = nil
+        guard let draft = selectedDraft, preview(of: draft) == nil else { return }
+        select(.thread(wanted))
+    }
+
+    // MARK: Account
+
+    func signIn() {
+        guard !signingIn else { return }
+        signingIn = true
+        signInError = nil
+        core.send("begin_sign_in") { [weak self] result in
+            guard let self else { return }
+            guard case .success(let value) = result, let url = URL(string: value.string("url")) else {
+                self.signInFailed("The sign-in couldn't be started.")
+                return
+            }
+            let session = SignInSession()
+            self.signInSession = session
+            session.start(url: url) { [weak self] callback in
+                guard let self else { return }
+                self.signInSession = nil
+                guard let callback else {
+                    self.signingIn = false
+                    return
+                }
+                self.core.send("complete_sign_in", ["url": callback.absoluteString]) { [weak self] result in
+                    if case .failure(let error) = result { self?.signInFailed(error.message) } else { self?.signingIn = false }
+                }
+            }
+        }
+    }
+
+    /// Signs in on an auth server that allows it without Google. Used by the demo and local work.
+    func devSignIn(email: String, done: (() -> Void)? = nil) {
+        signingIn = true
+        core.send("dev_sign_in", ["email": email]) { [weak self] result in
+            if case .failure(let error) = result { self?.signInFailed(error.message) } else { self?.signingIn = false }
+            done?()
+        }
+    }
+
+    private func signInFailed(_ message: String) {
+        signingIn = false
+        signInError = message
+    }
+
+    func signOut() {
+        drafts = [:]
+        attachmentsByKey = [:]
+        threadDrafts = []
+        defaults.removeObject(forKey: "drafts")
+        openEmptyDraft()
+        core.send("sign_out")
+    }
+
+    // MARK: Servers
+
+    @ObservationIgnored private var addServerCount = 0
+
+    /// Asks for an install command and keeps looking for the server it will link.
+    func prepareToAddServer() {
+        addServerCount = servers.count
+        core.send("watch_servers", ["on": true])
+        if let token = enrollToken, token.expiresAt - Date().timeIntervalSince1970 > 600 { return }
+        core.send("create_enroll_token") { [weak self] result in
+            switch result {
+            case .success(let value): self?.enrollToken = EnrollToken(json: value)
+            case .failure(let error): self?.errorMessage = error.message
+            }
+        }
+    }
+
+    func stopAddingServer() {
+        core.send("watch_servers", ["on": false])
+        // A token links one server; the next server gets a new one.
+        if servers.count != addServerCount { enrollToken = nil }
+    }
+
+    /// Whether the server runs an older version than the newest release.
+    func isOutdated(_ server: Server) -> Bool {
+        server.state == .connected && Version.isOlder(server.version, than: updater.latest)
+    }
+
+    /// Has the server install the newest release and start it.
+    func update(_ server: Server) {
+        guard serverUpdates[server.id] == nil else { return }
+        serverUpdates[server.id] = ServerUpdate(from: server.version)
+        core.send("update_server", ["server_id": server.id]) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                self.serverUpdates[server.id]?.restarting = true
+                // If the server never says it is back, the row stops waiting for it.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
+                    if self?.serverUpdates[server.id]?.restarting == true { self?.serverUpdates[server.id] = nil }
+                }
+            case .failure(let error):
+                self.serverUpdates[server.id] = nil
+                self.errorMessage = error.message
+            }
+        }
+    }
+
+    func removeServer(_ server: Server) {
+        core.send("remove_server", ["server_id": server.id]) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
+    }
+
+    // MARK: Projects
+
+    func listFolder(serverID: String, path: String?, icons: Bool, done: @escaping (Result<RemoteFolder, CoreBridge.CoreError>) -> Void) {
+        var request: JSON = ["type": "list_dir", "icons": icons]
+        if let path { request["path"] = path }
+        core.send("request", ["server_id": serverID, "request": request]) { result in
+            done(result.map { RemoteFolder(json: $0) })
+        }
+    }
+
+    func addProject(serverID: String, path: String) {
+        request(serverID, ["type": "add_project", "path": path]) { [weak self] in
+            guard let self else { return }
+            // The new project is the one the next thread starts in.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+                guard let project = self.projects.first(where: { $0.serverID == serverID && $0.path == trimmed }) else { return }
+                self.setNewThreadProject(project.id)
+            }
+        }
+    }
+
+    /// Opens the panel on the ways to add a project, after the servers when there is a choice.
+    func addProject() {
+        openPanel(addProjectPage)
+    }
+
+    var addProjectPage: PanelPage {
+        let connected = servers.filter { $0.state == .connected }
+        guard connected.count == 1, let server = connected.first else { return .servers }
+        return .sources(server.id)
+    }
+
+    /// Whether the server can start a project from a name or from GitHub.
+    func startsProjects(_ server: Server?) -> Bool {
+        (server?.protocolVersion ?? 0) >= 5
+    }
+
+    func browse(serverID: String, query: String, done: @escaping (Result<FolderListing, CoreBridge.CoreError>) -> Void) {
+        core.send("browse", ["server_id": serverID, "query": query]) { result in
+            done(result.map { FolderListing(json: $0) })
+        }
+    }
+
+    func readGitHub(_ serverID: String) {
+        core.send("request", ["server_id": serverID, "request": ["type": "github_status"]]) { [weak self] result in
+            guard case .success(let answer) = result else { return }
+            self?.heard(github: answer, serverID: serverID)
+        }
+    }
+
+    private func heard(github answer: JSON, serverID: String) {
+        guard let state = GitHubState(rawValue: answer.string("state")) else { return }
+        github[serverID] = state
+        defaults.set(state.rawValue, forKey: "github-\(serverID)")
+    }
+
+    /// Asks the server for its GitHub repositories. The ones it listed before stay until then.
+    func loadRepos(_ serverID: String) {
+        repoErrors[serverID] = nil
+        core.send("request", ["server_id": serverID, "request": ["type": "github_repos"]]) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let answer) where answer.string("type") == "repos":
+                repos[serverID] = answer.objects("repos").map { Repo(json: $0) }
+            case .success(let answer):
+                repos[serverID] = nil
+                heard(github: answer, serverID: serverID)
+            case .failure(let error):
+                repoErrors[serverID] = error.message
+            }
+        }
+    }
+
+    func newProject(named name: String, on serverID: String) {
+        add(["type": "new_project", "name": name], named: name, on: serverID)
+    }
+
+    func clone(_ repo: String, on serverID: String) {
+        add(["type": "clone_repo", "repo": repo], named: repo, on: serverID)
+    }
+
+    private func add(_ request: JSON, named name: String, on serverID: String) {
+        guard addingProject == nil else { return }
+        addingProject = AddingProject(serverID: serverID, name: name)
+        panelNotice = nil
+        core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
+            guard let self else { return }
+            addingProject = nil
+            switch result {
+            case .success(let answer):
+                projectsAdded += 1
+                awaitedProjectID = answer.string("project_id")
+                openAwaitedProject()
+            case .failure(let error) where panel != nil:
+                panelNotice = error.message
+            case .failure(let error):
+                errorMessage = error.message
+            }
+        }
+    }
+
+    /// Starts a thread in the project that was just made, once the server has told about it.
+    private func openAwaitedProject() {
+        guard let project = project(awaitedProjectID) else { return }
+        awaitedProjectID = nil
+        guard selectedDraft == nil else { return setNewThreadProject(project.id) }
+        startNewThread(in: project)
+    }
+
+    // MARK: Branches
+
+    /// Whether a turn is running in the project's folder, which is when its branch can't be
+    /// switched.
+    func isWorking(in project: Project) -> Bool {
+        threads.values.contains { $0.projectID == project.id && $0.running && $0.cwd == project.path }
+    }
+
+    /// Whether the project's server is new enough to start threads in worktrees of their own.
+    func canUseWorktrees(of project: Project) -> Bool {
+        project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 6
+    }
+
+    /// Whether the open draft starts its thread in a new worktree.
+    var draftUsesWorktree: Bool {
+        guard let draft = selectedDraft, let project = project(draft.projectID) else { return false }
+        return draft.worktree == true && canUseWorktrees(of: project)
+    }
+
+    /// The branch the open draft's worktree starts from: the one picked, or the one checked out.
+    var draftBase: String? {
+        selectedDraft?.base ?? project(selectedDraft?.projectID)?.branch
+    }
+
+    func setDraftWorktree(_ worktree: Bool) {
+        updateDraft { $0.worktree = worktree }
+        readGit(fetch: true)
+    }
+
+    func setDraftBase(_ branch: String) {
+        updateDraft { $0.base = branch }
+    }
+
+    /// Whether the project's server is new enough to list and switch branches.
+    func canSwitchBranches(of project: Project) -> Bool {
+        project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 3
+    }
+
+    /// Opens the branch picker once the branches are known: a popover finds its place by the
+    /// size it opens with.
+    func showBranches(of project: Project) {
+        let request: JSON = ["type": "branches", "project_id": project.id]
+        core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
+            self?.listedBranches = result.map { $0.objects("branches").map { Branch(json: $0) } }
+            self?.showsBranches = true
+        }
+    }
+
+    /// Checks the branch out in the project's folder, making it first if asked to. `done` gets
+    /// what went wrong, if anything.
+    func switchBranch(of project: Project, to name: String, create: Bool, done: @escaping (String?) -> Void) {
+        let request: JSON = ["type": "switch_branch", "project_id": project.id, "branch": name, "create": create]
+        core.send("request", ["server_id": project.serverID, "request": request]) { result in
+            switch result {
+            case .success: done(nil)
+            case .failure(let error): done(error.message)
+            }
+        }
+    }
+
+    // MARK: Git
+
+    /// Whether the project's server is new enough to commit, push and open pull requests.
+    func canUseGit(of project: Project) -> Bool {
+        (server(project.serverID)?.protocolVersion ?? 0) >= 4
+    }
+
+    /// Has the server read the repository git works in from here again, which the project then
+    /// arrives with. With `fetch` the remote is asked first.
+    private func readGit(fetch: Bool = false, done: (([ChangedFile]) -> Void)? = nil) {
+        guard let project = gitProject else { return }
+        var request: JSON = ["type": "git_status", "project_id": project.id, "fetch": fetch]
+        if let thread = selectedThread { request["thread_id"] = thread.id }
+        core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
+            switch result {
+            case .success(let answer): done?(answer.objects("files").map { ChangedFile(json: $0) })
+            // Only said when the user is waiting for the answer.
+            case .failure(let error): if done != nil { self?.errorMessage = error.message }
+            }
+        }
+    }
+
+    /// What a click on the git button does: the one action the repository calls for, at once.
+    func runQuickGit(in project: Project) {
+        guard let quick = project.gitControl?.quick, gitStages[project.id] == nil else { return }
+        if let url = quick.url.flatMap({ URL(string: $0) }) {
+            Platform.open(url)
+            return
+        }
+        guard let action = quick.action else {
+            show(GitNotice(projectID: project.id, title: quick.hint ?? quick.label))
+            return
+        }
+        startGit(action, in: project, confirm: quick.confirm)
+    }
+
+    /// What a pick from the menu does: a commit opens its sheet, the others happen at once.
+    func chooseGit(_ item: GitMenuItem, in project: Project) {
+        guard item.reason == nil, gitStages[project.id] == nil else { return }
+        guard item.action == "commit" else { return startGit(item.action, in: project, confirm: item.confirm) }
+        // A sheet takes its size from what it opens with, so the files come first.
+        readGit { [weak self] files in
+            self?.gitFiles = files
+            self?.committingProject = project
+        }
+    }
+
+    /// Runs the action, after asking where when it would push from the default branch.
+    private func startGit(_ action: String, in project: Project, confirm: GitConfirm?) {
+        guard let confirm else { return runGit(action, in: project) }
+        pendingGit = PendingGit(project: project, action: action, confirm: confirm)
+    }
+
+    /// Carries on with the action that waited, on the default branch or on a branch made for it.
+    func confirmGit(_ pending: PendingGit, onNewBranch: Bool) {
+        runGit(pending.action, in: pending.project, message: pending.message, paths: pending.paths, newBranch: onNewBranch)
+    }
+
+    /// Has the project's server carry the action out. It writes the commit message when there
+    /// is none, and the pull request. What it did, or what git refused, shows under the button.
+    func runGit(_ action: String, in project: Project, message: String? = nil, paths: [String] = [], newBranch: Bool = false) {
+        guard gitStages[project.id] == nil else { return }
+        gitStages[project.id] = action == "pull" ? .pull : action == "push" ? .push : newBranch ? .branch : .message
+        gitNotice = nil
+        var command: JSON = [
+            "server_id": project.serverID, "project_id": project.id, "action": action, "paths": paths, "new_branch": newBranch,
+        ]
+        if let message, !message.isEmpty { command["message"] = message }
+        if let thread = selectedThread, thread.projectID == project.id { command["thread_id"] = thread.id }
+        core.send("git_run", command) { [weak self] result in
+            guard let self else { return }
+            self.gitStages[project.id] = nil
+            switch result {
+            case .success(let done):
+                let notice = GitNotice(
+                    projectID: project.id, title: done.string("title"), description: done.optionalString("description"),
+                    url: done.optionalString("url"), next: done.optionalString("next")
+                )
+                self.show(notice)
+            case .failure(let error):
+                self.show(GitNotice(projectID: project.id, title: "Git stopped", description: error.message, failed: true))
+            }
+        }
+    }
+
+    /// What worked goes away by itself; what failed stays until it is closed.
+    private func show(_ notice: GitNotice) {
+        gitNotice = notice
+        guard !notice.failed else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            if self?.gitNotice == notice { self?.gitNotice = nil }
+        }
+    }
+
+    func dismissGitNotice() {
+        gitNotice = nil
+    }
+
+    /// The action a notice says comes next, like the push after a commit.
+    func runNextGit() {
+        guard let notice = gitNotice, let next = notice.next, let project = project(notice.projectID) else { return }
+        let confirm = project.gitControl?.menu.first { $0.action == next }?.confirm
+        startGit(next, in: project, confirm: confirm)
+    }
+
+    /// Picks the model that writes titles, commit messages and pull requests on the server.
+    /// Without one, the lightest model of the thread's agent writes.
+    func setTextModel(_ model: String?, on server: Server) {
+        var command: JSON = ["server_id": server.id]
+        if let model { command["model"] = model }
+        core.send("set_text_model", command) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
+    }
+
+    /// Says how the server's writer names branches. Without instructions the server goes back
+    /// to its own.
+    func setBranchInstructions(_ instructions: String?, on server: Server) {
+        var command: JSON = ["server_id": server.id]
+        if let instructions { command["instructions"] = instructions }
+        core.send("set_branch_instructions", command) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
+    }
+
+    /// Sets the shell script that runs in every new worktree of the project, or takes it away.
+    func setSetup(of project: Project, to script: String) {
+        var change: JSON = ["type": "set_project_setup", "project_id": project.id]
+        if !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { change["script"] = script }
+        request(project.serverID, change)
+    }
+
+    func removeProject(_ project: Project) {
+        request(project.serverID, ["type": "remove_project", "project_id": project.id])
+    }
+
+    /// Makes an image on the project's server its icon. Without one, the project goes back to the
+    /// icon found in its folder.
+    func setIcon(of project: Project, to path: String?) {
+        var command: JSON = ["server_id": project.serverID, "project_id": project.id]
+        if let path { command["path"] = path }
+        core.send("set_project_icon", command) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
+    }
+
+    // MARK: Command panel
+
+    func openPanel(_ page: PanelPage) {
+        guard account.signedIn, !servers.isEmpty else { return }
+        panel = page
+        for server in servers where server.state == .connected && startsProjects(server) {
+            if github[server.id] == nil {
+                github[server.id] = defaults.string(forKey: "github-\(server.id)").flatMap(GitHubState.init)
+            }
+            readGitHub(server.id)
+        }
+    }
+
+    func closePanel() {
+        guard panel != nil else { return }
+        panel = nil
+        panelNotice = nil
+        composerFocus += 1
+    }
+
+    // MARK: Threads
+
+    func select(_ new: Selection) {
+        lastSelection = nil
+        let reopens = selectedThread != nil && openThreadID == nil
+        guard new != selection || reopens else { return }
+        if let open = openThreadID {
+            core.send("close_thread", ["thread_id": open])
+            openThreadID = nil
+        }
+        let left = selectedDraft
+        selection = new
+        if let left, preview(of: left) == nil, !sendingDraftIDs.contains(left.id) { removeDraft(left.id) }
+        openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
+        activity = Activity()
+        transcriptIsEmpty = true
+        sidePanel.turns = []
+        sidePanel.showAgents()
+        agents = []
+        guard case .thread(let id) = new, let thread = threads[id] else {
+            transcript.begin(threadID: nil)
+            defaults.set(draftKey, forKey: "selection")
+            ensureDraftProject()
+            readGit(fetch: true)
+            return
+        }
+        open(thread)
+    }
+
+    private func open(_ thread: ThreadInfo) {
+        openThreadID = thread.id
+        transcript.begin(threadID: thread.id)
+        defaults.set(thread.id, forKey: "selection")
+        core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id])
+        core.send("mark_seen", ["thread_id": thread.id])
+        readGit(fetch: true)
+    }
+
+    /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft
+    /// opens at once, with more the panel asks which.
+    func newThread() {
+        guard projects.count > 1 else { return startNewThread(in: projects.first) }
+        openPanel(.projects)
+    }
+
+    /// Opens an empty draft. The one that was open stays in the sidebar if something was written
+    /// in it.
+    func startNewThread(in project: Project? = nil) {
+        openEmptyDraft()
+        if let project { setNewThreadProject(project.id) }
+    }
+
+    /// Where the app goes when what was open is gone.
+    private func openEmptyDraft() {
+        select(.draft(emptyDraft().id))
+    }
+
+    func setNewThreadProject(_ id: String?) {
+        updateDraft {
+            $0.projectID = id
+            $0.base = nil
+        }
+        uploadToComposerServer()
+        readGit(fetch: true)
+    }
+
+    func discard(_ draft: ThreadDraft) {
+        let wasOpen = selection == .draft(draft.id)
+        removeDraft(draft.id)
+        guard wasOpen else { return }
+        if let next = threadDrafts.last(where: { !sendingDraftIDs.contains($0.id) }) { return select(.draft(next.id)) }
+        if let next = activeThreads.first { return select(.thread(next.id)) }
+        openEmptyDraft()
+    }
+
+    var canSend: Bool {
+        guard !sendingDraftIDs.contains(draftKey), let server = composerServer, server.state == .connected else { return false }
+        if selectedThread == nil && project(selectedDraft?.projectID) == nil { return false }
+        guard attachments.allSatisfy({ $0.state == .ready && $0.serverID == server.id }) else { return false }
+        return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+    }
+
+    /// Why a message with these attachments can't be sent yet.
+    var attachmentsHold: String? {
+        if attachments.contains(where: { if case .failed = $0.state { true } else { false } }) {
+            return "Try the attachment that failed again, or remove it"
+        }
+        return attachments.contains { $0.state != .ready } ? "Waiting for the attachments to upload" : nil
+    }
+
+    func send() {
+        guard canSend else { return }
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attached = attachments
+        let key = draftKey
+        var command: JSON = ["text": text, "attachments": attached.compactMap(\.path)]
+        let existing = selectedThread
+        if let thread = existing {
+            command["server_id"] = thread.serverID
+            command["thread_id"] = thread.id
+        } else {
+            guard let draft = selectedDraft, let project = project(draft.projectID), let model = composerModel else {
+                errorMessage = "This server has no agent installed. Install Claude Code or Codex on it and try again."
+                return
+            }
+            var settings: JSON = [
+                "project_id": project.id,
+                "agent": model.agent.rawValue,
+                "model": model.id,
+                "access": draft.access.rawValue,
+                "plan": draft.plan,
+            ]
+            if let effort = composerEffort { settings["effort"] = effort }
+            if draftUsesWorktree, let base = draftBase { settings["worktree"] = ["base": base] }
+            command["server_id"] = project.serverID
+            command["new_thread"] = settings
+            sendingDraftIDs.insert(draft.id)
+            activity = Activity.starting
+            transcript.setActivity(activity)
+        }
+        let serverID = command.string("server_id")
+        draft = ""
+        attachmentsByKey[key] = nil
+        transcript.setPending(text, attachments: attached.map(\.attached))
+        transcriptIsEmpty = false
+
+        core.send("send", command) { [weak self] result in
+            guard let self else { return }
+            if existing == nil { self.sendingDraftIDs.remove(key) }
+            switch result {
+            case .failure(let error):
+                // The message goes back to where it was written, wherever the app is now.
+                self.setText(text, for: key)
+                self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
+                self.errorMessage = error.message
+                guard self.draftKey == key else { return }
+                self.transcript.setPending(nil)
+                self.transcriptIsEmpty = self.transcript.isEmpty
+                self.activity = existing == nil ? Activity() : self.activity
+                self.transcript.setActivity(self.activity)
+            case .success(let value):
+                guard existing == nil else { return }
+                self.openNewThread(id: value.string("thread_id"), serverID: serverID, draftID: key)
+            }
+        }
+    }
+
+    /// Replaces a draft with the thread its first message created. If the draft is still open,
+    /// the thread opens in its place with the message kept on screen.
+    private func openNewThread(id: String, serverID: String, draftID: String) {
+        let wasOpen = selection == .draft(draftID)
+        removeDraft(draftID)
+        sidePanel.move(from: draftID, to: id)
+        guard wasOpen else { return }
+        selection = .thread(id)
+        openThreadID = id
+        defaults.set(id, forKey: "selection")
+        transcript.adopt(threadID: id)
+        core.send("open_thread", ["server_id": serverID, "thread_id": id])
+        core.send("mark_seen", ["thread_id": id])
+    }
+
+    // MARK: Images and videos
+
+    /// The file of an image or a video the open thread shows. The core fetches it from the
+    /// thread's server if this Mac doesn't have it.
+    func media(_ id: String, done: @escaping (URL?) -> Void) {
+        guard let serverID = selectedThread?.serverID ?? composerServer?.id else { return done(nil) }
+        core.send("media", ["server_id": serverID, "media_id": id]) { result in
+            guard case .success(let value) = result, let path = value["path"] as? String else { return done(nil) }
+            done(URL(fileURLWithPath: path))
+        }
+    }
+
+    func refreshMediaStorage() {
+        core.send("storage") { [weak self] result in
+            guard case .success(let value) = result else { return }
+            let bytes = { (key: String) in (value[key] as? NSNumber)?.int64Value ?? 0 }
+            self?.mediaStorage = MediaStorage(used: bytes("media_bytes"), limit: bytes("media_limit"))
+        }
+    }
+
+    /// Removes the images and videos kept on this Mac. The servers still have them.
+    func clearMedia() {
+        core.send("clear_media") { [weak self] _ in self?.refreshMediaStorage() }
+    }
+
+    func stop() {
+        guard let thread = selectedThread else { return }
+        request(thread.serverID, ["type": "stop", "thread_id": thread.id])
+    }
+
+    /// Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by
+    /// question, when the call asks questions.
+    func answer(_ approval: Approval, allow: Bool, answers: [String: String] = [:]) {
+        guard let thread = selectedThread else { return }
+        let answer: JSON = ["type": "answer", "thread_id": thread.id, "approval_id": approval.id, "allow": allow, "answers": answers]
+        request(thread.serverID, answer)
+    }
+
+    /// Gives the agent a queued message now, in the turn that runs.
+    func sendNow(queued messageID: String) {
+        guard let thread = selectedThread else { return }
+        request(thread.serverID, ["type": "send_queued", "thread_id": thread.id, "message_id": messageID])
+    }
+
+    /// Takes a queued message back into the composer of its thread, after what is written there.
+    func takeBack(queued messageID: String) {
+        guard let thread = selectedThread, let message = activity.queued.first(where: { $0.id == messageID }) else { return }
+        let key = thread.id
+        request(thread.serverID, ["type": "cancel_queued", "thread_id": thread.id, "message_id": messageID], done: { [weak self] in
+            guard let self else { return }
+            let written = [self.drafts[key] ?? "", message.text].filter { !$0.isEmpty }
+            self.setText(written.joined(separator: "\n\n"), for: key)
+            let back = message.attachments.map { Attachment(path: $0, shown: message.media[$0], serverID: thread.serverID) }
+            let attached = (self.attachmentsByKey[key] ?? []) + back
+            self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
+            self.composerFocus += 1
+        })
+    }
+
+    func rename(_ thread: ThreadInfo, to title: String) {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title != thread.title else { return }
+        update(thread, ["title": title]) { $0.title = title }
+    }
+
+    func delete(_ thread: ThreadInfo) {
+        request(thread.serverID, ["type": "delete", "thread_id": thread.id])
+    }
+
+    func setModel(_ model: ModelInfo) {
+        guard let thread = selectedThread else {
+            updateDraft {
+                $0.model = model.id
+                $0.effort = nil
+            }
+            return
+        }
+        rememberSettings(model: model.id, effort: nil, access: thread.access)
+        update(thread, ["model": model.id, "effort": ""]) {
+            $0.model = model.id
+            $0.effort = nil
+        }
+    }
+
+    func setEffort(_ effort: String) {
+        guard let thread = selectedThread else {
+            updateDraft { $0.effort = effort }
+            return
+        }
+        rememberSettings(model: thread.model ?? composerModel?.id, effort: effort, access: thread.access)
+        update(thread, ["effort": effort]) { $0.effort = effort }
+    }
+
+    func setAccess(_ access: Access) {
+        guard let thread = selectedThread else {
+            updateDraft { $0.access = access }
+            return
+        }
+        rememberSettings(model: thread.model ?? composerModel?.id, effort: thread.effort, access: access)
+        update(thread, ["access": access.rawValue]) { $0.access = access }
+    }
+
+    func setPlan(_ plan: Bool) {
+        guard let thread = selectedThread else {
+            updateDraft { $0.plan = plan }
+            return
+        }
+        update(thread, ["plan": plan]) { $0.plan = plan }
+    }
+
+    /// Marks threads done or brings them back. A thread that is working or monitoring can't be
+    /// marked done.
+    func setDone(_ ids: [String], done: Bool, fromSidebar: Bool = false) {
+        let changed = ids.compactMap { threads[$0] }.filter { $0.isDone != done && !(done && $0.busy) }
+        guard !changed.isEmpty else { return }
+        // Leaving the thread that was just put away, for the next one that is still active.
+        if done, fromSidebar, case .thread(let open) = selection, changed.contains(where: { $0.id == open }) {
+            let active = activeThreads
+            let position = active.firstIndex { $0.id == open } ?? 0
+            let remaining = active.filter { thread in !changed.contains { $0.id == thread.id } }
+            let next = remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)]
+            if let next { select(.thread(next.id)) } else { openEmptyDraft() }
+        }
+        let now = Date().timeIntervalSince1970
+        for thread in changed {
+            update(thread, ["done": done]) { $0.doneAt = done ? now : nil }
+        }
+        guard done else {
+            undo = nil
+            return
+        }
+        showUndo(UndoNotice(threadIDs: changed.map(\.id), text: changed.count == 1 ? "Marked done" : "Marked \(changed.count) threads done"))
+    }
+
+    func toggleDone() {
+        guard let thread = selectedThread else { return }
+        setDone([thread.id], done: !thread.isDone)
+    }
+
+    private func showUndo(_ notice: UndoNotice) {
+        undo = notice
+        undoTimer?.invalidate()
+        undoTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in self?.undo = nil }
+    }
+
+    func performUndo() {
+        guard let notice = undo else { return }
+        undo = nil
+        setDone(notice.threadIDs, done: false)
+    }
+
+    /// Changes a thread on its server, and here at once so the app doesn't wait for the answer.
+    private func update(_ thread: ThreadInfo, _ change: JSON, locally: (inout ThreadInfo) -> Void) {
+        var changed = thread
+        locally(&changed)
+        threads[thread.id] = changed
+        request(thread.serverID, ["type": "update", "thread_id": thread.id, "change": change], failed: { [weak self] in
+            self?.threads[thread.id] = thread
+        })
+    }
+
+    private func request(_ serverID: String, _ request: JSON, done: (() -> Void)? = nil, failed: (() -> Void)? = nil) {
+        core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
+            switch result {
+            case .success: done?()
+            case .failure(let error):
+                failed?()
+                self?.errorMessage = error.message
+            }
+        }
+    }
+
+    // MARK: Attachments
+
+    /// Adds the files to what is being written and starts sending them to its server, so they
+    /// are there when the message is sent.
+    func attach(_ urls: [URL]) {
+        guard let server = composerServer else { return }
+        let key = draftKey
+        for url in urls where url.isFileURL && !attachments.contains(where: { $0.file == url }) {
+            let attachment = Attachment(file: url, serverID: server.id)
+            attachmentsByKey[key, default: []].append(attachment)
+            upload(attachment.id)
+        }
+    }
+
+    func removeAttachment(_ id: String) {
+        if case .uploading = attachments.first(where: { $0.id == id })?.state {
+            core.send("cancel_upload", ["key": id])
+        }
+        attachmentsByKey[draftKey]?.removeAll { $0.id == id }
+        if attachmentsByKey[draftKey]?.isEmpty == true { attachmentsByKey[draftKey] = nil }
+    }
+
+    func retryAttachment(_ id: String) {
+        upload(id)
+    }
+
+    private func changeAttachment(_ id: String, _ change: (inout Attachment) -> Void) {
+        for (key, attached) in attachmentsByKey {
+            guard let index = attached.firstIndex(where: { $0.id == id }) else { continue }
+            change(&attachmentsByKey[key]![index])
+            return
+        }
+    }
+
+    private func upload(_ id: String) {
+        guard let attachment = attachmentsByKey.values.joined().first(where: { $0.id == id }), let file = attachment.file else { return }
+        let serverID = attachment.serverID
+        changeAttachment(id) { $0.state = .uploading(0) }
+        core.send("upload", ["server_id": serverID, "key": id, "file": file.path]) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(let error):
+                self.changeAttachment(id) { attachment in
+                    // An upload that was stopped to go to another server is on its way there.
+                    guard attachment.serverID == serverID else { return }
+                    attachment.state = .failed(error.message)
+                }
+            case .success(let value):
+                let (path, media) = (value.string("path"), value.optionalString("media"))
+                self.changeAttachment(id) {
+                    $0.path = path
+                    $0.media = media
+                }
+                guard attachment.video, media != nil else { return self.changeAttachment(id) { $0.state = .ready } }
+                self.uploadPoster(of: id, file: file, path: path, serverID: serverID)
+            }
+        }
+    }
+
+    /// Sends the first frame of a video after it, which stands for it wherever it isn't played.
+    /// A video without one is sent all the same.
+    private func uploadPoster(of id: String, file: URL, path: String, serverID: String) {
+        let ready = { [weak self] (poster: String?) in
+            self?.changeAttachment(id) { attachment in
+                guard attachment.path == path else { return }
+                attachment.poster = poster
+                attachment.state = .ready
+            }
+            return
+        }
+        Pictures.firstFrame(file, id: "poster:\(id)", maxPixels: 1280) { [weak self] image in
+            guard let self, let image else { return ready(nil) }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let poster = Pictures.writeJPEG(image)
+                DispatchQueue.main.async {
+                    guard let poster else { return ready(nil) }
+                    let upload: JSON = ["server_id": serverID, "key": "\(id).poster", "file": poster.path, "poster_of": path]
+                    self.core.send("upload", upload) { result in
+                        try? FileManager.default.removeItem(at: poster)
+                        guard case .success(let value) = result else { return ready(nil) }
+                        ready(value.optionalString("media"))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Sends the open draft's files again when its project is on another server than they are.
+    private func uploadToComposerServer() {
+        guard let server = composerServer else { return }
+        for attachment in attachments where attachment.serverID != server.id && attachment.file != nil {
+            core.send("cancel_upload", ["key": attachment.id])
+            changeAttachment(attachment.id) {
+                $0.serverID = server.id
+                $0.path = nil
+                $0.media = nil
+                $0.poster = nil
+            }
+            upload(attachment.id)
+        }
+    }
+
+    // MARK: Viewer
+
+    func view(_ media: [ViewedMedia], at index: Int) {
+        guard media.indices.contains(index) else { return }
+        viewing = Viewing(items: media, index: index)
+    }
+
+    /// Shows the image or video before or after the one that is shown, around the ends.
+    func viewNext(_ step: Int) {
+        guard let count = viewing?.items.count, count > 1, let index = viewing?.index else { return }
+        viewing?.index = (index + step + count) % count
+    }
+
+    func closeViewer() {
+        viewing = nil
+        composerFocus += 1
+    }
+
+    /// Attaches what was dropped on the window: files, and images that aren't files yet.
+    func attach(dropped providers: [NSItemProvider]) {
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url else { return }
+                    DispatchQueue.main.async { self.attach([url]) }
+                }
+                continue
+            }
+            guard let type = ImageFiles.attachable.first(where: { provider.hasItemConformingToTypeIdentifier($0.identifier) }) else { continue }
+            provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+                guard let data, let file = ImageFiles.saveForAttaching(data, type: type) else { return }
+                DispatchQueue.main.async { self.attach([file]) }
+            }
+        }
+    }
+}
+
+extension Activity {
+    /// What is shown between sending a first message and the server saying the turn runs.
+    static var starting: Activity {
+        var activity = Activity()
+        activity.running = true
+        activity.startedAt = Date().timeIntervalSince1970
+        return activity
+    }
+}
+
+/// Shows the browser sheet for signing in and reports the address it was sent back to.
+final class SignInSession: NSObject, ASWebAuthenticationPresentationContextProviding {
+    private var session: ASWebAuthenticationSession?
+
+    func start(url: URL, done: @escaping (URL?) -> Void) {
+        let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "motile") { callback, _ in
+            DispatchQueue.main.async { done(callback) }
+        }
+        session.presentationContextProvider = self
+        self.session = session
+        if !session.start() {
+            done(nil)
+        }
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        #if os(macOS)
+        NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
+        #else
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.flatMap(\.windows).first(where: \.isKeyWindow) ?? scenes.first.map { ASPresentationAnchor(windowScene: $0) } ?? ASPresentationAnchor()
+        #endif
+    }
+}

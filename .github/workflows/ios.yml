@@ -1,0 +1,59 @@
+name: iOS
+
+# Builds the iOS app for the simulator on every push that touches it, so that a push says whether
+# it still compiles. Run by hand, or called by the release, it archives the app for devices and
+# uploads it to TestFlight.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/ios/**
+      - packages/apple/**
+      - crates/**
+      - Cargo.lock
+      - .github/workflows/ios.yml
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          rustup update stable --no-self-update
+          rustup default stable
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build for the simulator
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        working-directory: apps/ios
+        run: |
+          xcodebuild -project Motile.xcodeproj -scheme Motile -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/derived build
+
+      - name: Build the core for devices
+        if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
+        run: apps/ios/scripts/build-core.sh device
+
+      # The App Store Connect key signs the archive with the team's own certificate and profile,
+      # which Xcode makes when they are missing, and uploads it.
+      - name: Upload to TestFlight
+        if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: apps/ios/scripts/testflight.sh

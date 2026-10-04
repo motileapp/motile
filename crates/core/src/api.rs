@@ -30,6 +30,10 @@ pub struct Config {
     pub local_only: bool,
     #[serde(default)]
     pub direct_addr: Option<String>,
+    /// How many bytes the fetched images and videos may take on this device. Two gigabytes
+    /// without it.
+    #[serde(default)]
+    pub media_limit: Option<u64>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -55,6 +59,13 @@ pub enum Command {
     },
     SignOut,
     RefreshAccount,
+    /// The app is in front again after `away_secs` in the background, where the system may have
+    /// cut its connections without a word. After a long time away every server is dialed again.
+    Foreground {
+        away_secs: u64,
+    },
+    /// The device changed networks: what waits to dial again dials now.
+    NetworkChanged,
     /// Asks the auth server about the account every couple of seconds, while waiting for a server.
     WatchServers {
         on: bool,

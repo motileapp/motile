@@ -1,0 +1,681 @@
+import SwiftUI
+
+/// The space between the rows' highlights, and around each one: it looks empty but is the row's.
+private let rowGap = 2.0
+/// How far the rows' highlights stay from the sidebar's edges.
+let sidebarRowInset: CGFloat = 10
+private let rowMargin = EdgeInsets(top: rowGap / 2, leading: sidebarRowInset, bottom: rowGap / 2, trailing: sidebarRowInset)
+let doneRowHeight = Double(scaled(30))
+
+#if os(macOS)
+/// The drafts, then every active thread on every server in one list, with the ones marked done on
+/// a shelf at the bottom.
+struct SidebarView: View {
+    static let rowInset = sidebarRowInset
+
+    @Environment(AppStore.self) private var store
+    @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
+    @State private var renaming: ThreadInfo?
+    @State private var newTitle = ""
+    @State private var deleting: ThreadInfo?
+    @State private var search = ""
+
+    var body: some View {
+        let active = store.activeThreads.filter(matches)
+        let done = store.doneThreads.filter(matches)
+        VStack(spacing: 0) {
+            SearchField(text: $search)
+                .padding(.horizontal, 10)
+                .padding(.top, 2)
+                .padding(.bottom, 6)
+            GeometryReader { list in
+                threads(active: active, done: done, maxDoneHeight: list.size.height * 0.6)
+            }
+        }
+        .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Title", text: $newTitle)
+            Button("Rename") {
+                if let thread = renaming { store.rename(thread, to: newTitle) }
+                renaming = nil
+            }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
+        .confirmationDialog(
+            "Delete “\(deleting?.title ?? "")”?",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+        ) {
+            Button("Delete", role: .destructive) {
+                if let thread = deleting { store.delete(thread) }
+                deleting = nil
+            }
+        } message: {
+            let inWorktree = deleting.map { thread in store.project(thread.projectID)?.seen(from: thread).worktree != nil } ?? false
+            Text(inWorktree
+                ? "The thread and its transcript are removed from its server, and so is its worktree with what isn't committed there. Its branch stays."
+                : "The thread and its transcript are removed from its server. Files the agent changed stay as they are.")
+        }
+    }
+
+    private func threads(active: [ThreadInfo], done: [ThreadInfo], maxDoneHeight: Double) -> some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    DraftRows(search: search) { store.select($0) }
+                    ForEach(active) { thread in
+                        ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 }) { store.select($0) }
+                    }
+                    if active.isEmpty {
+                        Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
+                            .font(.ui(size: 12))
+                            .foregroundStyle(Color.themeTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, rowMargin.leading + 8)
+                            .padding(.vertical, 6 + rowGap / 2)
+                    }
+                }
+                .padding(.vertical, 4 - rowGap / 2)
+            }
+            if let undo = store.undo {
+                UndoRow(notice: undo)
+                    .transition(.opacity)
+            }
+            if !done.isEmpty {
+                DoneShelf(
+                    threads: done,
+                    maxHeight: maxDoneHeight,
+                    expanded: search.isEmpty ? $doneExpanded : .constant(true),
+                    rename: beginRename,
+                    delete: { deleting = $0 }
+                )
+            }
+            SidebarFooter()
+        }
+        .clipped()
+        .animation(.easeOut(duration: 0.15), value: store.undo)
+    }
+
+    private func matches(_ thread: ThreadInfo) -> Bool {
+        store.matches(thread, search: search)
+    }
+
+    private func beginRename(_ thread: ThreadInfo) {
+        newTitle = thread.title
+        renaming = thread
+    }
+}
+
+#endif
+
+/// Whether a thread's title or project matches what is being searched for.
+extension AppStore {
+    func matches(_ thread: ThreadInfo, search: String) -> Bool {
+        guard !search.isEmpty else { return true }
+        let project = project(thread.projectID)?.name ?? ""
+        return thread.title.localizedCaseInsensitiveContains(search) || project.localizedCaseInsensitiveContains(search)
+    }
+}
+
+struct SearchField: View {
+    @Binding var text: String
+
+    private static let height: CGFloat = Platform.scale > 1 ? 38 : 28
+    private static let sidePadding: CGFloat = Platform.scale > 1 ? 10 : 8
+    private static let clearSize: CGFloat = Platform.scale > 1 ? 24 : 18
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.ui(size: 12, weight: .medium))
+                .foregroundStyle(Color.themeTertiary)
+            TextField("Search", text: $text)
+                .textFieldStyle(.plain)
+                .font(.ui(size: 13))
+            if !text.isEmpty {
+                IconOnlyButton(symbol: "xmark.circle.fill", help: "Clear", size: Self.clearSize, symbolSize: 12) { text = "" }
+                    .foregroundStyle(Color.themeTertiary)
+                    .padding(.trailing, (Self.height - Self.clearSize) / 2 - Self.sidePadding)
+            }
+        }
+        .padding(.horizontal, Self.sidePadding)
+        .frame(height: Self.height)
+        .background(Color.themeHover, in: RoundedRectangle(cornerRadius: Platform.scale > 1 ? 11 : 8, style: .continuous))
+    }
+}
+
+struct ThreadMenu: View {
+    @Environment(AppStore.self) private var store
+    let thread: ThreadInfo
+    let rename: (ThreadInfo) -> Void
+    let delete: (ThreadInfo) -> Void
+
+    var body: some View {
+        if thread.isDone {
+            Button("Mark Undone") { store.setDone([thread.id], done: false) }
+        } else {
+            Button("Mark Done") { store.setDone([thread.id], done: true, fromSidebar: true) }
+                .disabled(thread.busy)
+        }
+        Button("Rename…") { rename(thread) }
+        Divider()
+        Button("Delete…", role: .destructive) { delete(thread) }
+    }
+}
+
+#if os(macOS)
+private struct MarkDoneButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: "checkmark")
+                    .font(.ui(size: 11, weight: .semibold))
+                Text("Mark Done")
+                    .font(.ui(size: 11, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(hovering ? .primary : .secondary)
+            .padding(.horizontal, 5)
+            .frame(height: 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .hoverHighlight(radius: 6)
+        .onHover { hovering = $0 }
+    }
+}
+
+#endif
+
+/// An active thread: its project and what it is doing on the first line, its title on the second,
+/// its project's branch, its server and its agent on the third.
+struct ThreadRow: View {
+    @Environment(AppStore.self) private var store
+    let thread: ThreadInfo
+    let rename: (ThreadInfo) -> Void
+    let delete: (ThreadInfo) -> Void
+    /// Opens what the row stands for. The sidebar it is in may have more to do then.
+    var open: (Selection) -> Void = { _ in }
+    @State private var hovering = false
+
+    private static let sidePadding: CGFloat = 8
+    private static let topPadding: CGFloat = 3
+
+    var body: some View {
+        let project = store.project(thread.projectID)?.seen(from: thread)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                ProjectIcon(project: project, size: 14)
+                Text(projectName)
+                    .font(.ui(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: 6)
+                #if os(macOS)
+                if hovering && !thread.busy {
+                    MarkDoneButton { store.setDone([thread.id], done: true, fromSidebar: true) }
+                        .padding(.trailing, Self.topPadding - Self.sidePadding)
+                } else {
+                    ThreadStatus(thread: thread)
+                }
+                #else
+                ThreadStatus(thread: thread)
+                #endif
+            }
+            .foregroundStyle(.secondary)
+            .frame(height: scaled(22))
+
+            Text(thread.title)
+                .font(.ui(size: 13, weight: .medium))
+                .lineLimit(1)
+
+            HStack(spacing: 6) {
+                if let branch = project?.branch {
+                    Text(branch)
+                        .font(.ui(size: 11))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 6)
+                if store.servers.count > 1, let server = store.server(thread.serverID) {
+                    ServerLabel(server: server)
+                }
+                AgentIcon(agent: thread.agent, size: 12)
+            }
+            .foregroundStyle(.tertiary)
+            .frame(height: scaled(16))
+        }
+        .padding(.horizontal, Self.sidePadding)
+        .padding(.top, Self.topPadding)
+        .padding(.bottom, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(rowMargin)
+        .contentShape(Rectangle())
+        .hoverHighlight(radius: 8, selected: store.selection == .thread(thread.id), inset: rowMargin)
+        .onHover { hovering = $0 }
+        .onTapGesture { open(.thread(thread.id)) }
+        .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
+    }
+
+    private var projectName: String {
+        store.project(thread.projectID)?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
+    }
+}
+
+/// The threads that haven't been sent yet, above the others. They are their own view so that
+/// typing only redraws them.
+struct DraftRows: View {
+    @Environment(AppStore.self) private var store
+    let search: String
+    var open: (Selection) -> Void = { _ in }
+
+    var body: some View {
+        let listed = store.listedDrafts.filter(matches)
+        if !listed.isEmpty {
+            ForEach(listed) { DraftRow(listed: $0, open: open) }
+            Divider()
+                .padding(.horizontal, rowMargin.leading + 8)
+                .padding(.vertical, 4 + rowGap / 2)
+        }
+    }
+
+    private func matches(_ listed: ListedDraft) -> Bool {
+        guard !search.isEmpty else { return true }
+        let project = store.project(listed.draft.projectID)?.name ?? ""
+        return listed.preview.localizedCaseInsensitiveContains(search) || project.localizedCaseInsensitiveContains(search)
+    }
+}
+
+/// A draft: its project on the first line, what was written in it on the second, if anything.
+private struct DraftRow: View {
+    @Environment(AppStore.self) private var store
+    let listed: ListedDraft
+    var open: (Selection) -> Void = { _ in }
+    @State private var hovering = false
+
+    private static let sidePadding: CGFloat = 8
+    private static let topPadding: CGFloat = 3
+
+    var body: some View {
+        let project = store.project(listed.draft.projectID)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                ProjectIcon(project: project, size: 14)
+                Text(project?.name ?? "No project")
+                    .font(.ui(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if store.servers.count > 1, let server = store.server(project?.serverID) {
+                    ServerLabel(server: server)
+                }
+                Spacer(minLength: 6)
+                if hovering {
+                    IconOnlyButton(symbol: "xmark", help: "Discard draft", size: 22, symbolSize: 12) {
+                        store.discard(listed.draft)
+                    }
+                    .padding(.trailing, Self.topPadding - Self.sidePadding)
+                } else {
+                    HStack(spacing: 3) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.ui(size: 11, weight: .semibold))
+                        Text("Draft")
+                            .font(.ui(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(Color.themeSecondary)
+                }
+            }
+            .foregroundStyle(.secondary)
+            .frame(height: scaled(22))
+
+            Text(listed.preview)
+                .font(.ui(size: 13, weight: .medium))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, Self.sidePadding)
+        .padding(.top, Self.topPadding)
+        .padding(.bottom, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(rowMargin)
+        .contentShape(Rectangle())
+        .hoverHighlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin)
+        .onHover { hovering = $0 }
+        .onTapGesture { open(.draft(listed.id)) }
+        .contextMenu {
+            Button("Discard Draft", role: .destructive) { store.discard(listed.draft) }
+        }
+    }
+}
+
+/// The offer to undo marking threads done: a line above the done threads.
+struct UndoRow: View {
+    @Environment(AppStore.self) private var store
+    let notice: UndoNotice
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Button {
+                store.performUndo()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.ui(size: 10, weight: .semibold))
+                        .frame(width: 14)
+                    Text("Undo")
+                        .font(.ui(size: 12, weight: .medium))
+                    Spacer()
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark")
+                            .font(.ui(size: 9, weight: .semibold))
+                        Text(notice.text)
+                            .font(.ui(size: 11))
+                            .lineLimit(1)
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 18)
+                .frame(height: doneRowHeight)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverHighlight(radius: 0)
+        }
+    }
+}
+
+#if os(macOS)
+/// The threads marked done, at the bottom of the sidebar: a line that opens into their list.
+private struct DoneShelf: View {
+    static let rowHeight = doneRowHeight
+    private static let defaultHeight = 250.0
+    private static let minHeight = 4 * (rowHeight + rowGap) + 4
+
+    @Environment(AppStore.self) private var store
+    let threads: [ThreadInfo]
+    let maxHeight: Double
+    @Binding var expanded: Bool
+    let rename: (ThreadInfo) -> Void
+    let delete: (ThreadInfo) -> Void
+    @AppStorage("sidebar.doneHeight") private var height = DoneShelf.defaultHeight
+    @GestureState private var pulledUp = 0.0
+
+    var body: some View {
+        let contentHeight = Double(threads.count) * (Self.rowHeight + rowGap) + 4
+        let tallest = min(maxHeight, contentHeight)
+        let heights = min(Self.minHeight, tallest)...tallest
+        VStack(spacing: 0) {
+            if expanded && heights.lowerBound < heights.upperBound {
+                resizeHandle(heights)
+            } else {
+                Divider()
+            }
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "chevron.right")
+                        .font(.ui(size: 10, weight: .semibold))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                        .frame(width: 14)
+                    Text("Done")
+                        .font(.ui(size: 12, weight: .medium))
+                    Spacer()
+                    Text("\(threads.count)")
+                        .font(.ui(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 18)
+                .frame(height: Self.rowHeight)
+                .padding(.top, 4)
+                .padding(.bottom, expanded ? 4 - rowGap / 2 : 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverHighlight(radius: 0)
+
+            if expanded {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(threads) { thread in
+                            DoneRow(thread: thread, rename: rename, delete: delete) { store.select($0) }
+                                .frame(height: Self.rowHeight + rowGap)
+                        }
+                    }
+                    .padding(.bottom, 4 - rowGap / 2)
+                }
+                .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
+            }
+        }
+    }
+
+    /// The line above the done threads. Dragging it makes their list taller or shorter; the
+    /// height is saved when the drag ends.
+    private func resizeHandle(_ heights: ClosedRange<Double>) -> some View {
+        Divider()
+            .overlay {
+                Color.clear
+                    .frame(height: Theme.resizeGrab)
+                    .contentShape(Rectangle())
+                    .onHover { inside in
+                        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                            .updating($pulledUp) { drag, pull, _ in pull = -drag.translation.height }
+                            .onEnded { drag in
+                                height = listHeight(in: heights, pulledUp: -drag.translation.height)
+                            }
+                    )
+            }
+            .zIndex(1)
+    }
+
+    private func listHeight(in heights: ClosedRange<Double>, pulledUp: Double) -> Double {
+        let resting = min(heights.upperBound, max(heights.lowerBound, height))
+        return min(heights.upperBound, max(heights.lowerBound, resting + pulledUp))
+    }
+}
+
+#endif
+
+/// A thread that is done: one quiet line.
+struct DoneRow: View {
+    @Environment(AppStore.self) private var store
+    let thread: ThreadInfo
+    let rename: (ThreadInfo) -> Void
+    let delete: (ThreadInfo) -> Void
+    var open: (Selection) -> Void = { _ in }
+    @State private var hovering = false
+
+    private static let sidePadding = 8.0
+    private static let buttonSize = 22.0
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ProjectIcon(project: store.project(thread.projectID), size: 14)
+            Text(thread.title)
+                .font(.ui(size: 13))
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 6)
+            if hovering {
+                IconOnlyButton(symbol: "arrow.uturn.backward", help: "Mark undone", size: Self.buttonSize, symbolSize: 12) {
+                    store.setDone([thread.id], done: false)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.trailing, (doneRowHeight - Self.buttonSize) / 2 - Self.sidePadding)
+            } else {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: context.date.timeIntervalSince1970))
+                        .font(.ui(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .padding(.horizontal, Self.sidePadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(rowMargin)
+        .contentShape(Rectangle())
+        .hoverHighlight(radius: 8, selected: store.selection == .thread(thread.id), inset: rowMargin)
+        .onHover { hovering = $0 }
+        .onTapGesture { open(.thread(thread.id)) }
+        .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
+    }
+}
+
+/// What a thread is up to, or how long ago it last was.
+struct ThreadStatus: View {
+    let thread: ThreadInfo
+
+    var body: some View {
+        if thread.needsApproval {
+            label("Approval", Color.themeWarning) {
+                symbol("questionmark.circle")
+            }
+        } else if thread.running {
+            HStack(spacing: 6) {
+                if thread.agents > 0 {
+                    label("\(thread.agents)", Color.themeWorking) {
+                        symbol("person.2")
+                    }
+                    .help(thread.agents == 1 ? "1 agent is working" : "\(thread.agents) agents are working")
+                }
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
+                        symbol("circle.dashed")
+                    }
+                }
+            }
+        } else if thread.monitoring {
+            label("Monitoring", Color.themeText) {
+                symbol("eye")
+            }
+        } else if thread.unread {
+            label("Unread", Color.themeUnread) {
+                Circle()
+                    .frame(width: 6, height: 6)
+            }
+        } else {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                Text(Time.ago(thread.updatedAt, now: context.date.timeIntervalSince1970))
+                    .font(.ui(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func label(_ text: String, _ color: Color, @ViewBuilder icon: () -> some View) -> some View {
+        HStack(spacing: 3) {
+            icon()
+            Text(text)
+                .font(.ui(size: 11, weight: .medium))
+                .monospacedDigit()
+        }
+        .foregroundStyle(color)
+    }
+
+    private func symbol(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.ui(size: 11, weight: .semibold))
+    }
+}
+
+/// A server and how the app reaches it.
+struct ServerLine: View {
+    let server: Server
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+            Text(server.name)
+                .font(.ui(size: 12, weight: .medium))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            ServerUpdateStatus(server: server) {
+                Text(detail)
+                    .font(.ui(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
+        }
+        .frame(height: scaled(20))
+        .help(server.error ?? detail)
+    }
+
+    private var color: Color {
+        switch server.state {
+        case .connected: return Color.themeSuccess
+        case .connecting: return Color.themeWarning
+        case .disconnected, .refused: return Color.themeDanger
+        }
+    }
+
+    private var detail: String {
+        switch server.state {
+        case .connected:
+            let path = server.path ?? "connected"
+            return server.rttMs.map { "\(path) · \($0) ms" } ?? path
+        case .connecting: return "connecting…"
+        case .disconnected: return "offline"
+        case .refused: return "refused"
+        }
+    }
+}
+
+#if os(macOS)
+/// The servers and how the app reaches them, and the account.
+private struct SidebarFooter: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.openSettings) private var openSettings
+
+    /// The account's line takes clicks up to the sidebar's edges, and halfway to the line above.
+    private static let accountMargin = EdgeInsets(top: 4, leading: 10, bottom: 8, trailing: 10)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AppUpdateRow(updater: store.updater)
+            ForEach(store.servers) { ServerLine(server: $0) }
+            Menu {
+                Button("Settings…") { openSettings() }
+                Button("Add a Project…") { store.addProject() }
+                Button("Add a Server…") { store.showsAddServer = true }
+                Divider()
+                Button("Sign Out") { store.signOut() }
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "person.crop.circle")
+                        .font(.ui(size: 14))
+                    Text(store.account.email)
+                        .font(.ui(size: 12))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .frame(height: 30)
+                .padding(Self.accountMargin)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .hoverHighlight(radius: 8, inset: Self.accountMargin)
+            .padding(.horizontal, -8 - Self.accountMargin.leading)
+            .padding(.top, -Self.accountMargin.top)
+            .padding(.bottom, -Self.accountMargin.bottom)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+#endif

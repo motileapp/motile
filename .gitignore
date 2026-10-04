@@ -5,6 +5,9 @@
 /apps/macos/build
 /apps/macos/.swiftpm
 /apps/macos/screenshots
+/apps/ios/build
+/packages/apple/.build
+/packages/apple/.swiftpm
 xcuserdata/
 DerivedData/
 node_modules/
