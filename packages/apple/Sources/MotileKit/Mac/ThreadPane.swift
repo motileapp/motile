@@ -146,7 +146,7 @@ struct ThreadPane: View {
         let selected = store.project(store.selectedDraft?.projectID)
         return HStack(spacing: Self.headlineWordSpace) {
             Text("Let’s build in")
-                .foregroundStyle(Color.themeSecondary)
+                .foregroundStyle(Color.themeText)
             Menu {
                 ForEach(store.recentProjects) { project in
                     Button {
