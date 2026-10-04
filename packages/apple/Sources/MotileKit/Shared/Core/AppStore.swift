@@ -97,11 +97,13 @@ final class AppStore {
     var showsAddServer = false
     /// The settings are open over the app, where they aren't a window of their own.
     var showsSettings = false
+    /// The thread's settings are open over the app, where they aren't around the composer.
+    var showsThreadSettings = false
     /// The project an icon is being chosen for.
     var iconProject: Project?
     /// Files are being dragged over the window.
     var dropTargeted = false
-    /// The branch picker under the composer is open, on the branches it was opened with.
+    /// The branch picker is open, on the branches it was opened with.
     var showsBranches = false
     private(set) var listedBranches: Result<[Branch], CoreBridge.CoreError> = .success([])
     /// The project whose changes the commit sheet is open on, with the files it was opened with.

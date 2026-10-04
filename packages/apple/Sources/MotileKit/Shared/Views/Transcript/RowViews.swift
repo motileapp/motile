@@ -50,11 +50,14 @@ class RowView: FlippedView {
 
     func clearSelection() {}
 
+    /// What the row says about its message, like when it was sent, is shown or faded out.
+    var showsMeta = false
+
     /// How tall the row is in a column `width` wide, as its view lays it out closed. It runs off
     /// the main thread. A queued message is only estimated: it is always among the last rows.
     class func height(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments):
+        case .user(let text, let attachments, _):
             let fit = BubbleFit(text: text, attachments: attachments, width: width)
             return UserRowView.height(fit, textHeight: fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0)
         case .prose(let text, let above, _):
@@ -69,8 +72,8 @@ class RowView: FlippedView {
     /// What the row would be without measuring its text, until it has been measured.
     class func estimatedHeight(_ row: RowModel, width: CGFloat) -> CGFloat {
         switch row.kind {
-        case .user(let text, let attachments):
-            return estimatedTextHeight(text.length, width: width * 0.75) + 48 + AttachedFilesView.height(attachments, width: width)
+        case .user(let text, let attachments, _):
+            return estimatedTextHeight(text.length, width: width * 0.75) + 34 + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
         case .prose(let text, let above, _):
             return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + above
         case .code(let content):
@@ -151,8 +154,13 @@ final class UserRowView: RowView {
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
     private let attachments = AttachedFilesView()
+    private let meta = MessageMeta(trailing: true, tooltip: "Copy message")
     private var files: [AttachedFile] = []
     private var pending = false
+
+    override var showsMeta: Bool {
+        didSet { meta.shown = showsMeta }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -161,6 +169,11 @@ final class UserRowView: RowView {
         addSubview(bubble)
         bubble.addSubview(text)
         bubble.addSubview(attachments)
+        addSubview(meta)
+        meta.onCopy = { [weak self] in
+            guard let self else { return }
+            Platform.copy(self.text.content.string)
+        }
         text.onSelect = { [weak self] in
             guard let self else { return }
             self.owner?.rowWillSelect(self)
@@ -171,7 +184,8 @@ final class UserRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .user(let content, let files) = row.kind else { return }
+        guard case .user(let content, let files, let at) = row.kind else { return }
+        meta.show(Time.stamp(at))
         text.content = content
         self.files = files
         text.isHidden = content.length == 0
@@ -181,9 +195,11 @@ final class UserRowView: RowView {
     }
 
     private static let margin: CGFloat = 14
+    /// The room under the bubble for when the message was sent and the button that copies it.
+    static let footHeight = MessageMeta.height + 6
 
     static func height(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
-        bubbleHeight(fit, textHeight: textHeight) + margin * 2
+        margin + bubbleHeight(fit, textHeight: textHeight) + footHeight
     }
 
     private static func bubbleHeight(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
@@ -200,6 +216,7 @@ final class UserRowView: RowView {
         attachments.frame = CGRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
         attachments.layout(width: fit.innerWidth)
         text.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: textHeight)
+        meta.frame = CGRect(x: 0, y: bubble.frame.maxY + 2, width: width, height: MessageMeta.height)
         return Self.height(fit, textHeight: textHeight)
     }
 
@@ -854,32 +871,23 @@ final class ChangesRowView: RowView {
     }
 }
 
-/// The line that closes a turn: how long it took, a way to copy the reply and, when the agent
-/// was refused a tool, the choice to allow it.
+/// Closes a turn: a way to copy the reply and when it ended.
 final class TurnEndRowView: RowView {
-    private static let buttonY: CGFloat = -1
-    private static let ruleY = buttonY + IconButton.side + 5
-    static let height = ruleY + 1 + 14
+    static let height = MessageMeta.height + 10
 
-    private let summary = TextLabel(font: Theme.smallFont, color: Theme.tertiary)
-    private var copyButton: IconButton!
-    private let rule = SurfaceView()
-    private var folded = false
+    private let meta = MessageMeta(trailing: false, tooltip: "Copy reply")
+
+    override var showsMeta: Bool {
+        didSet { meta.shown = showsMeta }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        addSubview(summary)
-        copyButton = IconButton(symbolName: "doc.on.doc", tooltip: "Copy reply") { [weak self] in
+        addSubview(meta)
+        meta.onCopy = { [weak self] in
             guard let self else { return }
             self.owner?.copyReply(endingAt: self.rowID)
-            self.copyButton.set(symbolName: "checkmark")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                self?.copyButton.set(symbolName: "doc.on.doc")
-            }
         }
-        addSubview(copyButton)
-        rule.fill = Theme.border
-        addSubview(rule)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -887,18 +895,87 @@ final class TurnEndRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .turnEnd(let end) = row.kind else { return }
-        summary.string = end.label
-        folded = end.folded
-        summary.isHidden = folded
+        meta.show(end.stamp)
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let lineHeight = scaled(16)
-        let summaryWidth = folded ? 0 : min(summary.naturalWidth + 4, width - 40)
-        summary.frame = CGRect(x: 0, y: Self.buttonY + ((IconButton.side - lineHeight) / 2).rounded(), width: summaryWidth, height: lineHeight)
-        copyButton.frame = CGRect(x: folded ? -6 : summaryWidth + 4, y: Self.buttonY, width: IconButton.side, height: IconButton.side)
-        rule.frame = CGRect(x: 0, y: Self.ruleY, width: width, height: 1)
+        meta.frame = CGRect(x: 0, y: 0, width: width, height: MessageMeta.height)
         return Self.height
+    }
+}
+
+/// Under a message or a reply: when it was sent and a button that copies it, at the side the
+/// message is on. Where there is a pointer it is only seen while the pointer is over its message.
+final class MessageMeta: FlippedView {
+    static let height = IconButton.side
+    /// How far the button's symbol is from the button's edge, which goes past the column's.
+    private static let symbolInset: CGFloat = Platform.scale > 1 ? 9 : 6
+
+    var onCopy: (() -> Void)?
+    var shown = !Platform.hoverReveals {
+        didSet {
+            guard shown != oldValue else { return }
+            reveal()
+        }
+    }
+
+    private let trailing: Bool
+    private let time = TextLabel(font: Theme.smallFont, color: Theme.tertiary)
+    private var button: IconButton?
+    private var copied = false
+
+    init(trailing: Bool, tooltip: String) {
+        self.trailing = trailing
+        super.init(frame: .zero)
+        addSubview(time)
+        let button = IconButton(symbolName: "doc.on.doc", tooltip: tooltip) { [weak self] in self?.copy() }
+        self.button = button
+        addSubview(button)
+        opacity = shown ? 1 : 0
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    func show(_ stamp: String) {
+        time.string = stamp
+        layoutNow()
+    }
+
+    override var frame: CGRect {
+        didSet { layoutNow() }
+    }
+
+    override func layoutNow() {
+        guard let button else { return }
+        let side = IconButton.side
+        let lineHeight = scaled(16)
+        let lineY = ((side - lineHeight) / 2).rounded()
+        let words = ceil(time.string.size(withAttributes: [.font: Theme.smallFont]).width)
+        let timeWidth = min(words + 4, max(0, bounds.width - side))
+        guard trailing else {
+            button.frame = CGRect(x: -Self.symbolInset, y: 0, width: side, height: side)
+            time.frame = CGRect(x: button.frame.maxX, y: lineY, width: timeWidth, height: lineHeight)
+            return
+        }
+        button.frame = CGRect(x: bounds.width - side + Self.symbolInset, y: 0, width: side, height: side)
+        time.frame = CGRect(x: button.frame.minX - timeWidth, y: lineY, width: timeWidth, height: lineHeight)
+    }
+
+    /// The check mark that says it was copied stays to be seen, also when the pointer has left.
+    private func copy() {
+        onCopy?()
+        copied = true
+        button?.set(symbolName: "checkmark")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self else { return }
+            self.copied = false
+            self.button?.set(symbolName: "doc.on.doc")
+            self.reveal()
+        }
+    }
+
+    private func reveal() {
+        fade(to: shown || copied ? 1 : 0, duration: 0.12)
     }
 }
 

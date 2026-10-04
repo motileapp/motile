@@ -53,28 +53,18 @@ private struct StripShape: Shape {
     }
 }
 
+#if os(macOS)
 /// Where the composer's thread works: the server, the folder or a worktree of its own, and the
 /// branch checked out there, which opens the picker to switch. A thread that starts in a new
-/// worktree picks the branch it starts from there instead.
+/// worktree picks the branch it starts from there instead. On iOS the thread's settings say it.
 struct ContextStrip: View {
     @Environment(AppStore.self) private var store
     let project: Project
     let server: Server?
 
     var body: some View {
-        #if os(macOS)
         parts
             .modifier(ComposerStrip(edge: .bottom))
-        #else
-        // Where a phone has no room for all of it, it scrolls sideways.
-        ViewThatFits(in: .horizontal) {
-            parts
-            ScrollView(.horizontal, showsIndicators: false) {
-                parts.fixedSize()
-            }
-        }
-        .modifier(ComposerStrip(edge: .bottom))
-        #endif
     }
 
     private var parts: some View {
@@ -108,8 +98,7 @@ struct ContextStrip: View {
                     } label: {
                         branchLabel(startsInWorktree ? "From \(branch)" : branch, opens: true)
                     }
-                    .buttonStyle(.plain)
-                    .hoverHighlight(radius: 7, inset: ComposerStrip.margin)
+                    .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin))
                     .help(startsInWorktree ? "The branch the worktree's branch starts from" : "Switch the branch of \(project.name)")
                     .popover(isPresented: $store.showsBranches, arrowEdge: .bottom) {
                         BranchPicker(project: project, base: startsInWorktree ? branch : nil)
@@ -217,6 +206,7 @@ struct ContextStrip: View {
         .contentShape(Rectangle())
     }
 }
+#endif
 
 /// The branches of the project's repository, to switch to one or make a new one. What is typed
 /// narrows the list, and becomes the name of a branch to make when it matches none. With `base`
@@ -320,11 +310,11 @@ struct BranchPicker: View {
             DispatchQueue.main.async { searching = true }
         }
         #else
-        // A sheet on a phone, where the keyboard only comes when the field is tapped.
-        .padding(.top, 14)
+        // A screen of the thread's settings, where the keyboard only comes when the field is tapped.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .background(Color.themeBackground)
+        .navigationTitle(base == nil ? "Branch" : "Start from")
+        .navigationBarTitleDisplayMode(.inline)
         #endif
         .onChange(of: query) { highlighted = 0 }
     }
@@ -349,14 +339,16 @@ struct BranchPicker: View {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
                             row(choice, index: index)
-                                .onTapGesture { choose(choices, at: index) }
+                                .button(.highlight(radius: 8)) { choose(choices, at: index) }
                                 .onHover { if $0 { highlighted = index } }
                                 .id(choice.id)
                         }
                     }
                     .padding(Self.listPadding)
                 }
+                #if os(macOS)
                 .frame(height: listHeight)
+                #endif
                 .onChange(of: highlighted) {
                     guard choices.indices.contains(highlighted) else { return }
                     proxy.scrollTo(choices[highlighted].id)

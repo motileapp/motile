@@ -24,9 +24,15 @@ enum Platform {
     static let name = "macos"
     /// How much larger than on the Mac text and the controls around it are.
     static let scale: CGFloat = 1
+    /// What only matters under the pointer is hidden until the pointer is over it.
+    static let hoverReveals = true
+    /// The least a control is tall and wide for a finger to press it.
+    static let minimumPress: CGFloat = 0
     #else
     static let name = "ios"
     static let scale: CGFloat = 1.14
+    static let hoverReveals = false
+    static let minimumPress: CGFloat = 44
     #endif
 
     /// What the device is called in what the user reads.

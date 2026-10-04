@@ -74,15 +74,10 @@ struct ThreadScreen: View {
             }
         }
         ToolbarItem(placement: .principal) { title }
-        if let project = store.gitProject, let control = project.gitControl {
-            ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            if let project = store.gitProject, let control = project.gitControl {
                 GitButton(project: project, control: control)
             }
-            if #available(iOS 26.0, *) {
-                ToolbarSpacer(.fixed, placement: .topBarTrailing)
-            }
-        }
-        ToolbarItem(placement: .topBarTrailing) {
             Button {
                 store.sidePanel.isOpen.toggle()
             } label: {

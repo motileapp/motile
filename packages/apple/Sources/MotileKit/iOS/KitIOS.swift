@@ -446,7 +446,7 @@ final class SidewaysClipView: UIScrollView {
 }
 
 /// The scroll view the transcript's rows are in, as the transcript drives it.
-final class TranscriptScroller: UIView, UIScrollViewDelegate {
+final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     let document = FlippedView()
     /// The viewport moved, by the user's hand or not.
     var onScroll: (() -> Void)?
@@ -464,6 +464,19 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate {
         scrollView.delegate = self
         addSubview(scrollView)
         scrollView.addSubview(document)
+        // A tap on the transcript puts the keyboard away at once, whatever else the tap does.
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+        tap.cancelsTouchesInView = false
+        tap.delegate = self
+        scrollView.addGestureRecognizer(tap)
+    }
+
+    @objc private func tapped() {
+        Platform.endEditing()
+    }
+
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }

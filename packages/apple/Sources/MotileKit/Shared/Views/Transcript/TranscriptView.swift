@@ -129,6 +129,10 @@ final class TranscriptView: FlippedView, RowOwner {
     /// The group or fold that was just clicked. It stays where it is while its rows come and go.
     private var toggled: Anchor?
     private var layoutWidth: CGFloat = 0
+    /// Where the pointer is over the transcript, and the row whose time and copy button it shows:
+    /// the message under it, or the end of the reply under it.
+    private var pointerAt: CGPoint?
+    private var metaRowID: String?
     private static let measuring = DispatchQueue(label: "app.motile.heights", qos: .userInitiated)
     /// Stops the measuring that is under way, when rows or the width it measures for are gone.
     private var measuringStopped: OSAllocatedUnfairLock<Bool>?
@@ -162,6 +166,12 @@ final class TranscriptView: FlippedView, RowOwner {
         jumpButton.dropShadow(opacity: 0.18, radius: 8, down: 2)
         addSubview(jumpButton)
 
+        if Platform.hoverReveals {
+            onHover = { [weak self] point in
+                self?.pointerAt = point
+                self?.updateMetaRow()
+            }
+        }
         scroller.onScroll = { [weak self] in self?.scrolled() }
         scroller.onUserScroll = { [weak self] began in
             if began { self?.userScrollBegan() } else { self?.userScrollEnded() }
@@ -517,6 +527,7 @@ final class TranscriptView: FlippedView, RowOwner {
             document.addSubview(view)
         }
         view.configure(row)
+        view.showsMeta = !Platform.hoverReveals || row.id == metaRowID
         view.opacity = 1
         if fresh.remove(row.id) != nil {
             view.opacity = 0
@@ -665,6 +676,7 @@ final class TranscriptView: FlippedView, RowOwner {
         working.frame = CGRect(x: x, y: topPadding + workingY + 2, width: width, height: Self.workingHeight)
         working.isHidden = !showsWorking
         updateJumpButton()
+        updateMetaRow()
         if !pendingHighlight.isEmpty {
             let ids = pendingHighlight
             pendingHighlight.removeAll()
@@ -697,6 +709,28 @@ final class TranscriptView: FlippedView, RowOwner {
             return
         }
         scroll(to: target)
+    }
+
+    /// Rows are stacked without room between them and are as wide as the transcript for this,
+    /// so the pointer never leaves a message on its way to the message's copy button.
+    private func updateMetaRow() {
+        guard Platform.hoverReveals else { return }
+        let id = pointerAt.flatMap { metaRow(at: $0.y + scroller.offsetY - topPadding) }
+        guard id != metaRowID else { return }
+        if let metaRowID { views[metaRowID]?.showsMeta = false }
+        metaRowID = id
+        if let id { views[id]?.showsMeta = true }
+    }
+
+    private func metaRow(at y: CGFloat) -> String? {
+        guard !rows.isEmpty, y >= 0, y < offsets[rows.count] else { return nil }
+        let under = index(at: y)
+        guard !rows[under].isUser else { return rows[under].id }
+        for row in rows[under...] {
+            guard !row.isUser else { return nil }
+            if case .turnEnd = row.kind { return row.id }
+        }
+        return nil
     }
 
     private func updateJumpButton() {

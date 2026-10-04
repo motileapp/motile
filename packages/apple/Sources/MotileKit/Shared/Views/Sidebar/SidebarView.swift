@@ -180,9 +180,8 @@ private struct MarkDoneButton: View {
             .frame(height: 22)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.highlight(radius: 6))
         .fixedSize()
-        .hoverHighlight(radius: 6)
         .onHover { hovering = $0 }
     }
 }
@@ -253,9 +252,8 @@ struct ThreadRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
         .contentShape(Rectangle())
-        .hoverHighlight(radius: 8, selected: store.selection == .thread(thread.id), inset: rowMargin)
+        .button(.highlight(radius: 8, selected: store.selection == .thread(thread.id), inset: rowMargin)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
-        .onTapGesture { open(.thread(thread.id)) }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
     }
 
@@ -339,9 +337,8 @@ private struct DraftRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
         .contentShape(Rectangle())
-        .hoverHighlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin)
+        .button(.highlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin)) { open(.draft(listed.id)) }
         .onHover { hovering = $0 }
-        .onTapGesture { open(.draft(listed.id)) }
         .contextMenu {
             Button("Discard Draft", role: .destructive) { store.discard(listed.draft) }
         }
@@ -380,8 +377,7 @@ struct UndoRow: View {
                 .padding(.vertical, 4)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .hoverHighlight(radius: 0)
+            .buttonStyle(.highlight(radius: 0))
         }
     }
 }
@@ -435,8 +431,7 @@ private struct DoneShelf: View {
                 .padding(.bottom, expanded ? 4 - rowGap / 2 : 4)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .hoverHighlight(radius: 0)
+            .buttonStyle(.highlight(radius: 0))
 
             if expanded {
                 ScrollView {
@@ -521,9 +516,8 @@ struct DoneRow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
         .contentShape(Rectangle())
-        .hoverHighlight(radius: 8, selected: store.selection == .thread(thread.id), inset: rowMargin)
+        .button(.highlight(radius: 8, selected: store.selection == .thread(thread.id), inset: rowMargin)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
-        .onTapGesture { open(.thread(thread.id)) }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
     }
 }

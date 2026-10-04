@@ -31,7 +31,7 @@ struct AttachmentTile: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.themeBorder, lineWidth: 1))
         .contentShape(Rectangle())
-        .onTapGesture(perform: open)
+        .button(DimButtonStyle(), action: open)
         .overlay(alignment: .topTrailing) {
             Button {
                 store.removeAttachment(attachment.id)

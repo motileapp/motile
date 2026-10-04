@@ -20,6 +20,14 @@ struct ComposerTextView: UIViewRepresentable {
     let onSubmit: () -> Void
     let onFiles: ([URL]) -> Void
     let onFileDrag: (Bool) -> Void
+    var focused: Binding<Bool>?
+
+    /// Says whether the text has the keyboard.
+    func reporting(focus: Binding<Bool>) -> ComposerTextView {
+        var view = self
+        view.focused = focus
+        return view
+    }
 
     func makeUIView(context: Context) -> ComposerUITextView {
         let view = ComposerUITextView()
@@ -59,6 +67,14 @@ struct ComposerTextView: UIViewRepresentable {
 
         init(_ parent: ComposerTextView) {
             self.parent = parent
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            parent.focused?.wrappedValue = true
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            parent.focused?.wrappedValue = false
         }
 
         func textViewDidChange(_ textView: UITextView) {

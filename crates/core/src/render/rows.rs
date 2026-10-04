@@ -130,6 +130,8 @@ pub enum RowKind {
         stopped: bool,
         /// The turn's fold says how long it took, so this row doesn't.
         folded: bool,
+        /// When the turn ended.
+        at: f64,
     },
     /// A message that waits for the agent to take it. The row's item is the message.
     Queued {
@@ -875,6 +877,7 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
                 is_error: summary.is_error,
                 stopped: summary.stopped,
                 folded: false,
+                at: item.created_at,
             },
         )],
     }
@@ -1495,6 +1498,8 @@ mod tests {
         let summary = motile_protocol::wire::TurnSummary { duration_ms: Some(90_000), ..Default::default() };
         transcript.upsert(at(190.0, item("e", 7, ItemKind::TurnEnd { summary })), true);
         assert_eq!(outline(&transcript), ["user", "fold", "user", "fold", "Done.", "end folded"]);
+        let end = &transcript.rows().last().unwrap().kind;
+        assert!(matches!(end, RowKind::TurnEnd { at, .. } if *at == 190.0), "the end says when the turn ended");
         let folds = transcript.rows().iter().filter_map(|row| match row.kind {
             RowKind::Fold { duration_ms, .. } => duration_ms,
             _ => None,

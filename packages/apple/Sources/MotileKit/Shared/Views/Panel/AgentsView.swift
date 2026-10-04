@@ -87,8 +87,7 @@ private struct AgentRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .hoverHighlight()
+        .buttonStyle(.highlight())
     }
 }
 
