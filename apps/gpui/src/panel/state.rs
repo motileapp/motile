@@ -1,0 +1,763 @@
+//! What the side panel shows: whether it is open, the tabs each thread has in it, and what the
+//! tabs of the open thread show.
+
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::Path;
+
+use gpui_kit::prelude::*;
+use gpui_kit::*;
+use motile_core::api::Command;
+use motile_protocol::wire::{Change, DiffScope, Request};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::store::Store;
+use crate::transcript::model::TurnChange;
+
+pub const WIDTHS: (f32, f32) = (340., 900.);
+
+/// A tab of the panel beside the thread.
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "path", rename_all = "snake_case")]
+pub enum PanelTab {
+    Diff,
+    /// The folder's files, to open one.
+    Files,
+    /// One file, by its path in the folder.
+    File(String),
+    /// The agents the thread's agent has started, and what one of them did.
+    Agents,
+}
+
+impl PanelTab {
+    pub fn id(&self) -> String {
+        match self {
+            PanelTab::Diff => "diff".into(),
+            PanelTab::Files => "files".into(),
+            PanelTab::Agents => "agents".into(),
+            PanelTab::File(path) => format!("file:{path}"),
+        }
+    }
+
+    pub fn title(&self) -> String {
+        match self {
+            PanelTab::Diff => "Diff".into(),
+            PanelTab::Files => "Files".into(),
+            PanelTab::Agents => "Agents".into(),
+            PanelTab::File(path) => crate::models::last_component(path),
+        }
+    }
+}
+
+/// The tabs a thread has open in the panel.
+#[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
+pub struct PanelTabs {
+    pub tabs: Vec<PanelTab>,
+    pub active: Option<PanelTab>,
+    /// What the diff tab shows, once that was chosen.
+    pub scope: Option<DiffScope>,
+    /// The panel covers the thread.
+    pub maximized: Option<bool>,
+}
+
+/// The folder the panel looks into: the one the open thread works in, or the project's when a
+/// thread is about to start there.
+#[derive(Clone, PartialEq, Debug)]
+pub struct PanelTarget {
+    /// What its tabs are kept under: the thread, or the draft.
+    pub key: String,
+    pub server_id: String,
+    pub project_id: String,
+    pub thread_id: Option<String>,
+    pub name: String,
+    pub repository: bool,
+    /// The thread works in a worktree of its own.
+    pub worktree: bool,
+}
+
+#[derive(Clone, Debug)]
+pub enum Loaded<T> {
+    Loading,
+    Ready(T),
+    Failed(String),
+}
+
+impl<T> Loaded<T> {
+    pub fn value(&self) -> Option<&T> {
+        match self {
+            Loaded::Ready(value) => Some(value),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug, Deserialize)]
+pub struct FileEntry {
+    pub name: String,
+    pub folder: bool,
+    #[serde(default)]
+    pub ignored: bool,
+}
+
+/// A row of the files tab: a file or a folder, as deep as the folders above it.
+#[derive(Clone, PartialEq, Debug)]
+pub struct FileNode {
+    pub path: String,
+    pub name: String,
+    pub folder: bool,
+    pub ignored: bool,
+    pub depth: usize,
+    pub open: bool,
+}
+
+/// What a line of a file's diff is, as the core says.
+pub const UNCHANGED: u8 = 0;
+pub const ADDED: u8 = 1;
+pub const REMOVED: u8 = 2;
+/// The heading of a hunk, or a note in place of the lines.
+pub const NOTE: u8 = 3;
+
+/// A file of a diff, or a whole file, as lines to draw.
+#[derive(Clone, Debug)]
+pub struct CodeFile {
+    pub path: String,
+    /// Where a renamed file was.
+    pub from: Option<String>,
+    pub change: Option<Change>,
+    pub added: u32,
+    pub removed: u32,
+    pub lines: Vec<SharedString>,
+    pub kinds: Vec<u8>,
+    /// Each line's number in the file as it was and as it is, 0 where it isn't in that one.
+    pub old: Vec<u32>,
+    pub new: Vec<u32>,
+    /// The length of the longest line, in columns.
+    pub columns: usize,
+    /// The highlighting of each line once it has arrived, as the core's span triples.
+    pub spans: Vec<Vec<u32>>,
+}
+
+/// A file with more lines than this starts closed in a diff.
+pub const OPEN_UP_TO_LINES: usize = 1500;
+
+#[derive(Deserialize)]
+struct DiffFile {
+    path: String,
+    from: Option<String>,
+    change: Change,
+    added: u32,
+    removed: u32,
+    binary: bool,
+    lines: Vec<String>,
+    kinds: Vec<u8>,
+    old: Vec<u32>,
+    new: Vec<u32>,
+}
+
+fn widest(lines: &[SharedString]) -> usize {
+    lines
+        .iter()
+        .map(|line| line.chars().map(|character| if character == '\t' { 4 } else { 1 }).sum::<usize>())
+        .max()
+        .unwrap_or(0)
+}
+
+impl CodeFile {
+    fn from_diff(file: DiffFile) -> Self {
+        if file.lines.is_empty() {
+            let note = if file.binary {
+                "Binary file"
+            } else if file.change == Change::Renamed {
+                "Renamed without changes"
+            } else {
+                "Empty file"
+            };
+            return Self {
+                path: file.path,
+                from: file.from,
+                change: Some(file.change),
+                added: file.added,
+                removed: file.removed,
+                columns: note.len(),
+                lines: vec![note.into()],
+                kinds: vec![NOTE],
+                old: vec![0],
+                new: vec![0],
+                spans: Vec::new(),
+            };
+        }
+        let lines: Vec<SharedString> = file.lines.into_iter().map(SharedString::from).collect();
+        Self {
+            path: file.path,
+            from: file.from,
+            change: Some(file.change),
+            added: file.added,
+            removed: file.removed,
+            columns: widest(&lines),
+            lines,
+            kinds: file.kinds,
+            old: file.old,
+            new: file.new,
+            spans: Vec::new(),
+        }
+    }
+
+    /// A whole file, every line as it is.
+    pub fn whole(path: String, lines: Vec<String>) -> Self {
+        let count = lines.len();
+        let lines: Vec<SharedString> = lines.into_iter().map(SharedString::from).collect();
+        Self {
+            path,
+            from: None,
+            change: None,
+            added: 0,
+            removed: 0,
+            columns: widest(&lines),
+            lines,
+            kinds: vec![UNCHANGED; count],
+            old: vec![0; count],
+            new: (1..=count as u32).collect(),
+            spans: Vec::new(),
+        }
+    }
+}
+
+/// Files to draw one under the other: the files of a diff, or one whole file.
+#[derive(Clone, Debug)]
+pub struct CodeDocument {
+    /// Names what it shows. A document with the same name takes the place of the one before it
+    /// without the view moving.
+    pub id: String,
+    pub files: Vec<CodeFile>,
+    pub truncated: bool,
+    /// Every file is under a heading with its name, as in a diff.
+    pub headed: bool,
+}
+
+impl CodeDocument {
+    pub fn from_diff(value: Value, id: String) -> Self {
+        let truncated = value["truncated"].as_bool().unwrap_or(false);
+        let files: Vec<DiffFile> = serde_json::from_value(value["files"].clone()).unwrap_or_default();
+        Self { id, files: files.into_iter().map(CodeFile::from_diff).collect(), truncated, headed: true }
+    }
+
+    pub fn added(&self) -> u32 {
+        self.files.iter().map(|file| file.added).sum()
+    }
+
+    pub fn removed(&self) -> u32 {
+        self.files.iter().map(|file| file.removed).sum()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum FileContent {
+    Text(CodeDocument, bool),
+    /// The image's file on this device.
+    Image(String),
+    Binary(u64),
+}
+
+fn read_file(answer: Value, path: &str, id: String) -> FileContent {
+    match answer["kind"].as_str() {
+        Some("text") => {
+            let lines: Vec<String> = serde_json::from_value(answer["lines"].clone()).unwrap_or_default();
+            let document = CodeDocument {
+                id,
+                files: vec![CodeFile::whole(path.to_string(), lines)],
+                truncated: false,
+                headed: false,
+            };
+            FileContent::Text(document, answer["truncated"].as_bool().unwrap_or(false))
+        }
+        Some("image") => match answer["file"].as_str() {
+            Some(file) => FileContent::Image(file.to_string()),
+            None => FileContent::Binary(answer["size"].as_u64().unwrap_or(0)),
+        },
+        _ => FileContent::Binary(answer["size"].as_u64().unwrap_or(0)),
+    }
+}
+
+/// The panel beside the thread.
+pub struct SidePanel {
+    pub is_open: bool,
+    pub tabs_by_key: BTreeMap<String, PanelTabs>,
+    /// The turns of the open thread that changed files, the first one first.
+    pub turns: Vec<TurnChange>,
+    /// The agent whose transcript the agents tab shows. Without one it lists them.
+    pub shown_agent: Option<String>,
+
+    pub diff: Loaded<CodeDocument>,
+    /// The files of the diff that are closed, by path.
+    pub collapsed: HashSet<String>,
+    /// The file of the diff to bring into view, and a count that goes up with every request.
+    pub reveal: Option<(String, u64)>,
+
+    /// What each folder that was looked into has in it, by its path.
+    pub listings: HashMap<String, Vec<FileEntry>>,
+    pub open_folders: HashSet<String>,
+    pub files_error: Option<String>,
+    /// The files that are open in tabs, by path.
+    pub contents: HashMap<String, Loaded<FileContent>>,
+
+    /// The folder all of the above is of.
+    shown: Option<PanelTarget>,
+    shown_scope: Option<DiffScope>,
+    diff_request: u64,
+    file_requests: HashMap<u64, String>,
+}
+
+impl SidePanel {
+    pub fn new(is_open: bool, tabs_by_key: BTreeMap<String, PanelTabs>) -> Self {
+        Self {
+            is_open,
+            tabs_by_key,
+            turns: Vec::new(),
+            shown_agent: None,
+            diff: Loaded::Loading,
+            collapsed: HashSet::new(),
+            reveal: None,
+            listings: HashMap::new(),
+            open_folders: HashSet::new(),
+            files_error: None,
+            contents: HashMap::new(),
+            shown: None,
+            shown_scope: None,
+            diff_request: 0,
+            file_requests: HashMap::new(),
+        }
+    }
+
+    /// The rows of the files tab: every folder that is open with what is in it.
+    pub fn nodes(&self) -> Vec<FileNode> {
+        let mut nodes = Vec::new();
+        self.list_nodes("", 0, &mut nodes);
+        nodes
+    }
+
+    fn list_nodes(&self, folder: &str, depth: usize, nodes: &mut Vec<FileNode>) {
+        for entry in self.listings.get(folder).into_iter().flatten() {
+            let path = if folder.is_empty() { entry.name.clone() } else { format!("{folder}/{}", entry.name) };
+            let open = entry.folder && self.open_folders.contains(&path);
+            nodes.push(FileNode {
+                path: path.clone(),
+                name: entry.name.clone(),
+                folder: entry.folder,
+                ignored: entry.ignored,
+                depth,
+                open,
+            });
+            if open {
+                self.list_nodes(&path, depth + 1, nodes);
+            }
+        }
+    }
+
+    /// Forgets what was shown when the folder is another one than before.
+    fn look_into(&mut self, target: &PanelTarget) {
+        if self.shown.as_ref() == Some(target) {
+            return;
+        }
+        let same_folder = self.shown.as_ref().is_some_and(|shown| shown.key == target.key);
+        self.shown = Some(target.clone());
+        if same_folder {
+            return;
+        }
+        self.shown_scope = None;
+        self.diff = Loaded::Loading;
+        self.collapsed.clear();
+        self.listings.clear();
+        self.open_folders.clear();
+        self.files_error = None;
+        self.contents.clear();
+        self.file_requests.clear();
+    }
+}
+
+fn target_request(target: &PanelTarget) -> (String, Option<String>) {
+    (target.project_id.clone(), target.thread_id.clone())
+}
+
+impl Store {
+    fn panel_key(&self) -> Option<String> {
+        self.panel_target().map(|target| target.key)
+    }
+
+    /// The tabs the open thread or draft has in the panel.
+    pub fn panel_tabs(&self) -> PanelTabs {
+        self.panel_key().and_then(|key| self.side_panel.tabs_by_key.get(&key).cloned()).unwrap_or_default()
+    }
+
+    fn change_tabs(&mut self, change: impl FnOnce(&mut PanelTabs)) {
+        let Some(key) = self.panel_key() else { return };
+        let mut tabs = self.side_panel.tabs_by_key.get(&key).cloned().unwrap_or_default();
+        change(&mut tabs);
+        if tabs.tabs.is_empty() && tabs.scope.is_none() && tabs.maximized.is_none() {
+            self.side_panel.tabs_by_key.remove(&key);
+        } else {
+            self.side_panel.tabs_by_key.insert(key, tabs);
+        }
+        let saved = self.side_panel.tabs_by_key.clone();
+        self.prefs.set("panel.tabs", saved);
+    }
+
+    pub fn set_panel_open(&mut self, open: bool) {
+        self.side_panel.is_open = open;
+        self.prefs.set("panel.open", open);
+        if !open {
+            self.change_tabs(|tabs| tabs.maximized = None);
+        }
+    }
+
+    /// Shows the tab, opening it and the panel when they aren't.
+    pub fn open_tab(&mut self, tab: PanelTab) {
+        self.change_tabs(|tabs| {
+            if !tabs.tabs.contains(&tab) {
+                tabs.tabs.push(tab.clone());
+            }
+            tabs.active = Some(tab);
+        });
+        self.set_panel_open(true);
+    }
+
+    pub fn activate_tab(&mut self, tab: PanelTab) {
+        self.change_tabs(|tabs| tabs.active = Some(tab));
+    }
+
+    /// Closes the tab. The one beside it is shown in its place.
+    pub fn close_tab(&mut self, tab: &PanelTab) {
+        self.change_tabs(|tabs| {
+            let Some(index) = tabs.tabs.iter().position(|open| open == tab) else { return };
+            tabs.tabs.remove(index);
+            if tabs.active.as_ref() != Some(tab) {
+                return;
+            }
+            tabs.active =
+                if tabs.tabs.is_empty() { None } else { Some(tabs.tabs[index.min(tabs.tabs.len() - 1)].clone()) };
+        });
+        if let PanelTab::File(path) = tab {
+            self.side_panel.contents.remove(path);
+        }
+    }
+
+    pub fn close_other_tabs(&mut self, tab: &PanelTab) {
+        self.change_tabs(|tabs| {
+            tabs.tabs = vec![tab.clone()];
+            tabs.active = Some(tab.clone());
+        });
+    }
+
+    pub fn close_all_tabs(&mut self) {
+        self.change_tabs(|tabs| {
+            tabs.tabs.clear();
+            tabs.active = None;
+        });
+    }
+
+    /// What ⌘W does while the panel shows a tab. `false` when there is none to close.
+    pub fn close_active_tab(&mut self) -> bool {
+        if !self.side_panel.is_open {
+            return false;
+        }
+        let Some(active) = self.panel_tabs().active else { return false };
+        self.close_tab(&active);
+        true
+    }
+
+    /// The panel covers the thread, so the window shows the sidebar and the panel.
+    pub fn panel_maximized(&self) -> bool {
+        self.side_panel.is_open && self.panel_tabs().maximized == Some(true)
+    }
+
+    pub fn toggle_panel_maximized(&mut self) {
+        if !self.side_panel.is_open {
+            return;
+        }
+        let maximized = !self.panel_maximized();
+        self.change_tabs(|tabs| tabs.maximized = maximized.then_some(true));
+        if maximized {
+            // The composer is behind the panel now, and must not take what is typed.
+            self.blur_composer += 1;
+        }
+    }
+
+    /// The tabs a draft had go to the thread it became.
+    pub fn move_tabs(&mut self, draft_key: &str, thread_key: &str) {
+        let Some(tabs) = self.side_panel.tabs_by_key.remove(draft_key) else { return };
+        self.side_panel.tabs_by_key.insert(thread_key.to_string(), tabs);
+        if self.side_panel.shown.as_ref().is_some_and(|shown| shown.key == draft_key) {
+            self.side_panel.shown = None;
+        }
+    }
+
+    pub fn forget_tabs(&mut self, key: &str) {
+        self.side_panel.tabs_by_key.remove(key);
+    }
+
+    // Agents
+
+    /// Opens the agents tab on what the agent did that the tool call started.
+    pub fn show_agent(&mut self, id: String, cx: &mut Context<Self>) {
+        let Some(thread_id) = self.transcript.read(cx).thread_id.clone() else { return };
+        self.side_panel.shown_agent = Some(id.clone());
+        self.agent_transcript.update(cx, |transcript, _| transcript.begin(Some(thread_id.clone())));
+        self.agents_changed(cx);
+        self.send(Command::OpenAgent { thread_id, agent_id: id });
+        self.open_tab(PanelTab::Agents);
+    }
+
+    /// Goes back to the list of agents.
+    pub fn show_agents(&mut self, cx: &mut Context<Self>) {
+        if self.side_panel.shown_agent.take().is_none() {
+            return;
+        }
+        let thread_id = self.agent_transcript.read(cx).thread_id.clone();
+        if let Some(thread_id) = thread_id {
+            self.send(Command::CloseAgent { thread_id });
+        }
+        self.agent_transcript.update(cx, |transcript, _| transcript.begin(None));
+    }
+
+    /// The shown agent's transcript says that it works for as long as it does.
+    pub fn agents_changed(&mut self, cx: &mut Context<Self>) {
+        use crate::models::AgentViewExt;
+        let Some(agent) = self.agents.iter().find(|agent| Some(&agent.id) == self.side_panel.shown_agent.as_ref())
+        else {
+            return;
+        };
+        let activity = crate::models::Activity {
+            running: agent.working(),
+            started_at: Some(agent.started_at),
+            ..Default::default()
+        };
+        self.agent_transcript.update(cx, |transcript, _| {
+            if transcript.activity != activity {
+                transcript.set_activity(activity);
+            }
+        });
+    }
+
+    // Diff
+
+    /// What the diff tab shows: what was chosen, or the turn's work as far as it is known.
+    pub fn diff_scope(&self, target: &PanelTarget) -> DiffScope {
+        if let Some(chosen) = self.panel_tabs().scope {
+            match &chosen {
+                DiffScope::Turn { item_id } if !self.side_panel.turns.iter().any(|turn| &turn.id == item_id) => {}
+                _ => return chosen,
+            }
+        }
+        if target.worktree { DiffScope::Branch } else { DiffScope::Uncommitted }
+    }
+
+    pub fn choose_diff_scope(&mut self, scope: DiffScope) {
+        self.change_tabs(|tabs| tabs.scope = Some(scope));
+    }
+
+    /// Opens the diff tab on `scope`, with the file at `path` in view.
+    pub fn show_diff(&mut self, scope: Option<DiffScope>, revealing: Option<String>) {
+        if let Some(scope) = scope {
+            self.choose_diff_scope(scope);
+        }
+        if let Some(path) = revealing {
+            let count = self.side_panel.reveal.as_ref().map_or(0, |reveal| reveal.1) + 1;
+            self.side_panel.reveal = Some((path, count));
+        }
+        self.open_tab(PanelTab::Diff);
+    }
+
+    /// Asks the server for the diff. What is shown stays until the answer is there, unless it
+    /// is of another folder or scope.
+    pub fn load_diff(&mut self, target: &PanelTarget, scope: DiffScope) {
+        self.side_panel.look_into(target);
+        if self.side_panel.shown_scope.as_ref() != Some(&scope) {
+            self.side_panel.shown_scope = Some(scope.clone());
+            self.side_panel.diff = Loaded::Loading;
+            self.side_panel.collapsed.clear();
+        }
+        let (project_id, thread_id) = target_request(target);
+        let id = format!("{}/{scope:?}", target.key);
+        let fresh = self.side_panel.diff.value().is_none_or(|document| document.id != id);
+        let target = target.clone();
+        let command =
+            Command::Diff { server_id: target.server_id.clone(), project_id, thread_id, scope: scope.clone() };
+        let read_id = id.clone();
+        self.side_panel.diff_request = self.ask_read(
+            command,
+            move |value| CodeDocument::from_diff(value, read_id),
+            move |store, result: Result<CodeDocument, String>, _| {
+                if store.side_panel.shown.as_ref() != Some(&target)
+                    || store.side_panel.shown_scope.as_ref() != Some(&scope)
+                {
+                    return;
+                }
+                match result {
+                    Ok(document) => {
+                        if fresh {
+                            store.side_panel.collapsed = document
+                                .files
+                                .iter()
+                                .filter(|file| file.lines.len() > OPEN_UP_TO_LINES)
+                                .map(|file| file.path.clone())
+                                .collect();
+                        }
+                        store.side_panel.diff = Loaded::Ready(document);
+                    }
+                    Err(error) => store.side_panel.diff = Loaded::Failed(error),
+                }
+            },
+        );
+    }
+
+    pub fn toggle_collapsed(&mut self, path: &str) {
+        if !self.side_panel.collapsed.remove(path) {
+            self.side_panel.collapsed.insert(path.to_string());
+        }
+    }
+
+    pub fn set_all_collapsed(&mut self, closed: bool) {
+        self.side_panel.collapsed = if closed {
+            self.side_panel
+                .diff
+                .value()
+                .map(|document| document.files.iter().map(|file| file.path.clone()).collect())
+                .unwrap_or_default()
+        } else {
+            HashSet::new()
+        };
+    }
+
+    // Files
+
+    /// Reads the folders that have been looked into again, the folder itself first.
+    pub fn load_files(&mut self, target: &PanelTarget) {
+        self.side_panel.look_into(target);
+        let mut folders: Vec<String> = self.side_panel.listings.keys().cloned().collect();
+        if !folders.iter().any(String::is_empty) {
+            folders.push(String::new());
+        }
+        folders.sort();
+        for folder in folders {
+            self.list_files_in(folder, target);
+        }
+    }
+
+    pub fn toggle_folder(&mut self, path: &str) {
+        if self.side_panel.open_folders.remove(path) {
+            return;
+        }
+        self.side_panel.open_folders.insert(path.to_string());
+        if self.side_panel.listings.contains_key(path) {
+            return;
+        }
+        let Some(shown) = self.side_panel.shown.clone() else { return };
+        self.list_files_in(path.to_string(), &shown);
+    }
+
+    fn list_files_in(&mut self, folder: String, target: &PanelTarget) {
+        let (project_id, thread_id) = target_request(target);
+        let request = Request::ListFiles { project_id, thread_id, path: folder.clone() };
+        let target = target.clone();
+        self.request_then(&target.server_id.clone(), request, move |store, result, _| {
+            if store.side_panel.shown.as_ref() != Some(&target) {
+                return;
+            }
+            match result {
+                Ok(answer) => {
+                    let entries: Vec<FileEntry> = serde_json::from_value(answer["entries"].clone()).unwrap_or_default();
+                    if store.side_panel.listings.get(&folder) != Some(&entries) {
+                        store.side_panel.listings.insert(folder.clone(), entries);
+                    }
+                    if folder.is_empty() {
+                        store.side_panel.files_error = None;
+                    }
+                }
+                Err(error) => {
+                    // A folder that has gone closes; only the folder itself says what went wrong.
+                    store.side_panel.listings.remove(&folder);
+                    store.side_panel.open_folders.remove(&folder);
+                    if folder.is_empty() {
+                        store.side_panel.files_error = Some(error);
+                    }
+                }
+            }
+        });
+    }
+
+    /// Asks the server for the file. What is shown of it stays until the answer is there.
+    pub fn load_file(&mut self, path: &str, target: &PanelTarget) {
+        self.side_panel.look_into(target);
+        self.side_panel.contents.entry(path.to_string()).or_insert(Loaded::Loading);
+        let (project_id, thread_id) = target_request(target);
+        let id = format!("{}/{path}", target.key);
+        let command =
+            Command::File { server_id: target.server_id.clone(), project_id, thread_id, path: path.to_string() };
+        let (read_path, answered_path) = (path.to_string(), path.to_string());
+        let target = target.clone();
+        let request = self.ask_read(
+            command,
+            move |value| read_file(value, &read_path, id),
+            move |store, result: Result<FileContent, String>, _| {
+                if store.side_panel.shown.as_ref() != Some(&target) {
+                    return;
+                }
+                let loaded = match result {
+                    Ok(content) => Loaded::Ready(content),
+                    Err(error) => Loaded::Failed(error),
+                };
+                store.side_panel.contents.insert(answered_path, loaded);
+            },
+        );
+        self.side_panel.file_requests.retain(|_, requested| requested != path);
+        self.side_panel.file_requests.insert(request, path.to_string());
+    }
+
+    /// The highlighting of what a request answered with has arrived.
+    pub fn colour_code(&mut self, request: u64, file: usize, lines: Vec<Vec<u32>>) {
+        let panel = &mut self.side_panel;
+        let document = if request == panel.diff_request {
+            match &mut panel.diff {
+                Loaded::Ready(document) => Some(document),
+                _ => None,
+            }
+        } else if let Some(path) = panel.file_requests.get(&request) {
+            match panel.contents.get_mut(path) {
+                Some(Loaded::Ready(FileContent::Text(document, _))) => Some(document),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let Some(document) = document else { return };
+        let Some(code) = document.files.get_mut(file) else { return };
+        if code.lines.len() != lines.len() {
+            return;
+        }
+        code.spans = lines;
+    }
+}
+
+/// The symbol a file is shown with, by what its name ends in.
+pub fn file_symbol(path: &str) -> &'static str {
+    let extension =
+        Path::new(path).extension().and_then(|extension| extension.to_str()).unwrap_or_default().to_lowercase();
+    match extension.as_str() {
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "heic" | "bmp" | "tiff" | "ico" | "svg" => "photo",
+        "md" | "markdown" | "txt" | "rst" => "doc.text",
+        "json" | "yaml" | "yml" | "toml" | "xml" | "plist" | "lock" => "curlybraces",
+        "sh" | "bash" | "zsh" | "fish" => "terminal",
+        "" => "doc",
+        _ => "chevron.left.forwardslash.chevron.right",
+    }
+}
+
+impl PanelTab {
+    pub fn symbol(&self) -> &'static str {
+        match self {
+            PanelTab::Diff => "plusminus",
+            PanelTab::Files => "folder",
+            PanelTab::Agents => "person.2",
+            PanelTab::File(path) => file_symbol(path),
+        }
+    }
+}
