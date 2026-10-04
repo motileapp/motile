@@ -77,6 +77,7 @@ struct ComposerView: View {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
                 .strokeBorder(store.dropTargeted ? Color.themePrimary : Color.themeStrongBorder, lineWidth: store.dropTargeted ? 2 : 1)
         )
+        .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
     }
 
     static let radius: CGFloat = 22
@@ -400,5 +401,22 @@ struct ComposerSendButtons: View {
                 .accessibilityLabel("Send")
             }
         }
+    }
+}
+
+/// Where the composer is, for the transcript behind it.
+struct ComposerPlace: PreferenceKey {
+    struct Value {
+        /// The composer with the room around it, which the rows end above.
+        var room: Anchor<CGRect>?
+        var box: Anchor<CGRect>?
+    }
+
+    static var defaultValue: Value { Value() }
+
+    static func reduce(value: inout Value, nextValue: () -> Value) {
+        let next = nextValue()
+        value.room = next.room ?? value.room
+        value.box = next.box ?? value.box
     }
 }

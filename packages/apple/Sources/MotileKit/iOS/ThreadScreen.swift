@@ -9,10 +9,6 @@ struct ThreadScreen: View {
     /// The sidebar is under the thread, so the top bar has the button that shows it.
     var overSidebar = true
     @State private var composerHeight: CGFloat = 120
-    /// Where the composer starts and the transcript ends, on the screen. The transcript goes on
-    /// under the composer to the screen's edge, or to the keyboard.
-    @State private var composerTop: CGFloat = 0
-    @State private var transcriptBottom: CGFloat = 0
 
     private static let composerBottomGap: CGFloat = 8
 
@@ -25,16 +21,6 @@ struct ThreadScreen: View {
         ZStack(alignment: .bottom) {
             if isStart {
                 start
-            } else {
-                GeometryReader { proxy in
-                    TranscriptRepresentable(store: store, topInset: proxy.safeAreaInsets.top, bottomInset: max(0, transcriptBottom - composerTop), bottomGap: max(0, transcriptBottom - composerTop - composerHeight) + Self.composerBottomGap)
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.frame(in: .global).maxY
-                        } action: { bottom in
-                            transcriptBottom = bottom
-                        }
-                        .ignoresSafeArea(.container, edges: [.top, .bottom])
-                }
             }
             if !isStart || !store.projects.isEmpty {
                 ComposerView()
@@ -42,15 +28,16 @@ struct ThreadScreen: View {
                     .padding(.top, TranscriptView.composerGap)
                     .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
-                    .onGeometryChange(for: CGRect.self) { proxy in
-                        proxy.frame(in: .global)
-                    } action: { frame in
-                        composerHeight = frame.height
-                        composerTop = frame.minY
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        composerHeight = height
                     }
+                    .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .transcriptBehind(of: store, shown: !isStart, under: .vertical)
         .background(Color.themeBackground.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
