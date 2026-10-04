@@ -14,7 +14,6 @@ struct GitButton: View {
     private static let radius: CGFloat = 7
     /// What leaves the room under the button that the composer's menus leave over theirs.
     private static let menuGap: CGFloat = 16
-    private static let stateColor = Color.purple
     @State private var anchor = MenuAnchorView()
     #endif
 
@@ -33,7 +32,6 @@ struct GitButton: View {
     private var content: some View {
         let stage = store.gitStages[project.id]
         let quick = control.quick
-        let runs = quick.action != nil || quick.url != nil
         return HStack(spacing: 0) {
             Button {
                 store.runQuickGit(in: project)
@@ -47,13 +45,12 @@ struct GitButton: View {
                     } else {
                         Image(systemName: GitSymbol.name(for: quick.action))
                             .font(.ui(size: 12, weight: .medium))
-                            .foregroundStyle(quick.state != nil ? Self.stateColor : runs ? Color.themeText : Color.themeTertiary)
                     }
-                    label(of: quick, at: stage)
+                    Text(stage?.label ?? quick.title)
                         .font(.ui(size: 12, weight: .medium))
                         .lineLimit(1)
                 }
-                .foregroundStyle(runs || stage != nil ? Color.themeText : Color.themeTertiary)
+                .foregroundStyle(color(of: quick, at: stage))
                 .padding(.horizontal, 9)
                 .frame(height: Self.height)
                 .contentShape(Rectangle())
@@ -74,10 +71,11 @@ struct GitButton: View {
         .padding(.horizontal, 6)
     }
 
-    private func label(of quick: GitQuick, at stage: GitStage?) -> Text {
-        if let stage { return Text(stage.label) }
-        guard let state = quick.state else { return Text(quick.label) }
-        return Text("\(Text(state).foregroundStyle(Self.stateColor)) \(quick.label)")
+    private func color(of quick: GitQuick, at stage: GitStage?) -> Color {
+        if stage != nil { return .themeText }
+        if quick.state != nil { return .themeMerged }
+        guard quick.action != nil || quick.url != nil else { return .themeTertiary }
+        return .themeText
     }
 
     private var chevron: some View {

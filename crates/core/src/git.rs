@@ -17,7 +17,7 @@ pub struct Control {
 #[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct Quick {
     pub label: String,
-    /// Said before the label, in the symbol's color: "Merged".
+    /// Said before the label, and colors the button: "Merged".
     pub state: Option<String>,
     pub action: Option<GitAction>,
     pub url: Option<String>,
