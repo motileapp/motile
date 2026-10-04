@@ -43,23 +43,19 @@ struct CommandPanel: View {
 
     #if os(macOS)
     private func panel(_ sections: [PanelSection], rows: Int) -> some View {
-        ZStack(alignment: .top) {
-            Color.black.opacity(0.32)
-                .ignoresSafeArea()
-                .onTapGesture { store.closePanel() }
-            VStack(spacing: 0) {
-                header
-                ThemeDivider()
-                results(sections, rows: rows)
-                ThemeDivider()
-                hints
-            }
-            .frame(width: 620)
-            .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1))
-            .shadow(color: .black.opacity(0.3), radius: 30, y: 14)
-            .padding(.top, 70)
+        VStack(spacing: 0) {
+            header
+            ThemeDivider()
+            results(sections, rows: rows)
+            ThemeDivider()
+            hints
         }
+        .frame(width: 620)
+        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 30, y: 14)
+        .padding(.top, 70)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
             DispatchQueue.main.async { searching = true }
             keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
