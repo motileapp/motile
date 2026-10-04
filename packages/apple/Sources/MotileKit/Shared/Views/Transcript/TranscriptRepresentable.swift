@@ -77,8 +77,9 @@ struct TranscriptRepresentable {
 
 extension View {
     /// Puts the open thread's transcript behind the view, which holds the composer, and under
-    /// the safe area of `edges`. The transcript leaves room for the composer and fades out from
-    /// the middle of its box down to its own bottom, wherever the two are.
+    /// the safe area of `edges`, the keyboard too: it lifts the composer and leaves the
+    /// transcript as tall as it was. The transcript leaves room for the composer and fades out
+    /// from the middle of its box down to its own bottom, wherever the two are.
     func transcriptBehind(of store: AppStore, shown: Bool, under edges: Edge.Set) -> some View {
         backgroundPreferenceValue(ComposerPlace.self) { place in
             if shown {
@@ -91,7 +92,7 @@ extension View {
                             bottomFade: place.box.map { proxy.size.height - proxy[$0].midY } ?? 0
                         )
                     }
-                    .ignoresSafeArea(.container, edges: edges)
+                    .ignoresSafeArea(.all, edges: edges)
                 }
             }
         }

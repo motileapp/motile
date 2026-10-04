@@ -462,6 +462,8 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.keyboardDismissMode = .interactive
         scrollView.delegate = self
+        // Sized with the view at once, so the transcript knows how much of it shows when it is laid out.
+        scrollView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(scrollView)
         scrollView.addSubview(document)
         // A tap on the transcript puts the keyboard away at once, whatever else the tap does.
@@ -480,12 +482,6 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard scrollView.frame != bounds else { return }
-        scrollView.frame = bounds
-    }
 
     /// Fades the rows out at the viewport's edges. The scroll view's own layer moves with what
     /// it scrolls, so the mask is on the view around it.
