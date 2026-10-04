@@ -111,6 +111,12 @@ enum DemoDriver {
         case "top":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
             (first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView)?.setContentOffset(.zero, animated: false)
+        case "flash":
+            let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+            let scroll = first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView
+            if rest == "end", let scroll { scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false) }
+            scroll?.flashScrollIndicators()
+            print("FLASH", scroll?.verticalScrollIndicatorInsets as Any, scroll?.safeAreaInsets as Any, scroll?.automaticallyAdjustsScrollIndicatorInsets as Any)
         case "focus":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
             first(ComposerUITextView.self, in: window)?.becomeFirstResponder()
