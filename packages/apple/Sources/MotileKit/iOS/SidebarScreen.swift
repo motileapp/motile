@@ -26,9 +26,6 @@ struct SidebarScreen: View {
         let selection = store.selection
         VStack(spacing: 0) {
             header
-            SearchField(text: $search)
-                .padding(.horizontal, sidebarRowInset + 2)
-                .padding(.bottom, 8)
             ScrollView {
                 LazyVStack(spacing: 0) {
                     DraftRows(search: search, open: open)
@@ -106,7 +103,7 @@ struct SidebarScreen: View {
             Button {
                 store.openPanel(.commands)
             } label: {
-                Image(systemName: "magnifyingglass")
+                Image(systemName: "command")
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(Color.themeText)
                     .frame(width: 42, height: 42)
@@ -164,11 +161,12 @@ struct SidebarScreen: View {
         }
     }
 
-    /// The servers and how the app reaches them, the account, and the way to a new thread.
+    /// The servers and how the app reaches them, and under them the account, the search and
+    /// the way to a new thread.
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(store.servers) { ServerLine(server: $0) }
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Menu {
                     Section(store.account.email) {
                         Button {
@@ -202,25 +200,24 @@ struct SidebarScreen: View {
                 .buttonStyle(.plain)
                 .glassButton(in: Circle())
                 .accessibilityLabel("Account")
-                Spacer()
+                SearchField(text: $search, bare: true)
+                    .padding(.horizontal, 6)
+                    .frame(height: 46)
+                    .glassButton(in: Capsule())
                 Button {
                     showThread()
                     store.newThread()
                 } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .semibold))
-                        Text("New thread")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .foregroundStyle(Color.themeBackground)
-                    .padding(.horizontal, 20)
-                    .frame(height: 46)
-                    .background(Color.themeText, in: Capsule())
-                    .contentShape(Capsule())
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Color.themeText)
+                        .frame(width: 46, height: 46)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .glassButton(in: Circle())
                 .disabled(store.projects.isEmpty)
+                .accessibilityLabel("New thread")
             }
             .padding(.top, 6)
         }
