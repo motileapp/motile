@@ -206,6 +206,12 @@ Mac app.
   ad space.
 - When a deploy changes required env vars, deploy the code first and change the variables
   after. Unbind restarts the running pod on every variable change.
+- Do not slow the machine to a crawl. Other sessions work on it at the same time. Before you
+  start a dev app, a simulator or a big build, look at what already runs and how much memory is
+  free (`memory_pressure`, `xcrun simctl list devices booted`, `pgrep -fl build/dev`). If there
+  is headroom, go ahead. If not, wait for it instead of adding to the pile. Use one simulator at
+  a time, and when you are done, stop what you started: `scripts/dev-app.sh --stop`, and
+  `xcrun simctl shutdown` for the simulator.
 - After you make code changes, run the checks below and fix what they raise.
 
 ## Development
@@ -255,8 +261,8 @@ To see a UI change, use the dev app. A change to a view both apps share is looke
 
 Both are signed in as `demo@motile.app` on an auth server with the dev login, never a real
 account. Their server, `studio`, runs `scripts/fake-agent` and starts with a project and three
-finished threads. All of it lives in `apps/macos/build/dev` and keeps running between runs;
-its ports are in `build/dev/ports`. On the Mac, type with `osascript` (System Events
+finished threads. All of it lives in `apps/macos/build/dev` and keeps running until you stop it,
+which you do when your task is done; its ports are in `build/dev/ports`. On the Mac, type with `osascript` (System Events
 `keystroke`, which needs Accessibility; pictures need Screen Recording) and address the app by
 the pid in `build/dev/app.pid`. Use the demo (`scripts/ci-demo.sh`) only for the stall numbers.
 
