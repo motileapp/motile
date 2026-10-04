@@ -285,7 +285,7 @@ enum GitStage: String {
 
 /// What a git action did, or why it couldn't, shown under the button until it is dismissed.
 struct GitNotice: Equatable {
-    let projectID: String
+    let checkoutID: String
     let title: String
     var description: String?
     var failed = false
@@ -377,6 +377,9 @@ struct Project: Equatable, Identifiable {
         iconPath = json.optionalString("icon_path")
         createdAt = json.double("created_at")
     }
+
+    /// Names the folder git works in for it: its worktree, or the project's folder.
+    var checkoutID: String { "\(id):\(worktree?.path ?? path)" }
 
     /// The project as the thread works in it: with the branch and the git state of its worktree,
     /// when it has one.

@@ -265,9 +265,10 @@ pub enum Event {
         received: u64,
         total: Option<u64>,
     },
-    /// A stage of a project's `git_run` has started.
+    /// A stage of a `git_run` has started, in the project's folder or in the worktree of the thread.
     GitProgress {
         project_id: String,
+        thread_id: Option<String>,
         stage: GitStage,
     },
     /// How much of an image or a video has arrived from its server.

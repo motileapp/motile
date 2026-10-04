@@ -44,7 +44,7 @@ struct ThreadScreen: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar { bar }
         .overlay(alignment: .topTrailing) {
-            if let notice = store.gitNotice, notice.projectID == store.gitProject?.id {
+            if let notice = store.gitNotice, notice.checkoutID == store.gitProject?.checkoutID {
                 GitNoticeView(notice: notice)
                     .padding(.top, 6)
                     .padding(.horizontal, 14)

@@ -30,7 +30,7 @@ struct GitButton: View {
 
     #if os(macOS)
     private var content: some View {
-        let stage = store.gitStages[project.id]
+        let stage = store.gitStages[project.checkoutID]
         let quick = control.quick
         return HStack(spacing: 0) {
             Button {
@@ -97,7 +97,7 @@ struct GitButton: View {
         guard let view = anchor.view else { return }
         let menu = NSMenu()
         menu.autoenablesItems = false
-        let running = store.gitStages[project.id] != nil
+        let running = store.gitStages[project.checkoutID] != nil
         for item in control.menu {
             let entry = ActionMenuItem(title: item.label) { store.chooseGit(item, in: project) }
             entry.image = NSImage(systemSymbolName: GitSymbol.name(for: item.action), accessibilityDescription: nil)
@@ -118,7 +118,7 @@ struct GitButton: View {
     /// The menu of every action, under the one the repository calls for. One that can't run now
     /// is greyed, with why under its name.
     private var content: some View {
-        let running = store.gitStages[project.id] != nil
+        let running = store.gitStages[project.checkoutID] != nil
         let quick = control.quick
         let showsQuick = (quick.action != nil || quick.url != nil) && !control.menu.contains { $0.label == quick.label }
         return Menu {
