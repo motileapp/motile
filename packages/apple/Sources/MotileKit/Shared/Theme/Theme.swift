@@ -21,17 +21,16 @@ enum Theme {
         #endif
     }
 
-    // Surfaces. The dark ones stay clear of gray level 16, where some monitors flicker.
-    static let background = dynamic(hex(0xfcfcfc), hex(0x19191a))
-    static let raised = dynamic(hex(0xffffff), hex(0x242426))
+    // Surfaces
+    static let background = dynamic(hex(0xf8f9fc), hex(0x08090d))
+    static let raised = dynamic(hex(0xffffff), hex(0x15171d))
     /// What the sidebar lies on where the thread is a card that slides off it.
-    static let drawerBackground = dynamic(hex(0xf0f0f2), hex(0x0e0e0f))
-    /// The composer lies on the window's surface, so in the dark it only lightens what is there.
-    static let composer = dynamic(hex(0xffffff), white(0.04))
-    static let bubble = dynamic(hex(0xf1f1f3), hex(0x2d2d30))
-    static let codeBackground = dynamic(hex(0xf6f6f7), hex(0x222224))
-    /// Over the blurred backdrop of the window: nearly opaque, so only a hint of it comes through.
-    static let glassTint = dynamic(hex(0xfcfcfc, alpha: 0.9), hex(0x18181a, alpha: 0.9))
+    static let drawerBackground = dynamic(hex(0xeceef3), hex(0x030407))
+    static let field = dynamic(hex(0xffffff), white(0.04))
+    static let bubble = dynamic(hex(0xeceef4), hex(0x1c1f27))
+    static let codeBackground = dynamic(hex(0xf1f3f8), hex(0x101218))
+    /// Over the glass of what floats on the transcript, so that text on it stays readable.
+    static let glassTint = dynamic(hex(0xffffff, alpha: 0.6), hex(0x15171d, alpha: 0.6))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
     static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
     static let border = dynamic(hex(0x000000, alpha: 0.09), white(0.09))
@@ -44,10 +43,10 @@ enum Theme {
     #endif
 
     // Text
-    static let text = dynamic(hex(0x27272a), hex(0xececee))
-    static let prose = dynamic(hex(0x3a3a40), hex(0xc2c2c7))
-    static let secondary = dynamic(hex(0x71717a), hex(0x9c9ca6))
-    static let tertiary = dynamic(hex(0xa1a1aa), hex(0x6c6c75))
+    static let text = dynamic(hex(0x22242b), hex(0xecedf1))
+    static let prose = dynamic(hex(0x383b45), hex(0xc1c4cd))
+    static let secondary = dynamic(hex(0x6b6f7c), hex(0x9a9eab))
+    static let tertiary = dynamic(hex(0x9a9eab), hex(0x646875))
 
     // Meaning
     static let primary = dynamic(hex(0x2a5bd7), hex(0x4f7cff))
@@ -114,7 +113,7 @@ extension Color {
     static let themeBackground = Color(platform: Theme.background)
     static let themeRaised = Color(platform: Theme.raised)
     static let themeDrawerBackground = Color(platform: Theme.drawerBackground)
-    static let themeComposer = Color(platform: Theme.composer)
+    static let themeField = Color(platform: Theme.field)
     static let themeBubble = Color(platform: Theme.bubble)
     static let themeGlassTint = Color(platform: Theme.glassTint)
     static let themeHover = Color(platform: Theme.hover)

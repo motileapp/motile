@@ -27,7 +27,7 @@ struct ThreadPane: View {
                 TranscriptRepresentable(store: store, bottomInset: composerHeight)
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
-                    .padding(.top, Self.composerGap)
+                    .padding(.top, TranscriptView.composerGap)
                     .padding(.bottom, 16)
                     .frame(maxWidth: .infinity)
                     .onGeometryChange(for: CGFloat.self) { proxy in
@@ -58,9 +58,6 @@ struct ThreadPane: View {
             }
         }
     }
-
-    /// The room above the composer, which the transcript fades out in.
-    static let composerGap = TranscriptView.composerGap
 
     /// The thread's project and name and its git button, drawn in the window's top bar over
     /// this pane.

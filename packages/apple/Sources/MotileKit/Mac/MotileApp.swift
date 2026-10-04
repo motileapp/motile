@@ -126,7 +126,7 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(GlassBackground())
+        .background(Color.themeBackground.ignoresSafeArea())
         .background(WindowReveal(shown: store.ready || store.errorMessage != nil))
         .toolbarBackground(.hidden, for: .windowToolbar)
         .modifier(HiddenWindowTitle())
@@ -345,6 +345,7 @@ private struct WindowReveal: NSViewRepresentable {
         }
 
         override func viewDidMoveToWindow() {
+            window?.backgroundColor = Theme.background
             window?.alphaValue = shown ? 1 : 0
         }
     }
