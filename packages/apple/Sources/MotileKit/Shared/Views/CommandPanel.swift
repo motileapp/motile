@@ -318,13 +318,15 @@ struct CommandPanel: View {
     private var projectItems: [PanelItem] {
         projects.enumerated().map { position, project in
             let server = store.server(project.serverID)?.name ?? ""
-            return PanelItem(
+            var item = PanelItem(
                 id: "project-\(project.id)",
                 title: project.name,
-                detail: server.isEmpty ? project.path : "\(server) · \(project.path)",
+                detail: "\(server) \(project.path)",
                 icon: .project(project),
                 shortcut: position < 9 && page == .projects && Platform.name == "macos" ? position + 1 : nil
             ) { store.startNewThread(in: project) }
+            item.detailParts = server.isEmpty ? [(.folder, project.path)] : [(.server, server), (.folder, project.path)]
+            return item
         }
     }
 
@@ -642,6 +644,8 @@ private struct PanelItem: Identifiable {
     let id: String
     let title: String
     let detail: String
+    /// Shown instead of `detail`, each part after its symbol.
+    var detailParts: [(symbol: Symbol, text: String)] = []
     let icon: Icon
     /// The digit that runs it with ⌘.
     var shortcut: Int?
@@ -698,7 +702,7 @@ private struct PanelRow: View {
         HStack(spacing: 12) {
             icon
                 .frame(width: 22, height: 22)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 if item.placeholderLines > 0 {
                     placeholderLines
                 } else {
@@ -706,7 +710,9 @@ private struct PanelRow: View {
                         .font(.ui(size: 14))
                         .lineLimit(1)
                         .frame(height: Self.titleHeight)
-                    if !item.detail.isEmpty {
+                    if !item.detailParts.isEmpty {
+                        detailParts
+                    } else if !item.detail.isEmpty {
                         Text(item.detail)
                             .font(.ui(size: 12))
                             .foregroundStyle(Color.themeSecondary)
@@ -730,6 +736,27 @@ private struct PanelRow: View {
         .animation(item.placeholderLines > 0 ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : nil, value: faded)
         .onAppear { faded = item.placeholderLines > 0 }
         .onChange(of: item.placeholderLines) { faded = item.placeholderLines > 0 }
+    }
+
+    private var detailParts: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(item.detailParts.enumerated()), id: \.offset) { position, part in
+                if position > 0 {
+                    Text("·")
+                }
+                HStack(spacing: 4) {
+                    Image(part.symbol, size: 11)
+                        .foregroundStyle(Color.themeTertiary)
+                    Text(part.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .layoutPriority(position == 0 ? 1 : 0)
+            }
+        }
+        .font(.ui(size: 12))
+        .foregroundStyle(Color.themeSecondary)
+        .frame(height: Self.detailHeight)
     }
 
     /// Bars where the text will be, each in the room its line takes.
