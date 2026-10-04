@@ -131,7 +131,7 @@ private struct FolderListStyle: ViewModifier {
         #if os(macOS)
         content.listStyle(.inset(alternatesRowBackgrounds: true))
         #else
-        content.listStyle(.plain)
+        content.listStyle(.plain).scrollContentBackground(.hidden)
         #endif
     }
 }

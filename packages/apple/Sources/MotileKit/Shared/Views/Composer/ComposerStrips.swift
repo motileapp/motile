@@ -314,7 +314,7 @@ struct BranchPicker: View {
         #else
         // A screen of the thread's settings, where the keyboard only comes when the field is tapped.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.themeBackground)
+        .background(Color.themeSheet)
         .navigationTitle(base == nil ? "Branch" : "Start from")
         .navigationBarTitleDisplayMode(.inline)
         #endif

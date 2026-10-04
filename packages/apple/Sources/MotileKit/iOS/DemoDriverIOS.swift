@@ -90,6 +90,7 @@ enum DemoDriver {
             case "add": store.addProject()
             case "settings": store.showsSettings = true
             case "server": store.showsAddServer = true
+            case "icon": store.iconProject = store.projects.first
             case "thread": store.showsThreadSettings = true
             case "commit":
                 guard let project = store.gitProject, let item = project.gitControl?.menu.first(where: { $0.action == "commit" }) else { return }
@@ -100,6 +101,7 @@ enum DemoDriver {
                 store.showsAddServer = false
                 store.showsThreadSettings = false
                 store.committingProject = nil
+                store.iconProject = nil
             }
         case "appearance":
             UserDefaults.standard.set(rest, forKey: "appearance")

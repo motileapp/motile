@@ -192,26 +192,31 @@ struct RootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.themeBackground.ignoresSafeArea())
         .sheet(item: sheet) { sheet in
-            switch sheet {
-            case .icon(let project):
-                if let server = store.server(project.serverID) {
-                    FolderPicker(server: server, iconFor: project)
+            Group {
+                switch sheet {
+                case .icon(let project):
+                    if let server = store.server(project.serverID) {
+                        FolderPicker(server: server, iconFor: project)
+                            .frame(maxHeight: .infinity, alignment: .top)
+                            .presentationDragIndicator(.visible)
+                    }
+                case .commit(let project):
+                    CommitSheet(project: project)
+                case .addServer:
+                    ConnectServerView(isFirst: false)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .presentationDragIndicator(.visible)
+                case .panel(let page):
+                    CommandPanel(start: page)
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                case .settings:
+                    SettingsScreen()
+                case .threadSettings:
+                    ThreadSettingsSheet()
                 }
-            case .commit(let project):
-                CommitSheet(project: project)
-            case .addServer:
-                ConnectServerView(isFirst: false)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .presentationDragIndicator(.visible)
-            case .panel(let page):
-                CommandPanel(start: page)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-            case .settings:
-                SettingsScreen()
-            case .threadSettings:
-                ThreadSettingsSheet()
             }
+            .presentationBackground(Color.themeSheet)
         }
         .fullScreenCover(isPresented: Binding(get: { store.viewing != nil }, set: { if !$0 { store.closeViewer() } })) {
             if let viewing = store.viewing {
@@ -258,7 +263,7 @@ private struct SettingsScreen: View {
     var body: some View {
         NavigationStack {
             SettingsView()
-                .background(Color.themeBackground)
+                .background(Color.themeSheet)
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
