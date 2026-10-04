@@ -4,12 +4,13 @@ import UIKit
 
 extension View {
     /// Lets a swipe to the right slide a sidebar row aside and show a round button behind it. A
-    /// short swipe leaves the button there to tap, a long one does what the button does.
+    /// short swipe leaves the button there to tap, a long one does what the button does. The row
+    /// leaves with a long swipe unless the button won't take it away.
     func rowSwipe(
-        _ symbol: String, _ label: String, tint: Color, size: CGFloat, enabled: Bool = true, isOpen: Binding<Bool>,
+        _ symbol: String, _ label: String, tint: Color, size: CGFloat, leaves: Bool = true, isOpen: Binding<Bool>,
         action: @escaping () -> Void
     ) -> some View {
-        modifier(RowSwipe(symbol: symbol, label: label, tint: tint, size: size, enabled: enabled, isOpen: isOpen, action: action))
+        modifier(RowSwipe(symbol: symbol, label: label, tint: tint, size: size, leaves: leaves, isOpen: isOpen, action: action))
     }
 }
 
@@ -18,7 +19,7 @@ private struct RowSwipe: ViewModifier {
     let label: String
     let tint: Color
     let size: CGFloat
-    let enabled: Bool
+    let leaves: Bool
     @Binding var isOpen: Bool
     let action: () -> Void
 
@@ -48,13 +49,13 @@ private struct RowSwipe: ViewModifier {
             .background(alignment: .leading) { button }
             .clipped()
             .onGeometryChange(for: Double.self) { $0.size.width } action: { width = $0 }
-            .gesture(RowPan(isOpen: offset > 0, enabled: enabled, changed: dragged, ended: released))
+            .gesture(RowPan(isOpen: offset > 0, changed: dragged, ended: released))
             .onChange(of: isOpen) { _, open in
                 guard !open, offsetAtStart == nil, offset > 0 else { return }
                 withAnimation(Self.settle) { offset = 0 }
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: armed) { _, armed in armed }
-            .accessibilityAction(named: label) { if enabled { action() } }
+            .accessibilityAction(named: label, action)
     }
 
     /// The button comes in as the row leaves, and past its place stretches after the row.
@@ -101,6 +102,10 @@ private struct RowSwipe: ViewModifier {
 
     /// The row leaves to the right, and then what the button does happens.
     private func commit() {
+        guard leaves else {
+            settle(open: false)
+            return action()
+        }
         withAnimation(.easeOut(duration: 0.18)) {
             offset = max(width, offset)
         } completion: {
@@ -114,7 +119,6 @@ private struct RowSwipe: ViewModifier {
 /// The finger that moves a row: only a swipe to the side, and from rest only one to the right.
 private struct RowPan: UIGestureRecognizerRepresentable {
     let isOpen: Bool
-    let enabled: Bool
     let changed: (Double) -> Void
     let ended: (Double, Double) -> Void
 
@@ -129,7 +133,6 @@ private struct RowPan: UIGestureRecognizerRepresentable {
 
     func updateUIGestureRecognizer(_ pan: UIPanGestureRecognizer, context: Context) {
         context.coordinator.isOpen = isOpen
-        pan.isEnabled = enabled
     }
 
     func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {

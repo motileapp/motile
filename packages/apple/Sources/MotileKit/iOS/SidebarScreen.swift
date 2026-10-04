@@ -15,6 +15,9 @@ struct SidebarScreen: View {
     @State private var search = ""
     /// The row a swipe has slid aside, by its id in the list.
     @State private var swiped: String?
+    /// Why a swipe couldn't mark a thread done: its agent is still at it.
+    @State private var busy = ""
+    @State private var showsBusy = false
 
     var body: some View {
         let active = store.activeThreads.filter { store.matches($0, search: search) }
@@ -29,8 +32,11 @@ struct SidebarScreen: View {
                     DraftRows(search: search, open: open)
                     ForEach(active) { thread in
                         ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 }, open: open)
-                            .rowSwipe("checkmark", "Mark Done", tint: .themeSuccess, size: 36, enabled: !thread.busy, isOpen: swipe(thread.id)) {
-                                store.setDone([thread.id], done: true, fromSidebar: true)
+                            .rowSwipe(
+                                "checkmark", "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
+                                leaves: !thread.busy, isOpen: swipe(thread.id)
+                            ) {
+                                markDone(thread)
                             }
                     }
                     if active.isEmpty {
@@ -58,6 +64,11 @@ struct SidebarScreen: View {
             footer
         }
         .animation(.easeOut(duration: 0.15), value: store.undo)
+        .alert(busy, isPresented: $showsBusy) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Stop it first, then mark it done.")
+        }
         .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Title", text: $newTitle)
             Button("Rename") {
@@ -230,6 +241,15 @@ struct SidebarScreen: View {
         guard underThread else { return }
         store.sidePanel.isOpen = false
         drawer.isOpen = false
+    }
+
+    private func markDone(_ thread: ThreadInfo) {
+        guard !thread.busy else {
+            busy = thread.running ? "Still working" : "Still monitoring"
+            showsBusy = true
+            return
+        }
+        store.setDone([thread.id], done: true, fromSidebar: true)
     }
 
     private func swipe(_ row: String) -> Binding<Bool> {
