@@ -14,6 +14,8 @@ struct ThreadScreen: View {
     @State private var composerTop: CGFloat = 0
     @State private var transcriptBottom: CGFloat = 0
 
+    private static let composerBottomGap: CGFloat = 8
+
     private var isStart: Bool {
         guard let draft = store.selectedDraft else { return false }
         return store.transcriptIsEmpty && !store.sendingDraftIDs.contains(draft.id)
@@ -25,7 +27,7 @@ struct ThreadScreen: View {
                 start
             } else {
                 GeometryReader { proxy in
-                    TranscriptRepresentable(store: store, topInset: proxy.safeAreaInsets.top, bottomInset: max(0, transcriptBottom - composerTop))
+                    TranscriptRepresentable(store: store, topInset: proxy.safeAreaInsets.top, bottomInset: max(0, transcriptBottom - composerTop), bottomGap: max(0, transcriptBottom - composerTop - composerHeight) + Self.composerBottomGap)
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             proxy.frame(in: .global).maxY
                         } action: { bottom in
@@ -38,7 +40,7 @@ struct ThreadScreen: View {
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
                     .padding(.top, TranscriptView.composerGap)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
                     .onGeometryChange(for: CGRect.self) { proxy in
                         proxy.frame(in: .global)
