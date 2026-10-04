@@ -38,6 +38,7 @@ struct ThreadScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .transcriptBehind(of: store, shown: !isStart, under: .vertical)
+        .takingDroppedFiles()
         .background(Color.themeBackground.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)

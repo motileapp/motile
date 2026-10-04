@@ -108,6 +108,7 @@ enum DemoDriver {
             guard let approval = store.activity.approvals.first else { return }
             store.answer(approval, allow: rest == "allow")
         case "done": store.toggleDone()
+        case "drop": store.dropTargeted = rest == "on"
         case "top":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
             (first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView)?.setContentOffset(.zero, animated: false)

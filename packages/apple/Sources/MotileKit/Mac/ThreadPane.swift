@@ -35,6 +35,7 @@ struct ThreadPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .transcriptBehind(of: store, shown: !isStart, under: [])
+        .takingDroppedFiles()
         .overlay(alignment: .topLeading) { topBar }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
         .sheet(item: $store.committingProject) { project in

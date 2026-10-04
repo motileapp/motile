@@ -103,6 +103,8 @@ final class AppStore {
     var iconProject: Project?
     /// Files are being dragged over the window.
     var dropTargeted = false
+    /// Files are being dragged over the composer's text, which takes drops itself.
+    var composerDropTargeted = false
     /// The branch picker is open, on the branches it was opened with.
     var showsBranches = false
     private(set) var listedBranches: Result<[Branch], CoreBridge.CoreError> = .success([])

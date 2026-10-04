@@ -176,7 +176,6 @@ struct MainView: View {
     @AppStorage("panel.width") private var panelWidth = 460.0
 
     var body: some View {
-        @Bindable var store = store
         GeometryReader { window in
             let widest = min(Self.sidebarWidths.upperBound, Double(window.size.width) - 1 - Self.threadMinWidth)
             let widths = Self.sidebarWidths.lowerBound...max(Self.sidebarWidths.lowerBound, widest)
@@ -249,10 +248,6 @@ struct MainView: View {
                 }
                 .withoutSystemGlass()
             }
-        }
-        .onDrop(of: [UTType.fileURL] + ImageFiles.attachable, isTargeted: $store.dropTargeted) { providers in
-            store.attach(dropped: providers)
-            return true
         }
     }
 
