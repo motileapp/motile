@@ -6,7 +6,6 @@ import SwiftUI
 /// of a new one.
 struct ThreadPane: View {
     @Environment(AppStore.self) private var store
-    @State private var composerHeight: CGFloat = 120
     /// How far the title starts from the pane's left edge: past the window's buttons when the
     /// sidebar is hidden.
     var titleInset: CGFloat = 20
@@ -26,20 +25,16 @@ struct ThreadPane: View {
             if isStart {
                 start
             } else {
-                TranscriptRepresentable(store: store, bottomInset: composerHeight, bottomGap: Self.composerBottomGap)
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
                     .padding(.top, TranscriptView.composerGap)
                     .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { height in
-                        composerHeight = height
-                    }
+                    .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .transcriptBehind(of: store, shown: !isStart, under: [])
         .overlay(alignment: .topLeading) { topBar }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
         .sheet(item: $store.committingProject) { project in

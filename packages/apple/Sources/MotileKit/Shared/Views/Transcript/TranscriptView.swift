@@ -46,15 +46,14 @@ final class TranscriptView: FlippedView, RowOwner {
         }
     }
 
-    /// Room under what floats over the transcript's end. The rows fade out before it.
-    var bottomGap: CGFloat = 0 {
+    /// How far up from the view's bottom the rows fade out: nothing at the bottom, all there
+    /// from this height on.
+    var bottomFade: CGFloat = 0 {
         didSet {
-            guard bottomGap != oldValue else { return }
+            guard bottomFade != oldValue else { return }
             layoutFade()
         }
     }
-
-    private static let bottomFade: CGFloat = 48
 
     private static let jumpButtonGap: CGFloat = 12
 
@@ -93,7 +92,7 @@ final class TranscriptView: FlippedView, RowOwner {
     private var document: FlippedView { scroller.document }
     private let working = WorkingView()
     private let jumpButton = SurfaceView()
-    /// Fades the rows out under the top bar and towards the gap under the composer. The jump
+    /// Fades the rows out under the top bar and from the composer's middle down. The jump
     /// button is not under it.
     private let fade = CAGradientLayer()
 
@@ -242,8 +241,7 @@ final class TranscriptView: FlippedView, RowOwner {
     private func layoutFade() {
         guard bounds.height > 0 else { return }
         scroller.setIndicatorInsets(top: topInset, bottom: bottomInset)
-        let end = bounds.height - bottomGap
-        let stops = [topInset, topPadding, end - min(Self.bottomFade, max(0, bottomInset - bottomGap)), end]
+        let stops = [topInset, topPadding, max(topPadding, bounds.height - bottomFade), bounds.height]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fade.frame = bounds

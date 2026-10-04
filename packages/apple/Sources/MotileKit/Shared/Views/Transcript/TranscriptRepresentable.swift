@@ -9,8 +9,8 @@ struct TranscriptRepresentable {
     var topInset: CGFloat = 0
     /// The height of what floats over the end of the transcript.
     let bottomInset: CGFloat
-    /// The room under that, which the transcript fades out before.
-    var bottomGap: CGFloat = 0
+    /// How far up from its bottom the transcript fades out.
+    var bottomFade: CGFloat = 0
 
     private var model: TranscriptModel { ofAgent ? store.agentTranscript : store.transcript }
 
@@ -19,7 +19,7 @@ struct TranscriptRepresentable {
         let (store, model) = (store, model)
         view.topInset = topInset
         view.bottomInset = bottomInset
-        view.bottomGap = bottomGap
+        view.bottomFade = bottomFade
         view.measuresAhead = !ofAgent
         view.onNeedHighlight = { rowIDs in
             guard let threadID = model.threadID else { return }
@@ -65,13 +65,36 @@ struct TranscriptRepresentable {
     private func update(_ view: TranscriptView) {
         view.topInset = topInset
         view.bottomInset = bottomInset
-        view.bottomGap = bottomGap
+        view.bottomFade = bottomFade
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
         var model: TranscriptModel?
+    }
+}
+
+extension View {
+    /// Puts the open thread's transcript behind the view, which holds the composer, and under
+    /// the safe area of `edges`. The transcript leaves room for the composer and fades out from
+    /// the middle of its box down to its own bottom, wherever the two are.
+    func transcriptBehind(of store: AppStore, shown: Bool, under edges: Edge.Set) -> some View {
+        backgroundPreferenceValue(ComposerPlace.self) { place in
+            if shown {
+                GeometryReader { safe in
+                    GeometryReader { proxy in
+                        TranscriptRepresentable(
+                            store: store,
+                            topInset: edges.contains(.top) ? safe.safeAreaInsets.top : 0,
+                            bottomInset: place.room.map { proxy.size.height - proxy[$0].minY } ?? 0,
+                            bottomFade: place.box.map { proxy.size.height - proxy[$0].midY } ?? 0
+                        )
+                    }
+                    .ignoresSafeArea(.container, edges: edges)
+                }
+            }
+        }
     }
 }
 
