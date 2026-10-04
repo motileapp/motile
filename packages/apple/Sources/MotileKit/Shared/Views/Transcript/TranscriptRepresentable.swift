@@ -9,6 +9,8 @@ struct TranscriptRepresentable {
     var topInset: CGFloat = 0
     /// The height of what floats over the end of the transcript.
     let bottomInset: CGFloat
+    /// The room under that, which the transcript fades out before.
+    var bottomGap: CGFloat = 0
 
     private var model: TranscriptModel { ofAgent ? store.agentTranscript : store.transcript }
 
@@ -17,6 +19,7 @@ struct TranscriptRepresentable {
         let (store, model) = (store, model)
         view.topInset = topInset
         view.bottomInset = bottomInset
+        view.bottomGap = bottomGap
         view.measuresAhead = !ofAgent
         view.onNeedHighlight = { rowIDs in
             guard let threadID = model.threadID else { return }
@@ -59,6 +62,7 @@ struct TranscriptRepresentable {
     private func update(_ view: TranscriptView) {
         view.topInset = topInset
         view.bottomInset = bottomInset
+        view.bottomGap = bottomGap
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }

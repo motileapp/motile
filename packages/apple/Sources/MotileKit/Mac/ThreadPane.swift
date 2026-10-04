@@ -13,6 +13,8 @@ struct ThreadPane: View {
     /// The side panel is beside the pane, so the window's last button isn't over it.
     var besidePanel = false
 
+    private static let composerBottomGap: CGFloat = 16
+
     private var isStart: Bool {
         guard let draft = store.selectedDraft else { return false }
         return store.transcriptIsEmpty && !store.sendingDraftIDs.contains(draft.id)
@@ -24,11 +26,11 @@ struct ThreadPane: View {
             if isStart {
                 start
             } else {
-                TranscriptRepresentable(store: store, bottomInset: composerHeight)
+                TranscriptRepresentable(store: store, bottomInset: composerHeight, bottomGap: Self.composerBottomGap)
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
                     .padding(.top, TranscriptView.composerGap)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
                     .onGeometryChange(for: CGFloat.self) { proxy in
                         proxy.size.height
