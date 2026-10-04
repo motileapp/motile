@@ -41,8 +41,8 @@ enum Theme {
     #endif
 
     // Text
-    static let text = dynamic(hex(0x22242b), hex(0xecedf1))
-    static let prose = dynamic(hex(0x383b45), hex(0xb1b4be))
+    static let text = dynamic(hex(0x22242b), hex(0xdcdee4))
+    static let prose = dynamic(hex(0x383b45), hex(0xa8abb6))
     static let secondary = dynamic(hex(0x6b6f7c), hex(0x9a9eab))
     static let tertiary = dynamic(hex(0x9a9eab), hex(0x646875))
 
