@@ -124,11 +124,15 @@ struct PanelTabStrip: View {
         ScrollViewReader { strip in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 2) {
-                    ForEach(tabs.tabs) { tab in
-                        PanelTabChip(tab: tab, active: tab == tabs.active, closable: !tabs.isBlank)
+                    if !tabs.isBlank {
+                        ForEach(tabs.tabs) { tab in
+                            PanelTabChip(tab: tab, active: tab == tabs.active)
+                        }
                     }
-                    IconOnlyButton(symbol: .plus, help: "New tab", size: scaled(28), symbolSize: 12, faded: true) {
-                        store.sidePanel.openBlank()
+                    if store.panelUnavailable == nil {
+                        IconOnlyButton(symbol: .plus, help: "New tab", size: scaled(28), symbolSize: 12, faded: true) {
+                            store.sidePanel.openBlank()
+                        }
                     }
                 }
                 .padding(.horizontal, 8)
@@ -142,12 +146,35 @@ struct PanelTabStrip: View {
     }
 }
 
+/// The menu items that open and switch the panel's tabs, on the keys Safari and Chrome use.
+struct PanelTabCommands: View {
+    let store: AppStore
+
+    var body: some View {
+        let panel = store.sidePanel
+        let switchable = panel.isOpen && panel.tabs.tabs.count > 1
+        Button("New Tab") { panel.openBlank() }
+            .keyboardShortcut("t")
+            .disabled(store.panelUnavailable != nil)
+        Button("Show Next Tab") { panel.activate(offset: 1) }
+            .keyboardShortcut(.tab, modifiers: .control)
+            .disabled(!switchable)
+        Button("Show Previous Tab") { panel.activate(offset: -1) }
+            .keyboardShortcut(.tab, modifiers: [.control, .shift])
+            .disabled(!switchable)
+        Button("Show Next Tab") { panel.activate(offset: 1) }
+            .keyboardShortcut("]", modifiers: [.command, .shift])
+            .disabled(!switchable)
+        Button("Show Previous Tab") { panel.activate(offset: -1) }
+            .keyboardShortcut("[", modifiers: [.command, .shift])
+            .disabled(!switchable)
+    }
+}
+
 private struct PanelTabChip: View {
     @Environment(AppStore.self) private var store
     let tab: PanelTab
     let active: Bool
-    /// The blank tab a panel starts with has nothing to close.
-    let closable: Bool
     @State private var hovering = false
 
     private static let closeSize: CGFloat = Platform.scale > 1 ? 24 : 16
@@ -177,18 +204,15 @@ private struct PanelTabChip: View {
         .overlay(alignment: .trailing) {
             IconOnlyButton(symbol: .x, help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4, faded: true) { panel.close(tab) }
                 .padding(.trailing, Self.closeMargin)
-                .opacity(closable && (hovering || active) ? 1 : 0)
-                .allowsHitTesting(closable)
+                .opacity(hovering || active ? 1 : 0)
         }
         .padding(.vertical, -Self.reach)
         .onHover { hovering = $0 }
         .help(tab.path ?? tab.title)
         .contextMenu {
             Button("Close") { panel.close(tab) }
-                .disabled(!closable)
             Button("Close Others") { panel.closeOthers(tab) }
             Button("Close All") { panel.closeAll() }
-                .disabled(!closable)
             if let path = tab.path {
                 Divider()
                 Button("Copy Path") { Platform.copy(path) }

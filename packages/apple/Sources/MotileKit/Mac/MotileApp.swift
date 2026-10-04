@@ -49,6 +49,7 @@ struct MotileApp: App {
                 Button("Show Agents") { store.sidePanel.open(.agents) }
                     .keyboardShortcut("a", modifiers: [.command, .shift])
                     .disabled(store.panelUnavailable != nil)
+                PanelTabCommands(store: store)
                 Divider()
             }
             CommandGroup(replacing: .saveItem) {
