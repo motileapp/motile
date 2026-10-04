@@ -113,7 +113,7 @@ final class AppStore {
     private(set) var gitFiles: [ChangedFile] = []
     /// An action that pushes from the default branch, until the user says where it should happen.
     var pendingGit: PendingGit?
-    /// The stage a project's git action is at, by project.
+    /// The stage a git action is at, by the checkout it runs in.
     private(set) var gitStages: [String: GitStage] = [:]
     private(set) var gitNotice: GitNotice?
     private(set) var panel: PanelPage?
@@ -280,10 +280,13 @@ final class AppStore {
                 self?.serverUpdates[serverID]?.fraction = total.flatMap { $0 > 0 ? received / $0 : nil }
             }
         case "git_progress":
-            let (projectID, stage) = (event.string("project_id"), GitStage(rawValue: event.string("stage")))
+            let (projectID, threadID) = (event.string("project_id"), event.optionalString("thread_id"))
+            let stage = GitStage(rawValue: event.string("stage"))
             return { [weak self] in
-                guard self?.gitStages[projectID] != nil else { return }
-                self?.gitStages[projectID] = stage
+                guard let self, let project = self.project(projectID) else { return }
+                let checkoutID = (threadID.flatMap { self.threads[$0] }.map { project.seen(from: $0) } ?? project).checkoutID
+                guard self.gitStages[checkoutID] != nil else { return }
+                self.gitStages[checkoutID] = stage
             }
         case "upload_progress":
             let (key, sent, size) = (event.string("key"), event.double("sent"), event.double("size"))
@@ -977,13 +980,13 @@ final class AppStore {
 
     /// What a click on the git button does: the one action the repository calls for, at once.
     func runQuickGit(in project: Project) {
-        guard let quick = project.gitControl?.quick, gitStages[project.id] == nil else { return }
+        guard let quick = project.gitControl?.quick, gitStages[project.checkoutID] == nil else { return }
         if let url = quick.url.flatMap({ URL(string: $0) }) {
             Platform.open(url)
             return
         }
         guard let action = quick.action else {
-            show(GitNotice(projectID: project.id, title: quick.hint ?? quick.label))
+            show(GitNotice(checkoutID: project.checkoutID, title: quick.hint ?? quick.label))
             return
         }
         startGit(action, in: project, confirm: quick.confirm)
@@ -991,7 +994,7 @@ final class AppStore {
 
     /// What a pick from the menu does: a commit opens its sheet, the others happen at once.
     func chooseGit(_ item: GitMenuItem, in project: Project) {
-        guard item.reason == nil, gitStages[project.id] == nil else { return }
+        guard item.reason == nil, gitStages[project.checkoutID] == nil else { return }
         guard item.action == "commit" else { return startGit(item.action, in: project, confirm: item.confirm) }
         // A sheet takes its size from what it opens with, so the files come first.
         readGit { [weak self] files in
@@ -1014,8 +1017,9 @@ final class AppStore {
     /// Has the project's server carry the action out. It writes the commit message when there
     /// is none, and the pull request. What it did, or what git refused, shows under the button.
     func runGit(_ action: String, in project: Project, message: String? = nil, paths: [String] = [], newBranch: Bool = false) {
-        guard gitStages[project.id] == nil else { return }
-        gitStages[project.id] = action == "pull" ? .pull : action == "push" ? .push : newBranch ? .branch : .message
+        let checkoutID = project.checkoutID
+        guard gitStages[checkoutID] == nil else { return }
+        gitStages[checkoutID] = action == "pull" ? .pull : action == "push" ? .push : newBranch ? .branch : .message
         gitNotice = nil
         var command: JSON = [
             "server_id": project.serverID, "project_id": project.id, "action": action, "paths": paths, "new_branch": newBranch,
@@ -1024,16 +1028,16 @@ final class AppStore {
         if let thread = selectedThread, thread.projectID == project.id { command["thread_id"] = thread.id }
         core.send("git_run", command) { [weak self] result in
             guard let self else { return }
-            self.gitStages[project.id] = nil
+            self.gitStages[checkoutID] = nil
             switch result {
             case .success(let done):
                 let notice = GitNotice(
-                    projectID: project.id, title: done.string("title"), description: done.optionalString("description"),
+                    checkoutID: checkoutID, title: done.string("title"), description: done.optionalString("description"),
                     url: done.optionalString("url"), next: done.optionalString("next")
                 )
                 self.show(notice)
             case .failure(let error):
-                self.show(GitNotice(projectID: project.id, title: "Git stopped", description: error.message, failed: true))
+                self.show(GitNotice(checkoutID: checkoutID, title: "Git stopped", description: error.message, failed: true))
             }
         }
     }
@@ -1053,7 +1057,8 @@ final class AppStore {
 
     /// The action a notice says comes next, like the push after a commit.
     func runNextGit() {
-        guard let notice = gitNotice, let next = notice.next, let project = project(notice.projectID) else { return }
+        guard let notice = gitNotice, let next = notice.next else { return }
+        guard let project = gitProject, project.checkoutID == notice.checkoutID else { return }
         let confirm = project.gitControl?.menu.first { $0.action == next }?.confirm
         startGit(next, in: project, confirm: confirm)
     }

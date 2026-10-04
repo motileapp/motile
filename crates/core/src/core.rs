@@ -1187,11 +1187,17 @@ impl Core {
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
                     let events = sink.clone();
-                    let started = |stage| events(Event::GitProgress { project_id: project_id.clone(), stage });
+                    let started = |stage| {
+                        events(Event::GitProgress {
+                            project_id: project_id.clone(),
+                            thread_id: thread_id.clone(),
+                            stage,
+                        })
+                    };
                     let request = Request::GitRun {
                         project_id: project_id.clone(),
                         action,
-                        thread_id,
+                        thread_id: thread_id.clone(),
                         message,
                         paths,
                         new_branch,
