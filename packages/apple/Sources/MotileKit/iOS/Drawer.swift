@@ -105,9 +105,6 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         let bounds = view.bounds
         let width = sidebarWidth
         sidebar.view.frame = CGRect(x: 0, y: 0, width: width, height: bounds.height)
-        // The sidebar comes forward a little as the card leaves.
-        sidebar.view.transform = CGAffineTransform(translationX: -28 * (1 - progress), y: 0)
-        sidebar.view.alpha = 0.35 + 0.65 * progress
         card.frame = CGRect(x: progress * width, y: 0, width: bounds.width, height: bounds.height)
         card.layer.cornerRadius = min(1, progress * 6) * Self.cardRadius
         content.view.frame = card.bounds
