@@ -66,7 +66,7 @@ struct FolderPicker: View {
             }
             .padding(.top, 12)
 
-            Divider()
+            ThemeDivider()
             HStack {
                 Text(target)
                     .font(.ui(size: 12, design: .monospaced))

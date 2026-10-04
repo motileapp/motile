@@ -371,7 +371,7 @@ private struct SettingsRow<Leading: View, Trailing: View>: View {
 
 private struct SettingsDivider: View {
     var body: some View {
-        Divider()
+        ThemeDivider()
             .padding(.horizontal, settingsInset)
     }
 }

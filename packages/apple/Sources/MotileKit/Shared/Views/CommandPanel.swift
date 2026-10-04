@@ -49,9 +49,9 @@ struct CommandPanel: View {
                 .onTapGesture { store.closePanel() }
             VStack(spacing: 0) {
                 header
-                Divider()
+                ThemeDivider()
                 results(sections, rows: rows)
-                Divider()
+                ThemeDivider()
                 hints
             }
             .frame(width: 620)
@@ -78,7 +78,7 @@ struct CommandPanel: View {
         VStack(spacing: 0) {
             header
                 .padding(.top, 10)
-            Divider()
+            ThemeDivider()
             results(sections, rows: rows)
         }
         .background(Color.themeBackground)

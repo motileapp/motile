@@ -288,11 +288,11 @@ struct BranchPicker: View {
             }
             .padding(.horizontal, 16)
             .frame(height: Platform.scale > 1 ? 52 : 38)
-            Divider()
+            ThemeDivider()
             list(choices)
             let note: String? = working ? "An agent is working in this project. Switch when it has finished." : problem
             if let note {
-                Divider()
+                ThemeDivider()
                 Text(note)
                     .font(.ui(size: 11.5))
                     .foregroundStyle(working ? Color.themeSecondary : Color.themeDanger)

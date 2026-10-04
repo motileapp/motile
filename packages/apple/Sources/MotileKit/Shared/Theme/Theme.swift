@@ -31,7 +31,7 @@ enum Theme {
     static let glassTint = dynamic(hex(0xffffff, alpha: 0.6), hex(0x0c0e12, alpha: 0.8))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
     static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
-    static let border = dynamic(hex(0x000000, alpha: 0.09), white(0.09))
+    static let border = dynamic(hex(0x000000, alpha: 0.09), white(0.07))
     static let strongBorder = dynamic(hex(0x000000, alpha: 0.14), white(0.14))
 
     #if os(macOS)
