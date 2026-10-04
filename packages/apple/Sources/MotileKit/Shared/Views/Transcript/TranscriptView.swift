@@ -40,7 +40,8 @@ final class TranscriptView: FlippedView, RowOwner {
     var bottomInset: CGFloat = 0 {
         didSet {
             guard bottomInset != oldValue else { return }
-            // More room under the rows, as for the keyboard, is glided to.
+            // More room under the rows, as for the keyboard, is glided to, from near the end too.
+            if bottomInset > oldValue, !userScrolling, endY - scroller.offsetY < Self.nearEnd { pinned = true }
             updateVisible(follows: false)
             land()
             jumpButton.frame.origin.y = jumpButtonY
@@ -86,6 +87,8 @@ final class TranscriptView: FlippedView, RowOwner {
     private static let workingHeight = TurnEndRowView.height
     /// How close to the end a scroll has to come for the view to follow the end again.
     private static let pinDistance: CGFloat = 1
+    /// How close to the end the viewport has to be to go to the end when the keyboard opens.
+    private static let nearEnd: CGFloat = 80
 
     /// How far the end has to be below the viewport for the jump button to show.
     private var jumpDistance: CGFloat { max(200, viewportHeight / 2) }
@@ -98,7 +101,7 @@ final class TranscriptView: FlippedView, RowOwner {
     /// button is not under it, and neither is the scroll bar, which `edge` keeps whole.
     private let fade = CAGradientLayer()
     private let edge = CALayer()
-    private let mask = CALayer()
+    private let fadeMask = CALayer()
 
     private var rows: [RowModel] = []
     private var hasPending = false
@@ -164,9 +167,9 @@ final class TranscriptView: FlippedView, RowOwner {
         addSubview(scroller)
         fade.colors = [PlatformColor.clear.cgColor, PlatformColor.black.cgColor, PlatformColor.black.cgColor, PlatformColor.clear.cgColor]
         edge.backgroundColor = PlatformColor.black.cgColor
-        mask.addSublayer(fade)
-        mask.addSublayer(edge)
-        scroller.fadeMask = mask
+        fadeMask.addSublayer(fade)
+        fadeMask.addSublayer(edge)
+        scroller.fadeMask = fadeMask
         document.addSubview(working)
         working.isHidden = true
 
@@ -251,7 +254,7 @@ final class TranscriptView: FlippedView, RowOwner {
         let stops = [topInset, topPadding, max(topPadding, bounds.height - bottomFade), bounds.height]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        mask.frame = bounds
+        fadeMask.frame = bounds
         fade.frame = bounds
         let edgeWidth = TranscriptScroller.indicatorWidth
         edge.frame = CGRect(x: bounds.width - edgeWidth, y: 0, width: edgeWidth, height: bounds.height)
