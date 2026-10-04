@@ -37,265 +37,111 @@ Production is the `Motile` project on Unbind:
 
 ### crates/protocol
 
-What the three programs agree on.
+What the programs agree on.
 
-- `wire.rs` is every message between an app and a server. Changing it changes both sides; bump
-  `PROTOCOL_VERSION` when an old app or server could no longer understand the other.
-- `auth_api.rs` and `auth_client.rs` are the auth server's JSON and the client for it.
-- `identity.rs` is the device key and request signing: a linked device signs its requests to the
-  auth server instead of holding a token.
-- `media.rs` names an image or a video by its contents, so that a server and the app that sent
-  it the file call it the same.
+- `wire.rs`: every message between an app and a server. Bump `PROTOCOL_VERSION` when an old
+  app or server could no longer understand the other.
+- `auth_api.rs`, `auth_client.rs`: the auth server's JSON and the client for it.
+- `identity.rs`: the device key and request signing.
+- `media.rs`: names an image or a video by its contents.
 
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
-- `sign_in.rs` is the browser's side of a sign-in: `/auth/start`, Google, and back with a
-  one-time code, to the app at `motile://auth` or to the web app at `WEB_URL/auth/callback`.
-  `google.rs` is the OIDC exchange.
-- `api.rs` is what apps, servers and the web app call: exchanging the code for a linked device or
-  for a web session (`/api/sessions`), install tokens (`/api/enroll-tokens`, `/api/enroll`),
-  `/api/me`, removing devices. A caller is a device that signed the request or a session's
-  `Bearer` token.
-- `config.rs` builds the install command a token comes with. It runs the installer at
-  `INSTALL_URL`, and names this auth server in it unless it is Motile's own.
-- `pages.rs` is the plain page a sign-in that failed ends on.
-- `migrations/` is the schema. Expired sign-ins and tokens are deleted every minute.
-- `e2e/` runs the real router on a fresh database per test, with a fake Google. `e2e/whole.rs`
+- `sign_in.rs`: the browser's side of a sign-in. `google.rs` is the OIDC exchange.
+- `api.rs`: what apps, servers and the web app call. A caller is a device that signed the
+  request or a session's `Bearer` token.
+- `config.rs`: builds the install command a token comes with.
+- `pages.rs`: the page a failed sign-in ends on.
+- `migrations/`: the schema.
+- `e2e/`: the real router on a fresh database per test, with a fake Google. `e2e/whole.rs`
   runs all three programs together.
-- `DEV_LOGIN=1` lets anyone sign in as anyone without Google. It exists for tests, the Mac demo
-  and local work, and must never be set in production.
+- `DEV_LOGIN=1` lets anyone sign in as anyone without Google. It is for tests, the demo and
+  local work, and must never be set in production.
 
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
 
-Both use shadcn/ui (preset `b1VlIvUO`: Base UI, neutral colors, Tailwind 4) and follow the
-system's light or dark appearance. They are one pnpm workspace; add components with
+One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
 `pnpm dlx shadcn@latest add <name>` inside the app.
 
-- `apps/marketing` builds to `dist`, which static-web-server serves in production
-  (`server.toml`). It ships no JavaScript; React only renders at build time.
-  `public/install.sh` is the installer: it downloads the server from the latest release and runs
-  `motile setup`. `scripts/icons.mjs` draws the icons of both web projects from the
-  mark: `pnpm --filter motile-marketing icons`.
-- `apps/web` runs on its own server. `src/server/auth.ts` holds the session: the browser only
-  gets an HttpOnly cookie, and the server calls the auth server with the session's token.
-  `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/` starts and
-  finishes a sign-in.
+- `apps/marketing` ships no JavaScript. `public/install.sh` is the installer.
+  `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
+- `apps/web`: `src/server/auth.ts` holds the session (the browser only gets an HttpOnly
+  cookie), `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/`
+  starts and finishes a sign-in.
 
 ### apps/server
 
-- `hub.rs` is the live state of every thread. A turn is one run of the agent's CLI; its events
-  are applied there, saved, and sent to every app that has the thread open. The agent's process
-  is talked to over its stdin while it runs: it asks before a tool call that needs approval and
-  waits for the app's answer, which is also how its questions to the user are answered and its
-  plan is approved. Claude Code is also told when the thread's model, effort or access change;
-  Codex takes them when its next process starts. A message sent while a turn runs is queued:
-  it waits until the turn ends and starts the next one, and it joins the transcript when the
-  agent says it has read it. A queued message can be sent now, which the running turn takes at
-  once (Claude Code moves what it runs to the background or stops its reply for it, Codex takes
-  it after its next tool call), or taken back, and the ones a stopped turn leaves behind wait
-  until they are sent. The queue is only in memory. Claude Code's process stays after a turn while something it started is still
-  running (a monitor, a background shell): the thread is then `monitoring`, the process takes
-  the next messages itself, and it starts turns of its own when what it watches reports.
-  A thread can work in a git worktree of its own instead of the project's folder: its first turn
-  makes the worktree in the server's data folder, on a branch that starts from the branch the
-  user picked as the remote has it, runs the project's setup script there as a tool call, and
-  starts the agent. The branch has a temporary name until the writer has named it from the
-  first message. A worktree that has gone is made again on its branch before the next turn,
-  and it goes with its thread, while the branch stays.
-  In a repository, the folder is kept as it is before a turn's agent starts and when the turn
-  ends: a snapshot, which is a commit under a ref of the thread's own that the repository's
-  branches and index never see. What the turn changed is the difference between the two, and
-  joins the item that ends the turn once it has been read.
-  An agent the thread's agent starts (Claude Code's Agent tool, a thread Codex spawns) is kept
-  with the tool call that started it: the call says how far the agent is, and what the agent
-  said and did are items that name the call as their `parent`. Those stay out of the thread's
-  transcript. The thread and its activity count the agents that still work.
-- `pacing.rs` says how much of a streamed reply is finished. The hub passes text on in finished
-  blocks (a paragraph, a list item, a line of code), not token by token.
-- `agents/` builds the command for a turn, the lines its process is given and parses its
-  output: `claude.rs` for `claude -p --input-format stream-json --output-format stream-json
-  --replay-user-messages --permission-prompt-tool stdio`, `codex.rs` for `codex app-server`,
-  which is JSON-RPC: its parser asks for the thread and the turn as the answers arrive. Both
-  become the same `AgentEvent`s. Codex presents a plan when its turn has ended and carries it
-  out in a turn of its own. `models.rs` lists Claude's models by hand; Codex's are read from
-  its cache.
-- `store.rs` is SQLite. Every item has a position (`seq`) and the revision that last changed it
+- `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
+  worktrees, snapshots and the agents an agent starts.
+- `pacing.rs`: passes a streamed reply on in finished blocks.
+- `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
+  (`claude.rs`, `codex.rs`). `models.rs` lists Claude's models by hand.
+- `store.rs`: SQLite. Every item has a position (`seq`) and the revision that last changed it
   (`rev`); an app asks for what changed after the revision it has.
-- `title.rs` generates thread titles with the thread's own agent.
-- `setup.rs` is what the installer runs: it checks for agents, links the server with the install
-  token, and installs the service. `service.rs` is that service: on Linux a systemd system unit
-  that runs as the installing user (for root it sets `IS_SANDBOX=1`, without which Claude Code
-  refuses full access), on a Mac a launchd agent in the user's desktop session, where the
-  agents find the Keychain, the simulators and code signing. The installer puts the binary in
-  `/usr/local/bin` on Linux and in `~/.local/bin` on a Mac, where it can update itself without
-  a password.
-- `access.rs` asks the auth server which apps belong to the account, and caches the answer.
-- `icons.rs` finds a project's icon in its folder (a favicon, icon or logo file, also in the
-  `apps` and `packages` of a workspace). The path is kept with the project; the user can pick
-  another image instead.
-- `git.rs` lists the branches of a project's folder and switches or creates one there, with the
-  `git` program. The project's folder has one branch for all the threads that work in it; it
-  refuses while an agent is working there. It also makes the worktrees of the threads that
-  work in one of their own.
-  It also reads what isn't committed or pushed in the folder a thread works in, and commits,
-  pulls, pushes and opens a pull request there when an app asks; pull requests are GitHub's,
-  through `gh`. The status is read when a turn ends and when an app asks, never on a timer, and
-  goes to the apps with the project. What git refuses reaches the user in git's words.
-  It takes the snapshots of the threads, and answers with the patch of a turn, of what isn't
-  committed, or of everything since the branch left the one it started from.
-- `files.rs` lists the server's folders for choosing a project, takes the attachments an app
-  sends, and lists and reads the files of the folder a thread works in, never outside it.
-- `github.rs` is the server's GitHub login, through `gh`: whether it is there, the repositories
-  it reaches and cloning one. A project started from a name (a folder with `git init`) or
-  cloned from GitHub goes in `~/projects` on the server.
-- `drafts.rs` has an agent write the commit message or the pull request's text from the changes,
-  for the user to edit before it is used, and name branches the way the server's instructions
-  say, which the user can change in the app's settings and put back. `generate.rs` is how it and `title.rs` ask an agent's
-  CLI for a short answer as JSON.
-- `media.rs` keeps the images and videos agents show. An agent shows one by writing a Markdown
-  image that points at a file on the server; the agents are told so when they start. The server
-  copies the file then, named by its contents, and the item says what it shows and how large it
-  is. So a thread shows the same thing after the file has changed or gone. An app asks for the
-  bytes by that name, and the copy goes when the last thread that shows it is deleted. The
-  images and videos attached to a user's message are kept the same way, each video with the
-  poster the app made of it.
-- `files.rs` takes the files an app uploads, each into a folder of its own in `attachments`. An
-  app uploads a file when it is attached, before the message is sent. The files go with the
-  thread their message is in, and one that was never sent goes after a day.
-- `update.rs` replaces the server's own program with the latest release's for this OS and CPU
-  and starts it again, when an app asks. It refuses while an agent is working.
-- `tests/e2e.rs` runs the server against `scripts/fake-agent` over real iroh connections.
+- `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),
+  snapshots and patches.
+- `files.rs`: browses the server's folders, takes uploads, and reads the files of a thread's
+  folder, never outside it.
+- `media.rs`: keeps the images and videos threads show, named by their contents.
+- `title.rs`, `drafts.rs`: have an agent write titles, commit messages, pull request texts and
+  branch names, through `generate.rs`.
+- `github.rs`: the server's GitHub login, its repositories and cloning one.
+- `icons.rs`: finds a project's icon in its folder.
+- `access.rs`: asks the auth server which apps belong to the account.
+- `setup.rs`, `service.rs`: what the installer runs, and the systemd or launchd service.
+- `update.rs`: replaces the server's own program with the latest release.
+- `tests/e2e.rs`: runs the server against `scripts/fake-agent` over real iroh connections.
 
 ### crates/core
 
-Built as a static library for the apps (`ffi.rs`: JSON commands in, JSON events out) and as a
-Rust library for tests.
+A static library for the apps (`ffi.rs`: JSON commands in, JSON events out) and a Rust library
+for tests.
 
-- `core.rs` is one loop that owns all state. Commands from the app and events from the servers
-  arrive on one channel; anything that waits on the network runs in its own task.
-- `link.rs` keeps one server connected and follows its thread list and the open threads. An app
-  that the system suspends in the background says when it is in front again (`foreground`) and
-  when the network changed: the links then dial at once, since a connection can die there
-  without a word.
-- `cache.rs` is the app's SQLite copy of its servers' threads. A thread is read from it a page
-  at a time: whole turns, about 150 items. An open thread holds its last turns, the ones
-  before them come when the app scrolls near the first row, and the app has the turns far
-  above let go again while it shows the end. So a thread of any length costs what is looked at.
-  What an agent the thread started did is read only when the app opens that agent.
-- `media.rs` is the images and videos the app has fetched from its servers, as files. They are
-  fetched when a row that shows one is seen, and take at most 2 GB, or what the app says (a
-  phone says less): past that, what was looked at longest ago goes first. The servers keep them all, so the app can also clear them. An
-  image or a video the app uploads is kept here too, so it shows without being fetched back.
-- `git.rs` says which git action a project's status calls for: commit, pull, push or a pull
-  request. The apps show that one.
-- `render/diff.rs` reads a patch into files whose lines the apps draw, and highlights them a
-  line at a time, as it does a whole file's.
-- `browse.rs` is browsing a server's folders by typing a path: the folders of the directory
-  typed so far, narrowed by what follows its last slash.
-- `render/` turns transcripts into rows ready to draw: `markdown.rs` (text with style runs, in
-  UTF-16 offsets), `highlight.rs` (syntect; streaming code is highlighted incrementally) and
-  `agents.rs` (the agents a thread's agent started, as the list an app shows) and
-  `rows.rs` (the row list and the splices sent to the app; tool calls that follow one another
-  are one row, one that still runs says since when, one that started an agent says what that
-  agent does, a finished turn's work folds behind one, as does what the agent did before a
-  message it took mid-turn, an image or a video is a row that knows its size before the file
-  is there, a message of the user names the images and videos attached to it, the files a turn
-  changed are a row before the turn's end, under their folders, and the messages that wait for
-  the agent are the last rows, each saying how it waits).
-- `api.rs` is the JSON the app and the core exchange. `examples/drive.rs` drives the core from a
-  terminal, and `examples/seed.rs` signs a data folder in with the dev login and makes the dev
-  app's project and threads.
+- `core.rs`: one loop that owns all state. Anything that waits on the network runs in its own
+  task.
+- `link.rs`: keeps one server connected and follows its threads.
+- `cache.rs`: the app's SQLite copy of its servers' threads, read a page of whole turns at a
+  time.
+- `media.rs`: the images and videos the app has fetched, as files, with a size limit.
+- `git.rs`: which git action a project's status calls for.
+- `browse.rs`: browsing a server's folders by typing a path.
+- `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
+  splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
+- `api.rs`: the JSON the app and the core exchange.
+- `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev app's
+  account, project and threads.
 
 ### packages/apple (Swift: SwiftUI, with AppKit and UIKit for the transcript)
 
-`MotileKit`, the Swift package both apps are made of. An app's own target is only its entry
-point. `Sources/MotileKit/Shared` is what both use, `Mac` and `iOS` what only one does, each
-file of those inside `#if os(…)`. A view that has to be AppKit on the Mac and UIKit on iOS has
-a twin in each, named alike (`KitMac.swift`, `KitIOS.swift`); what the two do is written once,
-in `Shared`, on top of them.
+`MotileKit`, the Swift package both apps are made of. `Sources/MotileKit/Shared` is what both
+use, `Mac` and `iOS` what only one does, each file of those inside `#if os(…)`. A view that has
+to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMac.swift`,
+`KitIOS.swift`); what the two do is written once, in `Shared`, on top of them.
 
-- `Shared/Platform/Platform.swift` is what the two systems call differently, behind one name
-  each: colours, fonts, images, the pasteboard. Sizes are written as they are on the Mac;
-  `Platform.scale` makes text and what is around it larger on iOS (`Font.ui`, `scaled`).
-- `Shared/Core/CoreBridge.swift` calls the Rust core; `Shared/Core/AppStore.swift` is all the
-  state the views show. Events are decoded off the main thread.
-- `Shared/Views/Transcript/` is the transcript: `TranscriptView.swift` only keeps views for the
-  rows on screen, `RowViews.swift` are the rows, `Rows.swift` builds their text and measures
-  their height off the main thread, so a row's height is known before it is scrolled to. The
-  view asks the core for the turns before its first row when it is scrolled near them.
-  `MediaRowView.swift` is the row of an image or a video: images are decoded off the main
-  thread at the size they are shown, and a video is downloaded when it is played. A queued
-  message is a row under the line that says the agent is working, with the buttons that send
-  it now or take it back. `AttachedFilesView.swift` is the files in a message's bubble: tiles
-  of one size for the images and videos, and the names of the others.
-  All of it is written on the views of `KitMac.swift` and `KitIOS.swift`: a view that takes
-  clicks or taps, a label, a symbol, the text view of a row and the scroll view the rows are in.
-  The layout manager draws the box around code inside a list, in room its paragraph leaves.
-  iOS has no tables in its text system, so there a table is a view over a line of the text
-  that keeps its place (`iOS/Tables.swift`).
-- `Shared/Views/Sidebar`, `Composer`, `Onboarding` and `Thread` are SwiftUI.
-  `Sidebar/SidebarView.swift` is the Mac's sidebar and the rows both sidebars show.
-  `Composer/ComposerStrips.swift` is the strips against the composer's top and bottom:
-  that the agent is monitoring, and the server, folder and branch the thread works in, with the
-  branch picker. A new thread chooses there between the project's folder and a new worktree,
-  and then picks the branch the worktree starts from.
-  `Composer/AttachmentViews.swift` is the attached files above the text: a tile for an
-  image or a video and a chip for any other file, each saying how far its upload is. A message
-  can't be sent until its files are on the server.
-  `Thread/GitControl.swift` is the git button in the top bar of a thread and its popover:
-  the files and the message of a commit, or the title and text of a pull request, to change
-  before they are used.
-  `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P, which iOS shows as a sheet. A
-  project is added there too: a new one from a name, one of the user's GitHub repositories, or
-  a folder of the server, browsed by typing its path. Rows that wait for a server are
-  placeholders of the same size.
-  `Views/Shared` holds the hover highlight and the agents' and projects' icons.
-- `Shared/Views/Panel` is the panel on the right of the thread, with tabs kept for each thread:
-  the changes in the folder the thread works in, its files, the files opened from either, and
-  the agents the thread started (`AgentsView.swift`), each of which opens into a transcript of
-  what it did. A tool call that started an agent opens it there too.
-  `CodeView.swift` is a diff or a file as it is drawn, and only the lines on screen;
-  `CodeViewMac.swift` and `CodeViewIOS.swift` scroll it and select in it.
-  `Shared/Core/SidePanel.swift` is the panel's state. A turn's changed files in the transcript
-  open its diff there. The panel can be maximized for a thread: it then covers the thread.
-- `Mac/MotileApp.swift` lays out the Mac's window: the sidebar and the thread side by side on
-  one surface, with a line between them. It is not a `NavigationSplitView`, whose sidebar the
-  system draws as a floating panel. `Mac/MediaViewer.swift` shows the images and videos of a
-  message or of the composer one at a time over the whole window, when one is clicked. Its
-  `ZoomingScrollView` is how an image zooms there and in the panel.
-  `Mac/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
-  it is signed by the developer who signed the running one, puts it in its place and restarts.
-  A copy that isn't signed with the Developer ID can't update itself.
-  `Mac/Glass.swift` is the window's glass surface, and `Mac/Demo/DemoDriver.swift` walks the
-  app through a scripted demo.
-- `iOS/MotileAppIOS.swift` is the iOS app: what it shows over itself, one sheet at a time, and
-  its layout. A narrow window has the sidebar under the thread (`Drawer.swift`): a swipe to
-  the right anywhere on the thread slides it aside as a card, except where the finger is on
-  code that scrolls back sideways, and the panel is a screen pushed over the thread
-  (`PanelScreen.swift`). A wide window, as on an iPad, has the three side by side.
-  `ThreadScreen.swift` is the thread under its top bar, `SidebarScreen.swift` the sidebar.
-  It tells the core when the app comes back to the front or changes networks.
-  `MediaViewerIOS.swift` is the viewer, `AttachMenu.swift` attaches from the photo library,
-  the camera and the Files app, and `ComposerTextIOS.swift` is the composer's text, where
-  Return only sends from a keyboard with keys. `GlassIOS.swift` is Liquid Glass where the
-  system has it and a material before that. `DemoDriverIOS.swift` has the dev app do what a
-  finger would, from a file of steps.
+- `Shared/Platform/Platform.swift`: what the two systems call differently, behind one name.
+  Sizes are written as they are on the Mac; `Platform.scale` enlarges them on iOS.
+- `Shared/Core`: `CoreBridge.swift` calls the Rust core, `AppStore.swift` is the state the
+  views show, `SidePanel.swift` the side panel's state.
+- `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
+  rows on screen, `Rows.swift` builds their text and measures them off the main thread,
+  `RowViews.swift` are the rows.
+- `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI.
+- `Shared/Views/CommandPanel.swift`: the panel behind ⌘K, ⌘N and ⌘P, a sheet on iOS.
+- `Shared/Views/Panel`: the panel on the right of the thread: changes, files and agents.
+  `CodeView.swift` draws a diff or a file.
+- `Mac/`: `MotileApp.swift` lays out the window, `MediaViewer.swift`, `AppUpdater.swift`,
+  `Glass.swift`, `Demo/DemoDriver.swift`.
+- `iOS/`: `MotileAppIOS.swift` is the app and its layout, `Drawer.swift` the sidebar under the
+  thread, `PanelScreen.swift`, `ThreadScreen.swift`, `SidebarScreen.swift`, `Tables.swift`,
+  `DemoDriverIOS.swift` the steps `do.sh` runs.
 
 ### apps/macos and apps/ios
 
-- `apps/macos` is the Mac app's executable, which runs `MotileKit`, and what builds it.
-  `Resources/AppIcon.icon` is the app icon of both apps, made in Icon Composer.
-  `scripts/build-app.sh` compiles it with `actool`, which also draws the flat icon older
-  macOS versions show. `scripts/ci-demo.sh` runs the demo in CI against a real auth server and
-  a real server and collects screenshots and `checks.txt`.
-  `scripts/dev-app.sh` opens the dev app, `scripts/shot.sh` takes a picture of its window and
-  `scripts/click.sh` clicks in it. `scripts/dev-stack.sh` is the account both dev apps use.
-  See Development.
-- `apps/ios` is the iOS app's Xcode project: one target with its entry point, for iOS 18 and
-  later, that links `MotileKit` and the core. `scripts/build-core.sh` builds the core for iOS,
-  which Xcode runs before it compiles. `MotileUITests` uses the app with fingers.
-  `scripts/dev-app.sh`, `shot.sh` and `do.sh` are the dev app in the simulator, and
-  `scripts/testflight.sh` uploads a build.
+- `apps/macos`: the Mac app's executable and what builds it (`scripts/build-app.sh`).
+  `Resources/AppIcon.icon` is the icon of both apps. `scripts/ci-demo.sh` runs the demo in CI.
+- `apps/ios`: the Xcode project, for iOS 18 and later. `scripts/build-core.sh` builds the core
+  for iOS, `MotileUITests` uses the app with fingers, `scripts/testflight.sh` uploads a build.
+- The dev app scripts of both are under Development.
 
 ## General Rules:
 
@@ -344,7 +190,7 @@ in `Shared`, on top of them.
 ## Development
 
 Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the marketing site and the
-web app. The Mac app and the iOS app need Xcode 26 or later, the iOS app also
+web app. The Mac app and the iOS app need a Mac with Xcode 26 or later, the iOS app also
 `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`.
 
     docker compose up -d                        # Postgres on localhost:5435
@@ -354,9 +200,7 @@ web app. The Mac app and the iOS app need Xcode 26 or later, the iOS app also
     pnpm --filter motile-web dev                # the web app on localhost:3001
     cargo run -p motile-server -- run           # a server, once linked with `motile setup <token>`
     cargo run -p motile-core --example drive    # the core, driven from a terminal
-    apps/macos/scripts/dev-app.sh               # on a Mac: the app, on an account of its own
-    apps/macos/scripts/build-app.sh --open      # on a Mac: the app, to sign in with Google
-    apps/ios/scripts/dev-app.sh                 # on a Mac: the iOS app in the simulator, on the same account
+    apps/macos/scripts/build-app.sh --open      # the Mac app, to sign in with Google
     open apps/ios/Motile.xcodeproj              # the iOS app, to run on a device from Xcode
 
 Checks (`cargo test` needs the compose Postgres; it creates a throwaway database per test):
@@ -365,57 +209,54 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
 
-The Mac app and the iOS app can't be built on Linux. The `iOS` workflow builds the iOS app and
-uploads it to TestFlight on every push that touches it. The `macOS` workflow builds the Mac app and the
-server for Macs on every push that touches them, runs the demo and uploads the app, the server
-and the screenshots:
+The `macOS` workflow runs the demo on every push that touches the app or the server:
 
     gh run watch                                      # then
     gh run download --name screenshots
 
-To see a UI change on a Mac, use the dev app, from `apps/macos`:
+### The dev apps
 
-    scripts/dev-app.sh             # builds what changed and opens the app; seconds after the first run
-    scripts/shot.sh shot.png       # a picture of its window
-    scripts/click.sh 85 330        # a click, counted in points from the window's top left corner
+To see a UI change, use the dev app. A change to a view both apps share is looked at in both.
 
-The dev app is signed in as `demo@motile.app` on an auth server with the dev login, and its
-server, `studio`, runs `scripts/fake-agent` and starts with a project and three finished
-threads. All of it lives in `apps/macos/build/dev` and keeps running between runs, so sessions
-in the same tree share it, and so do the Mac's and the iOS dev app. Its ports are picked when
-it is first made and kept in `build/dev/ports`: Postgres on 5436, the auth server on 3112 and
-the server on 47614, or the next ones that are free when another tree's dev app has those.
-`dev-app.sh` restarts only what was rebuilt, and `dev-app.sh --stop` stops everything. It never
-touches a real account. Reach other states by sending the fake agent's prompts below. Type with
-`osascript` (System Events `keystroke`), and address the app by the pid in `build/dev/app.pid`.
-A picture taken on a Retina display has two pixels per point. `osascript` needs Accessibility
-and the program that runs the agent needs Screen Recording, both granted once in System
-Settings. Use the demo (`scripts/ci-demo.sh`) only for the stall numbers.
+    # from apps/macos
+    scripts/dev-app.sh             # builds what changed and opens the app
+    scripts/dev-app.sh --stop      # stops everything
+    scripts/shot.sh shot.png       # a picture of its window, two pixels per point on Retina
+    scripts/click.sh 85 330        # a click, in points from the window's top left corner
 
-To see a UI change on iOS, use the dev app in the simulator, from `apps/ios`. It needs no
-window and no permission, so it also works with the Mac's screen locked:
-
-    scripts/dev-app.sh                      # builds what changed and opens the app in the simulator
+    # from apps/ios, in the simulator; works with the Mac's screen locked
+    scripts/dev-app.sh                      # builds what changed and opens the app
     scripts/shot.sh shot.png                # a picture of its screen
     scripts/do.sh "sidebar open"            # has the app do something; the steps are in DemoDriverIOS.swift
     scripts/do.sh "type run greet.py" send
     scripts/ui-test.sh                      # the tests that swipe and tap (MotileUITests)
     MOTILE_SIM="iPad Pro 13-inch (M5)" scripts/dev-app.sh    # another simulator
 
-A change to a view both apps share is looked at in both.
+Both are signed in as `demo@motile.app` on an auth server with the dev login, never a real
+account. Their server, `studio`, runs `scripts/fake-agent` and starts with a project and three
+finished threads. All of it lives in `apps/macos/build/dev` and keeps running between runs;
+its ports are in `build/dev/ports`. On the Mac, type with `osascript` (System Events
+`keystroke`, which needs Accessibility; pictures need Screen Recording) and address the app by
+the pid in `build/dev/app.pid`. Use the demo (`scripts/ci-demo.sh`) only for the stall numbers.
 
-`scripts/fake-agent` stands in for Claude Code and Codex in the tests and the demo. It replays
-the recorded output in `fixtures/` or makes up a turn, depending on the prompt. Asked to
-"watch the deploy" it stays after its turn, as Claude Code does while it monitors, asked to
-"run greet.py" under supervised access it asks before each tool call, and asked to "show the
-screenshot" it makes an image and shows it, and asked to "greet by name" it really changes
-files in its folder, and asked to "ask two agents" (Claude Code) or to "ask an agent" (Codex) it
-starts agents that say what they do and report. "Which color" has it
-ask the user a question, and "plan the hello" present a plan to approve. A message sent now
-while it works is read after its next tool call, as both agents do, or stops a reply that
-streams, as Claude Code does; "run greet.py" ends its reply with it. Asked for a commit
-message, a pull request's text or a branch's name, the way it is asked for a title, it writes
-one.
+### The fake agent
+
+`scripts/fake-agent` stands in for Claude Code and Codex in the tests, the demo and the dev
+apps. It replays the recorded output in `fixtures/` or makes up a turn, depending on the prompt:
+
+| Prompt | What it does |
+| --- | --- |
+| "watch the deploy" | Stays after its turn, as Claude Code does while it monitors |
+| "run greet.py" | Under supervised access, asks before each tool call |
+| "show the screenshot" | Makes an image and shows it |
+| "greet by name" | Really changes files in its folder |
+| "ask two agents" (Claude Code), "ask an agent" (Codex) | Starts agents that say what they do and report |
+| "which color" | Asks the user a question |
+| "plan the hello" | Presents a plan to approve |
+
+A message sent now while it works is read after its next tool call, or stops a reply that
+streams (Claude Code). Asked for a title, a commit message, a pull request's text or a branch's
+name, it writes one.
 
 ## Releasing and deploying
 
