@@ -204,6 +204,8 @@ enum GitSymbol {
 /// off, and `hint` says why.
 struct GitQuick: Equatable {
     let label: String
+    /// Said before the label: "Merged".
+    let state: String?
     let action: String?
     let url: String?
     let hint: String?
@@ -211,10 +213,16 @@ struct GitQuick: Equatable {
 
     init(json: JSON) {
         label = json.string("label")
+        state = json.optionalString("state")
         action = json.optionalString("action")
         url = json.optionalString("url")
         hint = json.optionalString("hint")
         confirm = json.object("confirm").map { GitConfirm(json: $0) }
+    }
+
+    var title: String {
+        guard let state else { return label }
+        return "\(state) \(label)"
     }
 }
 
