@@ -741,6 +741,7 @@ final class ErrorRowView: RowView {
 final class ChangesRowView: RowView {
     fileprivate static let headHeight: CGFloat = scaled(40)
     fileprivate static let entryHeight: CGFloat = scaled(26)
+    private static let topMargin: CGFloat = 12
     private static let bottomPadding: CGFloat = 6
     private static let radius: CGFloat = 10
     /// The button's highlight is this far from the top and the right, so that its words end as far
@@ -752,7 +753,7 @@ final class ChangesRowView: RowView {
     private var openButton: RowButton!
 
     static func height(entries: Int) -> CGFloat {
-        4 + headHeight + CGFloat(entries) * entryHeight + bottomPadding + 14
+        topMargin + headHeight + CGFloat(entries) * entryHeight + bottomPadding + 14
     }
 
     override init(frame: CGRect) {
@@ -794,10 +795,10 @@ final class ChangesRowView: RowView {
     override func layout(width: CGFloat) -> CGFloat {
         let entries = list.content?.entries.count ?? 0
         let height = Self.headHeight + CGFloat(entries) * Self.entryHeight + Self.bottomPadding
-        surface.frame = CGRect(x: 0, y: 4, width: width, height: height)
+        surface.frame = CGRect(x: 0, y: Self.topMargin, width: width, height: height)
         list.frame = CGRect(x: 0, y: 0, width: width, height: height)
         openButton.frame = CGRect(x: width - openButton.width, y: 0, width: openButton.width, height: Self.headHeight)
-        return height + 4 + 14
+        return height + Self.topMargin + 14
     }
 
     /// Draws the head and the entries, and lights the entry under the pointer.

@@ -950,7 +950,7 @@ fn changes_row(
     let margin = edges(button_margin, 2., button_margin, button_margin);
     let group: SharedString = format!("open-diff-{row_id}").into();
     div()
-        .pt(px(4.))
+        .pt(px(12.))
         .pb(px(14.))
         .child(
             div()
