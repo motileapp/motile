@@ -18,12 +18,12 @@ struct ComposerStrip: ViewModifier {
     func body(content: Content) -> some View {
         content
             .frame(height: Self.height)
-            .glassSurface(in: StripShape(edge: edge))
+            .composerSurface(in: StripShape(edge: edge))
             .padding(.horizontal, ComposerView.radius)
             .padding(edge == .top ? .bottom : .top, -Self.overlap)
     }
 
-    /// How far the strip's open edge goes under the composer, so their outlines do not double.
+    /// How far the strip's open edge goes under the composer, which covers its outline there.
     static let overlap: CGFloat = 1
 }
 

@@ -27,13 +27,15 @@ enum Theme {
     static let sheet = dynamic(hex(0xf8f9fc), hex(0x0e1015))
     static let field = dynamic(hex(0xffffff), white(0.04))
     static let bubble = dynamic(hex(0xeceef4), hex(0x15171d))
-    static let codeBackground = dynamic(hex(0xf1f3f8), hex(0x101218))
+    static let codeBackground = dynamic(hex(0xf1f3f8), hex(0x0c0e12))
+    static let composer = dynamic(hex(0xffffff), hex(0x0c0e12))
     /// Over the glass of what floats on the transcript, so that text on it stays readable.
     static let glassTint = dynamic(hex(0xffffff, alpha: 0.6), hex(0x0c0e12, alpha: 0.8))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
     static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
-    static let border = dynamic(hex(0x000000, alpha: 0.09), white(0.07))
-    static let strongBorder = dynamic(hex(0x000000, alpha: 0.14), white(0.14))
+    /// Borders are solid, so that where two meet they do not darken.
+    static let border = dynamic(hex(0xe2e3e5), hex(0x191a1e))
+    static let strongBorder = dynamic(hex(0xd5d6d9), hex(0x2b2b2f))
 
     #if os(macOS)
     static let systemLink = NSColor.linkColor
@@ -120,6 +122,7 @@ extension Color {
     static let themeSheet = Color(platform: Theme.sheet)
     static let themeField = Color(platform: Theme.field)
     static let themeBubble = Color(platform: Theme.bubble)
+    static let themeComposer = Color(platform: Theme.composer)
     static let themeGlassTint = Color(platform: Theme.glassTint)
     static let themeHover = Color(platform: Theme.hover)
     static let themeSelected = Color(platform: Theme.selected)

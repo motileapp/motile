@@ -73,7 +73,7 @@ struct ComposerView: View {
             .animation(.easeOut(duration: 0.22), value: collapsed)
             #endif
         }
-        .glassSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .composerSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
     }
 
