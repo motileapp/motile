@@ -57,4 +57,18 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(app.buttons["Threads"].waitForExistence(timeout: 3))
         XCTAssertFalse(newThread.exists && newThread.isHittable)
     }
+
+    func testASwipeToTheRightOnAThreadInTheSidebarMarksItDone() {
+        app.swipeRight()
+        let thread = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Use an F-String in Greet'")).firstMatch
+        XCTAssertTrue(shown(thread))
+        thread.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: thread.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)))
+        let undo = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Marked done'")).firstMatch
+        XCTAssertTrue(shown(undo))
+        // The swipe was the row's, so the sidebar is where it was.
+        XCTAssertTrue(newThread.isHittable)
+        undo.tap()
+        XCTAssertTrue(undo.waitForNonExistence(timeout: 3))
+    }
 }

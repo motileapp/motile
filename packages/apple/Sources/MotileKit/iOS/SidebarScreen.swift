@@ -13,6 +13,8 @@ struct SidebarScreen: View {
     @State private var newTitle = ""
     @State private var deleting: ThreadInfo?
     @State private var search = ""
+    /// The row a swipe has slid aside, by its id in the list.
+    @State private var swiped: String?
 
     var body: some View {
         let active = store.activeThreads.filter { store.matches($0, search: search) }
@@ -27,6 +29,9 @@ struct SidebarScreen: View {
                     DraftRows(search: search, open: open)
                     ForEach(active) { thread in
                         ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 }, open: open)
+                            .rowSwipe("checkmark", "Mark Done", tint: .themeSuccess, size: 36, enabled: !thread.busy, isOpen: swipe(thread.id)) {
+                                store.setDone([thread.id], done: true, fromSidebar: true)
+                            }
                     }
                     if active.isEmpty {
                         Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
@@ -43,6 +48,9 @@ struct SidebarScreen: View {
                 .padding(.bottom, 12)
             }
             .scrollDismissesKeyboard(.immediately)
+            .onScrollPhaseChange { _, phase in
+                if phase.isScrolling { swiped = nil }
+            }
             if let undo = store.undo {
                 UndoRow(notice: undo)
                     .transition(.opacity)
@@ -131,6 +139,9 @@ struct SidebarScreen: View {
             ForEach(done, id: \.doneRowID) { thread in
                 DoneRow(thread: thread, rename: beginRename, delete: { deleting = $0 }, open: open)
                     .frame(height: 44)
+                    .rowSwipe("arrow.uturn.backward", "Mark Undone", tint: .themeSecondary, size: 28, isOpen: swipe(thread.doneRowID)) {
+                        store.setDone([thread.id], done: false)
+                    }
             }
         }
     }
@@ -219,6 +230,12 @@ struct SidebarScreen: View {
         guard underThread else { return }
         store.sidePanel.isOpen = false
         drawer.isOpen = false
+    }
+
+    private func swipe(_ row: String) -> Binding<Bool> {
+        Binding(get: { swiped == row }, set: { open in
+            if open { swiped = row } else if swiped == row { swiped = nil }
+        })
     }
 
     private func beginRename(_ thread: ThreadInfo) {

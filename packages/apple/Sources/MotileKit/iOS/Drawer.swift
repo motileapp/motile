@@ -40,6 +40,8 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     private static let peek: CGFloat = 76
     private static let widest: CGFloat = 360
     private static let cardRadius: CGFloat = 44
+    /// The name of the recognizers that slide the sidebar's rows aside.
+    static let rowSwipe = "row-swipe"
 
     let sidebar: UIViewController
     let content: UIViewController
@@ -171,7 +173,8 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         guard isEnabled || isOpen else { return false }
         let speed = pan.velocity(in: view)
         guard abs(speed.x) > abs(speed.y) * 1.3 else { return false }
-        guard !isOpen else { return true }
+        // Opened, only the swipe back is the drawer's: one to the right is the sidebar's rows'.
+        guard !isOpen else { return speed.x < 0 }
         guard speed.x > 0 else { return false }
         return !scrollsSideways(under: pan.location(in: view))
     }
@@ -191,6 +194,11 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
             view = current.superview
         }
         return false
+    }
+
+    /// A row of the sidebar that a swipe slides aside has the swipe first.
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRequireFailureOf other: UIGestureRecognizer) -> Bool {
+        other.name == Self.rowSwipe
     }
 
     /// The scroll views wait to hear that this swipe isn't the drawer's, which they do the
