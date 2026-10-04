@@ -79,10 +79,9 @@ struct ConnectServerView: View {
         let layout = AnyLayout(VStackLayout(alignment: .trailing, spacing: 8))
         #endif
         return layout {
-            Text(store.enrollToken?.command ?? "Preparing the command…")
+            Text(store.enrollToken.map { Self.breakingAnywhere($0.command) } ?? "Preparing the command…")
                 .font(.ui(size: 12.5, design: .monospaced))
                 .foregroundStyle(store.enrollToken == nil ? Color.themeTertiary : Color.themeText)
-                .textSelection(.enabled)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -109,5 +108,11 @@ struct ConnectServerView: View {
         .padding([.vertical, .trailing], 10)
         .background(Color(platform: Theme.bubble), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.themeBorder))
+    }
+
+    /// Lets the command wrap between any two characters, as CSS's `break-all` does. Not selectable,
+    /// since a copy would carry the zero-width spaces into the shell.
+    private static func breakingAnywhere(_ text: String) -> String {
+        text.map(String.init).joined(separator: "\u{200B}")
     }
 }
