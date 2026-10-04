@@ -479,6 +479,8 @@ struct ThreadInfo: Equatable, Identifiable {
     /// The agent's process is still there, working or monitoring.
     var busy: Bool { running || monitoring }
 
+    var monitoringSince: Double { turnEndedAt ?? updatedAt }
+
     /// Active threads keep their place when something happens in them; only coming back from
     /// done moves one to the top.
     var activeOrder: Double { max(createdAt, undoneAt ?? 0) }

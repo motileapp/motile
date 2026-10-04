@@ -78,6 +78,11 @@ struct ComposerView: View {
 
     static let radius: CGFloat = 22
 
+    private func monitoringLabel(now: Double) -> String {
+        guard let thread = store.selectedThread else { return "Monitoring" }
+        return "Monitoring for \(Time.elapsed(since: thread.monitoringSince, now: now))"
+    }
+
     private var monitoringStrip: some View {
         HStack(spacing: 0) {
             Circle()
@@ -85,9 +90,11 @@ struct ComposerView: View {
                 .frame(width: 6, height: 6)
                 .padding(.leading, 14)
                 .padding(.trailing, 8)
-            Text("Monitoring")
-                .font(.ui(size: 12.5, weight: .medium))
-                .foregroundStyle(Color.themeText)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(monitoringLabel(now: context.date.timeIntervalSince1970))
+                    .font(.ui(size: 12.5, weight: .medium))
+                    .foregroundStyle(Color.themeText)
+            }
             Spacer(minLength: 8)
             Button {
                 store.stop()
