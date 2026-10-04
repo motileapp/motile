@@ -66,6 +66,8 @@ struct SidebarScreen: View {
             }
             footer
         }
+        .contentShape(Rectangle())
+        .onTapGesture { Platform.endEditing() }
         .animation(.easeOut(duration: 0.15), value: store.undo)
         .alert(busy, isPresented: $showsBusy) {
             Button("OK", role: .cancel) {}

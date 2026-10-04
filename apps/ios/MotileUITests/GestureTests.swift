@@ -69,4 +69,14 @@ final class GestureTests: XCTestCase {
         undo.tap()
         XCTAssertTrue(undo.waitForNonExistence(timeout: 3))
     }
+
+    func testATapBesideTheSidebarsSearchPutsTheKeyboardAway() {
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        app.textFields["Search"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        app.staticTexts["Motile"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(newThread.isHittable)
+    }
 }
