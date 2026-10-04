@@ -1,7 +1,7 @@
 name: iOS
 
 # Archives the iOS app for devices and uploads it to TestFlight: on every push that touches it,
-# by hand, and with a release. A newer push takes the place of an upload that is still on its way.
+# and by hand. A newer push takes the place of an upload that is still on its way.
 on:
   push:
     branches: [main]
@@ -12,7 +12,6 @@ on:
       - Cargo.lock
       - .github/workflows/ios.yml
   workflow_dispatch:
-  workflow_call:
 
 concurrency:
   group: ios-${{ github.ref }}
