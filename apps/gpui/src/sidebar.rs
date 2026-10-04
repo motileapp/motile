@@ -546,6 +546,7 @@ impl Sidebar {
                     div().pb(px(4. - ROW_GAP / 2.)).children(threads.iter().map(|thread| self.done_row(thread, cx))),
                 ))
             })
+            .child(crate::ui::divider(cx))
     }
 
     /// A thread that is done: one quiet line.
