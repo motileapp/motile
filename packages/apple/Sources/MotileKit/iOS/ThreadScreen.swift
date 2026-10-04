@@ -163,7 +163,7 @@ struct ThreadScreen: View {
         let selected = store.project(store.selectedDraft?.projectID)
         return VStack(spacing: 12) {
             Text("Let’s build in")
-                .foregroundStyle(Color.themeSecondary)
+                .foregroundStyle(Color.themeText)
             Menu {
                 ForEach(store.recentProjects) { project in
                     Button {
