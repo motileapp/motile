@@ -146,6 +146,8 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 
 ### apps/gpui (Rust: GPUI with GPUI Kit)
 
+Paused: see the rule under General Rules.
+
 The Mac app ported to Rust. A Cargo workspace of its own with its own `Cargo.lock`, so the
 checks and the workflows leave it alone; run `cargo` from `apps/gpui`. It uses `crates/core` as
 a Rust library, and its data folder is `Motile GPUI`, so it is a device of its own beside the
@@ -185,6 +187,8 @@ Mac app.
 - The Mac app and the iOS app do the same things. What one gets, the other gets in the same
   change, and what both do is written once, in `packages/apple/Sources/MotileKit/Shared`. Only
   what a system does differently is written twice.
+- Ignore `apps/gpui` for now. We are not working on it currently: do not read it, change it or
+  keep it in step with the Mac app unless we ask for it.
 - Do not leave paragraphs of comments on top of the code. You should try to avoid them as much
   as possible with understandable function names and code. If they are necessary even then, make
   them concise. Remove such comments when you come by them in the codebase. Comments should
