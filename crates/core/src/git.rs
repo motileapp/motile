@@ -173,31 +173,29 @@ fn confirm(status: &GitStatus, action: GitAction) -> Option<Confirm> {
     let (title, does, proceed) = match (action, commits) {
         (GitAction::Commit | GitAction::Pull, _) => return None,
         (GitAction::Push | GitAction::CommitPush, true) => (
-            "Commit & push to the default branch?".to_string(),
+            format!("Commit & push to {branch}?"),
             "commit and push your changes",
             format!("Commit & push to {branch}"),
         ),
         (GitAction::Push | GitAction::CommitPush, false) => {
-            ("Push to the default branch?".to_string(), "push your commits", format!("Push to {branch}"))
+            (format!("Push to {branch}?"), "push your commits", format!("Push to {branch}"))
         }
         (_, true) => (
-            "Commit, push & create a PR from the default branch?".to_string(),
+            format!("Commit, push & create a PR from {branch}?"),
             "commit, push and open a pull request",
             "Commit, push & create PR".to_string(),
         ),
         (_, false) => (
-            "Push & create a PR from the default branch?".to_string(),
+            format!("Push & create a PR from {branch}?"),
             "push your commits and open a pull request",
             "Push & create PR".to_string(),
         ),
     };
     Some(Confirm {
         title,
-        description: format!(
-            "This will {does} on {branch}. You can go on there, or make a branch for the work and do the same on it."
-        ),
+        description: format!("{branch} is the default branch. You can {does} there, or on a new branch."),
         proceed,
-        branch_off: "Check out a new branch & continue".to_string(),
+        branch_off: "Use a new branch".to_string(),
     })
 }
 
@@ -328,7 +326,7 @@ mod tests {
     fn pushing_from_the_default_branch_is_asked_about_first() {
         let quick = control(&GitStatus { changed: 1, ..main() }).quick;
         let confirm = quick.confirm.expect("a push from the default branch is confirmed");
-        assert_eq!(confirm.title, "Commit & push to the default branch?");
+        assert_eq!(confirm.title, "Commit & push to main?");
         assert_eq!(confirm.proceed, "Commit & push to main");
 
         let push = control(&GitStatus { ahead: 1, ..main() }).quick.confirm.unwrap();

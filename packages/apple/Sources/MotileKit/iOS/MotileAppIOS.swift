@@ -219,12 +219,12 @@ struct RootView: View {
             }
         }
         .alert(
-            "Something went wrong",
+            store.errorAlert.title,
             isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(store.errorMessage ?? "")
+            Text(store.errorAlert.detail)
         }
     }
 

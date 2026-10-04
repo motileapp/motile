@@ -253,7 +253,7 @@ fn key_file(config: &Config) -> PathBuf {
 }
 
 fn error_text(error: anyhow::Error) -> String {
-    format!("{error:#}")
+    motile_protocol::error_text(&error)
 }
 
 impl Core {
@@ -640,7 +640,9 @@ impl Core {
 
     fn link(&self, server_id: &str) -> Result<Arc<Link>, String> {
         let server = self.servers.iter().find(|server| server.device.public_key == server_id);
-        server.and_then(|server| server.link.clone()).ok_or_else(|| "Not connected to that server.".to_string())
+        server
+            .and_then(|server| server.link.clone())
+            .ok_or_else(|| "That server isn't connected. Try again when it is back.".to_string())
     }
 
     /// Tells the app about a server's projects, each with its icon if this device has the file.
@@ -675,7 +677,7 @@ impl Core {
             let fetched = async {
                 let request = Request::ProjectIcon { project_id: project_id.clone() };
                 let Message::Icon { data } = link.request(&request).await? else {
-                    bail!("The server didn't answer with an icon.");
+                    bail!("Your server didn't answer with an icon.");
                 };
                 save_icon(&folder, &project_id, &name, &BASE64.decode(data)?)
             };
@@ -1133,7 +1135,9 @@ impl Core {
                                     *browsed.lock().unwrap() = Some((key, folders.clone()));
                                     Ok(folders)
                                 }
-                                Ok(other) => Err(format!("Unexpected answer from the server: {other:?}")),
+                                Ok(other) => Err(format!(
+                                    "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"
+                                )),
                                 Err(error) => Err(error_text(error)),
                             }
                         }
@@ -1153,7 +1157,9 @@ impl Core {
                     let sent = async {
                         match link.request(&Request::Send { thread_id, new_thread, text, attachments }).await? {
                             Message::Sent { thread_id } => Ok(json!({ "thread_id": thread_id })),
-                            other => bail!("Unexpected answer from the server: {other:?}"),
+                            other => bail!(
+                                "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"
+                            ),
                         }
                     };
                     reply(&sink, id, sent.await.map_err(error_text));
@@ -1249,7 +1255,13 @@ impl Core {
                     let (patch, truncated) = match link.request(&Request::Diff { project_id, thread_id, scope }).await {
                         Ok(Message::Diff { patch, truncated }) => (patch, truncated),
                         Ok(other) => {
-                            return reply(&sink, id, Err(format!("Unexpected answer from the server: {other:?}")));
+                            return reply(
+                                &sink,
+                                id,
+                                Err(format!(
+                                    "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"
+                                )),
+                            );
                         }
                         Err(error) => return reply(&sink, id, Err(error_text(error))),
                     };

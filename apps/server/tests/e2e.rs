@@ -954,7 +954,7 @@ async fn an_agent_that_monitors_takes_messages_and_wakes_by_itself() {
     assert!(!monitoring.running && monitoring.turn_ended_at.is_some());
     let done = ThreadChange { done: Some(true), ..Default::default() };
     let refused = update(&connection, &thread_id, done).await;
-    assert!(matches!(refused, Message::Error { message } if message.contains("while it is monitoring")));
+    assert!(matches!(refused, Message::Error { message } if message.contains("still monitoring")));
 
     send(&connection, Some(thread_id.clone()), None, "How far is it?").await;
     thread_where(&mut list, |thread| thread.running).await;
@@ -1091,7 +1091,7 @@ async fn a_thread_is_marked_done_and_comes_back_with_new_activity() {
 
     let done = ThreadChange { done: Some(true), ..Default::default() };
     let refused = update(&connection, &thread_id, done.clone()).await;
-    assert!(matches!(refused, Message::Error { message } if message.contains("while it is working")));
+    assert!(matches!(refused, Message::Error { message } if message.contains("still working")));
 
     finished_transcript(&connection, &thread_id).await;
     assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
@@ -1244,7 +1244,7 @@ async fn a_project_is_started_from_a_name_or_cloned_from_github() {
     assert_eq!(path_of(projects_now(&connection).await, &named), folder.to_string_lossy());
     assert!(folder.join(".git").is_dir());
     let again = connection.request(&Request::NewProject { name: "my app".to_string() }).await.unwrap();
-    assert!(matches!(again, Message::Error { message } if message.contains("already there")));
+    assert!(matches!(again, Message::Error { message } if message.contains("already exists")));
 
     // Nobody is signed in to gh yet.
     let signed_out = Message::Github { state: GitHubState::SignedOut };

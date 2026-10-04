@@ -9,10 +9,10 @@ use std::time::Duration;
 use anyhow::Context;
 use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
 use iroh::{Endpoint, SecretKey};
-use motile_protocol::ALPN;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{Message, Request};
+use motile_protocol::{ALPN, error_text};
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast::error::RecvError;
 
@@ -174,7 +174,7 @@ impl Server {
                 saved.map(|path| Message::Uploaded { path })
             }
         };
-        let reply = reply.unwrap_or_else(|error| Message::Error { message: format!("{error:#}") });
+        let reply = reply.unwrap_or_else(|error| Message::Error { message: error_text(&error) });
         write_frame(&mut send, &reply).await?;
         send.finish()?;
         Ok(())
@@ -186,7 +186,7 @@ impl Server {
 async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     static UPDATING: AtomicBool = AtomicBool::new(false);
     let refusal = if hub.any_running().await {
-        Some("An agent is working on this server. Update it when the threads have finished.")
+        Some("Agents are still working. Update your server when they have finished.")
     } else if UPDATING.swap(true, Ordering::SeqCst) {
         Some("This server is already updating.")
     } else {
@@ -218,7 +218,7 @@ async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     let installed = installing.await?;
     UPDATING.store(false, Ordering::SeqCst);
     if let Err(error) = installed {
-        write_frame(&mut send, &Message::Error { message: format!("{error:#}") }).await?;
+        write_frame(&mut send, &Message::Error { message: error_text(&error) }).await?;
         send.finish()?;
         return Ok(());
     }
@@ -243,7 +243,7 @@ async fn git_run(mut send: SendStream, hub: Arc<Hub>, project_id: String, run: G
     while let Some(stage) = started.recv().await {
         let _ = write_frame(&mut send, &Message::GitProgress { stage }).await;
     }
-    let reply = running.await?.unwrap_or_else(|error| Message::Error { message: format!("{error:#}") });
+    let reply = running.await?.unwrap_or_else(|error| Message::Error { message: error_text(&error) });
     write_frame(&mut send, &reply).await?;
     send.finish()?;
     Ok(())
@@ -253,7 +253,7 @@ async fn send_media(mut send: SendStream, media: &MediaStore, id: &str) -> anyho
     let (file, size) = match media.open(id).await {
         Ok(opened) => opened,
         Err(error) => {
-            write_frame(&mut send, &Message::Error { message: format!("{error:#}") }).await?;
+            write_frame(&mut send, &Message::Error { message: error_text(&error) }).await?;
             send.finish()?;
             return Ok(());
         }
@@ -274,7 +274,7 @@ async fn send_file(
     let (file, kind, size, sent) = match hub.open_file(project_id, thread_id, path).await {
         Ok(opened) => opened,
         Err(error) => {
-            write_frame(&mut send, &Message::Error { message: format!("{error:#}") }).await?;
+            write_frame(&mut send, &Message::Error { message: error_text(&error) }).await?;
             send.finish()?;
             return Ok(());
         }

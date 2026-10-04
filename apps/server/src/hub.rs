@@ -17,12 +17,12 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use motile_protocol::now;
 use motile_protocol::wire::{
     Activity, Agent, BranchInstructions, ChangedFile, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
     Item, ItemKind, Media, Message, NewThread, Project, Queued, ServerInfo, Subagent, Thread, ThreadChange, ToolCall,
     ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
+use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, broadcast, mpsc};
@@ -253,7 +253,7 @@ impl Hub {
             bail!("There is nothing to send.");
         }
         if let Some(gone) = attachments.iter().find(|path| !Path::new(path).is_file()) {
-            bail!("{} is no longer on the server. Attach it again.", file_name(gone));
+            bail!("{} is no longer on your server. Attach it again.", file_name(gone));
         }
         let mut threads = self.threads.lock().await;
         let (thread_id, is_new) = match (thread_id, new_thread) {
@@ -334,7 +334,7 @@ impl Hub {
         let project = projects
             .iter()
             .find(|project| project.id == new_thread.project_id)
-            .context("That project is no longer on the server.")?;
+            .context("That project is no longer on your server.")?;
         let created_at = now();
         let worktree = match new_thread.worktree {
             Some(new) if new.base.is_empty() || new.base.starts_with('-') => {
@@ -512,7 +512,7 @@ impl Hub {
             return Ok(());
         }
         if live.preparing.is_some() {
-            bail!("The agent can't take it yet.");
+            bail!("The agent isn't ready yet. Send it again in a moment.");
         }
         let Some(run) = &live.run else {
             let queued = live.queued.remove(index);
@@ -520,7 +520,7 @@ impl Hub {
         };
         if !run.received_result {
             if !live.steer(index) {
-                bail!("The agent can't take it yet.");
+                bail!("The agent isn't ready yet. Send it again in a moment.");
             }
             return Ok(());
         }
@@ -628,8 +628,12 @@ impl Hub {
             told.push(claude::access_line(thread.plan, thread.access));
         }
         match change.done {
-            Some(true) if thread.running => bail!("A thread can't be marked done while it is working."),
-            Some(true) if thread.monitoring => bail!("A thread can't be marked done while it is monitoring."),
+            Some(true) if thread.running => {
+                bail!("The agent is still working. Mark the thread done when it has finished.")
+            }
+            Some(true) if thread.monitoring => {
+                bail!("The agent is still monitoring. Mark the thread done when it has stopped.")
+            }
             Some(true) => thread.done_at = thread.done_at.or_else(|| Some(now())),
             Some(false) if thread.done_at.is_some() => {
                 thread.done_at = None;
@@ -692,7 +696,7 @@ impl Hub {
     pub async fn add_project(&self, path: &str) -> anyhow::Result<String> {
         let path = if path.len() > 1 { path.trim_end_matches('/') } else { path };
         if !Path::new(path).is_absolute() || !Path::new(path).is_dir() {
-            bail!("{path} isn't a folder on the server.");
+            bail!("{path} isn't a folder on your server.");
         }
         let mut projects = self.projects.lock().await;
         if let Some(project) = projects.iter().find(|project| project.path == path) {
@@ -715,7 +719,7 @@ impl Hub {
 
     /// Where new projects and clones go: `projects` in the home folder.
     fn projects_root(&self) -> anyhow::Result<PathBuf> {
-        let home = self.environment.variables.get("HOME").context("The server doesn't know its home folder.")?;
+        let home = self.environment.variables.get("HOME").context("Your server doesn't know its home folder.")?;
         let root = Path::new(home).join("projects");
         std::fs::create_dir_all(&root).with_context(|| format!("{} can't be made.", root.display()))?;
         Ok(root)
@@ -727,7 +731,7 @@ impl Hub {
         let path = self.projects_root()?.join(folder);
         if let Err(error) = std::fs::create_dir(&path) {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
-                bail!("{} is already there. Pick another name, or add it as a local folder.", path.display());
+                bail!("{} already exists. Pick another name, or add it as a local folder.", path.display());
             }
             return Err(error).with_context(|| format!("{} can't be made.", path.display()));
         }
@@ -786,7 +790,7 @@ impl Hub {
         let project = projects
             .iter_mut()
             .find(|project| project.id == project_id)
-            .context("That project is no longer on the server.")?;
+            .context("That project is no longer on your server.")?;
         match path {
             Some(path) => {
                 if icons::version(&path).is_none() {
@@ -815,7 +819,7 @@ impl Hub {
         let project = projects
             .iter_mut()
             .find(|project| project.id == project_id)
-            .context("That project is no longer on the server.")?;
+            .context("That project is no longer on your server.")?;
         project.setup = script;
         self.store.save_project_setup(project)?;
         self.announce_projects(&projects);
@@ -845,7 +849,7 @@ impl Hub {
         let threads = self.threads.lock().await;
         let working = threads.values().any(|live| live.stored.thread.cwd == folder && live.activity.running);
         if working {
-            bail!("An agent is working there. Switch branches when it has finished.");
+            bail!("An agent is still working. Switch branches when it has finished.");
         }
         Ok(())
     }
@@ -1082,7 +1086,7 @@ impl Hub {
     async fn project_path(&self, project_id: &str) -> anyhow::Result<String> {
         let projects = self.projects.lock().await;
         let project = projects.iter().find(|project| project.id == project_id);
-        Ok(project.context("That project is no longer on the server.")?.path.clone())
+        Ok(project.context("That project is no longer on your server.")?.path.clone())
     }
 
     fn announce_projects(&self, stored: &[StoredProject]) {
@@ -1145,7 +1149,7 @@ impl Hub {
         live.preparing = None;
         let started = match made {
             Ok(()) => self.start_agent(live, prompt),
-            Err(error) => self.end_without_agent(live, Some(format!("{error:#}"))),
+            Err(error) => self.end_without_agent(live, Some(error_text(&error))),
         };
         if let Err(error) = started {
             tracing::error!(thread_id, "couldn't start a turn: {error:#}");
@@ -1204,7 +1208,7 @@ impl Hub {
         let (repository, setup) = {
             let projects = self.projects.lock().await;
             let project = projects.iter().find(|project| project.id == project_id);
-            let project = project.context("That project is no longer on the server.")?;
+            let project = project.context("That project is no longer on your server.")?;
             (project.path.clone(), project.setup.clone())
         };
         if let Some(parent) = Path::new(&path).parent() {

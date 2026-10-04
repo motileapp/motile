@@ -331,7 +331,7 @@ impl Link {
 
     fn connection(&self) -> anyhow::Result<Connection> {
         let connection = self.lock().connection.clone();
-        connection.ok_or_else(|| anyhow::anyhow!("Not connected to the server."))
+        connection.ok_or_else(|| anyhow::anyhow!("Your server isn't connected. Try again when it is back."))
     }
 
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
@@ -347,13 +347,15 @@ impl Link {
         loop {
             // A server from before it could update itself closes the stream without an answer.
             let Some(message) = follow.next().await? else {
-                anyhow::bail!("This server is too old to update itself. Run the install command on the machine again.");
+                anyhow::bail!("This server is too old to update itself. Run the install command on its machine again.");
             };
             match message {
                 Message::Updating { received, total } => progress(received, total),
                 Message::Ok => return Ok(()),
                 Message::Error { message } => anyhow::bail!(message),
-                other => anyhow::bail!("Unexpected answer from the server: {other:?}"),
+                other => {
+                    anyhow::bail!("Your server gave an unexpected answer. Update it and try again. It said: {other:?}")
+                }
             }
         }
     }
@@ -363,7 +365,7 @@ impl Link {
         let mut follow = self.connection()?.follow(request).await?;
         loop {
             let Some(message) = follow.next().await? else {
-                anyhow::bail!("The server closed the stream without answering.");
+                anyhow::bail!("Your server didn't answer. Try again.");
             };
             match message {
                 Message::GitProgress { stage } => started(stage),

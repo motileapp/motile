@@ -20,3 +20,8 @@ pub const APP_REDIRECT: &str = "motile://auth";
 pub fn now() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
 }
+
+/// An error and its causes as sentences an app can show, the first one saying what went wrong.
+pub fn error_text(error: &anyhow::Error) -> String {
+    error.chain().map(ToString::to_string).collect::<Vec<_>>().join(" ")
+}

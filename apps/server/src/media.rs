@@ -133,7 +133,7 @@ impl MediaStore {
         if !is_id(id) {
             bail!("{id} isn't the name of an image or a video.");
         }
-        let file = tokio::fs::File::open(self.folder.join(id)).await.context("The server no longer has that file.")?;
+        let file = tokio::fs::File::open(self.folder.join(id)).await.context("Your server no longer has that file.")?;
         let size = file.metadata().await?.len();
         Ok((file, size))
     }

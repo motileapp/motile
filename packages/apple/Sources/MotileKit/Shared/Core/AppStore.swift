@@ -145,6 +145,23 @@ final class AppStore {
     /// The drafts whose first message is on its way to the server.
     private(set) var sendingDraftIDs: Set<String> = []
     var errorMessage: String?
+    /// What deleting a thread takes with it.
+    func deletionNote(_ thread: ThreadInfo?) -> String {
+        let inWorktree = thread.map { project($0.projectID)?.seen(from: $0).worktree != nil } ?? false
+        return inWorktree
+            ? "Its worktree and the uncommitted changes there are deleted too. Its branch stays."
+            : "The files the agent changed stay as they are."
+    }
+    /// The error's first sentence as the alert's title, and the rest below it.
+    var errorAlert: (title: String, detail: String) {
+        let message = errorMessage ?? ""
+        let sentences = message.split(separator: ". ", maxSplits: 1)
+        guard let first = sentences.first, first.count <= 60, !first.contains("\n") else {
+            return ("Something went wrong", message)
+        }
+        let title = first.hasSuffix(".") ? first.dropLast() : first
+        return (String(title), sentences.count > 1 ? String(sentences[1]) : "")
+    }
     private(set) var threadDrafts: [ThreadDraft] = []
     /// What the open draft said when it was opened, if it said anything. Its row in the sidebar
     /// shows this, so the sidebar doesn't change while the draft is being written.
@@ -1195,7 +1212,7 @@ final class AppStore {
             command["thread_id"] = thread.id
         } else {
             guard let draft = selectedDraft, let project = project(draft.projectID), let model = composerModel else {
-                errorMessage = "This server has no agent installed. Install Claude Code or Codex on it and try again."
+                errorMessage = "No agent is installed. Install Claude Code or Codex on your server and try again."
                 return
             }
             var settings: JSON = [
