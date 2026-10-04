@@ -451,7 +451,7 @@ enum Access: String, CaseIterable, Identifiable, Codable {
 
     var symbol: Symbol {
         switch self {
-        case .supervised: .lock
+        case .supervised: .shield
         case .acceptEdits: .pencilLine
         case .auto: .sparkles
         case .full: .lockOpen
