@@ -474,6 +474,9 @@ pub struct GitStatus {
     pub branch: Option<String>,
     /// The checked-out branch is the one the remote starts new work from.
     pub default: bool,
+    /// The branch new work starts from: the remote's, or `main` or `master` without one.
+    #[serde(default)]
+    pub default_branch: Option<String>,
     pub remote: bool,
     pub upstream: bool,
     /// Commits that aren't on the remote yet.

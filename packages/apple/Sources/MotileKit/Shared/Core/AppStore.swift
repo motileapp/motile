@@ -592,6 +592,7 @@ final class AppStore {
         draft.model = defaults.string(forKey: "new.model")
         draft.effort = defaults.string(forKey: "new.effort")
         draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
+        draft.base = nil
     }
 
     private func rememberSettings(model: String?, effort: String?, access: Access) {
@@ -878,9 +879,11 @@ final class AppStore {
         return draft.worktree == true && canUseWorktrees(of: project)
     }
 
-    /// The branch the open draft's worktree starts from: the one picked, or the one checked out.
+    /// The branch the open draft's worktree starts from: the one picked, the one picked last in
+    /// its project, or the default one.
     var draftBase: String? {
-        selectedDraft?.base ?? project(selectedDraft?.projectID)?.branch
+        guard let draft = selectedDraft, let project = project(draft.projectID) else { return nil }
+        return draft.base ?? defaults.string(forKey: "new.base-\(project.id)") ?? project.git?.defaultBranch ?? project.branch
     }
 
     func setDraftWorktree(_ worktree: Bool) {
@@ -890,6 +893,8 @@ final class AppStore {
 
     func setDraftBase(_ branch: String) {
         updateDraft { $0.base = branch }
+        guard let projectID = selectedDraft?.projectID else { return }
+        defaults.set(branch, forKey: "new.base-\(projectID)")
     }
 
     /// Whether the project's server is new enough to list and switch branches.
