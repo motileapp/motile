@@ -5,7 +5,7 @@
 # screen locked.
 #
 #   scripts/dev-app.sh           build, start what isn't running, open the app
-#   scripts/dev-app.sh --stop    stop the app, the servers and PostgreSQL
+#   scripts/dev-app.sh --stop    shut the simulator down, stop the servers and PostgreSQL
 #
 # MOTILE_SIM names the simulator (default "iPhone 17"), as `xcrun simctl list devices` does.
 # Needs Xcode 26 or later, Rust with the aarch64-apple-ios-sim target, and PostgreSQL.
@@ -16,7 +16,7 @@ SIM="${MOTILE_SIM:-iPhone 17}"
 BUNDLE=app.motile.ios
 
 if [ "${1:-}" = "--stop" ]; then
-    xcrun simctl terminate "$SIM" "$BUNDLE" 2>/dev/null || true
+    xcrun simctl shutdown "$SIM" 2>/dev/null || true
     stop_stack
     exit 0
 fi
