@@ -11,7 +11,7 @@ use iroh::Endpoint;
 use iroh::endpoint::PathEvent;
 use motile_protocol::wire::{FileKind, GitStage, Message, Request};
 use serde::Serialize;
-use tokio::sync::mpsc;
+use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
 
 use crate::connection::{Closed, Connection, PathKind, ServerAddr};
@@ -59,6 +59,8 @@ pub struct Link {
     endpoint: Endpoint,
     events: mpsc::UnboundedSender<(String, LinkEvent)>,
     inner: Mutex<Inner>,
+    /// Ends the wait before the next dial.
+    wake: Notify,
 }
 
 #[derive(Default)]
@@ -70,6 +72,8 @@ struct Inner {
     /// Tasks tied to the current connection.
     followers: Vec<AbortHandle>,
     open: HashMap<String, OpenThread>,
+    /// The connection was closed here to dial again, so its end is no failure to tell about.
+    redialing: bool,
 }
 
 struct OpenThread {
@@ -84,7 +88,13 @@ impl Link {
         server: ServerAddr,
         events: mpsc::UnboundedSender<(String, LinkEvent)>,
     ) -> Arc<Self> {
-        let link = Arc::new(Self { server_id: server.key.clone(), endpoint, events, inner: Mutex::default() });
+        let link = Arc::new(Self {
+            server_id: server.key.clone(),
+            endpoint,
+            events,
+            inner: Mutex::default(),
+            wake: Notify::new(),
+        });
         let dialer = tokio::spawn(link.clone().dial_forever(server));
         link.lock().dialer = Some(dialer.abort_handle());
         link
@@ -120,6 +130,25 @@ impl Link {
         self.drop_connection();
     }
 
+    /// Lets go of the connection and dials again at once. For when the app comes back after a
+    /// time in which the system may have cut the connection without saying so.
+    pub fn redial(&self) {
+        let connection = {
+            let mut inner = self.lock();
+            inner.redialing = inner.connection.is_some();
+            inner.connection.clone()
+        };
+        if let Some(connection) = connection {
+            connection.close();
+        }
+        self.wake.notify_one();
+    }
+
+    /// Dials now if the link is waiting to dial again. For when the network has changed.
+    pub fn retry_now(&self) {
+        self.wake.notify_one();
+    }
+
     fn drop_connection(&self) {
         let mut inner = self.lock();
         for follower in inner.followers.drain(..) {
@@ -149,6 +178,11 @@ impl Link {
                 Err(error) => Closed { refused: false, reason: format!("{error:#}") },
             };
 
+            if std::mem::take(&mut self.lock().redialing) {
+                failures = 0;
+                continue;
+            }
+
             // A server that turns the device away still completes the handshake first, so only a
             // connection that got its thread list counts as having worked.
             let had_connected = self.lock().status.state == State::Connected;
@@ -170,7 +204,10 @@ impl Link {
                     ..Status::default()
                 }
             });
-            tokio::time::sleep(delay).await;
+            tokio::select! {
+                _ = tokio::time::sleep(delay) => {}
+                _ = self.wake.notified() => failures = 0,
+            }
         }
     }
 

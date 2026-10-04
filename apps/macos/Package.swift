@@ -17,11 +17,13 @@ let package = Package(
     products: [
         .executable(name: "Motile", targets: ["Motile"])
     ],
+    dependencies: [
+        .package(path: "../../packages/apple")
+    ],
     targets: [
-        .target(name: "CMotileCore", path: "Sources/CMotileCore"),
         .executableTarget(
             name: "Motile",
-            dependencies: ["CMotileCore"],
+            dependencies: [.product(name: "MotileKit", package: "apple")],
             path: "Sources/Motile",
             linkerSettings: [
                 .unsafeFlags(["-L", coreFolder, "-lmotile_core"] + coreLinkFlags)

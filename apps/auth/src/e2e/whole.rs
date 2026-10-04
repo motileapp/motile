@@ -54,6 +54,7 @@ impl App {
             platform: "macos".into(),
             local_only: true,
             direct_addr: Some(format!("127.0.0.1:{server_port}")),
+            media_limit: None,
         };
         let (sender, events) = mpsc::unbounded_channel();
         let sink = Arc::new(move |event: Event| {

@@ -46,6 +46,8 @@ const PROGRESS_EVERY: Duration = Duration::from_millis(200);
 const SHOWN_FILES: &str = "files";
 /// How many ticks pass between account checks when nobody is waiting for a server.
 const ACCOUNT_CHECK_TICKS: u64 = 30;
+/// A connection that was out of the app's sight for this long isn't trusted to be alive.
+const STALE_AFTER: Duration = Duration::from_secs(10);
 
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
 
@@ -164,6 +166,8 @@ struct Core {
     /// The icon files that have been asked for, so none is asked for twice.
     icons_asked: HashSet<String>,
     media: Arc<MediaCache>,
+    /// How many bytes the fetched images and videos may take.
+    media_limit: u64,
     /// The commands waiting for each image or video that is being fetched.
     media_waiting: HashMap<String, Vec<u64>>,
     /// The files on their way to a server, by the key the app gave: the command that waits for
@@ -209,6 +213,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         auth: AuthClient::new(&config.auth_url),
         me: cache.account().unwrap_or_default(),
         media: Arc::new(MediaCache::new(config.data_dir.join("media"))),
+        media_limit: config.media_limit.unwrap_or(media::LIMIT),
         media_waiting: HashMap::new(),
         uploads: HashMap::new(),
         browsed: Browsed::default(),
@@ -514,6 +519,21 @@ impl Core {
 
     // ---- servers ----
 
+    /// Has the endpoint look at the network again and the links dial now: again from the start
+    /// with `redial`, or only the ones that wait to.
+    fn network_changed(&self, redial: bool) {
+        if let Some(endpoint) = self.endpoint.clone() {
+            tokio::spawn(async move { endpoint.network_change().await });
+        }
+        for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
+            if redial {
+                link.redial();
+            } else {
+                link.retry_now();
+            }
+        }
+    }
+
     fn bind_endpoint(&self) {
         let (key, inputs, local_only) = (self.key.clone(), self.inputs.clone(), self.config.local_only);
         tokio::spawn(async move {
@@ -688,6 +708,7 @@ impl Core {
         };
         self.media_waiting.insert(media_id.clone(), vec![id]);
         let (cache, inputs, sink) = (self.media.clone(), self.inputs.clone(), self.sink.clone());
+        let limit = self.media_limit;
         tokio::spawn(async move {
             let mut told = Instant::now();
             let progress = |received, size| {
@@ -700,7 +721,7 @@ impl Core {
             let fetched = async {
                 link.media(&media_id, &unfinished, progress).await?;
                 let file = media::finish(&unfinished)?;
-                cache.trim(media::LIMIT);
+                cache.trim(limit);
                 anyhow::Ok(file.to_string_lossy().into_owned())
             };
             let result = fetched.await.map_err(error_text);
@@ -719,6 +740,7 @@ impl Core {
             Err(error) => return self.reply(id, Err(error)),
         };
         let (cache, inputs, sink, told_key) = (self.media.clone(), self.inputs.clone(), self.sink.clone(), key.clone());
+        let limit = self.media_limit;
         let upload = tokio::spawn(async move {
             let key = &key;
             let mut told = Instant::now();
@@ -735,7 +757,7 @@ impl Core {
                 if let Some(media_id) = media_id.clone() {
                     tokio::task::spawn_blocking(move || {
                         cache.keep(&media_id, &file);
-                        cache.trim(media::LIMIT);
+                        cache.trim(limit);
                     })
                     .await?;
                 }
@@ -1032,6 +1054,15 @@ impl Core {
                 self.check_account();
                 self.reply(id, Ok(json!({})));
             }
+            Command::Foreground { away_secs } => {
+                self.network_changed(Duration::from_secs(away_secs) >= STALE_AFTER);
+                self.check_account();
+                self.reply(id, Ok(json!({})));
+            }
+            Command::NetworkChanged => {
+                self.network_changed(false);
+                self.reply(id, Ok(json!({})));
+            }
             Command::WatchServers { on } => {
                 self.watch_servers = on;
                 if on {
@@ -1281,9 +1312,9 @@ impl Core {
             }
             Command::Media { server_id, media_id } => self.find_media(id, &server_id, media_id),
             Command::Storage => {
-                let (media, sink) = (self.media.clone(), self.sink.clone());
+                let (media, sink, limit) = (self.media.clone(), self.sink.clone(), self.media_limit);
                 tokio::task::spawn_blocking(move || {
-                    reply(&sink, id, Ok(json!({ "media_bytes": media.size(), "media_limit": media::LIMIT })));
+                    reply(&sink, id, Ok(json!({ "media_bytes": media.size(), "media_limit": limit })));
                 });
             }
             Command::ClearMedia => {

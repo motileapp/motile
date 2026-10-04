@@ -15,6 +15,8 @@ These programs make it up, plus the code the apps share:
 | Web app (`apps/web`) | app.motile.app | Lists an account's servers and apps, adds servers, removes devices |
 | Server (`apps/server`, the `motile` binary) | The user's Linux machines and Macs | Runs the agents, stores threads in SQLite, serves the account's apps |
 | Mac app (`apps/macos`) | The user's Mac | The interface |
+| iOS app (`apps/ios`) | The user's iPhone and iPad | The interface |
+| Apple kit (`packages/apple`) | Inside the Mac and the iOS app | Their state and their views |
 | Core (`crates/core`) | Inside every app | Account, connections, sync, the local cache, rendering transcripts |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
@@ -171,15 +173,18 @@ Rust library for tests.
 
 - `core.rs` is one loop that owns all state. Commands from the app and events from the servers
   arrive on one channel; anything that waits on the network runs in its own task.
-- `link.rs` keeps one server connected and follows its thread list and the open threads.
+- `link.rs` keeps one server connected and follows its thread list and the open threads. An app
+  that the system suspends in the background says when it is in front again (`foreground`) and
+  when the network changed: the links then dial at once, since a connection can die there
+  without a word.
 - `cache.rs` is the app's SQLite copy of its servers' threads. A thread is read from it a page
   at a time: whole turns, about 150 items. An open thread holds its last turns, the ones
   before them come when the app scrolls near the first row, and the app has the turns far
   above let go again while it shows the end. So a thread of any length costs what is looked at.
   What an agent the thread started did is read only when the app opens that agent.
 - `media.rs` is the images and videos the app has fetched from its servers, as files. They are
-  fetched when a row that shows one is seen, and take at most 2 GB: past that, what was looked
-  at longest ago goes first. The servers keep them all, so the app can also clear them. An
+  fetched when a row that shows one is seen, and take at most 2 GB, or what the app says (a
+  phone says less): past that, what was looked at longest ago goes first. The servers keep them all, so the app can also clear them. An
   image or a video the app uploads is kept here too, so it shows without being fetched back.
 - `git.rs` says which git action a project's status calls for: commit, pull, push or a pull
   request. The apps show that one.
@@ -201,58 +206,96 @@ Rust library for tests.
   terminal, and `examples/seed.rs` signs a data folder in with the dev login and makes the dev
   app's project and threads.
 
-### apps/macos (Swift: SwiftUI, with AppKit for the transcript)
+### packages/apple (Swift: SwiftUI, with AppKit and UIKit for the transcript)
 
-- `Core/CoreBridge.swift` calls the Rust core; `Core/AppStore.swift` is all the state the views
-  show. Events are decoded off the main thread.
-- `App/MotileApp.swift` lays out the window: the sidebar and the thread side by side on one
-  surface, with a line between them. It is not a `NavigationSplitView`, whose sidebar the system
-  draws as a floating panel.
-- `Views/Transcript/` is the transcript: `TranscriptView.swift` only keeps views for the rows on
-  screen, `RowViews.swift` are the rows, `Rows.swift` builds their text and measures their
-  height off the main thread, so a row's height is known before it is scrolled to. The view
-  asks the core for the turns before its first row when it is scrolled near them.
+`MotileKit`, the Swift package both apps are made of. An app's own target is only its entry
+point. `Sources/MotileKit/Shared` is what both use, `Mac` and `iOS` what only one does, each
+file of those inside `#if os(…)`. A view that has to be AppKit on the Mac and UIKit on iOS has
+a twin in each, named alike (`KitMac.swift`, `KitIOS.swift`); what the two do is written once,
+in `Shared`, on top of them.
+
+- `Shared/Platform/Platform.swift` is what the two systems call differently, behind one name
+  each: colours, fonts, images, the pasteboard. Sizes are written as they are on the Mac;
+  `Platform.scale` makes text and what is around it larger on iOS (`Font.ui`, `scaled`).
+- `Shared/Core/CoreBridge.swift` calls the Rust core; `Shared/Core/AppStore.swift` is all the
+  state the views show. Events are decoded off the main thread.
+- `Shared/Views/Transcript/` is the transcript: `TranscriptView.swift` only keeps views for the
+  rows on screen, `RowViews.swift` are the rows, `Rows.swift` builds their text and measures
+  their height off the main thread, so a row's height is known before it is scrolled to. The
+  view asks the core for the turns before its first row when it is scrolled near them.
   `MediaRowView.swift` is the row of an image or a video: images are decoded off the main
   thread at the size they are shown, and a video is downloaded when it is played. A queued
   message is a row under the line that says the agent is working, with the buttons that send
   it now or take it back. `AttachedFilesView.swift` is the files in a message's bubble: tiles
   of one size for the images and videos, and the names of the others.
-- `Views/Sidebar`, `Views/Thread`, `Views/Composer` and `Views/Onboarding` are SwiftUI.
-  `Views/Composer/ComposerStrips.swift` is the strips against the composer's top and bottom:
+  All of it is written on the views of `KitMac.swift` and `KitIOS.swift`: a view that takes
+  clicks or taps, a label, a symbol, the text view of a row and the scroll view the rows are in.
+  The layout manager draws the box around code inside a list, in room its paragraph leaves.
+  iOS has no tables in its text system, so there a table is a view over a line of the text
+  that keeps its place (`iOS/Tables.swift`).
+- `Shared/Views/Sidebar`, `Composer`, `Onboarding` and `Thread` are SwiftUI.
+  `Sidebar/SidebarView.swift` is the Mac's sidebar and the rows both sidebars show.
+  `Composer/ComposerStrips.swift` is the strips against the composer's top and bottom:
   that the agent is monitoring, and the server, folder and branch the thread works in, with the
   branch picker. A new thread chooses there between the project's folder and a new worktree,
   and then picks the branch the worktree starts from.
-  `Views/Composer/AttachmentViews.swift` is the attached files above the text: a tile for an
+  `Composer/AttachmentViews.swift` is the attached files above the text: a tile for an
   image or a video and a chip for any other file, each saying how far its upload is. A message
   can't be sent until its files are on the server.
-  `Views/MediaViewer.swift` shows the images and videos of a message or of the composer one at
-  a time over the whole window, when one is clicked. Its `ZoomingScrollView` is how an image
-  zooms there and in the panel.
-  `Views/Thread/GitControl.swift` is the git button in the top bar of a thread and its popover:
+  `Thread/GitControl.swift` is the git button in the top bar of a thread and its popover:
   the files and the message of a commit, or the title and text of a pull request, to change
   before they are used.
-  `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P. A project is added there too:
-  a new one from a name, one of the user's GitHub repositories, or a folder of the server,
-  browsed by typing its path. Rows that wait for a server are placeholders of the same size.
-  `Views/Shared` holds the window's glass surface, the hover highlight and the agents' and
-  projects' icons.
-- `Views/Panel` is the panel on the right of the thread, with tabs kept for each thread: the
-  changes in the folder the thread works in, its files, the files opened from either, and the
-  agents the thread started (`AgentsView.swift`), each of which opens into a transcript of what
-  it did. A tool call that started an agent opens it there too.
-  `CodeView.swift` draws a diff or a file, and only the lines on screen. `Core/SidePanel.swift`
-  is the panel's state. A turn's changed files in the transcript open its diff there. The
-  panel can be maximized for a thread: it then covers the thread, which keeps its width behind
-  it, and the window shows the sidebar and the panel.
-- `Core/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
+  `Views/CommandPanel.swift` is the panel behind ⌘K, ⌘N and ⌘P, which iOS shows as a sheet. A
+  project is added there too: a new one from a name, one of the user's GitHub repositories, or
+  a folder of the server, browsed by typing its path. Rows that wait for a server are
+  placeholders of the same size.
+  `Views/Shared` holds the hover highlight and the agents' and projects' icons.
+- `Shared/Views/Panel` is the panel on the right of the thread, with tabs kept for each thread:
+  the changes in the folder the thread works in, its files, the files opened from either, and
+  the agents the thread started (`AgentsView.swift`), each of which opens into a transcript of
+  what it did. A tool call that started an agent opens it there too.
+  `CodeView.swift` is a diff or a file as it is drawn, and only the lines on screen;
+  `CodeViewMac.swift` and `CodeViewIOS.swift` scroll it and select in it.
+  `Shared/Core/SidePanel.swift` is the panel's state. A turn's changed files in the transcript
+  open its diff there. The panel can be maximized for a thread: it then covers the thread.
+- `Mac/MotileApp.swift` lays out the Mac's window: the sidebar and the thread side by side on
+  one surface, with a line between them. It is not a `NavigationSplitView`, whose sidebar the
+  system draws as a floating panel. `Mac/MediaViewer.swift` shows the images and videos of a
+  message or of the composer one at a time over the whole window, when one is clicked. Its
+  `ZoomingScrollView` is how an image zooms there and in the panel.
+  `Mac/AppUpdater.swift` updates the app itself: it downloads the release's app, checks that
   it is signed by the developer who signed the running one, puts it in its place and restarts.
   A copy that isn't signed with the Developer ID can't update itself.
-- `Resources/AppIcon.icon` is the app icon, made in Icon Composer. `scripts/build-app.sh`
-  compiles it with `actool`, which also draws the flat icon older macOS versions show.
-- `Demo/DemoDriver.swift` walks the app through a scripted demo; `scripts/ci-demo.sh` runs it
-  in CI against a real auth server and a real server and collects screenshots and `checks.txt`.
-- `scripts/dev-app.sh` opens the dev app, `scripts/shot.sh` takes a picture of its window and
-  `scripts/click.sh` clicks in it. See Development.
+  `Mac/Glass.swift` is the window's glass surface, and `Mac/Demo/DemoDriver.swift` walks the
+  app through a scripted demo.
+- `iOS/MotileAppIOS.swift` is the iOS app: what it shows over itself, one sheet at a time, and
+  its layout. A narrow window has the sidebar under the thread (`Drawer.swift`): a swipe to
+  the right anywhere on the thread slides it aside as a card, except where the finger is on
+  code that scrolls back sideways, and the panel is a screen pushed over the thread
+  (`PanelScreen.swift`). A wide window, as on an iPad, has the three side by side.
+  `ThreadScreen.swift` is the thread under its top bar, `SidebarScreen.swift` the sidebar.
+  It tells the core when the app comes back to the front or changes networks.
+  `MediaViewerIOS.swift` is the viewer, `AttachMenu.swift` attaches from the photo library,
+  the camera and the Files app, and `ComposerTextIOS.swift` is the composer's text, where
+  Return only sends from a keyboard with keys. `GlassIOS.swift` is Liquid Glass where the
+  system has it and a material before that. `DemoDriverIOS.swift` has the dev app do what a
+  finger would, from a file of steps.
+
+### apps/macos and apps/ios
+
+- `apps/macos` is the Mac app's executable, which runs `MotileKit`, and what builds it.
+  `Resources/AppIcon.icon` is the app icon of both apps, made in Icon Composer.
+  `scripts/build-app.sh` compiles it with `actool`, which also draws the flat icon older
+  macOS versions show. `scripts/ci-demo.sh` runs the demo in CI against a real auth server and
+  a real server and collects screenshots and `checks.txt`.
+  `scripts/dev-app.sh` opens the dev app, `scripts/shot.sh` takes a picture of its window and
+  `scripts/click.sh` clicks in it. `scripts/dev-stack.sh` is the account both dev apps use.
+  See Development.
+- `apps/ios` is the iOS app's Xcode project: one target with its entry point, for iOS 18 and
+  later, that links `MotileKit` and the core. `scripts/build-core.sh` builds the core for iOS,
+  which Xcode runs before it compiles. `MotileUITests` uses the app with fingers.
+  `scripts/dev-app.sh`, `shot.sh` and `do.sh` are the dev app in the simulator, and
+  `scripts/testflight.sh` uploads a build.
 
 ## General Rules:
 
@@ -270,8 +313,11 @@ Rust library for tests.
 - A machine that runs agents is a server, in the code and in what the user reads. What the user
   reads says "your server" or its name, not "the server" alone, which sounds like ours. The auth
   server is always called the auth server.
-- Rendering logic belongs in `crates/core`, not in an app, so that every future app (iOS,
-  Android, Windows, Linux) gets it.
+- Rendering logic belongs in `crates/core`, not in an app, so that every future app (Android,
+  Windows, Linux) gets it.
+- The Mac app and the iOS app do the same things. What one gets, the other gets in the same
+  change, and what both do is written once, in `packages/apple/Sources/MotileKit/Shared`. Only
+  what a system does differently is written twice.
 - Do not leave paragraphs of comments on top of the code. You should try to avoid them as much
   as possible with understandable function names and code. If they are necessary even then, make
   them concise. Remove such comments when you come by them in the codebase. Comments should
@@ -298,7 +344,8 @@ Rust library for tests.
 ## Development
 
 Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the marketing site and the
-web app. The Mac app needs Xcode 26 or later.
+web app. The Mac app and the iOS app need Xcode 26 or later, the iOS app also
+`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`.
 
     docker compose up -d                        # Postgres on localhost:5435
     cargo run -p motile-auth                    # with the variables from .env.example exported
@@ -309,6 +356,8 @@ web app. The Mac app needs Xcode 26 or later.
     cargo run -p motile-core --example drive    # the core, driven from a terminal
     apps/macos/scripts/dev-app.sh               # on a Mac: the app, on an account of its own
     apps/macos/scripts/build-app.sh --open      # on a Mac: the app, to sign in with Google
+    apps/ios/scripts/dev-app.sh                 # on a Mac: the iOS app in the simulator, on the same account
+    open apps/ios/Motile.xcodeproj              # the iOS app, to run on a device from Xcode
 
 Checks (`cargo test` needs the compose Postgres; it creates a throwaway database per test):
 
@@ -316,8 +365,10 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
 
-The Mac app can't be built on Linux. The `macOS` workflow builds it and the server for Macs on
-every push that touches them, runs the demo and uploads the app, the server and the screenshots:
+The Mac app and the iOS app can't be built on Linux. The `iOS` workflow builds the iOS app for
+the simulator on every push that touches it. The `macOS` workflow builds the Mac app and the
+server for Macs on every push that touches them, runs the demo and uploads the app, the server
+and the screenshots:
 
     gh run watch                                      # then
     gh run download --name screenshots
@@ -330,14 +381,28 @@ To see a UI change on a Mac, use the dev app, from `apps/macos`:
 
 The dev app is signed in as `demo@motile.app` on an auth server with the dev login, and its
 server, `studio`, runs `scripts/fake-agent` and starts with a project and three finished
-threads. All of it lives in `apps/macos/build/dev` and keeps running between runs (Postgres on
-5436, the auth server on 3112, the server on 47614), so sessions in the same tree share it.
+threads. All of it lives in `apps/macos/build/dev` and keeps running between runs, so sessions
+in the same tree share it, and so do the Mac's and the iOS dev app. Its ports are picked when
+it is first made and kept in `build/dev/ports`: Postgres on 5436, the auth server on 3112 and
+the server on 47614, or the next ones that are free when another tree's dev app has those.
 `dev-app.sh` restarts only what was rebuilt, and `dev-app.sh --stop` stops everything. It never
 touches a real account. Reach other states by sending the fake agent's prompts below. Type with
 `osascript` (System Events `keystroke`), and address the app by the pid in `build/dev/app.pid`.
 A picture taken on a Retina display has two pixels per point. `osascript` needs Accessibility
 and the program that runs the agent needs Screen Recording, both granted once in System
 Settings. Use the demo (`scripts/ci-demo.sh`) only for the stall numbers.
+
+To see a UI change on iOS, use the dev app in the simulator, from `apps/ios`. It needs no
+window and no permission, so it also works with the Mac's screen locked:
+
+    scripts/dev-app.sh                      # builds what changed and opens the app in the simulator
+    scripts/shot.sh shot.png                # a picture of its screen
+    scripts/do.sh "sidebar open"            # has the app do something; the steps are in DemoDriverIOS.swift
+    scripts/do.sh "type run greet.py" send
+    scripts/ui-test.sh                      # the tests that swipe and tap (MotileUITests)
+    MOTILE_SIM="iPad Pro 13-inch (M5)" scripts/dev-app.sh    # another simulator
+
+A change to a view both apps share is looked at in both.
 
 `scripts/fake-agent` stands in for Claude Code and Codex in the tests and the demo. It replays
 the recorded output in `fixtures/` or makes up a turn, depending on the prompt. Asked to
@@ -356,7 +421,9 @@ one.
 
 To release, set `version` in `Cargo.toml` to the new version, commit, and push the tag
 `v<version>`; the workflow refuses a tag that doesn't match. It publishes the server and the auth
-server for Linux, and the server and the app for Macs, as a GitHub release. The installer and the download button
+server for Linux, and the server and the app for Macs, as a GitHub release, and uploads the iOS app
+to TestFlight. Running the `iOS` workflow by hand uploads one without a release
+(`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID` variables). The installer and the download button
 always fetch the latest release, and apps and servers compare their own version with it to offer
 an update. The app in a release is signed with the Developer ID certificate and
 notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with
@@ -374,8 +441,8 @@ sentence describing the change:
     macos: Show the server's round-trip time in the sidebar
     server | core | macos: Stream replies in finished blocks
 
-The parts are the folders in `apps` and `crates`: `auth`, `marketing`, `web`, `server`, `macos`,
-`core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
+The parts are the folders in `apps`, `crates` and `packages`: `auth`, `marketing`, `web`, `server`,
+`macos`, `ios`, `apple`, `core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
 
 The title should be concise. Description should explain the work in more detail (only if
 required) while still being concise. Use simple language, do not try to sound smart.
