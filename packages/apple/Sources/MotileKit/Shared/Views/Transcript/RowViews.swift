@@ -196,7 +196,10 @@ final class UserRowView: RowView {
 
     private static let margin: CGFloat = 14
     /// The room under the bubble for when the message was sent and the button that copies it.
-    static let footHeight = MessageMeta.height + 6
+    static let footHeight = metaGap + MessageMeta.height + 4
+    private static let metaGap: CGFloat = 4
+    /// Keeps the time and the button clear of the bubble's round corner.
+    private static let metaInset: CGFloat = 6
 
     static func height(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
         margin + bubbleHeight(fit, textHeight: textHeight) + footHeight
@@ -216,7 +219,7 @@ final class UserRowView: RowView {
         attachments.frame = CGRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
         attachments.layout(width: fit.innerWidth)
         text.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: textHeight)
-        meta.frame = CGRect(x: 0, y: bubble.frame.maxY + 2, width: width, height: MessageMeta.height)
+        meta.frame = CGRect(x: 0, y: bubble.frame.maxY + Self.metaGap, width: width - Self.metaInset, height: MessageMeta.height)
         return Self.height(fit, textHeight: textHeight)
     }
 
