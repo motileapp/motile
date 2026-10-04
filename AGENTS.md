@@ -17,6 +17,7 @@ These programs make it up, plus the code the apps share:
 | Mac app (`apps/macos`) | The user's Mac | The interface |
 | iOS app (`apps/ios`) | The user's iPhone and iPad | The interface |
 | Apple kit (`packages/apple`) | Inside the Mac and the iOS app | Their state and their views |
+| GPUI app (`apps/gpui`) | The user's Mac | The Mac app again, in Rust with GPUI. A trial: no workflow builds it |
 | Core (`crates/core`) | Inside every app | Account, connections, sync, the local cache, rendering transcripts |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
@@ -142,6 +143,26 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 - `apps/ios`: the Xcode project, for iOS 18 and later. `scripts/build-core.sh` builds the core
   for iOS, `MotileUITests` uses the app with fingers, `scripts/testflight.sh` uploads a build.
 - The dev app scripts of both are under Development.
+
+### apps/gpui (Rust: GPUI with GPUI Kit)
+
+The Mac app ported to Rust. A Cargo workspace of its own with its own `Cargo.lock`, so the
+checks and the workflows leave it alone; run `cargo` from `apps/gpui`. It uses `crates/core` as
+a Rust library, and its data folder is `Motile GPUI`, so it is a device of its own beside the
+Mac app.
+
+- `bridge.rs`: runs the core and prepares a transcript's rows off the main thread. `store/` is
+  the state the views show, as `AppStore.swift` is.
+- `root.rs`, `main_view.rs`, `app_menu.rs`, `settings.rs`: the window, its layout, the menu bar
+  and shortcuts, the Settings window.
+- `transcript/`: `model.rs` (the rows and their splices into GPUI's list), `prose.rs`,
+  `rows.rs`, `view.rs`.
+- `composer/`, `sidebar.rs`, `thread/`, `panel/`, `git.rs`, `command_panel.rs`, `media/`,
+  `onboarding.rs`: the views of the same names in the Apple kit.
+- `ui/`: the Mac's buttons, alerts and sheets, SF Symbols as Lucide icons (`icons.rs`), the
+  system's menus (`menu.rs`).
+- `scripts/dev-app.sh` opens its dev app on a stack of its own, with `--mac` the Mac app beside
+  it to compare. `scripts/build-app.sh` builds `Motile GPUI.app`.
 
 ## General Rules:
 
@@ -287,7 +308,7 @@ sentence describing the change:
     server | core | macos: Stream replies in finished blocks
 
 The parts are the folders in `apps`, `crates` and `packages`: `auth`, `marketing`, `web`, `server`,
-`macos`, `ios`, `apple`, `core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
+`macos`, `ios`, `apple`, `gpui`, `core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
 
 The title should be concise. Description should explain the work in more detail (only if
 required) while still being concise. Use simple language, do not try to sound smart.

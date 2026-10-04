@@ -1,0 +1,45 @@
+# A workspace of its own, so that the repository's checks and workflows leave it alone.
+[workspace]
+
+[package]
+name = "motile-gpui"
+version = "0.1.13"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "motile-gpui"
+path = "src/main.rs"
+
+[dependencies]
+motile-core = { path = "../../crates/core" }
+motile-protocol = { path = "../../crates/protocol" }
+gpui-kit = "0.7"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "form", "query"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSMenu", "NSMenuItem", "NSView", "NSImage", "NSResponder", "NSApplication", "NSAppearance", "NSWindow", "objc2-core-foundation"] }
+raw-window-handle = "0.6"
+block2 = "0.6"
+objc2-authentication-services = { version = "0.3", default-features = false, features = ["std", "block2", "ASFoundation", "ASWebAuthenticationSession"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL", "NSDictionary", "NSValue", "NSGeometry", "NSError", "NSArray"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVPlayer", "AVPlayerItem", "AVPlayerItemOutput", "AVAsset", "objc2-core-media", "objc2-core-video"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMTime"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVPixelBuffer", "CVBuffer", "CVImageBuffer", "CVReturn"] }
+core-video = "0.5"
+core-foundation = "0.10"
+
+[profile.release]
+strip = true
+lto = "thin"

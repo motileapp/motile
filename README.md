@@ -127,6 +127,7 @@ apps/marketing   The marketing site at motile.app, with the installer
 apps/web         The web app at app.motile.app
 apps/server      The server: agents, thread storage, the iroh endpoint, the installer's setup
 apps/macos       The Mac app
+apps/gpui        The Mac app in Rust with GPUI
 crates/protocol  Messages, device keys and request signing, shared by all three
 crates/core      What every app shares: account, connections, sync, cache, rendering
 scripts          fake-agent, which stands in for the agents in tests
