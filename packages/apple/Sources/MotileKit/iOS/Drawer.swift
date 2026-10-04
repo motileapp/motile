@@ -69,7 +69,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = Theme.drawerBackground
+        view.backgroundColor = Theme.background
 
         addChild(sidebar)
         sidebar.view.backgroundColor = .clear
@@ -79,13 +79,17 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         card.clipsToBounds = true
         card.layer.cornerCurve = .continuous
         card.backgroundColor = Theme.background
+        paintCardBorder()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: Self, _: UITraitCollection) in
+            controller.paintCardBorder()
+        }
         view.addSubview(card)
         addChild(content)
         content.view.backgroundColor = Theme.background
         card.addSubview(content.view)
         content.didMove(toParent: self)
 
-        shade.backgroundColor = Theme.drawerBackground
+        shade.backgroundColor = Theme.background
         shade.alpha = 0
         shade.isHidden = true
         shade.addAction(UIAction { [weak self] _ in self?.setOpen(false, animated: true) }, for: .touchUpInside)
@@ -94,6 +98,10 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         pan.addTarget(self, action: #selector(panned(_:)))
         pan.delegate = self
         view.addGestureRecognizer(pan)
+    }
+
+    private func paintCardBorder() {
+        card.layer.borderColor = Theme.border.resolvedColor(with: traitCollection).cgColor
     }
 
     override func viewDidLayoutSubviews() {
@@ -106,7 +114,9 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         let width = sidebarWidth
         sidebar.view.frame = CGRect(x: 0, y: 0, width: width, height: bounds.height)
         card.frame = CGRect(x: progress * width, y: 0, width: bounds.width, height: bounds.height)
-        card.layer.cornerRadius = min(1, progress * 6) * Self.cardRadius
+        let lifted = min(1, max(0, progress * 6))
+        card.layer.cornerRadius = lifted * Self.cardRadius
+        card.layer.borderWidth = lifted
         content.view.frame = card.bounds
         shade.frame = card.bounds
         shade.alpha = 0.55 * progress

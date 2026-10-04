@@ -320,7 +320,7 @@ struct MainScreen: View {
         return HStack(spacing: 0) {
             SidebarScreen(underThread: false)
                 .frame(width: Self.sidebarWidth)
-                .background(Color.themeDrawerBackground.ignoresSafeArea())
+                .background(Color.themeBackground.ignoresSafeArea())
             line
             if covers {
                 PanelScreen(beside: true)

@@ -24,8 +24,6 @@ enum Theme {
     // Surfaces
     static let background = dynamic(hex(0xf8f9fc), hex(0x08090d))
     static let raised = dynamic(hex(0xffffff), hex(0x15171d))
-    /// What the sidebar lies on where the thread is a card that slides off it.
-    static let drawerBackground = dynamic(hex(0xeceef3), hex(0x030407))
     static let field = dynamic(hex(0xffffff), white(0.04))
     static let bubble = dynamic(hex(0xeceef4), hex(0x1c1f27))
     static let codeBackground = dynamic(hex(0xf1f3f8), hex(0x101218))
@@ -112,7 +110,6 @@ enum Theme {
 extension Color {
     static let themeBackground = Color(platform: Theme.background)
     static let themeRaised = Color(platform: Theme.raised)
-    static let themeDrawerBackground = Color(platform: Theme.drawerBackground)
     static let themeField = Color(platform: Theme.field)
     static let themeBubble = Color(platform: Theme.bubble)
     static let themeGlassTint = Color(platform: Theme.glassTint)
