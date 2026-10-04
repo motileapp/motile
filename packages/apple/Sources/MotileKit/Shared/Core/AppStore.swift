@@ -124,6 +124,9 @@ final class AppStore {
     /// The GitHub repositories each server last listed, and why one couldn't.
     private(set) var repos: [String: [Repo]] = [:]
     private(set) var repoErrors: [String: String] = [:]
+    /// The servers that are listing their repositories now.
+    private(set) var listingRepos: Set<String> = []
+    @ObservationIgnored private var reposListed: [String: Date] = [:]
     private(set) var addingProject: AddingProject?
     /// Counts up when a project has been made or cloned.
     private(set) var projectsAdded = 0
@@ -850,14 +853,20 @@ final class AppStore {
         defaults.set(state.rawValue, forKey: "github-\(serverID)")
     }
 
-    /// Asks the server for its GitHub repositories. The ones it listed before stay until then.
-    func loadRepos(_ serverID: String) {
+    /// Asks the server for its GitHub repositories, unless it listed them in the last minute or
+    /// `fresh` asks again anyway. The ones it listed before stay until it answers.
+    func loadRepos(_ serverID: String, fresh: Bool = false) {
+        guard !listingRepos.contains(serverID) else { return }
+        if !fresh, let listed = reposListed[serverID], Date().timeIntervalSince(listed) < 60 { return }
+        listingRepos.insert(serverID)
         repoErrors[serverID] = nil
         core.send("request", ["server_id": serverID, "request": ["type": "github_repos"]]) { [weak self] result in
             guard let self else { return }
+            listingRepos.remove(serverID)
             switch result {
             case .success(let answer) where answer.string("type") == "repos":
                 repos[serverID] = answer.objects("repos").map { Repo(json: $0) }
+                reposListed[serverID] = Date()
             case .success(let answer):
                 repos[serverID] = nil
                 heard(github: answer, serverID: serverID)
