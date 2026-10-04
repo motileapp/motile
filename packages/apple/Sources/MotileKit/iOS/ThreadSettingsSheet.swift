@@ -21,7 +21,7 @@ struct ThreadSettingsSheet: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(Color.themeBackground)
+            .background(Color.themeSheet)
             .navigationTitle("Thread settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
