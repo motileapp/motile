@@ -248,7 +248,7 @@ struct ThreadRow: View, Equatable {
             Text(thread.title)
                 .font(.ui(size: 13, weight: .medium))
                 .lineLimit(1)
-                .padding(.bottom, 3)
+                .padding(.bottom, 4)
 
             HStack(spacing: 6) {
                 if let branch = project?.branch {
