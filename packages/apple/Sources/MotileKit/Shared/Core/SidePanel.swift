@@ -30,9 +30,12 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case change(turn: String, path: String)
     /// The agents the thread's agent has started, and what one of them did.
     case agents
+    /// A tab that offers what there is to open. A thread can have several, told apart by number.
+    case blank(Int)
 
     var id: String {
         switch self {
+        case .blank(let number): "blank:\(number)"
         case .diff: "diff"
         case .files: "files"
         case .agents: "agents"
@@ -41,11 +44,16 @@ enum PanelTab: Hashable, Codable, Identifiable {
         }
     }
 
+    var blankNumber: Int? {
+        guard case .blank(let number) = self else { return nil }
+        return number
+    }
+
     /// The file a tab is about.
     var path: String? {
         switch self {
         case .file(let path), .change(_, let path): path
-        case .diff, .files, .agents: nil
+        case .diff, .files, .agents, .blank: nil
         }
     }
 
@@ -54,6 +62,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff: "Diff"
         case .files: "Files"
         case .agents: "Agents"
+        case .blank: "New Tab"
         case .file(let path), .change(_, let path): URL(fileURLWithPath: path).lastPathComponent
         }
     }
@@ -63,6 +72,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff, .change: "plusminus"
         case .files: "folder"
         case .agents: "person.2"
+        case .blank: "plus"
         case .file(let path): FileSymbol.name(for: path)
         }
     }
@@ -76,6 +86,9 @@ struct PanelTabs: Equatable, Codable {
     var scope: DiffScope?
     /// The panel covers the thread.
     var maximized: Bool?
+
+    /// All there is is a blank tab, as before one was opened.
+    var isBlank: Bool { tabs.count == 1 && tabs[0].blankNumber != nil }
 }
 
 /// The folder the panel looks into: the one the open thread works in, or the project's when a
@@ -197,20 +210,44 @@ final class SidePanel {
 
     private var key: String? { store?.panelTarget?.key }
 
-    var tabs: PanelTabs { key.flatMap { tabsByKey[$0] } ?? PanelTabs() }
+    /// The thread's tabs. There is always one: a blank one when none was opened.
+    var tabs: PanelTabs {
+        var tabs = key.flatMap { tabsByKey[$0] } ?? PanelTabs()
+        if tabs.tabs.isEmpty { tabs.tabs = [.blank(0)] }
+        if tabs.active == nil { tabs.active = tabs.tabs.first }
+        return tabs
+    }
 
     private func change(_ change: (inout PanelTabs) -> Void) {
         guard let key else { return }
-        var tabs = tabsByKey[key] ?? PanelTabs()
+        var tabs = self.tabs
         change(&tabs)
-        tabsByKey[key] = tabs.tabs.isEmpty && tabs.scope == nil && tabs.maximized == nil ? nil : tabs
+        let untouched = tabs.isBlank && tabs.scope == nil && tabs.maximized == nil
+        tabsByKey[key] = untouched ? nil : tabs
         defaults.set(try? JSONEncoder().encode(tabsByKey), forKey: "panel.tabs")
     }
 
-    /// Shows the tab, opening it and the panel when they aren't.
+    /// Shows the tab, opening it and the panel when they aren't. It takes the place of the blank
+    /// tab it is opened from.
     func open(_ tab: PanelTab) {
         change { tabs in
-            if !tabs.tabs.contains(tab) { tabs.tabs.append(tab) }
+            let blank = tabs.tabs.firstIndex { $0 == tabs.active && $0.blankNumber != nil }
+            if tabs.tabs.contains(tab) {
+                if let blank { tabs.tabs.remove(at: blank) }
+            } else if let blank {
+                tabs.tabs[blank] = tab
+            } else {
+                tabs.tabs.append(tab)
+            }
+            tabs.active = tab
+        }
+        isOpen = true
+    }
+
+    func openBlank() {
+        change { tabs in
+            let tab = PanelTab.blank((tabs.tabs.compactMap(\.blankNumber).max() ?? -1) + 1)
+            tabs.tabs.append(tab)
             tabs.active = tab
         }
         isOpen = true
@@ -245,9 +282,10 @@ final class SidePanel {
         }
     }
 
-    /// What ⌘W does while the panel shows a tab. `false` when there is none to close.
+    /// What ⌘W does while the panel shows a tab. `false` when all it has is a blank one.
     func closeActive() -> Bool {
-        guard isOpen, let active = tabs.active else { return false }
+        let tabs = tabs
+        guard isOpen, !tabs.isBlank, let active = tabs.active else { return false }
         close(active)
         return true
     }

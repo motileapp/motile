@@ -45,7 +45,7 @@ struct PanelContent: View {
             case .file(let path): FileSurface(target: target, path: path).id(path)
             case .change(let turn, let path): ChangeSurface(target: target, turn: turn, path: path).id(active)
             case .agents: AgentsSurface()
-            case nil: PanelLauncher(target: target)
+            case .blank, nil: PanelLauncher(target: target)
             }
         }
     }
@@ -125,10 +125,10 @@ struct PanelTabStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 2) {
                     ForEach(tabs.tabs) { tab in
-                        PanelTabChip(tab: tab, active: tab == tabs.active)
+                        PanelTabChip(tab: tab, active: tab == tabs.active, closable: !tabs.isBlank)
                     }
-                    if !tabs.tabs.isEmpty {
-                        add
+                    IconOnlyButton(symbol: "plus", help: "New tab", size: scaled(28), symbolSize: 12, faded: true) {
+                        store.sidePanel.openBlank()
                     }
                 }
                 .padding(.horizontal, 8)
@@ -140,33 +140,14 @@ struct PanelTabStrip: View {
             }
         }
     }
-
-    private var add: some View {
-        Menu {
-            Button("Files") { store.sidePanel.open(.files) }
-            Button("Diff") { store.sidePanel.showDiff() }
-                .disabled(store.panelTarget?.repository != true)
-            Button("Agents") { store.sidePanel.open(.agents) }
-        } label: {
-            Image(systemName: "plus")
-                .font(.ui(size: 12, weight: .medium))
-                .frame(width: scaled(28), height: scaled(28))
-                .frame(minWidth: Platform.minimumPress, minHeight: Platform.minimumPress)
-                .contentShape(Rectangle())
-        }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .hoverHighlight(faded: true)
-        .help("Open a tab")
-    }
 }
 
 private struct PanelTabChip: View {
     @Environment(AppStore.self) private var store
     let tab: PanelTab
     let active: Bool
+    /// The blank tab a panel starts with has nothing to close.
+    let closable: Bool
     @State private var hovering = false
 
     private static let closeSize: CGFloat = Platform.scale > 1 ? 24 : 16
@@ -197,15 +178,18 @@ private struct PanelTabChip: View {
         .overlay(alignment: .trailing) {
             IconOnlyButton(symbol: "xmark", help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4, faded: true) { panel.close(tab) }
                 .padding(.trailing, Self.closeMargin)
-                .opacity(hovering || active ? 1 : 0)
+                .opacity(closable && (hovering || active) ? 1 : 0)
+                .allowsHitTesting(closable)
         }
         .padding(.vertical, -Self.reach)
         .onHover { hovering = $0 }
         .help(tab.path ?? tab.title)
         .contextMenu {
             Button("Close") { panel.close(tab) }
+                .disabled(!closable)
             Button("Close Others") { panel.closeOthers(tab) }
             Button("Close All") { panel.closeAll() }
+                .disabled(!closable)
             if let path = tab.path {
                 Divider()
                 Button("Copy Path") { Platform.copy(path) }
@@ -214,14 +198,14 @@ private struct PanelTabChip: View {
     }
 }
 
-/// What the panel shows before a tab is open: the tabs there are to open.
+/// What a blank tab shows: the tabs there are to open.
 private struct PanelLauncher: View {
     @Environment(AppStore.self) private var store
     let target: PanelTarget
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("Open a tab")
+            Text("Open")
                 .font(.ui(size: 13, weight: .semibold))
                 .foregroundStyle(Color.themeText)
             VStack(spacing: 2) {
