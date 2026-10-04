@@ -40,7 +40,9 @@ final class TranscriptView: FlippedView, RowOwner {
     var bottomInset: CGFloat = 0 {
         didSet {
             guard bottomInset != oldValue else { return }
-            updateVisible()
+            // More room under the rows, as for the keyboard, is glided to.
+            updateVisible(follows: false)
+            land()
             jumpButton.frame.origin.y = jumpButtonY
             layoutFade()
         }
