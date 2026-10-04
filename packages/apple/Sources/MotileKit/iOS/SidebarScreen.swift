@@ -133,10 +133,10 @@ struct SidebarScreen: View {
                 Spacer()
                 Text("\(done.count)")
                     .font(.ui(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.themeTertiary)
                     .monospacedDigit()
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.themeSecondary)
             .padding(.horizontal, sidebarRowInset + 8)
             .frame(height: 44)
             .contentShape(Rectangle())

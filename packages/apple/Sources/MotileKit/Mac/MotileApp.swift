@@ -18,6 +18,7 @@ struct MotileApp: App {
         Window("Motile", id: "main") {
             RootView()
                 .environment(store)
+                .foregroundStyle(Color.themeText)
                 .frame(minWidth: 780, minHeight: 500)
                 .onAppear {
                     guard !delegate.started else { return }
@@ -90,6 +91,7 @@ struct MotileApp: App {
         Settings {
             SettingsView()
                 .environment(store)
+                .foregroundStyle(Color.themeText)
         }
     }
 }
