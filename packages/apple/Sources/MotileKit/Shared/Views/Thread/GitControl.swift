@@ -14,6 +14,7 @@ struct GitButton: View {
     private static let radius: CGFloat = 7
     /// What leaves the room under the button that the composer's menus leave over theirs.
     private static let menuGap: CGFloat = 16
+    private static let stateColor = Color.purple
     @State private var anchor = MenuAnchorView()
     #endif
 
@@ -33,7 +34,6 @@ struct GitButton: View {
         let stage = store.gitStages[project.id]
         let quick = control.quick
         let runs = quick.action != nil || quick.url != nil
-        let merged = quick.url != nil && project.git?.pullRequest?.merged == true
         return HStack(spacing: 0) {
             Button {
                 store.runQuickGit(in: project)
@@ -47,9 +47,9 @@ struct GitButton: View {
                     } else {
                         Image(systemName: GitSymbol.name(for: quick.action))
                             .font(.ui(size: 12, weight: .medium))
-                            .foregroundStyle(merged ? Color.purple : runs ? Color.themeText : Color.themeTertiary)
+                            .foregroundStyle(quick.state != nil ? Self.stateColor : runs ? Color.themeText : Color.themeTertiary)
                     }
-                    Text(stage?.label ?? quick.label)
+                    label(of: quick, at: stage)
                         .font(.ui(size: 12, weight: .medium))
                         .lineLimit(1)
                 }
@@ -60,7 +60,7 @@ struct GitButton: View {
             }
             .buttonStyle(.highlight(radius: 0))
             .disabled(stage != nil)
-            .help(quick.hint ?? project.git?.pullRequest?.title ?? quick.label)
+            .help(quick.hint ?? project.git?.pullRequest?.title ?? quick.title)
             Rectangle()
                 .fill(Color.themeStrongBorder)
                 .frame(width: 1, height: Self.height)
@@ -72,6 +72,12 @@ struct GitButton: View {
         }
         .background(MenuAnchor(anchor: anchor))
         .padding(.horizontal, 6)
+    }
+
+    private func label(of quick: GitQuick, at stage: GitStage?) -> Text {
+        if let stage { return Text(stage.label) }
+        guard let state = quick.state else { return Text(quick.label) }
+        return Text("\(Text(state).foregroundStyle(Self.stateColor)) \(quick.label)")
     }
 
     private var chevron: some View {
@@ -124,7 +130,7 @@ struct GitButton: View {
                     Button {
                         store.runQuickGit(in: project)
                     } label: {
-                        Label(quick.label, systemImage: GitSymbol.name(for: quick.action))
+                        Label(quick.title, systemImage: GitSymbol.name(for: quick.action))
                     }
                     .disabled(running)
                 }

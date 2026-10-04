@@ -17,6 +17,8 @@ pub struct Control {
 #[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct Quick {
     pub label: String,
+    /// Said before the label, in the symbol's color: "Merged".
+    pub state: Option<String>,
     pub action: Option<GitAction>,
     pub url: Option<String>,
     pub hint: Option<String>,
@@ -96,6 +98,7 @@ fn quick(status: &GitStatus) -> Quick {
     if let Some(pull_request) = &status.pull_request {
         return Quick {
             label: format!("PR #{}", pull_request.number),
+            state: pull_request.merged.then(|| "Merged".to_string()),
             url: Some(pull_request.url.clone()),
             ..Quick::default()
         };
@@ -274,6 +277,7 @@ mod tests {
             (opened.label.as_str(), opened.url.as_deref(), opened.action),
             ("PR #12", Some("https://x/12"), None)
         );
+        assert_eq!(opened.state, None);
     }
 
     #[test]
@@ -285,6 +289,7 @@ mod tests {
             (control.quick.label.as_str(), control.quick.url.as_deref(), control.quick.action),
             ("PR #12", Some("https://x/12"), None)
         );
+        assert_eq!(control.quick.state.as_deref(), Some("Merged"));
         assert_eq!(control.menu[2].label, "Create PR");
         assert_eq!(
             control.menu[2].reason.as_deref(),
