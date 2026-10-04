@@ -34,7 +34,7 @@ struct CommandPanel: View {
         panel(sections, rows: items.count)
             .onChange(of: query) {
                 highlighted = 0
-                store.panelNotice = nil
+                if store.panelNotice != nil { store.panelNotice = nil }
                 browse()
             }
             .onChange(of: store.github) { followGitHub() }
@@ -124,9 +124,26 @@ struct CommandPanel: View {
                 .submitLabel(.go)
                 .onSubmit(runHighlighted)
                 #endif
+            if case .github(let id) = page {
+                refreshRepos(id)
+            }
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
+    }
+
+    /// Lists the repositories again, to find one made since. A spinner while the server lists them.
+    @ViewBuilder private func refreshRepos(_ id: String) -> some View {
+        if store.listingRepos.contains(id) {
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 26, height: 26)
+                .help("Refreshing your repositories")
+        } else {
+            IconOnlyButton(symbol: .rotateCw, help: Platform.name == "macos" ? "Refresh (⌘R)" : "Refresh", size: 26, symbolSize: 14, faded: true) {
+                store.loadRepos(id, fresh: true)
+            }
+        }
     }
 
     #if os(iOS)
@@ -153,7 +170,7 @@ struct CommandPanel: View {
     private func results(_ sections: [PanelSection], rows: Int) -> some View {
         ScrollViewReader { scroller in
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     if rows == 0 {
                         Text(emptyText)
                             .font(.ui(size: 13))
@@ -173,11 +190,10 @@ struct CommandPanel: View {
                         ForEach(section.items) { item in
                             PanelRow(item: item, highlighted: steered && item.selectable && item.index == highlighted)
                                 .button(.highlight(radius: PanelRow.radius, inset: PanelRow.margin)) { run(item) }
-                                .id(item.index >= 0 ? AnyHashable(item.index) : AnyHashable(item.id))
                                 .onHover { if $0, item.index >= 0 { highlighted = item.index } }
                         }
                     }
-                    if let notice = store.panelNotice {
+                    if let notice {
                         Text(notice)
                             .font(.ui(size: 12))
                             .foregroundStyle(Color.themeDanger)
@@ -194,7 +210,10 @@ struct CommandPanel: View {
             .frame(maxHeight: .infinity)
             .scrollDismissesKeyboard(.interactively)
             #endif
-            .onChange(of: highlighted) { scroller.scrollTo(highlighted) }
+            .onChange(of: highlighted) {
+                guard let item = sections.flatMap(\.items).first(where: { $0.index == highlighted }) else { return }
+                scroller.scrollTo(item.id)
+            }
         }
     }
 
@@ -205,9 +224,15 @@ struct CommandPanel: View {
         switch page {
         case .github, .folder: return 420
         default:
-            let notice = store.panelNotice == nil ? 0 : Self.noticeHeight
+            let notice = self.notice == nil ? 0 : Self.noticeHeight
             return min(420, max(90, CGFloat(rows) * PanelRow.height + CGFloat(sections.count) * 32 + 10 + notice))
         }
+    }
+
+    /// What a server refused, or why it couldn't list the repositories again.
+    private var notice: String? {
+        guard case .github(let id) = page, store.repos[id] != nil else { return store.panelNotice }
+        return store.panelNotice ?? store.repoErrors[id]
     }
 
     private var emptyText: String {
@@ -228,6 +253,7 @@ struct CommandPanel: View {
             } else {
                 hint(["↩"], "Select")
             }
+            if case .github = page { hint(["⌘", "R"], "Refresh") }
             if pages.count > 1 { hint(["⌫"], "Back") }
             hint(["esc"], "Close")
             Spacer()
@@ -278,7 +304,9 @@ struct CommandPanel: View {
         case .newProject(let id):
             sections = [PanelSection(title: "New project", items: [newProject(on: id)])]
             narrows = false
-        case .github(let id): sections = [PanelSection(title: "Your GitHub", items: repoItems(id))]
+        case .github(let id):
+            sections = [PanelSection(title: "Your GitHub", items: repoItems(id))]
+            narrows = false
         case .githubSetup(let id):
             let missing = store.github[id] == .missing
             let title = missing ? "GitHub's gh isn't installed on \(serverName(id))" : "GitHub isn't signed in on \(serverName(id))"
@@ -392,18 +420,27 @@ struct CommandPanel: View {
             item.busy = store.addingProject == AddingProject(serverID: id, name: name)
             return item
         }
-        var items = repos.map { repo in
+        let typed = query.trimmingCharacters(in: .whitespaces)
+        var items = found(repos, typed.lowercased()).map { repo in
             var item = clone(repo.name, repo.name, repo.description ?? "", .bookMarked)
             item.note = repo.isPrivate ? "Private" : nil
             return item
         }
         // A repository that isn't listed is cloned by its name.
-        let typed = query.trimmingCharacters(in: .whitespaces)
         let listed = repos.contains { $0.name.caseInsensitiveCompare(typed) == .orderedSame }
         if !listed, typed.wholeMatch(of: #/[\w.-]+/[\w.-]+/#) != nil {
             items.append(clone(typed, "Clone \(typed)", "A repository that isn't in your list", .circleArrowDown))
         }
         return items
+    }
+
+    /// The repositories that answer the search, the best first and the last pushed among equals.
+    private func found(_ repos: [Repo], _ search: String) -> [Repo] {
+        guard !search.isEmpty else { return repos }
+        return repos.enumerated()
+            .compactMap { position, repo in repo.rank(search).map { (rank: $0, position: position, repo: repo) } }
+            .sorted { ($0.rank, $0.position) < ($1.rank, $1.position) }
+            .map(\.repo)
     }
 
     private func setupItems(_ id: String) -> [PanelItem] {
@@ -559,6 +596,7 @@ struct CommandPanel: View {
         switch page {
         case .folder: query = "~/"
         case .github(let id): store.loadRepos(id)
+        case .sources(let id) where store.github[id] == .ready: store.loadRepos(id)
         default: break
         }
     }
@@ -616,6 +654,9 @@ struct CommandPanel: View {
             alternate()
         case 51 where query.isEmpty && pages.count > 1:
             back()
+        case 15 where command:
+            guard case .github(let id) = page else { return false }
+            store.loadRepos(id, fresh: true)
         default:
             guard command, let digit = Int(event.charactersIgnoringModifiers ?? ""),
                 let item = items.first(where: { $0.shortcut == digit })

@@ -1236,8 +1236,12 @@ case "$1 $2" in
     [ -f "$(dirname "$0")/signed-in" ] || { echo "no oauth token found for github.com" >&2; exit 1; }
     echo token ;;
 "api user/repos"*)
-    echo '[{"full_name": "acme/app", "description": "The app", "private": true},
-           {"full_name": "me/notes", "description": null, "private": false}]' ;;
+    [ -f "$(dirname "$0")/signed-in" ] || { echo "To get started with GitHub CLI, please run:  gh auth login" >&2; exit 4; }
+    case "$2" in
+    *"&page=1")
+        echo '{"full_name":"acme/app","description":"The app","private":true}'
+        echo '{"full_name":"me/notes","description":null,"private":false}' ;;
+    esac ;;
 "repo clone")
     git init --quiet "$4" && git -C "$4" remote add origin "https://github.com/$3.git" ;;
 esac

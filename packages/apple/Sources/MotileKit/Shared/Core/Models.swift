@@ -780,11 +780,27 @@ struct Repo: Equatable {
     let name: String
     let description: String?
     let isPrivate: Bool
+    private let lowercasedName: String
+    private let lowercasedRepoName: Substring
+    private let lowercasedDescription: String
 
     init(json: JSON) {
         name = json.string("name")
         description = json.optionalString("description")
         isPrivate = json.bool("private")
+        lowercasedName = name.lowercased()
+        lowercasedRepoName = lowercasedName.split(separator: "/", maxSplits: 1).last ?? Substring(lowercasedName)
+        lowercasedDescription = description?.lowercased() ?? ""
+    }
+
+    /// How well it answers a lowercased search, the best at 0: the name after the owner
+    /// starting with it, then the whole name, then the name holding it, then the description.
+    func rank(_ search: String) -> Int? {
+        if lowercasedRepoName.hasPrefix(search) { return 0 }
+        if lowercasedName.hasPrefix(search) { return 1 }
+        if lowercasedName.contains(search) { return 2 }
+        if lowercasedDescription.contains(search) { return 3 }
+        return nil
     }
 }
 
