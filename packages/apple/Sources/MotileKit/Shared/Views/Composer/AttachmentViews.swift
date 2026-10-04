@@ -20,8 +20,7 @@ struct AttachmentTile: View {
                     .frame(width: Self.side, height: Self.side)
             }
             if attachment.video {
-                Image(systemName: "play.fill")
-                    .font(.ui(size: 16))
+                Image(.play, size: 16)
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.5), radius: 3)
             }
@@ -36,8 +35,7 @@ struct AttachmentTile: View {
             Button {
                 store.removeAttachment(attachment.id)
             } label: {
-                Image(systemName: "xmark")
-                    .font(.ui(size: 8, weight: .bold))
+                Image(.x, size: 8)
                     .foregroundStyle(.white)
                     .frame(width: 16, height: 16)
                     .background(.black.opacity(0.6), in: Circle())
@@ -80,7 +78,7 @@ struct AttachmentChip: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Image(systemName: "doc")
+            Image(.file, size: 12)
             Text(attachment.name)
                 .lineLimit(1)
             if let bytes = attachment.bytes {
@@ -88,7 +86,7 @@ struct AttachmentChip: View {
                     .foregroundStyle(Color.themeSecondary)
             }
             AttachmentProgress(attachment: attachment, onPicture: false)
-            IconOnlyButton(symbol: "xmark", help: "Remove", size: 18, symbolSize: 10) {
+            IconOnlyButton(symbol: .x, help: "Remove", size: 18, symbolSize: 10) {
                 store.removeAttachment(attachment.id)
             }
         }
@@ -128,14 +126,14 @@ private struct AttachmentProgress: View {
                 store.retryAttachment(attachment.id)
             } label: {
                 if onPicture {
-                    Label("Retry", systemImage: "arrow.clockwise")
+                    Label("Retry", symbol: .rotateCw, size: 10)
                         .font(.ui(size: 10, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 2)
                         .background(Color.themeDanger.opacity(0.85))
                 } else {
-                    Label("Retry", systemImage: "arrow.clockwise")
+                    Label("Retry", symbol: .rotateCw)
                         .foregroundStyle(Color.themeDanger)
                 }
             }

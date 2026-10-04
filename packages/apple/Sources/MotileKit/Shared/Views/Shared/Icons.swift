@@ -47,8 +47,7 @@ struct AgentIcon: View {
                 .interpolation(.high)
                 .frame(width: size, height: size)
         } else {
-            Image(systemName: "sparkle")
-                .font(.ui(size: size * 0.85))
+            Image(.sparkle, size: size * 0.85)
                 .frame(width: size, height: size)
         }
     }
@@ -209,8 +208,7 @@ struct ProjectIcon: View {
                     .aspectRatio(contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
             } else {
-                Image(systemName: "folder")
-                    .font(.ui(size: size * 0.78, weight: .medium))
+                Image(.folder, size: size * 0.78)
                     .foregroundStyle(Color.themeSecondary)
             }
         }
@@ -232,14 +230,42 @@ struct ServerLabel: View {
 
     var body: some View {
         HStack(spacing: size * 0.3) {
-            Image(systemName: "server.rack")
-                .font(.ui(size: size * 0.82, weight: .medium))
+            Image(.server, size: size * 0.82)
             Text(server.name)
                 .font(.ui(size: size))
                 .lineLimit(1)
         }
         .foregroundStyle(Color.themeTertiary)
         .help("On \(server.name)")
+    }
+}
+
+extension PullRequest.State {
+    var color: Color {
+        switch self {
+        case .open: .themeSuccess
+        case .draft: .themeSecondary
+        case .merged: .themeMerged
+        case .closed: .themeDanger
+        }
+    }
+}
+
+/// A thread's pull request: what became of it, and its number.
+struct PullRequestLabel: View {
+    let pullRequest: PullRequest
+    /// In the colour of what became of it, or as quiet as the row it is in.
+    var colored = true
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(pullRequest.state.symbol, size: 11)
+            Text(verbatim: "\(pullRequest.number)")
+                .font(.ui(size: 11, weight: .medium))
+                .monospacedDigit()
+        }
+        .foregroundStyle(colored ? pullRequest.state.color : Color.themeTertiary)
+        .help(pullRequest.title)
     }
 }
 

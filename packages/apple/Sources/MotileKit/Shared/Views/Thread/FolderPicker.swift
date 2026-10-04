@@ -25,7 +25,7 @@ struct FolderPicker: View {
                 Button {
                     if let parent = folder?.parent { load(parent) }
                 } label: {
-                    Image(systemName: "chevron.up")
+                    Image(.chevronUp, size: 13)
                 }
                 .disabled(folder?.parent == nil)
                 .help("Enclosing folder")
@@ -39,14 +39,14 @@ struct FolderPicker: View {
 
             List(selection: $selected) {
                 ForEach(folder?.folders ?? [], id: \.self) { name in
-                    Label(name, systemImage: "folder")
+                    Label(name, symbol: .folder)
                         .tag(name)
                         .contentShape(Rectangle())
                         .onTapGesture(count: 2) { load(child(name)) }
                         .onTapGesture { selected = name }
                 }
                 ForEach(folder?.files ?? [], id: \.self) { name in
-                    Label(name, systemImage: "photo")
+                    Label(name, symbol: .image)
                         .tag(name)
                         .contentShape(Rectangle())
                         .onTapGesture(count: 2) { useAsIcon(name) }

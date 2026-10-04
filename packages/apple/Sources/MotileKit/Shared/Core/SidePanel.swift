@@ -67,13 +67,13 @@ enum PanelTab: Hashable, Codable, Identifiable {
         }
     }
 
-    var symbol: String {
+    var symbol: Symbol {
         switch self {
-        case .diff, .change: "plusminus"
-        case .files: "folder"
-        case .agents: "person.2"
-        case .blank: "plus"
-        case .file(let path): FileSymbol.name(for: path)
+        case .diff, .change: .diff
+        case .files: .folder
+        case .agents: .users
+        case .blank: .plus
+        case .file(let path): FileSymbol.symbol(for: path)
         }
     }
 }
@@ -547,14 +547,14 @@ final class SidePanel {
 
 /// The symbol a file is shown with, by what its name ends in.
 enum FileSymbol {
-    static func name(for path: String) -> String {
+    static func symbol(for path: String) -> Symbol {
         switch (path as NSString).pathExtension.lowercased() {
-        case "png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "ico", "svg": "photo"
-        case "md", "markdown", "txt", "rst": "doc.text"
-        case "json", "yaml", "yml", "toml", "xml", "plist", "lock": "curlybraces"
-        case "sh", "bash", "zsh", "fish": "terminal"
-        case "": "doc"
-        default: "chevron.left.forwardslash.chevron.right"
+        case "png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "ico", "svg": .image
+        case "md", "markdown", "txt", "rst": .fileText
+        case "json", "yaml", "yml", "toml", "xml", "plist", "lock": .braces
+        case "sh", "bash", "zsh", "fish": .terminal
+        case "": .file
+        default: .code
         }
     }
 }

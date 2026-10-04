@@ -5,7 +5,7 @@ import UIKit
 /// An entry of the menu a view opens when it is held.
 struct MenuAction {
     let title: String
-    let symbol: String
+    let symbol: Symbol
     let run: () -> Void
 }
 
@@ -151,7 +151,7 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate {
         guard takesPress(at: location), let actions = menuActions?(), !actions.isEmpty else { return nil }
         return UIContextMenuConfiguration(actionProvider: { _ in
             UIMenu(children: actions.map { action in
-                UIAction(title: action.title, image: UIImage(systemName: action.symbol)) { _ in action.run() }
+                UIAction(title: action.title, image: .symbol(action.symbol, size: 15)) { _ in action.run() }
             })
         })
     }
@@ -289,28 +289,17 @@ final class ShimmerLabel: TextLabel {
     }
 }
 
-/// The rows ask for the same few symbols every time one scrolls in, so each is made once.
-private var symbols: [String: UIImage] = [:]
-
-private func symbol(_ name: String, size: CGFloat, weight: UIFont.Weight) -> UIImage? {
-    let key = "\(name)/\(size)/\(weight.rawValue)"
-    if let made = symbols[key] { return made }
-    let made = UIImage.symbol(name, size: size * Platform.scale, weight: weight)
-    symbols[key] = made
-    return made
-}
-
-/// An SF Symbol in one colour, in the middle of its frame.
+/// A symbol in one colour, in the middle of its frame.
 final class SymbolView: UIImageView {
-    convenience init(_ name: String = "", size: CGFloat = 12, weight: UIFont.Weight = .regular, tint: UIColor = Theme.secondary) {
+    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: UIColor = Theme.secondary) {
         self.init(frame: .zero)
         contentMode = .center
         tintColor = tint
-        if !name.isEmpty { show(name, size: size, weight: weight) }
+        if let symbol { show(symbol, size: size) }
     }
 
-    func show(_ name: String, size: CGFloat = 12, weight: UIFont.Weight = .regular) {
-        image = symbol(name, size: size, weight: weight)
+    func show(_ symbol: Symbol, size: CGFloat = 12) {
+        image = .symbol(symbol, size: size)
     }
 
     var tint: UIColor? {
@@ -319,12 +308,12 @@ final class SymbolView: UIImageView {
     }
 }
 
-/// A borderless button with an SF Symbol and, optionally, a title. It lights up under a finger.
+/// A borderless button with a symbol and, optionally, a title. It lights up under a finger.
 final class IconButton: UIButton {
     static let side: CGFloat = 36
     private static let symbolSize: CGFloat = 14
 
-    convenience init(symbolName: String, title: String = "", tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", tooltip: String, action: @escaping () -> Void) {
         self.init(type: .custom)
         layer.cornerRadius = 8
         layer.cornerCurve = .continuous
@@ -332,12 +321,12 @@ final class IconButton: UIButton {
         setTitleColor(Theme.secondary, for: .normal)
         titleLabel?.font = Theme.smallFont
         accessibilityLabel = tooltip
-        set(symbolName: symbolName, title: title)
+        set(symbol: symbol, title: title)
         addAction(UIAction { _ in action() }, for: .touchUpInside)
     }
 
-    func set(symbolName: String, title: String = "") {
-        setImage(symbol(symbolName, size: Self.symbolSize, weight: .medium), for: .normal)
+    func set(symbol: Symbol, title: String = "") {
+        setImage(.symbol(symbol, size: Self.symbolSize), for: .normal)
         setTitle(title.isEmpty ? nil : title, for: .normal)
     }
 

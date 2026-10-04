@@ -57,6 +57,9 @@ pub struct Thread {
     pub agents: u32,
     /// When the last turn ended, for telling the user about replies they haven't seen.
     pub turn_ended_at: Option<f64>,
+    /// The pull request that was opened for the thread, whatever became of it.
+    #[serde(default)]
+    pub pull_request: Option<PullRequest>,
     /// The transcript's revision; a client whose copy is older has catching up to do.
     pub rev: u64,
 }
@@ -489,8 +492,8 @@ pub struct GitStatus {
     pub removed: u32,
     /// The server can open pull requests for this repository.
     pub pull_requests: bool,
-    /// The pull request of the branch: the open one, or the merged one while the branch has no
-    /// commit since.
+    /// The pull request of the branch: the open one, or the merged or closed one while the branch
+    /// has no commit since.
     pub pull_request: Option<PullRequest>,
 }
 
@@ -502,6 +505,15 @@ pub struct PullRequest {
     pub draft: bool,
     #[serde(default)]
     pub merged: bool,
+    /// Closed without being merged.
+    #[serde(default)]
+    pub closed: bool,
+}
+
+impl PullRequest {
+    pub fn is_open(&self) -> bool {
+        !self.merged && !self.closed
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

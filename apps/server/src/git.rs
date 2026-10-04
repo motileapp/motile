@@ -278,28 +278,48 @@ pub async fn fetch(folder: &str, environment: &Environment) {
     }
 }
 
-/// The pull request of the branch that is checked out, from GitHub's `gh`: the open one, or the
-/// merged one while the branch has no commit since.
-pub async fn pull_request(folder: &str, environment: &Environment) -> Option<PullRequest> {
-    let fields = "number,title,url,state,isDraft,headRefOid";
-    let view = command("gh", folder, environment, &["pr", "view", "--json", fields]);
+/// What GitHub's `gh` says of a pull request, and the commit at its head: the one with that
+/// number, or the one of the branch that is checked out.
+async fn viewed_pull_request(
+    folder: &str,
+    environment: &Environment,
+    number: Option<u64>,
+) -> Option<(PullRequest, String)> {
+    let number = number.map(|number| number.to_string());
+    let mut arguments = vec!["pr", "view"];
+    arguments.extend(number.as_deref());
+    arguments.extend(["--json", "number,title,url,state,isDraft,headRefOid"]);
+    let view = command("gh", folder, environment, &arguments);
     let answer: serde_json::Value = serde_json::from_str(&run(view, None, QUICK).await.ok()?).ok()?;
-    let merged = match answer["state"].as_str()? {
-        "OPEN" => false,
-        "MERGED" => true,
-        _ => return None,
-    };
-    if merged {
-        let head = answer["headRefOid"].as_str()?;
-        git(folder, environment, &["merge-base", "--is-ancestor", "HEAD", head]).await.ok()?;
+    let state = answer["state"].as_str()?;
+    let (merged, closed) = (state == "MERGED", state == "CLOSED");
+    if !merged && !closed && state != "OPEN" {
+        return None;
     }
-    Some(PullRequest {
+    let found = PullRequest {
         number: answer["number"].as_u64()?,
         title: answer["title"].as_str()?.to_string(),
         url: answer["url"].as_str()?.to_string(),
         draft: answer["isDraft"].as_bool().unwrap_or(false),
         merged,
-    })
+        closed,
+    };
+    Some((found, answer["headRefOid"].as_str().unwrap_or_default().to_string()))
+}
+
+/// The pull request of the branch that is checked out: the open one, or the merged or closed one
+/// while the branch has no commit since.
+pub async fn pull_request(folder: &str, environment: &Environment) -> Option<PullRequest> {
+    let (found, head) = viewed_pull_request(folder, environment, None).await?;
+    if !found.is_open() {
+        git(folder, environment, &["merge-base", "--is-ancestor", "HEAD", &head]).await.ok()?;
+    }
+    Some(found)
+}
+
+/// The pull request with that number, whatever became of it.
+pub async fn pull_request_numbered(folder: &str, environment: &Environment, number: u64) -> Option<PullRequest> {
+    Some(viewed_pull_request(folder, environment, Some(number)).await?.0)
 }
 
 /// The names and the patch of the changes at `paths` that aren't committed, all of them when it

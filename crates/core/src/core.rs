@@ -1668,6 +1668,7 @@ mod tests {
             needs_approval,
             agents: 0,
             turn_ended_at: None,
+            pull_request: None,
             rev: 3,
         }
     }

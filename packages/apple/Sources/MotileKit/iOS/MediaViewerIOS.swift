@@ -60,7 +60,7 @@ struct MediaViewer: View {
 
     private func bar(_ item: ViewedMedia) -> some View {
         HStack(spacing: 12) {
-            button("xmark", label: "Close") { store.closeViewer() }
+            button(.x, label: "Close") { store.closeViewer() }
             Spacer(minLength: 8)
             VStack(spacing: 1) {
                 Text(item.name)
@@ -76,7 +76,7 @@ struct MediaViewer: View {
             .foregroundStyle(.white)
             Spacer(minLength: 8)
             if let shared {
-                ShareLink(item: shared) { symbol("square.and.arrow.up") }
+                ShareLink(item: shared) { symbol(.share) }
             } else {
                 Color.clear.frame(width: 40, height: 40)
             }
@@ -86,14 +86,13 @@ struct MediaViewer: View {
         .opacity(pulled > 0 ? 0 : 1)
     }
 
-    private func button(_ name: String, label: String, action: @escaping () -> Void) -> some View {
+    private func button(_ name: Symbol, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { symbol(name) }
             .accessibilityLabel(label)
     }
 
-    private func symbol(_ name: String) -> some View {
-        Image(systemName: name)
-            .font(.system(size: 15, weight: .semibold))
+    private func symbol(_ name: Symbol) -> some View {
+        Image(name, size: 13)
             .foregroundStyle(.white)
             .frame(width: 40, height: 40)
             .background(.white.opacity(0.16), in: Circle())

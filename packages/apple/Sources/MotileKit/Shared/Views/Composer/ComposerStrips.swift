@@ -74,8 +74,7 @@ struct ContextStrip: View {
         return HStack(spacing: 0) {
             if let server {
                 part(server.name) {
-                    Image(systemName: "server.rack")
-                        .font(.ui(size: 11, weight: .medium))
+                    Image(.server, size: 11)
                 }
                 .padding(.leading, 14)
                 .help("On \(server.name)")
@@ -118,10 +117,10 @@ struct ContextStrip: View {
     /// Where a new thread starts, to choose, and where a thread that has started works.
     @ViewBuilder private var workspace: some View {
         if let worktree = project.worktree {
-            working(in: "Worktree", symbol: "folder.badge.gearshape")
+            working(in: "Worktree", symbol: .folderGit2)
                 .help(worktree.path)
         } else if store.selectedThread != nil, project.branch != nil {
-            working(in: "Local checkout", symbol: "folder")
+            working(in: "Local checkout", symbol: .folder)
                 .help("The thread works in the project's folder")
         } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
             let inWorktree = store.draftUsesWorktree
@@ -131,21 +130,19 @@ struct ContextStrip: View {
             Menu {
                 Section("Workspace") {
                     Toggle(isOn: Binding(get: { !inWorktree }, set: { _ in store.setDraftWorktree(false) })) {
-                        Label("Current checkout", systemImage: "folder")
+                        Label("Current checkout", symbol: .folder)
                     }
                     Toggle(isOn: Binding(get: { inWorktree }, set: { _ in store.setDraftWorktree(true) })) {
-                        Label("New worktree", systemImage: "folder.badge.plus")
+                        Label("New worktree", symbol: .folderGit2)
                     }
                 }
             } label: {
                 HStack(spacing: 5) {
-                    Image(systemName: inWorktree ? "folder.badge.plus" : "folder")
-                        .font(.ui(size: 11, weight: .medium))
+                    Image(inWorktree ? .folderGit2 : .folder, size: 11)
                     Text(inWorktree ? "New worktree" : "Current checkout")
                         .font(.ui(size: 12))
                         .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.ui(size: 9, weight: .bold))
+                    Image(.chevronDown, size: 9)
                         .foregroundStyle(Color.themeTertiary)
                 }
                 .padding(.horizontal, 9)
@@ -162,12 +159,11 @@ struct ContextStrip: View {
         }
     }
 
-    @ViewBuilder private func working(in title: String, symbol: String) -> some View {
+    @ViewBuilder private func working(in title: String, symbol: Symbol) -> some View {
         divider
             .padding(.horizontal, 10)
         part(title) {
-            Image(systemName: symbol)
-                .font(.ui(size: 11, weight: .medium))
+            Image(symbol, size: 11)
         }
     }
 
@@ -190,15 +186,13 @@ struct ContextStrip: View {
 
     private func branchLabel(_ branch: String, opens: Bool) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.ui(size: 11, weight: .medium))
+            Image(.gitBranch, size: 11)
             Text(branch)
                 .font(.ui(size: 12))
                 .lineLimit(1)
                 .truncationMode(.middle)
             if opens {
-                Image(systemName: "chevron.down")
-                    .font(.ui(size: 9, weight: .bold))
+                Image(.chevronDown, size: 9)
                     .foregroundStyle(Color.themeTertiary)
             }
         }
@@ -269,8 +263,7 @@ struct BranchPicker: View {
         let choices = self.choices
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.ui(size: 12, weight: .medium))
+                Image(.search, size: 12)
                     .foregroundStyle(Color.themeTertiary)
                 TextField(base == nil ? "Switch or create a branch…" : "Start from a branch…", text: $query)
                     .textFieldStyle(.plain)
@@ -364,8 +357,7 @@ struct BranchPicker: View {
             switch choice {
             case .branch(let branch):
                 let chosen = base.map { $0 == branch.name } ?? branch.current
-                Image(systemName: chosen ? "checkmark" : "arrow.triangle.branch")
-                    .font(.ui(size: 11, weight: .semibold))
+                Image(chosen ? .check : .gitBranch, size: 11)
                     .foregroundStyle(chosen ? Color.themeText : Color.themeTertiary)
                     .frame(width: 14)
                 Text(branch.name)
@@ -379,8 +371,7 @@ struct BranchPicker: View {
                         .foregroundStyle(Color.themeTertiary)
                 }
             case .create(let name):
-                Image(systemName: "plus")
-                    .font(.ui(size: 11, weight: .semibold))
+                Image(.plus, size: 11)
                     .foregroundStyle(Color.themeTertiary)
                     .frame(width: 14)
                 Text("Create branch “\(name)”")

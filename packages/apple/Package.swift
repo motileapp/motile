@@ -11,7 +11,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "CMotileCore", path: "Sources/CMotileCore"),
-        .target(name: "MotileKit", dependencies: ["CMotileCore"], path: "Sources/MotileKit"),
+        .target(name: "MotileKit", dependencies: ["CMotileCore"], path: "Sources/MotileKit", resources: [.copy("Fonts")]),
     ],
     swiftLanguageVersions: [.v5]
 )

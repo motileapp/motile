@@ -5,7 +5,7 @@ import QuartzCore
 /// An entry of the menu a view opens under a right click.
 struct MenuAction {
     let title: String
-    let symbol: String
+    let symbol: Symbol
     let run: () -> Void
 }
 
@@ -280,28 +280,17 @@ final class ShimmerLabel: TextLabel {
     }
 }
 
-/// The rows ask for the same few symbols every time one scrolls in, so each is made once.
-private var symbols: [String: NSImage] = [:]
-
-private func symbol(_ name: String, size: CGFloat, weight: NSFont.Weight) -> NSImage? {
-    let key = "\(name)/\(size)/\(weight.rawValue)"
-    if let made = symbols[key] { return made }
-    let made = NSImage.symbol(name, size: size, weight: weight)
-    symbols[key] = made
-    return made
-}
-
-/// An SF Symbol in one colour, in the middle of its frame.
+/// A symbol in one colour, in the middle of its frame.
 final class SymbolView: NSImageView {
-    convenience init(_ name: String = "", size: CGFloat = 12, weight: NSFont.Weight = .regular, tint: NSColor = Theme.secondary) {
+    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: NSColor = Theme.secondary) {
         self.init(frame: .zero)
         imageScaling = .scaleNone
         contentTintColor = tint
-        if !name.isEmpty { show(name, size: size, weight: weight) }
+        if let symbol { show(symbol, size: size) }
     }
 
-    func show(_ name: String, size: CGFloat = 12, weight: NSFont.Weight = .regular) {
-        image = symbol(name, size: size, weight: weight)
+    func show(_ symbol: Symbol, size: CGFloat = 12) {
+        image = .symbol(symbol, size: size)
     }
 
     var tint: NSColor? {
@@ -310,7 +299,7 @@ final class SymbolView: NSImageView {
     }
 }
 
-/// A borderless button with an SF Symbol and, optionally, a title. It lights up under the
+/// A borderless button with a symbol and, optionally, a title. It lights up under the
 /// pointer.
 final class IconButton: NSButton {
     static let side: CGFloat = 28
@@ -319,13 +308,13 @@ final class IconButton: NSButton {
     private var action_: (() -> Void)?
     private var tracking: NSTrackingArea?
 
-    convenience init(symbolName: String, title: String = "", tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", tooltip: String, action: @escaping () -> Void) {
         self.init(frame: .zero)
         isBordered = false
         bezelStyle = .inline
         wantsLayer = true
         layer?.cornerRadius = 6
-        image = symbol(symbolName, size: Self.symbolSize, weight: .medium)
+        image = .symbol(symbol, size: Self.symbolSize)
         imagePosition = title.isEmpty ? .imageOnly : .imageLeading
         self.title = title
         font = Theme.smallFont
@@ -337,8 +326,8 @@ final class IconButton: NSButton {
         setButtonType(.momentaryChange)
     }
 
-    func set(symbolName: String, title: String = "") {
-        image = symbol(symbolName, size: Self.symbolSize, weight: .medium)
+    func set(symbol: Symbol, title: String = "") {
+        image = .symbol(symbol, size: Self.symbolSize)
         self.title = title
     }
 

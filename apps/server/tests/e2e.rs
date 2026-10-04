@@ -139,6 +139,7 @@ async fn serve(
         environment,
     )
     .unwrap();
+    hub.keep_pull_requests_current(Duration::from_millis(200));
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
@@ -1404,10 +1405,11 @@ struct GitRun<'a> {
     message: Option<&'a str>,
     paths: &'a [&'a str],
     new_branch: bool,
+    thread_id: Option<&'a str>,
 }
 
 fn run(action: GitAction) -> GitRun<'static> {
-    GitRun { action, message: None, paths: &[], new_branch: false }
+    GitRun { action, message: None, paths: &[], new_branch: false, thread_id: None }
 }
 
 /// The stages the server went through, and how the run ended.
@@ -1415,7 +1417,7 @@ async fn git_run(connection: &Connection, project_id: &str, run: GitRun<'_>) -> 
     let request = Request::GitRun {
         project_id: project_id.to_string(),
         action: run.action,
-        thread_id: None,
+        thread_id: run.thread_id.map(str::to_string),
         message: run.message.map(str::to_string),
         paths: run.paths.iter().map(|path| path.to_string()).collect(),
         new_branch: run.new_branch,
@@ -1553,6 +1555,26 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     std::fs::write(repository.join("notes.txt"), "now\n").unwrap();
     git(&repository, &["commit", "-q", "-am", "Note it now"]);
     assert_eq!(git_status(&connection, &project.id, false).await.0.pull_request, None);
+
+    // A pull request opened for a thread is that thread's own: it stays with it whatever the
+    // folder's branch does, and follows what GitHub says of it.
+    let open = r#"{"number": 7, "title": "Greet", "url": "https://github.com/acme/app/pull/7", "state": "OPEN", "isDraft": false}"#;
+    std::fs::write(bin.join("pull-request"), open).unwrap();
+    let new_thread =
+        NewThread { project_id: project.id.clone(), ..harness.new_thread(&connection, Agent::Claude).await.unwrap() };
+    let thread_id = send(&connection, None, Some(new_thread), "Greet by an f-string").await;
+    finished_transcript(&connection, &thread_id).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let (_, end) =
+        git_run(&connection, &project.id, GitRun { thread_id: Some(&thread_id), ..run(GitAction::CreatePr) }).await;
+    assert_eq!(done(end).0, "PR #7 is already open");
+    let linked = thread_where(&mut list, |thread| thread.pull_request.is_some()).await;
+    assert_eq!(linked.pull_request.map(|opened| (opened.number, opened.is_open())), Some((7, true)));
+    git(&repository, &["checkout", "-q", "main"]);
+    std::fs::write(bin.join("pull-request"), open.replace("OPEN", "CLOSED")).unwrap();
+    let closed = thread_where(&mut list, |thread| thread.pull_request.as_ref().is_some_and(|found| found.closed)).await;
+    assert_eq!(closed.id, thread_id);
 }
 
 fn git_says(folder: &Path, arguments: &[&str]) -> String {

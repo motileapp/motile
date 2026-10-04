@@ -134,7 +134,7 @@ struct SettingsView: View {
             SettingsSection("Text generation", caption: "The model that writes thread titles, branch names, commit messages and pull requests") {
                 ForEach(servers) { server in
                     SettingsRow {
-                        Image(systemName: "server.rack")
+                        Image(.server, size: 13)
                             .foregroundStyle(Color.themeSecondary)
                         Text(server.name)
                     } trailing: {

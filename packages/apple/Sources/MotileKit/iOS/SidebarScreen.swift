@@ -36,7 +36,7 @@ struct SidebarScreen: View {
                         )
                         .equatable()
                         .rowSwipe(
-                            "checkmark", "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
+                            .check, "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
                             leaves: !thread.busy, isOpen: swipe(thread.id)
                         ) {
                             markDone(thread)
@@ -105,8 +105,7 @@ struct SidebarScreen: View {
             Button {
                 store.openPanel(.commands)
             } label: {
-                Image(systemName: "command")
-                    .font(.system(size: 17, weight: .medium))
+                Image(.command, size: 15)
                     .foregroundStyle(Color.themeText)
                     .frame(width: 42, height: 42)
                     .contentShape(Circle())
@@ -129,8 +128,7 @@ struct SidebarScreen: View {
             doneExpanded.toggle()
         } label: {
             HStack(spacing: 7) {
-                Image(systemName: "chevron.right")
-                    .font(.ui(size: 10, weight: .semibold))
+                Image(.chevronRight, size: 10)
                     .rotationEffect(.degrees(expanded ? 90 : 0))
                     .frame(width: 14)
                 Text("Done")
@@ -156,7 +154,7 @@ struct SidebarScreen: View {
                 )
                 .equatable()
                 .frame(height: 44)
-                .rowSwipe("arrow.uturn.backward", "Mark Undone", tint: .themeSecondary, size: 28, isOpen: swipe(thread.doneRowID)) {
+                .rowSwipe(.undo2, "Mark Undone", tint: .themeSecondary, size: 28, isOpen: swipe(thread.doneRowID)) {
                     store.setDone([thread.id], done: false)
                 }
             }
@@ -174,23 +172,23 @@ struct SidebarScreen: View {
                         Button {
                             store.showsSettings = true
                         } label: {
-                            Label("Settings", systemImage: "gearshape")
+                            Label("Settings", symbol: .settings, size: 15)
                         }
                         Button {
                             store.addProject()
                         } label: {
-                            Label("Add a Project", systemImage: "folder.badge.plus")
+                            Label("Add a Project", symbol: .folderPlus, size: 15)
                         }
                         Button {
                             store.showsAddServer = true
                         } label: {
-                            Label("Add a Server", systemImage: "server.rack")
+                            Label("Add a Server", symbol: .server, size: 15)
                         }
                     }
                     Button(role: .destructive) {
                         store.signOut()
                     } label: {
-                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                        Label("Sign Out", symbol: .logOut, size: 15)
                     }
                 } label: {
                     Text(initial)
@@ -210,8 +208,7 @@ struct SidebarScreen: View {
                     showThread()
                     store.newThread()
                 } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 17, weight: .medium))
+                    Image(.squarePen, size: 15)
                         .foregroundStyle(Color.themeText)
                         .frame(width: 46, height: 46)
                         .contentShape(Circle())

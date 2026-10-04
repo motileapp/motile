@@ -19,23 +19,22 @@ struct AttachMenu: View {
             Button {
                 picksPhotos = true
             } label: {
-                Label("Photo Library", systemImage: "photo.on.rectangle")
+                Label("Photo Library", symbol: .images, size: 15)
             }
             if UIImagePickerController.isSourceTypeAvailable(.camera) {
                 Button {
                     takesPhoto = true
                 } label: {
-                    Label("Take Photo", systemImage: "camera")
+                    Label("Take Photo", symbol: .camera, size: 15)
                 }
             }
             Button {
                 picksFiles = true
             } label: {
-                Label("Choose Files", systemImage: "folder")
+                Label("Choose Files", symbol: .folder, size: 15)
             }
         } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 17, weight: .medium))
+            Image(.plus, size: 15)
                 .foregroundStyle(Color.themeSecondary)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())

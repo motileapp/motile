@@ -164,16 +164,39 @@ struct GitStatus: Equatable {
 }
 
 struct PullRequest: Equatable {
+    enum State {
+        case open
+        case draft
+        case merged
+        /// Closed without being merged.
+        case closed
+
+        var symbol: Symbol {
+            switch self {
+            case .open: .gitPullRequest
+            case .draft: .gitPullRequestDraft
+            case .merged: .gitMerge
+            case .closed: .gitPullRequestClosed
+            }
+        }
+    }
+
     let number: Int
     let title: String
     let url: String
-    let merged: Bool
+    let state: State
 
     init(json: JSON) {
         number = json.int("number")
         title = json.string("title")
         url = json.string("url")
-        merged = json.bool("merged")
+        if json.bool("merged") {
+            state = .merged
+        } else if json.bool("closed") {
+            state = .closed
+        } else {
+            state = json.bool("draft") ? .draft : .open
+        }
     }
 }
 
@@ -191,14 +214,14 @@ struct GitControl: Equatable {
     }
 }
 
-/// Names what a git action or its icon stands for, as the server spells it: "commit_push".
+/// The symbol of a git action, as the server spells it: "commit_push".
 enum GitSymbol {
-    static func name(for action: String?) -> String {
+    static func symbol(for action: String?) -> Symbol {
         switch action {
-        case "pull": "icloud.and.arrow.down"
-        case "push", "commit_push", "commit_push_pr": "icloud.and.arrow.up"
-        case "create_pr", nil: "arrow.triangle.merge"
-        default: "smallcircle.filled.circle"
+        case "pull": .cloudDownload
+        case "push", "commit_push", "commit_push_pr": .cloudUpload
+        case "create_pr": .gitPullRequestCreate
+        default: .gitCommitHorizontal
         }
     }
 }
@@ -381,6 +404,12 @@ struct Project: Equatable, Identifiable {
     /// Names the folder git works in for it: its worktree, or the project's folder.
     var checkoutID: String { "\(id):\(worktree?.path ?? path)" }
 
+    /// The pull request that was opened for the thread, or the one of its worktree's branch.
+    /// The project's own folder is shared by its threads, so its branch says nothing of one.
+    func pullRequest(of thread: ThreadInfo) -> PullRequest? {
+        thread.pullRequest ?? worktrees.first { $0.path == thread.cwd }?.git?.pullRequest
+    }
+
     /// The project as the thread works in it: with the branch and the git state of its worktree,
     /// when it has one.
     func seen(from thread: ThreadInfo) -> Project {
@@ -420,12 +449,12 @@ enum Access: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    var symbol: String {
+    var symbol: Symbol {
         switch self {
-        case .supervised: "lock"
-        case .acceptEdits: "pencil.line"
-        case .auto: "sparkles"
-        case .full: "lock.open"
+        case .supervised: .lock
+        case .acceptEdits: .pencilLine
+        case .auto: .sparkles
+        case .full: .lockOpen
         }
     }
 }
@@ -452,6 +481,8 @@ struct ThreadInfo: Equatable, Identifiable {
     /// How many agents the thread's agent has started that still work.
     let agents: Int
     let turnEndedAt: Double?
+    /// The pull request that was opened for it.
+    let pullRequest: PullRequest?
     let unread: Bool
 
     init(json: JSON) {
@@ -474,6 +505,7 @@ struct ThreadInfo: Equatable, Identifiable {
         needsApproval = json.bool("needs_approval")
         agents = json.int("agents")
         turnEndedAt = json.optionalDouble("turn_ended_at")
+        pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
         unread = json.bool("unread")
     }
 
@@ -687,7 +719,7 @@ struct Approval: Equatable, Identifiable {
     let title: String
     /// What the tool acts on: the command, the file.
     let target: String
-    let symbol: String
+    let symbol: Symbol
     /// What the buttons that allow and refuse it say.
     let allowLabel: String
     let refuseLabel: String

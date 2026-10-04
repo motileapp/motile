@@ -11,8 +11,7 @@ struct ConnectServerView: View {
     var body: some View {
         VStack(spacing: 0) {
             if isFirst { Spacer() }
-            Image(systemName: "server.rack")
-                .font(.ui(size: 24, weight: .medium))
+            Image(.server, size: 24)
                 .foregroundStyle(Color.themePrimary)
                 .frame(width: 56, height: 56)
                 .background(Color.themePrimary.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -90,15 +89,14 @@ struct ConnectServerView: View {
             HStack(spacing: 4) {
                 #if os(iOS)
                 ShareLink(item: store.enrollToken?.command ?? "") {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.ui(size: Self.symbolSize, weight: .medium))
+                    Image(.share, size: Self.symbolSize)
                         .frame(width: Self.buttonSize, height: Self.buttonSize)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.highlight(radius: 6, faded: true))
                 .accessibilityLabel("Share the command")
                 #endif
-                IconOnlyButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy the command", size: Self.buttonSize, symbolSize: Self.symbolSize, faded: true) {
+                IconOnlyButton(symbol: copied ? .check : .copy, help: "Copy the command", size: Self.buttonSize, symbolSize: Self.symbolSize, faded: true) {
                     guard let command = store.enrollToken?.command else { return }
                     Platform.copy(command)
                     copied = true

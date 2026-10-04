@@ -1,7 +1,7 @@
 //! The git button of a project: the one action its status calls for, the menu behind it, and
 //! what each says when it can't run. Every client shows the same.
 
-use motile_protocol::wire::{GitAction, GitStatus};
+use motile_protocol::wire::{GitAction, GitStatus, PullRequest};
 use serde::Serialize;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -17,7 +17,7 @@ pub struct Control {
 #[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct Quick {
     pub label: String,
-    /// Said before the label, and colors the button: "Merged".
+    /// Said before the label, and colors the button: "Merged", "Closed" or "Draft".
     pub state: Option<String>,
     pub action: Option<GitAction>,
     pub url: Option<String>,
@@ -98,7 +98,7 @@ fn quick(status: &GitStatus) -> Quick {
     if let Some(pull_request) = &status.pull_request {
         return Quick {
             label: format!("PR #{}", pull_request.number),
-            state: pull_request.merged.then(|| "Merged".to_string()),
+            state: state(pull_request).map(str::to_string),
             url: Some(pull_request.url.clone()),
             ..Quick::default()
         };
@@ -113,7 +113,17 @@ fn quick(status: &GitStatus) -> Quick {
 }
 
 fn has_open_pull_request(status: &GitStatus) -> bool {
-    status.pull_request.as_ref().is_some_and(|pull_request| !pull_request.merged)
+    status.pull_request.as_ref().is_some_and(PullRequest::is_open)
+}
+
+fn state(pull_request: &PullRequest) -> Option<&'static str> {
+    if pull_request.merged {
+        return Some("Merged");
+    }
+    if pull_request.closed {
+        return Some("Closed");
+    }
+    pull_request.draft.then_some("Draft")
 }
 
 fn menu(status: &GitStatus) -> Vec<Item> {
@@ -147,6 +157,7 @@ fn menu(status: &GitStatus) -> Vec<Item> {
     let merged = status
         .pull_request
         .as_ref()
+        .filter(|found| found.merged)
         .map(|merged| format!("PR #{} is merged. Commit new work before creating another.", merged.number));
 
     let pull_request_reason = if !status.pull_requests {
@@ -201,8 +212,6 @@ fn confirm(status: &GitStatus, action: GitAction) -> Option<Confirm> {
 
 #[cfg(test)]
 mod tests {
-    use motile_protocol::wire::PullRequest;
-
     use super::*;
 
     fn branch() -> GitStatus {
@@ -226,11 +235,16 @@ mod tests {
             url: "https://x/12".to_string(),
             draft: false,
             merged: false,
+            closed: false,
         })
     }
 
     fn merged() -> Option<PullRequest> {
         open().map(|open| PullRequest { merged: true, ..open })
+    }
+
+    fn closed() -> Option<PullRequest> {
+        open().map(|open| PullRequest { closed: true, ..open })
     }
 
     fn quick_of(status: GitStatus) -> (String, Option<GitAction>) {
@@ -296,6 +310,25 @@ mod tests {
 
         let changed = GitStatus { changed: 1, ..status };
         assert_eq!(quick_of(changed), runs("Commit, Push & PR", GitAction::CommitPushPr));
+    }
+
+    #[test]
+    fn a_closed_pull_request_is_shown_and_another_can_be_created() {
+        let status = GitStatus { ahead_of_default: 2, pull_request: closed(), ..branch() };
+        let control = control(&status);
+        assert_eq!((control.quick.label.as_str(), control.quick.url.as_deref()), ("PR #12", Some("https://x/12")));
+        assert_eq!(control.quick.state.as_deref(), Some("Closed"));
+        assert_eq!((control.menu[2].label.as_str(), control.menu[2].reason.as_deref()), ("Create PR", None));
+
+        let ahead = GitStatus { ahead: 1, ..status };
+        assert_eq!(quick_of(ahead), runs("Push & Create PR", GitAction::CreatePr));
+    }
+
+    #[test]
+    fn a_draft_pull_request_says_so() {
+        let draft = open().map(|open| PullRequest { draft: true, ..open });
+        let quick = control(&GitStatus { pull_request: draft, ..branch() }).quick;
+        assert_eq!((quick.label.as_str(), quick.state.as_deref()), ("PR #12", Some("Draft")));
     }
 
     #[test]

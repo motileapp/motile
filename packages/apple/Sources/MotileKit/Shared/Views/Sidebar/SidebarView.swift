@@ -136,15 +136,14 @@ struct SearchField: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.ui(size: 12, weight: .medium))
+            Image(.search, size: 12)
                 .foregroundStyle(Color.themeTertiary)
             TextField("Search", text: $text)
                 .textFieldStyle(.plain)
                 .font(.ui(size: 13))
                 .focused($focused)
             if !text.isEmpty {
-                IconOnlyButton(symbol: "xmark.circle.fill", help: "Clear", size: Self.clearSize, symbolSize: 12) { text = "" }
+                IconOnlyButton(symbol: .circleX, help: "Clear", size: Self.clearSize, symbolSize: 12) { text = "" }
                     .foregroundStyle(Color.themeTertiary)
                     .padding(.trailing, (Self.height - Self.clearSize) / 2 - Self.sidePadding)
             }
@@ -184,8 +183,7 @@ private struct MarkDoneButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 3) {
-                Image(systemName: "checkmark")
-                    .font(.ui(size: 11, weight: .semibold))
+                Image(.check, size: 11)
                 Text("Mark Done")
                     .font(.ui(size: 11, weight: .medium))
                     .lineLimit(1)
@@ -202,7 +200,7 @@ private struct MarkDoneButton: View {
 #endif
 
 /// An active thread: its project and what it is doing on the first line, its title on the second,
-/// its project's branch, its server and its agent on the third. It is redrawn only when what it
+/// its project's branch, its pull request, its server and its agent on the third. It is redrawn only when what it
 /// shows changes.
 struct ThreadRow: View, Equatable {
     @Environment(AppStore.self) private var store
@@ -260,6 +258,9 @@ struct ThreadRow: View, Equatable {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 6)
+                if let pullRequest = project?.pullRequest(of: thread) {
+                    PullRequestLabel(pullRequest: pullRequest)
+                }
                 ThreadServerLabel(serverID: thread.serverID)
                 AgentIcon(agent: thread.agent, size: 12)
             }
@@ -339,14 +340,13 @@ private struct DraftRow: View {
                 }
                 Spacer(minLength: 6)
                 if hovering {
-                    IconOnlyButton(symbol: "xmark", help: "Discard draft", size: 22, symbolSize: 12, faded: true) {
+                    IconOnlyButton(symbol: .x, help: "Discard draft", size: 22, symbolSize: 12, faded: true) {
                         store.discard(listed.draft)
                     }
                     .padding(.trailing, Self.topPadding - Self.sidePadding)
                 } else {
                     HStack(spacing: 3) {
-                        Image(systemName: "square.and.pencil")
-                            .font(.ui(size: 11, weight: .semibold))
+                        Image(.squarePen, size: 11)
                         Text("Draft")
                             .font(.ui(size: 11, weight: .medium))
                     }
@@ -386,15 +386,13 @@ struct UndoRow: View {
                 store.performUndo()
             } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.ui(size: 10, weight: .semibold))
+                    Image(.undo2, size: 10)
                         .frame(width: 14)
                     Text("Undo")
                         .font(.ui(size: 12, weight: .medium))
                     Spacer()
                     HStack(spacing: 3) {
-                        Image(systemName: "checkmark")
-                            .font(.ui(size: 9, weight: .semibold))
+                        Image(.check, size: 9)
                         Text(notice.text)
                             .font(.ui(size: 11))
                             .lineLimit(1)
@@ -442,8 +440,7 @@ private struct DoneShelf: View {
                 expanded.toggle()
             } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "chevron.right")
-                        .font(.ui(size: 10, weight: .semibold))
+                    Image(.chevronRight, size: 10)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .frame(width: 14)
                     Text("Done")
@@ -512,7 +509,7 @@ private struct DoneShelf: View {
 
 #endif
 
-/// A thread that is done: one quiet line. It is redrawn only when what it shows changes.
+/// A thread that is done: one quiet line, with its pull request. It is redrawn only when what it shows changes.
 struct DoneRow: View, Equatable {
     @Environment(AppStore.self) private var store
     let thread: ThreadInfo
@@ -527,8 +524,11 @@ struct DoneRow: View, Equatable {
     private static let buttonSize = 22.0
 
     static func == (one: DoneRow, other: DoneRow) -> Bool {
-        one.thread == other.thread && one.project?.iconPath == other.project?.iconPath && one.selected == other.selected
+        one.thread == other.thread && one.project?.iconPath == other.project?.iconPath && one.pullRequest == other.pullRequest
+            && one.selected == other.selected
     }
+
+    private var pullRequest: PullRequest? { project?.pullRequest(of: thread) }
 
     var body: some View {
         HStack(spacing: 7) {
@@ -538,8 +538,11 @@ struct DoneRow: View, Equatable {
                 .lineLimit(1)
                 .foregroundStyle(Color.themeSecondary)
             Spacer(minLength: 6)
+            if let pullRequest {
+                PullRequestLabel(pullRequest: pullRequest, colored: false)
+            }
             if hovering {
-                IconOnlyButton(symbol: "arrow.uturn.backward", help: "Mark undone", size: Self.buttonSize, symbolSize: 12, faded: true) {
+                IconOnlyButton(symbol: .undo2, help: "Mark undone", size: Self.buttonSize, symbolSize: 12, faded: true) {
                     store.setDone([thread.id], done: false)
                 }
                 .padding(.trailing, (doneRowHeight - Self.buttonSize) / 2 - Self.sidePadding)
@@ -568,26 +571,26 @@ struct ThreadStatus: View {
     var body: some View {
         if thread.needsApproval {
             label("Approval", Color.themeWarning) {
-                symbol("questionmark.circle")
+                symbol(.circleQuestionMark)
             }
         } else if thread.running {
             HStack(spacing: 6) {
                 if thread.agents > 0 {
                     label("\(thread.agents)", Color.themeWorking) {
-                        symbol("person.2")
+                        symbol(.users)
                     }
                     .help(thread.agents == 1 ? "1 agent is working" : "\(thread.agents) agents are working")
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
-                        symbol("circle.dashed")
+                        symbol(.circleDashed)
                     }
                 }
             }
         } else if thread.monitoring {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeText) {
-                    symbol("eye")
+                    symbol(.eye)
                 }
             }
         } else if thread.unread {
@@ -614,9 +617,8 @@ struct ThreadStatus: View {
         .foregroundStyle(color)
     }
 
-    private func symbol(_ name: String) -> some View {
-        Image(systemName: name)
-            .font(.ui(size: 11, weight: .semibold))
+    private func symbol(_ name: Symbol) -> some View {
+        Image(name, size: 11)
     }
 }
 
@@ -685,8 +687,7 @@ private struct SidebarFooter: View {
                 Button("Sign Out") { store.signOut() }
             } label: {
                 HStack(spacing: 7) {
-                    Image(systemName: "person.crop.circle")
-                        .font(.ui(size: 14))
+                    Image(.circleUser, size: 14)
                     Text(store.account.email)
                         .font(.ui(size: 12))
                         .lineLimit(1)

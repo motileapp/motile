@@ -133,7 +133,7 @@ struct ThreadPane: View {
                     Button {
                         store.addProject()
                     } label: {
-                        Label("Add Project", systemImage: "folder.badge.plus")
+                        Label("Add Project", symbol: .folderPlus)
                     }
                     .controlSize(.large)
                     .disabled(!store.servers.contains { $0.state == .connected })
@@ -161,7 +161,7 @@ struct ThreadPane: View {
                         Label {
                             Text(name)
                         } icon: {
-                            Image(platform: project.menuIcon ?? NSImage(systemSymbolName: "folder", accessibilityDescription: nil) ?? NSImage())
+                            Image(platform: project.menuIcon ?? .symbol(.folder, size: 13))
                         }
                     }
                 }
@@ -176,8 +176,7 @@ struct ThreadPane: View {
                 HStack(spacing: 8) {
                     ProjectIcon(project: selected, size: 22)
                     Text(selected?.name ?? "a project")
-                    Image(systemName: "chevron.down")
-                        .font(.ui(size: 13, weight: .bold))
+                    Image(.chevronDown, size: 13)
                         .foregroundStyle(Color.themeTertiary)
                 }
                 .padding(.leading, 9)

@@ -109,7 +109,7 @@ final class MediaRowView: RowView {
     private static let gap: CGFloat = 6
 
     private let picture = PictureView()
-    private let playSymbol = SymbolView("play.circle.fill", size: 40, tint: Theme.secondary)
+    private let playSymbol = SymbolView(.circlePlay, size: 40, tint: Theme.secondary)
     private let caption = TextLabel(font: Theme.smallFont, color: Theme.secondary)
     private var content: MediaContent?
     private var file: URL?
@@ -294,9 +294,9 @@ final class MediaRowView: RowView {
         guard let media = content else { return [] }
         var actions: [MenuAction] = []
         if !media.video {
-            actions.append(MenuAction(title: "Copy Image", symbol: "doc.on.doc") { [weak self] in self?.copyImage() })
+            actions.append(MenuAction(title: "Copy Image", symbol: .copy) { [weak self] in self?.copyImage() })
         }
-        actions.append(MenuAction(title: MediaFiles.saveTitle, symbol: "square.and.arrow.down") { [weak self] in self?.save() })
+        actions.append(MenuAction(title: MediaFiles.saveTitle, symbol: .download) { [weak self] in self?.save() })
         return actions
     }
 
