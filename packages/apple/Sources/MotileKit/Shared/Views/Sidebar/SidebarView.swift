@@ -296,7 +296,7 @@ struct DraftRows: View {
         let listed = store.listedDrafts.filter(matches)
         if !listed.isEmpty {
             ForEach(listed) { DraftRow(listed: $0, open: open) }
-            Divider()
+            ThemeDivider()
                 .padding(.horizontal, rowMargin.leading + 8)
                 .padding(.vertical, 4 + rowGap / 2)
         }
@@ -375,7 +375,7 @@ struct UndoRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Divider()
+            ThemeDivider()
             Button {
                 store.performUndo()
             } label: {
@@ -431,7 +431,7 @@ private struct DoneShelf: View {
             if expanded && heights.lowerBound < heights.upperBound {
                 resizeHandle(heights)
             } else {
-                Divider()
+                ThemeDivider()
             }
             Button {
                 expanded.toggle()
@@ -474,14 +474,14 @@ private struct DoneShelf: View {
                 }
                 .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
             }
-            Divider()
+            ThemeDivider()
         }
     }
 
     /// The line above the done threads. Dragging it makes their list taller or shorter; the
     /// height is saved when the drag ends.
     private func resizeHandle(_ heights: ClosedRange<Double>) -> some View {
-        Divider()
+        ThemeDivider()
             .overlay {
                 Color.clear
                     .frame(height: Theme.resizeGrab)
