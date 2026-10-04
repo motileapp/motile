@@ -226,8 +226,9 @@ final class UserRowView: RowView {
     override func clearSelection() { text.clearSelection() }
 }
 
-/// A message that waits for the agent: what it says, how it waits, and the buttons that send it
-/// now or take it back. It stands where the user's messages do, dotted around instead of filled.
+/// A message that waits for the agent: what it says, how it waits, and the buttons that steer
+/// the turn with it or take it back into the composer. It stands where the user's messages do,
+/// dotted around instead of filled.
 final class QueuedRowView: RowView {
     /// The strip under the message, down to the bubble's edge, that holds the status and the buttons.
     static let footHeight: CGFloat = scaled(34)
@@ -246,7 +247,6 @@ final class QueuedRowView: RowView {
     private var messageID = ""
     private var attached: [AttachedFile] = []
     private var hasText = false
-    private var sending = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -259,8 +259,8 @@ final class QueuedRowView: RowView {
         bubble.addSubview(clock)
         bubble.addSubview(status)
         sendButton = RowButton(
-            title: "Send now",
-            tooltip: "Have the agent take it at once, in the turn that runs",
+            title: "Steer",
+            tooltip: "Send as a steer instead",
             radius: Self.radius - Self.buttonMargin,
             insets: PlatformEdgeInsets(top: 4, left: 2, bottom: Self.buttonMargin, right: 2)
         ) { [weak self] in
@@ -268,8 +268,8 @@ final class QueuedRowView: RowView {
             self.owner?.sendQueued(messageID: self.messageID)
         }
         cancelButton = RowButton(
-            title: "Cancel",
-            tooltip: "Take it back into the composer",
+            title: "Edit",
+            tooltip: "Edit in the composer",
             radius: Self.radius - Self.buttonMargin,
             insets: PlatformEdgeInsets(top: 4, left: 2, bottom: Self.buttonMargin, right: Self.buttonMargin)
         ) { [weak self] in
@@ -296,9 +296,6 @@ final class QueuedRowView: RowView {
         attached = content.attachments
         attachments.show(content.attachments, owner: owner)
         status.string = content.status
-        sending = content.sending
-        sendButton.isHidden = sending
-        cancelButton.isHidden = sending
         sendButton.dim()
         cancelButton.dim()
     }
@@ -306,9 +303,9 @@ final class QueuedRowView: RowView {
     override func layout(width: CGFloat) -> CGFloat {
         let padding = BubbleFit.padding
         // The buttons reach the bubble's edge, so they take the padding on that side too.
-        let buttonsWidth = sending ? 0 : sendButton.width + cancelButton.width
+        let buttonsWidth = sendButton.width + cancelButton.width
         let statusWidth = 18 + ceil(status.string.size(withAttributes: [.font: Theme.smallFont]).width) + 8
-        let footWidth = sending ? statusWidth : statusWidth + 10 + buttonsWidth - padding
+        let footWidth = statusWidth + 10 + buttonsWidth - padding
         let fit = BubbleFit(text: text.content, attachments: attached, width: width, least: max(footWidth, 12))
         let (innerWidth, top, between, files) = (fit.innerWidth, fit.top, fit.between, fit.files)
         let textHeight = hasText ? text.height(forWidth: innerWidth) : 0
@@ -321,7 +318,7 @@ final class QueuedRowView: RowView {
 
         cancelButton.frame = CGRect(x: bubbleSize.width - cancelButton.width, y: footY, width: cancelButton.width, height: Self.footHeight)
         sendButton.frame = CGRect(x: cancelButton.frame.minX - sendButton.width, y: footY, width: sendButton.width, height: Self.footHeight)
-        let statusEnd = sending ? bubbleSize.width - padding : sendButton.frame.minX - 6
+        let statusEnd = sendButton.frame.minX - 6
         // In the middle of what the buttons light up.
         let lineHeight = scaled(16)
         let lineY = footY + ((4 + Self.footHeight - Self.buttonMargin - lineHeight) / 2).rounded()

@@ -304,20 +304,17 @@ struct ChangesContent {
     }
 }
 
-/// A message that waits for the agent to take it. The row's item is the message.
+/// A message that waits to be given to the agent. The row's item is the message.
 struct QueuedContent {
     let text: NSAttributedString
     let attachments: [AttachedFile]
-    /// How it waits: queued, held, or being given to the agent.
+    /// How it waits: queued or held.
     let status: String
-    /// The agent is being given it, so it can no longer be sent now or taken back.
-    let sending: Bool
 
     init(json: JSON) {
         text = Typesetter.plain(json.string("text"), color: Theme.prose)
         attachments = json.objects("attachments").map(AttachedFile.init(json:))
         status = json.string("status")
-        sending = json.bool("sending")
     }
 }
 

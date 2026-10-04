@@ -646,7 +646,7 @@ pub struct Activity {
     pub queued: Vec<Queued>,
 }
 
-/// A message sent while the agent was working. It joins the transcript when the agent takes it.
+/// A message sent while the agent was working. It joins the transcript when the agent is given it.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Queued {
     pub id: String,
@@ -657,7 +657,8 @@ pub struct Queued {
     pub media: Vec<Media>,
     /// The turn it waited for was stopped; it goes when the user sends it.
     pub held: bool,
-    /// The agent has been given it and hasn't taken it yet.
+    /// Always false: what the agent is given leaves the queue. Older clients still read it.
+    #[serde(default)]
     pub sending: bool,
 }
 

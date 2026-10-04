@@ -134,14 +134,12 @@ pub enum RowKind {
         /// When the turn ended.
         at: f64,
     },
-    /// A message that waits for the agent to take it. The row's item is the message.
+    /// A message that waits to be given to the agent. The row's item is the message.
     Queued {
         text: String,
         attachments: Vec<Attached>,
-        /// How it waits: queued, held, or being given to the agent.
+        /// How it waits: queued or held.
         status: &'static str,
-        /// The agent is being given it, so it can no longer be sent now or taken back.
-        sending: bool,
     },
 }
 
@@ -512,11 +510,7 @@ fn attached(paths: &[String], media: &[Media]) -> Vec<Attached> {
 
 /// The queued messages as rows, each saying how it waits.
 fn queued_rows(queued: &[Queued]) -> Vec<Row> {
-    let status = |message: &Queued| match (message.sending, message.held) {
-        (true, _) => "Sending…",
-        (false, true) => "Held",
-        (false, false) => "Queued",
-    };
+    let status = |message: &Queued| if message.held { "Held" } else { "Queued" };
     let row = |message: &Queued| Row {
         id: format!("queued/{}", message.id),
         item: message.id.clone(),
@@ -525,7 +519,6 @@ fn queued_rows(queued: &[Queued]) -> Vec<Row> {
             text: message.text.clone(),
             attachments: attached(&message.attachments, &message.media),
             status: status(message),
-            sending: message.sending,
         },
     };
     queued.iter().map(row).collect()
@@ -1580,13 +1573,13 @@ mod tests {
 
     #[test]
     fn queued_messages_are_the_last_rows_and_say_how_they_wait() {
-        let message = |id: &str, held, sending| Queued {
+        let message = |id: &str, held| Queued {
             id: id.into(),
             text: "Also this".into(),
             attachments: vec!["/tmp/a/notes.txt".into()],
             media: Vec::new(),
             held,
-            sending,
+            sending: false,
         };
         let statuses = |transcript: &Transcript| {
             let rows = transcript.rows().iter().filter_map(|row| match &row.kind {
@@ -1598,7 +1591,7 @@ mod tests {
         let mut transcript = Transcript::new("");
         transcript.load(vec![assistant("a", 0, "Working on it.")]);
 
-        let waiting = vec![message("m1", true, false), message("m2", false, false), message("m3", false, false)];
+        let waiting = vec![message("m1", true), message("m2", false), message("m3", false)];
         let splice = transcript.set_queued(waiting).unwrap();
         assert_eq!((splice.start, splice.remove, splice.rows.len()), (1, 0, 3));
         assert_eq!(statuses(&transcript), ["Held", "Queued", "Queued"]);
@@ -1606,8 +1599,8 @@ mod tests {
         assert_eq!((first.id.as_str(), first.item.as_str()), ("queued/m1", "m1"));
         assert!(matches!(&first.kind, RowKind::Queued { attachments, .. } if attachments[0].name == "notes.txt"));
 
-        transcript.set_queued(vec![message("m2", false, true), message("m3", false, false)]);
-        assert_eq!(statuses(&transcript), ["Sending…", "Queued"]);
+        transcript.set_queued(vec![message("m2", false), message("m3", false)]);
+        assert_eq!(statuses(&transcript), ["Queued", "Queued"]);
 
         // What the agent says next goes above the messages that still wait.
         transcript.upsert(assistant("b", 1, "Still working."), true);

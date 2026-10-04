@@ -82,7 +82,7 @@ final class RowButton: FlippedView {
         tip = tooltip
         describe(title, button: true)
         onPress = { _ in action() }
-        onHover = { [weak self] point in self?.highlight.fill = point == nil ? .clear : Theme.hover }
+        onHover = { [weak self] point in self?.light(point != nil) }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -102,7 +102,12 @@ final class RowButton: FlippedView {
 
     /// A button that is shown again starts unlit, wherever the pointer left it.
     func dim() {
-        highlight.fill = .clear
+        light(false)
+    }
+
+    private func light(_ lit: Bool) {
+        highlight.fill = lit ? Theme.hover : .clear
+        title.color = lit ? Theme.text : Theme.secondary
     }
 }
 

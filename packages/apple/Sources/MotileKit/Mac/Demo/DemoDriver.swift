@@ -233,7 +233,9 @@ private final class Demo {
         }
         store.draft = ""
         if let kept = store.activity.queued.first { store.sendNow(queued: kept.id) }
-        await expect("a message sent now is being given to the agent") { queuedStatuses == ["Sending…"] }
+        await expect("a steered message joins the transcript at once") {
+            queuedStatuses.isEmpty && store.transcript.rows.filter(\.isUser).count == 2
+        }
         if let edit = store.activity.approvals.first { store.answer(edit, allow: true) }
         await expect("the next tool call asks") { store.activity.approvals.first?.title == "Bash" }
         if let bash = store.activity.approvals.first { store.answer(bash, allow: true) }
