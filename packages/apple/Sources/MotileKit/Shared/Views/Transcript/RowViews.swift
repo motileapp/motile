@@ -227,7 +227,7 @@ final class UserRowView: RowView {
 }
 
 /// A message that waits for the agent: what it says, how it waits, and the buttons that send it
-/// now or take it back. It stands where the user's messages do, outlined instead of filled.
+/// now or take it back. It stands where the user's messages do, dotted around instead of filled.
 final class QueuedRowView: RowView {
     /// The strip under the message, down to the bubble's edge, that holds the status and the buttons.
     static let footHeight: CGFloat = scaled(34)
@@ -251,6 +251,7 @@ final class QueuedRowView: RowView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         bubble.stroke = Theme.strongBorder
+        bubble.dotted = true
         bubble.radius = Self.radius
         addSubview(bubble)
         bubble.addSubview(text)
