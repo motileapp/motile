@@ -27,10 +27,10 @@ enum Theme {
     /// What the sidebar lies on where the thread is a card that slides off it.
     static let drawerBackground = dynamic(hex(0xeceef3), hex(0x030407))
     static let field = dynamic(hex(0xffffff), white(0.04))
-    static let bubble = dynamic(hex(0xeceef4), hex(0x1c1f27))
+    static let bubble = dynamic(hex(0xeceef4), hex(0x15171d))
     static let codeBackground = dynamic(hex(0xf1f3f8), hex(0x101218))
     /// Over the glass of what floats on the transcript, so that text on it stays readable.
-    static let glassTint = dynamic(hex(0xffffff, alpha: 0.6), hex(0x15171d, alpha: 0.6))
+    static let glassTint = dynamic(hex(0xffffff, alpha: 0.6), hex(0x0c0e12, alpha: 0.8))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
     static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
     static let border = dynamic(hex(0x000000, alpha: 0.09), white(0.09))
@@ -44,7 +44,7 @@ enum Theme {
 
     // Text
     static let text = dynamic(hex(0x22242b), hex(0xecedf1))
-    static let prose = dynamic(hex(0x383b45), hex(0xc1c4cd))
+    static let prose = dynamic(hex(0x383b45), hex(0xb1b4be))
     static let secondary = dynamic(hex(0x6b6f7c), hex(0x9a9eab))
     static let tertiary = dynamic(hex(0x9a9eab), hex(0x646875))
 
