@@ -26,8 +26,8 @@ enum Theme {
     static let raised = dynamic(hex(0xffffff), hex(0x15171d))
     static let sheet = dynamic(hex(0xf8f9fc), hex(0x0e1015))
     static let field = dynamic(hex(0xffffff), white(0.04))
-    static let bubble = dynamic(hex(0xeceef4), hex(0x15171d))
-    static let composer = dynamic(hex(0xffffff), hex(0x0e0f14))
+    static let bubble = dynamic(hex(0xeceef4), hex(0x101217))
+    static let composer = dynamic(hex(0xffffff), hex(0x111217))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
     static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
     /// Borders are solid, so that where two meet they do not darken.
