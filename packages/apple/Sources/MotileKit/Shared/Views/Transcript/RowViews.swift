@@ -522,8 +522,8 @@ final class ToolRowView: RowView {
     private let header = SurfaceView()
     private static let titleFont = PlatformFont.ui(13)
 
-    private let icon = SymbolView(tint: Theme.secondary)
-    private let title = TextLabel(font: ToolRowView.titleFont, color: Theme.secondary)
+    private let icon = SymbolView(tint: Theme.activity)
+    private let title = TextLabel(font: ToolRowView.titleFont, color: Theme.activity)
     private let shine = ShimmerLabel.make(ToolRowView.titleFont)
     private let chevron = SymbolView(tint: Theme.tertiary)
     /// How long a call that still runs has been running.
@@ -641,9 +641,9 @@ final class ToolRowView: RowView {
     private func setTitle(_ words: String, target: String = "", note: String? = nil, failed: Bool = false) {
         let text = NSMutableAttributedString(
             string: target.isEmpty ? words : words + " ",
-            attributes: [.font: Self.titleFont, .foregroundColor: Theme.secondary]
+            attributes: [.font: Self.titleFont, .foregroundColor: Theme.activity]
         )
-        let targetColor = failed ? Theme.danger : running ? Theme.secondary : Theme.prose
+        let targetColor = failed ? Theme.danger : running ? Theme.activity : Theme.prose
         text.append(NSAttributedString(string: target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
         if let note {
             let attributes: [NSAttributedString.Key: Any] = [.font: Self.titleFont, .foregroundColor: Theme.tertiary]
@@ -989,7 +989,7 @@ final class WorkingView: FlippedView {
     /// Digits of one width, so the line doesn't change size with every second.
     private static let font = PlatformFont.uiDigits(13)
 
-    private let text = TextLabel(font: WorkingView.font, color: Theme.secondary)
+    private let text = TextLabel(font: WorkingView.font, color: Theme.activity)
     private let shine = ShimmerLabel.make(WorkingView.font)
     private var timer: Timer?
     private var activity = Activity()
