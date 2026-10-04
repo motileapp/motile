@@ -106,10 +106,22 @@ struct ThreadPane: View {
         return "\(name) · \(branch)"
     }
 
-    /// The empty state of a new thread: a question, and the composer in the middle of the pane.
+    /// The empty state of a new thread: a question, and the composer a little above the middle
+    /// of the window.
     private var start: some View {
+        GeometryReader { window in
+            startBlock
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.bottom, window.size.height * Self.startLift * 2)
+        }
+        .ignoresSafeArea(edges: .top)
+    }
+
+    /// How far above the middle the start is, as a part of the window's height.
+    private static let startLift: CGFloat = 0.03
+
+    private var startBlock: some View {
         VStack(spacing: 26) {
-            Spacer()
             if store.projects.isEmpty {
                 VStack(spacing: 10) {
                     Text("Add a project to start")
@@ -131,10 +143,7 @@ struct ThreadPane: View {
                 ComposerView()
                     .padding(.horizontal, Theme.contentPadding)
             }
-            Spacer()
-            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var headline: some View {
