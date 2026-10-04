@@ -128,7 +128,7 @@ struct SidebarScreen: View {
         .buttonStyle(.plain)
         .padding(.top, 8)
         if expanded {
-            ForEach(done) { thread in
+            ForEach(done, id: \.doneRowID) { thread in
                 DoneRow(thread: thread, rename: beginRename, delete: { deleting = $0 }, open: open)
                     .frame(height: 44)
             }
@@ -225,5 +225,10 @@ struct SidebarScreen: View {
         newTitle = thread.title
         renaming = thread
     }
+}
+
+private extension ThreadInfo {
+    /// Not the id its active row has in the same list, or the list keeps that row for it.
+    var doneRowID: String { "done:\(id)" }
 }
 #endif
