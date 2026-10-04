@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// The git button in a thread's top bar. Its left half does the one thing the repository calls
-/// for, at once: commit, push, open a pull request, pull. Its right half opens the menu of all
-/// of them, where an item that can't run now says why. While an action runs, the button says
-/// which stage it is at.
+/// The git button in a thread's top bar. On the Mac its left half does the one thing the
+/// repository calls for, at once: commit, push, open a pull request, pull. Its right half opens
+/// the menu of all of them, where an item that can't run now says why. While an action runs, the
+/// button says which stage it is at. On iOS it is one symbol that opens the menu.
 struct GitButton: View {
     @Environment(AppStore.self) private var store
     let project: Project
@@ -12,23 +12,29 @@ struct GitButton: View {
     #if os(macOS)
     private static let height = ToolbarButton.width - 2 * ToolbarButton.margin
     private static let radius: CGFloat = 7
-    #else
-    private static let height: CGFloat = 34
-    private static let radius: CGFloat = 17
-    #endif
     /// What leaves the room under the button that the composer's menus leave over theirs.
     private static let menuGap: CGFloat = 16
-    #if os(macOS)
     @State private var anchor = MenuAnchorView()
     #endif
 
     var body: some View {
-        @Bindable var store = store
+        content
+            .alert(store.pendingGit?.confirm.title ?? "", isPresented: confirming, presenting: store.pendingGit) { pending in
+                Button(pending.confirm.proceed) { store.confirmGit(pending, onNewBranch: false) }
+                Button(pending.confirm.branchOff) { store.confirmGit(pending, onNewBranch: true) }
+                Button("Abort", role: .cancel) {}
+            } message: { pending in
+                Text(pending.confirm.description)
+            }
+    }
+
+    #if os(macOS)
+    private var content: some View {
         let stage = store.gitStages[project.id]
         let quick = control.quick
         let runs = quick.action != nil || quick.url != nil
         let merged = quick.url != nil && project.git?.pullRequest?.merged == true
-        HStack(spacing: 0) {
+        return HStack(spacing: 0) {
             Button {
                 store.runQuickGit(in: project)
             } label: {
@@ -48,13 +54,11 @@ struct GitButton: View {
                         .lineLimit(1)
                 }
                 .foregroundStyle(runs || stage != nil ? Color.themeText : Color.themeTertiary)
-                .padding(.leading, Self.radius > 10 ? 12 : 9)
-                .padding(.trailing, 9)
+                .padding(.horizontal, 9)
                 .frame(height: Self.height)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .hoverHighlight(radius: 0)
+            .buttonStyle(.highlight(radius: 0))
             .disabled(stage != nil)
             .help(quick.hint ?? project.git?.pullRequest?.title ?? quick.label)
             Rectangle()
@@ -62,38 +66,25 @@ struct GitButton: View {
                 .frame(width: 1, height: Self.height)
             menuButton
         }
-        #if os(macOS)
         .clipShape(RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
         }
         .background(MenuAnchor(anchor: anchor))
         .padding(.horizontal, 6)
-        #else
-        .modifier(OutlineBeforeGlass(radius: Self.radius))
-        #endif
-        .alert(store.pendingGit?.confirm.title ?? "", isPresented: confirming, presenting: store.pendingGit) { pending in
-            Button(pending.confirm.proceed) { store.confirmGit(pending, onNewBranch: false) }
-            Button(pending.confirm.branchOff) { store.confirmGit(pending, onNewBranch: true) }
-            Button("Abort", role: .cancel) {}
-        } message: { pending in
-            Text(pending.confirm.description)
-        }
     }
 
     private var chevron: some View {
         Image(systemName: "chevron.down")
             .font(.ui(size: 9, weight: .bold))
             .foregroundStyle(Color.themeSecondary)
-            .frame(width: Self.radius > 10 ? 32 : 24, height: Self.height)
+            .frame(width: 24, height: Self.height)
             .contentShape(Rectangle())
     }
 
-    #if os(macOS)
     private var menuButton: some View {
         Button(action: showMenu) { chevron }
-            .buttonStyle(.plain)
-            .hoverHighlight(radius: 0)
+            .buttonStyle(.highlight(radius: 0))
             .help("Commit, push or open a pull request")
     }
 
@@ -122,7 +113,7 @@ struct GitButton: View {
     }
     #else
     /// The menu of every action. One that can't run now is greyed, with why under its name.
-    private var menuButton: some View {
+    private var content: some View {
         let running = store.gitStages[project.id] != nil
         return Menu {
             ForEach(control.menu) { item in
@@ -138,9 +129,13 @@ struct GitButton: View {
                 Section(warning) {}
             }
         } label: {
-            chevron
+            if running {
+                ProgressView()
+            } else {
+                Image(systemName: "arrow.triangle.branch")
+            }
         }
-        .buttonStyle(.plain)
+        .accessibilityLabel("Git")
     }
     #endif
 
@@ -150,24 +145,6 @@ struct GitButton: View {
         }
     }
 }
-
-#if os(iOS)
-/// The top bar's own glass goes around the button where the system has it; before that the
-/// button has an outline of its own.
-private struct OutlineBeforeGlass: ViewModifier {
-    let radius: CGFloat
-
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-        } else {
-            content
-                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1) }
-        }
-    }
-}
-#endif
 
 #if os(macOS)
 /// Where the git button is in its window, for its menu to open against.

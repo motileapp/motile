@@ -84,7 +84,9 @@ struct FolderPicker: View {
             }
             .padding(14)
         }
+        #if os(macOS)
         .frame(width: 520)
+        #endif
         .onAppear { load(iconFor.path) }
     }
 

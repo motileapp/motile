@@ -787,6 +787,13 @@ enum Time {
         return "\(Int(seconds / 86400))d"
     }
 
+    /// The time of day, with the date before it when that isn't today.
+    static func stamp(_ timestamp: Double) -> String {
+        let date = Date(timeIntervalSince1970: timestamp)
+        let today = Calendar.current.isDateInToday(date)
+        return date.formatted(date: today ? .omitted : .abbreviated, time: .shortened)
+    }
+
     /// "850ms", "12s", "3m 5s", "1h 2m".
     static func duration(milliseconds: Int) -> String {
         if milliseconds < 1000 { return "\(milliseconds)ms" }

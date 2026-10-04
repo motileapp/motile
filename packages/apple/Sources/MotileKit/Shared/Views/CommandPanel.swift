@@ -178,9 +178,9 @@ struct CommandPanel: View {
                             .padding(.bottom, 4)
                         ForEach(section.items) { item in
                             PanelRow(item: item, highlighted: steered && item.selectable && item.index == highlighted)
+                                .button(.highlight(radius: PanelRow.radius, inset: PanelRow.margin)) { run(item) }
                                 .id(item.index >= 0 ? AnyHashable(item.index) : AnyHashable(item.id))
                                 .onHover { if $0, item.index >= 0 { highlighted = item.index } }
-                                .onTapGesture { run(item) }
                         }
                     }
                     if let notice = store.panelNotice {
@@ -691,6 +691,8 @@ private struct PanelItem: Identifiable {
 private struct PanelRow: View {
     static let height: CGFloat = scaled(46)
     static let sideMargin: CGFloat = 8
+    static let radius: CGFloat = 9
+    static let margin = EdgeInsets(top: 0, leading: sideMargin, bottom: 0, trailing: sideMargin)
     private static let titleHeight: CGFloat = scaled(17)
     private static let detailHeight: CGFloat = scaled(15)
 
@@ -727,7 +729,7 @@ private struct PanelRow: View {
         .frame(height: Self.height)
         .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(item.off ? 0.45 : 1)
-        .background(highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .padding(.horizontal, Self.sideMargin)
         .contentShape(Rectangle())
         .opacity(faded ? 0.45 : 1)

@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Lights up what the pointer is over, and what is selected. The light is drawn `inset` from the
+/// Lights up what the pointer is over, what is selected and what is `lit`. The light is drawn `inset` from the
 /// view's edges: that margin looks empty but is the view's, so neighbours leave no gap to miss.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
+    let lit: Bool
     let inset: EdgeInsets
     let color: Color
     @State private var hovering = false
@@ -21,38 +22,87 @@ private struct HoverHighlight: ViewModifier {
 
     private var fill: Color {
         if selected { return Color.themeSelected }
-        return hovering ? color : Color.clear
+        return hovering || lit ? color : Color.clear
     }
 }
 
 extension View {
-    func hoverHighlight(radius: CGFloat = 7, selected: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover) -> some View {
-        modifier(HoverHighlight(radius: radius, selected: selected, inset: inset, color: color))
+    func hoverHighlight(
+        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover
+    ) -> some View {
+        modifier(HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, color: color))
     }
 }
 
+/// What a button looks like under the pointer and under a finger: the same light. A button that
+/// is selected, or `lit` as the one the arrow keys are on, has it without either.
+struct HighlightButtonStyle: ButtonStyle {
+    var radius: CGFloat = 7
+    var selected = false
+    var lit = false
+    var inset = EdgeInsets()
+    var color = Color.themeHover
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .hoverHighlight(radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, color: color)
+    }
+}
+
+/// A button whose own look says what it does, like a picture: it only dims under a finger.
+struct DimButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+extension ButtonStyle where Self == HighlightButtonStyle {
+    static func highlight(
+        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover
+    ) -> HighlightButtonStyle {
+        HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, color: color)
+    }
+}
+
+extension View {
+    /// Makes the view a button, with that light unless it has another style.
+    func button(_ style: some ButtonStyle = .highlight(), action: @escaping () -> Void) -> some View {
+        Button(action: action) { self }
+            .buttonStyle(style)
+    }
+}
+
+/// As tall as it is on the Mac, and where fingers press it at least as tall as a finger needs.
+func pressable(_ height: CGFloat) -> CGFloat {
+    max(scaled(height), Platform.minimumPress)
+}
+
 /// A button that is only a symbol, with room around it to hit and a background under the pointer.
-/// The inset is more room to hit, outside the background.
+/// The inset is more room to hit, outside the background. Under a finger it takes presses as far
+/// around it as a finger needs, without taking that room in the layout.
 struct IconOnlyButton: View {
     let symbol: String
     let help: String
-    var size: CGFloat = 26
+    var size: CGFloat = scaled(26)
     var symbolSize: CGFloat = 13
     var radius: CGFloat = 6
     var inset = EdgeInsets()
     let action: () -> Void
 
     var body: some View {
+        let reach = max(0, (Platform.minimumPress - size) / 2)
+        let around = EdgeInsets(top: inset.top + reach, leading: inset.leading + reach, bottom: inset.bottom + reach, trailing: inset.trailing + reach)
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.ui(size: symbolSize, weight: .medium))
                 .frame(width: size, height: size)
-                .padding(inset)
+                .padding(around)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .hoverHighlight(radius: radius, inset: inset)
+        .buttonStyle(.highlight(radius: radius, inset: around))
+        .padding(-reach)
         .help(help)
+        .accessibilityLabel(help)
     }
 }
 
@@ -81,8 +131,7 @@ struct LinkButton: View {
                         .frame(minWidth: Self.height, minHeight: Self.height)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .hoverHighlight(radius: 6, color: .themeLinkHover)
+                .buttonStyle(.highlight(radius: 6, color: .themeLinkHover))
                 .fixedSize()
             }
     }

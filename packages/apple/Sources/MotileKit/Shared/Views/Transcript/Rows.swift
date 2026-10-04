@@ -21,7 +21,7 @@ enum TranscriptColumn {
 /// here, off the main thread, so showing a row costs the main thread nothing but drawing.
 final class RowModel {
     enum Kind {
-        case user(text: NSAttributedString, attachments: [AttachedFile])
+        case user(text: NSAttributedString, attachments: [AttachedFile], at: Double)
         /// `above` is the space it keeps from the row above it. `uncoloured` when code inside it
         /// still waits for highlighting.
         case prose(NSAttributedString, above: CGFloat, uncoloured: Bool)
@@ -59,7 +59,7 @@ final class RowModel {
         nested = json.bool("nested")
         switch json.string("kind") {
         case "user":
-            kind = .user(text: Typesetter.plain(json.string("text"), color: Theme.text), attachments: json.objects("attachments").map(AttachedFile.init(json:)))
+            kind = .user(text: Typesetter.plain(json.string("text"), color: Theme.text), attachments: json.objects("attachments").map(AttachedFile.init(json:)), at: json.double("at"))
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
             kind = .prose(Typesetter.prose(json), above: Typesetter.spaceAbove(json), uncoloured: uncoloured)
@@ -93,7 +93,7 @@ final class RowModel {
 
     /// A user message shown the moment it is sent, before the server has it.
     static func pending(text: String, attachments: [AttachedFile]) -> RowModel {
-        RowModel(id: "pending", itemID: "pending", kind: .user(text: Typesetter.plain(text, color: Theme.text), attachments: attachments))
+        RowModel(id: "pending", itemID: "pending", kind: .user(text: Typesetter.plain(text, color: Theme.text), attachments: attachments, at: Date().timeIntervalSince1970))
     }
 
     /// The plain text of the row, for copying a whole reply.
@@ -328,6 +328,7 @@ struct TurnEnd {
     let stopped: Bool
     /// The turn's fold says how long it took, so the end of the turn doesn't.
     let folded: Bool
+    let at: Double
 
     init(json: JSON) {
         durationMs = (json["duration_ms"] as? NSNumber)?.intValue
@@ -335,6 +336,13 @@ struct TurnEnd {
         isError = json.bool("is_error")
         stopped = json.bool("stopped")
         folded = json.bool("folded")
+        at = json.double("at")
+    }
+
+    /// When the turn ended and, unless its fold says so, how long it took.
+    var stamp: String {
+        guard !folded, stopped || durationMs != nil else { return Time.stamp(at) }
+        return "\(Time.stamp(at)) · \(label)"
     }
 
     var label: String { Self.label(stopped: stopped, durationMs: durationMs) }

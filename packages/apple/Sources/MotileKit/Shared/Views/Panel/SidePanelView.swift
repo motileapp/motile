@@ -91,7 +91,7 @@ struct PanelBar<Content: View>: View {
             HStack(spacing: 4) { content }
                 .padding(.leading, 12)
                 .padding(.trailing, 6)
-                .frame(height: scaled(36))
+                .frame(height: pressable(36))
             PanelLine()
         }
     }
@@ -151,6 +151,7 @@ struct PanelTabStrip: View {
                 .font(.ui(size: 12, weight: .medium))
                 .foregroundStyle(Color.themeSecondary)
                 .frame(width: scaled(28), height: scaled(28))
+                .frame(minWidth: Platform.minimumPress, minHeight: Platform.minimumPress)
                 .contentShape(Rectangle())
         }
         .menuStyle(.button)
@@ -168,6 +169,11 @@ private struct PanelTabChip: View {
     let active: Bool
     @State private var hovering = false
 
+    private static let closeSize: CGFloat = Platform.scale > 1 ? 24 : 16
+    private static let closeMargin: CGFloat = 6
+    /// How far above and under the tab a finger still presses it.
+    private static let reach = max(0, (Platform.minimumPress - scaled(28)) / 2)
+
     var body: some View {
         let panel = store.sidePanel
         HStack(spacing: 6) {
@@ -180,27 +186,23 @@ private struct PanelTabChip: View {
                 .foregroundStyle(active ? Color.themeText : Color.themeSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Button {
-                panel.close(tab)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.ui(size: 8, weight: .bold))
-                    .foregroundStyle(Color.themeSecondary)
-                    .frame(width: Platform.scale > 1 ? 24 : 16, height: Platform.scale > 1 ? 24 : 16)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .hoverHighlight(radius: 4)
-            .opacity(hovering || active ? 1 : 0)
-            .help("Close (⌘W)")
+            Color.clear
+                .frame(width: Self.closeSize, height: Self.closeSize)
         }
         .padding(.leading, 9)
-        .padding(.trailing, 6)
+        .padding(.trailing, Self.closeMargin)
         .frame(height: scaled(28))
         .frame(maxWidth: 180)
+        .padding(.vertical, Self.reach)
         .contentShape(Rectangle())
-        .onTapGesture { panel.activate(tab) }
-        .hoverHighlight(selected: active)
+        .button(.highlight(selected: active, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0))) { panel.activate(tab) }
+        .overlay(alignment: .trailing) {
+            IconOnlyButton(symbol: "xmark", help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4) { panel.close(tab) }
+                .foregroundStyle(Color.themeSecondary)
+                .padding(.trailing, Self.closeMargin)
+                .opacity(hovering || active ? 1 : 0)
+        }
+        .padding(.vertical, -Self.reach)
         .onHover { hovering = $0 }
         .help(path ?? tab.title)
         .contextMenu {
@@ -262,11 +264,10 @@ private struct PanelLauncher: View {
             }
             .foregroundStyle(Color.themeText)
             .padding(.horizontal, 10)
-            .frame(height: scaled(34))
+            .frame(height: pressable(34))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .hoverHighlight()
+        .buttonStyle(.highlight())
         .disabled(reason != nil)
         .opacity(reason == nil ? 1 : 0.45)
         .help(reason ?? "")
@@ -365,7 +366,7 @@ struct DiffSurface: View {
             }
             .foregroundStyle(Color.themeText)
             .padding(.horizontal, 8)
-            .frame(height: 26)
+            .frame(height: pressable(26))
             .contentShape(Rectangle())
         }
         .menuStyle(.button)
@@ -387,19 +388,13 @@ struct DiffSurface: View {
         case .turn(let id):
             let turns = store.sidePanel.turns
             guard let turn = turns.first(where: { $0.id == id }), turn.id != turns.last?.id else { return "Latest turn" }
-            return "Turn at \(time(turn.at))"
+            return "Turn at \(Time.stamp(turn.at))"
         }
     }
 
     private func label(of turn: TurnChange) -> String {
-        let name = turn.id == store.sidePanel.turns.last?.id ? "Latest turn" : "Turn at \(time(turn.at))"
+        let name = turn.id == store.sidePanel.turns.last?.id ? "Latest turn" : "Turn at \(Time.stamp(turn.at))"
         return "\(name) · \(turn.files == 1 ? "1 file" : "\(turn.files) files")"
-    }
-
-    private func time(_ at: Double) -> String {
-        let date = Date(timeIntervalSince1970: at)
-        let today = Calendar.current.isDateInToday(date)
-        return date.formatted(date: today ? .omitted : .abbreviated, time: .shortened)
     }
 }
 
@@ -475,12 +470,11 @@ private struct FileRow: View {
         .opacity(node.ignored ? 0.5 : 1)
         .padding(.leading, 12 + CGFloat(node.depth) * 14)
         .padding(.trailing, 10)
-        .frame(height: scaled(26))
+        .frame(height: pressable(26))
         .contentShape(Rectangle())
-        .onTapGesture {
+        .button(.highlight(radius: 6, inset: EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))) {
             if node.folder { panel.toggleFolder(node.path) } else { panel.open(.file(node.path)) }
         }
-        .hoverHighlight(radius: 6, inset: EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
         .contextMenu {
             Button("Copy Path") { Platform.copy(node.path) }
         }

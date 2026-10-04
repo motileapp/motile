@@ -159,6 +159,7 @@ private enum RootSheet: Identifiable {
     case addServer
     case panel(PanelPage)
     case settings
+    case threadSettings
 
     var id: String {
         switch self {
@@ -167,6 +168,7 @@ private enum RootSheet: Identifiable {
         case .addServer: "add-server"
         case .panel: "panel"
         case .settings: "settings"
+        case .threadSettings: "thread-settings"
         }
     }
 }
@@ -206,6 +208,8 @@ struct RootView: View {
                     .presentationDragIndicator(.visible)
             case .settings:
                 SettingsScreen()
+            case .threadSettings:
+                ThreadSettingsSheet()
             }
         }
         .fullScreenCover(isPresented: Binding(get: { store.viewing != nil }, set: { if !$0 { store.closeViewer() } })) {
@@ -231,6 +235,7 @@ struct RootView: View {
             if store.showsAddServer { return .addServer }
             if let page = store.panel { return .panel(page) }
             if store.showsSettings { return .settings }
+            if store.showsThreadSettings { return .threadSettings }
             return nil
         } set: { new in
             guard new == nil else { return }
@@ -238,7 +243,9 @@ struct RootView: View {
             if store.committingProject != nil { return store.committingProject = nil }
             if store.showsAddServer { return store.showsAddServer = false }
             if store.panel != nil { return store.closePanel() }
-            store.showsSettings = false
+            if store.showsSettings { return store.showsSettings = false }
+            store.showsThreadSettings = false
+            store.showsBranches = false
         }
     }
 }

@@ -9,6 +9,8 @@ struct QuestionsView: View {
     @State private var typed: [String: String] = [:]
 
     private static let optionGap: CGFloat = 6
+    /// How far past the option's sides its light and the room to press it reach.
+    private static let optionReach: CGFloat = 6
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,10 +32,12 @@ struct QuestionsView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, Self.optionGap / 2)
+                            .padding(.horizontal, Self.optionReach)
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.highlight(radius: 6))
                         .padding(.vertical, -Self.optionGap / 2)
+                        .padding(.horizontal, -Self.optionReach)
                     }
                     TextField("Something else", text: typedAnswer(for: question))
                         .textFieldStyle(.roundedBorder)

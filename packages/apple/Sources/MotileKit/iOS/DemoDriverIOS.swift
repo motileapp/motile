@@ -12,11 +12,11 @@ import UIKit
 ///     send                              sends what is written
 ///     panel diff|files|agents|close     opens a tab of the panel, or closes the panel
 ///     file <path>                       opens a file in the panel
-///     sheet commands|projects|settings|server|close
+///     sheet commands|projects|settings|server|thread|close
 ///     appearance light|dark|system
 ///     answer <allow|refuse>             answers the first approval
 ///     view                              opens the thread's images in the viewer
-///     branches                          opens the branch picker
+///     branches                          opens the branch picker in the thread's settings
 ///     top                               scrolls the transcript to its start
 ///     focus | blur                      gives the composer the keyboard, or takes it away
 ///     access <supervised|…>             sets how much the agent may do without asking
@@ -86,6 +86,7 @@ enum DemoDriver {
             case "add": store.addProject()
             case "settings": store.showsSettings = true
             case "server": store.showsAddServer = true
+            case "thread": store.showsThreadSettings = true
             case "commit":
                 guard let project = store.gitProject, let item = project.gitControl?.menu.first(where: { $0.action == "commit" }) else { return }
                 store.chooseGit(item, in: project)
@@ -93,6 +94,7 @@ enum DemoDriver {
                 store.closePanel()
                 store.showsSettings = false
                 store.showsAddServer = false
+                store.showsThreadSettings = false
                 store.committingProject = nil
             }
         case "appearance":
@@ -118,6 +120,7 @@ enum DemoDriver {
             store.view(shown, at: 0)
         case "branches":
             guard let project = store.composerProject else { return }
+            store.showsThreadSettings = true
             store.showBranches(of: project)
         default: break
         }

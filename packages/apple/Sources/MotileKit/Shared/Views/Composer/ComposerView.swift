@@ -1,12 +1,17 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Where messages are written: the text, and under it the model, the reasoning effort and how
-/// much the agent may do without asking. A strip above says when the agent is monitoring, and
-/// one below says where the thread works: the server, the folder and the branch.
+/// Where messages are written. A strip above says when the agent is monitoring. On the Mac the
+/// model, the reasoning effort and how much the agent may do without asking are under the text,
+/// and a strip below says where the thread works: the server, the folder and the branch. On iOS
+/// all of that is in the thread's settings, which the model's name opens, and the composer is
+/// one line until it is written in.
 struct ComposerView: View {
     @Environment(AppStore.self) private var store
     @State private var textHeight: CGFloat = ComposerTextView.minimumHeight
+    #if os(iOS)
+    @State private var focused = false
+    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,9 +19,11 @@ struct ComposerView: View {
                 monitoringStrip
             }
             box
+            #if os(macOS)
             if let project = store.composerProject {
                 ContextStrip(project: project, server: store.server(project.serverID))
             }
+            #endif
         }
         .frame(maxWidth: Theme.contentWidth)
     }
@@ -33,7 +40,7 @@ struct ComposerView: View {
             if !store.attachments.isEmpty {
                 attachments
             }
-            ComposerTextView(
+            let text = ComposerTextView(
                 text: $store.draft,
                 height: $textHeight,
                 placeholder: placeholder,
@@ -42,14 +49,26 @@ struct ComposerView: View {
                 onFiles: { store.attach($0) },
                 onFileDrag: { store.dropTargeted = $0 }
             )
-            .frame(height: textHeight)
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
+            #if os(macOS)
+            text
+                .frame(height: textHeight)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
 
             ViewThatFits(in: .horizontal) {
                 controls(compact: false)
                 controls(compact: true)
             }
+            #else
+            let collapsed = !focused && store.draft.isEmpty && store.attachments.isEmpty
+            ComposerRows(collapsed: collapsed) {
+                text
+                    .reporting(focus: $focused)
+                    .frame(height: textHeight)
+                ComposerTouchControls(collapsed: collapsed)
+            }
+            .animation(.easeOut(duration: 0.22), value: collapsed)
+            #endif
         }
         .background {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
@@ -84,10 +103,10 @@ struct ComposerView: View {
                     .padding(.horizontal, 9)
                     .frame(height: 24)
                     .padding(ComposerStrip.margin)
+                    .frame(minHeight: Platform.minimumPress)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .hoverHighlight(radius: 7, inset: ComposerStrip.margin)
+            .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin))
             .help("Stop monitoring (⌘.)")
         }
         .modifier(ComposerStrip(edge: .top))
@@ -95,6 +114,7 @@ struct ComposerView: View {
 
     private var placeholder: String {
         guard let server = store.composerServer else { return "Ask anything" }
+        if store.selectedThread?.isDone == true { return "Send a message to bring it back" }
         if server.state != .connected { return "Waiting for \(server.name) to connect…" }
         if server.models.isEmpty && server.known { return "Install Claude Code or Codex on \(server.name) to start" }
         if store.activity.running { return "Send a follow-up; it waits for the agent's turn to end" }
@@ -107,10 +127,8 @@ struct ComposerView: View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle")
                 .foregroundStyle(Color.themeSuccess)
-            Text("This thread is done.")
+            Text("Done")
                 .fontWeight(.medium)
-            Text("Send a message to bring it back.")
-                .foregroundStyle(Color.themeSecondary)
             Spacer()
             Button {
                 store.setDone([thread.id], done: false)
@@ -119,18 +137,21 @@ struct ComposerView: View {
                     .fontWeight(.medium)
                     .foregroundStyle(Color.themePrimary)
                     .padding(.horizontal, Self.undoneButtonPadding)
-                    .frame(height: 24)
+                    .frame(height: scaled(24))
+                    .padding(.vertical, Self.undoneReach)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .hoverHighlight(radius: 7, color: .themePrimaryHover)
-            .padding(.vertical, -4)
+            .buttonStyle(.highlight(radius: 7, inset: EdgeInsets(top: Self.undoneReach, leading: 0, bottom: Self.undoneReach, trailing: 0), color: .themePrimaryHover))
+            .padding(.vertical, -4 - Self.undoneReach)
         }
         .font(.ui(size: 12.5))
         .padding(.leading, 16)
         .padding(.trailing, 16 - Self.undoneButtonPadding)
         .padding(.top, 12)
     }
+
+    /// How far above and under the button a finger still presses it.
+    private static let undoneReach = max(0, (Platform.minimumPress - scaled(24)) / 2)
 
     /// The tool calls the agent waits with: each is allowed or refused, and one that asks
     /// questions is answered.
@@ -188,31 +209,34 @@ struct ComposerView: View {
         }
     }
 
+    static func effortLabel(_ effort: String) -> String {
+        switch effort {
+        case "xhigh": return "Extra high"
+        case "": return "Default"
+        default: return effort.prefix(1).uppercased() + String(effort.dropFirst())
+        }
+    }
+
+    static func margin(leading: CGFloat = 1, trailing: CGFloat = 1) -> EdgeInsets {
+        EdgeInsets(top: 8, leading: leading, bottom: 8, trailing: trailing)
+    }
+
+    #if os(macOS)
     /// The row under the text. When it is too narrow for all of it, the model and the access
     /// are only their icons. The space between its controls and around them is their margins,
     /// so each takes clicks up to the next one and to the composer's edges.
     private func controls(compact: Bool) -> some View {
         HStack(spacing: 0) {
-            #if os(iOS)
-            AttachMenu()
-                .padding(.leading, 6)
-            #endif
             modelMenu(compact: compact)
             effortMenu
             accessMenu(compact: compact)
             Spacer(minLength: 10)
-            #if os(macOS)
             IconOnlyButton(symbol: "paperclip", help: "Attach files", size: 30, symbolSize: 15, inset: Self.margin(trailing: 4)) {
                 chooseFiles()
             }
             .foregroundStyle(Color.themeSecondary)
-            #endif
-            primaryButtons
+            ComposerSendButtons()
         }
-    }
-
-    private static func margin(leading: CGFloat = 1, trailing: CGFloat = 1) -> EdgeInsets {
-        EdgeInsets(top: 8, leading: leading, bottom: 8, trailing: trailing)
     }
 
     private func control(_ title: String?, symbol: String? = nil, agent: Agent? = nil, margin: EdgeInsets) -> some View {
@@ -289,26 +313,18 @@ struct ComposerView: View {
         if let model = store.composerModel, !model.efforts.isEmpty {
             Menu {
                 ForEach(model.efforts, id: \.self) { effort in
-                    choice(effortLabel(effort), chosen: effort == store.composerEffort) {
+                    choice(Self.effortLabel(effort), chosen: effort == store.composerEffort) {
                         store.setEffort(effort)
                     }
                 }
             } label: {
-                control(effortLabel(store.composerEffort ?? ""), margin: Self.margin())
+                control(Self.effortLabel(store.composerEffort ?? ""), margin: Self.margin())
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
             .hoverHighlight(radius: 9, inset: Self.margin())
-        }
-    }
-
-    private func effortLabel(_ effort: String) -> String {
-        switch effort {
-        case "xhigh": return "Extra high"
-        case "": return "Default"
-        default: return effort.prefix(1).uppercased() + String(effort.dropFirst())
         }
     }
 
@@ -334,43 +350,6 @@ struct ComposerView: View {
         .help(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail)
     }
 
-    @ViewBuilder private var primaryButtons: some View {
-        let running = store.activity.running && store.selectedThread != nil
-        let sends = !running || store.canSend
-        if running {
-            Button {
-                store.stop()
-            } label: {
-                RoundedRectangle(cornerRadius: 2.5)
-                    .fill(.white)
-                    .frame(width: 10, height: 10)
-                    .frame(width: 30, height: 30)
-                    .background(Color.themeDanger.opacity(0.9), in: Circle())
-                    .padding(Self.margin(leading: 4, trailing: sends ? 4 : 8))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Stop (⌘.)")
-        }
-        if sends {
-            Button {
-                store.send()
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.ui(size: 14, weight: .semibold))
-                    .foregroundStyle(store.canSend ? Color.white : Color.themeSecondary)
-                    .frame(width: 30, height: 30)
-                    .background(store.canSend ? Color.themePrimary : Color.themeSelected, in: Circle())
-                    .padding(Self.margin(leading: 4, trailing: 8))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(SendButtonStyle())
-            .disabled(!store.canSend)
-            .help(store.attachmentsHold ?? (running ? "Queue message" : "Send"))
-        }
-    }
-
-    #if os(macOS)
     private func chooseFiles() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
@@ -381,9 +360,47 @@ struct ComposerView: View {
     #endif
 }
 
-/// The plain style dims a disabled label; this one leaves the disabled look to the label.
-private struct SendButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
+/// Stops the turn that runs, and sends what is written or queues it behind that turn.
+struct ComposerSendButtons: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let running = store.activity.running && store.selectedThread != nil
+        let sends = !running || store.canSend
+        HStack(spacing: 0) {
+            if running {
+                Button {
+                    store.stop()
+                } label: {
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(.white)
+                        .frame(width: 10, height: 10)
+                        .frame(width: 30, height: 30)
+                        .background(Color.themeDanger.opacity(0.9), in: Circle())
+                        .padding(ComposerView.margin(leading: 4, trailing: sends ? 4 : 8))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(DimButtonStyle())
+                .help("Stop (⌘.)")
+                .accessibilityLabel("Stop")
+            }
+            if sends {
+                Button {
+                    store.send()
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.ui(size: 14, weight: .semibold))
+                        .foregroundStyle(store.canSend ? Color.white : Color.themeSecondary)
+                        .frame(width: 30, height: 30)
+                        .background(store.canSend ? Color.themePrimary : Color.themeSelected, in: Circle())
+                        .padding(ComposerView.margin(leading: 4, trailing: 8))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(DimButtonStyle())
+                .disabled(!store.canSend)
+                .help(store.attachmentsHold ?? (running ? "Queue message" : "Send"))
+                .accessibilityLabel("Send")
+            }
+        }
     }
 }
