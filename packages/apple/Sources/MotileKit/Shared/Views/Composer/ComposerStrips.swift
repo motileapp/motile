@@ -89,6 +89,7 @@ struct ContextStrip: View {
             if let branch = startsInWorktree ? store.draftBase : project.branch {
                 if project.worktree != nil {
                     branchLabel(branch, opens: false)
+                        .foregroundStyle(Color.themeSecondary)
                         .help("The branch of this thread's worktree")
                 } else if store.canSwitchBranches(of: project) {
                     Button {
@@ -96,13 +97,14 @@ struct ContextStrip: View {
                     } label: {
                         branchLabel(startsInWorktree ? "From \(branch)" : branch, opens: true)
                     }
-                    .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin))
+                    .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin, faded: true))
                     .help(startsInWorktree ? "The branch the worktree's branch starts from" : "Switch the branch of \(project.name)")
                     .popover(isPresented: $store.showsBranches, arrowEdge: .bottom) {
                         BranchPicker(project: project, base: startsInWorktree ? branch : nil)
                     }
                 } else {
                     branchLabel(branch, opens: false)
+                        .foregroundStyle(Color.themeSecondary)
                         .help(server?.known == true ? "Update \(server?.name ?? "your server") to switch branches from here" : "The branch checked out there")
                 }
             }
@@ -142,7 +144,6 @@ struct ContextStrip: View {
                         .font(.ui(size: 9, weight: .bold))
                         .foregroundStyle(Color.themeTertiary)
                 }
-                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 9)
                 .frame(height: 24)
                 .padding(margin)
@@ -152,7 +153,7 @@ struct ContextStrip: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .hoverHighlight(radius: 7, inset: margin)
+            .hoverHighlight(radius: 7, inset: margin, faded: true)
             .help(inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder")
         }
     }
@@ -197,7 +198,6 @@ struct ContextStrip: View {
                     .foregroundStyle(Color.themeTertiary)
             }
         }
-        .foregroundStyle(Color.themeSecondary)
         .padding(.horizontal, 9)
         .frame(height: 24)
         .padding(ComposerStrip.margin)

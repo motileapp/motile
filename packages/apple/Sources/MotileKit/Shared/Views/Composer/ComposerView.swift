@@ -101,14 +101,13 @@ struct ComposerView: View {
             } label: {
                 Text("Stop")
                     .font(.ui(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.themeSecondary)
                     .padding(.horizontal, 9)
                     .frame(height: 24)
                     .padding(ComposerStrip.margin)
                     .frame(minHeight: Platform.minimumPress)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin))
+            .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin, faded: true))
             .help("Stop monitoring (⌘.)")
         }
         .modifier(ComposerStrip(edge: .top))
@@ -233,10 +232,9 @@ struct ComposerView: View {
             effortMenu
             accessMenu(compact: compact)
             Spacer(minLength: 10)
-            IconOnlyButton(symbol: "paperclip", help: "Attach files", size: 30, symbolSize: 15, inset: Self.margin(trailing: 4)) {
+            IconOnlyButton(symbol: "paperclip", help: "Attach files", size: 30, symbolSize: 15, inset: Self.margin(trailing: 4), faded: true) {
                 chooseFiles()
             }
-            .foregroundStyle(Color.themeSecondary)
             ComposerSendButtons()
         }
     }
@@ -259,7 +257,6 @@ struct ComposerView: View {
                 .font(.ui(size: 9, weight: .bold))
                 .foregroundStyle(Color.themeTertiary)
         }
-        .foregroundStyle(Color.themeSecondary)
         .padding(.horizontal, 9)
         .frame(height: 30)
         .padding(margin)
@@ -306,7 +303,7 @@ struct ComposerView: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .hoverHighlight(radius: 9, inset: margin)
+        .hoverHighlight(radius: 9, inset: margin, faded: true)
         .disabled(models.isEmpty)
         .help(name)
     }
@@ -326,7 +323,7 @@ struct ComposerView: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .hoverHighlight(radius: 9, inset: Self.margin())
+            .hoverHighlight(radius: 9, inset: Self.margin(), faded: true)
         }
     }
 
@@ -348,7 +345,7 @@ struct ComposerView: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .hoverHighlight(radius: 9, inset: Self.margin())
+        .hoverHighlight(radius: 9, inset: Self.margin(), faded: true)
         .help(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail)
     }
 

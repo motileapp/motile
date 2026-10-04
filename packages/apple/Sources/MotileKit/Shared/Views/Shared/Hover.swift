@@ -2,16 +2,19 @@ import SwiftUI
 
 /// Lights up what the pointer is over, what is selected and what is `lit`. The light is drawn `inset` from the
 /// view's edges: that margin looks empty but is the view's, so neighbours leave no gap to miss.
+/// What is `faded` is in the secondary color until it lights up.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
     let lit: Bool
     let inset: EdgeInsets
     let color: Color
+    let faded: Bool
     @State private var hovering = false
+    @Environment(\.isEnabled) private var enabled
 
     func body(content: Content) -> some View {
-        content
+        tinted(content)
             .background {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(fill)
@@ -20,17 +23,31 @@ private struct HoverHighlight: ViewModifier {
             .onHover { hovering = $0 }
     }
 
+    @ViewBuilder private func tinted(_ content: Content) -> some View {
+        if faded {
+            content.foregroundStyle(text)
+        } else {
+            content
+        }
+    }
+
     private var fill: Color {
         if selected { return Color.themeSelected }
         return hovering || lit ? color : Color.clear
+    }
+
+    private var text: Color {
+        guard enabled, selected || hovering || lit else { return Color.themeSecondary }
+        return Color.themeText
     }
 }
 
 extension View {
     func hoverHighlight(
-        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover
+        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover,
+        faded: Bool = false
     ) -> some View {
-        modifier(HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, color: color))
+        modifier(HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, color: color, faded: faded))
     }
 }
 
@@ -42,10 +59,11 @@ struct HighlightButtonStyle: ButtonStyle {
     var lit = false
     var inset = EdgeInsets()
     var color = Color.themeHover
+    var faded = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .hoverHighlight(radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, color: color)
+            .hoverHighlight(radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, color: color, faded: faded)
     }
 }
 
@@ -58,9 +76,10 @@ struct DimButtonStyle: ButtonStyle {
 
 extension ButtonStyle where Self == HighlightButtonStyle {
     static func highlight(
-        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover
+        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover,
+        faded: Bool = false
     ) -> HighlightButtonStyle {
-        HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, color: color)
+        HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, color: color, faded: faded)
     }
 }
 
@@ -87,6 +106,7 @@ struct IconOnlyButton: View {
     var symbolSize: CGFloat = 13
     var radius: CGFloat = 6
     var inset = EdgeInsets()
+    var faded = false
     let action: () -> Void
 
     var body: some View {
@@ -99,7 +119,7 @@ struct IconOnlyButton: View {
                 .padding(around)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.highlight(radius: radius, inset: around))
+        .buttonStyle(.highlight(radius: radius, inset: around, faded: faded))
         .padding(-reach)
         .help(help)
         .accessibilityLabel(help)

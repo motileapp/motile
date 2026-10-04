@@ -95,17 +95,16 @@ struct ConnectServerView: View {
                         .frame(width: Self.buttonSize, height: Self.buttonSize)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.highlight(radius: 6))
+                .buttonStyle(.highlight(radius: 6, faded: true))
                 .accessibilityLabel("Share the command")
                 #endif
-                IconOnlyButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy the command", size: Self.buttonSize, symbolSize: Self.symbolSize) {
+                IconOnlyButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy the command", size: Self.buttonSize, symbolSize: Self.symbolSize, faded: true) {
                     guard let command = store.enrollToken?.command else { return }
                     Platform.copy(command)
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 }
             }
-            .foregroundStyle(Color.themeSecondary)
             .disabled(store.enrollToken == nil)
         }
         .padding(.leading, 14)

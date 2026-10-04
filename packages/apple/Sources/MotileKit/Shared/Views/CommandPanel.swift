@@ -112,8 +112,7 @@ struct CommandPanel: View {
     private var header: some View {
         HStack(spacing: 10) {
             if pages.count > 1 {
-                IconOnlyButton(symbol: "arrow.left", help: "Back", size: 26, symbolSize: 14) { back() }
-                    .foregroundStyle(Color.themeSecondary)
+                IconOnlyButton(symbol: "arrow.left", help: "Back", size: 26, symbolSize: 14, faded: true) { back() }
             } else {
                 Image(systemName: "magnifyingglass")
                     .font(.ui(size: 15, weight: .medium))
