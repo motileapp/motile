@@ -121,8 +121,10 @@ struct Live {
     preparing: Option<Preparing>,
     /// The item that ended a turn whose changes haven't been read yet.
     ended: Option<String>,
-    /// Messages sent while the agent was working, until it takes them.
+    /// Messages sent while the agent was working, until they are given to it.
     queued: Vec<Queued>,
+    /// Messages given to the agent that it hasn't taken yet. They are in the transcript already.
+    given: Vec<Queued>,
     title_needs_refinement: bool,
 }
 
@@ -175,7 +177,16 @@ impl Hub {
         let media = MediaStore::new(media_folder, home);
         let threads = store.load_threads()?;
         let worktrees = threads.iter().filter_map(thread_worktree).collect();
-        let live = |stored: StoredThread| (stored.thread.id.clone(), Live::new(stored, media.clone()));
+        let mut queued = store.load_queued()?;
+        let live = |stored: StoredThread| {
+            let mut live = Live::new(stored, media.clone());
+            // No turn survives a restart, so what waited for one goes when the user sends it.
+            live.queued = queued.remove(&live.stored.thread.id).unwrap_or_default();
+            for queued in &mut live.queued {
+                queued.held = true;
+            }
+            (live.stored.thread.id.clone(), live)
+        };
         let threads = threads.into_iter().map(live).collect();
         let mut projects = store.load_projects()?;
         for project in &mut projects {
@@ -275,6 +286,7 @@ impl Hub {
         let prompt = prompt(&text, &attachments);
         if live.preparing.is_some() {
             live.queued.push(Queued { id: new_id(), text, attachments, media, held: false, sending: false });
+            live.save_queued(&self.store)?;
             live.send_activity();
             return Ok(thread_id);
         }
@@ -283,6 +295,7 @@ impl Hub {
             let idle = run.received_result;
             if !idle || !live.write_prompt(&prompt, &new_id()) {
                 live.queued.push(Queued { id: new_id(), text, attachments, media, held: false, sending: false });
+                live.save_queued(&self.store)?;
                 live.send_activity();
                 return Ok(thread_id);
             }
@@ -509,9 +522,6 @@ impl Hub {
         let mut threads = self.threads.lock().await;
         let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
         let index = live.queued_index(message_id)?;
-        if live.queued[index].sending {
-            return Ok(());
-        }
         if live.preparing.is_some() {
             bail!("The agent isn't ready yet. Send it again in a moment.");
         }
@@ -520,14 +530,15 @@ impl Hub {
             return self.start_next_turn(live, queued);
         };
         if !run.received_result {
-            if !live.steer(index) {
+            if !live.steer(&self.store, index)? {
                 bail!("The agent isn't ready yet. Send it again in a moment.");
             }
             return Ok(());
         }
-        if !live.give(index) {
+        if !live.give(&self.store, index)? {
             // The agent's process takes no more; the message starts the next turn.
             live.queued[index].held = false;
+            live.save_queued(&self.store)?;
             live.send_activity();
             return Ok(());
         }
@@ -539,10 +550,8 @@ impl Hub {
         let mut threads = self.threads.lock().await;
         let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
         let index = live.queued_index(message_id)?;
-        if live.queued[index].sending {
-            bail!("The agent has already been given that message.");
-        }
         live.queued.remove(index);
+        live.save_queued(&self.store)?;
         live.send_activity();
         Ok(())
     }
@@ -1418,6 +1427,7 @@ impl Hub {
         for queued in &mut live.queued {
             queued.held = true;
         }
+        live.save_queued(&self.store)?;
         self.store.save_thread(&live.stored)?;
         live.send_activity();
         self.announce(&live.stored.thread);
@@ -1512,8 +1522,8 @@ impl Hub {
         }
         let interrupted = run.interrupted.load(Ordering::Relaxed);
         // A message the agent was given too late for this turn starts its next one.
-        let given = live.queued.iter().any(|queued| queued.sending);
-        if !interrupted && (given || live.hand_over()) {
+        let given = !live.given.is_empty();
+        if !interrupted && (given || live.hand_over(&self.store)?) {
             return self.resume(live);
         }
         let Some(run) = &mut live.run else { return Ok(()) };
@@ -1732,12 +1742,7 @@ impl Hub {
                 }
             }
             AgentEvent::Woke => self.resume(live)?,
-            AgentEvent::Taken { id } => {
-                let Some(index) = live.queued.iter().position(|queued| queued.id == id) else { return Ok(()) };
-                let queued = live.queued.remove(index);
-                live.append_message(store, queued.text, queued.attachments, queued.media)?;
-                live.send_activity();
-            }
+            AgentEvent::Taken { id } => live.given.retain(|given| given.id != id),
             AgentEvent::Turn { id } => {
                 if let Some(run) = &mut live.run {
                     run.turn_id = Some(id);
@@ -1795,8 +1800,19 @@ impl Hub {
         // What the user stopped doesn't go on by itself: the messages that waited stay until
         // they are sent.
         for queued in &mut live.queued {
-            queued.sending = false;
             queued.held |= interrupted;
+        }
+        if let Err(error) = live.save_queued(&self.store) {
+            tracing::error!(thread_id, "couldn't save the queued messages: {error:#}");
+        }
+        // What the agent was given and didn't take starts the next turn, already in the transcript.
+        let given = std::mem::take(&mut live.given);
+        if !interrupted && !given.is_empty() {
+            let prompts: Vec<String> = given.iter().map(|given| prompt(&given.text, &given.attachments)).collect();
+            if let Err(error) = self.start_turn(live, prompts.join("\n\n")) {
+                tracing::error!(thread_id, "couldn't start the next turn: {error:#}");
+            }
+            return;
         }
         if let Some(index) = live.queued.iter().position(|queued| !queued.held) {
             let queued = live.queued.remove(index);
@@ -1815,6 +1831,7 @@ impl Hub {
 
     fn start_next_turn(self: &Arc<Self>, live: &mut Live, queued: Queued) -> anyhow::Result<()> {
         let prompt = prompt(&queued.text, &queued.attachments);
+        live.save_queued(&self.store)?;
         live.append_message(&self.store, queued.text, queued.attachments, queued.media)?;
         self.start_turn(live, prompt)
     }
@@ -1853,6 +1870,7 @@ impl Live {
             preparing: None,
             ended: None,
             queued: Vec::new(),
+            given: Vec::new(),
             title_needs_refinement: false,
         }
     }
@@ -1877,6 +1895,10 @@ impl Live {
         let _ = self.updates.send(Message::Activity { activity: self.activity() });
     }
 
+    fn save_queued(&self, store: &Store) -> rusqlite::Result<()> {
+        store.save_queued(&self.stored.thread.id, &self.queued)
+    }
+
     fn queued_index(&self, message_id: &str) -> anyhow::Result<usize> {
         let index = self.queued.iter().position(|queued| queued.id == message_id);
         index.context("That message is no longer waiting.")
@@ -1885,17 +1907,17 @@ impl Live {
     /// A message was sent now to the turn that runs, and the agent hasn't taken it yet.
     fn steering(&self) -> bool {
         let stopped = self.run.as_ref().is_some_and(|run| run.interrupted.load(Ordering::Relaxed));
-        !stopped && self.queued.iter().any(|queued| queued.sending)
+        !stopped && !self.given.is_empty()
     }
 
     /// Gives the idle process the first message that waits, unless it still has one to take or
     /// waits for an answer itself. `false` when nothing was given.
-    fn hand_over(&mut self) -> bool {
-        if self.queued.iter().any(|queued| queued.sending) || !self.activity.approvals.is_empty() {
-            return false;
+    fn hand_over(&mut self, store: &Store) -> anyhow::Result<bool> {
+        if !self.given.is_empty() || !self.activity.approvals.is_empty() {
+            return Ok(false);
         }
-        let Some(index) = self.queued.iter().position(|queued| !queued.held) else { return false };
-        self.give(index)
+        let Some(index) = self.queued.iter().position(|queued| !queued.held) else { return Ok(false) };
+        self.give(store, index)
     }
 
     /// Writes a prompt to the agent's process. `false` when it takes none.
@@ -1906,18 +1928,18 @@ impl Live {
 
     /// Writes the queued message to the idle process, which starts its next turn with it.
     /// `false` when it takes no more.
-    fn give(&mut self, index: usize) -> bool {
+    fn give(&mut self, store: &Store, index: usize) -> anyhow::Result<bool> {
         let queued = &self.queued[index];
         if !self.write_prompt(&prompt(&queued.text, &queued.attachments), &queued.id) {
-            return false;
+            return Ok(false);
         }
-        self.note_given(index);
-        true
+        self.note_given(store, index)?;
+        Ok(true)
     }
 
     /// Writes the queued message to the turn that runs, which takes it at once. `false` when the
     /// agent can't take it.
-    fn steer(&mut self, index: usize) -> bool {
+    fn steer(&mut self, store: &Store, index: usize) -> anyhow::Result<bool> {
         let queued = &self.queued[index];
         let thread = &self.stored.thread;
         let turn_id = self.run.as_ref().and_then(|run| run.turn_id.as_deref());
@@ -1925,16 +1947,20 @@ impl Live {
         let line =
             agents::steer(thread.agent, session_id, turn_id, &prompt(&queued.text, &queued.attachments), &queued.id);
         if !line.is_some_and(|line| self.write(line)) {
-            return false;
+            return Ok(false);
         }
-        self.note_given(index);
-        true
+        self.note_given(store, index)?;
+        Ok(true)
     }
 
-    fn note_given(&mut self, index: usize) {
-        self.queued[index].sending = true;
-        self.queued[index].held = false;
+    /// Moves a message the agent was given from the queue into the transcript.
+    fn note_given(&mut self, store: &Store, index: usize) -> anyhow::Result<()> {
+        let queued = self.queued.remove(index);
+        self.save_queued(store)?;
+        self.append_message(store, queued.text.clone(), queued.attachments.clone(), queued.media.clone())?;
+        self.given.push(queued);
         self.send_activity();
+        Ok(())
     }
 
     /// Writes a line to the process's stdin. `false` when it takes no more.

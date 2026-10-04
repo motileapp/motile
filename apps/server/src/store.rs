@@ -1,9 +1,10 @@
 //! Threads, their transcripts and the projects, in SQLite.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
-use motile_protocol::wire::{Access, Agent, Item, Thread};
+use motile_protocol::wire::{Access, Agent, Item, Queued, Thread};
 use rusqlite::{Connection, OptionalExtension, params};
 
 const MIGRATIONS: &[&str] = &[
@@ -14,6 +15,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0005_worktrees.sql"),
     include_str!("../migrations/0006_attachments.sql"),
     include_str!("../migrations/0007_thread_pull_requests.sql"),
+    include_str!("../migrations/0008_queued.sql"),
 ];
 
 pub struct Store {
@@ -321,6 +323,34 @@ impl Store {
             })
             .optional()?;
         Ok(payload.and_then(|payload| serde_json::from_str(&payload).ok()))
+    }
+
+    /// The messages that wait, by thread, in their order.
+    pub fn load_queued(&self) -> rusqlite::Result<HashMap<String, Vec<Queued>>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare("SELECT thread_id, payload FROM queued ORDER BY thread_id, position")?;
+        let rows = statement.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+        let mut queued: HashMap<String, Vec<Queued>> = HashMap::new();
+        for row in rows {
+            let (thread_id, payload) = row?;
+            let Ok(message) = serde_json::from_str(&payload) else { continue };
+            queued.entry(thread_id).or_default().push(message);
+        }
+        Ok(queued)
+    }
+
+    /// Replaces the messages that wait for the thread's agent with these.
+    pub fn save_queued(&self, thread_id: &str, queued: &[Queued]) -> rusqlite::Result<()> {
+        let mut connection = self.connection();
+        let transaction = connection.transaction()?;
+        transaction.execute("DELETE FROM queued WHERE thread_id = ?1", [thread_id])?;
+        for (position, message) in queued.iter().enumerate() {
+            transaction.execute(
+                "INSERT INTO queued (thread_id, id, position, payload) VALUES (?1, ?2, ?3, ?4)",
+                params![thread_id, message.id, position as i64, serde_json::to_string(message).unwrap_or_default()],
+            )?;
+        }
+        transaction.commit()
     }
 
     pub fn save_item(&self, thread_id: &str, item: &Item) -> rusqlite::Result<()> {

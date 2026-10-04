@@ -450,8 +450,12 @@ async fn a_client_that_reconnects_mid_turn_is_sent_only_what_it_missed() {
     let had = transcript.items.len();
 
     // The turn keeps running without the client. Back again, it asks for what came after its revision.
-    tokio::time::sleep(Duration::from_millis(300)).await;
     let second = harness.connect().await;
+    let mut watching = Transcript::default();
+    let mut watch = open(&second, &thread_id, 0).await;
+    while watching.synced.is_none() || watching.rev <= transcript.rev {
+        watching.apply(next(&mut watch).await);
+    }
     let mut follow = open(&second, &thread_id, transcript.rev).await;
     transcript.synced = None;
     let mut resent = 0;
@@ -849,6 +853,23 @@ async fn queue_while_waiting(
 }
 
 #[tokio::test]
+async fn a_queued_message_survives_a_restart_and_waits_to_be_sent() {
+    let mut harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    first_approval(&mut transcript, &mut follow).await;
+    let queued = queue_while_waiting(&connection, &thread_id, "Use single quotes", &mut transcript, &mut follow).await;
+
+    harness.restart().await;
+    let mut reopened = Transcript::default();
+    reopened.apply(next(&mut open(&harness.connect().await, &thread_id, 0).await).await);
+    assert_eq!(reopened.queued, vec![Queued { held: true, ..queued }]);
+}
+
+#[tokio::test]
 async fn a_message_queued_for_claude_is_sent_now_or_taken_back() {
     a_queued_message_is_sent_now_or_taken_back(Agent::Claude).await;
 }
@@ -869,7 +890,6 @@ async fn a_queued_message_is_sent_now_or_taken_back(agent: Agent) {
 
     let dropped = queue_while_waiting(&connection, &thread_id, "Never mind", &mut transcript, &mut follow).await;
     let kept = queue_while_waiting(&connection, &thread_id, "Use single quotes", &mut transcript, &mut follow).await;
-    assert!(!dropped.sending && !kept.sending, "nothing is given to an agent that waits for an answer");
 
     let cancel = Request::CancelQueued { thread_id: thread_id.clone(), message_id: dropped.id.clone() };
     assert_eq!(connection.request(&cancel).await.unwrap(), Message::Ok);
@@ -877,12 +897,12 @@ async fn a_queued_message_is_sent_now_or_taken_back(agent: Agent) {
     assert!(matches!(again, Message::Error { message } if message.contains("no longer waiting")));
     let send_now = Request::SendQueued { thread_id: thread_id.clone(), message_id: kept.id.clone() };
     assert_eq!(connection.request(&send_now).await.unwrap(), Message::Ok);
-    while transcript.queued.len() != 1 || !transcript.queued[0].sending {
+    while !transcript.queued.is_empty() || !messages_and_turn_ends(&transcript).contains(&"Use single quotes") {
         transcript.apply(next(&mut follow).await);
     }
     let too_late = Request::CancelQueued { thread_id: thread_id.clone(), message_id: kept.id };
     let refused = connection.request(&too_late).await.unwrap();
-    assert!(matches!(refused, Message::Error { message } if message.contains("already been given")));
+    assert!(matches!(refused, Message::Error { message } if message.contains("no longer waiting")));
 
     let allow = |approval_id| Request::Answer {
         thread_id: thread_id.clone(),
@@ -1927,7 +1947,11 @@ async fn an_image_the_agent_shows_is_kept_as_it_was_and_goes_with_its_thread() {
     let reply = transcript.items.iter().find(|item| !item.media.is_empty()).unwrap();
     assert!(matches!(&reply.kind, ItemKind::Assistant { text } if text.ends_with("The header is in place.")));
     let [media] = &reply.media[..] else { panic!("the reply shows one image: {:?}", reply.media) };
-    assert_eq!((media.src.as_str(), media.video), (screenshot.to_str().unwrap(), false));
+    // On a Mac the temporary folder is reached through a link, which the agent's paths have resolved.
+    assert_eq!(
+        (std::fs::canonicalize(&media.src).unwrap(), media.video),
+        (std::fs::canonicalize(&screenshot).unwrap(), false)
+    );
     assert_eq!((media.width, media.height, media.size), (Some(960), Some(600), shown.len() as u64));
 
     // The agent's file changes; the thread still shows what it showed.
