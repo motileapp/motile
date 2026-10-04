@@ -171,7 +171,8 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         guard isEnabled || isOpen else { return false }
         let speed = pan.velocity(in: view)
         guard abs(speed.x) > abs(speed.y) * 1.3 else { return false }
-        guard !isOpen else { return true }
+        // Opened, only the swipe back is the drawer's: one to the right is the sidebar's rows'.
+        guard !isOpen else { return speed.x < 0 }
         guard speed.x > 0 else { return false }
         return !scrollsSideways(under: pan.location(in: view))
     }

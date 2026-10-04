@@ -22,11 +22,12 @@ struct SidebarScreen: View {
             SearchField(text: $search)
                 .padding(.horizontal, sidebarRowInset + 2)
                 .padding(.bottom, 8)
-            ScrollView {
-                LazyVStack(spacing: 0) {
+            List {
+                Group {
                     DraftRows(search: search, open: open)
                     ForEach(active) { thread in
                         ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 }, open: open)
+                            .swipeActions(edge: .leading) { doneAction(thread) }
                     }
                     if active.isEmpty {
                         Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
@@ -40,8 +41,15 @@ struct SidebarScreen: View {
                         doneShelf(done)
                     }
                 }
-                .padding(.bottom, 12)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
             }
+            .listStyle(.plain)
+            .listRowSpacing(0)
+            .scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, 0)
+            .contentMargins(.bottom, 12, for: .scrollContent)
             .scrollDismissesKeyboard(.immediately)
             if let undo = store.undo {
                 UndoRow(notice: undo)
@@ -131,7 +139,28 @@ struct SidebarScreen: View {
             ForEach(done, id: \.doneRowID) { thread in
                 DoneRow(thread: thread, rename: beginRename, delete: { deleting = $0 }, open: open)
                     .frame(height: 44)
+                    .swipeActions(edge: .leading) { doneAction(thread) }
             }
+        }
+    }
+
+    /// What a swipe to the right on a thread's row does: marks it done, or undone.
+    @ViewBuilder
+    private func doneAction(_ thread: ThreadInfo) -> some View {
+        if thread.isDone {
+            Button {
+                store.setDone([thread.id], done: false)
+            } label: {
+                Label("Undo", systemImage: "arrow.uturn.backward")
+            }
+            .tint(Color.themeSecondary)
+        } else if !thread.busy {
+            Button {
+                store.setDone([thread.id], done: true, fromSidebar: true)
+            } label: {
+                Label("Done", systemImage: "checkmark")
+            }
+            .tint(Color.themeWorking)
         }
     }
 
