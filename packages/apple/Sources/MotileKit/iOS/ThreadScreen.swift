@@ -107,7 +107,7 @@ struct ThreadScreen: View {
     }
 
     private var title: some View {
-        VStack(spacing: 1) {
+        VStack(alignment: .leading, spacing: 1) {
             Text(store.selectedThread?.title ?? "New thread")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.themeText)
@@ -118,6 +118,7 @@ struct ThreadScreen: View {
             }
         }
         .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var projectLine: String? {
