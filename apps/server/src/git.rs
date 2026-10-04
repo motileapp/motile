@@ -140,6 +140,10 @@ pub async fn status(folder: &str, environment: &Environment) -> Option<(GitStatu
         removed: read.files.iter().map(|file| file.removed).sum(),
         pull_requests: remote.is_some() && on_path("gh", environment),
         branch: read.branch,
+        default_branch: match &default {
+            Some(default) => Some(default.clone()),
+            None => usual_branch(folder, environment).await,
+        },
         ..GitStatus::default()
     };
     let committed = !read.head.is_empty();
@@ -243,6 +247,17 @@ async fn default_branch(folder: &str, environment: &Environment, remote: &str) -
     }
     for usual in ["main", "master"] {
         let name = format!("refs/remotes/{remote}/{usual}");
+        if git(folder, environment, &["rev-parse", "--verify", "--quiet", &name]).await.is_ok() {
+            return Some(usual.to_string());
+        }
+    }
+    None
+}
+
+/// `main` or `master`, when the repository has one.
+async fn usual_branch(folder: &str, environment: &Environment) -> Option<String> {
+    for usual in ["main", "master"] {
+        let name = format!("refs/heads/{usual}");
         if git(folder, environment, &["rev-parse", "--verify", "--quiet", &name]).await.is_ok() {
             return Some(usual.to_string());
         }

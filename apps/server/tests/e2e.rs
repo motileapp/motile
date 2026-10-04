@@ -1491,6 +1491,7 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     let (status, files) = git_status(&connection, &project.id, false).await;
     assert_eq!((status.branch.as_deref(), status.default, status.upstream), (Some("greet-f-string"), false, true));
     assert_eq!((status.ahead, status.ahead_of_default, files), (0, 1, vec!["notes.txt".to_string()]));
+    assert_eq!(status.default_branch.as_deref(), Some("main"));
     assert_eq!(
         status.pull_request.map(|opened| (opened.number, opened.title)),
         Some((7, "Greet with an f-string".to_string()))
