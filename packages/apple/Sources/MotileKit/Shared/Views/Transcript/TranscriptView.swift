@@ -58,7 +58,7 @@ final class TranscriptView: FlippedView, RowOwner {
         }
     }
 
-    private static let jumpButtonGap: CGFloat = 12
+    private static let jumpButtonGap: CGFloat = 10
 
     /// The room between the last row and the composer.
     static let composerGap: CGFloat = 24
