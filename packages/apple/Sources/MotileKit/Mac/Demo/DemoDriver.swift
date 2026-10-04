@@ -336,11 +336,16 @@ private final class Demo {
                 return files.count == 2 && files.contains { !$0.spans.isEmpty }
             }
             await shoot("07-diff")
+            store.sidePanel.showChange(turn: turn.id, path: "greet.py")
+            await expect("what the turn changed in one file opens in a tab of its own") {
+                guard case .text(let document, _) = store.sidePanel.contents[.change(turn: turn.id, path: "greet.py")]?.value else { return false }
+                return document.files.map(\.path) == ["greet.py"]
+            }
             store.sidePanel.open(.files)
             await expect("the folder the thread works in is listed") { store.sidePanel.nodes.contains { $0.name == "greet.py" } }
             store.sidePanel.open(.file("greet.py"))
             await expect("a file of the folder opens in a tab of its own") {
-                guard case .text(let document, _) = store.sidePanel.contents["greet.py"]?.value else { return false }
+                guard case .text(let document, _) = store.sidePanel.contents[.file("greet.py")]?.value else { return false }
                 return document.files.first?.lines.first == "def greet(name):"
             }
             await shoot("07-file")

@@ -43,7 +43,10 @@ struct TranscriptRepresentable {
                 guard let threadID = model.threadID else { return done() }
                 store.core.send("trim_earlier", ["thread_id": threadID, "keep_rows": keepRows]) { _ in done() }
             }
-            view.onOpenDiff = { itemID, path in store.sidePanel.showDiff(.turn(itemID), revealing: path) }
+            view.onOpenDiff = { itemID, path in
+                guard let path else { return store.sidePanel.showDiff(.turn(itemID)) }
+                store.sidePanel.showChange(turn: itemID, path: path)
+            }
         }
         let hooks = TranscriptModel.Hooks(
             reset: { [weak view] rows in view?.reset(rows: rows) },

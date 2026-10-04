@@ -43,6 +43,7 @@ struct PanelContent: View {
             case .diff: DiffSurface(target: target)
             case .files: FilesSurface(target: target)
             case .file(let path): FileSurface(target: target, path: path).id(path)
+            case .change(let turn, let path): ChangeSurface(target: target, turn: turn, path: path).id(active)
             case .agents: AgentsSurface()
             case nil: PanelLauncher(target: target)
             }
@@ -204,21 +205,16 @@ private struct PanelTabChip: View {
         }
         .padding(.vertical, -Self.reach)
         .onHover { hovering = $0 }
-        .help(path ?? tab.title)
+        .help(tab.path ?? tab.title)
         .contextMenu {
             Button("Close") { panel.close(tab) }
             Button("Close Others") { panel.closeOthers(tab) }
             Button("Close All") { panel.closeAll() }
-            if let path {
+            if let path = tab.path {
                 Divider()
                 Button("Copy Path") { Platform.copy(path) }
             }
         }
-    }
-
-    private var path: String? {
-        guard case .file(let path) = tab else { return nil }
-        return path
     }
 }
 
@@ -385,15 +381,12 @@ struct DiffSurface: View {
         switch scope {
         case .uncommitted: return "Uncommitted"
         case .branch: return "Branch"
-        case .turn(let id):
-            let turns = store.sidePanel.turns
-            guard let turn = turns.first(where: { $0.id == id }), turn.id != turns.last?.id else { return "Latest turn" }
-            return "Turn at \(Time.stamp(turn.at))"
+        case .turn(let id): return store.sidePanel.name(ofTurn: id)
         }
     }
 
     private func label(of turn: TurnChange) -> String {
-        let name = turn.id == store.sidePanel.turns.last?.id ? "Latest turn" : "Turn at \(Time.stamp(turn.at))"
+        let name = store.sidePanel.name(ofTurn: turn.id)
         return "\(name) · \(turn.files == 1 ? "1 file" : "\(turn.files) files")"
     }
 }
@@ -505,7 +498,7 @@ struct FileSurface: View {
                 }
                 IconOnlyButton(symbol: "arrow.clockwise", help: "Read the file again") { asked += 1 }
             }
-            switch panel.contents[path] {
+            switch panel.contents[.file(path)] {
             case nil, .loading:
                 PanelLoading()
             case .failed(let message):
@@ -533,5 +526,48 @@ struct FileSurface: View {
     private var folder: String {
         let folder = (path as NSString).deletingLastPathComponent
         return folder.isEmpty ? "" : folder + "/"
+    }
+}
+
+/// What one turn changed in one file.
+struct ChangeSurface: View {
+    @Environment(AppStore.self) private var store
+    let target: PanelTarget
+    let turn: String
+    let path: String
+    @State private var closed = false
+
+    var body: some View {
+        let panel = store.sidePanel
+        VStack(spacing: 0) {
+            PanelBar {
+                Text(panel.name(ofTurn: turn))
+                    .font(.ui(size: 12.5, weight: .medium))
+                    .foregroundStyle(Color.themeText)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                IconOnlyButton(symbol: "plusminus", help: "Show everything this turn changed") {
+                    panel.showDiff(.turn(turn), revealing: path)
+                }
+            }
+            switch panel.contents[.change(turn: turn, path: path)] {
+            case nil, .loading:
+                PanelLoading()
+            case .failed(let message):
+                PanelMessage(text: message, failed: true)
+            case .ready(.text(let document, let truncated)) where !document.files.isEmpty:
+                if truncated {
+                    PanelNote(text: "The turn's changes are too long to show in full, so this file's may be cut short.")
+                }
+                CodeViewRepresentable(
+                    document: document, collapsed: closed ? [path] : [],
+                    onToggle: { _ in closed.toggle() }, onOpenFile: { panel.open(.file($0)) })
+            case .ready:
+                PanelMessage(text: "The turn's changes to this file can't be shown.")
+            }
+        }
+        .task(id: target) {
+            panel.loadChange(turn: turn, path: path, of: target)
+        }
     }
 }

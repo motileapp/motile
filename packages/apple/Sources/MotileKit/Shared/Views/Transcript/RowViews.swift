@@ -737,7 +737,7 @@ final class ErrorRowView: RowView {
 }
 
 /// What a turn changed: how many files and lines, and the files under their folders. A click on
-/// a file shows the turn's diff with that file in view.
+/// a file opens what the turn changed in it in a tab of the panel.
 final class ChangesRowView: RowView {
     fileprivate static let headHeight: CGFloat = scaled(40)
     fileprivate static let entryHeight: CGFloat = scaled(26)

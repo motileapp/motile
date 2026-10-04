@@ -26,6 +26,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case files
     /// One file, by its path in the folder.
     case file(String)
+    /// What one turn changed in one file, by the item that ended the turn.
+    case change(turn: String, path: String)
     /// The agents the thread's agent has started, and what one of them did.
     case agents
 
@@ -35,6 +37,15 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .files: "files"
         case .agents: "agents"
         case .file(let path): "file:\(path)"
+        case .change(_, let path): "change:\(path)"
+        }
+    }
+
+    /// The file a tab is about.
+    var path: String? {
+        switch self {
+        case .file(let path), .change(_, let path): path
+        case .diff, .files, .agents: nil
         }
     }
 
@@ -43,13 +54,13 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff: "Diff"
         case .files: "Files"
         case .agents: "Agents"
-        case .file(let path): URL(fileURLWithPath: path).lastPathComponent
+        case .file(let path), .change(_, let path): URL(fileURLWithPath: path).lastPathComponent
         }
     }
 
     var symbol: String {
         switch self {
-        case .diff: "plusminus"
+        case .diff, .change: "plusminus"
         case .files: "folder"
         case .agents: "person.2"
         case .file(let path): FileSymbol.name(for: path)
@@ -167,14 +178,14 @@ final class SidePanel {
     private(set) var listings: [String: [FileEntry]] = [:]
     private(set) var openFolders: Set<String> = []
     private(set) var filesError: String?
-    /// The files that are open in tabs, by path.
-    private(set) var contents: [String: Loaded<FileContent>] = [:]
+    /// What the tabs of one file show: the file, or what a turn changed in it.
+    private(set) var contents: [PanelTab: Loaded<FileContent>] = [:]
 
     /// The folder all of the above is of.
     @ObservationIgnored private var shown: PanelTarget?
     @ObservationIgnored private var shownScope: DiffScope?
     @ObservationIgnored private var diffRequest: UInt64 = 0
-    @ObservationIgnored private var fileRequests: [UInt64: String] = [:]
+    @ObservationIgnored private var fileRequests: [UInt64: PanelTab] = [:]
 
     init() {
         isOpen = defaults.bool(forKey: "panel.open")
@@ -217,7 +228,7 @@ final class SidePanel {
             guard tabs.active == tab else { return }
             tabs.active = tabs.tabs.isEmpty ? nil : tabs.tabs[min(index, tabs.tabs.count - 1)]
         }
-        if case .file(let path) = tab { contents[path] = nil }
+        contents[tab] = nil
     }
 
     func closeOthers(_ tab: PanelTab) {
@@ -314,6 +325,24 @@ final class SidePanel {
         open(.diff)
     }
 
+    /// Opens what the turn changed in the file in a tab of its own. A file has one such tab,
+    /// which shows the turn that was asked for last.
+    func showChange(turn: String, path: String) {
+        let tab = PanelTab.change(turn: turn, path: path)
+        change { tabs in
+            guard let index = tabs.tabs.firstIndex(where: { $0.id == tab.id }), tabs.tabs[index] != tab else { return }
+            contents[tabs.tabs[index]] = nil
+            tabs.tabs[index] = tab
+        }
+        open(tab)
+    }
+
+    /// What the diff's menu and a change's tab call the turn.
+    func name(ofTurn id: String) -> String {
+        guard let turn = turns.first(where: { $0.id == id }) else { return "Earlier turn" }
+        return turn.id == turns.last?.id ? "Latest turn" : "Turn at \(Time.stamp(turn.at))"
+    }
+
     /// Asks the server for the diff. What is shown stays until the answer is there, unless it
     /// is of another folder or scope.
     func loadDiff(of target: PanelTarget, scope: DiffScope) {
@@ -402,21 +431,33 @@ final class SidePanel {
 
     /// Asks the server for the file. What is shown of it stays until the answer is there.
     func loadFile(_ path: String, of target: PanelTarget) {
-        look(into: target)
-        if contents[path] == nil { contents[path] = .loading }
-        var command = target.request
-        command["server_id"] = target.serverID
-        command["path"] = path
         let id = "\(target.key)/\(path)"
-        let request = store?.core.send("file", command, read: { Self.read(file: $0, path: path, id: id) }) { [weak self] result in
+        load(.file(path), "file", ["path": path], of: target) { Self.read(file: $0, path: path, id: id) }
+    }
+
+    /// Asks the server for what the turn changed in the file.
+    func loadChange(turn: String, path: String, of target: PanelTarget) {
+        let tab = PanelTab.change(turn: turn, path: path)
+        let id = "\(target.key)/\(turn)/\(path)"
+        load(tab, "diff", ["scope": DiffScope.turn(turn).request, "path": path], of: target) {
+            .text(CodeDocument(diff: $0, id: id), truncated: $0.bool("truncated"))
+        }
+    }
+
+    private func load(_ tab: PanelTab, _ type: String, _ fields: JSON, of target: PanelTarget, read: @escaping (JSON) -> FileContent) {
+        look(into: target)
+        if contents[tab] == nil { contents[tab] = .loading }
+        var command = target.request.merging(fields) { $1 }
+        command["server_id"] = target.serverID
+        let request = store?.core.send(type, command, read: read) { [weak self] result in
             guard let self, self.shown == target else { return }
             switch result {
-            case .success(let content): self.contents[path] = .ready(content)
-            case .failure(let error): self.contents[path] = .failed(error.message)
+            case .success(let content): self.contents[tab] = .ready(content)
+            case .failure(let error): self.contents[tab] = .failed(error.message)
             }
         }
-        fileRequests = fileRequests.filter { $0.value != path }
-        if let request { fileRequests[request] = path }
+        fileRequests = fileRequests.filter { $0.value != tab }
+        if let request { fileRequests[request] = tab }
     }
 
     private static func read(file answer: JSON, path: String, id: String) -> FileContent {
@@ -455,7 +496,7 @@ final class SidePanel {
         let document: CodeDocument?
         if request == diffRequest {
             document = diff.value
-        } else if let path = fileRequests[request], case .text(let text, _) = contents[path]?.value {
+        } else if let tab = fileRequests[request], case .text(let text, _) = contents[tab]?.value {
             document = text
         } else {
             document = nil

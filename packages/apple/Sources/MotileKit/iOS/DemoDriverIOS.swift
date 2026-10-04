@@ -12,6 +12,7 @@ import UIKit
 ///     send                              sends what is written
 ///     panel diff|files|agents|close     opens a tab of the panel, or closes the panel
 ///     file <path>                       opens a file in the panel
+///     change <path>                     opens what the latest turn changed in a file
 ///     sheet commands|projects|settings|server|thread|close
 ///     appearance light|dark|system
 ///     answer <allow|refuse>             answers the first approval
@@ -78,6 +79,9 @@ enum DemoDriver {
             default: store.sidePanel.isOpen = false
             }
         case "file": store.sidePanel.open(.file(rest))
+        case "change":
+            guard let turn = store.sidePanel.turns.last else { return }
+            store.sidePanel.showChange(turn: turn.id, path: rest)
         case "sheet":
             switch rest {
             case "commands": store.openPanel(.commands)
