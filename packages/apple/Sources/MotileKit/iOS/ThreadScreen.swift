@@ -99,7 +99,7 @@ struct ThreadScreen: View {
             Text(store.selectedThread?.title ?? "New thread")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.themeText)
-            if let projectLine {
+            if let projectLine = store.composerProjectLine {
                 Text(projectLine)
                     .font(.system(size: 12))
                     .foregroundStyle(Color.themeSecondary)
@@ -107,14 +107,6 @@ struct ThreadScreen: View {
         }
         .lineLimit(1)
         .frame(idealWidth: 10000, maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var projectLine: String? {
-        let project = store.composerProject
-        let folder = store.selectedThread.map { URL(fileURLWithPath: $0.cwd).lastPathComponent }
-        guard let name = project?.name ?? folder else { return nil }
-        guard let branch = project?.branch else { return name }
-        return "\(name) · \(branch)"
     }
 
     /// The empty state of a new thread: a question, over the composer.

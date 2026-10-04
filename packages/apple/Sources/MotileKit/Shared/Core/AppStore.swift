@@ -513,6 +513,17 @@ final class AppStore {
         threadProject ?? project(selectedDraft?.projectID)
     }
 
+    /// The line over the thread's title: its project, its branch, and whether it starts in a new
+    /// worktree.
+    var composerProjectLine: String? {
+        let project = composerProject
+        let folder = selectedThread.map { URL(fileURLWithPath: $0.cwd).lastPathComponent }
+        guard let name = project?.name ?? folder else { return nil }
+        if draftUsesWorktree, let base = draftBase { return "\(name) · \(base) · New worktree" }
+        guard let branch = project?.branch else { return name }
+        return "\(name) · \(branch)"
+    }
+
     /// The open thread's project, as the thread works in it.
     var threadProject: Project? {
         guard let thread = selectedThread else { return nil }

@@ -80,9 +80,9 @@ struct ThreadPane: View {
 
     private var title: some View {
         VStack(alignment: .leading, spacing: 2) {
-            if let projectLine {
+            if let projectLine = store.composerProjectLine {
                 HStack(spacing: 6) {
-                    ProjectIcon(project: titleProject, size: 14)
+                    ProjectIcon(project: store.composerProject, size: 14)
                     Text(projectLine)
                         .font(.ui(size: 11))
                         .foregroundStyle(Color.themeSecondary)
@@ -93,18 +93,6 @@ struct ThreadPane: View {
                 .foregroundStyle(Color.themeText)
         }
         .lineLimit(1)
-    }
-
-    private var titleProject: Project? {
-        store.composerProject
-    }
-
-    private var projectLine: String? {
-        let project = titleProject
-        let folder = store.selectedThread.map { URL(fileURLWithPath: $0.cwd).lastPathComponent }
-        guard let name = project?.name ?? folder else { return nil }
-        guard let branch = project?.branch else { return name }
-        return "\(name) · \(branch)"
     }
 
     /// The empty state of a new thread: a question, and the composer a little above the middle
