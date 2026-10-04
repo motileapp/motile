@@ -112,10 +112,23 @@ struct GitButton: View {
         menu.popUp(positioning: nil, at: NSPoint(x: view.bounds.maxX - menu.size.width, y: below), in: view)
     }
     #else
-    /// The menu of every action. One that can't run now is greyed, with why under its name.
+    /// The menu of every action, under the one the repository calls for. One that can't run now
+    /// is greyed, with why under its name.
     private var content: some View {
         let running = store.gitStages[project.id] != nil
+        let quick = control.quick
+        let showsQuick = (quick.action != nil || quick.url != nil) && !control.menu.contains { $0.label == quick.label }
         return Menu {
+            if showsQuick {
+                Section {
+                    Button {
+                        store.runQuickGit(in: project)
+                    } label: {
+                        Label(quick.label, systemImage: GitSymbol.name(for: quick.action))
+                    }
+                    .disabled(running)
+                }
+            }
             ForEach(control.menu) { item in
                 Button {
                     store.chooseGit(item, in: project)
