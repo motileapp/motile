@@ -11,7 +11,16 @@ import UIKit
 final class SurfaceView: LayerView {
     var fill: PlatformColor = .clear { didSet { repaint() } }
     var stroke: PlatformColor? { didSet { repaint() } }
+    var dotted = false { didSet { repaint() } }
     var radius: CGFloat = 0 { didSet { repaint() } }
+    private var dots: CAShapeLayer?
+
+    override var frame: CGRect {
+        didSet {
+            guard dotted, frame.size != oldValue.size else { return }
+            repaint()
+        }
+    }
 
     /// A clickable surface takes the clicks on the labels and icons inside it.
     var onClick: (() -> Void)? {
@@ -22,8 +31,32 @@ final class SurfaceView: LayerView {
         layer.backgroundColor = resolved(fill)
         layer.cornerRadius = radius
         layer.cornerCurve = .continuous
-        layer.borderColor = stroke.map(resolved)
-        layer.borderWidth = stroke == nil ? 0 : 1
+        layer.borderColor = dotted ? nil : stroke.map(resolved)
+        layer.borderWidth = stroke == nil || dotted ? 0 : 1
+        paintDots(layer)
+    }
+
+    private func paintDots(_ layer: CALayer) {
+        guard dotted, let stroke else {
+            dots?.removeFromSuperlayer()
+            dots = nil
+            return
+        }
+        let dots = self.dots ?? CAShapeLayer()
+        self.dots = dots
+        if dots.superlayer !== layer { layer.addSublayer(dots) }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let rect = layer.bounds.insetBy(dx: 0.5, dy: 0.5)
+        let corner = max(0, min(radius - 0.5, rect.width / 2, rect.height / 2))
+        dots.frame = layer.bounds
+        dots.contentsScale = layer.contentsScale
+        dots.path = rect.isEmpty ? nil : CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil)
+        dots.fillColor = nil
+        dots.strokeColor = resolved(stroke)
+        dots.lineWidth = 1
+        dots.lineDashPattern = [2, 3]
+        CATransaction.commit()
     }
 }
 
