@@ -50,6 +50,8 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     var onChange: ((Bool) -> Void)?
 
     private let card = UIView()
+    /// Behind the card, since the card clips: it casts the card's shadow on the sidebar.
+    private let cardShadow = UIView()
     /// Over the card while the sidebar shows: it dims the thread and takes the tap that closes.
     private let shade = UIControl()
     private let pan = UIPanGestureRecognizer()
@@ -82,10 +84,15 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         card.clipsToBounds = true
         card.layer.cornerCurve = .continuous
         card.backgroundColor = Theme.background
-        paintCardBorder()
+        cardShadow.isUserInteractionEnabled = false
+        cardShadow.layer.shadowColor = UIColor.black.cgColor
+        cardShadow.layer.shadowOffset = .zero
+        cardShadow.layer.shadowRadius = 28
+        paintCardEdges()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: Self, _: UITraitCollection) in
-            controller.paintCardBorder()
+            controller.paintCardEdges()
         }
+        view.addSubview(cardShadow)
         view.addSubview(card)
         addChild(content)
         content.view.backgroundColor = Theme.background
@@ -103,8 +110,9 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         view.addGestureRecognizer(pan)
     }
 
-    private func paintCardBorder() {
+    private func paintCardEdges() {
         card.layer.borderColor = Theme.border.resolvedColor(with: traitCollection).cgColor
+        cardShadow.layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.7 : 0.16
     }
 
     override func viewDidLayoutSubviews() {
@@ -121,10 +129,27 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         card.layer.cornerRadius = lifted * Self.cardRadius
         card.layer.borderWidth = lifted
         content.view.frame = card.bounds
+        placeShadow()
         shade.frame = card.bounds
         shade.alpha = 0.55 * progress
         shade.isHidden = progress == 0
         sidebar.view.isHidden = progress == 0
+    }
+
+    /// The shadow comes in as the card leaves its place and goes as it leaves the screen, so
+    /// neither end of the slide shows it.
+    private func placeShadow() {
+        if cardShadow.bounds.size != card.bounds.size {
+            cardShadow.layer.shadowPath = UIBezierPath(roundedRect: card.bounds, cornerRadius: Self.cardRadius).cgPath
+        }
+        cardShadow.frame = card.frame
+        let onScreen = (view.bounds.width - card.frame.minX) / max(1, view.bounds.width)
+        cardShadow.alpha = smoothstep(progress * 4) * smoothstep(onScreen * 4)
+    }
+
+    private func smoothstep(_ value: CGFloat) -> CGFloat {
+        let clamped = min(1, max(0, value))
+        return clamped * clamped * (3 - 2 * clamped)
     }
 
     /// Opens or closes as the client's state says, unless a finger is moving the card.
@@ -140,27 +165,61 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         if open { view.endEditing(true) }
         onChange?(open)
         guard animated, view.window != nil else {
+            stopSliding()
             progress = target
             return place()
         }
-        // Unhidden before it moves, so that it is there to be seen moving.
-        sidebar.view.isHidden = false
-        shade.isHidden = false
-        let distance = abs(target - progress) * sidebarWidth
-        let spring = distance > 1 ? min(12, abs(velocity) / distance) : 0
-        UIView.animate(
-            withDuration: 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: spring,
-            options: [.allowUserInteraction, .beginFromCurrentState]
-        ) {
-            self.progress = target
-            self.place()
+        let distance = abs(target - progress)
+        let speed = min(12 * distance, abs(velocity) / sidebarWidth)
+        slide = Slide(target: target, offset: progress - target, speed: velocity < 0 ? -speed : speed, start: CACurrentMediaTime())
+        guard slideLink == nil else { return }
+        let link = CADisplayLink(target: self, selector: #selector(slid(_:)))
+        link.add(to: .main, forMode: .common)
+        slideLink = link
+    }
+
+    /// A critically damped spring, followed frame by frame so that what depends on how far
+    /// the card is aside, like its shadow, follows it.
+    private struct Slide {
+        static let stiffness: CGFloat = 22
+        let target: CGFloat
+        let offset: CGFloat
+        let speed: CGFloat
+        let start: CFTimeInterval
+
+        func at(_ time: CFTimeInterval) -> (progress: CGFloat, speed: CGFloat) {
+            let t = CGFloat(time - start)
+            let k = Self.stiffness
+            let decay = exp(-k * t)
+            let drift = speed + k * offset
+            return (target + (offset + drift * t) * decay, (speed - k * drift * t) * decay)
         }
+    }
+
+    private var slide: Slide?
+    private var slideLink: CADisplayLink?
+
+    @objc private func slid(_ link: CADisplayLink) {
+        guard let slide else { return stopSliding() }
+        let now = slide.at(link.targetTimestamp)
+        let settled = abs(now.progress - slide.target) < 0.0005 && abs(now.speed) < 0.01
+        progress = settled ? slide.target : now.progress
+        place()
+        guard settled else { return }
+        stopSliding()
+    }
+
+    private func stopSliding() {
+        slideLink?.invalidate()
+        slideLink = nil
+        slide = nil
     }
 
     @objc private func panned(_ recognizer: UIPanGestureRecognizer) {
         let moved = recognizer.translation(in: view).x
         switch recognizer.state {
         case .began:
+            stopSliding()
             progressAtStart = progress
             view.endEditing(true)
         case .changed:
