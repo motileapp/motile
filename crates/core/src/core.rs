@@ -1239,7 +1239,7 @@ impl Core {
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
             }
-            Command::Diff { server_id, project_id, thread_id, scope } => {
+            Command::Diff { server_id, project_id, thread_id, scope, path } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
@@ -1255,7 +1255,10 @@ impl Core {
                     };
                     // Reading and highlighting a long patch takes a while.
                     let _ = tokio::task::spawn_blocking(move || {
-                        let files = diff::parse(&patch);
+                        let mut files = diff::parse(&patch);
+                        if let Some(path) = path {
+                            files.retain(|file| file.path == path);
+                        }
                         reply(&sink, id, Ok(json!({ "files": files, "truncated": truncated })));
                         for (file, changed) in files.iter().enumerate() {
                             let lines = diff::highlight(changed);

@@ -149,12 +149,15 @@ pub enum Command {
     /// The changes in the folder the thread works in, or in the project's folder, read for
     /// drawing. Answers with the `files`, each a `render::diff::FileDiff`, and `truncated` when
     /// the server cut them short. A `code_spans` event follows for each file's highlighting.
+    /// With a `path`, only that file's changes.
     Diff {
         server_id: String,
         project_id: String,
         #[serde(default)]
         thread_id: Option<String>,
         scope: DiffScope,
+        #[serde(default)]
+        path: Option<String>,
     },
     /// The file at `path` in that folder. Answers with its `kind` and `size`, and for a text
     /// with its `lines` and `truncated` when they are only its start, for an image with the

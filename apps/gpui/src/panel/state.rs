@@ -579,8 +579,13 @@ impl Store {
         let id = format!("{}/{scope:?}", target.key);
         let fresh = self.side_panel.diff.value().is_none_or(|document| document.id != id);
         let target = target.clone();
-        let command =
-            Command::Diff { server_id: target.server_id.clone(), project_id, thread_id, scope: scope.clone() };
+        let command = Command::Diff {
+            server_id: target.server_id.clone(),
+            project_id,
+            thread_id,
+            scope: scope.clone(),
+            path: None,
+        };
         let read_id = id.clone();
         self.side_panel.diff_request = self.ask_read(
             command,
