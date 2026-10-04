@@ -123,6 +123,8 @@ pub struct Parser {
     /// it still works.
     tasks: HashMap<String, (String, bool)>,
     compacting: bool,
+    /// What Claude Code said about a failed API call, which it reports again as the turn's error.
+    api_error: Option<String>,
 }
 
 impl Parser {
@@ -134,6 +136,10 @@ impl Parser {
         match object["type"].as_str() {
             Some("system") => self.parse_system(&object),
             Some("stream_event") => self.parse_stream_event(&object["event"]),
+            Some("assistant") if object["error"].is_string() => {
+                self.api_error = Some(content_text(&object["message"]["content"]));
+                vec![]
+            }
             Some("assistant") => self.parse_assistant(&object["message"]),
             Some("user") if object["isReplay"] == true => match object["uuid"].as_str() {
                 Some(id) => vec![AgentEvent::Taken { id: id.to_string() }],
@@ -149,7 +155,7 @@ impl Parser {
             Some("result") if object["num_turns"] == 0 && object["is_error"] == false => vec![],
             Some("result") => {
                 self.ended = true;
-                vec![parse_result(&object)]
+                vec![parse_result(&object, self.api_error.take())]
             }
             _ => vec![],
         }
@@ -364,17 +370,19 @@ fn parse_control_request(object: &Value) -> Vec<AgentEvent> {
     vec![AgentEvent::Approval(approval)]
 }
 
-fn parse_result(object: &Value) -> AgentEvent {
+fn parse_result(object: &Value, api_error: Option<String>) -> AgentEvent {
+    let is_error = object["is_error"].as_bool().unwrap_or(object["subtype"] != "success");
+    let result_text = object["result"].as_str().filter(|text| is_error && !text.is_empty()).map(String::from);
     let summary = TurnSummary {
         duration_ms: object["duration_ms"].as_u64(),
         cost_usd: object["total_cost_usd"].as_f64(),
-        is_error: object["is_error"].as_bool().unwrap_or(object["subtype"] != "success"),
+        is_error: is_error || api_error.is_some(),
         ..TurnSummary::default()
     };
     let reason = object["terminal_reason"].as_str().unwrap_or_default();
     AgentEvent::Completed {
         summary,
-        result_text: object["result"].as_str().map(String::from),
+        result_text: result_text.or(api_error),
         preempted: matches!(reason, "aborted_streaming" | "aborted_tools"),
     }
 }
@@ -498,6 +506,25 @@ mod tests {
         assert_eq!(parser.parse(init), vec![AgentEvent::Session { id: "s1".to_string() }]);
         let failed = r#"{"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":0}"#;
         assert!(matches!(parser.parse(failed)[..], [AgentEvent::Completed { .. }]));
+    }
+
+    #[test]
+    fn a_failed_api_call_is_reported_once_as_the_turns_error() {
+        let mut parser = Parser::default();
+        let message = r#"{"type":"assistant","error":"billing_error","message":{"id":"m1","model":"<synthetic>",
+            "content":[{"type":"text","text":"You're out of usage credits."}]}}"#;
+        let failed = r#"{"type":"result","subtype":"success","is_error":true,"result":"You're out of usage credits."}"#;
+        let ended = r#"{"type":"result","subtype":"success","is_error":false,"result":"Cut off"}"#;
+
+        assert_eq!(parser.parse(message), vec![]);
+        let [AgentEvent::Completed { summary, result_text, .. }] = &parser.parse(failed)[..] else { panic!() };
+        assert!(summary.is_error);
+        assert_eq!(result_text.as_deref(), Some("You're out of usage credits."));
+
+        assert_eq!(parser.parse(message), vec![]);
+        let [AgentEvent::Completed { summary, result_text, .. }] = &parser.parse(ended)[..] else { panic!() };
+        assert!(summary.is_error);
+        assert_eq!(result_text.as_deref(), Some("You're out of usage credits."));
     }
 
     #[test]
