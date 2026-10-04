@@ -26,7 +26,7 @@ struct ThreadPane: View {
                 start
             } else {
                 ComposerView()
-                    .padding(.horizontal, Theme.contentPadding)
+                    .padding(.horizontal, Theme.composerPadding)
                     .padding(.top, TranscriptView.composerGap)
                     .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)
@@ -142,7 +142,7 @@ struct ThreadPane: View {
             } else {
                 headline
                 ComposerView()
-                    .padding(.horizontal, Theme.contentPadding)
+                    .padding(.horizontal, Theme.composerPadding)
             }
         }
     }

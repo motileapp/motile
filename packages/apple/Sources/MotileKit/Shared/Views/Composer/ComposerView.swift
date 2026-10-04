@@ -27,7 +27,7 @@ struct ComposerView: View {
                 #endif
             }
         }
-        .frame(maxWidth: Theme.contentWidth)
+        .frame(maxWidth: Theme.composerWidth)
     }
 
     private var box: some View {

@@ -24,7 +24,7 @@ struct ThreadScreen: View {
             }
             if !isStart || !store.projects.isEmpty {
                 ComposerView()
-                    .padding(.horizontal, Theme.contentPadding)
+                    .padding(.horizontal, Theme.composerPadding)
                     .padding(.top, TranscriptView.composerGap)
                     .padding(.bottom, Self.composerBottomGap)
                     .frame(maxWidth: .infinity)

@@ -230,7 +230,7 @@ final class ShimmerLabel: TextLabel {
     }
 
     static func make(_ font: NSFont) -> ShimmerLabel {
-        let field = ShimmerLabel(font: font, color: Theme.text)
+        let field = ShimmerLabel(font: font, color: Theme.shimmer)
         field.setAccessibilityElement(false)
 
         let alphas: [CGFloat] = [0, 0.12, 0.55, 1, 0.55, 0.12, 0]

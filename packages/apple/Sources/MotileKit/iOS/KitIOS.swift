@@ -251,7 +251,7 @@ final class ShimmerLabel: TextLabel {
     }
 
     static func make(_ font: UIFont) -> ShimmerLabel {
-        let label = ShimmerLabel(font: font, color: Theme.text)
+        let label = ShimmerLabel(font: font, color: Theme.shimmer)
         label.isAccessibilityElement = false
         let alphas: [CGFloat] = [0, 0.12, 0.55, 1, 0.55, 0.12, 0]
         label.band.colors = alphas.map { UIColor.black.withAlphaComponent($0).cgColor }

@@ -45,6 +45,7 @@ enum Theme {
     static let prose = dynamic(hex(0x383b45), hex(0xa8abb6))
     static let secondary = dynamic(hex(0x6b6f7c), hex(0x9a9eab))
     static let tertiary = dynamic(hex(0x9a9eab), hex(0x646875))
+    static let shimmer = dynamic(hex(0x22242b), hex(0xffffff))
 
     // Meaning
     static let primary = dynamic(hex(0x2a5bd7), hex(0x4f7cff))
@@ -101,9 +102,13 @@ enum Theme {
     }
 
     // Layout
-    /// The widest the transcript and the composer get.
+    /// The widest the transcript gets.
     static let contentWidth: CGFloat = 768
-    static let contentPadding: CGFloat = Platform.scale > 1 ? 14 : 24
+    static let contentPadding: CGFloat = Platform.scale > 1 ? 16 : 38
+    /// How far the composer reaches past the transcript on each side.
+    static let composerReach: CGFloat = Platform.scale > 1 ? 6 : 14
+    static let composerWidth = contentWidth + composerReach * 2
+    static let composerPadding = contentPadding - composerReach
     /// The invisible area that takes the drag around a line that resizes.
     static let resizeGrab: CGFloat = 17
 }
