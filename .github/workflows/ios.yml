@@ -1,8 +1,7 @@
 name: iOS
 
-# Builds the iOS app for the simulator on every push that touches it, so that a push says whether
-# it still compiles. Run by hand, or called by the release, it archives the app for devices and
-# uploads it to TestFlight.
+# Archives the iOS app for devices and uploads it to TestFlight: on every push that touches it,
+# by hand, and with a release. A newer push takes the place of an upload that is still on its way.
 on:
   push:
     branches: [main]
@@ -31,25 +30,16 @@ jobs:
           xcodebuild -version
           rustup update stable --no-self-update
           rustup default stable
-          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          rustup target add aarch64-apple-ios
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build for the simulator
-        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
-        working-directory: apps/ios
-        run: |
-          xcodebuild -project Motile.xcodeproj -scheme Motile -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath build/derived build
-
       - name: Build the core for devices
-        if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
         run: apps/ios/scripts/build-core.sh device
 
       # The App Store Connect key signs the archive with the team's own certificate and profile,
       # which Xcode makes when they are missing, and uploads it.
       - name: Upload to TestFlight
-        if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
         env:
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}

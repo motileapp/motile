@@ -365,8 +365,8 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
 
-The Mac app and the iOS app can't be built on Linux. The `iOS` workflow builds the iOS app for
-the simulator on every push that touches it. The `macOS` workflow builds the Mac app and the
+The Mac app and the iOS app can't be built on Linux. The `iOS` workflow builds the iOS app and
+uploads it to TestFlight on every push that touches it. The `macOS` workflow builds the Mac app and the
 server for Macs on every push that touches them, runs the demo and uploads the app, the server
 and the screenshots:
 
@@ -422,7 +422,7 @@ one.
 To release, set `version` in `Cargo.toml` to the new version, commit, and push the tag
 `v<version>`; the workflow refuses a tag that doesn't match. It publishes the server and the auth
 server for Linux, and the server and the app for Macs, as a GitHub release, and uploads the iOS app
-to TestFlight. Running the `iOS` workflow by hand uploads one without a release
+to TestFlight, as every push to `main` that touches it does
 (`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID` variables). The installer and the download button
 always fetch the latest release, and apps and servers compare their own version with it to offer
 an update. The app in a release is signed with the Developer ID certificate and
