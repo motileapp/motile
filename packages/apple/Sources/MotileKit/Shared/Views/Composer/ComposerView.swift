@@ -49,7 +49,7 @@ struct ComposerView: View {
                 focusKey: "\(store.draftKey)#\(store.composerFocus)",
                 onSubmit: { store.send() },
                 onFiles: { store.attach($0) },
-                onFileDrag: { store.dropTargeted = $0 }
+                onFileDrag: { store.composerDropTargeted = $0 }
             )
             #if os(macOS)
             text
@@ -71,11 +71,6 @@ struct ComposerView: View {
             }
             .animation(.easeOut(duration: 0.22), value: collapsed)
             #endif
-        }
-        .overlay {
-            if store.dropTargeted {
-                RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themePrimary, lineWidth: 2)
-            }
         }
         .glassSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
