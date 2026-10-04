@@ -59,8 +59,7 @@ export function AddServer({ servers }: { servers: Array<Device> }) {
           <DialogHeader>
             <DialogTitle>Add a server</DialogTitle>
             <DialogDescription>
-              Run this on the Linux machine or the Mac your agents should work
-              on. It installs Motile there and links the machine to your account.
+              Run this on the Linux machine or Mac that will run your agents.
             </DialogDescription>
           </DialogHeader>
           {install ? (
@@ -72,8 +71,7 @@ export function AddServer({ servers }: { servers: Array<Device> }) {
           )}
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner className="size-3.5" />
-            Waiting for the machine. The command works for one machine, for an
-            hour.
+            Waiting for your server. The command works once, for an hour.
           </p>
         </DialogContent>
       </Dialog>
