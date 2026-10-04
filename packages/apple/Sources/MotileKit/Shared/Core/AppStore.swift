@@ -326,6 +326,14 @@ final class AppStore {
                 self.transcript.apply(spans: spans, rowID: rowID)
                 self.agentTranscript.apply(spans: spans, rowID: rowID)
             }
+        case "live":
+            let threadID = event.string("thread_id")
+            let live = event.bool("live")
+            return { [weak self] in
+                guard let self, self.transcript.threadID == threadID else { return }
+                self.transcript.setLive(live)
+                if self.agentTranscript.threadID == threadID { self.agentTranscript.setLive(live) }
+            }
         case "activity":
             let threadID = event.string("thread_id")
             let activity = Activity(json: event.object("activity") ?? [:], waiting: event.objects("waiting"))
@@ -1108,9 +1116,12 @@ final class AppStore {
 
     private func open(_ thread: ThreadInfo) {
         openThreadID = thread.id
-        transcript.begin(threadID: thread.id)
+        transcript.begin(threadID: thread.id, keepingRows: true)
         defaults.set(thread.id, forKey: "selection")
-        core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id])
+        core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id]) { [weak self] result in
+            guard case .failure = result, let self, self.transcript.threadID == thread.id else { return }
+            self.transcript.dropKeptRows()
+        }
         core.send("mark_seen", ["thread_id": thread.id])
         readGit(fetch: true)
     }

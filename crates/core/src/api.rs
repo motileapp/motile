@@ -289,6 +289,11 @@ pub enum Event {
         rows: Vec<Row>,
         earlier: bool,
     },
+    /// Whether the thread has caught up with its server, so that what arrives from now on is new.
+    Live {
+        thread_id: String,
+        live: bool,
+    },
     /// The agents the thread's agent has started, in the order it started them.
     Agents {
         thread_id: String,

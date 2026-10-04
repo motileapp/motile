@@ -43,6 +43,7 @@ struct App {
     projects: Vec<ProjectView>,
     rows: Vec<Row>,
     running: bool,
+    live: bool,
 }
 
 impl App {
@@ -70,6 +71,7 @@ impl App {
             projects: Vec::new(),
             rows: Vec::new(),
             running: false,
+            live: false,
         }
     }
 
@@ -101,6 +103,7 @@ impl App {
                 }
             }
             Event::Activity { activity, .. } => self.running = activity.running,
+            Event::Live { live, .. } => self.live = live,
             Event::ThreadError { message, .. } => panic!("a thread couldn't be opened: {message}"),
             Event::Restored
             | Event::Reply { .. }
@@ -276,6 +279,7 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
     app.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: thread_id.clone() }).await.unwrap();
     app.ask(Command::MarkSeen { thread_id: thread_id.clone() }).await.unwrap();
     app.until("the turn has ended", App::turn_ended).await;
+    app.until("the thread has caught up with its server", |app| app.live).await;
 
     // The finished turn shows its last message; what led to it is behind the fold.
     assert_eq!(kinds(&app), ["user", "fold", "prose", "code", "prose", "code", "prose", "turn_end"]);
@@ -361,6 +365,7 @@ async fn an_app_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a_r
     assert!(reopened.projects[0].icon_path.is_some(), "the icon is shown from the cache, without the server");
     reopened.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: thread_id.clone() }).await.unwrap();
     reopened.until("the cached rows are shown", |app| app.rows.len() == before.len()).await;
+    assert!(!reopened.live, "rows from the cache are not news");
     reopened
         .ask(Command::Highlight {
             thread_id: thread_id.clone(),

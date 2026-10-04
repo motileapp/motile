@@ -100,6 +100,9 @@ final class TranscriptView: FlippedView, RowOwner {
     private var expanded: Set<String> = []
     private var requestedHighlight: Set<String> = []
     private var activity = Activity()
+    /// Whether the thread has caught up with its server. What it had before that is simply
+    /// there when the thread opens; only what arrives after it streams in.
+    var live = false
     /// The row that ended the turn the server still reports as running.
     private var endOfRunningTurn: String?
 
@@ -352,7 +355,7 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private var reducesMotion: Bool { Platform.reducesMotion }
 
-    private var animates: Bool { activity.running && !reducesMotion }
+    private var animates: Bool { activity.running && live && !reducesMotion }
 
     // MARK: Content
 
@@ -373,7 +376,7 @@ final class TranscriptView: FlippedView, RowOwner {
         heldAnchor = nil
         stopGlide()
         pin()
-        updateVisible()
+        updateVisible(glides: false)
         measureRows()
     }
 
@@ -490,6 +493,7 @@ final class TranscriptView: FlippedView, RowOwner {
         if !activity.running || activity.startedAt != self.activity.startedAt { endOfRunningTurn = nil }
         self.activity = activity
         working.update(activity)
+        guard animates else { return updateVisible() }
         updateVisible(follows: false)
         land()
     }
@@ -626,7 +630,7 @@ final class TranscriptView: FlippedView, RowOwner {
     /// Makes the views for the rows in and near the viewport, measures the ones that need it,
     /// and keeps the viewport where it was: at the end if it follows the end, otherwise with
     /// `anchor` in the same place.
-    private func updateVisible(anchor: Anchor? = nil, follows: Bool = true) {
+    private func updateVisible(anchor: Anchor? = nil, follows: Bool = true, glides: Bool = true) {
         guard !updating, bounds.width > 0 else { return }
         updating = true
         defer { updating = false }
@@ -640,7 +644,7 @@ final class TranscriptView: FlippedView, RowOwner {
         // Measuring changes heights, which moves the viewport, which changes what is visible.
         // It settles in a pass or two.
         for _ in 0..<4 {
-            position(anchor: anchor, follows: follows)
+            position(anchor: anchor, follows: follows, glides: glides)
             let top = scroller.offsetY - topPadding - Self.overscan
             let bottom = scroller.offsetY + viewportHeight - topPadding + Self.overscan
 
@@ -670,7 +674,7 @@ final class TranscriptView: FlippedView, RowOwner {
             guard let firstChanged else { break }
             recomputeOffsets(from: firstChanged)
         }
-        position(anchor: anchor, follows: follows)
+        position(anchor: anchor, follows: follows, glides: glides)
 
         let workingY = firstLowered < offsets.count ? offsets[firstLowered] : 0
         working.frame = CGRect(x: x, y: topPadding + workingY + 2, width: width, height: Self.workingHeight)
@@ -685,7 +689,7 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     /// Sizes the document and puts the viewport where it belongs.
-    private func position(anchor: Anchor?, follows: Bool) {
+    private func position(anchor: Anchor?, follows: Bool, glides: Bool) {
         let height = max(contentHeight, viewportHeight)
         scroller.setDocument(width: bounds.width, height: height)
         let end = height - viewportHeight
@@ -704,7 +708,7 @@ final class TranscriptView: FlippedView, RowOwner {
         let distance = target - current
         guard abs(distance) > 0.5 else { return }
         // A streaming reply pushes the end down a block at a time; the viewport glides after it.
-        if toEnd, animates || glide != nil, distance > 0, distance < viewportHeight {
+        if glides, toEnd, animates || glide != nil, distance > 0, distance < viewportHeight {
             startGlide()
             return
         }

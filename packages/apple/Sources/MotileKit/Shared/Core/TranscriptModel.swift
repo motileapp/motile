@@ -11,12 +11,17 @@ final class TranscriptModel {
         let recolor: (String, CodeContent) -> Void
         /// Whether the thread has turns before the first row.
         let earlier: (Bool) -> Void
+        /// Whether the thread has caught up with its server.
+        let live: (Bool) -> Void
     }
 
     private(set) var threadID: String?
     private(set) var rows: [RowModel] = []
     private(set) var activity = Activity()
     private var hasEarlier = false
+    private(set) var live = false
+    /// The view still shows the rows of the thread that was open before.
+    private var keepsRows = false
     private var pending: RowModel?
     private var hooks: Hooks?
     private var owner: ObjectIdentifier?
@@ -34,6 +39,7 @@ final class TranscriptModel {
     func attach(_ hooks: Hooks, owner: AnyObject) {
         self.hooks = hooks
         self.owner = ObjectIdentifier(owner)
+        hooks.live(live)
         hooks.reset(rows)
         hooks.pending(pending)
         hooks.activity(activity)
@@ -47,14 +53,29 @@ final class TranscriptModel {
         self.owner = nil
     }
 
-    /// Starts showing another thread, or none. Its rows follow from the core.
-    func begin(threadID: String?) {
+    /// Starts showing another thread, or none. Its rows follow from the core. With `keepingRows`
+    /// the view shows the rows it has until they do, so that it isn't empty in between.
+    func begin(threadID: String?, live: Bool = false, keepingRows: Bool = false) {
         self.threadID = threadID
         rows = []
         pending = nil
         activity = Activity()
         hasEarlier = false
-        hooks?.reset([])
+        setLive(live)
+        keepsRows = keepingRows
+        guard !keepingRows else { return }
+        showState()
+    }
+
+    /// The thread's rows aren't coming: the view lets go of the ones it kept.
+    func dropKeptRows() {
+        guard keepsRows else { return }
+        keepsRows = false
+        showState()
+    }
+
+    private func showState() {
+        hooks?.reset(rows)
         hooks?.activity(activity)
     }
 
@@ -74,6 +95,9 @@ final class TranscriptModel {
             rows = new
             hooks?.reset(new)
             if let pending { hooks?.pending(pending) }
+            guard keepsRows else { return }
+            keepsRows = false
+            hooks?.activity(activity)
             return
         }
         guard start >= 0, remove >= 0, start + remove <= rows.count else { return }
@@ -90,6 +114,11 @@ final class TranscriptModel {
     func setActivity(_ activity: Activity) {
         self.activity = activity
         hooks?.activity(activity)
+    }
+
+    func setLive(_ live: Bool) {
+        self.live = live
+        hooks?.live(live)
     }
 
     func apply(spans: [NSNumber], rowID: String) {

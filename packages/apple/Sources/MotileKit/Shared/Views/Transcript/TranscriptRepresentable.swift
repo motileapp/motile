@@ -48,7 +48,8 @@ struct TranscriptRepresentable {
             pending: { [weak view] row in view?.setPending(row) },
             activity: { [weak view] activity in view?.setActivity(activity) },
             recolor: { [weak view] rowID, content in view?.recolor(rowID: rowID, content: content) },
-            earlier: { [weak view] earlier in view?.setEarlier(earlier) }
+            earlier: { [weak view] earlier in view?.setEarlier(earlier) },
+            live: { [weak view] live in view?.live = live }
         )
         model.attach(hooks, owner: view)
         coordinator.model = model
