@@ -1557,7 +1557,7 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     assert_eq!(git_status(&connection, &project.id, false).await.0.pull_request, None);
 
     // A pull request opened for a thread is that thread's own: it stays with it whatever the
-    // folder's branch does, and follows what GitHub says of it.
+    // folder's branch does, and follows what GitHub says of it, done or not.
     let open = r#"{"number": 7, "title": "Greet", "url": "https://github.com/acme/app/pull/7", "state": "OPEN", "isDraft": false}"#;
     std::fs::write(bin.join("pull-request"), open).unwrap();
     let new_thread =
@@ -1571,6 +1571,8 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     assert_eq!(done(end).0, "PR #7 is already open");
     let linked = thread_where(&mut list, |thread| thread.pull_request.is_some()).await;
     assert_eq!(linked.pull_request.map(|opened| (opened.number, opened.is_open())), Some((7, true)));
+    let done = ThreadChange { done: Some(true), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
     git(&repository, &["checkout", "-q", "main"]);
     std::fs::write(bin.join("pull-request"), open.replace("OPEN", "CLOSED")).unwrap();
     let closed = thread_where(&mut list, |thread| thread.pull_request.as_ref().is_some_and(|found| found.closed)).await;

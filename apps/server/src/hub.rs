@@ -951,6 +951,9 @@ impl Hub {
             }
             _ => (None, Instant::now()),
         };
+        if let Some(found) = &pull_request {
+            self.keep_pull_request_of(path, found).await;
+        }
         status.pull_request = pull_request;
         let read = GitRead { status: status.clone(), head, pull_request_read };
         let before = self.lock_git().insert(path.to_string(), read);
@@ -998,8 +1001,22 @@ impl Hub {
         self.announce(&live.stored.thread);
     }
 
-    /// Asks GitHub every so often what became of the pull requests of the threads that aren't
-    /// done. One that is merged stays merged, so it isn't asked about again.
+    /// Keeps what GitHub now says of a pull request on the threads in that folder that opened it.
+    async fn keep_pull_request_of(&self, folder: &str, found: &PullRequest) {
+        let opened: Vec<String> = {
+            let threads = self.threads.lock().await;
+            let in_folder = threads.values().map(|live| &live.stored.thread).filter(|thread| thread.cwd == folder);
+            let opened =
+                in_folder.filter(|thread| thread.pull_request.as_ref().map(|own| own.number) == Some(found.number));
+            opened.map(|thread| thread.id.clone()).collect()
+        };
+        for thread_id in opened {
+            self.set_pull_request(Some(&thread_id), found.clone()).await;
+        }
+    }
+
+    /// Asks GitHub every so often what became of the threads' pull requests: those of the threads
+    /// that aren't done unless merged, and those of the done ones while open.
     pub fn keep_pull_requests_current(self: &Arc<Self>, every: Duration) {
         let hub = self.clone();
         tokio::spawn(async move {
@@ -1013,9 +1030,11 @@ impl Hub {
     async fn refresh_pull_requests(&self) {
         let followed: Vec<(String, String, u64)> = {
             let threads = self.threads.lock().await;
-            let active = threads.values().map(|live| &live.stored.thread).filter(|thread| thread.done_at.is_none());
-            let followed = active.filter_map(|thread| {
-                let pull_request = thread.pull_request.as_ref().filter(|found| !found.merged)?;
+            let followed = threads.values().map(|live| &live.stored.thread).filter_map(|thread| {
+                let pull_request = thread.pull_request.as_ref().filter(|found| match thread.done_at {
+                    Some(_) => found.is_open(),
+                    None => !found.merged,
+                })?;
                 Some((thread.id.clone(), thread.project_id.clone(), pull_request.number))
             });
             followed.collect()
