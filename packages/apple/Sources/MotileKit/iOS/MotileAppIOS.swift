@@ -131,6 +131,7 @@ struct MotileCommands: Commands {
             Button("Show Agents") { store.sidePanel.open(.agents) }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
                 .disabled(store.panelUnavailable != nil)
+            PanelTabCommands(store: store)
         }
         CommandMenu("Thread") {
             Button(store.selectedThread?.isDone == true ? "Mark Undone" : "Mark Done") { store.toggleDone() }

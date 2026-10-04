@@ -244,7 +244,12 @@ final class SidePanel {
         isOpen = true
     }
 
+    /// Adds a blank tab. A hidden panel that only has its blank tab just opens.
     func openBlank() {
+        guard isOpen || !tabs.isBlank else {
+            isOpen = true
+            return
+        }
         change { tabs in
             let tab = PanelTab.blank((tabs.tabs.compactMap(\.blankNumber).max() ?? -1) + 1)
             tabs.tabs.append(tab)
@@ -255,6 +260,14 @@ final class SidePanel {
 
     func activate(_ tab: PanelTab) {
         change { $0.active = tab }
+    }
+
+    /// Shows the tab `offset` places from the active one, wrapping around the ends.
+    func activate(offset: Int) {
+        let tabs = tabs
+        guard isOpen, tabs.tabs.count > 1, let active = tabs.active, let index = tabs.tabs.firstIndex(of: active) else { return }
+        let count = tabs.tabs.count
+        activate(tabs.tabs[((index + offset) % count + count) % count])
     }
 
     /// Closes the tab. The one beside it is shown in its place.
