@@ -209,7 +209,7 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
 
-The `macOS` workflow runs the demo on every push that touches the app or the server:
+The `Release` workflow runs the demo on every push to `main` that touches the app or the server:
 
     gh run watch                                      # then
     gh run download --name screenshots
@@ -260,15 +260,19 @@ name, it writes one.
 
 ## Releasing and deploying
 
-To release, set `version` in `Cargo.toml` to the new version, commit, and push the tag
-`v<version>`; the workflow refuses a tag that doesn't match. It publishes the server and the auth
-server for Linux, and the server and the app for Macs, as a GitHub release, and uploads the iOS app
-to TestFlight, as every push to `main` that touches it does
-(`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID` variables). The installer and the download button
-always fetch the latest release, and apps and servers compare their own version with it to offer
-an update. The app in a release is signed with the Developer ID certificate and
-notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with
-`sign` does the same without a release.
+Every push to `main` that touches the server, the auth server or the Mac app is a release, for
+now. The `Release` workflow publishes the server and the auth server for Linux, and the server and
+the app for Macs, as a GitHub release. Its version is the first two numbers of `version` in
+`Cargo.toml` and the number of commits as the third (`scripts/release-version.sh`), so set
+`version` only to change the first two. The installer and the download button always fetch the
+latest release, and apps and servers compare their own version with it to offer an update. The
+app in a release is signed with the Developer ID certificate and notarized, using the repository's
+`APPLE_*` secrets; running the `macOS` workflow by hand with `sign` does the same without a
+release.
+
+Every push to `main` that touches the iOS app uploads it to TestFlight
+(`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID`
+variables), with the version in `Cargo.toml` as it is.
 
 Unbind builds the `Marketing`, `Web` and `Auth` services from `main` and deploys them on every
 push that touches their files.

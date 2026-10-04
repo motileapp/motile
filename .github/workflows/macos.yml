@@ -2,18 +2,8 @@ name: macOS
 
 # Builds the Mac app and the server for Macs, walks the app through a demo against a real auth server
 # and a real server on the runner, and keeps the app, the server and the screenshots as artifacts.
+# The release runs it on every push to main that touches them.
 on:
-  push:
-    branches: [main]
-    paths:
-      - apps/macos/**
-      - packages/apple/**
-      - crates/**
-      - apps/server/**
-      - apps/auth/**
-      - scripts/**
-      - Cargo.lock
-      - .github/workflows/macos.yml
   workflow_dispatch:
     inputs:
       sign:
@@ -36,6 +26,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        run: scripts/release-version.sh
 
       - name: Toolchain
         run: |

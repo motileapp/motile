@@ -1,14 +1,31 @@
 name: Release
 
 # Builds the server and the auth server for Linux, and the server and the app for Macs, and publishes
-# them as a GitHub release. The iOS app is uploaded to TestFlight. The installer downloads the server from the latest release, and the
-# download button on motile.app links to the app in it.
+# them as a GitHub release, on every push to main that touches them. The version is the one
+# scripts/release-version.sh gives the commit. The installer downloads the server from the latest
+# release, and the download button on motile.app links to the app in it. A newer push takes the
+# place of a release that is still on its way.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths:
+      - apps/macos/**
+      - packages/apple/**
+      - crates/**
+      - apps/server/**
+      - apps/auth/**
+      - scripts/**
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/release.yml
+      - .github/workflows/macos.yml
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
 
 jobs:
   linux:
@@ -23,13 +40,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Check that the tag is the version in Cargo.toml
-        run: |
-          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "Cargo.toml says $version, but the tag is $GITHUB_REF_NAME."
-            exit 1
-          fi
+        with:
+          fetch-depth: 0
+      - name: Version
+        run: scripts/release-version.sh
       - name: Toolchain
         run: |
           sudo apt-get update && sudo apt-get install -y musl-tools
@@ -55,16 +69,14 @@ jobs:
       sign: true
     secrets: inherit
 
-  # The iOS app goes to TestFlight, not into the release, so the release doesn't wait for it.
-  ios:
-    uses: ./.github/workflows/ios.yml
-    secrets: inherit
-
   # The release is the latest one as soon as it exists, so it is made once, with every file.
   publish:
     needs: [linux, macos]
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -72,4 +84,6 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes artifacts/*.tar.gz artifacts/Motile.zip
+        run: |
+          tag="v$(scripts/release-version.sh)"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --generate-notes artifacts/*.tar.gz artifacts/Motile.zip
