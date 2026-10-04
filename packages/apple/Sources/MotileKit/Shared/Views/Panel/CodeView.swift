@@ -356,12 +356,12 @@ final class CodeSheet {
 
         let closed = collapsed.contains(file.path)
         let chevron = CGRect(x: rect.minX + 8, y: rect.minY, width: 16, height: rect.height)
-        TintedSymbol.draw(closed ? "chevron.right" : "chevron.down", size: 9, weight: .semibold, color: Theme.tertiary, in: chevron)
+        TintedSymbol.draw(closed ? .chevronRight : .chevronDown, size: 9, color: Theme.tertiary, in: chevron)
         let icon = CGRect(x: rect.minX + 28, y: rect.minY, width: 18, height: rect.height)
-        TintedSymbol.draw(FileSymbol.name(for: file.path), size: 11, color: Theme.secondary, in: icon)
+        TintedSymbol.draw(FileSymbol.symbol(for: file.path), size: 11, color: Theme.secondary, in: icon)
 
         let open = CGRect(x: rect.maxX - 34, y: rect.minY, width: 28, height: rect.height)
-        TintedSymbol.draw("arrow.up.forward.square", size: 12, color: Theme.secondary, in: open)
+        TintedSymbol.draw(.squareArrowOutUpRight, size: 12, color: Theme.secondary, in: open)
         let counts = LineCountText.text(added: file.added, removed: file.removed)
         let countsSize = counts.size()
         let countsX = open.minX - 4 - countsSize.width

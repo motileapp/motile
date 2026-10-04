@@ -100,7 +100,7 @@ func pressable(_ height: CGFloat) -> CGFloat {
 /// The inset is more room to hit, outside the background. Under a finger it takes presses as far
 /// around it as a finger needs, without taking that room in the layout.
 struct IconOnlyButton: View {
-    let symbol: String
+    let symbol: Symbol
     let help: String
     var size: CGFloat = scaled(26)
     var symbolSize: CGFloat = 13
@@ -113,8 +113,7 @@ struct IconOnlyButton: View {
         let reach = max(0, (Platform.minimumPress - size) / 2)
         let around = EdgeInsets(top: inset.top + reach, leading: inset.leading + reach, bottom: inset.bottom + reach, trailing: inset.trailing + reach)
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.ui(size: symbolSize, weight: .medium))
+            Image(symbol, size: symbolSize)
                 .frame(width: size, height: size)
                 .padding(around)
                 .contentShape(Rectangle())
@@ -169,7 +168,7 @@ struct ToolbarButton: View {
     static let margin: CGFloat = 2
     static let width: CGFloat = 28 + 2 * margin
 
-    let symbol: String
+    let symbol: Symbol
     let help: String
     let action: () -> Void
 

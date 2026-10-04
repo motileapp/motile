@@ -23,8 +23,7 @@ private struct FileDrop: ViewModifier {
 
     private var cover: some View {
         VStack(spacing: 12 * Platform.scale) {
-            Image(systemName: "paperclip")
-                .font(.ui(size: 28, weight: .medium))
+            Image(.paperclip, size: 28)
             Text("Drop files here")
                 .font(.ui(size: 17, weight: .semibold))
         }

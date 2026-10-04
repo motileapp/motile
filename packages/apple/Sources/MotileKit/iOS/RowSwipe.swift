@@ -7,7 +7,7 @@ extension View {
     /// short swipe leaves the button there to tap, a long one does what the button does. The row
     /// leaves with a long swipe unless the button won't take it away.
     func rowSwipe(
-        _ symbol: String, _ label: String, tint: Color, size: CGFloat, leaves: Bool = true, isOpen: Binding<Bool>,
+        _ symbol: Symbol, _ label: String, tint: Color, size: CGFloat, leaves: Bool = true, isOpen: Binding<Bool>,
         action: @escaping () -> Void
     ) -> some View {
         modifier(RowSwipe(symbol: symbol, label: label, tint: tint, size: size, leaves: leaves, isOpen: isOpen, action: action))
@@ -15,7 +15,7 @@ extension View {
 }
 
 private struct RowSwipe: ViewModifier {
-    let symbol: String
+    let symbol: Symbol
     let label: String
     let tint: Color
     let size: CGFloat
@@ -63,8 +63,7 @@ private struct RowSwipe: ViewModifier {
         let stretch = max(0, offset - openWidth)
         let entry = min(1, max(0, (offset - 8) / (openWidth * 0.72 - 8)))
         return Button(action: commit) {
-            Image(systemName: symbol)
-                .font(.system(size: size * 0.42, weight: .semibold))
+            Image(symbol, size: size * 0.37)
                 .foregroundStyle(Color.themeBackground)
                 .offset(x: armed ? stretch / 2 : 0)
                 .animation(.easeOut(duration: 0.15), value: armed)

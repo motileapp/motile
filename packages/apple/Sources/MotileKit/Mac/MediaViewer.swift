@@ -29,9 +29,9 @@ struct MediaViewer: View {
             content(item)
             if viewing.items.count > 1 {
                 HStack {
-                    arrow("chevron.left", help: "Previous (←)") { store.viewNext(-1) }
+                    arrow(.chevronLeft, help: "Previous (←)") { store.viewNext(-1) }
                     Spacer()
-                    arrow("chevron.right", help: "Next (→)") { store.viewNext(1) }
+                    arrow(.chevronRight, help: "Next (→)") { store.viewNext(1) }
                 }
                 .padding(.horizontal, 14)
             }
@@ -55,7 +55,7 @@ struct MediaViewer: View {
             .padding(.horizontal, 80)
         }
         .overlay(alignment: .topTrailing) {
-            arrow("xmark", help: "Close (Esc)") { store.closeViewer() }
+            arrow(.x, help: "Close (Esc)") { store.closeViewer() }
                 .padding(10)
         }
         .task(id: item) { load(item) }
@@ -105,10 +105,9 @@ struct MediaViewer: View {
         }
     }
 
-    private func arrow(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+    private func arrow(_ symbol: Symbol, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.ui(size: 13, weight: .semibold))
+            Image(symbol, size: 13)
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 32)
                 .background(.white.opacity(0.14), in: Circle())

@@ -97,10 +97,10 @@ final class PictureView: LayerView {
 enum TintedSymbol {
     private static var cache: [String: PlatformImage] = [:]
 
-    static func image(_ name: String, size: CGFloat, weight: PlatformFont.Weight = .regular, color: PlatformColor) -> PlatformImage? {
-        let key = "\(name)/\(size)/\(weight.rawValue)/\(ObjectIdentifier(color).hashValue)"
+    static func image(_ name: Symbol, size: CGFloat, color: PlatformColor) -> PlatformImage {
+        let key = "\(name.rawValue)/\(size)/\(ObjectIdentifier(color).hashValue)"
         if let cached = cache[key] { return cached }
-        guard let symbol = PlatformImage.symbol(name, size: size * Platform.scale, weight: weight) else { return nil }
+        let symbol = PlatformImage.symbol(name, size: size)
         #if os(macOS)
         let tinted = NSImage(size: symbol.size, flipped: false) { rect in
             symbol.draw(in: rect)
@@ -116,8 +116,8 @@ enum TintedSymbol {
     }
 
     /// Draws the symbol in the middle of `rect`.
-    static func draw(_ name: String, size: CGFloat, weight: PlatformFont.Weight = .regular, color: PlatformColor, in rect: CGRect) {
-        guard let image = image(name, size: size, weight: weight, color: color) else { return }
+    static func draw(_ name: Symbol, size: CGFloat, color: PlatformColor, in rect: CGRect) {
+        let image = image(name, size: size, color: color)
         let origin = CGPoint(x: (rect.midX - image.size.width / 2).rounded(), y: (rect.midY - image.size.height / 2).rounded())
         let frame = CGRect(origin: origin, size: image.size)
         #if os(macOS)

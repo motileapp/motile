@@ -183,20 +183,20 @@ struct ToolContent {
         progress = json.optionalString("progress")
     }
 
-    var symbol: String { Self.symbol(for: icon) }
+    var symbol: Symbol { Self.symbol(for: icon) }
 
-    static func symbol(for icon: String) -> String {
+    static func symbol(for icon: String) -> Symbol {
         switch icon {
-        case "terminal": "terminal"
-        case "file": "doc.text"
-        case "edit": "pencil"
-        case "search": "magnifyingglass"
-        case "web": "globe"
-        case "agent": "person.2"
-        case "watch": "eye"
-        case "question": "questionmark.bubble"
-        case "todo": "checklist"
-        default: "wrench.and.screwdriver"
+        case "terminal": .terminal
+        case "file": .fileText
+        case "edit": .pencil
+        case "search": .search
+        case "web": .globe
+        case "agent": .users
+        case "watch": .eye
+        case "question": .messageCircleQuestionMark
+        case "todo": .listChecks
+        default: .wrench
         }
     }
 

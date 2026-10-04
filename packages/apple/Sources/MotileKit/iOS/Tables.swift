@@ -124,7 +124,7 @@ final class TableView: FlippedView {
         scroll.addSubview(grid)
         menuActions = { [weak self] in
             guard let table = self?.grid.table else { return [] }
-            return [MenuAction(title: "Copy Table", symbol: "doc.on.doc") { Platform.copy(table.words) }]
+            return [MenuAction(title: "Copy Table", symbol: .copy) { Platform.copy(table.words) }]
         }
     }
 

@@ -54,8 +54,7 @@ struct ThreadSettingsSheet: View {
                                     .foregroundStyle(Color.themeText)
                                 Spacer()
                                 if model.id == current?.id {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 15, weight: .semibold))
+                                    Image(.check, size: 13)
                                         .foregroundStyle(Color.themeText)
                                 }
                             }
@@ -69,8 +68,7 @@ struct ThreadSettingsSheet: View {
                             AgentIcon(agent: agent, size: 14)
                             Text(agent.name)
                             Spacer()
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 12, weight: .semibold))
+                            Image(.chevronDown, size: 10.5)
                                 .rotationEffect(.degrees(listed.contains(agent) ? 180 : 0))
                         }
                         .frame(minHeight: 32)
@@ -135,8 +133,7 @@ struct ThreadSettingsSheet: View {
                     } label: {
                         HStack(spacing: 8) {
                             LabeledContent(title, value: branch)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
+                            Image(.chevronRight, size: 11)
                                 .foregroundStyle(Color.themeTertiary)
                         }
                         .foregroundStyle(Color.themeText)

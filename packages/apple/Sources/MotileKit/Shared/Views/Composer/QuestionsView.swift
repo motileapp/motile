@@ -23,7 +23,8 @@ struct QuestionsView: View {
                             choose(option, for: question)
                         } label: {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Image(systemName: symbol(option, for: question))
+                                Image(symbol(option, for: question), size: 13)
+                                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - $0.height / 6 }
                                     .foregroundStyle(isChosen(option, for: question) ? Color.themePrimary : Color.themeSecondary)
                                 Text(option.label)
                                 Text(option.detail)
@@ -81,10 +82,10 @@ struct QuestionsView: View {
         chosen[question.id] = picked
     }
 
-    private func symbol(_ option: Question.Choice, for question: Question) -> String {
+    private func symbol(_ option: Question.Choice, for question: Question) -> Symbol {
         let on = isChosen(option, for: question)
-        if question.multiple { return on ? "checkmark.square.fill" : "square" }
-        return on ? "largecircle.fill.circle" : "circle"
+        if question.multiple { return on ? .squareCheck : .square }
+        return on ? .circleDot : .circle
     }
 
     private func typedAnswer(for question: Question) -> Binding<String> {

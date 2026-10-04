@@ -96,15 +96,14 @@ private struct AgentStatusIcon: View {
 
     var body: some View {
         switch status {
-        case .running: icon("circle.dashed", Color.themeWorking)
-        case .succeeded: icon("checkmark", Color.themeSecondary)
-        case .failed: icon("xmark", Color.themeDanger)
+        case .running: icon(.circleDashed, Color.themeWorking)
+        case .succeeded: icon(.check, Color.themeSecondary)
+        case .failed: icon(.x, Color.themeDanger)
         }
     }
 
-    private func icon(_ name: String, _ color: Color) -> some View {
-        Image(systemName: name)
-            .font(.ui(size: 11, weight: .semibold))
+    private func icon(_ name: Symbol, _ color: Color) -> some View {
+        Image(name, size: 11)
             .foregroundStyle(color)
     }
 }
@@ -139,7 +138,7 @@ private struct AgentTranscript: View {
     var body: some View {
         VStack(spacing: 0) {
             PanelBar {
-                IconOnlyButton(symbol: "chevron.left", help: "All agents") { store.sidePanel.showAgents() }
+                IconOnlyButton(symbol: .chevronLeft, help: "All agents") { store.sidePanel.showAgents() }
                     .padding(.leading, -6)
                 AgentStatusIcon(status: agent.status)
                     .frame(width: 16)

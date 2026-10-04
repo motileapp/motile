@@ -11,18 +11,18 @@ struct AppUpdateRow: View {
         case .idle:
             EmptyView()
         case .checking:
-            line("Checking for updates…", symbol: "arrow.triangle.2.circlepath") {
+            line("Checking for updates…", symbol: .refreshCw) {
                 ProgressView().controlSize(.small)
             }
         case .upToDate:
-            line("Motile \(updater.current) is the newest version", symbol: "checkmark.circle")
+            line("Motile \(updater.current) is the newest version", symbol: .circleCheck)
         case .available(let version):
-            line("Motile \(version) is available", symbol: "arrow.down.circle") {
+            line("Motile \(version) is available", symbol: .circleArrowDown) {
                 PillButton("Update") { updater.install() }
             }
         case .downloading(let version, let fraction):
             VStack(alignment: .leading, spacing: 5) {
-                line("Downloading Motile \(version)", symbol: "arrow.down.circle") {
+                line("Downloading Motile \(version)", symbol: .circleArrowDown) {
                     Text("\(Int(fraction * 100))%")
                         .font(.ui(size: 11))
                         .foregroundStyle(Color.themeTertiary)
@@ -34,16 +34,16 @@ struct AppUpdateRow: View {
                     .tint(Color.themeSecondary)
             }
         case .installing(let version):
-            line("Installing Motile \(version)…", symbol: "arrow.down.circle") {
+            line("Installing Motile \(version)…", symbol: .circleArrowDown) {
                 ProgressView().controlSize(.small)
             }
         case .ready(let version):
-            line("Motile \(version) is installed", symbol: "checkmark.circle") {
+            line("Motile \(version) is installed", symbol: .circleCheck) {
                 PillButton("Restart") { updater.relaunch() }
             }
         case .failed(let message):
             VStack(alignment: .leading, spacing: 4) {
-                line("The update didn’t work", symbol: "exclamationmark.triangle") {
+                line("The update didn’t work", symbol: .triangleAlert) {
                     PillButton("Try Again") { updater.retry() }
                 }
                 Text(message)
@@ -54,14 +54,13 @@ struct AppUpdateRow: View {
         }
     }
 
-    private func line(_ text: String, symbol: String) -> some View {
+    private func line(_ text: String, symbol: Symbol) -> some View {
         line(text, symbol: symbol) { EmptyView() }
     }
 
-    private func line<Trailing: View>(_ text: String, symbol: String, @ViewBuilder trailing: () -> Trailing) -> some View {
+    private func line<Trailing: View>(_ text: String, symbol: Symbol, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: symbol)
-                .font(.ui(size: 13, weight: .medium))
+            Image(symbol, size: 13)
                 .foregroundStyle(Color.themeSecondary)
             Text(text)
                 .font(.ui(size: 12, weight: .medium))

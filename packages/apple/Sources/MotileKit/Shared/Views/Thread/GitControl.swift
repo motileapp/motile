@@ -28,6 +28,11 @@ struct GitButton: View {
             }
     }
 
+    private func symbol(of quick: GitQuick) -> Symbol {
+        guard quick.url == nil else { return project.git?.pullRequest?.state.symbol ?? .gitPullRequest }
+        return GitSymbol.symbol(for: quick.action)
+    }
+
     #if os(macOS)
     private var content: some View {
         let stage = store.gitStages[project.checkoutID]
@@ -43,8 +48,7 @@ struct GitButton: View {
                             .scaleEffect(0.7)
                             .frame(width: 14, height: 14)
                     } else {
-                        Image(systemName: GitSymbol.name(for: quick.action))
-                            .font(.ui(size: 12, weight: .medium))
+                        Image(symbol(of: quick), size: 12)
                     }
                     Text(stage?.label ?? quick.title)
                         .font(.ui(size: 12, weight: .medium))
@@ -73,14 +77,13 @@ struct GitButton: View {
 
     private func color(of quick: GitQuick, at stage: GitStage?) -> Color {
         if stage != nil { return .themeText }
-        if quick.state != nil { return .themeMerged }
+        if quick.url != nil, let pullRequest = project.git?.pullRequest { return pullRequest.state.color }
         guard quick.action != nil || quick.url != nil else { return .themeTertiary }
         return .themeText
     }
 
     private var chevron: some View {
-        Image(systemName: "chevron.down")
-            .font(.ui(size: 9, weight: .bold))
+        Image(.chevronDown, size: 9)
             .frame(width: 24, height: Self.height)
             .contentShape(Rectangle())
     }
@@ -100,7 +103,7 @@ struct GitButton: View {
         let running = store.gitStages[project.checkoutID] != nil
         for item in control.menu {
             let entry = ActionMenuItem(title: item.label) { store.chooseGit(item, in: project) }
-            entry.image = NSImage(systemSymbolName: GitSymbol.name(for: item.action), accessibilityDescription: nil)
+            entry.image = .symbol(GitSymbol.symbol(for: item.action), size: 13)
             entry.isEnabled = item.reason == nil && !running
             entry.toolTip = item.reason
             menu.addItem(entry)
@@ -127,7 +130,7 @@ struct GitButton: View {
                     Button {
                         store.runQuickGit(in: project)
                     } label: {
-                        Label(quick.title, systemImage: GitSymbol.name(for: quick.action))
+                        Label(quick.title, symbol: symbol(of: quick), size: 15)
                     }
                     .disabled(running)
                 }
@@ -136,7 +139,7 @@ struct GitButton: View {
                 Button {
                     store.chooseGit(item, in: project)
                 } label: {
-                    Label(item.label, systemImage: GitSymbol.name(for: item.action))
+                    Label(item.label, symbol: GitSymbol.symbol(for: item.action), size: 15)
                     if let reason = item.reason { Text(reason) }
                 }
                 .disabled(item.reason != nil || running)
@@ -148,7 +151,7 @@ struct GitButton: View {
             if running {
                 ProgressView()
             } else {
-                Image(systemName: "arrow.triangle.branch")
+                Image(.gitBranch, size: 15)
             }
         }
         .accessibilityLabel("Git")
@@ -244,7 +247,7 @@ struct GitNoticeView: View {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
-            IconOnlyButton(symbol: "xmark", help: "Close", size: Self.closeSize, symbolSize: 11, radius: Self.radius - Self.closeMargin, faded: true) {
+            IconOnlyButton(symbol: .x, help: "Close", size: Self.closeSize, symbolSize: 11, radius: Self.radius - Self.closeMargin, faded: true) {
                 store.dismissGitNotice()
             }
             .padding(Self.closeMargin)
@@ -388,8 +391,7 @@ struct CommitSheet: View {
                 Button {
                     includes(file.path).wrappedValue.toggle()
                 } label: {
-                    Image(systemName: isExcluded ? "circle" : "checkmark.circle.fill")
-                        .font(.system(size: 20))
+                    Image(isExcluded ? .circle : .circleCheck, size: 17)
                         .foregroundStyle(isExcluded ? Color.themeTertiary : Color.themePrimary)
                 }
                 .buttonStyle(.plain)

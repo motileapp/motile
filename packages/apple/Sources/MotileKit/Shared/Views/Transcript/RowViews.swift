@@ -239,7 +239,7 @@ final class QueuedRowView: RowView {
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
     private let attachments = AttachedFilesView()
-    private let clock = SymbolView("clock", size: 11)
+    private let clock = SymbolView(.clock, size: 11)
     private let status = TextLabel(font: Theme.smallFont, color: Theme.secondary)
     private var sendButton: RowButton!
     private var cancelButton: RowButton!
@@ -408,7 +408,7 @@ final class CodeHeader: FlippedView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(language)
-        copyButton = IconButton(symbolName: "doc.on.doc", tooltip: "Copy code") { [weak self] in self?.copy() }
+        copyButton = IconButton(symbol: .copy, tooltip: "Copy code") { [weak self] in self?.copy() }
         addSubview(copyButton)
     }
 
@@ -428,9 +428,9 @@ final class CodeHeader: FlippedView {
 
     private func copy() {
         Platform.copy(code)
-        copyButton.set(symbolName: "checkmark")
+        copyButton.set(symbol: .check)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            self?.copyButton.set(symbolName: "doc.on.doc")
+            self?.copyButton.set(symbol: .copy)
         }
     }
 }
@@ -521,7 +521,7 @@ final class ToolRowView: RowView {
     private let header = SurfaceView()
     private static let titleFont = PlatformFont.ui(13)
 
-    private let icon = SymbolView()
+    private let icon = SymbolView(tint: Theme.secondary)
     private let title = TextLabel(font: ToolRowView.titleFont, color: Theme.secondary)
     private let shine = ShimmerLabel.make(ToolRowView.titleFont)
     private let chevron = SymbolView(tint: Theme.tertiary)
@@ -593,7 +593,7 @@ final class ToolRowView: RowView {
             hasDetail = tool.hasDetail || tool.agent
             detailText = { tool.detail() }
         case .thinking(let thought):
-            icon.show("brain")
+            icon.show(.brain)
             running = false
             setTitle("Thought")
             hasDetail = thought.length > 0
@@ -607,7 +607,7 @@ final class ToolRowView: RowView {
             detailText = nil
             open = group.open
         case .fold(let fold):
-            icon.show("clock")
+            icon.show(.clock)
             running = false
             setTitle(fold.label)
             hasDetail = true
@@ -674,7 +674,7 @@ final class ToolRowView: RowView {
         title.frame = CGRect(x: 30, y: middle(scaled(18)), width: titleWidth, height: scaled(18))
         shine.frame = title.frame
         chevron.isHidden = !hasDetail
-        chevron.show(open ?? expanded ? "chevron.down" : "chevron.right", size: 9, weight: .semibold)
+        chevron.show(open ?? expanded ? .chevronDown : .chevronRight, size: 9)
         chevron.frame = CGRect(x: 30 + titleWidth + 2, y: middle(16), width: 14, height: 16)
         elapsed.frame = CGRect(x: chevron.frame.maxX + 6, y: middle(scaled(16)), width: timeWidth, height: scaled(16))
 
@@ -700,7 +700,7 @@ final class ErrorRowView: RowView {
     static let padding: CGFloat = 20 + 14
 
     private let surface = SurfaceView()
-    private let icon = SymbolView("exclamationmark.circle", size: 13, tint: Theme.danger)
+    private let icon = SymbolView(.circleAlert, size: 13, tint: Theme.danger)
     private let text = RowTextView.make()
 
     override init(frame: CGRect) {
@@ -842,10 +842,10 @@ final class ChangesRowView: RowView {
                 var x = 12 + CGFloat(entry.depth) * 16
                 if entry.folder {
                     let chevron = CGRect(x: x, y: row.minY, width: 12, height: row.height)
-                    TintedSymbol.draw(entry.open ? "chevron.down" : "chevron.right", size: 8, weight: .semibold, color: Theme.tertiary, in: chevron)
+                    TintedSymbol.draw(entry.open ? .chevronDown : .chevronRight, size: 8, color: Theme.tertiary, in: chevron)
                 }
                 x += 16
-                let symbol = entry.folder ? "folder" : FileSymbol.name(for: entry.path)
+                let symbol: Symbol = entry.folder ? .folder : FileSymbol.symbol(for: entry.path)
                 TintedSymbol.draw(symbol, size: 11, color: Theme.secondary, in: CGRect(x: x, y: row.minY, width: 16, height: row.height))
                 x += 24
                 let counts = entry.counts.size()
@@ -932,7 +932,7 @@ final class MessageMeta: FlippedView {
         self.trailing = trailing
         super.init(frame: .zero)
         addSubview(time)
-        let button = IconButton(symbolName: "doc.on.doc", tooltip: tooltip) { [weak self] in self?.copy() }
+        let button = IconButton(symbol: .copy, tooltip: tooltip) { [weak self] in self?.copy() }
         self.button = button
         addSubview(button)
         opacity = shown ? 1 : 0
@@ -969,11 +969,11 @@ final class MessageMeta: FlippedView {
     private func copy() {
         onCopy?()
         copied = true
-        button?.set(symbolName: "checkmark")
+        button?.set(symbol: .check)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
             guard let self else { return }
             self.copied = false
-            self.button?.set(symbolName: "doc.on.doc")
+            self.button?.set(symbol: .copy)
             self.reveal()
         }
     }

@@ -19,8 +19,8 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
     Activity, Agent, BranchInstructions, ChangedFile, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
-    Item, ItemKind, Media, Message, NewThread, Project, Queued, ServerInfo, Subagent, Thread, ThreadChange, ToolCall,
-    ToolStatus, TurnChanges, TurnSummary, Worktree,
+    Item, ItemKind, Media, Message, NewThread, Project, PullRequest, Queued, ServerInfo, Subagent, Thread,
+    ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -40,7 +40,7 @@ const ROOT_BYPASS_REFUSAL: &str = "cannot be used with root/sudo privileges";
 /// Streamed text is written to disk at most this often, and when its block ends.
 const FLUSH_EVERY: Duration = Duration::from_secs(1);
 /// How long a branch's pull request is taken as known before GitHub is asked again.
-const PULL_REQUEST_FRESH: Duration = Duration::from_secs(60);
+pub const PULL_REQUEST_FRESH: Duration = Duration::from_secs(60);
 const TEXT_MODEL: &str = "text_model";
 const BRANCH_INSTRUCTIONS: &str = "branch_instructions";
 const MAX_INSTRUCTIONS_CHARS: usize = 4000;
@@ -371,6 +371,7 @@ impl Hub {
             needs_approval: false,
             agents: 0,
             turn_ended_at: None,
+            pull_request: None,
             rev: 0,
         };
         Ok(StoredThread { thread, session_id: None, title_source: TitleSource::Placeholder, next_seq: 0, worktree })
@@ -945,8 +946,8 @@ impl Hub {
             Some(known) if known.1.elapsed() < PULL_REQUEST_FRESH => known,
             _ if status.pull_requests && status.branch.is_some() && pushed => {
                 let found = git::pull_request(path, &self.environment).await;
-                // On the default branch a merged one is another branch's history.
-                (found.filter(|found| !found.merged || !status.default), Instant::now())
+                // On the default branch a merged or closed one is another branch's history.
+                (found.filter(|found| found.is_open() || !status.default), Instant::now())
             }
             _ => (None, Instant::now()),
         };
@@ -981,6 +982,55 @@ impl Hub {
         });
         let messages = said.collect::<Vec<_>>().join("\n\n");
         Ok((self.writer(thread.agent), drafts::Thread { title: thread.title.clone(), messages }))
+    }
+
+    /// Makes the pull request the thread's own, or keeps what GitHub now says of it.
+    async fn set_pull_request(&self, thread_id: Option<&str>, pull_request: PullRequest) {
+        let mut threads = self.threads.lock().await;
+        let Some(live) = thread_id.and_then(|thread_id| threads.get_mut(thread_id)) else { return };
+        if live.stored.thread.pull_request.as_ref() == Some(&pull_request) {
+            return;
+        }
+        live.stored.thread.pull_request = Some(pull_request);
+        if let Err(error) = self.store.save_thread(&live.stored) {
+            tracing::error!("couldn't save the thread's pull request: {error:#}");
+        }
+        self.announce(&live.stored.thread);
+    }
+
+    /// Asks GitHub every so often what became of the pull requests of the threads that aren't
+    /// done. One that is merged stays merged, so it isn't asked about again.
+    pub fn keep_pull_requests_current(self: &Arc<Self>, every: Duration) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(every).await;
+                hub.refresh_pull_requests().await;
+            }
+        });
+    }
+
+    async fn refresh_pull_requests(&self) {
+        let followed: Vec<(String, String, u64)> = {
+            let threads = self.threads.lock().await;
+            let active = threads.values().map(|live| &live.stored.thread).filter(|thread| thread.done_at.is_none());
+            let followed = active.filter_map(|thread| {
+                let pull_request = thread.pull_request.as_ref().filter(|found| !found.merged)?;
+                Some((thread.id.clone(), thread.project_id.clone(), pull_request.number))
+            });
+            followed.collect()
+        };
+        let mut asked: HashMap<(String, u64), Option<PullRequest>> = HashMap::new();
+        for (thread_id, project_id, number) in followed {
+            let Ok(folder) = self.project_path(&project_id).await else { continue };
+            let key = (folder, number);
+            if !asked.contains_key(&key) {
+                let found = git::pull_request_numbered(&key.0, &self.environment, number).await;
+                asked.insert(key.clone(), found);
+            }
+            let Some(found) = asked.get(&key).cloned().flatten() else { continue };
+            self.set_pull_request(Some(&thread_id), found).await;
+        }
     }
 
     /// Carries the action out in the project's folder, or in the worktree of the run's thread,
@@ -1050,7 +1100,8 @@ impl Hub {
             pushed = git::upstream(path, environment).await;
         }
         if opens {
-            if let Some(open) = git::pull_request(path, environment).await.filter(|found| !found.merged) {
+            if let Some(open) = git::pull_request(path, environment).await.filter(PullRequest::is_open) {
+                self.set_pull_request(run.thread_id.as_deref(), open.clone()).await;
                 return done(format!("PR #{} is already open", open.number), Some(open.title), Some(open.url), None);
             }
             started(GitStage::PullRequestText);
@@ -1058,13 +1109,24 @@ impl Hub {
             started(GitStage::PullRequest);
             let url = git::open_pull_request(path, environment, &title, &body).await?;
             let number = url.rsplit('/').next().unwrap_or_default();
+            let opened = match (git::pull_request(path, environment).await, number.parse()) {
+                (Some(opened), _) => Some(opened),
+                (None, Ok(number)) => {
+                    let (title, url) = (title.clone(), url.clone());
+                    Some(PullRequest { number, title, url, draft: false, merged: false, closed: false })
+                }
+                (None, Err(_)) => None,
+            };
+            if let Some(opened) = opened {
+                self.set_pull_request(run.thread_id.as_deref(), opened).await;
+            }
             return done(format!("Created PR #{number}"), Some(title), Some(url), None);
         }
         if let Some(upstream) = pushed {
             let opened = self
                 .lock_git()
                 .get(path)
-                .and_then(|read| read.status.pull_request.as_ref().map(|found| !found.merged))
+                .and_then(|read| read.status.pull_request.as_ref().map(PullRequest::is_open))
                 .unwrap_or(false);
             let next = (!status.default && status.pull_requests && !opened).then_some(GitAction::CreatePr);
             return done(format!("Pushed {commit} to {upstream}"), Some(subject), None, next);

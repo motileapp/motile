@@ -126,7 +126,7 @@ struct ComposerView: View {
 
     private func doneBanner(_ thread: ThreadInfo) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle")
+            Image(.circleCheck, size: 13)
                 .foregroundStyle(Color.themeSuccess)
             Text("Done")
                 .fontWeight(.medium)
@@ -164,7 +164,7 @@ struct ComposerView: View {
             ForEach(store.activity.approvals) { approval in
                 if approval.questions.isEmpty {
                     HStack(spacing: 8) {
-                        Image(systemName: approval.symbol)
+                        Image(approval.symbol, size: 13)
                             .foregroundStyle(Color.themeSecondary)
                         Text(approval.title)
                             .fontWeight(.medium)
@@ -232,29 +232,27 @@ struct ComposerView: View {
             effortMenu
             accessMenu(compact: compact)
             Spacer(minLength: 10)
-            IconOnlyButton(symbol: "paperclip", help: "Attach files", size: 30, symbolSize: 15, inset: Self.margin(trailing: 4), faded: true) {
+            IconOnlyButton(symbol: .paperclip, help: "Attach files", size: 30, symbolSize: 15, inset: Self.margin(trailing: 4), faded: true) {
                 chooseFiles()
             }
             ComposerSendButtons()
         }
     }
 
-    private func control(_ title: String?, symbol: String? = nil, agent: Agent? = nil, margin: EdgeInsets) -> some View {
+    private func control(_ title: String?, symbol: Symbol? = nil, agent: Agent? = nil, margin: EdgeInsets) -> some View {
         HStack(spacing: 6) {
             if let agent {
                 AgentIcon(agent: agent, size: 14)
             }
             if let symbol {
-                Image(systemName: symbol)
-                    .font(.ui(size: 13, weight: .medium))
+                Image(symbol, size: 13)
             }
             if let title {
                 Text(title)
                     .font(.ui(size: 12.5, weight: .medium))
                     .lineLimit(1)
             }
-            Image(systemName: "chevron.down")
-                .font(.ui(size: 9, weight: .bold))
+            Image(.chevronDown, size: 9)
                 .foregroundStyle(Color.themeTertiary)
         }
         .padding(.horizontal, 9)
@@ -339,7 +337,7 @@ struct ComposerView: View {
             Divider()
             Toggle("Plan mode", isOn: Binding(get: { store.composerPlan }, set: { store.setPlan($0) }))
         } label: {
-            control(compact ? nil : label, symbol: store.composerPlan ? "list.bullet.clipboard" : store.composerAccess.symbol, margin: Self.margin())
+            control(compact ? nil : label, symbol: store.composerPlan ? .clipboardList : store.composerAccess.symbol, margin: Self.margin())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -387,8 +385,7 @@ struct ComposerSendButtons: View {
                 Button {
                     store.send()
                 } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.ui(size: 14, weight: .semibold))
+                    Image(.arrowUp, size: 14)
                         .foregroundStyle(store.canSend ? Color.white : Color.themeSecondary)
                         .frame(width: 30, height: 30)
                         .background(store.canSend ? Color.themePrimary : Color.themeSelected, in: Circle())

@@ -181,7 +181,7 @@ final class TranscriptView: FlippedView, RowOwner {
         jumpButton.isHidden = true
         jumpButton.tip = "Scroll to end"
         jumpButton.describe("Scroll to end", button: true)
-        let arrow = SymbolView("arrow.down", size: 12, weight: .semibold)
+        let arrow = SymbolView(.arrowDown, size: 12)
         arrow.frame = CGRect(x: (side - 16) / 2, y: (side - 16) / 2, width: 16, height: 16)
         jumpButton.addSubview(arrow)
         jumpButton.onClick = { [weak self] in self?.scrollToEnd() }

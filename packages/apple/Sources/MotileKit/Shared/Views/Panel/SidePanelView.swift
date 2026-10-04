@@ -148,8 +148,7 @@ struct PanelTabStrip: View {
                 .disabled(store.panelTarget?.repository != true)
             Button("Agents") { store.sidePanel.open(.agents) }
         } label: {
-            Image(systemName: "plus")
-                .font(.ui(size: 12, weight: .medium))
+            Image(.plus, size: 12)
                 .frame(width: scaled(28), height: scaled(28))
                 .frame(minWidth: Platform.minimumPress, minHeight: Platform.minimumPress)
                 .contentShape(Rectangle())
@@ -177,8 +176,7 @@ private struct PanelTabChip: View {
     var body: some View {
         let panel = store.sidePanel
         HStack(spacing: 6) {
-            Image(systemName: tab.symbol)
-                .font(.ui(size: 11, weight: .medium))
+            Image(tab.symbol, size: 11)
                 .frame(width: 14)
             Text(tab.title)
                 .font(.ui(size: 12, weight: .medium))
@@ -195,7 +193,7 @@ private struct PanelTabChip: View {
         .contentShape(Rectangle())
         .button(.highlight(selected: active, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
-            IconOnlyButton(symbol: "xmark", help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4, faded: true) { panel.close(tab) }
+            IconOnlyButton(symbol: .x, help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4, faded: true) { panel.close(tab) }
                 .padding(.trailing, Self.closeMargin)
                 .opacity(hovering || active ? 1 : 0)
         }
@@ -225,22 +223,21 @@ private struct PanelLauncher: View {
                 .font(.ui(size: 13, weight: .semibold))
                 .foregroundStyle(Color.themeText)
             VStack(spacing: 2) {
-                row("folder", "Files", keys: "⇧⌘E", reason: nil) { store.sidePanel.open(.files) }
-                row("plusminus", "Diff", keys: "⌘D", reason: target.repository ? nil : "Available in git repositories.") {
+                row(.folder, "Files", keys: "⇧⌘E", reason: nil) { store.sidePanel.open(.files) }
+                row(.diff, "Diff", keys: "⌘D", reason: target.repository ? nil : "Available in git repositories.") {
                     store.sidePanel.showDiff()
                 }
-                row("person.2", "Agents", keys: "⇧⌘A", reason: nil) { store.sidePanel.open(.agents) }
+                row(.users, "Agents", keys: "⇧⌘A", reason: nil) { store.sidePanel.open(.agents) }
             }
             .frame(width: 250)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func row(_ symbol: String, _ title: String, keys: String, reason: String?, action: @escaping () -> Void) -> some View {
+    private func row(_ symbol: Symbol, _ title: String, keys: String, reason: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: symbol)
-                    .font(.ui(size: 13, weight: .medium))
+                Image(symbol, size: 13)
                     .frame(width: 18)
                 Text(title)
                     .font(.ui(size: 13))
@@ -297,13 +294,13 @@ struct DiffSurface: View {
                 if let document = panel.diff.value, document.files.count > 1 {
                     let allClosed = panel.collapsed.count >= document.files.count
                     IconOnlyButton(
-                        symbol: allClosed ? "rectangle.expand.vertical" : "rectangle.compress.vertical",
+                        symbol: allClosed ? .unfoldVertical : .foldVertical,
                         help: allClosed ? "Open every file" : "Close every file"
                     ) {
                         panel.setAllCollapsed(!allClosed)
                     }
                 }
-                IconOnlyButton(symbol: "arrow.clockwise", help: "Read the changes again") { asked += 1 }
+                IconOnlyButton(symbol: .rotateCw, help: "Read the changes again") { asked += 1 }
             }
             if !target.repository {
                 PanelMessage(text: "This folder isn't a git repository.")
@@ -352,8 +349,7 @@ struct DiffSurface: View {
             HStack(spacing: 5) {
                 Text(title(of: scope))
                     .font(.ui(size: 12.5, weight: .medium))
-                Image(systemName: "chevron.down")
-                    .font(.ui(size: 8, weight: .bold))
+                Image(.chevronDown, size: 8)
                     .foregroundStyle(Color.themeTertiary)
             }
             .foregroundStyle(Color.themeText)
@@ -397,8 +393,7 @@ struct FilesSurface: View {
         let panel = store.sidePanel
         VStack(spacing: 0) {
             PanelBar {
-                Image(systemName: "folder")
-                    .font(.ui(size: 11, weight: .medium))
+                Image(.folder, size: 11)
                     .foregroundStyle(Color.themeSecondary)
                 Text(target.name)
                     .font(.ui(size: 12.5, weight: .medium))
@@ -406,7 +401,7 @@ struct FilesSurface: View {
                     .lineLimit(1)
                     .padding(.leading, 3)
                 Spacer(minLength: 4)
-                IconOnlyButton(symbol: "arrow.clockwise", help: "Read the folder again") { asked += 1 }
+                IconOnlyButton(symbol: .rotateCw, help: "Read the folder again") { asked += 1 }
             }
             if let error = panel.filesError {
                 PanelMessage(text: error, failed: true)
@@ -440,13 +435,11 @@ private struct FileRow: View {
     var body: some View {
         let panel = store.sidePanel
         HStack(spacing: 6) {
-            Image(systemName: node.open ? "chevron.down" : "chevron.right")
-                .font(.ui(size: 8, weight: .bold))
+            Image(node.open ? .chevronDown : .chevronRight, size: 8)
                 .foregroundStyle(Color.themeTertiary)
                 .frame(width: 10)
                 .opacity(node.folder ? 1 : 0)
-            Image(systemName: node.folder ? "folder" : FileSymbol.name(for: node.path))
-                .font(.ui(size: 11))
+            Image(node.folder ? .folder : FileSymbol.symbol(for: node.path), size: 11)
                 .foregroundStyle(Color.themeSecondary)
                 .frame(width: 16)
             Text(node.name)
@@ -487,12 +480,12 @@ struct FileSurface: View {
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer(minLength: 4)
-                IconOnlyButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy the path") {
+                IconOnlyButton(symbol: copied ? .check : .copy, help: "Copy the path") {
                     Platform.copy(path)
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
                 }
-                IconOnlyButton(symbol: "arrow.clockwise", help: "Read the file again") { asked += 1 }
+                IconOnlyButton(symbol: .rotateCw, help: "Read the file again") { asked += 1 }
             }
             switch panel.contents[.file(path)] {
             case nil, .loading:
@@ -542,7 +535,7 @@ struct ChangeSurface: View {
                     .foregroundStyle(Color.themeText)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                IconOnlyButton(symbol: "plusminus", help: "Show everything this turn changed") {
+                IconOnlyButton(symbol: .diff, help: "Show everything this turn changed") {
                     panel.showDiff(.turn(turn), revealing: path)
                 }
             }

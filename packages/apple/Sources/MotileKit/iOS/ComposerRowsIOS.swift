@@ -69,8 +69,7 @@ struct ComposerTouchControls: View {
                 Text(model?.name ?? "No agent")
                     .font(.ui(size: 13, weight: .medium))
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.ui(size: 9, weight: .bold))
+                Image(.chevronDown, size: 9)
                     .foregroundStyle(Color.themeTertiary)
             }
             .padding(.horizontal, 10)

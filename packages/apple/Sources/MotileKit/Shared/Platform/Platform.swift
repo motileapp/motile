@@ -201,16 +201,6 @@ extension Image {
 }
 
 extension PlatformImage {
-    static func symbol(_ name: String, size: CGFloat, weight: PlatformFont.Weight = .regular) -> PlatformImage? {
-        #if os(macOS)
-        let configuration = NSImage.SymbolConfiguration(pointSize: size, weight: weight)
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration)
-        #else
-        let symbolWeight = UIImage.SymbolWeight(weight)
-        return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: symbolWeight))
-        #endif
-    }
-
     /// The image of a file's bytes, or nothing when they aren't an image.
     static func decoded(_ data: Data) -> PlatformImage? {
         #if os(macOS)
@@ -220,24 +210,6 @@ extension PlatformImage {
         #endif
     }
 }
-
-#if os(iOS)
-extension UIImage.SymbolWeight {
-    init(_ weight: UIFont.Weight) {
-        switch weight {
-        case .ultraLight: self = .ultraLight
-        case .thin: self = .thin
-        case .light: self = .light
-        case .medium: self = .medium
-        case .semibold: self = .semibold
-        case .bold: self = .bold
-        case .heavy: self = .heavy
-        case .black: self = .black
-        default: self = .regular
-        }
-    }
-}
-#endif
 
 extension CGRect {
     /// Fills the rectangle with the fill colour that is set.

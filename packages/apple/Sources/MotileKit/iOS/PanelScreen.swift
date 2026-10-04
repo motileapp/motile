@@ -32,12 +32,12 @@ struct PanelScreen: View {
         HStack(spacing: 0) {
             let maximized = store.sidePanel.isMaximized
             IconOnlyButton(
-                symbol: maximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                symbol: maximized ? .minimize2 : .maximize2,
                 help: maximized ? "Restore the side panel" : "Maximize the side panel", size: 36, symbolSize: 14, faded: true
             ) {
                 store.sidePanel.toggleMaximized()
             }
-            IconOnlyButton(symbol: "xmark", help: "Close the side panel", size: 36, symbolSize: 14, faded: true) {
+            IconOnlyButton(symbol: .x, help: "Close the side panel", size: 36, symbolSize: 14, faded: true) {
                 store.sidePanel.isOpen = false
             }
         }

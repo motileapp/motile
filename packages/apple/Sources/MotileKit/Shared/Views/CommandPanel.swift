@@ -112,10 +112,9 @@ struct CommandPanel: View {
     private var header: some View {
         HStack(spacing: 10) {
             if pages.count > 1 {
-                IconOnlyButton(symbol: "arrow.left", help: "Back", size: 26, symbolSize: 14, faded: true) { back() }
+                IconOnlyButton(symbol: .arrowLeft, help: "Back", size: 26, symbolSize: 14, faded: true) { back() }
             } else {
-                Image(systemName: "magnifyingglass")
-                    .font(.ui(size: 15, weight: .medium))
+                Image(.search, size: 15)
                     .foregroundStyle(Color.themeTertiary)
                     .frame(width: 26, height: 26)
             }
@@ -334,7 +333,7 @@ struct CommandPanel: View {
     }
 
     private var addProject: PanelItem {
-        PanelItem(id: "add-project", title: "Add a project…", detail: "A new one, one of your GitHub's or a folder", icon: .symbol("folder.badge.plus"), keepsOpen: true) {
+        PanelItem(id: "add-project", title: "Add a project…", detail: "A new one, one of your GitHub's or a folder", icon: .symbol(.folderPlus), keepsOpen: true) {
             open(store.addProjectPage)
         }
     }
@@ -347,7 +346,7 @@ struct CommandPanel: View {
         return servers.map(\.element).map { server in
             let projects = store.projects.filter { $0.serverID == server.id }.count
             let detail = server.state != .connected ? "Offline" : projects == 1 ? "1 project" : "\(projects) projects"
-            var item = PanelItem(id: "server-\(server.id)", title: server.name, detail: detail, icon: .symbol("server.rack"), keepsOpen: true) {
+            var item = PanelItem(id: "server-\(server.id)", title: server.name, detail: detail, icon: .symbol(.server), keepsOpen: true) {
                 open(.sources(server.id))
             }
             item.off = server.state != .connected
@@ -357,11 +356,11 @@ struct CommandPanel: View {
 
     /// GitHub comes last while it still needs setting up on the server.
     private func sourceItems(_ id: String) -> [PanelItem] {
-        let folder = PanelItem(id: "source-folder", title: "Local folder", detail: "Browse the folders on \(serverName(id))", icon: .symbol("folder"), keepsOpen: true) {
+        let folder = PanelItem(id: "source-folder", title: "Local folder", detail: "Browse the folders on \(serverName(id))", icon: .symbol(.folder), keepsOpen: true) {
             open(.folder(id))
         }
         guard store.startsProjects(store.server(id)) else { return [folder] }
-        let new = PanelItem(id: "source-new", title: "New project", detail: "Start a new Git repository from a name", icon: .symbol("plus.square"), keepsOpen: true) {
+        let new = PanelItem(id: "source-new", title: "New project", detail: "Start a new Git repository from a name", icon: .symbol(.squarePlus), keepsOpen: true) {
             open(.newProject(id))
         }
         guard let state = store.github[id] else { return [new, .placeholder(0, lines: 2), folder] }
@@ -376,7 +375,7 @@ struct CommandPanel: View {
 
     private func newProject(on id: String) -> PanelItem {
         let name = query.trimmingCharacters(in: .whitespaces)
-        var item = PanelItem(id: "create", title: name.isEmpty ? "Name the project" : "Create \(name)", detail: "A new Git repository in ~/projects on \(serverName(id))", icon: .symbol("plus.square"), keepsOpen: true) {
+        var item = PanelItem(id: "create", title: name.isEmpty ? "Name the project" : "Create \(name)", detail: "A new Git repository in ~/projects on \(serverName(id))", icon: .symbol(.squarePlus), keepsOpen: true) {
             store.newProject(named: name, on: id)
         }
         item.off = name.isEmpty
@@ -388,7 +387,7 @@ struct CommandPanel: View {
         guard let repos = store.repos[id] else {
             return store.repoErrors[id] == nil ? (0..<8).map { .placeholder($0, lines: 2) } : []
         }
-        let clone = { (name: String, title: String, detail: String, symbol: String) in
+        let clone = { (name: String, title: String, detail: String, symbol: Symbol) in
             var item = PanelItem(id: "repo-\(name)", title: title, detail: detail, icon: .symbol(symbol), keepsOpen: true) {
                 store.clone(name, on: id)
             }
@@ -396,7 +395,7 @@ struct CommandPanel: View {
             return item
         }
         var items = repos.map { repo in
-            var item = clone(repo.name, repo.name, repo.description ?? "", "book.closed")
+            var item = clone(repo.name, repo.name, repo.description ?? "", .bookMarked)
             item.note = repo.isPrivate ? "Private" : nil
             return item
         }
@@ -404,24 +403,24 @@ struct CommandPanel: View {
         let typed = query.trimmingCharacters(in: .whitespaces)
         let listed = repos.contains { $0.name.caseInsensitiveCompare(typed) == .orderedSame }
         if !listed, typed.wholeMatch(of: #/[\w.-]+/[\w.-]+/#) != nil {
-            items.append(clone(typed, "Clone \(typed)", "A repository that isn't in your list", "arrow.down.circle"))
+            items.append(clone(typed, "Clone \(typed)", "A repository that isn't in your list", .circleArrowDown))
         }
         return items
     }
 
     private func setupItems(_ id: String) -> [PanelItem] {
         let name = serverName(id)
-        let check = PanelItem(id: "check-github", title: "Check again", detail: "Once that is done", icon: .symbol("arrow.clockwise"), keepsOpen: true) {
+        let check = PanelItem(id: "check-github", title: "Check again", detail: "Once that is done", icon: .symbol(.rotateCw), keepsOpen: true) {
             store.readGitHub(id)
         }
         guard store.github[id] != .missing else {
-            let install = PanelItem(id: "install-gh", title: "Open cli.github.com", detail: "Install gh on \(name), then run gh auth login there", icon: .symbol("arrow.up.right.square"), keepsOpen: true) {
+            let install = PanelItem(id: "install-gh", title: "Open cli.github.com", detail: "Install gh on \(name), then run gh auth login there", icon: .symbol(.squareArrowOutUpRight), keepsOpen: true) {
                 guard let site = URL(string: "https://cli.github.com") else { return }
                 Platform.open(site)
             }
             return [install, check]
         }
-        let copy = PanelItem(id: "copy-login", title: copied ? "Copied" : "Copy gh auth login", detail: "Run it in a terminal on \(name)", icon: .symbol(copied ? "checkmark" : "doc.on.doc"), keepsOpen: true) {
+        let copy = PanelItem(id: "copy-login", title: copied ? "Copied" : "Copy gh auth login", detail: "Run it in a terminal on \(name)", icon: .symbol(copied ? .check : .copy), keepsOpen: true) {
             Platform.copy("gh auth login")
             copied = true
         }
@@ -436,17 +435,17 @@ struct CommandPanel: View {
         let projects = Set(store.projects.filter { $0.serverID == id }.map(\.path))
         var items: [PanelItem] = []
         if query.hasSuffix("/") || query == "~" {
-            items.append(PanelItem(id: "add-here", title: "Add this folder", detail: listing.typed, icon: .symbol("folder.badge.plus")) {
+            items.append(PanelItem(id: "add-here", title: "Add this folder", detail: listing.typed, icon: .symbol(.folderPlus)) {
                 store.addProject(serverID: id, path: listing.path)
             })
             if let parent = listing.parent {
-                items.append(PanelItem(id: "parent", title: "..", detail: "", icon: .symbol("arrow.turn.left.up"), keepsOpen: true) {
+                items.append(PanelItem(id: "parent", title: "..", detail: "", icon: .symbol(.cornerLeftUp), keepsOpen: true) {
                     query = parent
                 })
             }
         }
         items += listing.folders.map { folder in
-            var item = PanelItem(id: folder.path, title: folder.name, detail: "", icon: .symbol("folder"), keepsOpen: true) {
+            var item = PanelItem(id: folder.path, title: folder.name, detail: "", icon: .symbol(.folder), keepsOpen: true) {
                 query = folder.typed
             }
             item.note = projects.contains(folder.path) ? "Project" : nil
@@ -472,11 +471,11 @@ struct CommandPanel: View {
         guard let thread = store.selectedThread else { return [] }
         var items: [PanelItem] = []
         if thread.busy {
-            items.append(PanelItem(id: "stop", title: "Stop the agent", detail: thread.title, icon: .symbol("stop.circle")) { store.stop() })
+            items.append(PanelItem(id: "stop", title: "Stop the agent", detail: thread.title, icon: .symbol(.circleStop)) { store.stop() })
         } else {
             let done = thread.isDone
             items.append(
-                PanelItem(id: "done", title: done ? "Mark undone" : "Mark done", detail: thread.title, icon: .symbol(done ? "arrow.uturn.backward.circle" : "checkmark.circle")) {
+                PanelItem(id: "done", title: done ? "Mark undone" : "Mark done", detail: thread.title, icon: .symbol(done ? .undo2 : .circleCheck)) {
                     store.toggleDone()
                 }
             )
@@ -487,7 +486,7 @@ struct CommandPanel: View {
     /// The servers that run an older version than the newest release.
     private var serverUpdates: [PanelItem] {
         store.servers.filter { store.isOutdated($0) && store.serverUpdates[$0.id] == nil }.map { server in
-            PanelItem(id: "update-\(server.id)", title: "Update \(server.name)", detail: "From version \(server.version) to \(store.updater.latest ?? "")", icon: .symbol("arrow.down.circle")) {
+            PanelItem(id: "update-\(server.id)", title: "Update \(server.name)", detail: "From version \(server.version) to \(store.updater.latest ?? "")", icon: .symbol(.circleArrowDown)) {
                 store.update(server)
             }
         }
@@ -495,18 +494,18 @@ struct CommandPanel: View {
 
     private var commands: [PanelItem] {
         let always: [PanelItem] = [
-            PanelItem(id: "new-thread", title: "New thread…", detail: "Choose a project to start in", icon: .symbol("square.and.pencil"), keepsOpen: true) {
+            PanelItem(id: "new-thread", title: "New thread…", detail: "Choose a project to start in", icon: .symbol(.squarePen), keepsOpen: true) {
                 open(.projects)
             },
-            PanelItem(id: "go-to-thread", title: "Go to thread…", detail: "\(store.threads.count) threads", icon: .symbol("text.bubble"), keepsOpen: true) {
+            PanelItem(id: "go-to-thread", title: "Go to thread…", detail: "\(store.threads.count) threads", icon: .symbol(.messageSquareText), keepsOpen: true) {
                 open(.threads)
             },
             addProject,
-            PanelItem(id: "add-server", title: "Add a server…", detail: "A machine that runs your agents", icon: .symbol("server.rack")) {
+            PanelItem(id: "add-server", title: "Add a server…", detail: "A machine that runs your agents", icon: .symbol(.server)) {
                 store.showsAddServer = true
             },
         ]
-        let settings = PanelItem(id: "settings", title: "Settings…", detail: "Appearance, servers and projects", icon: .symbol("gearshape")) {
+        let settings = PanelItem(id: "settings", title: "Settings…", detail: "Appearance, servers and projects", icon: .symbol(.settings)) {
             #if os(macOS)
             openSettings()
             #else
@@ -520,7 +519,7 @@ struct CommandPanel: View {
     private var appUpdate: [PanelItem] {
         #if os(macOS)
         [
-            PanelItem(id: "check-updates", title: "Check for updates", detail: "Motile \(store.updater.current)", icon: .symbol("arrow.triangle.2.circlepath")) {
+            PanelItem(id: "check-updates", title: "Check for updates", detail: "Motile \(store.updater.current)", icon: .symbol(.refreshCw)) {
                 store.updater.check(asked: true)
             }
         ]
@@ -638,7 +637,7 @@ private struct PanelSection: Identifiable {
 
 private struct PanelItem: Identifiable {
     enum Icon {
-        case symbol(String)
+        case symbol(Symbol)
         /// A logo, drawn in the colour of the symbols.
         case logo(PlatformImage?)
         case project(Project?)
@@ -670,7 +669,7 @@ private struct PanelItem: Identifiable {
     var selectable: Bool { !off && placeholderLines == 0 }
 
     static func placeholder(_ position: Int, lines: Int) -> PanelItem {
-        var item = PanelItem(id: "placeholder-\(position)", title: "", detail: "", icon: .symbol("")) {}
+        var item = PanelItem(id: "placeholder-\(position)", title: "", detail: "", icon: .symbol(.folder)) {}
         item.placeholderLines = lines
         item.index = position
         return item
@@ -781,8 +780,7 @@ private struct PanelRow: View {
                 .fill(Color.themeSelected)
                 .frame(width: 20, height: 20)
         case .symbol(let name):
-            Image(systemName: name)
-                .font(.ui(size: 15, weight: .medium))
+            Image(name, size: 15)
                 .foregroundStyle(Color.themeSecondary)
         case .logo(let logo):
             Image(platform: logo ?? PlatformImage())

@@ -60,7 +60,7 @@ struct ThreadScreen: View {
                 Button {
                     drawer.isOpen.toggle()
                 } label: {
-                    Image(systemName: "line.3.horizontal")
+                    Image(.menu, size: 16)
                         .overlay(alignment: .topTrailing) {
                             if needsAttention {
                                 Circle()
@@ -81,7 +81,7 @@ struct ThreadScreen: View {
             Button {
                 store.sidePanel.isOpen.toggle()
             } label: {
-                Image(systemName: "sidebar.right")
+                Image(.panelRight, size: 16)
             }
             .accessibilityLabel("Files and changes")
         }
@@ -130,7 +130,7 @@ struct ThreadScreen: View {
                 Button {
                     store.addProject()
                 } label: {
-                    Label("Add Project", systemImage: "folder.badge.plus")
+                    Label("Add Project", symbol: .folderPlus, size: 15)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
@@ -161,7 +161,7 @@ struct ThreadScreen: View {
                         Label {
                             Text(name)
                         } icon: {
-                            Image(platform: project.menuIcon ?? PlatformImage.symbol("folder", size: 15) ?? PlatformImage())
+                            Image(platform: project.menuIcon ?? .symbol(.folder, size: 15))
                         }
                     }
                 }
@@ -178,8 +178,7 @@ struct ThreadScreen: View {
                     Text(selected?.name ?? "a project")
                         .foregroundStyle(Color.themeText)
                         .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .bold))
+                    Image(.chevronDown, size: 11)
                         .foregroundStyle(Color.themeTertiary)
                 }
                 .padding(.leading, 12)

@@ -238,7 +238,7 @@ struct MainView: View {
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     HStack(spacing: 0) {
-                        ToolbarButton(symbol: "sidebar.left", help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
+                        ToolbarButton(symbol: .panelLeft, help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
                             sidebarHidden.toggle()
                         }
                         if sidebarHidden {
@@ -271,13 +271,13 @@ struct MainView: View {
         return HStack(spacing: 0) {
             if open {
                 ToolbarButton(
-                    symbol: maximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                    symbol: maximized ? .minimize2 : .maximize2,
                     help: maximized ? "Restore the side panel (⇧⌥⌘B)" : "Maximize the side panel (⇧⌥⌘B)"
                 ) {
                     store.sidePanel.toggleMaximized()
                 }
             }
-            ToolbarButton(symbol: "sidebar.right", help: open ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
+            ToolbarButton(symbol: .panelRight, help: open ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
                 store.sidePanel.isOpen.toggle()
             }
         }
@@ -287,10 +287,10 @@ struct MainView: View {
     /// in the same layout pass. A toolbar item sized to the sidebar follows it a frame late.
     private var projectButtons: some View {
         HStack(spacing: 0) {
-            ToolbarButton(symbol: "folder.badge.plus", help: "Add a project") {
+            ToolbarButton(symbol: .folderPlus, help: "Add a project") {
                 store.addProject()
             }
-            ToolbarButton(symbol: "square.and.pencil", help: "New thread (⌘N). ⇧-click starts one in this project") {
+            ToolbarButton(symbol: .squarePen, help: "New thread (⌘N). ⇧-click starts one in this project") {
                 guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true else { return store.newThread() }
                 store.startNewThread(in: store.composerProject)
             }

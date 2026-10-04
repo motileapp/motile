@@ -121,6 +121,9 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 
 - `Shared/Platform/Platform.swift`: what the two systems call differently, behind one name.
   Sizes are written as they are on the Mac; `Platform.scale` enlarges them on iOS.
+- `Shared/Platform/Symbol.swift`: the icons, drawn from Lucide's font (`Fonts/lucide.ttf`), not
+  SF Symbols. A new one is a case with the character it has in lucide-static's
+  `font/codepoints.json`.
 - `Shared/Core`: `CoreBridge.swift` calls the Rust core, `AppStore.swift` is the state the
   views show, `SidePanel.swift` the side panel's state.
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
