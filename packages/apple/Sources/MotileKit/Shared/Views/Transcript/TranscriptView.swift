@@ -98,7 +98,7 @@ final class TranscriptView: FlippedView, RowOwner {
     /// button is not under it, and neither is the scroll bar, which `edge` keeps whole.
     private let fade = CAGradientLayer()
     private let edge = CALayer()
-    private let mask = CALayer()
+    private let fadeMask = CALayer()
 
     private var rows: [RowModel] = []
     private var hasPending = false
@@ -164,9 +164,9 @@ final class TranscriptView: FlippedView, RowOwner {
         addSubview(scroller)
         fade.colors = [PlatformColor.clear.cgColor, PlatformColor.black.cgColor, PlatformColor.black.cgColor, PlatformColor.clear.cgColor]
         edge.backgroundColor = PlatformColor.black.cgColor
-        mask.addSublayer(fade)
-        mask.addSublayer(edge)
-        scroller.fadeMask = mask
+        fadeMask.addSublayer(fade)
+        fadeMask.addSublayer(edge)
+        scroller.fadeMask = fadeMask
         document.addSubview(working)
         working.isHidden = true
 
@@ -251,7 +251,7 @@ final class TranscriptView: FlippedView, RowOwner {
         let stops = [topInset, topPadding, max(topPadding, bounds.height - bottomFade), bounds.height]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        mask.frame = bounds
+        fadeMask.frame = bounds
         fade.frame = bounds
         let edgeWidth = TranscriptScroller.indicatorWidth
         edge.frame = CGRect(x: bounds.width - edgeWidth, y: 0, width: edgeWidth, height: bounds.height)
