@@ -40,7 +40,8 @@ final class TranscriptView: FlippedView, RowOwner {
     var bottomInset: CGFloat = 0 {
         didSet {
             guard bottomInset != oldValue else { return }
-            // More room under the rows, as for the keyboard, is glided to.
+            // More room under the rows, as for the keyboard, is glided to, from near the end too.
+            if bottomInset > oldValue, !userScrolling, endY - scroller.offsetY < Self.nearEnd { pinned = true }
             updateVisible(follows: false)
             land()
             jumpButton.frame.origin.y = jumpButtonY
@@ -86,6 +87,8 @@ final class TranscriptView: FlippedView, RowOwner {
     private static let workingHeight = TurnEndRowView.height
     /// How close to the end a scroll has to come for the view to follow the end again.
     private static let pinDistance: CGFloat = 1
+    /// How close to the end the viewport has to be to go to the end when the keyboard opens.
+    private static let nearEnd: CGFloat = 80
 
     /// How far the end has to be below the viewport for the jump button to show.
     private var jumpDistance: CGFloat { max(200, viewportHeight / 2) }
