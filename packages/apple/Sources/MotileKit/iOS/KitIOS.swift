@@ -445,6 +445,14 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
     var onUserScroll: ((Bool) -> Void)?
 
     private let scrollView = UIScrollView()
+    /// Where the bar covers the transcript's top, for the system to blur the rows under it.
+    private let topBar = UIView()
+
+    /// Whether the system blurs the rows under the top bar, instead of the transcript fading them.
+    static var blursUnderTopBar: Bool {
+        guard #available(iOS 26, *) else { return false }
+        return true
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -462,6 +470,19 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
         tap.cancelsTouchesInView = false
         tap.delegate = self
         scrollView.addGestureRecognizer(tap)
+        addTopBarEdge()
+    }
+
+    private func addTopBarEdge() {
+        guard #available(iOS 26, *) else { return }
+        scrollView.topEdgeEffect.style = .soft
+        let interaction = UIScrollEdgeElementContainerInteraction()
+        interaction.scrollView = scrollView
+        interaction.edge = .top
+        topBar.addInteraction(interaction)
+        topBar.isUserInteractionEnabled = false
+        topBar.autoresizingMask = [.flexibleWidth]
+        addSubview(topBar)
     }
 
     @objc private func tapped() {
@@ -487,9 +508,10 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
 
     static let indicatorWidth: CGFloat = 10
 
-    /// Keeps the scroll indicator clear of what covers the transcript's top.
-    func setIndicatorInset(top: CGFloat) {
-        scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: top, left: 0, bottom: 0, right: 0)
+    /// How tall the bar over the transcript's top is. The scroll indicator keeps clear of it.
+    func setTopBar(height: CGFloat) {
+        scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: height, left: 0, bottom: 0, right: 0)
+        topBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: height)
     }
 
     func setDocument(width: CGFloat, height: CGFloat) {

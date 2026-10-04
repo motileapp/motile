@@ -97,7 +97,8 @@ final class TranscriptView: FlippedView, RowOwner {
     private var document: FlippedView { scroller.document }
     private let working = WorkingView()
     private let jumpButton = SurfaceView()
-    /// Fades the rows out under the top bar and from the composer's middle down. The jump
+    /// Fades the rows out under the top bar, unless the system blurs them there, and from the
+    /// composer's middle down. The jump
     /// button is not under it, and neither is the scroll bar, which `edge` keeps whole.
     private let fade = CAGradientLayer()
     private let edge = CALayer()
@@ -250,8 +251,9 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private func layoutFade() {
         guard bounds.height > 0 else { return }
-        scroller.setIndicatorInset(top: topInset)
-        let stops = [topInset, topPadding, max(topPadding, bounds.height - bottomFade), bounds.height]
+        scroller.setTopBar(height: topInset)
+        let fadeTop = TranscriptScroller.blursUnderTopBar ? [0, 0] : [topInset, topPadding]
+        let stops = fadeTop + [max(topPadding, bounds.height - bottomFade), bounds.height]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fadeMask.frame = bounds
