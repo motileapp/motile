@@ -30,7 +30,7 @@ xcodebuild archive -project Motile.xcodeproj -scheme Motile -configuration Relea
     -destination 'generic/platform=iOS' -archivePath build/Motile.xcarchive -derivedDataPath build/derived \
     DEVELOPMENT_TEAM="$APPLE_TEAM_ID" PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
     MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
-    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
+    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" IOS_PROFILE_NAME="$PROFILE_NAME"
 
 cat > build/export.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
