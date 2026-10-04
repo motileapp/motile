@@ -233,7 +233,7 @@ struct ComposerView: View {
             effortMenu
             accessMenu(compact: compact)
             Spacer(minLength: 10)
-            IconOnlyButton(symbol: .paperclip, help: "Attach files", size: 30, symbolSize: 15, inset: Self.margin(trailing: 4), faded: true) {
+            IconOnlyButton(symbol: .paperclip, help: "Attach files", size: 30, symbolSize: 15, radius: 15, inset: Self.margin(trailing: 4), faded: true) {
                 chooseFiles()
             }
             ComposerSendButtons()
