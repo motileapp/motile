@@ -126,6 +126,9 @@ extension AppStore {
 
 struct SearchField: View {
     @Binding var text: String
+    /// Without a background or a height of its own, for a field that lies on glass.
+    var bare = false
+    @FocusState private var focused: Bool
 
     private static let height: CGFloat = Platform.scale > 1 ? 38 : 28
     private static let sidePadding: CGFloat = Platform.scale > 1 ? 10 : 8
@@ -139,6 +142,7 @@ struct SearchField: View {
             TextField("Search", text: $text)
                 .textFieldStyle(.plain)
                 .font(.ui(size: 13))
+                .focused($focused)
             if !text.isEmpty {
                 IconOnlyButton(symbol: "xmark.circle.fill", help: "Clear", size: Self.clearSize, symbolSize: 12) { text = "" }
                     .foregroundStyle(Color.themeTertiary)
@@ -146,8 +150,11 @@ struct SearchField: View {
             }
         }
         .padding(.horizontal, Self.sidePadding)
-        .frame(height: Self.height)
-        .background(Color.themeHover, in: RoundedRectangle(cornerRadius: Platform.scale > 1 ? 11 : 8, style: .continuous))
+        .frame(height: bare ? nil : Self.height)
+        .frame(maxHeight: bare ? .infinity : nil)
+        .background(bare ? Color.clear : Color.themeHover, in: RoundedRectangle(cornerRadius: Platform.scale > 1 ? 11 : 8, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
     }
 }
 

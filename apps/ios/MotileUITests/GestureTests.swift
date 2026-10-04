@@ -20,6 +20,13 @@ final class GestureTests: XCTestCase {
         element.waitForExistence(timeout: 3) && element.isHittable
     }
 
+    /// The thread's row in the sidebar, not its title on the thread that is off the screen.
+    private func row(_ title: String) -> XCUIElement? {
+        XCTAssertTrue(shown(newThread))
+        return app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", title))
+            .allElementsBoundByIndex.first { $0.isHittable }
+    }
+
     func testASwipeToTheRightShowsTheSidebarAndOneBackHidesIt() {
         XCTAssertFalse(newThread.exists && newThread.isHittable)
         app.swipeRight()
@@ -28,17 +35,9 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(newThread.waitForNonExistence(timeout: 3) || !newThread.isHittable)
     }
 
-    func testATapOnTheThreadBesideTheSidebarHidesTheSidebar() {
-        app.buttons["Threads"].tap()
-        XCTAssertTrue(shown(newThread))
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-        XCTAssertTrue(newThread.waitForNonExistence(timeout: 3) || !newThread.isHittable)
-    }
-
     func testAThreadOpensFromTheSidebarAndScrolls() {
         app.swipeRight()
-        let thread = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Add API Rate Limiting'")).firstMatch
-        XCTAssertTrue(shown(thread))
+        guard let thread = row("Add API Rate Limiting") else { return XCTFail("no row") }
         thread.tap()
         XCTAssertTrue(newThread.waitForNonExistence(timeout: 3) || !newThread.isHittable)
         // Up and down is the transcript's, and leaves the sidebar where it is.
@@ -60,8 +59,7 @@ final class GestureTests: XCTestCase {
 
     func testASwipeToTheRightOnAThreadInTheSidebarMarksItDone() {
         app.swipeRight()
-        let thread = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Use an F-String in Greet'")).firstMatch
-        XCTAssertTrue(shown(thread))
+        guard let thread = row("Use an F-String in Greet") else { return XCTFail("no row") }
         thread.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: thread.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)))
         let undo = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Marked done'")).firstMatch

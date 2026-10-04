@@ -12,7 +12,8 @@ final class Drawer {
 }
 
 /// The sidebar under the thread: swiping right anywhere on the thread slides it aside as a
-/// card and shows the sidebar, and a swipe back, or a tap on what is left of the card, closes it.
+/// card and shows the sidebar, and a swipe back closes it. A phone's sidebar takes the whole
+/// screen; a wider window leaves the card in view, and a tap on it closes too.
 struct DrawerView<Sidebar: View, Content: View>: UIViewControllerRepresentable {
     let drawer: Drawer
     @ViewBuilder let sidebar: Sidebar
@@ -36,8 +37,8 @@ struct DrawerView<Sidebar: View, Content: View>: UIViewControllerRepresentable {
 }
 
 final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
-    /// What of the thread stays in view beside the sidebar.
-    private static let peek: CGFloat = 76
+    /// A window narrower than this gives all of its width to the sidebar.
+    private static let fullBelow: CGFloat = 500
     private static let widest: CGFloat = 360
     private static let cardRadius: CGFloat = 44
     /// The name of the recognizers that slide the sidebar's rows aside.
@@ -66,7 +67,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     private var sidebarWidth: CGFloat {
-        min(Self.widest, view.bounds.width - Self.peek)
+        view.bounds.width < Self.fullBelow ? view.bounds.width : Self.widest
     }
 
     override func viewDidLoad() {

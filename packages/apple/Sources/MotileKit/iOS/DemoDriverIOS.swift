@@ -121,6 +121,9 @@ enum DemoDriver {
         case "focus":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
             first(ComposerUITextView.self, in: window)?.becomeFirstResponder()
+        case "search":
+            let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+            first(UITextField.self, in: window)?.becomeFirstResponder()
         case "blur": Platform.endEditing()
         case "access": store.setAccess(Access(rawValue: rest) ?? .full)
         case "view":
