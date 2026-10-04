@@ -72,11 +72,12 @@ struct ComposerView: View {
             .animation(.easeOut(duration: 0.22), value: collapsed)
             #endif
         }
+        .overlay {
+            if store.dropTargeted {
+                RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themePrimary, lineWidth: 2)
+            }
+        }
         .glassSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .strokeBorder(store.dropTargeted ? Color.themePrimary : Color.themeStrongBorder, lineWidth: store.dropTargeted ? 2 : 1)
-        )
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
     }
 
