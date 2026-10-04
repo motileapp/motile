@@ -25,18 +25,26 @@ fi
 
 version() { shasum "$1" | cut -d' ' -f1; }
 pid_of() { cut -d' ' -f1 "$DEV/$1.pid" 2>/dev/null || true; }
+# A process that has exited but was not collected still answers `kill -0`.
 alive() {
-    local pid
+    local pid state
     pid="$(pid_of "$1")"
-    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+    [ -n "$pid" ] || return 1
+    state="$(ps -o stat= -p "$pid" 2>/dev/null)" || return 1
+    [ -n "$state" ] && [ "${state#Z}" = "$state" ]
 }
 current() { alive "$1" && [ "$(cut -d' ' -f2 "$DEV/$1.pid")" = "$(version "$2")" ]; }
 stop() {
     alive "$1" || return 0
     local pid
     pid="$(pid_of "$1")"
-    kill "$pid"
-    while kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
+    kill "$pid" 2>/dev/null || true
+    local waited=0
+    while alive "$1"; do
+        sleep 0.1
+        waited=$((waited + 1))
+        [ "$waited" -ne 50 ] || kill -9 "$pid" 2>/dev/null || true
+    done
 }
 started() { echo "$2 $(version "$3")" > "$DEV/$1.pid"; }
 field() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p"; }

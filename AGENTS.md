@@ -210,8 +210,8 @@ Mac app.
   start a dev app, a simulator or a big build, look at what already runs and how much memory is
   free (`memory_pressure`, `xcrun simctl list devices booted`, `pgrep -fl build/dev`). If there
   is headroom, go ahead. If not, wait for it instead of adding to the pile. Use one simulator at
-  a time, and when you are done, stop what you started: `scripts/dev-app.sh --stop`, and
-  `xcrun simctl shutdown` for the simulator.
+  a time, and when you are done, stop what you started: `scripts/dev-app.sh --stop`, which on iOS
+  also shuts its simulator down.
 - After you make code changes, run the checks below and fix what they raise.
 
 ## Development
