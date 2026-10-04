@@ -311,10 +311,12 @@ final class SymbolView: UIImageView {
 /// A borderless button with a symbol and, optionally, a title. It lights up under a finger.
 final class IconButton: UIButton {
     static let side: CGFloat = 36
-    private static let symbolSize: CGFloat = 14
 
-    convenience init(symbol: Symbol, title: String = "", tooltip: String, action: @escaping () -> Void) {
+    private var symbolSize: CGFloat = 14
+
+    convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat = 14, tooltip: String, action: @escaping () -> Void) {
         self.init(type: .custom)
+        self.symbolSize = symbolSize
         layer.cornerRadius = 8
         layer.cornerCurve = .continuous
         tintColor = Theme.secondary
@@ -326,7 +328,7 @@ final class IconButton: UIButton {
     }
 
     func set(symbol: Symbol, title: String = "") {
-        setImage(.symbol(symbol, size: Self.symbolSize), for: .normal)
+        setImage(.symbol(symbol, size: symbolSize), for: .normal)
         setTitle(title.isEmpty ? nil : title, for: .normal)
     }
 

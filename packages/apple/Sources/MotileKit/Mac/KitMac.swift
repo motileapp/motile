@@ -303,18 +303,19 @@ final class SymbolView: NSImageView {
 /// pointer.
 final class IconButton: NSButton {
     static let side: CGFloat = 28
-    private static let symbolSize: CGFloat = 14
 
+    private var symbolSize: CGFloat = 14
     private var action_: (() -> Void)?
     private var tracking: NSTrackingArea?
 
-    convenience init(symbol: Symbol, title: String = "", tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat = 14, tooltip: String, action: @escaping () -> Void) {
         self.init(frame: .zero)
+        self.symbolSize = symbolSize
         isBordered = false
         bezelStyle = .inline
         wantsLayer = true
         layer?.cornerRadius = 6
-        image = .symbol(symbol, size: Self.symbolSize)
+        image = .symbol(symbol, size: symbolSize)
         imagePosition = title.isEmpty ? .imageOnly : .imageLeading
         self.title = title
         font = Theme.smallFont
@@ -327,7 +328,7 @@ final class IconButton: NSButton {
     }
 
     func set(symbol: Symbol, title: String = "") {
-        image = .symbol(symbol, size: Self.symbolSize)
+        image = .symbol(symbol, size: symbolSize)
         self.title = title
     }
 
