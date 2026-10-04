@@ -93,8 +93,10 @@ final class TranscriptView: FlippedView, RowOwner {
     private let working = WorkingView()
     private let jumpButton = SurfaceView()
     /// Fades the rows out under the top bar and from the composer's middle down. The jump
-    /// button is not under it.
+    /// button is not under it, and neither is the scroll bar, which `edge` keeps whole.
     private let fade = CAGradientLayer()
+    private let edge = CALayer()
+    private let mask = CALayer()
 
     private var rows: [RowModel] = []
     private var hasPending = false
@@ -159,7 +161,10 @@ final class TranscriptView: FlippedView, RowOwner {
         super.init(frame: frame)
         addSubview(scroller)
         fade.colors = [PlatformColor.clear.cgColor, PlatformColor.black.cgColor, PlatformColor.black.cgColor, PlatformColor.clear.cgColor]
-        scroller.fadeMask = fade
+        edge.backgroundColor = PlatformColor.black.cgColor
+        mask.addSublayer(fade)
+        mask.addSublayer(edge)
+        scroller.fadeMask = mask
         document.addSubview(working)
         working.isHidden = true
 
@@ -240,11 +245,14 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private func layoutFade() {
         guard bounds.height > 0 else { return }
-        scroller.setIndicatorInsets(top: topInset, bottom: bottomInset)
+        scroller.setIndicatorInset(top: topInset)
         let stops = [topInset, topPadding, max(topPadding, bounds.height - bottomFade), bounds.height]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        mask.frame = bounds
         fade.frame = bounds
+        let edgeWidth = TranscriptScroller.indicatorWidth
+        edge.frame = CGRect(x: bounds.width - edgeWidth, y: 0, width: edgeWidth, height: bounds.height)
         fade.locations = stops.map { NSNumber(value: Double(min(1, max(0, $0 / bounds.height)))) }
         CATransaction.commit()
     }

@@ -498,9 +498,11 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
     var viewportHeight: CGFloat { scrollView.bounds.height }
     var documentSize: CGSize { scrollView.contentSize }
 
-    /// Keeps the scroll indicator clear of what covers the transcript's ends.
-    func setIndicatorInsets(top: CGFloat, bottom: CGFloat) {
-        scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: top, left: 0, bottom: bottom, right: 0)
+    static let indicatorWidth: CGFloat = 10
+
+    /// Keeps the scroll indicator clear of what covers the transcript's top.
+    func setIndicatorInset(top: CGFloat) {
+        scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: top, left: 0, bottom: 0, right: 0)
     }
 
     func setDocument(width: CGFloat, height: CGFloat) {
