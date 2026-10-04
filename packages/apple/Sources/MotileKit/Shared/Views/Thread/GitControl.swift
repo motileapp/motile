@@ -23,7 +23,7 @@ struct GitButton: View {
             .alert(store.pendingGit?.confirm.title ?? "", isPresented: confirming, presenting: store.pendingGit) { pending in
                 Button(pending.confirm.proceed) { store.confirmGit(pending, onNewBranch: false) }
                 Button(pending.confirm.branchOff) { store.confirmGit(pending, onNewBranch: true) }
-                Button("Abort", role: .cancel) {}
+                Button("Cancel", role: .cancel) {}
             } message: { pending in
                 Text(pending.confirm.description)
             }

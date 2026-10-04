@@ -125,7 +125,7 @@ pub async fn receive_upload<R: AsyncRead + Unpin>(
         Path::new(name).file_name().and_then(|name| name.to_str()).context("The attachment needs a file name.")?;
     let (folder, path) = match poster_of {
         Some(video) => {
-            let folder = upload_folder(attachments, video).context("That video isn't on the server.")?;
+            let folder = upload_folder(attachments, video).context("That video isn't on your server.")?;
             (folder.clone(), folder.join(POSTER))
         }
         None => {

@@ -61,7 +61,9 @@ pub async fn install_latest(
 
 async fn download(url: &str, to: &Path, progress: &mut impl FnMut(u64, Option<u64>)) -> anyhow::Result<()> {
     motile_protocol::tls::install();
-    let mut response = reqwest::get(url).await.context("The release couldn't be reached.")?;
+    let mut response = reqwest::get(url)
+        .await
+        .context("Your server couldn't reach the release. Check its connection and try again.")?;
     if !response.status().is_success() {
         bail!("The release couldn't be downloaded: {}.", response.status());
     }
@@ -69,7 +71,7 @@ async fn download(url: &str, to: &Path, progress: &mut impl FnMut(u64, Option<u6
     let mut file = tokio::fs::File::create(to).await?;
     let (mut received, mut reported) = (0u64, Instant::now());
     progress(0, total);
-    while let Some(chunk) = response.chunk().await.context("The download was cut off.")? {
+    while let Some(chunk) = response.chunk().await.context("The download was cut off. Try again.")? {
         file.write_all(&chunk).await?;
         received += chunk.len() as u64;
         if reported.elapsed() >= REPORT_EVERY {
@@ -101,10 +103,7 @@ async fn replace(program: &Path, new_program: &Path) -> anyhow::Result<()> {
         .status()
         .await;
     if !moved.is_ok_and(|status| status.success()) {
-        bail!(
-            "This server may not replace {}. Run the install command on the machine again to update it.",
-            program.display()
-        );
+        bail!("This server can't replace {}. Run the install command on its machine again.", program.display());
     }
     Ok(())
 }

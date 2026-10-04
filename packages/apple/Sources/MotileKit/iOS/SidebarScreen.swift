@@ -76,10 +76,7 @@ struct SidebarScreen: View {
                 deleting = nil
             }
         } message: {
-            let inWorktree = deleting.map { thread in store.project(thread.projectID)?.seen(from: thread).worktree != nil } ?? false
-            Text(inWorktree
-                ? "The thread and its transcript are removed from its server, and so is its worktree with what isn't committed there. Its branch stays."
-                : "The thread and its transcript are removed from its server. Files the agent changed stay as they are.")
+            Text(store.deletionNote(deleting))
         }
     }
 

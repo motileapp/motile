@@ -124,7 +124,7 @@ impl Connection {
         let (mut send, mut recv) = self.inner.open_bi().await?;
         write_frame(&mut send, request).await?;
         send.finish()?;
-        read_frame(&mut recv).await?.context("The server closed the stream without answering.")
+        read_frame(&mut recv).await?.context("Your server didn't answer. Try again.")
     }
 
     /// For `Subscribe` and `Open`: every message until the stream is dropped.
@@ -170,7 +170,7 @@ impl Connection {
         }
         send.finish()?;
         let media_id = shown.map(|(extension, _)| namer.id(&extension));
-        match read_frame(&mut recv).await?.context("The server closed the stream without answering.")? {
+        match read_frame(&mut recv).await?.context("Your server didn't answer. Try again.")? {
             Message::Uploaded { path } => Ok((path, media_id)),
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to an upload: {other:?}"),
@@ -183,12 +183,11 @@ impl Connection {
         let (mut send, mut recv) = self.inner.open_bi().await?;
         write_frame(&mut send, request).await?;
         send.finish()?;
-        let (kind, size, sent) =
-            match read_frame(&mut recv).await?.context("The server closed the stream without answering.")? {
-                Message::File { kind, size, sent } => (kind, size, sent),
-                Message::Error { message } => bail!("{message}"),
-                other => bail!("Unexpected answer to a file request: {other:?}"),
-            };
+        let (kind, size, sent) = match read_frame(&mut recv).await?.context("Your server didn't answer. Try again.")? {
+            Message::File { kind, size, sent } => (kind, size, sent),
+            Message::Error { message } => bail!("{message}"),
+            other => bail!("Unexpected answer to a file request: {other:?}"),
+        };
         if sent > MAX_FILE_BYTES {
             bail!("The file is too large to show.");
         }
@@ -203,7 +202,7 @@ impl Connection {
         let (mut send, mut recv) = self.inner.open_bi().await?;
         write_frame(&mut send, &Request::Media { id: id.to_string() }).await?;
         send.finish()?;
-        let size = match read_frame(&mut recv).await?.context("The server closed the stream without answering.")? {
+        let size = match read_frame(&mut recv).await?.context("Your server didn't answer. Try again.")? {
             Message::Media { size } => size,
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to a media request: {other:?}"),
@@ -214,7 +213,7 @@ impl Connection {
         let mut received = 0;
         while received < size {
             let wanted = buffer.len().min((size - received) as usize);
-            let read = recv.read(&mut buffer[..wanted]).await?.context("The download was cut off.")?;
+            let read = recv.read(&mut buffer[..wanted]).await?.context("The download was cut off. Try again.")?;
             output.write_all(&buffer[..read]).await?;
             received += read as u64;
             progress(received, size);
