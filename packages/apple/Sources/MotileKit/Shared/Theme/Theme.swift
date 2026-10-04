@@ -57,8 +57,8 @@ enum Theme {
     static let dangerBackground = dynamic(hex(0xdc2626, alpha: 0.07), hex(0xff5c5c, alpha: 0.1))
     static let warning = dynamic(hex(0xb45309), hex(0xf5b454))
     static let warningBackground = dynamic(hex(0xf59e0b, alpha: 0.1), hex(0xf59e0b, alpha: 0.12))
-    static let success = dynamic(hex(0x047857), hex(0x4ade80))
-    static let merged = dynamic(hex(0x8250df), hex(0xab7df8))
+    static let success = dynamic(hex(0x047857), hex(0x55c483))
+    static let merged = dynamic(hex(0x8250df), hex(0xba93fb))
     static let working = dynamic(hex(0x0284c7), hex(0x38bdf8))
     static let unread = dynamic(hex(0xea580c), hex(0xfb923c))
 
