@@ -46,7 +46,7 @@ struct ThreadPane: View {
                 GitNoticeView(notice: notice)
                     .padding(.top, 6)
                     .padding(.trailing, 14)
-                    .transition(.opacity)
+                    .transition(.opacity.combined(with: .offset(y: -6)))
             }
         }
         .animation(.easeOut(duration: 0.15), value: store.gitNotice)

@@ -211,48 +211,77 @@ struct GitNoticeView: View {
     @Environment(AppStore.self) private var store
     let notice: GitNotice
 
-    private static let radius: CGFloat = 10
-    private static let padding: CGFloat = 12
+    private static let radius: CGFloat = 14
+    private static let padding: CGFloat = 14
     private static let closeSize: CGFloat = 24
     /// The close button is this far from the top and the right, and its corners follow the notice's.
-    private static let closeMargin: CGFloat = 5
+    private static let closeMargin: CGFloat = 9
+    private static let titleHeight: CGFloat = scaled(16)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(notice.title)
-                .font(.ui(size: 12.5, weight: .semibold))
-                .foregroundStyle(Color.themeText)
-                .padding(.trailing, Self.closeMargin + Self.closeSize + 4 - Self.padding)
-            if let description = notice.description {
-                // The end is where a hook says what it found.
-                Text(description)
-                    .font(.ui(size: 12, design: notice.failed ? .monospaced : .default))
-                    .foregroundStyle(notice.failed ? Color.themeDanger : Color.themeSecondary)
-                    .lineLimit(notice.failed ? 8 : 2)
-                    .truncationMode(notice.failed ? .head : .tail)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+        let url = notice.url.flatMap { URL(string: $0) }
+        HStack(alignment: .top, spacing: 10) {
+            Image(notice.failed ? .circleAlert : .circleCheck, size: 15)
+                .foregroundStyle(notice.failed ? Color.themeDanger : Color.themeSuccess)
+                .frame(height: Self.titleHeight)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(notice.title)
+                    .font(.ui(size: 13, weight: .medium))
+                    .foregroundStyle(Color.themeText)
+                    .frame(minHeight: Self.titleHeight)
+                if let description = notice.description {
+                    // The end is where a hook says what it found.
+                    Text(description)
+                        .font(notice.failed ? .ui(size: 11.5, design: .monospaced) : .ui(size: 12.5))
+                        .foregroundStyle(Color.themeSecondary)
+                        .lineLimit(notice.failed ? 8 : 2)
+                        .truncationMode(notice.failed ? .head : .tail)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if url != nil || notice.nextLabel != nil {
+                    HStack(spacing: 8) {
+                        if let url {
+                            action("View PR", prominent: notice.nextLabel == nil) { Platform.open(url) }
+                        }
+                        if let next = notice.nextLabel {
+                            action(next, prominent: true) { store.runNextGit() }
+                        }
+                    }
+                    .padding(.top, 6)
+                }
             }
-            if let url = notice.url.flatMap({ URL(string: $0) }) {
-                LinkButton("View PR") { Platform.open(url) }
-            }
-            if let next = notice.nextLabel {
-                LinkButton(next) { store.runNextGit() }
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(Self.padding)
-        .frame(maxWidth: 300, alignment: .leading)
+        .padding(.vertical, Self.padding)
+        .padding(.leading, Self.padding)
+        .padding(.trailing, Self.closeMargin + Self.closeSize + 4)
+        .frame(maxWidth: Platform.scale > 1 ? 440 : 320)
         .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
-            IconOnlyButton(symbol: .x, help: "Close", size: Self.closeSize, symbolSize: 11, radius: Self.radius - Self.closeMargin, faded: true) {
+            IconOnlyButton(symbol: .x, help: "Close", size: Self.closeSize, symbolSize: 12, radius: Self.radius - Self.closeMargin, faded: true) {
                 store.dismissGitNotice()
             }
             .padding(Self.closeMargin)
         }
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        .shadow(color: .black.opacity(0.05), radius: 1.5, y: 1)
+        .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
+    }
+
+    private func action(_ title: String, prominent: Bool, run: @escaping () -> Void) -> some View {
+        Button(action: run) {
+            Text(title)
+                .font(.ui(size: 12, weight: .medium))
+                .foregroundStyle(prominent ? Color.white : Color.themeText)
+                .padding(.horizontal, 10)
+                .frame(height: scaled(26))
+                .background(prominent ? Color.themePrimary : Color.themeSelected, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(DimButtonStyle())
     }
 }
 
