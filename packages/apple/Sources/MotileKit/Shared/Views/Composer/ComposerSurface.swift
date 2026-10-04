@@ -11,10 +11,10 @@ extension View {
             .overlay { shape.stroke(Color.themeBorder, lineWidth: 1) }
         #else
         if #available(iOS 26.0, *) {
-            background(Color.themeGlassTint, in: shape)
+            background(Color.themeComposer.opacity(0.8), in: shape)
                 .glassEffect(.regular, in: shape)
         } else {
-            background(Color.themeGlassTint, in: shape)
+            background(Color.themeComposer.opacity(0.8), in: shape)
                 .background(.regularMaterial, in: shape)
                 .overlay { shape.stroke(Color.themeStrongBorder, lineWidth: 1) }
         }

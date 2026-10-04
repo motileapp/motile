@@ -28,8 +28,6 @@ enum Theme {
     static let field = dynamic(hex(0xffffff), white(0.04))
     static let bubble = dynamic(hex(0xeceef4), hex(0x15171d))
     static let composer = dynamic(hex(0xffffff), hex(0x0e0f14))
-    /// Over the glass of what floats on the transcript, so that text on it stays readable.
-    static let glassTint = dynamic(hex(0xffffff, alpha: 0.6), hex(0x0c0e12, alpha: 0.8))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
     static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
     /// Borders are solid, so that where two meet they do not darken.
@@ -122,7 +120,6 @@ extension Color {
     static let themeField = Color(platform: Theme.field)
     static let themeBubble = Color(platform: Theme.bubble)
     static let themeComposer = Color(platform: Theme.composer)
-    static let themeGlassTint = Color(platform: Theme.glassTint)
     static let themeHover = Color(platform: Theme.hover)
     static let themeSelected = Color(platform: Theme.selected)
     static let themeBorder = Color(platform: Theme.border)
