@@ -118,7 +118,7 @@ struct ThreadScreen: View {
             }
         }
         .lineLimit(1)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(idealWidth: 10000, maxWidth: .infinity, alignment: .leading)
     }
 
     private var projectLine: String? {
