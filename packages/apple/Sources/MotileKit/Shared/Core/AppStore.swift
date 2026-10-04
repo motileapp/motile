@@ -381,8 +381,12 @@ final class AppStore {
     private func apply(servers: [Server]) {
         self.servers = servers
         let known = Set(servers.map(\.id))
-        projects.removeAll { !known.contains($0.serverID) }
-        threads = threads.filter { known.contains($0.value.serverID) }
+        if projects.contains(where: { !known.contains($0.serverID) }) {
+            projects.removeAll { !known.contains($0.serverID) }
+        }
+        if threads.values.contains(where: { !known.contains($0.serverID) }) {
+            threads = threads.filter { known.contains($0.value.serverID) }
+        }
         // A server that is back with another version has finished updating.
         for server in servers where server.state == .connected {
             guard let update = serverUpdates[server.id], update.restarting, server.version != update.from else { continue }
@@ -407,6 +411,7 @@ final class AppStore {
 
     private func upsert(_ thread: ThreadInfo) {
         let before = threads[thread.id]
+        guard before != thread else { return }
         threads[thread.id] = thread
         markOpenThreadSeen()
         guard selection == .thread(thread.id), let before else { return }
@@ -428,9 +433,10 @@ final class AppStore {
     private func apply(projects new: [Project], serverID: String) {
         let git = gitProject?.git
         defer { if gitProject?.git != git { workspaceVersion += 1 } }
-        projects.removeAll { $0.serverID == serverID }
-        projects.append(contentsOf: new)
-        projects.sort { $0.createdAt < $1.createdAt }
+        var updated = projects.filter { $0.serverID != serverID } + new
+        updated.sort { $0.createdAt < $1.createdAt }
+        // Every row of the sidebar looks at the projects, so they only change when they did.
+        if updated != projects { projects = updated }
         ImageFiles.shared.warm(new.compactMap(\.iconPath))
         ensureDraftProject()
         openAwaitedProject()
@@ -479,6 +485,10 @@ final class AppStore {
 
     func project(_ id: String?) -> Project? {
         projects.first { $0.id == id }
+    }
+
+    var projectsByID: [String: Project] {
+        Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// The projects, the one a thread was last started in first. A project without threads

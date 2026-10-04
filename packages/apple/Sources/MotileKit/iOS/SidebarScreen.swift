@@ -22,6 +22,8 @@ struct SidebarScreen: View {
     var body: some View {
         let active = store.activeThreads.filter { store.matches($0, search: search) }
         let done = store.doneThreads.filter { store.matches($0, search: search) }
+        let projects = store.projectsByID
+        let selection = store.selection
         VStack(spacing: 0) {
             header
             SearchField(text: $search)
@@ -31,13 +33,17 @@ struct SidebarScreen: View {
                 LazyVStack(spacing: 0) {
                     DraftRows(search: search, open: open)
                     ForEach(active) { thread in
-                        ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 }, open: open)
-                            .rowSwipe(
-                                "checkmark", "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
-                                leaves: !thread.busy, isOpen: swipe(thread.id)
-                            ) {
-                                markDone(thread)
-                            }
+                        ThreadRow(
+                            thread: thread, project: projects[thread.projectID]?.seen(from: thread),
+                            selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 }, open: open
+                        )
+                        .equatable()
+                        .rowSwipe(
+                            "checkmark", "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
+                            leaves: !thread.busy, isOpen: swipe(thread.id)
+                        ) {
+                            markDone(thread)
+                        }
                     }
                     if active.isEmpty {
                         Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
@@ -48,7 +54,7 @@ struct SidebarScreen: View {
                             .padding(.vertical, 10)
                     }
                     if !done.isEmpty {
-                        doneShelf(done)
+                        doneShelf(done, projects: projects, selection: selection)
                     }
                 }
                 .padding(.bottom, 12)
@@ -118,7 +124,7 @@ struct SidebarScreen: View {
 
     /// The threads marked done: a line that opens into their list, under the active ones.
     @ViewBuilder
-    private func doneShelf(_ done: [ThreadInfo]) -> some View {
+    private func doneShelf(_ done: [ThreadInfo], projects: [String: Project], selection: Selection) -> some View {
         let expanded = !search.isEmpty || doneExpanded
         Button {
             doneExpanded.toggle()
@@ -133,10 +139,10 @@ struct SidebarScreen: View {
                 Spacer()
                 Text("\(done.count)")
                     .font(.ui(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.themeTertiary)
                     .monospacedDigit()
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.themeSecondary)
             .padding(.horizontal, sidebarRowInset + 8)
             .frame(height: 44)
             .contentShape(Rectangle())
@@ -145,11 +151,15 @@ struct SidebarScreen: View {
         .padding(.top, 8)
         if expanded {
             ForEach(done, id: \.doneRowID) { thread in
-                DoneRow(thread: thread, rename: beginRename, delete: { deleting = $0 }, open: open)
-                    .frame(height: 44)
-                    .rowSwipe("arrow.uturn.backward", "Mark Undone", tint: .themeSecondary, size: 28, isOpen: swipe(thread.doneRowID)) {
-                        store.setDone([thread.id], done: false)
-                    }
+                DoneRow(
+                    thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
+                    rename: beginRename, delete: { deleting = $0 }, open: open
+                )
+                .equatable()
+                .frame(height: 44)
+                .rowSwipe("arrow.uturn.backward", "Mark Undone", tint: .themeSecondary, size: 28, isOpen: swipe(thread.doneRowID)) {
+                    store.setDone([thread.id], done: false)
+                }
             }
         }
     }

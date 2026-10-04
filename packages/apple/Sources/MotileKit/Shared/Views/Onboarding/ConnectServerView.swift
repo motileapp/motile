@@ -20,7 +20,7 @@ struct ConnectServerView: View {
             Text(isFirst ? "Connect your first server" : "Add a server")
                 .font(.ui(size: 24, weight: .semibold))
                 .padding(.top, 18)
-            Text("Run this on the Linux machine or the Mac where your agents should work. It installs Motile, links the machine to your account and keeps it running.")
+            Text("Run this on the Linux machine or Mac that will run your agents.")
                 .font(.ui(size: 14))
                 .foregroundStyle(Color.themeSecondary)
                 .multilineTextAlignment(.center)
@@ -34,13 +34,13 @@ struct ConnectServerView: View {
 
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text("Waiting for your server to connect…")
+                Text("Waiting for your server…")
                     .font(.ui(size: 13))
                     .foregroundStyle(Color.themeSecondary)
             }
             .padding(.top, 22)
 
-            Text("The command works for one machine, for an hour. If neither Claude Code nor Codex is installed there, the installer offers to install them.")
+            Text("The command works once, for an hour.")
                 .font(.ui(size: 12))
                 .foregroundStyle(Color.themeTertiary)
                 .multilineTextAlignment(.center)
@@ -69,12 +69,15 @@ struct ConnectServerView: View {
         .onDisappear { store.stopAddingServer() }
     }
 
+    private static let buttonSize = scaled(28)
+    private static let symbolSize: CGFloat = 14
+
     private var commandBox: some View {
         #if os(macOS)
-        let layout = AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+        let layout = AnyLayout(HStackLayout(alignment: .top, spacing: 8))
         #else
         // A phone has no room for the buttons beside the command, and can send it to the machine.
-        let layout = AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+        let layout = AnyLayout(VStackLayout(alignment: .trailing, spacing: 8))
         #endif
         return layout {
             Text(store.enrollToken?.command ?? "Preparing the command…")
@@ -82,31 +85,31 @@ struct ConnectServerView: View {
                 .foregroundStyle(store.enrollToken == nil ? Color.themeTertiary : Color.themeText)
                 .textSelection(.enabled)
                 .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 10) {
-                Button {
+            HStack(spacing: 4) {
+                #if os(iOS)
+                ShareLink(item: store.enrollToken?.command ?? "") {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.ui(size: Self.symbolSize, weight: .medium))
+                        .frame(width: Self.buttonSize, height: Self.buttonSize)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.highlight(radius: 6))
+                .accessibilityLabel("Share the command")
+                #endif
+                IconOnlyButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy the command", size: Self.buttonSize, symbolSize: Self.symbolSize) {
                     guard let command = store.enrollToken?.command else { return }
                     Platform.copy(command)
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
-                } label: {
-                    Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .font(.ui(size: 12, weight: .medium))
                 }
-                #if os(iOS)
-                ShareLink(item: store.enrollToken?.command ?? "") {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .font(.ui(size: 12, weight: .medium))
-                }
-                #endif
             }
-            #if os(iOS)
-            .buttonStyle(.bordered)
-            #endif
-            .controlSize(.small)
+            .foregroundStyle(Color.themeSecondary)
             .disabled(store.enrollToken == nil)
         }
-        .padding(14)
+        .padding(.leading, 14)
+        .padding([.vertical, .trailing], 10)
         .background(Color(platform: Theme.codeBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.themeBorder))
     }

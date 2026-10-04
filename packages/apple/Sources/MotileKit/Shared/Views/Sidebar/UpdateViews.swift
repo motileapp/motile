@@ -25,7 +25,7 @@ struct AppUpdateRow: View {
                 line("Downloading Motile \(version)", symbol: "arrow.down.circle") {
                     Text("\(Int(fraction * 100))%")
                         .font(.ui(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.themeTertiary)
                         .monospacedDigit()
                 }
                 ProgressView(value: fraction)
@@ -48,7 +48,7 @@ struct AppUpdateRow: View {
                 }
                 Text(message)
                     .font(.ui(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.themeSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -62,7 +62,7 @@ struct AppUpdateRow: View {
         HStack(spacing: 7) {
             Image(systemName: symbol)
                 .font(.ui(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
             Text(text)
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)
@@ -87,7 +87,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
             HStack(spacing: 6) {
                 Text(progress(of: update))
                     .font(.ui(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.themeSecondary)
                     .monospacedDigit()
                 ProgressView().controlSize(.small)
             }

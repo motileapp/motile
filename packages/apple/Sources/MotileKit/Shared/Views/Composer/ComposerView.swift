@@ -73,10 +73,6 @@ struct ComposerView: View {
             #endif
         }
         .glassSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-                .strokeBorder(Color.themeStrongBorder, lineWidth: 1)
-        )
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
     }
 

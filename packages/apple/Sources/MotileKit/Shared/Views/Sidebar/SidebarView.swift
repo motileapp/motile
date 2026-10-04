@@ -6,6 +6,8 @@ private let rowGap = 2.0
 let sidebarRowInset: CGFloat = 10
 private let rowMargin = EdgeInsets(top: rowGap / 2, leading: sidebarRowInset, bottom: rowGap / 2, trailing: sidebarRowInset)
 let doneRowHeight = Double(scaled(30))
+/// One clock for every "5m" in the sidebar, so that they all change at once.
+private let agoClock = PeriodicTimelineSchedule(from: .now, by: 30)
 
 #if os(macOS)
 /// The drafts, then every active thread on every server in one list, with the ones marked done on
@@ -23,13 +25,15 @@ struct SidebarView: View {
     var body: some View {
         let active = store.activeThreads.filter(matches)
         let done = store.doneThreads.filter(matches)
+        let projects = store.projectsByID
+        let selection = store.selection
         VStack(spacing: 0) {
             SearchField(text: $search)
                 .padding(.horizontal, 10)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
             GeometryReader { list in
-                threads(active: active, done: done, maxDoneHeight: list.size.height * 0.6)
+                threads(active: active, done: done, projects: projects, selection: selection, maxDoneHeight: list.size.height * 0.6)
             }
         }
         .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -53,13 +57,19 @@ struct SidebarView: View {
         }
     }
 
-    private func threads(active: [ThreadInfo], done: [ThreadInfo], maxDoneHeight: Double) -> some View {
+    private func threads(
+        active: [ThreadInfo], done: [ThreadInfo], projects: [String: Project], selection: Selection, maxDoneHeight: Double
+    ) -> some View {
         VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     DraftRows(search: search) { store.select($0) }
                     ForEach(active) { thread in
-                        ThreadRow(thread: thread, rename: beginRename, delete: { deleting = $0 }) { store.select($0) }
+                        ThreadRow(
+                            thread: thread, project: projects[thread.projectID]?.seen(from: thread),
+                            selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 }
+                        ) { store.select($0) }
+                        .equatable()
                     }
                     if active.isEmpty {
                         Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
@@ -79,6 +89,8 @@ struct SidebarView: View {
             if !done.isEmpty {
                 DoneShelf(
                     threads: done,
+                    projects: projects,
+                    selection: selection,
                     maxHeight: maxDoneHeight,
                     expanded: search.isEmpty ? $doneExpanded : .constant(true),
                     rename: beginRename,
@@ -172,7 +184,7 @@ private struct MarkDoneButton: View {
                     .font(.ui(size: 11, weight: .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(hovering ? .primary : .secondary)
+            .foregroundStyle(hovering ? Color.themeText : Color.themeSecondary)
             .padding(.horizontal, 5)
             .frame(height: 22)
             .contentShape(Rectangle())
@@ -186,10 +198,14 @@ private struct MarkDoneButton: View {
 #endif
 
 /// An active thread: its project and what it is doing on the first line, its title on the second,
-/// its project's branch, its server and its agent on the third.
-struct ThreadRow: View {
+/// its project's branch, its server and its agent on the third. It is redrawn only when what it
+/// shows changes.
+struct ThreadRow: View, Equatable {
     @Environment(AppStore.self) private var store
     let thread: ThreadInfo
+    /// Its project as the thread works in it.
+    let project: Project?
+    let selected: Bool
     let rename: (ThreadInfo) -> Void
     let delete: (ThreadInfo) -> Void
     /// Opens what the row stands for. The sidebar it is in may have more to do then.
@@ -199,12 +215,15 @@ struct ThreadRow: View {
     private static let sidePadding: CGFloat = 8
     private static let topPadding: CGFloat = 3
 
+    static func == (one: ThreadRow, other: ThreadRow) -> Bool {
+        one.thread == other.thread && one.project == other.project && one.selected == other.selected
+    }
+
     var body: some View {
-        let project = store.project(thread.projectID)?.seen(from: thread)
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: 14)
-                Text(projectName)
+                Text(project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent)
                     .font(.ui(size: 11, weight: .medium))
                     .lineLimit(1)
                     .layoutPriority(1)
@@ -220,7 +239,7 @@ struct ThreadRow: View {
                 ThreadStatus(thread: thread)
                 #endif
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.themeSecondary)
             .frame(height: scaled(22))
 
             Text(thread.title)
@@ -235,12 +254,10 @@ struct ThreadRow: View {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 6)
-                if store.servers.count > 1, let server = store.server(thread.serverID) {
-                    ServerLabel(server: server)
-                }
+                ThreadServerLabel(serverID: thread.serverID)
                 AgentIcon(agent: thread.agent, size: 12)
             }
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(Color.themeTertiary)
             .frame(height: scaled(16))
         }
         .padding(.horizontal, Self.sidePadding)
@@ -249,13 +266,22 @@ struct ThreadRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
         .contentShape(Rectangle())
-        .button(.highlight(radius: 8, selected: store.selection == .thread(thread.id), inset: rowMargin)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: 8, selected: selected, inset: rowMargin)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
     }
+}
 
-    private var projectName: String {
-        store.project(thread.projectID)?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
+/// The server a thread is on, when there is more than one. It is its own view so that news of a
+/// server only redraws this.
+private struct ThreadServerLabel: View {
+    @Environment(AppStore.self) private var store
+    let serverID: String
+
+    var body: some View {
+        if store.servers.count > 1, let server = store.server(serverID) {
+            ServerLabel(server: server)
+        }
     }
 }
 
@@ -321,7 +347,7 @@ private struct DraftRow: View {
                     .foregroundStyle(Color.themeSecondary)
                 }
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.themeSecondary)
             .frame(height: scaled(22))
 
             Text(listed.preview)
@@ -368,7 +394,7 @@ struct UndoRow: View {
                             .lineLimit(1)
                     }
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 18)
                 .frame(height: doneRowHeight)
                 .padding(.vertical, 4)
@@ -388,6 +414,8 @@ private struct DoneShelf: View {
 
     @Environment(AppStore.self) private var store
     let threads: [ThreadInfo]
+    let projects: [String: Project]
+    let selection: Selection
     let maxHeight: Double
     @Binding var expanded: Bool
     let rename: (ThreadInfo) -> Void
@@ -418,10 +446,10 @@ private struct DoneShelf: View {
                     Spacer()
                     Text("\(threads.count)")
                         .font(.ui(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.themeTertiary)
                         .monospacedDigit()
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 18)
                 .frame(height: Self.rowHeight)
                 .padding(.top, 4)
@@ -434,8 +462,12 @@ private struct DoneShelf: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(threads) { thread in
-                            DoneRow(thread: thread, rename: rename, delete: delete) { store.select($0) }
-                                .frame(height: Self.rowHeight + rowGap)
+                            DoneRow(
+                                thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
+                                rename: rename, delete: delete
+                            ) { store.select($0) }
+                            .equatable()
+                            .frame(height: Self.rowHeight + rowGap)
                         }
                     }
                     .padding(.bottom, 4 - rowGap / 2)
@@ -476,10 +508,12 @@ private struct DoneShelf: View {
 
 #endif
 
-/// A thread that is done: one quiet line.
-struct DoneRow: View {
+/// A thread that is done: one quiet line. It is redrawn only when what it shows changes.
+struct DoneRow: View, Equatable {
     @Environment(AppStore.self) private var store
     let thread: ThreadInfo
+    let project: Project?
+    let selected: Bool
     let rename: (ThreadInfo) -> Void
     let delete: (ThreadInfo) -> Void
     var open: (Selection) -> Void = { _ in }
@@ -488,25 +522,29 @@ struct DoneRow: View {
     private static let sidePadding = 8.0
     private static let buttonSize = 22.0
 
+    static func == (one: DoneRow, other: DoneRow) -> Bool {
+        one.thread == other.thread && one.project?.iconPath == other.project?.iconPath && one.selected == other.selected
+    }
+
     var body: some View {
         HStack(spacing: 7) {
-            ProjectIcon(project: store.project(thread.projectID), size: 14)
+            ProjectIcon(project: project, size: 14)
             Text(thread.title)
                 .font(.ui(size: 13))
                 .lineLimit(1)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
             Spacer(minLength: 6)
             if hovering {
                 IconOnlyButton(symbol: "arrow.uturn.backward", help: "Mark undone", size: Self.buttonSize, symbolSize: 12) {
                     store.setDone([thread.id], done: false)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.trailing, (doneRowHeight - Self.buttonSize) / 2 - Self.sidePadding)
             } else {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
+                TimelineView(agoClock) { context in
                     Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: context.date.timeIntervalSince1970))
                         .font(.ui(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.themeTertiary)
                 }
             }
         }
@@ -514,7 +552,7 @@ struct DoneRow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
         .contentShape(Rectangle())
-        .button(.highlight(radius: 8, selected: store.selection == .thread(thread.id), inset: rowMargin)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: 8, selected: selected, inset: rowMargin)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
     }
@@ -553,10 +591,10 @@ struct ThreadStatus: View {
                     .frame(width: 6, height: 6)
             }
         } else {
-            TimelineView(.periodic(from: .now, by: 30)) { context in
+            TimelineView(agoClock) { context in
                 Text(Time.ago(thread.updatedAt, now: context.date.timeIntervalSince1970))
                     .font(.ui(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.themeTertiary)
             }
         }
     }
@@ -593,7 +631,7 @@ struct ServerLine: View {
             ServerUpdateStatus(server: server) {
                 Text(detail)
                     .font(.ui(size: 11))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.themeTertiary)
                     .monospacedDigit()
             }
         }
@@ -650,7 +688,7 @@ private struct SidebarFooter: View {
                         .truncationMode(.middle)
                     Spacer(minLength: 0)
                 }
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 8)
                 .frame(height: 30)
                 .padding(Self.accountMargin)
