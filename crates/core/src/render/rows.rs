@@ -52,6 +52,7 @@ pub struct Attached {
 pub enum RowKind {
     User {
         text: String,
+        links: Vec<markdown::Link>,
         attachments: Vec<Attached>,
         at: f64,
     },
@@ -858,7 +859,8 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
     match &item.kind {
         ItemKind::User { text, attachments } => {
             let attachments = attached(attachments, &item.media);
-            vec![row(0, RowKind::User { text: text.clone(), attachments, at: item.created_at })]
+            let links = markdown::links_in(text);
+            vec![row(0, RowKind::User { text: text.clone(), links, attachments, at: item.created_at })]
         }
         ItemKind::Assistant { text } => render_markdown(item, text, streaming),
         ItemKind::Thinking { text } => vec![row(0, RowKind::Thinking { text: text.clone() })],
@@ -1324,6 +1326,17 @@ mod tests {
                 {"id": "a/1", "item": "a", "kind": "code", "language": "sh", "code": "ls", "spans": null},
             ])
         );
+    }
+
+    #[test]
+    fn a_web_address_in_a_user_message_is_a_link() {
+        let message =
+            item("u", 0, ItemKind::User { text: "Open https://motile.app now".into(), attachments: Vec::new() });
+        let mut transcript = Transcript::new("");
+        transcript.upsert(message, false);
+
+        let RowKind::User { links, .. } = &transcript.rows()[0].kind else { panic!("expected a user row") };
+        assert_eq!(links, &[markdown::Link { start: 5, len: 18, url: "https://motile.app".into() }]);
     }
 
     fn call(id: &str, seq: u64, name: &str, input: Value, status: ToolStatus) -> Item {

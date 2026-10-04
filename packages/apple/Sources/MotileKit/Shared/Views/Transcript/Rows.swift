@@ -59,7 +59,7 @@ final class RowModel {
         nested = json.bool("nested")
         switch json.string("kind") {
         case "user":
-            kind = .user(text: Typesetter.plain(json.string("text"), color: Theme.text), attachments: json.objects("attachments").map(AttachedFile.init(json:)), at: json.double("at"))
+            kind = .user(text: Typesetter.message(json), attachments: json.objects("attachments").map(AttachedFile.init(json:)), at: json.double("at"))
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
             kind = .prose(Typesetter.prose(json), above: Typesetter.spaceAbove(json), uncoloured: uncoloured)
@@ -437,6 +437,20 @@ enum Typesetter {
         )
     }
 
+    static func message(_ json: JSON) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: plain(json.string("text"), color: Theme.text))
+        link(result, json)
+        return result
+    }
+
+    private static func link(_ text: NSMutableAttributedString, _ json: JSON) {
+        for link in json.objects("links") {
+            let range = NSRange(location: link.int("start"), length: link.int("len"))
+            guard range.location >= 0, range.length > 0, NSMaxRange(range) <= text.length, let url = URL(string: link.string("url")) else { continue }
+            text.addAttributes([.link: url, .foregroundColor: Theme.link], range: range)
+        }
+    }
+
     static func mono(_ text: String, color: PlatformColor) -> NSAttributedString {
         NSAttributedString(string: text, attributes: [.font: Theme.smallMono, .foregroundColor: color, .paragraphStyle: monoStyle])
     }
@@ -596,10 +610,7 @@ enum Typesetter {
             }
         }
 
-        for link in json.objects("links") {
-            guard let range = clamp(link.int("start"), link.int("len")), let url = URL(string: link.string("url")) else { continue }
-            result.addAttributes([.link: url, .foregroundColor: Theme.link], range: range)
-        }
+        link(result, json)
         return tables.finished(result, paras: paras)
     }
 
