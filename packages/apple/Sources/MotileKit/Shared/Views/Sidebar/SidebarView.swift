@@ -224,7 +224,7 @@ struct ThreadRow: View, Equatable {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: 14)
                 Text(project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent)
@@ -245,10 +245,12 @@ struct ThreadRow: View, Equatable {
             }
             .foregroundStyle(Color.themeSecondary)
             .frame(height: scaled(22))
+            .padding(.bottom, 2)
 
             Text(thread.title)
                 .font(.ui(size: 13, weight: .medium))
                 .lineLimit(1)
+                .padding(.bottom, 3)
 
             HStack(spacing: 6) {
                 if let branch = project?.branch {
