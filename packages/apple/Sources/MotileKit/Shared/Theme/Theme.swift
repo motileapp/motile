@@ -22,12 +22,12 @@ enum Theme {
     }
 
     // Surfaces
-    static let background = dynamic(hex(0xf8f9fc), hex(0x08090d))
+    static let background = dynamic(hex(0xf8f9fc), hex(0x0a0b0f))
     static let raised = dynamic(hex(0xffffff), hex(0x15171d))
     static let sheet = dynamic(hex(0xf8f9fc), hex(0x0e1015))
     static let field = dynamic(hex(0xffffff), white(0.04))
     static let bubble = dynamic(hex(0xeceef4), hex(0x15171d))
-    static let composer = dynamic(hex(0xffffff), hex(0x0c0e12))
+    static let composer = dynamic(hex(0xffffff), hex(0x0e0f14))
     /// Over the glass of what floats on the transcript, so that text on it stays readable.
     static let glassTint = dynamic(hex(0xffffff, alpha: 0.6), hex(0x0c0e12, alpha: 0.8))
     static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))

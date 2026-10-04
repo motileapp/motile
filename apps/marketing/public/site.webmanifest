@@ -4,8 +4,8 @@
   "description": "The command center for coding agents",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#08090d",
-  "theme_color": "#08090d",
+  "background_color": "#0a0b0f",
+  "theme_color": "#0a0b0f",
   "icons": [
     {
       "src": "/icon-192.png",
