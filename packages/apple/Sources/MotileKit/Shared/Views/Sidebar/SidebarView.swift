@@ -445,6 +445,7 @@ private struct DoneShelf: View {
                 }
                 .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
             }
+            Divider()
         }
     }
 
