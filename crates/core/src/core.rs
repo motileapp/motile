@@ -427,12 +427,7 @@ impl Core {
     }
 
     fn complete_sign_in(&mut self, id: u64, url: &str) -> anyhow::Result<()> {
-        let query = url.split_once('?').map(|(_, query)| query).unwrap_or_default();
-        let parameters: HashMap<String, String> = query
-            .split('&')
-            .filter_map(|pair| pair.split_once('='))
-            .map(|(name, value)| (name.to_string(), percent_decode(value)))
-            .collect();
+        let parameters = callback_parameters(url);
         let Some((verifier, state)) = self.pending_sign_in.take() else {
             bail!("No sign-in is in progress.");
         };
@@ -1579,6 +1574,18 @@ fn merge(splices: Vec<Splice>) -> Vec<Splice> {
     merged
 }
 
+/// What the address a sign-in came back to says. A browser carries the fragment of the page it
+/// was sent on from over to that address, and it is no part of the answer.
+fn callback_parameters(url: &str) -> HashMap<String, String> {
+    let without_fragment = url.split_once('#').map_or(url, |(address, _)| address);
+    let query = without_fragment.split_once('?').map(|(_, query)| query).unwrap_or_default();
+    query
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(name, value)| (name.to_string(), percent_decode(value)))
+        .collect()
+}
+
 fn percent_decode(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
@@ -1602,6 +1609,13 @@ fn percent_decode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_fragment_on_the_sign_in_callback_is_no_part_of_its_answer() {
+        let parameters = callback_parameters("motile://auth?code=abc&state=one%20two#identifier");
+        assert_eq!(parameters.get("code").map(String::as_str), Some("abc"));
+        assert_eq!(parameters.get("state").map(String::as_str), Some("one two"));
+    }
 
     #[test]
     fn query_values_are_decoded() {
