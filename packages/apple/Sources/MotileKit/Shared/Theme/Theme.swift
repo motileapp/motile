@@ -45,7 +45,7 @@ enum Theme {
     static let prose = dynamic(hex(0x383b45), hex(0xa8abb6))
     static let secondary = dynamic(hex(0x6b6f7c), hex(0x9a9eab))
     static let tertiary = dynamic(hex(0x9a9eab), hex(0x646875))
-    static let shimmer = dynamic(hex(0x22242b), hex(0xffffff))
+    static let shimmer = dynamic(hex(0x000000), hex(0xffffff))
 
     // Meaning
     static let primary = dynamic(hex(0x2a5bd7), hex(0x4f7cff))
