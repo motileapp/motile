@@ -123,7 +123,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
             let frame = box.frame(of: glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: self)
                 .offsetBy(dx: origin.x, dy: origin.y)
                 .insetBy(dx: 0.5, dy: 0.5)
-            Theme.codeBackground.setFill()
+            Theme.bubble.setFill()
             RoundedBox.fill(frame, radius: 10)
             Theme.border.setStroke()
             RoundedBox.stroke(frame, radius: 10)

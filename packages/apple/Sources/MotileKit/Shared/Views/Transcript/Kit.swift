@@ -84,7 +84,7 @@ final class PictureView: LayerView {
     override func paint(_ layer: CALayer) {
         layer.contents = picture
         layer.contentsGravity = fills ? .resizeAspectFill : .resizeAspect
-        layer.backgroundColor = resolved(Theme.codeBackground)
+        layer.backgroundColor = resolved(Theme.bubble)
         layer.cornerRadius = Self.radius
         layer.cornerCurve = .continuous
         layer.masksToBounds = true

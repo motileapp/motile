@@ -346,7 +346,7 @@ final class CodeSheet {
     func drawHeading(of index: Int, in rect: CGRect, lineAbove: Bool) {
         guard let document, index < document.files.count else { return }
         let file = document.files[index]
-        Theme.codeBackground.setFill()
+        Theme.bubble.setFill()
         rect.fillCurrent()
         Theme.border.setFill()
         if lineAbove { CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: 1).fillCurrent() }

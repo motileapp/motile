@@ -451,7 +451,7 @@ final class CodeRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.codeBackground
+        surface.fill = Theme.bubble
         surface.stroke = Theme.border
         surface.radius = 10
         addSubview(surface)
@@ -550,7 +550,7 @@ final class ToolRowView: RowView {
         header.addSubview(chevron)
         header.addSubview(elapsed)
 
-        detailSurface.fill = Theme.codeBackground
+        detailSurface.fill = Theme.bubble
         detailSurface.radius = 8
         detailSurface.isHidden = true
         addSubview(detailSurface)
@@ -758,7 +758,7 @@ final class ChangesRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.codeBackground
+        surface.fill = Theme.bubble
         surface.stroke = Theme.border
         surface.radius = Self.radius
         addSubview(surface)

@@ -27,7 +27,6 @@ enum Theme {
     static let sheet = dynamic(hex(0xf8f9fc), hex(0x0e1015))
     static let field = dynamic(hex(0xffffff), white(0.04))
     static let bubble = dynamic(hex(0xeceef4), hex(0x15171d))
-    static let codeBackground = dynamic(hex(0xf1f3f8), hex(0x0c0e12))
     static let composer = dynamic(hex(0xffffff), hex(0x0c0e12))
     /// Over the glass of what floats on the transcript, so that text on it stays readable.
     static let glassTint = dynamic(hex(0xffffff, alpha: 0.6), hex(0x0c0e12, alpha: 0.8))
