@@ -168,6 +168,7 @@ struct MainView: View {
     /// How far the top bar's content starts from the window's left edge while the sidebar is
     /// hidden: past the window's buttons and the ones beside them.
     private static let pastWindowButtons = 240.0
+    private static let panelButtonsInset = 10.0
 
     @Environment(AppStore.self) private var store
     @AppStorage(MainView.sidebarHiddenKey) private var sidebarHidden = false
@@ -226,6 +227,13 @@ struct MainView: View {
                     panel(width: shownPanel, widths: panelWidths, topInset: window.safeAreaInsets.top)
                 }
             }
+            .frame(width: window.size.width, alignment: .leading)
+            .overlay(alignment: .topTrailing) {
+                panelButtons
+                    .frame(height: window.safeAreaInsets.top)
+                    .offset(y: -window.safeAreaInsets.top)
+                    .padding(.trailing, Self.panelButtonsInset)
+            }
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     HStack(spacing: 0) {
@@ -238,26 +246,6 @@ struct MainView: View {
                     }
                     // The system places an item by its width, so it is the same shown and hidden.
                     .frame(width: 3 * ToolbarButton.width, alignment: .leading)
-                }
-                .withoutSystemGlass()
-                // Without a title in the toolbar, this is what keeps the button at the right.
-                ToolbarItem {
-                    Spacer()
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 0) {
-                        if panelOpen {
-                            ToolbarButton(
-                                symbol: maximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-                                help: maximized ? "Restore the side panel (⇧⌥⌘B)" : "Maximize the side panel (⇧⌥⌘B)"
-                            ) {
-                                store.sidePanel.toggleMaximized()
-                            }
-                        }
-                        ToolbarButton(symbol: "sidebar.right", help: panelOpen ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
-                            store.sidePanel.isOpen.toggle()
-                        }
-                    }
                 }
                 .withoutSystemGlass()
             }
@@ -275,6 +263,26 @@ struct MainView: View {
                 .zIndex(1)
             SidePanelView(topInset: topInset)
                 .frame(width: width)
+        }
+    }
+
+    /// Drawn over the top bar, not as a toolbar item: the system places an item by its width, which
+    /// moved the side panel's button when the one beside it came and went.
+    private var panelButtons: some View {
+        let open = store.sidePanel.isOpen
+        let maximized = store.sidePanel.isMaximized
+        return HStack(spacing: 0) {
+            if open {
+                ToolbarButton(
+                    symbol: maximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                    help: maximized ? "Restore the side panel (⇧⌥⌘B)" : "Maximize the side panel (⇧⌥⌘B)"
+                ) {
+                    store.sidePanel.toggleMaximized()
+                }
+            }
+            ToolbarButton(symbol: "sidebar.right", help: open ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
+                store.sidePanel.isOpen.toggle()
+            }
         }
     }
 
