@@ -293,7 +293,8 @@ release.
 
 Every push to `main` that touches the iOS app uploads it to TestFlight
 (`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID`
-variables), with the version in `Cargo.toml` as it is.
+variables), with the version in `Cargo.toml` as it is. It is signed with the Apple Distribution
+certificate and the App Store profile in the `IOS_*` secrets, which expire on 2027-10-04.
 
 Unbind builds the `Marketing`, `Web` and `Auth` services from `main` and deploys them on every
 push that touches their files.
