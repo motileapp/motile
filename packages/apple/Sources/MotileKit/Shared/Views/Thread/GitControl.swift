@@ -81,14 +81,13 @@ struct GitButton: View {
     private var chevron: some View {
         Image(systemName: "chevron.down")
             .font(.ui(size: 9, weight: .bold))
-            .foregroundStyle(Color.themeSecondary)
             .frame(width: 24, height: Self.height)
             .contentShape(Rectangle())
     }
 
     private var menuButton: some View {
         Button(action: showMenu) { chevron }
-            .buttonStyle(.highlight(radius: 0))
+            .buttonStyle(.highlight(radius: 0, faded: true))
             .help("Commit, push or open a pull request")
     }
 
@@ -245,10 +244,9 @@ struct GitNoticeView: View {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
-            IconOnlyButton(symbol: "xmark", help: "Close", size: Self.closeSize, symbolSize: 11, radius: Self.radius - Self.closeMargin) {
+            IconOnlyButton(symbol: "xmark", help: "Close", size: Self.closeSize, symbolSize: 11, radius: Self.radius - Self.closeMargin, faded: true) {
                 store.dismissGitNotice()
             }
-            .foregroundStyle(Color.themeSecondary)
             .padding(Self.closeMargin)
         }
         .shadow(color: .black.opacity(0.12), radius: 12, y: 4)

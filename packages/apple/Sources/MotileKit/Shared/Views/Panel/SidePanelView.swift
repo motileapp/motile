@@ -150,7 +150,6 @@ struct PanelTabStrip: View {
         } label: {
             Image(systemName: "plus")
                 .font(.ui(size: 12, weight: .medium))
-                .foregroundStyle(Color.themeSecondary)
                 .frame(width: scaled(28), height: scaled(28))
                 .frame(minWidth: Platform.minimumPress, minHeight: Platform.minimumPress)
                 .contentShape(Rectangle())
@@ -159,7 +158,7 @@ struct PanelTabStrip: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .hoverHighlight()
+        .hoverHighlight(faded: true)
         .help("Open a tab")
     }
 }
@@ -180,11 +179,9 @@ private struct PanelTabChip: View {
         HStack(spacing: 6) {
             Image(systemName: tab.symbol)
                 .font(.ui(size: 11, weight: .medium))
-                .foregroundStyle(active ? Color.themeText : Color.themeSecondary)
                 .frame(width: 14)
             Text(tab.title)
                 .font(.ui(size: 12, weight: .medium))
-                .foregroundStyle(active ? Color.themeText : Color.themeSecondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Color.clear
@@ -196,10 +193,9 @@ private struct PanelTabChip: View {
         .frame(maxWidth: 180)
         .padding(.vertical, Self.reach)
         .contentShape(Rectangle())
-        .button(.highlight(selected: active, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0))) { panel.activate(tab) }
+        .button(.highlight(selected: active, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
-            IconOnlyButton(symbol: "xmark", help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4) { panel.close(tab) }
-                .foregroundStyle(Color.themeSecondary)
+            IconOnlyButton(symbol: "xmark", help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4, faded: true) { panel.close(tab) }
                 .padding(.trailing, Self.closeMargin)
                 .opacity(hovering || active ? 1 : 0)
         }

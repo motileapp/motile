@@ -173,7 +173,6 @@ struct ThreadMenu: View {
 #if os(macOS)
 private struct MarkDoneButton: View {
     let action: () -> Void
-    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
@@ -184,14 +183,12 @@ private struct MarkDoneButton: View {
                     .font(.ui(size: 11, weight: .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(hovering ? Color.themeText : Color.themeSecondary)
             .padding(.horizontal, 5)
             .frame(height: 22)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.highlight(radius: 6))
+        .buttonStyle(.highlight(radius: 6, faded: true))
         .fixedSize()
-        .onHover { hovering = $0 }
     }
 }
 
@@ -333,7 +330,7 @@ private struct DraftRow: View {
                 }
                 Spacer(minLength: 6)
                 if hovering {
-                    IconOnlyButton(symbol: "xmark", help: "Discard draft", size: 22, symbolSize: 12) {
+                    IconOnlyButton(symbol: "xmark", help: "Discard draft", size: 22, symbolSize: 12, faded: true) {
                         store.discard(listed.draft)
                     }
                     .padding(.trailing, Self.topPadding - Self.sidePadding)
@@ -394,13 +391,12 @@ struct UndoRow: View {
                             .lineLimit(1)
                     }
                 }
-                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 18)
                 .frame(height: doneRowHeight)
                 .padding(.vertical, 4)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.highlight(radius: 0))
+            .buttonStyle(.highlight(radius: 0, faded: true))
         }
     }
 }
@@ -449,14 +445,13 @@ private struct DoneShelf: View {
                         .foregroundStyle(Color.themeTertiary)
                         .monospacedDigit()
                 }
-                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 18)
                 .frame(height: Self.rowHeight)
                 .padding(.top, 4)
                 .padding(.bottom, expanded ? 4 - rowGap / 2 : 4)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.highlight(radius: 0))
+            .buttonStyle(.highlight(radius: 0, faded: true))
 
             if expanded {
                 ScrollView {
@@ -535,10 +530,9 @@ struct DoneRow: View, Equatable {
                 .foregroundStyle(Color.themeSecondary)
             Spacer(minLength: 6)
             if hovering {
-                IconOnlyButton(symbol: "arrow.uturn.backward", help: "Mark undone", size: Self.buttonSize, symbolSize: 12) {
+                IconOnlyButton(symbol: "arrow.uturn.backward", help: "Mark undone", size: Self.buttonSize, symbolSize: 12, faded: true) {
                     store.setDone([thread.id], done: false)
                 }
-                .foregroundStyle(Color.themeSecondary)
                 .padding(.trailing, (doneRowHeight - Self.buttonSize) / 2 - Self.sidePadding)
             } else {
                 TimelineView(agoClock) { context in
@@ -690,7 +684,6 @@ private struct SidebarFooter: View {
                         .truncationMode(.middle)
                     Spacer(minLength: 0)
                 }
-                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 8)
                 .frame(height: 30)
                 .padding(Self.accountMargin)
@@ -699,7 +692,7 @@ private struct SidebarFooter: View {
             .menuStyle(.button)
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
-            .hoverHighlight(radius: 8, inset: Self.accountMargin)
+            .hoverHighlight(radius: 8, inset: Self.accountMargin, faded: true)
             .padding(.horizontal, -8 - Self.accountMargin.leading)
             .padding(.top, -Self.accountMargin.top)
             .padding(.bottom, -Self.accountMargin.bottom)

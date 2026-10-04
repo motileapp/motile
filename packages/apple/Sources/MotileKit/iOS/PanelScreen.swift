@@ -33,15 +33,14 @@ struct PanelScreen: View {
             let maximized = store.sidePanel.isMaximized
             IconOnlyButton(
                 symbol: maximized ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-                help: maximized ? "Restore the side panel" : "Maximize the side panel", size: 36, symbolSize: 14
+                help: maximized ? "Restore the side panel" : "Maximize the side panel", size: 36, symbolSize: 14, faded: true
             ) {
                 store.sidePanel.toggleMaximized()
             }
-            IconOnlyButton(symbol: "xmark", help: "Close the side panel", size: 36, symbolSize: 14) {
+            IconOnlyButton(symbol: "xmark", help: "Close the side panel", size: 36, symbolSize: 14, faded: true) {
                 store.sidePanel.isOpen = false
             }
         }
-        .foregroundStyle(Color.themeSecondary)
         .padding(.trailing, 6)
     }
 }
