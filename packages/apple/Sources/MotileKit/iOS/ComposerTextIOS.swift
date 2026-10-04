@@ -59,6 +59,12 @@ struct ComposerTextView: UIViewRepresentable {
         context.coordinator.measure()
     }
 
+    /// Takes the width it is given: a text view that doesn't scroll asks for its text on one line.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: ComposerUITextView, context: Context) -> CGSize? {
+        guard let width = proposal.width else { return nil }
+        return CGSize(width: width, height: proposal.height ?? height)
+    }
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, UITextViewDelegate {

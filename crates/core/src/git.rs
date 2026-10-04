@@ -74,9 +74,9 @@ fn quick(status: &GitStatus) -> Quick {
             return run("Commit", GitAction::Commit);
         }
         if pushes_only {
-            return run("Commit & push", GitAction::CommitPush);
+            return run("Commit & Push", GitAction::CommitPush);
         }
-        return run("Commit, push & PR", GitAction::CommitPushPr);
+        return run("Commit, Push & PR", GitAction::CommitPushPr);
     }
     if !status.remote {
         return off("Commit", UP_TO_DATE);
@@ -91,7 +91,7 @@ fn quick(status: &GitStatus) -> Quick {
         if pushes_only {
             return run("Push", GitAction::Push);
         }
-        return run("Push & create PR", GitAction::CreatePr);
+        return run("Push & Create PR", GitAction::CreatePr);
     }
     if let Some(pull_request) = &status.pull_request {
         return Quick {
@@ -249,19 +249,19 @@ mod tests {
     fn changes_are_committed_as_far_as_the_branch_can_go() {
         let local = GitStatus { remote: false, upstream: false, pull_requests: false, ..branch() };
         assert_eq!(quick_of(GitStatus { changed: 1, ..local }), runs("Commit", GitAction::Commit));
-        assert_eq!(quick_of(GitStatus { changed: 1, ..branch() }), runs("Commit, push & PR", GitAction::CommitPushPr));
-        assert_eq!(quick_of(GitStatus { changed: 1, ..main() }), runs("Commit & push", GitAction::CommitPush));
+        assert_eq!(quick_of(GitStatus { changed: 1, ..branch() }), runs("Commit, Push & PR", GitAction::CommitPushPr));
+        assert_eq!(quick_of(GitStatus { changed: 1, ..main() }), runs("Commit & Push", GitAction::CommitPush));
         let with_pull_request = GitStatus { changed: 1, pull_request: open(), ..branch() };
-        assert_eq!(quick_of(with_pull_request), runs("Commit & push", GitAction::CommitPush));
+        assert_eq!(quick_of(with_pull_request), runs("Commit & Push", GitAction::CommitPush));
         let without_gh = GitStatus { changed: 1, pull_requests: false, ..branch() };
-        assert_eq!(quick_of(without_gh), runs("Commit & push", GitAction::CommitPush));
+        assert_eq!(quick_of(without_gh), runs("Commit & Push", GitAction::CommitPush));
     }
 
     #[test]
     fn a_clean_branch_is_pulled_pushed_or_opened_as_a_pull_request() {
         assert_eq!(quick_of(GitStatus { behind: 2, ..branch() }), runs("Pull", GitAction::Pull));
         assert_eq!(quick_of(GitStatus { behind: 2, ahead: 1, ..branch() }), off("Sync"));
-        assert_eq!(quick_of(GitStatus { ahead: 1, ..branch() }), runs("Push & create PR", GitAction::CreatePr));
+        assert_eq!(quick_of(GitStatus { ahead: 1, ..branch() }), runs("Push & Create PR", GitAction::CreatePr));
         assert_eq!(quick_of(GitStatus { ahead: 1, ..main() }), runs("Push", GitAction::Push));
         assert_eq!(quick_of(GitStatus { ahead: 1, pull_request: open(), ..branch() }), runs("Push", GitAction::Push));
         assert_eq!(quick_of(GitStatus { ahead_of_default: 2, ..branch() }), runs("Create PR", GitAction::CreatePr));
@@ -292,7 +292,7 @@ mod tests {
         );
 
         let changed = GitStatus { changed: 1, ..status };
-        assert_eq!(quick_of(changed), runs("Commit, push & PR", GitAction::CommitPushPr));
+        assert_eq!(quick_of(changed), runs("Commit, Push & PR", GitAction::CommitPushPr));
     }
 
     #[test]
