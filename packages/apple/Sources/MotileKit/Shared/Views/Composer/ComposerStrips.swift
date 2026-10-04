@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A strip against the composer's top or bottom, in the composer's fill and border: rounded on
+/// A strip against the composer's top or bottom, on the composer's surface: rounded on
 /// its outer corners and open where it meets the composer. It stands in from the composer's
 /// sides by the composer's corner radius, so it meets the composer's straight edge.
 struct ComposerStrip: ViewModifier {
@@ -18,16 +18,14 @@ struct ComposerStrip: ViewModifier {
     func body(content: Content) -> some View {
         content
             .frame(height: Self.height)
-            .glassSurface(in: StripShape(edge: edge, closed: true))
-            .overlay { StripShape(edge: edge, closed: false).stroke(Color.themeStrongBorder, lineWidth: 1) }
+            .glassSurface(in: StripShape(edge: edge))
             .padding(.horizontal, ComposerView.radius)
     }
 }
 
-/// The strip's outline: three sides, rounded on the two outer corners. Closed, it is the fill.
+/// The strip's outline, rounded on the two outer corners.
 private struct StripShape: Shape {
     let edge: ComposerStrip.Edge
-    let closed: Bool
 
     func path(in rect: CGRect) -> Path {
         let radius = ComposerStrip.radius
@@ -48,7 +46,7 @@ private struct StripShape: Shape {
             path.addArc(center: CGPoint(x: rect.maxX - radius, y: rect.maxY - radius), radius: radius, startAngle: .degrees(90), endAngle: .degrees(0), clockwise: true)
             path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
         }
-        if closed { path.closeSubpath() }
+        path.closeSubpath()
         return path
     }
 }
