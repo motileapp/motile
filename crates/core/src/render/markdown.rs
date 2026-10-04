@@ -1,5 +1,5 @@
-//! Markdown to blocks an app can draw without parsing anything: stretches of styled text, and
-//! code blocks. Offsets are in UTF-16 units, which is what the apps' text systems count in.
+//! Markdown to blocks a client can draw without parsing anything: stretches of styled text, and
+//! code blocks. Offsets are in UTF-16 units, which is what the clients' text systems count in.
 
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use serde::Serialize;
@@ -23,7 +23,7 @@ pub enum Block {
         language: String,
         code: String,
     },
-    /// An image the app has a file for. It stands on its own, after the text it was written in.
+    /// An image the client has a file for. It stands on its own, after the text it was written in.
     Image {
         src: String,
         alt: String,

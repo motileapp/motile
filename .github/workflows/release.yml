@@ -1,9 +1,9 @@
 name: Release
 
-# Builds the server and the auth server for Linux, and the server and the app for Macs, and publishes
+# Builds the server and the auth server for Linux, and the server and the client for Macs, and publishes
 # them as a GitHub release, on every push to main that touches them. The version is the one
 # scripts/release-version.sh gives the commit. The installer downloads the server from the latest
-# release, and the download button on motile.app links to the app in it. A newer push takes the
+# release, and the download button on motile.app links to the client in it. A newer push takes the
 # place of a release that is still on its way.
 on:
   push:

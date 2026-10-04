@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Takes a picture of the window of the app that scripts/dev-app.sh opened.
+# Takes a picture of the window of the client that scripts/dev-app.sh opened.
 #
 #   scripts/shot.sh [file.png]    (default build/dev/shot.png)
 set -euo pipefail
@@ -16,7 +16,7 @@ fi
 if [ ! -x "$DEV/window-id" ] || [ scripts/window-id.swift -nt "$DEV/window-id" ]; then
     swiftc -O scripts/window-id.swift -o "$DEV/window-id"
 fi
-# An app that has just been opened takes a moment to show its window.
+# A client that has just been opened takes a moment to show its window.
 for _ in $(seq 1 50); do
     WINDOW="$("$DEV/window-id" "$PID")" && break
     sleep 0.2

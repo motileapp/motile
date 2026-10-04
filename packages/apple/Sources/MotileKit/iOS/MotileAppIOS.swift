@@ -48,9 +48,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-/// Tells the core when the app comes to the front, goes to the back or changes networks. iOS
+/// Tells the core when the client comes to the front, goes to the back or changes networks. iOS
 /// suspends an app in the background and its connections die there without a word, so the core
-/// dials again the moment the app is back instead of waiting to find out.
+/// dials again the moment the client is back instead of waiting to find out.
 final class Lifecycle {
     private weak var store: AppStore?
     private let monitor = NWPathMonitor()
@@ -153,7 +153,7 @@ struct MotileCommands: Commands {
     }
 }
 
-/// What is shown over the app, one at a time. What is asked for last comes over what was there.
+/// What is shown over the client, one at a time. What is asked for last comes over what was there.
 private enum RootSheet: Identifiable {
     case icon(Project)
     case commit(Project)

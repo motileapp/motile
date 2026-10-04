@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Whether the app follows the system's light or dark appearance, or keeps one of them.
+/// Whether the client follows the system's light or dark appearance, or keeps one of them.
 enum Appearance: String, CaseIterable, Identifiable {
     case system, light, dark
 

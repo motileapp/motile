@@ -1,5 +1,5 @@
-//! A thread's transcript as the rows an app draws: one per user message, stretch of prose, code
-//! block, tool call and so on. The apps keep a list of these and apply the splices sent to them.
+//! A thread's transcript as the rows a client draws: one per user message, stretch of prose, code
+//! block, tool call and so on. The clients keep a list of these and apply the splices sent to them.
 //!
 //! The work of a turn takes little room: tool calls that follow one another are one row that
 //! opens into them, and once a turn has ended, everything before its last message folds behind
@@ -24,7 +24,7 @@ const OPEN_UP_TO_FILES: usize = 12;
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct Row {
-    /// Stable while the row's content grows, so the app can update it in place.
+    /// Stable while the row's content grows, so the client can update it in place.
     pub id: String,
     pub item: String,
     /// The row belongs to the group above it, which is open.
@@ -34,7 +34,7 @@ pub struct Row {
     pub kind: RowKind,
 }
 
-/// A file attached to a message. An image or a video is shown: the app asks the core for the
+/// A file attached to a message. An image or a video is shown: the client asks the core for the
 /// file `media` names, and for a video's `poster` until it plays.
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct Attached {
@@ -65,7 +65,7 @@ pub enum RowKind {
     Code {
         language: String,
         code: String,
-        /// `None` until the code has been highlighted; the app asks for it when the row is seen.
+        /// `None` until the code has been highlighted; the client asks for it when the row is seen.
         spans: Option<Spans>,
     },
     Tool {
@@ -75,7 +75,7 @@ pub enum RowKind {
     Thinking {
         text: String,
     },
-    /// An image or a video the reply shows. The app asks the core for the file `media` names.
+    /// An image or a video the reply shows. The client asks the core for the file `media` names.
     Media {
         media: String,
         video: bool,

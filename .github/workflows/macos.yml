@@ -1,13 +1,13 @@
 name: macOS
 
-# Builds the Mac app and the server for Macs, walks the app through a demo against a real auth server
-# and a real server on the runner, and keeps the app, the server and the screenshots as artifacts.
+# Builds the Mac app and the server for Macs, walks the client through a demo against a real auth server
+# and a real server on the runner, and keeps the client, the server and the screenshots as artifacts.
 # The release runs it on every push to main that touches them.
 on:
   workflow_dispatch:
     inputs:
       sign:
-        description: Sign and notarize the app
+        description: Sign and notarize the client
         type: boolean
         default: false
   workflow_call:
@@ -41,7 +41,7 @@ jobs:
           rustup default stable
 
       # First, because it is quick and says at once whether the Swift code is sound.
-      - name: Compile the app
+      - name: Compile the client
         working-directory: apps/macos
         run: swift build -c release --target Motile
 
@@ -81,13 +81,13 @@ jobs:
           name: server-aarch64-apple-darwin
           path: motile-aarch64-apple-darwin.tar.gz
 
-      - name: Bundle the app
+      - name: Bundle the client
         run: apps/macos/scripts/build-app.sh
 
       - name: Demo
         run: apps/macos/scripts/ci-demo.sh
 
-      - name: Notarize the app
+      - name: Notarize the client
         if: inputs.sign
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
@@ -102,7 +102,7 @@ jobs:
           xcrun stapler staple apps/macos/build/Motile.app
           spctl --assess --type execute --verbose apps/macos/build/Motile.app
 
-      - name: Zip the app
+      - name: Zip the client
         if: always()
         run: ditto -c -k --keepParent apps/macos/build/Motile.app Motile.zip
 

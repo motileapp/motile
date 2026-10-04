@@ -1,4 +1,4 @@
-//! The core's one loop. Commands from the app and events from the servers' links arrive on a single
+//! The core's one loop. Commands from the client and events from the servers' links arrive on a single
 //! channel and are handled in turn, so the state needs no locks. Anything that waits on the
 //! network runs in a task of its own and reports back through the same channel.
 
@@ -40,13 +40,13 @@ const FIRST_ITEMS: usize = 30;
 const RENDER_EVERY: Duration = Duration::from_millis(33);
 const SAVE_EVERY: Duration = Duration::from_secs(1);
 const TICK: Duration = Duration::from_secs(2);
-/// How often the app is told how far a download is.
+/// How often the client is told how far a download is.
 const PROGRESS_EVERY: Duration = Duration::from_millis(200);
 /// Where the images among a server's files are kept while they are shown, in the data folder.
 const SHOWN_FILES: &str = "files";
 /// How many ticks pass between account checks when nobody is waiting for a server.
 const ACCOUNT_CHECK_TICKS: u64 = 30;
-/// A connection that was out of the app's sight for this long isn't trusted to be alive.
+/// A connection that was out of the client's sight for this long isn't trusted to be alive.
 const STALE_AFTER: Duration = Duration::from_secs(10);
 
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
@@ -136,7 +136,7 @@ struct OpenThread {
     rev: u64,
     /// The tool calls that started an agent, in order.
     agents: Vec<Item>,
-    /// The agent whose transcript the app shows: the tool call that started it, and what it did.
+    /// The agent whose transcript the client shows: the tool call that started it, and what it did.
     agent: Option<(String, Transcript)>,
     /// Items whose streamed text hasn't been rendered yet.
     unrendered: HashSet<String>,
@@ -170,7 +170,7 @@ struct Core {
     media_limit: u64,
     /// The commands waiting for each image or video that is being fetched.
     media_waiting: HashMap<String, Vec<u64>>,
-    /// The files on their way to a server, by the key the app gave: the command that waits for
+    /// The files on their way to a server, by the key the client gave: the command that waits for
     /// each, and what stops it.
     uploads: HashMap<String, (u64, AbortHandle)>,
     /// The folders last listed for `browse`: of which server and directory, and whether with
@@ -612,7 +612,7 @@ impl Core {
             let server_id = server.device.public_key.clone();
             let address = ServerAddr { key: server_id.clone(), direct };
             let link = Link::connect(endpoint.clone(), address, self.link_events.clone());
-            // Threads the app opened before there was a connection to follow them on.
+            // Threads the client opened before there was a connection to follow them on.
             for (thread_id, open) in self.open.iter().filter(|(_, open)| open.server_id == server_id) {
                 link.open(thread_id.clone(), open.rev);
             }
@@ -645,7 +645,7 @@ impl Core {
             .ok_or_else(|| "That server isn't connected. Try again when it is back.".to_string())
     }
 
-    /// Tells the app about a server's projects, each with its icon if this device has the file.
+    /// Tells the client about a server's projects, each with its icon if this device has the file.
     /// Icons it doesn't have yet are fetched, and the projects are told again when they arrive.
     fn emit_projects(&mut self, server_id: &str, projects: Vec<Project>) {
         let folder = self.config.data_dir.join("icons");
@@ -806,7 +806,7 @@ impl Core {
                 let Some(server) = self.server_mut(server_id) else { return };
                 server.info = Some(info);
                 server.threads = threads.into_iter().map(|thread| (thread.id.clone(), thread)).collect();
-                // Threads deleted while the app was away are no longer followed.
+                // Threads deleted while the client was away are no longer followed.
                 let known: HashSet<String> = server.threads.keys().cloned().collect();
                 self.open.retain(|thread_id, open| open.server_id != server_id || known.contains(thread_id));
                 self.emit_servers();
@@ -1492,7 +1492,7 @@ impl Core {
 
 /// Writes a project's icon where `emit_projects` looks for it, and removes the icons the project
 /// had before.
-/// What the app is told when a thread's activity changes: the rows of the messages that wait
+/// What the client is told when a thread's activity changes: the rows of the messages that wait
 /// for the agent, when those changed, and what the agent is doing.
 fn activity_changed(thread_id: &str, transcript: &mut Transcript, activity: Activity) -> (Option<Splice>, Event) {
     let queued = transcript.set_queued(activity.queued.clone());
@@ -1500,7 +1500,7 @@ fn activity_changed(thread_id: &str, transcript: &mut Transcript, activity: Acti
     (queued, Event::Activity { thread_id: thread_id.to_string(), activity, waiting })
 }
 
-/// Writes an image among a server's files where the app can read it, and answers with where
+/// Writes an image among a server's files where the client can read it, and answers with where
 /// that is. The same file is written to the same place.
 fn show_file(folder: &std::path::Path, server_id: &str, path: &str, bytes: &[u8]) -> anyhow::Result<String> {
     use std::hash::{Hash, Hasher};

@@ -1,5 +1,5 @@
 //! The git button of a project: the one action its status calls for, the menu behind it, and
-//! what each says when it can't run. Every app shows the same.
+//! what each says when it can't run. Every client shows the same.
 
 use motile_protocol::wire::{GitAction, GitStatus};
 use serde::Serialize;

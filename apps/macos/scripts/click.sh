@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clicks in the window of the app that scripts/dev-app.sh opened, at a point counted from the
+# Clicks in the window of the client that scripts/dev-app.sh opened, at a point counted from the
 # window's top left corner, as in a picture from scripts/shot.sh. It moves the mouse pointer.
 #
 #   scripts/click.sh <x> <y>

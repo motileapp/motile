@@ -2,7 +2,7 @@
 import SwiftUI
 
 extension View {
-    /// The surface of a button that floats over the app: Liquid Glass where the system has it,
+    /// The surface of a button that floats over the client: Liquid Glass where the system has it,
     /// and the system's material with a hairline around it before that.
     @ViewBuilder
     func glassButton<S: Shape>(in shape: S) -> some View {

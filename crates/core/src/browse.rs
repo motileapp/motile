@@ -1,5 +1,5 @@
 //! Browsing a server's folders by typing a path, the way a shell completes one: the folders of
-//! the directory typed so far, narrowed by what follows its last slash. Every app shows the same.
+//! the directory typed so far, narrowed by what follows its last slash. Every client shows the same.
 
 use serde::Serialize;
 

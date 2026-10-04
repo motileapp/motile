@@ -1,6 +1,6 @@
-//! What the apps, the servers and the web app call. A linked device signs its requests with its
+//! What the clients, the servers and the web app call. A linked device signs its requests with its
 //! key; the requests that link one prove the key with a signature over what they redeem. The web
-//! app sends the token of the session a person signed in to.
+//! client sends the token of the session a person signed in to.
 
 use axum::Json;
 use axum::body::Bytes;
@@ -59,12 +59,12 @@ fn sign_in_expired() -> AppError {
 }
 
 /// Uses up a sign-in's code and returns who signed in. The code of a sign-in the web app started
-/// only opens a session, and an app's only links that app.
+/// only opens a session, and a client's only links that client.
 async fn redeem(state: &AppState, code: &str, verifier: &str, web: bool) -> AppResult<Uuid> {
     let taken = db::take_sign_in(&state.db, &sha256_hex(code.as_bytes()), web).await?;
     let sign_in = taken.ok_or_else(sign_in_expired)?;
     if sha256_hex(verifier.as_bytes()) != sign_in.challenge {
-        return Err(AppError::unauthorized("This sign-in was started by another app."));
+        return Err(AppError::unauthorized("This sign-in was started by another client."));
     }
     sign_in.user_id.ok_or_else(sign_in_expired)
 }
@@ -79,7 +79,7 @@ pub async fn exchange(State(state): State<AppState>, Json(request): Json<Exchang
     let user_id = redeem(&state, &request.code, &request.verifier, false).await?;
     let user = db::user_by_id(&state.db, user_id).await?.ok_or_else(sign_in_expired)?;
 
-    let name = clean(&request.name, "Motile app");
+    let name = clean(&request.name, "Motile client");
     let platform = clean(&request.platform, "unknown");
     if !db::link_device(&state.db, user.id, &request.public_key, DeviceKind::Client, &name, &platform).await? {
         return Err(AppError::new(StatusCode::CONFLICT, "This device can't be linked to the account."));
@@ -160,9 +160,9 @@ pub async fn create_enroll_token(
         Caller::Web(user) => user,
         Caller::Device(public_key) => {
             let user = linked_user(&state, &public_key).await?;
-            // A server can't add more servers; only someone signed in can, in an app or on the web.
+            // A server can't add more servers; only someone signed in can, in a client or on the web.
             if db::device_kind(&state.db, &public_key).await?.as_deref() != Some(db::kind_text(DeviceKind::Client)) {
-                return Err(AppError::new(StatusCode::FORBIDDEN, "Servers are added from the app."));
+                return Err(AppError::new(StatusCode::FORBIDDEN, "Servers are added from a client."));
             }
             user
         }
@@ -189,7 +189,7 @@ pub async fn enroll(
     let token_hash = sha256_hex(request.token.as_bytes());
     let expired = || {
         AppError::bad_request(
-            "This install command has expired or was used on another machine. Copy a new one from the app.",
+            "This install command has expired or was used on another machine. Copy a new one from a client.",
         )
     };
     let user_id = db::use_enroll_token(&state.db, &token_hash, &request.public_key).await?.ok_or_else(expired)?;

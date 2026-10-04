@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Colours and type for the whole app. Colours are dynamic, so text built once follows the
+/// Colours and type for the whole client. Colours are dynamic, so text built once follows the
 /// appearance without being built again.
 enum Theme {
     static func dynamic(_ light: PlatformColor, _ dark: PlatformColor) -> PlatformColor {

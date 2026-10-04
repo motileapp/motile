@@ -1,4 +1,4 @@
-//! Messages between an app and a server. Every stream starts with one `Request` from the app; the
+//! Messages between a client and a server. Every stream starts with one `Request` from the client; the
 //! server answers with one `Message`, or with a stream of them for `Subscribe` and `Open`.
 
 use std::collections::HashMap;
@@ -57,7 +57,7 @@ pub struct Thread {
     pub agents: u32,
     /// When the last turn ended, for telling the user about replies they haven't seen.
     pub turn_ended_at: Option<f64>,
-    /// The transcript's revision; an app whose copy is older has catching up to do.
+    /// The transcript's revision; a client whose copy is older has catching up to do.
     pub rev: u64,
 }
 
@@ -93,7 +93,7 @@ pub struct Media {
     /// In pixels, for an image, and for a video that has a poster.
     pub width: Option<u32>,
     pub height: Option<u32>,
-    /// The image that stands for a video until it plays, which the app that attached it made.
+    /// The image that stands for a video until it plays, which the client that attached it made.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub poster: Option<String>,
 }
@@ -669,7 +669,7 @@ pub enum Message {
         thread_id: String,
     },
 
-    /// First answer to `Open`. With `reset` the app's copy can't be caught up and is thrown
+    /// First answer to `Open`. With `reset` the client's copy can't be caught up and is thrown
     /// away; every item follows.
     Opened {
         reset: bool,

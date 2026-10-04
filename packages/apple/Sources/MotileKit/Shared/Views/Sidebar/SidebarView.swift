@@ -618,7 +618,7 @@ struct ThreadStatus: View {
     }
 }
 
-/// A server and how the app reaches it.
+/// A server and how the client reaches it.
 struct ServerLine: View {
     let server: Server
 
@@ -663,7 +663,7 @@ struct ServerLine: View {
 }
 
 #if os(macOS)
-/// The servers and how the app reaches them, and the account.
+/// The servers and how the client reaches them, and the account.
 private struct SidebarFooter: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openSettings) private var openSettings

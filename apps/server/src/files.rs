@@ -1,5 +1,5 @@
 //! The server's folders, for choosing where a chat works, the files in the folders threads work
-//! in, and files the app sends as attachments.
+//! in, and files the client sends as attachments.
 
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
@@ -15,7 +15,7 @@ use crate::git;
 use crate::media::POSTER;
 
 const MAX_UPLOAD: u64 = 500 * 1024 * 1024;
-/// A text is sent up to here; nobody reads more of it in an app.
+/// A text is sent up to here; nobody reads more of it in a client.
 const MAX_TEXT: u64 = 1024 * 1024;
 const MAX_IMAGE: u64 = 20 * 1024 * 1024;
 const IMAGES: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "ico"];

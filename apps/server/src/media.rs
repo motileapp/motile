@@ -10,7 +10,7 @@ use motile_protocol::media::{MAX_SIZE, Namer, is_id, kind};
 use motile_protocol::wire::Media;
 use pulldown_cmark::{Event, Options, Parser, Tag};
 
-/// The image an app made to stand for a video it attached, in the video's folder.
+/// The image a client made to stand for a video it attached, in the video's folder.
 pub const POSTER: &str = ".poster.jpg";
 
 #[derive(Clone)]
@@ -145,7 +145,7 @@ impl MediaStore {
     }
 }
 
-/// Where the images of a reply point, as the apps' Markdown parser reads them.
+/// Where the images of a reply point, as the clients' Markdown parser reads them.
 fn image_destinations(text: &str) -> Vec<String> {
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let destinations = Parser::new_ext(text, options).filter_map(|event| match event {

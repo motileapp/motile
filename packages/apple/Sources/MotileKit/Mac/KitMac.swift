@@ -584,7 +584,7 @@ final class TranscriptScroller: NSView {
 #endif
 
 #if os(macOS)
-/// What is done with the file of an image or a video outside the app.
+/// What is done with the file of an image or a video outside the client.
 enum MediaFiles {
     static let saveTitle = "Save As…"
 

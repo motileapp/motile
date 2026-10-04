@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the tests that use the app with fingers (MotileUITests) in the simulator, against the
+# Runs the tests that use the client with fingers (MotileUITests) in the simulator, against the
 # dev account of scripts/dev-app.sh.
 #
 #   scripts/ui-test.sh [-only-testing:MotileUITests/GestureTests/<test>]

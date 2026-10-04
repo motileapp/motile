@@ -55,7 +55,7 @@ function Account() {
                 </EmptyMedia>
                 <EmptyTitle>No servers yet</EmptyTitle>
                 <EmptyDescription>
-                  Add a Linux machine or a Mac and your apps can start threads on it.
+                  Add a Linux machine or a Mac and your clients can start threads on it.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -63,18 +63,18 @@ function Account() {
         </section>
         <section className="flex flex-col gap-4">
           <Heading
-            title="Apps"
+            title="Clients"
             description="The devices signed in to your account. They can reach every server."
           />
-          {account.apps.length > 0 ? (
-            <DeviceList devices={account.apps} />
+          {account.clients.length > 0 ? (
+            <DeviceList devices={account.clients} />
           ) : (
             <Empty className="border">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <LaptopIcon />
                 </EmptyMedia>
-                <EmptyTitle>No apps yet</EmptyTitle>
+                <EmptyTitle>No clients yet</EmptyTitle>
                 <EmptyDescription>
                   Sign in to Motile on your Mac and it shows up here.
                 </EmptyDescription>
