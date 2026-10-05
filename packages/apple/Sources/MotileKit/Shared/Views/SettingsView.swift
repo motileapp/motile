@@ -298,7 +298,7 @@ private struct BranchInstructionsEditor: View {
                 .padding(6)
                 .frame(height: 64)
                 .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1) }
+                .overlay { RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1) }
         }
         .padding(.horizontal, settingsInset)
         .padding(.bottom, 10)
@@ -328,7 +328,7 @@ private struct SetupSheet: View {
                 .padding(6)
                 .frame(height: 140)
                 .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1) }
+                .overlay { RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1) }
             HStack {
                 Spacer()
                 ActionButton("Cancel") { dismiss() }

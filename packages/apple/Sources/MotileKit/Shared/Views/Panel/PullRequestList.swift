@@ -40,7 +40,7 @@ struct PullRequestListSurface: View {
             }
         }
         .padding(.leading, -8)
-        InputField("Search", text: $search, icon: .search, variant: .filled, clearable: true)
+        InputField("Search", text: $search, icon: .search, clearable: true)
             .frame(maxWidth: 220)
         Spacer(minLength: 4)
         ActionButton(icon: .rotateCw, help: "Read the pull requests again") { asked += 1 }

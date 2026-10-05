@@ -122,7 +122,7 @@ struct WritingField: View {
             .frame(minHeight: height, maxHeight: height ?? .infinity)
             .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
             }
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
