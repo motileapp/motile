@@ -581,6 +581,7 @@ final class AppStore {
 
     /// Opens the pull request's tab, or the pull request on GitHub where the tab can't show it.
     func showPullRequest(_ url: URL) {
+        gitNotice = nil
         guard panelUnavailable == nil, pullRequestUnavailable == nil else { return Platform.open(url) }
         sidePanel.open(.pullRequest)
     }
@@ -1124,6 +1125,7 @@ final class AppStore {
         guard let notice = gitNotice, let next = notice.next else { return }
         guard let project = gitProject, project.checkoutID == notice.checkoutID else { return }
         let confirm = project.gitControl?.menu.first { $0.action == next }?.confirm
+        gitNotice = nil
         startGit(next, in: project, confirm: confirm)
     }
 
