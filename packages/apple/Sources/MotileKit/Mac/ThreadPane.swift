@@ -178,7 +178,7 @@ struct ThreadPane: View {
             .fixedSize()
             .hoverHighlight(radius: 10)
             .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.themeBorder, lineWidth: 1)
             }
         }
         .font(.ui(size: Self.headlineSize, weight: .regular))
