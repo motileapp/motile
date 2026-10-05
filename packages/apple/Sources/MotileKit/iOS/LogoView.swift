@@ -11,7 +11,7 @@ struct LogoView: View {
             .overlay {
                 Mark()
                     .fill(.white)
-                    .frame(width: size * 0.68, height: size * 0.68)
+                    .frame(width: size * 720 / 1024, height: size * 720 / 1024)
             }
             .frame(width: size, height: size)
     }
