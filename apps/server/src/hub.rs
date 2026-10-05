@@ -31,6 +31,7 @@ use tokio::task::AbortHandle;
 use crate::agents::environment::Environment;
 use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name};
 use crate::generate::Writer;
+use crate::linear::Linear;
 use crate::media::MediaStore;
 use crate::pricing::{self, Prices};
 use crate::store::{Purpose, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
@@ -78,6 +79,7 @@ pub struct GitRun {
 pub struct Hub {
     store: Store,
     pub media: MediaStore,
+    pub linear: Linear,
     environment: Environment,
     threads: Mutex<HashMap<String, Live>>,
     /// Locked after `threads` when both are needed.
@@ -240,6 +242,7 @@ impl Hub {
             threads: Mutex::new(threads),
             store,
             media,
+            linear: Linear::from_environment(),
             environment,
             projects,
             git,
@@ -247,6 +250,10 @@ impl Hub {
             worktrees_folder,
             list_updates,
         }))
+    }
+
+    pub fn store(&self) -> &Store {
+        &self.store
     }
 
     pub fn server_info(&self) -> ServerInfo {

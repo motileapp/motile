@@ -785,6 +785,17 @@ enum GitHubState: String {
     case missing
 }
 
+/// The Linear workspace a server is connected to, and the user who connected it.
+struct LinearConnection: Equatable {
+    let workspace: String
+    let user: String
+
+    init(json: JSON) {
+        workspace = json.string("workspace")
+        user = json.string("user")
+    }
+}
+
 struct Repo: Equatable {
     /// `owner/name`.
     let name: String

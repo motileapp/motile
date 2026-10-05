@@ -191,6 +191,15 @@ impl Server {
             Request::CloneRepo { repo } => {
                 hub.clone_repo(&repo).await.map(|project_id| Message::ProjectAdded { project_id })
             }
+            Request::LinearStatus => Ok(Message::Linear { connection: hub.linear.connection(hub.store()) }),
+            Request::LinearConnect => hub.linear.connect().map(|url| Message::LinearAuthorize { url }),
+            Request::LinearFinish { code, state } => {
+                let connected = hub.linear.finish(hub.store(), &code, &state).await;
+                connected.map(|connection| Message::Linear { connection: Some(connection) })
+            }
+            Request::LinearDisconnect => {
+                hub.linear.disconnect(hub.store()).await.map(|_| Message::Linear { connection: None })
+            }
             Request::ListDir { path, icons, hidden } => {
                 files::list_dir(path.as_deref(), &hub.server_info().home, icons, hidden)
             }

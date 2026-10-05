@@ -76,6 +76,7 @@ enum DemoDriver {
             case "agents": store.sidePanel.open(.agents)
             case "pull request": store.sidePanel.open(.pullRequest)
             case "pull requests": store.sidePanel.open(.pullRequests)
+            case "linear": store.sidePanel.open(.linear)
             case "max": store.sidePanel.toggleMaximized()
             case "open": store.sidePanel.isOpen = true
             default: store.sidePanel.isOpen = false

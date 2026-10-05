@@ -290,6 +290,18 @@ pub enum Request {
     CloneRepo {
         repo: String,
     },
+    /// Whether the server is connected to Linear. `Linear` answers.
+    LinearStatus,
+    /// Starts connecting the server to Linear. `LinearAuthorize` answers with the page where the
+    /// user approves it, which ends at `LINEAR_REDIRECT` with a `code` and a `state`.
+    LinearConnect,
+    /// Finishes connecting with what Linear sent the browser back with. `Linear` answers.
+    LinearFinish {
+        code: String,
+        state: String,
+    },
+    /// Takes back what Linear granted and forgets it. `Linear` answers.
+    LinearDisconnect,
     /// Takes the folder off the list. Its threads stay.
     RemoveProject {
         project_id: String,
@@ -524,6 +536,13 @@ pub enum GitHubState {
     SignedOut,
     /// `gh` isn't installed.
     Missing,
+}
+
+/// The Linear workspace a server is connected to, and the user who connected it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LinearConnection {
+    pub workspace: String,
+    pub user: String,
 }
 
 /// A repository on GitHub.
@@ -1225,6 +1244,12 @@ pub enum Message {
     },
     Repos {
         repos: Vec<Repo>,
+    },
+    Linear {
+        connection: Option<LinearConnection>,
+    },
+    LinearAuthorize {
+        url: String,
     },
     /// Local branches first, then the ones only on the remote.
     Branches {

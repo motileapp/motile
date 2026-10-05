@@ -106,6 +106,9 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   with the usage. A title is told what the pull requests and issues its message links to are
   about.
 - `github.rs`: the server's GitHub login, its repositories and cloning one.
+- `linear.rs`: the server's connection to Linear. The user approves Motile's application in a
+  browser and the server exchanges the code with the verifier it made (PKCE, no secret), so the
+  token never leaves the server. `MOTILE_LINEAR_URL` stands in for Linear.
 - `icons.rs`: finds a project's icon in its folder.
 - `access.rs`: asks the auth server which clients belong to the account.
 - `setup.rs`, `service.rs`: what the installer runs, and the systemd or launchd service.
@@ -148,7 +151,7 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   Sizes are written as they are on the Mac; `Platform.scale` enlarges them on iOS.
 - `Shared/Platform/Symbol.swift`: the icons, drawn from Lucide's font (`Fonts/lucide.ttf`), not
   SF Symbols. A new one is a case with the character it has in lucide-static's
-  `font/codepoints.json`.
+  `font/codepoints.json`. Linear's logo, which Lucide doesn't have, is drawn by hand there.
 - `Shared/Core`: `CoreBridge.swift` calls the Rust core, `AppStore.swift` is the state the
   views show, `SidePanel.swift` the side panel's state.
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
@@ -163,7 +166,7 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   or tokens by agent, and the models, projects and kinds of token under it.
 - `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
   requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
-  `LineCommentSheet.swift`, `PullRequestParts.swift`).
+  `LineCommentSheet.swift`, `PullRequestParts.swift`) and Linear (`LinearView.swift`).
   `CodeView.swift` draws a diff or a file.
 - `Mac/`: `MotileApp.swift` lays out the window, `MediaViewer.swift`, `AppUpdater.swift`,
   `Glass.swift`, `Demo/DemoDriver.swift`.

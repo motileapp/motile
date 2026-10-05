@@ -56,6 +56,8 @@ enum Symbol: String {
     case image = "\u{e0f6}"
     case images = "\u{e5c4}"
     case layers = "\u{e529}"
+    /// Linear's logo, which Lucide doesn't have.
+    case linear = "linear"
     case link = "\u{e102}"
     case list = "\u{e106}"
     case listChecks = "\u{e1d0}"
@@ -132,14 +134,38 @@ extension PlatformImage {
         return made
     }
 
-    private static func drawn(_ symbol: Symbol, side: CGFloat, trimmed: Bool) -> PlatformImage {
-        guard let symbolFont else { return PlatformImage() }
+    private static func glyph(_ symbol: Symbol, side: CGFloat) -> CGPath? {
+        guard let symbolFont else { return nil }
         let font = CTFontCreateWithFontDescriptor(symbolFont, side, nil)
         var character = Array(symbol.rawValue.utf16)
         var glyph = CGGlyph()
-        guard CTFontGetGlyphsForCharacters(font, &character, &glyph, 1), let path = CTFontCreatePathForGlyph(font, glyph, nil) else {
-            return PlatformImage()
+        guard CTFontGetGlyphsForCharacters(font, &character, &glyph, 1) else { return nil }
+        return CTFontCreatePathForGlyph(font, glyph, nil)
+    }
+
+    /// A disc cut into stripes that fall to the right, in a square of 24 with the room Lucide
+    /// leaves around its icons. A stripe is where `x + y` lies between two numbers.
+    private static func linearLogo(side: CGFloat) -> CGPath {
+        let stripes: [(CGFloat, CGFloat)] = [(22.706, 72), (17.674, 20.191), (12.642, 15.159), (-24, 10.127)]
+        let disc = CGPath(ellipseIn: CGRect(x: 0, y: 0, width: 24, height: 24), transform: nil)
+        let far: CGFloat = 48
+        let logo = CGMutablePath()
+        for (from, to) in stripes {
+            let stripe = CGMutablePath()
+            stripe.addLines(between: [
+                CGPoint(x: from / 2 + far, y: from / 2 - far), CGPoint(x: to / 2 + far, y: to / 2 - far),
+                CGPoint(x: to / 2 - far, y: to / 2 + far), CGPoint(x: from / 2 - far, y: from / 2 + far)
+            ])
+            stripe.closeSubpath()
+            logo.addPath(disc.intersection(stripe))
         }
+        let scale = side / 24 * 20 / 24
+        var placed = CGAffineTransform(translationX: side / 2, y: side / 2).scaledBy(x: scale, y: scale).translatedBy(x: -12, y: -12)
+        return logo.copy(using: &placed) ?? logo
+    }
+
+    private static func drawn(_ symbol: Symbol, side: CGFloat, trimmed: Bool) -> PlatformImage {
+        guard let path = symbol == .linear ? linearLogo(side: side) : glyph(symbol, side: side) else { return PlatformImage() }
         let box = trimmed ? path.boundingBoxOfPath.integral : CGRect(x: 0, y: 0, width: side, height: side)
         #if os(macOS)
         let image = NSImage(size: box.size, flipped: false) { _ in
