@@ -98,7 +98,8 @@ pub enum Command {
         query: String,
     },
     /// Sends the message with `attachments`, the paths `upload` answered with. Answers with
-    /// `thread_id`.
+    /// `thread_id`. With `now`, a turn that runs takes the message at once instead of the next
+    /// turn starting with it.
     Send {
         server_id: String,
         thread_id: Option<String>,
@@ -106,6 +107,8 @@ pub enum Command {
         text: String,
         #[serde(default)]
         attachments: Vec<String>,
+        #[serde(default)]
+        now: bool,
     },
     /// Sends a file of this device to the server, for a message to be sent with. Answers with
     /// its `path` there, and for an image or a video with `media`, the name the `media` command

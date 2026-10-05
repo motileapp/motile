@@ -274,6 +274,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         new_thread: Some(new_thread.clone()),
         text: "Add a rate limiter to the API".into(),
         attachments: Vec::new(),
+        now: false,
     };
     let sent = client.ask(send).await.unwrap();
     let thread_id = sent["thread_id"].as_str().unwrap().to_string();
@@ -339,6 +340,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         new_thread: Some(new_thread.clone()),
         text: "Show the screenshot".into(),
         attachments: Vec::new(),
+        now: false,
     };
     let showing = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
     client.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: showing }).await.unwrap();
@@ -364,6 +366,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         new_thread: Some(new_thread),
         text: "Add a rate limiter to the API".into(),
         attachments: Vec::new(),
+        now: false,
     };
     let unopened = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
     client

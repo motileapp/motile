@@ -1319,6 +1319,9 @@ final class AppStore {
         return attachments.contains { $0.state != .ready } ? "Waiting for the attachments to upload" : nil
     }
 
+    /// Whether a message sent while the agent works steers the turn that runs instead of waiting for it.
+    static let steersKey = "send.steers"
+
     func send() {
         guard canSend else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1326,9 +1329,11 @@ final class AppStore {
         let key = draftKey
         var command: JSON = ["text": text, "attachments": attached.compactMap(\.path)]
         let existing = selectedThread
+        let steers = existing != nil && defaults.bool(forKey: AppStore.steersKey)
         if let thread = existing {
             command["server_id"] = thread.serverID
             command["thread_id"] = thread.id
+            command["now"] = steers
         } else {
             guard let draft = selectedDraft, let project = project(draft.projectID), let model = composerModel else {
                 errorMessage = "No agent is installed. Install Claude Code or Codex on your server and try again."
@@ -1352,8 +1357,8 @@ final class AppStore {
         let serverID = command.string("server_id")
         draft = ""
         attachmentsByKey[key] = nil
-        // The server queues what is sent while the agent works.
-        transcript.setPending(text, attachments: attached.map(\.attached), queued: existing != nil && activity.running)
+        // The server queues what is sent while the agent works, unless the message steers it.
+        transcript.setPending(text, attachments: attached.map(\.attached), queued: existing != nil && activity.running && !steers)
         transcriptIsEmpty = false
 
         core.send("send", command) { [weak self] result in

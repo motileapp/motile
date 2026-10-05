@@ -200,7 +200,7 @@ async fn thread_where(list: &mut Follow, mut wanted: impl FnMut(&Thread) -> bool
 }
 
 async fn send(connection: &Connection, thread_id: Option<String>, new_thread: Option<NewThread>, text: &str) -> String {
-    let request = Request::Send { thread_id, new_thread, text: text.to_string(), attachments: Vec::new() };
+    let request = Request::Send { thread_id, new_thread, text: text.to_string(), attachments: Vec::new(), now: false };
     match connection.request(&request).await.unwrap() {
         Message::Sent { thread_id } => thread_id,
         other => panic!("unexpected answer to send: {other:?}"),
@@ -865,6 +865,35 @@ async fn a_message_sent_now_while_claude_writes_stops_the_reply_and_is_answered_
     );
     assert!(transcript.texts().last().unwrap().ends_with("You also said: Just say pineapple"));
     assert!(transcript.errors().is_empty());
+    assert!(transcript.queued.is_empty());
+    assert_eq!(harness.recorded_turns().len(), 1);
+}
+
+#[tokio::test]
+async fn a_message_sent_to_steer_is_taken_by_the_turn_that_runs() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Give me a long reply with a lot of code").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+
+    let steer = Request::Send {
+        thread_id: Some(thread_id.clone()),
+        new_thread: None,
+        text: "Just say pineapple".to_string(),
+        attachments: Vec::new(),
+        now: true,
+    };
+    assert_eq!(connection.request(&steer).await.unwrap(), Message::Sent { thread_id: thread_id.clone() });
+    transcript.follow_until_idle(&mut follow).await;
+
+    assert_eq!(
+        messages_and_turn_ends(&transcript),
+        vec!["Give me a long reply with a lot of code", "Just say pineapple", "(turn end)"],
+        "the message never waited for the turn to end"
+    );
+    assert!(transcript.texts().last().unwrap().ends_with("You also said: Just say pineapple"));
     assert!(transcript.queued.is_empty());
     assert_eq!(harness.recorded_turns().len(), 1);
 }
@@ -2418,7 +2447,7 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
 
     let attachments = vec![shot.clone(), video.clone(), notes.clone()];
     let new_thread = harness.new_thread(&connection, Agent::Claude).await;
-    let request = Request::Send { thread_id: None, new_thread, text: "Look".to_string(), attachments };
+    let request = Request::Send { thread_id: None, new_thread, text: "Look".to_string(), attachments, now: false };
     let Message::Sent { thread_id } = connection.request(&request).await.unwrap() else { panic!("not sent") };
     let transcript = finished_transcript(&connection, &thread_id).await;
 
@@ -2437,6 +2466,7 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
         new_thread: None,
         text: String::new(),
         attachments: vec![poster.clone() + "x"],
+        now: false,
     };
     assert!(matches!(connection.request(&gone).await.unwrap(), Message::Error { .. }));
 

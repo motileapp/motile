@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.openWindow) private var openWindow
     #endif
     @AppStorage("appearance") private var appearance = Appearance.system
+    @AppStorage(AppStore.steersKey) private var steers = false
     @State private var setupProject: Project?
 
     var body: some View {
@@ -53,6 +54,25 @@ struct SettingsView: View {
                     } trailing: {
                         Picker("Theme", selection: $appearance) {
                             ForEach(Appearance.allCases) { Text($0.label).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+
+                SettingsSection("Messages") {
+                    SettingsRow {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sent while the agent works")
+                            Text(steers ? "The agent reads it at once, in the turn that runs" : "Waits for the turn to end and starts the next one")
+                                .font(.caption)
+                                .foregroundStyle(Color.themeSecondary)
+                        }
+                    } trailing: {
+                        Picker("Sent while the agent works", selection: $steers) {
+                            Text("Queue").tag(false)
+                            Text("Steer").tag(true)
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()

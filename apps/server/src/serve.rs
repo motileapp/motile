@@ -115,9 +115,10 @@ impl Server {
                 Ok(subscription) => return follow_thread(send, subscription).await,
                 Err(error) => Err(error),
             },
-            Request::Send { thread_id, new_thread, text, attachments } => {
-                hub.send(thread_id, new_thread, text, attachments).await.map(|thread_id| Message::Sent { thread_id })
-            }
+            Request::Send { thread_id, new_thread, text, attachments, now } => hub
+                .send(thread_id, new_thread, text, attachments, now)
+                .await
+                .map(|thread_id| Message::Sent { thread_id }),
             Request::Answer { thread_id, approval_id, allow, answers } => {
                 hub.answer(&thread_id, &approval_id, allow, answers).await.map(|_| Message::Ok)
             }
