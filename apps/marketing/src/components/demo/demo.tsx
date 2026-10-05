@@ -236,7 +236,7 @@ function WindowButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="m-0.5 flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
+      className="m-0.5 flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground"
     >
       <Icon className="size-3.5" />
     </button>

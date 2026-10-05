@@ -59,7 +59,7 @@ export function DiffPanel({
             <XIcon className="size-[13px]" />
           </button>
         </span>
-        <span className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground">
+        <span className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground">
           <PlusIcon className="size-3.5" />
         </span>
       </div>
@@ -80,7 +80,7 @@ export function DiffPanel({
               setClosed(allClosed ? [] : files.map((file) => file.path))
             }
             aria-label={allClosed ? "Open every file" : "Close every file"}
-            className="ml-auto flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
+            className="ml-auto flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground"
           >
             {allClosed ? (
               <UnfoldVerticalIcon className="size-3.5" />
@@ -91,7 +91,7 @@ export function DiffPanel({
         )}
         <span
           className={cn(
-            "flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground",
+            "flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground",
             files.length < 2 && "ml-auto"
           )}
         >
