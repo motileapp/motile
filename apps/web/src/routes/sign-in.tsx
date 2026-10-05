@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { devSignIn, getAccount, getDevLogin } from "@/lib/account"
-import { Logo } from "@/components/logo"
+import { Header } from "@/components/header"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,56 +21,55 @@ function SignIn() {
   const { failed } = Route.useSearch()
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-sm flex-col justify-center gap-8 px-6 py-12">
-      <div className="flex items-center justify-between">
-        <a href="https://motile.app">
-          <Logo />
-        </a>
+    <div className="flex min-h-svh flex-col">
+      <Header>
         <ThemeToggle />
-      </div>
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-medium tracking-tight">
-          Sign in to Motile
-        </h1>
-        <p className="text-muted-foreground">
-          See the servers and clients on your account, add a server, and remove
-          what you no longer use.
-        </p>
-      </div>
-      <div className="flex flex-col gap-3">
-        <Button
-          size="lg"
-          nativeButton={false}
-          render={<a href="/auth/start" />}
-        >
-          <GoogleIcon />
-          Continue with Google
-        </Button>
-        {failed && (
-          <p role="alert" className="text-sm text-destructive">
-            The sign-in didn't finish. Try again.
+      </Header>
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-8 px-6 py-12">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-medium tracking-tight">
+            Sign in to Motile
+          </h1>
+          <p className="text-muted-foreground">
+            See the servers and clients on your account, add a server, and
+            remove what you no longer use.
           </p>
-        )}
-        {devLogin && <DevSignIn />}
-      </div>
-      <p className="text-sm text-muted-foreground">
-        By signing in you agree to the{" "}
-        <a
-          href="https://motile.app/terms/"
-          className="underline underline-offset-4 hover:text-foreground"
-        >
-          terms
-        </a>{" "}
-        and the{" "}
-        <a
-          href="https://motile.app/privacy/"
-          className="underline underline-offset-4 hover:text-foreground"
-        >
-          privacy policy
-        </a>
-        .
-      </p>
-    </main>
+        </div>
+        <div className="flex flex-col gap-3">
+          <Button
+            size="lg"
+            nativeButton={false}
+            render={<a href="/auth/start" />}
+          >
+            <GoogleIcon />
+            Continue with Google
+          </Button>
+          {failed && (
+            <p role="alert" className="text-sm text-destructive">
+              The sign-in didn't finish. Try again.
+            </p>
+          )}
+          {devLogin && <DevSignIn />}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          By signing in you agree to the{" "}
+          <a
+            href="https://motile.app/terms/"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            terms
+          </a>{" "}
+          and the{" "}
+          <a
+            href="https://motile.app/privacy/"
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            privacy policy
+          </a>
+          .
+        </p>
+      </main>
+    </div>
   )
 }
 
