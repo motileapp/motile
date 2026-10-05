@@ -39,7 +39,7 @@ struct MotileApp: App {
                     .keyboardShortcut("b", modifiers: [.command, .option])
                 Button(store.sidePanel.isMaximized ? "Restore Side Panel" : "Maximize Side Panel") { store.sidePanel.toggleMaximized() }
                     .keyboardShortcut("b", modifiers: [.command, .option, .shift])
-                    .disabled(!store.sidePanel.isOpen)
+                    .disabled(!store.sidePanel.canMaximize)
                 Button("Show Changes") { store.sidePanel.showDiff() }
                     .keyboardShortcut("d")
                     .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
@@ -294,6 +294,7 @@ struct MainView: View {
                 ) {
                     store.sidePanel.toggleMaximized()
                 }
+                .disabled(!store.sidePanel.canMaximize)
             }
             ToolbarButton(symbol: .panelRight, help: open ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
                 store.sidePanel.isOpen.toggle()
@@ -317,8 +318,12 @@ struct MainView: View {
 }
 
 /// The line between the thread and what is beside it. Dragging it makes the sidebar or the side
-/// panel wider or narrower.
+/// panel wider or narrower. It is grabbed mostly from the thread's side: the pane's rows light up
+/// close to the line, and the grab must not take their clicks.
 private struct PaneDivider: View {
+    private static let threadReach: CGFloat = 8
+    private static let paneReach: CGFloat = 4
+
     @Binding var width: Double
     let widths: ClosedRange<Double>
     /// The pane is on the right of the line, so it grows when the line goes left.
@@ -332,8 +337,11 @@ private struct PaneDivider: View {
             .ignoresSafeArea()
             .overlay {
                 Color.clear
-                    .frame(width: Theme.resizeGrab)
+                    .frame(width: Self.threadReach + 1 + Self.paneReach)
                     .contentShape(Rectangle())
+                    .alignmentGuide(HorizontalAlignment.center) { grab in
+                        grab[HorizontalAlignment.center] + (growsLeft ? 1 : -1) * (Self.threadReach - Self.paneReach) / 2
+                    }
                     .onHover { inside in
                         if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
                     }

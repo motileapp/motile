@@ -400,7 +400,6 @@ struct BranchPicker: View {
         .frame(height: Self.rowHeight)
         .frame(maxWidth: .infinity)
         .background(index == highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .contentShape(Rectangle())
         .opacity(working ? 0.5 : 1)
     }
 

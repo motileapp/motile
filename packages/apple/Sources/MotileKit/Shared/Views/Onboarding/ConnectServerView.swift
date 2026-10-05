@@ -90,7 +90,6 @@ struct ConnectServerView: View {
                 ShareLink(item: store.enrollToken?.command ?? "") {
                     Image(.share, size: Self.symbolSize)
                         .frame(width: Self.buttonSize, height: Self.buttonSize)
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.highlight(radius: 6, faded: true))
                 .accessibilityLabel("Share the command")

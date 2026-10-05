@@ -30,7 +30,6 @@ struct PullRequestActionButton: View {
             .overlay {
                 if style == "danger" { shape.strokeBorder(Color.themeDanger.opacity(0.6), lineWidth: 1) }
             }
-            .contentShape(Rectangle())
         }
         .buttonStyle(DimButtonStyle())
         .opacity(isEnabled || working != nil ? 1 : 0.45)

@@ -202,7 +202,6 @@ private struct PanelTabChip: View {
         .frame(height: scaled(28))
         .frame(maxWidth: 180)
         .padding(.vertical, Self.reach)
-        .contentShape(Rectangle())
         .button(.highlight(selected: active, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
             IconOnlyButton(symbol: .x, help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4, faded: true) { panel.close(tab) }
@@ -274,7 +273,6 @@ private struct PanelLauncher: View {
             .foregroundStyle(Color.themeText)
             .padding(.horizontal, 10)
             .frame(height: pressable(34))
-            .contentShape(Rectangle())
         }
         .buttonStyle(.highlight())
         .disabled(reason != nil)
@@ -557,7 +555,6 @@ private struct FileRow: View {
         .padding(.leading, 12 + CGFloat(node.depth) * 14)
         .padding(.trailing, 10)
         .frame(height: pressable(26))
-        .contentShape(Rectangle())
         .button(.highlight(radius: 6, inset: EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))) {
             if node.folder { panel.toggleFolder(node.path) } else { panel.open(.file(node.path)) }
         }

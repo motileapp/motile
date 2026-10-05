@@ -772,7 +772,6 @@ private struct PanelRow: View {
         .opacity(item.off ? 0.45 : 1)
         .background(highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .padding(.horizontal, Self.sideMargin)
-        .contentShape(Rectangle())
         .opacity(faded ? 0.45 : 1)
         .animation(item.placeholderLines > 0 ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : nil, value: faded)
         .onAppear { faded = item.placeholderLines > 0 }

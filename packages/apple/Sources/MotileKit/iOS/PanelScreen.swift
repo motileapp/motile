@@ -49,6 +49,7 @@ struct PanelScreen: View {
             ) {
                 store.sidePanel.toggleMaximized()
             }
+            .disabled(!store.sidePanel.canMaximize)
             IconOnlyButton(symbol: .x, help: "Close the side panel", size: 36, symbolSize: 14, faded: true) {
                 store.sidePanel.isOpen = false
             }

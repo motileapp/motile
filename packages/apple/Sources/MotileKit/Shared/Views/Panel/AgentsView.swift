@@ -85,7 +85,6 @@ private struct AgentRow: View {
             // An agent that another agent started stands in from it.
             .padding(.leading, agent.parent == nil ? 0 : 18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.highlight())
     }

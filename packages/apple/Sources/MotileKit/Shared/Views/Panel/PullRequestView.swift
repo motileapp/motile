@@ -289,7 +289,6 @@ private struct PullRequestPageView: View {
                     .font(.ui(size: 12))
                     .padding(.horizontal, 6)
                     .frame(height: pressable(24))
-                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.highlight(radius: 6))
                 .help("Show what it changes")
@@ -309,7 +308,6 @@ private struct PullRequestPageView: View {
                     .font(.ui(size: 12))
                     .padding(.horizontal, 6)
                     .frame(height: pressable(24))
-                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.highlight(radius: 6))
                 .padding(.leading, -6)
@@ -713,7 +711,6 @@ private struct StackCard: View {
                     }
                     .padding(.horizontal, 12)
                     .frame(height: pressable(28))
-                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.highlight(radius: 6, inset: EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)))
                 .disabled(layer.current)
@@ -767,7 +764,6 @@ private struct MergeBox: View {
                         .foregroundStyle(Color.themeLink)
                         .padding(.horizontal, 8)
                         .frame(height: pressable(24))
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.highlight(radius: 6))
                 .padding(.leading, 30)

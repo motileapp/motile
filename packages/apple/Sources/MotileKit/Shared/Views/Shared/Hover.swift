@@ -53,7 +53,8 @@ extension View {
 }
 
 /// What a button looks like under the pointer and under a finger: the same light. A button that
-/// is selected, or `lit` as the one the arrow keys are on, has it without either.
+/// is selected, or `lit` as the one the arrow keys are on, has it without either. All of the
+/// label takes the click, so wherever it lights it can be pressed.
 struct HighlightButtonStyle: ButtonStyle {
     var radius: CGFloat = 7
     var selected = false
@@ -64,6 +65,7 @@ struct HighlightButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .contentShape(Rectangle())
             .hoverHighlight(radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, color: color, faded: faded)
     }
 }
@@ -71,7 +73,9 @@ struct HighlightButtonStyle: ButtonStyle {
 /// A button whose own look says what it does, like a picture: it only dims under a finger.
 struct DimButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
+        configuration.label
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 
@@ -117,7 +121,6 @@ struct IconOnlyButton: View {
             Image(symbol, size: symbolSize)
                 .frame(width: size, height: size)
                 .padding(around)
-                .contentShape(Rectangle())
         }
         .buttonStyle(.highlight(radius: radius, inset: around, faded: faded))
         .padding(-reach)
@@ -149,7 +152,6 @@ struct LinkButton: View {
                         .foregroundStyle(Color.themeLink)
                         .padding(.horizontal, Self.padding)
                         .frame(minWidth: Self.height, minHeight: Self.height)
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.highlight(radius: 6, color: .themeLinkHover))
                 .fixedSize()

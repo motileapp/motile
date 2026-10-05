@@ -160,7 +160,6 @@ private struct PullRequestListRow: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.highlight())
         .contextMenu {

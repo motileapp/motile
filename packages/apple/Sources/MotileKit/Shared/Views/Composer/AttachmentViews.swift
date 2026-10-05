@@ -29,7 +29,6 @@ struct AttachmentTile: View {
         .overlay(alignment: .bottom) { AttachmentProgress(attachment: attachment, onPicture: true) }
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.themeBorder, lineWidth: 1))
-        .contentShape(Rectangle())
         .button(DimButtonStyle(), action: open)
         .overlay(alignment: .topTrailing) {
             Button {

@@ -34,7 +34,6 @@ struct QuestionsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, Self.optionGap / 2)
                             .padding(.horizontal, Self.optionReach)
-                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.highlight(radius: 6))
                         .padding(.vertical, -Self.optionGap / 2)

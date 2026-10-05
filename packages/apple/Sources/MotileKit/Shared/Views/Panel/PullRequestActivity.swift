@@ -73,7 +73,6 @@ struct ActivityRow: View {
                     }
                     .padding(.horizontal, 6)
                     .frame(height: pressable(24))
-                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.highlight(radius: 6))
                 .disabled(commit.sha.isEmpty)

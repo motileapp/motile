@@ -343,8 +343,11 @@ final class SidePanel {
     /// The panel covers the thread, so the window shows the sidebar and the panel.
     var isMaximized: Bool { isOpen && tabs.maximized == true }
 
+    /// A panel that has no folder to show, like a draft's whose worktree isn't made yet, stays beside the thread.
+    var canMaximize: Bool { isOpen && key != nil }
+
     func toggleMaximized() {
-        guard isOpen else { return }
+        guard canMaximize else { return }
         let maximized = !isMaximized
         change { $0.maximized = maximized ? true : nil }
         // The composer is behind the panel now, and must not take what is typed.

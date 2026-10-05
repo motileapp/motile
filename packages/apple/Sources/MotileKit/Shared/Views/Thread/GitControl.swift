@@ -57,7 +57,6 @@ struct GitButton: View {
                 .foregroundStyle(color(of: quick, at: stage))
                 .padding(.horizontal, 9)
                 .frame(height: Self.height)
-                .contentShape(Rectangle())
             }
             .buttonStyle(.highlight(radius: 0))
             .disabled(stage != nil)
@@ -85,7 +84,6 @@ struct GitButton: View {
     private var chevron: some View {
         Image(.chevronDown, size: 9)
             .frame(width: 24, height: Self.height)
-            .contentShape(Rectangle())
     }
 
     private var menuButton: some View {
@@ -279,7 +277,6 @@ struct GitNoticeView: View {
                 .padding(.horizontal, 10)
                 .frame(height: scaled(26))
                 .background(prominent ? Color.themePrimary : Color.themeSelected, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .contentShape(Rectangle())
         }
         .buttonStyle(DimButtonStyle())
     }

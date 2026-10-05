@@ -190,7 +190,6 @@ private struct MarkDoneButton: View {
             }
             .padding(.horizontal, 5)
             .frame(height: 22)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.highlight(radius: 6, faded: true))
         .fixedSize()
@@ -272,7 +271,6 @@ struct ThreadRow: View, Equatable {
         .padding(.bottom, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .contentShape(Rectangle())
         .button(.highlight(radius: 8, selected: selected, inset: rowMargin)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
@@ -365,7 +363,6 @@ private struct DraftRow: View {
         .padding(.bottom, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .contentShape(Rectangle())
         .button(.highlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin)) { open(.draft(listed.id)) }
         .onHover { hovering = $0 }
         .contextMenu {
@@ -401,7 +398,6 @@ struct UndoRow: View {
                 .padding(.horizontal, 18)
                 .frame(height: doneRowHeight)
                 .padding(.vertical, 4)
-                .contentShape(Rectangle())
             }
             .buttonStyle(.highlight(radius: 0, faded: true))
         }
@@ -455,7 +451,6 @@ private struct DoneShelf: View {
                 .frame(height: Self.rowHeight)
                 .padding(.top, 4)
                 .padding(.bottom, expanded ? 4 - rowGap / 2 : 4)
-                .contentShape(Rectangle())
             }
             .buttonStyle(.highlight(radius: 0, faded: true))
 
@@ -557,7 +552,6 @@ struct DoneRow: View, Equatable {
         .padding(.horizontal, Self.sidePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .contentShape(Rectangle())
         .button(.highlight(radius: 8, selected: selected, inset: rowMargin)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }

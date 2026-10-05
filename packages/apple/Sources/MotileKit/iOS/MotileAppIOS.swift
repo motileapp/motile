@@ -121,7 +121,7 @@ struct MotileCommands: Commands {
                 .keyboardShortcut("b", modifiers: [.command, .option])
             Button(store.sidePanel.isMaximized ? "Restore Side Panel" : "Maximize Side Panel") { store.sidePanel.toggleMaximized() }
                 .keyboardShortcut("b", modifiers: [.command, .option, .shift])
-                .disabled(!store.sidePanel.isOpen)
+                .disabled(!store.sidePanel.canMaximize)
             Button("Show Changes") { store.sidePanel.showDiff() }
                 .keyboardShortcut("d")
                 .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
