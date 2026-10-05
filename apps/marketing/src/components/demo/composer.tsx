@@ -143,8 +143,7 @@ export function Composer({
           <ProjectIcon project={thread.project} size={13} />
           {thread.project.name}
         </span>
-        <span className="mx-2.5 h-3 w-px bg-border" />
-        <span className="flex items-center gap-1.5">
+        <span className="ml-auto flex items-center gap-1.5">
           {thread.worktree ? (
             <FolderGit2Icon className="size-[11px]" />
           ) : (
@@ -152,7 +151,8 @@ export function Composer({
           )}
           {thread.worktree ? "Worktree" : "Local checkout"}
         </span>
-        <span className="mr-3.5 ml-auto flex items-center gap-1.5">
+        <span className="mx-2.5 h-3 w-px bg-border" />
+        <span className="mr-3.5 flex items-center gap-1.5">
           <GitBranchIcon className="size-[11px]" />
           {thread.branch}
           {!thread.worktree && (

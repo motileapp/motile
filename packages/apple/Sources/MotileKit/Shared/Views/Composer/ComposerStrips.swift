@@ -70,8 +70,7 @@ struct ContextStrip: View {
     }
 
     private var parts: some View {
-        @Bindable var store = store
-        return HStack(spacing: 0) {
+        HStack(spacing: 0) {
             if let server {
                 part(server.name) {
                     Image(.server, size: 11)
@@ -86,30 +85,48 @@ struct ContextStrip: View {
             }
             .padding(.leading, server == nil ? 14 : 0)
             .help(project.path)
-            workspace
             Spacer(minLength: 8)
-            let startsInWorktree = store.draftUsesWorktree
-            if let branch = startsInWorktree ? store.draftBase : project.branch {
-                if project.worktree != nil {
-                    branchLabel(branch, opens: false)
-                        .foregroundStyle(Color.themeSecondary)
-                        .help("The branch of this thread's worktree")
-                } else if store.canSwitchBranches(of: project) {
-                    Button {
-                        store.showBranches(of: project)
-                    } label: {
-                        branchLabel(startsInWorktree ? "From \(branch)" : branch, opens: true)
-                    }
-                    .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin, faded: true))
-                    .help(startsInWorktree ? "The branch the worktree's branch starts from" : "Switch the branch of \(project.name)")
-                    .popover(isPresented: $store.showsBranches, arrowEdge: .bottom) {
-                        BranchPicker(project: project, base: startsInWorktree ? branch : nil)
-                    }
-                } else {
-                    branchLabel(branch, opens: false)
-                        .foregroundStyle(Color.themeSecondary)
-                        .help(server?.known == true ? "Update \(server?.name ?? "your server") to switch branches from here" : "The branch checked out there")
+            workspace
+            if hasWorkspace, branch != nil {
+                divider
+            }
+            branchPart
+        }
+    }
+
+    private var branch: String? {
+        store.draftUsesWorktree ? store.draftBase : project.branch
+    }
+
+    private var hasWorkspace: Bool {
+        project.worktree != nil
+            || (store.selectedThread != nil && project.branch != nil)
+            || (store.selectedThread == nil && store.canUseWorktrees(of: project))
+    }
+
+    @ViewBuilder private var branchPart: some View {
+        @Bindable var store = store
+        let startsInWorktree = store.draftUsesWorktree
+        if let branch {
+            if project.worktree != nil {
+                branchLabel(branch, opens: false)
+                    .foregroundStyle(Color.themeSecondary)
+                    .help("The branch of this thread's worktree")
+            } else if store.canSwitchBranches(of: project) {
+                Button {
+                    store.showBranches(of: project)
+                } label: {
+                    branchLabel(startsInWorktree ? "From \(branch)" : branch, opens: true)
                 }
+                .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin, faded: true))
+                .help(startsInWorktree ? "The branch the worktree's branch starts from" : "Switch the branch of \(project.name)")
+                .popover(isPresented: $store.showsBranches, arrowEdge: .bottom) {
+                    BranchPicker(project: project, base: startsInWorktree ? branch : nil)
+                }
+            } else {
+                branchLabel(branch, opens: false)
+                    .foregroundStyle(Color.themeSecondary)
+                    .help(server?.known == true ? "Update \(server?.name ?? "your server") to switch branches from here" : "The branch checked out there")
             }
         }
     }
@@ -124,9 +141,7 @@ struct ContextStrip: View {
                 .help("The thread works in the project's folder")
         } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
             let inWorktree = store.draftUsesWorktree
-            let margin = EdgeInsets(top: 4, leading: 3, bottom: 4, trailing: 3)
-            divider
-                .padding(.leading, 10)
+            let margin = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
             Menu {
                 Section("Workspace") {
                     Toggle(isOn: Binding(get: { !inWorktree }, set: { _ in store.setDraftWorktree(false) })) {
@@ -159,12 +174,11 @@ struct ContextStrip: View {
         }
     }
 
-    @ViewBuilder private func working(in title: String, symbol: Symbol) -> some View {
-        divider
-            .padding(.horizontal, 10)
+    private func working(in title: String, symbol: Symbol) -> some View {
         part(title) {
             Image(symbol, size: 11)
         }
+        .padding(.horizontal, 13)
     }
 
     private var divider: some View {
