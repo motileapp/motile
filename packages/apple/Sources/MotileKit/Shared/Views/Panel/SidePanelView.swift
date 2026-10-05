@@ -134,6 +134,7 @@ struct PanelTabStrip: View {
                         IconOnlyButton(symbol: .plus, help: "New tab", size: scaled(28), symbolSize: 12, faded: true) {
                             store.sidePanel.openBlank()
                         }
+                        .disabled(tabs.isBlank)
                     }
                 }
                 .padding(.horizontal, 8)
