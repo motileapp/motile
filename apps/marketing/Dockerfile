@@ -8,6 +8,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/marketing/package.json apps/marketing/
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile --filter motile-marketing
+COPY packages/theme packages/theme
 COPY apps/marketing apps/marketing
 RUN pnpm --filter motile-marketing build
 

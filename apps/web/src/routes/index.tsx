@@ -6,6 +6,7 @@ import { AccountMenu } from "@/components/account-menu"
 import { AddServer } from "@/components/add-server"
 import { DeviceList } from "@/components/device-list"
 import { Logo } from "@/components/logo"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
 import {
   Empty,
@@ -34,7 +35,10 @@ function Account() {
         <a href="https://motile.app">
           <Logo />
         </a>
-        <AccountMenu user={account.user} />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <AccountMenu user={account.user} />
+        </div>
       </header>
       <main className="flex flex-col gap-12 pt-8">
         <section className="flex flex-col gap-4">
@@ -55,7 +59,8 @@ function Account() {
                 </EmptyMedia>
                 <EmptyTitle>No servers yet</EmptyTitle>
                 <EmptyDescription>
-                  Add a Linux machine or a Mac and your clients can start threads on it.
+                  Add a Linux machine or a Mac and your clients can start
+                  threads on it.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>

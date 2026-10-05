@@ -1,5 +1,6 @@
 import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
 import { Toaster } from "@/components/ui/sonner"
+import { THEME_SCRIPT } from "@/lib/theme"
 
 import appCss from "../styles.css?url"
 
@@ -8,16 +9,6 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      {
-        name: "theme-color",
-        content: "#f8f9fc",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        name: "theme-color",
-        content: "#0a0b0f",
-        media: "(prefers-color-scheme: dark)",
-      },
       { title: "Motile" },
       {
         name: "description",
@@ -52,8 +43,9 @@ function NotFound() {
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <HeadContent />
       </head>
       <body>
