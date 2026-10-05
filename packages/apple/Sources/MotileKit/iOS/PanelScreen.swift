@@ -3,7 +3,7 @@ import SwiftUI
 
 /// What the Mac has in the panel beside the thread: the changes in the folder the thread works
 /// in, its files, the files opened from either, and the agents the thread started. On a phone it
-/// is a screen pushed over the thread; in a wide window it is beside it.
+/// is under the thread, which a swipe to the left slides aside; in a wide window it is beside it.
 struct PanelScreen: View {
     @Environment(AppStore.self) private var store
     /// The panel is a pane beside the thread, with its own buttons to cover the thread and to close.
@@ -26,6 +26,18 @@ struct PanelScreen: View {
         .background(Color.themeBackground.ignoresSafeArea())
         .navigationTitle(store.panelTarget?.name ?? "Files")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !beside {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        store.sidePanel.isOpen = false
+                    } label: {
+                        Image(.chevronLeft, size: 16)
+                    }
+                    .accessibilityLabel("Back")
+                }
+            }
+        }
     }
 
     private var paneButtons: some View {
