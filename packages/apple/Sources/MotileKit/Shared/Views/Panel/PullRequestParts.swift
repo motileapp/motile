@@ -27,9 +27,6 @@ struct PullRequestActionButton: View {
             .padding(.horizontal, 11)
             .frame(height: scaled(28))
             .background(background, in: shape)
-            .overlay {
-                if style == "danger" { shape.strokeBorder(Color.themeDanger.opacity(0.6), lineWidth: 1) }
-            }
         }
         .buttonStyle(DimButtonStyle())
         .opacity(isEnabled || working != nil ? 1 : 0.45)
@@ -44,17 +41,13 @@ struct PullRequestActionButton: View {
     }
 
     private var foreground: Color {
-        switch style {
-        case "primary": .white
-        case "danger": .themeDanger
-        default: .themeText
-        }
+        style == "plain" ? .themeText : .white
     }
 
     private var background: Color {
         switch style {
         case "primary": .themePrimary
-        case "danger": .themeDanger.opacity(0.1)
+        case "danger": .themeDangerFill
         default: .themeSelected
         }
     }
