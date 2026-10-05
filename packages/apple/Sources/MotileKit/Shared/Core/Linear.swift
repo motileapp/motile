@@ -188,7 +188,8 @@ final class Linear {
     private(set) var teams: [String: [LinearTeam]] = [:]
     /// Who can be assigned, by workspace.
     private(set) var users: [String: [LinearUser]] = [:]
-    private(set) var issues: Loaded<[LinearGroup]> = .loading
+    /// The lists read so far, by what asked for them, so that a tab opens as it was left.
+    private var lists: [Query: Loaded<[LinearGroup]>] = [:]
     /// The open issues, by id.
     private(set) var pages: [String: Loaded<LinearPage>] = [:]
     /// The issues that are being changed, those commented on as `comment:` and their id, those
@@ -199,14 +200,24 @@ final class Linear {
     private var choices: [String: LinearChoice]
 
     @ObservationIgnored private var session: SignInSession?
-    /// What `issues` was asked with.
-    @ObservationIgnored private var listed: Listed?
+    /// What the tab lists now.
+    private var listed: Query?
     @ObservationIgnored private let defaults = UserDefaults.standard
 
-    private struct Listed: Equatable {
-        let target: PanelTarget
-        let choice: LinearChoice
+    /// What a list is asked with. Two threads of one project ask the same.
+    private struct Query: Hashable {
+        let serverID: String
+        let workspace: String
+        let team: String?
+        let mine: Bool
+        let states: [String]
         let search: String
+    }
+
+    /// The issues the tab lists.
+    var issues: Loaded<[LinearGroup]> {
+        guard let listed else { return .loading }
+        return lists[listed] ?? .loading
     }
 
     init() {
@@ -281,35 +292,43 @@ final class Linear {
     }
 
     /// Asks the server for the issues the project's tab lists, or for the ones that have the
-    /// words of `search`, and for the workspace's teams and users when they aren't known yet.
+    /// words of `search`, and for the workspace's teams and users when they aren't known yet. A
+    /// list read before shows at once while it is read again.
     func load(_ target: PanelTarget, search: String = "") {
         let choice = choice(for: target)
         guard let workspace = choice.workspace else { return }
-        let asked = Listed(target: target, choice: choice, search: search.trimmingCharacters(in: .whitespaces))
-        if listed != asked || issues.value == nil {
-            listed = asked
-            issues = .loading
-        }
-        working.insert("issues")
+        let query = Query(
+            serverID: target.serverID, workspace: workspace, team: choice.team, mine: choice.mine, states: choice.states,
+            search: search.trimmingCharacters(in: .whitespaces))
+        if let listed, listed != query, !listed.search.isEmpty { lists[listed] = nil }
+        listed = query
         if teams[workspace] == nil { loadTeams(of: workspace, on: target.serverID) }
+        fetch(query)
+    }
+
+    private func fetch(_ query: Query) {
+        if lists[query] == nil { lists[query] = .loading }
+        working.insert("issues")
         // A server that doesn't read `states` yet goes by `closed`.
-        let closed = choice.states.isEmpty || choice.states.contains { ["completed", "canceled"].contains($0) }
+        let closed = query.states.isEmpty || query.states.contains { ["completed", "canceled"].contains($0) }
         var command: JSON = [
-            "server_id": target.serverID, "workspace": workspace, "mine": choice.mine, "closed": closed, "states": choice.states,
+            "server_id": query.serverID, "workspace": query.workspace, "mine": query.mine, "closed": closed, "states": query.states,
         ]
-        if let team = choice.team { command["team"] = team }
-        if !asked.search.isEmpty { command["search"] = asked.search }
+        if let team = query.team { command["team"] = team }
+        if !query.search.isEmpty { command["search"] = query.search }
         store?.core.send("linear_issues", command, read: { $0.objects("groups").map(LinearGroup.init) }) { [weak self] result in
-            guard let self, listed == asked else { return }
-            working.remove("issues")
+            guard let self else { return }
+            let shown = listed == query
+            if shown { working.remove("issues") }
             switch result {
             case .success(let groups):
-                issues = .ready(groups)
-                error = nil
+                lists[query] = .ready(groups)
+                if shown { error = nil }
             case .failure(let failure):
-                if issues.value == nil { issues = .failed(failure.message) } else { error = failure.message }
+                guard shown else { return }
+                if lists[query]?.value == nil { lists[query] = .failed(failure.message) } else { error = failure.message }
                 // Linear may have ended the connection.
-                ask(["type": "linear_status"], on: target.serverID)
+                ask(["type": "linear_status"], on: query.serverID)
             }
         }
     }
@@ -389,7 +408,7 @@ final class Linear {
 
     private func refresh(issue id: String?, of workspace: String, on serverID: String) {
         if let id, pages[id] != nil { loadIssue(id, of: workspace, on: serverID) }
-        if let listed, listed.target.serverID == serverID { load(listed.target, search: listed.search) }
+        if let listed, listed.serverID == serverID { fetch(listed) }
     }
 
     private func loadTeams(of workspace: String, on serverID: String) {
