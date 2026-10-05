@@ -51,10 +51,13 @@ struct CommandPanel: View {
             hints
         }
         .frame(width: 620)
-        .background(Color.themePopover, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.themePopover)
+                .shadow(color: .black.opacity(0.3), radius: 30, y: 14)
+        }
         .environment(\.surface, .popover)
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1))
-        .shadow(color: .black.opacity(0.3), radius: 30, y: 14)
         .padding(.top, 70)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {

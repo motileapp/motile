@@ -236,7 +236,12 @@ struct GitNoticeView: View {
         .padding(.leading, Self.padding)
         .padding(.trailing, Self.closeMargin + Self.closeSize + 4)
         .frame(maxWidth: Platform.scale > 1 ? 440 : 320)
-        .background(Color.themePopover, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .background {
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
+                .fill(Color.themePopover)
+                .shadow(color: .black.opacity(0.05), radius: 1.5, y: 1)
+                .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
+        }
         .environment(\.surface, .popover)
         .overlay {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1)
@@ -245,8 +250,6 @@ struct GitNoticeView: View {
             ActionButton(icon: .x, help: "Close", size: .small) { store.dismissGitNotice() }
                 .padding(Self.closeMargin)
         }
-        .shadow(color: .black.opacity(0.05), radius: 1.5, y: 1)
-        .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
     }
 
     private func action(_ title: String, prominent: Bool, run: @escaping () -> Void) -> some View {
