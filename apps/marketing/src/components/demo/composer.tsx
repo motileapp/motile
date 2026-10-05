@@ -1,6 +1,5 @@
 import {
   ArrowUpIcon,
-  ChevronDownIcon,
   FolderGit2Icon,
   FolderIcon,
   GitBranchIcon,
@@ -11,7 +10,7 @@ import {
   SquareTerminalIcon,
 } from "lucide-react"
 import { useState, type ReactNode } from "react"
-import { AgentIcon, ProjectIcon } from "./icons"
+import { AgentIcon, MenuChevron, ProjectIcon } from "./icons"
 import type { Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
@@ -154,7 +153,7 @@ export function Composer({
           <GitBranchIcon className="size-[13px]" />
           {thread.branch}
           {!thread.worktree && (
-            <ChevronDownIcon className="size-[9px] opacity-60" />
+            <MenuChevron />
           )}
         </span>
       </Strip>
@@ -166,7 +165,7 @@ function Control({ children }: { children: ReactNode }) {
   return (
     <span className="flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground">
       {children}
-      <ChevronDownIcon className="size-[9px] opacity-60" />
+      <MenuChevron />
     </span>
   )
 }

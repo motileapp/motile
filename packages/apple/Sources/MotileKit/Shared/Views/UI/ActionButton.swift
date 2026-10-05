@@ -96,7 +96,7 @@ struct ControlLabel: View {
                     .opacity(pending && icon == nil ? 0 : 1)
             }
             if chevron {
-                Image(.chevronDown, size: 9)
+                Image(.chevronDown, size: size.textSize, trimmed: true)
                     .opacity(0.6)
             }
         }
