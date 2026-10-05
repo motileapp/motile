@@ -1269,7 +1269,7 @@ impl Core {
                     reply(&sink, id, listing.map(|listing| serde_json::to_value(listing).unwrap_or_default()));
                 });
             }
-            Command::Send { server_id, thread_id, new_thread, text, attachments } => {
+            Command::Send { server_id, thread_id, new_thread, text, attachments, now } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
@@ -1277,7 +1277,7 @@ impl Core {
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
                     let sent = async {
-                        match link.request(&Request::Send { thread_id, new_thread, text, attachments }).await? {
+                        match link.request(&Request::Send { thread_id, new_thread, text, attachments, now }).await? {
                             Message::Sent { thread_id } => Ok(json!({ "thread_id": thread_id })),
                             other => bail!(
                                 "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"

@@ -318,6 +318,7 @@ impl Hub {
         new_thread: Option<NewThread>,
         text: String,
         attachments: Vec<String>,
+        now: bool,
     ) -> anyhow::Result<String> {
         let text = text.trim().to_string();
         if text.is_empty() && attachments.is_empty() {
@@ -355,6 +356,9 @@ impl Hub {
             let idle = run.received_result;
             if !idle || !live.write_prompt(&prompt, &new_id()) {
                 live.queued.push(Queued { id: new_id(), text, attachments, media, held: false, sending: false });
+                if now && !idle && live.steer(&self.store, live.queued.len() - 1)? {
+                    return Ok(thread_id);
+                }
                 live.save_queued(&self.store)?;
                 live.send_activity();
                 return Ok(thread_id);
@@ -1160,7 +1164,7 @@ impl Hub {
             let before = self.lock_watched().insert(thread_id.clone(), seen.clone());
             let Some(before) = before else { continue };
             let Some(text) = news(&found, &before, &seen) else { continue };
-            if let Err(error) = self.send(Some(thread_id.clone()), None, text, Vec::new()).await {
+            if let Err(error) = self.send(Some(thread_id.clone()), None, text, Vec::new(), false).await {
                 tracing::warn!(thread_id, "couldn't tell the agent about its pull request: {error:#}");
             }
         }

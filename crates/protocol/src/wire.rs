@@ -233,12 +233,15 @@ pub enum Request {
     },
     /// Starts a turn, in `thread_id` or in a thread created from `new_thread`. While a turn is
     /// running the message is queued until the turn ends, when it starts the next one. An agent
-    /// that is only monitoring gets it right away.
+    /// that is only monitoring gets it right away. With `now`, the turn that runs takes it at once
+    /// if the agent can.
     Send {
         thread_id: Option<String>,
         new_thread: Option<NewThread>,
         text: String,
         attachments: Vec<String>,
+        #[serde(default)]
+        now: bool,
     },
     /// Gives the agent a queued message now.
     SendQueued {

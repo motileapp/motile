@@ -123,6 +123,7 @@ async fn main() -> anyhow::Result<()> {
                 new_thread: Some(new_thread),
                 text: prompt.to_string(),
                 attachments: Vec::new(),
+                now: false,
             })
             .await?;
         let thread_id = sent["thread_id"].as_str().unwrap_or_default().to_string();
