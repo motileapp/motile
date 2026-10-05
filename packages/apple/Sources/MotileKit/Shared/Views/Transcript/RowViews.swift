@@ -198,8 +198,6 @@ final class UserRowView: RowView {
     /// The room under the bubble for when the message was sent and the button that copies it.
     static let footHeight = metaGap + MessageMeta.height + 4
     private static let metaGap: CGFloat = 4
-    /// Keeps the time and the button clear of the bubble's round corner.
-    private static let metaInset: CGFloat = 6
 
     static func height(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
         margin + bubbleHeight(fit, textHeight: textHeight) + footHeight
@@ -219,7 +217,7 @@ final class UserRowView: RowView {
         attachments.frame = CGRect(x: padding, y: fit.top, width: fit.innerWidth, height: fit.files.height)
         attachments.layout(width: fit.innerWidth)
         text.frame = CGRect(x: padding, y: fit.top + fit.files.height + fit.between, width: fit.innerWidth, height: textHeight)
-        meta.frame = CGRect(x: 0, y: bubble.frame.maxY + Self.metaGap, width: width - Self.metaInset, height: MessageMeta.height)
+        meta.frame = CGRect(x: 0, y: bubble.frame.maxY + Self.metaGap, width: width, height: MessageMeta.height)
         return Self.height(fit, textHeight: textHeight)
     }
 
@@ -910,8 +908,6 @@ final class TurnEndRowView: RowView {
 /// message is on. Where there is a pointer it is only seen while the pointer is over its message.
 final class MessageMeta: FlippedView {
     static let height = IconButton.side
-    /// How far the button's symbol is from the button's edge, which goes past the column's.
-    private static let symbolInset = IconButton.symbolInset
 
     var onCopy: (() -> Void)?
     var shown = !Platform.hoverReveals {
@@ -955,11 +951,11 @@ final class MessageMeta: FlippedView {
         let words = ceil(time.string.size(withAttributes: [.font: Theme.smallFont]).width)
         let timeWidth = min(words + 4, max(0, bounds.width - side))
         guard trailing else {
-            button.frame = CGRect(x: -Self.symbolInset, y: 0, width: side, height: side)
+            button.frame = CGRect(x: 0, y: 0, width: side, height: side)
             time.frame = CGRect(x: button.frame.maxX, y: lineY, width: timeWidth, height: lineHeight)
             return
         }
-        button.frame = CGRect(x: bounds.width - side + Self.symbolInset, y: 0, width: side, height: side)
+        button.frame = CGRect(x: bounds.width - side, y: 0, width: side, height: side)
         time.frame = CGRect(x: button.frame.minX - timeWidth, y: lineY, width: timeWidth, height: lineHeight)
     }
 

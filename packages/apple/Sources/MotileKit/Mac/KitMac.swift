@@ -305,8 +305,6 @@ final class SymbolView: NSImageView {
 final class IconButton: NSButton {
     static let metrics = MotileKit.ControlSize.regular
     static let side = metrics.height
-    /// How far the symbol is from the button's edge.
-    static let symbolInset = ((side - metrics.symbolSide) / 2).rounded()
 
     private let symbolSize = IconButton.metrics.symbol
     private var action_: (() -> Void)?

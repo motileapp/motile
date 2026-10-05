@@ -322,8 +322,6 @@ final class SymbolView: UIImageView {
 final class IconButton: UIButton {
     static let metrics = MotileKit.ControlSize.regular
     static let side = metrics.height
-    /// How far the symbol is from the button's edge.
-    static let symbolInset = ((side - metrics.symbolSide) / 2).rounded()
     private static let touchSide = Platform.minimumPress
 
     private let symbolSize = IconButton.metrics.symbol
