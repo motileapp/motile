@@ -130,7 +130,9 @@ struct SearchField: View {
     var bare = false
 
     var body: some View {
-        InputField("Search", text: $text, icon: .search, size: Platform.scale > 1 ? .large : .regular, clearable: true, bare: bare)
+        InputField(
+            "Search", text: $text, icon: .search, variant: bare ? .bare : .outlined, size: Platform.scale > 1 ? .large : .regular, clearable: true
+        )
     }
 }
 
