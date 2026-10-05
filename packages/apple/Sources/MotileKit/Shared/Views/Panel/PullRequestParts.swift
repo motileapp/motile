@@ -210,24 +210,30 @@ struct PullRequestNoticeBar: View {
     @Environment(AppStore.self) private var store
     let notice: PullRequestNotice
 
+    private static let lineHeight = scaled(17)
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
                 Image(notice.failed ? .circleAlert : .circleCheck, size: 13)
                     .foregroundStyle(notice.failed ? Color.themeDanger : Color.themeSuccess)
-                    .frame(height: scaled(17))
+                    .frame(height: Self.lineHeight)
                 Text(notice.text)
                     .font(.ui(size: 12.5))
                     .foregroundStyle(Color.themeText)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(minHeight: Self.lineHeight)
                 Spacer(minLength: 4)
-                if let url = notice.url {
-                    LinkButton("Open") { Platform.open(url) }
+                HStack(spacing: 8) {
+                    if let url = notice.url {
+                        LinkButton("Open") { Platform.open(url) }
+                    }
+                    IconOnlyButton(symbol: .x, help: "Close", size: scaled(20), symbolSize: 10, faded: true) {
+                        store.sidePanel.dismissPullRequestNotice()
+                    }
                 }
-                IconOnlyButton(symbol: .x, help: "Close", size: scaled(20), symbolSize: 10, faded: true) {
-                    store.sidePanel.dismissPullRequestNotice()
-                }
+                .frame(height: Self.lineHeight)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
