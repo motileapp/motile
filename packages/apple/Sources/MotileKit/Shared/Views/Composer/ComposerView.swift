@@ -296,7 +296,8 @@ struct ComposerSendButtons: View {
         HStack(spacing: 0) {
             if running {
                 ActionButton(
-                    icon: .square, help: "Stop (⌘.)", variant: .danger, round: true, margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : 8)
+                    "", picture: AnyView(RoundedRectangle(cornerRadius: 2.5).frame(width: 10, height: 10)), help: "Stop (⌘.)", variant: .danger,
+                    round: true, margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : 8)
                 ) {
                     store.stop()
                 }
