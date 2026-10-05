@@ -558,6 +558,10 @@ struct ThreadStatus: View {
                     }
                 }
             }
+        } else if let stage = thread.gitStage {
+            label(stage.label, Color.themeWorking) {
+                Spinner(size: 11)
+            }
         } else if thread.monitoring {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeText) {
