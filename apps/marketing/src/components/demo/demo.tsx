@@ -235,7 +235,7 @@ function WindowButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="m-0.5 flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-hover hover:text-foreground"
+      className="m-0.5 flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
     >
       <Icon className="size-3.5" />
     </button>
@@ -244,12 +244,12 @@ function WindowButton({
 
 function GitButton() {
   return (
-    <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-[7px] border border-strong-border text-[12px] font-medium">
-      <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-hover">
+    <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-[7px] border border-border-secondary text-[12px] font-medium">
+      <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-background-secondary">
         <GitCommitHorizontalIcon className="size-3.5" />
         Commit
       </span>
-      <span className="flex h-full items-center justify-center border-l border-strong-border px-[11px] text-muted-foreground hover:bg-hover hover:text-foreground">
+      <span className="flex h-full items-center justify-center border-l border-border-secondary px-[11px] text-muted-foreground hover:bg-background-secondary hover:text-foreground">
         <MenuChevron />
       </span>
     </span>

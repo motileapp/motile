@@ -164,7 +164,7 @@ final class UserRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        bubble.fill = Theme.bubble
+        bubble.fill = Theme.backgroundSecondary
         bubble.radius = 18
         addSubview(bubble)
         bubble.addSubview(text)
@@ -248,7 +248,7 @@ final class QueuedRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        bubble.stroke = Theme.strongBorder
+        bubble.stroke = Theme.borderSecondary
         bubble.dotted = true
         bubble.radius = Self.radius
         addSubview(bubble)
@@ -405,6 +405,7 @@ final class CodeHeader: FlippedView {
         super.init(frame: frame)
         addSubview(language)
         copyButton = IconButton(symbol: .copy, symbolSize: 12, tooltip: "Copy code") { [weak self] in self?.copy() }
+        copyButton.surface = .secondary
         addSubview(copyButton)
     }
 
@@ -447,7 +448,7 @@ final class CodeRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.codeBlock
+        surface.fill = Theme.backgroundSecondary
         surface.stroke = Theme.border
         surface.radius = 10
         addSubview(surface)
@@ -546,7 +547,7 @@ final class ToolRowView: RowView {
         header.addSubview(chevron)
         header.addSubview(elapsed)
 
-        detailSurface.fill = Theme.bubble
+        detailSurface.fill = Theme.backgroundSecondary
         detailSurface.radius = 8
         detailSurface.isHidden = true
         addSubview(detailSurface)
@@ -754,7 +755,7 @@ final class ChangesRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.bubble
+        surface.fill = Theme.backgroundSecondary
         surface.stroke = Theme.border
         surface.radius = Self.radius
         addSubview(surface)
@@ -832,7 +833,7 @@ final class ChangesRowView: RowView {
                 let row = CGRect(x: 0, y: headHeight + CGFloat(index) * entryHeight, width: bounds.width, height: entryHeight)
                 guard row.intersects(dirtyRect) else { continue }
                 if hovered == index {
-                    Theme.hover.setFill()
+                    Theme.backgroundTertiary.setFill()
                     RoundedBox.fill(row.insetBy(dx: 6, dy: 1), radius: 6)
                 }
                 var x = 12 + CGFloat(entry.depth) * 16

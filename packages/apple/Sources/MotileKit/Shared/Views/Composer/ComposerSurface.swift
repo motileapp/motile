@@ -4,8 +4,12 @@ extension View {
     /// The surface of the composer and its strips. On the Mac it is the composer's colour with a
     /// hairline around it. On iOS it is Liquid Glass under a tint where the system has it, which
     /// draws its own edge, and the system's material with a hairline before that.
-    @ViewBuilder
     func composerSurface<S: Shape>(in shape: S) -> some View {
+        composerFill(in: shape).environment(\.surface, .composer)
+    }
+
+    @ViewBuilder
+    private func composerFill<S: Shape>(in shape: S) -> some View {
         #if os(macOS)
         background(Color.themeComposer, in: shape)
             .overlay { shape.stroke(Color.themeBorder, lineWidth: 1) }
@@ -16,7 +20,7 @@ extension View {
         } else {
             background(Color.themeComposer.opacity(0.8), in: shape)
                 .background(.regularMaterial, in: shape)
-                .overlay { shape.stroke(Color.themeStrongBorder, lineWidth: 1) }
+                .overlay { shape.stroke(Color.themeBorderSecondary, lineWidth: 1) }
         }
         #endif
     }

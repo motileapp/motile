@@ -198,6 +198,7 @@ struct ContextStrip: View {
 /// it picks the branch a new worktree starts from instead, and switches nothing.
 struct BranchPicker: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.surface) private var surface
     let project: Project
     var base: String?
     @State private var query = ""
@@ -296,7 +297,8 @@ struct BranchPicker: View {
         #else
         // A screen of the thread's settings, where the keyboard only comes when the field is tapped.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.themeSheet)
+        .background(Color.themeBackgroundSecondary)
+        .environment(\.surface, .secondary)
         .navigationTitle(base == nil ? "Branch" : "Start from")
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -374,7 +376,7 @@ struct BranchPicker: View {
         .padding(.horizontal, 8)
         .frame(height: Self.rowHeight)
         .frame(maxWidth: .infinity)
-        .background(index == highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(index == highlighted ? surface.next.color : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .opacity(working ? 0.5 : 1)
     }
 

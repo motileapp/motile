@@ -109,7 +109,8 @@ struct UsageView: View {
         #else
         .presentationDetents([.large])
         #endif
-        .presentationBackground(Color.themeSheet)
+        .presentationBackground(Color.themeBackgroundSecondary)
+        .environment(\.surface, .secondary)
         .onAppear(perform: load)
         .onChange(of: period) { load() }
     }
@@ -254,7 +255,7 @@ struct UsageView: View {
                 }
                 if let index = pointedIndex(in: report) {
                     RuleMark(x: .value("Time", report.starts[index]))
-                        .foregroundStyle(Color.themeStrongBorder)
+                        .foregroundStyle(Color.themeBorderSecondary)
                         .lineStyle(StrokeStyle(lineWidth: 1))
                 }
             }
@@ -311,7 +312,7 @@ struct UsageView: View {
                     }
                 }
             }
-            .background(Color.themeHover, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         }
     }
 
@@ -332,6 +333,7 @@ struct UsageView: View {
 /// A model, a project or a kind of token: its name, its part of the whole as a bar, its tokens
 /// and what they cost.
 private struct UsageLineRow: View {
+    @Environment(\.surface) private var surface
     enum Measure { case cost, tokens }
 
     let line: UsageReport.Line
@@ -365,7 +367,7 @@ private struct UsageLineRow: View {
             Spacer(minLength: 8)
             if whole {
                 Capsule()
-                    .fill(Color.themeSelected)
+                    .fill(surface.next.color)
                     .frame(width: Self.barWidth, height: 4)
                     .overlay(alignment: .leading) {
                         Capsule()

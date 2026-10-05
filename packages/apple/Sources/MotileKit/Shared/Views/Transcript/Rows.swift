@@ -380,7 +380,7 @@ extension NSAttributedString.Key {
 
 /// Turns the core's rows into attributed strings. Safe to call from any thread.
 enum Typesetter {
-    static let inlineCodeBackground = Theme.dynamic(Theme.hex(0x000000, alpha: 0.06), Theme.hex(0xffffff, alpha: 0.1))
+    static let inlineCodeBackground = Theme.backgroundTertiary
 
     private static let italicFont = Theme.proseFont.italicised
     private static let boldItalicFont = Theme.proseBold.italicised

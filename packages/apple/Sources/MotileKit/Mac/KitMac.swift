@@ -306,6 +306,8 @@ final class IconButton: NSButton {
     static let metrics = MotileKit.ControlSize.regular
     static let side = metrics.height
 
+    /// The layer it lies on.
+    var surface = Surface.background
     private var symbolSize = IconButton.metrics.symbol
     private var action_: (() -> Void)?
     private var tracking: NSTrackingArea?
@@ -365,7 +367,7 @@ final class IconButton: NSButton {
         let lit = hovering || pressing
         contentTintColor = lit ? Theme.text : Theme.secondary
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = lit ? Theme.hover.cgColor : nil
+            layer?.backgroundColor = lit ? surface.next.platform.cgColor : nil
         }
     }
 

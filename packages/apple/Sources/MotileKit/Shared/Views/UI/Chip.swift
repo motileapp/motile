@@ -10,6 +10,7 @@ struct Chip: View {
     var dot: Color?
     var tone: Color?
     var monospaced = false
+    @Environment(\.surface) private var surface
 
     init(_ title: String, icon: Symbol? = nil, dot: Color? = nil, tone: Color? = nil, monospaced: Bool = false) {
         self.title = title
@@ -36,6 +37,6 @@ struct Chip: View {
         .foregroundStyle(dot == nil ? tone ?? Color.themeText : Color.themeText)
         .padding(.horizontal, 7)
         .frame(height: Self.height)
-        .background(tone?.opacity(0.14) ?? Color.themeHover, in: Capsule())
+        .background(tone?.opacity(0.14) ?? surface.next.color, in: Capsule())
     }
 }

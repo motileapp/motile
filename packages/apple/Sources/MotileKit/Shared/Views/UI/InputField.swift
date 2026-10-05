@@ -22,6 +22,7 @@ struct InputField: View {
     private let variant: InputVariant
     private let focus: FocusState<Bool>.Binding?
     @FocusState private var ownFocus: Bool
+    @Environment(\.surface) private var surface
 
     init(
         _ placeholder: String, text: Binding<String>, icon: Symbol? = nil, variant: InputVariant = .outlined, size: ControlSize = .regular,
@@ -42,8 +43,7 @@ struct InputField: View {
 
     private var fill: Color {
         switch variant {
-        case .outlined: .themeField
-        case .filled: .themeHover
+        case .outlined, .filled: surface.next.color
         case .bare: .clear
         }
     }
@@ -78,7 +78,7 @@ struct InputField: View {
         .background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
         .overlay {
             if variant == .outlined {
-                RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(surface == .background ? Color.themeBorder : Color.themeBorderSecondary, lineWidth: 1)
             }
         }
     }

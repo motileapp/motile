@@ -47,7 +47,7 @@ export function Composer({
           <button
             type="button"
             onClick={onStop}
-            className="mr-1 ml-auto h-6 rounded-[6px] px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground"
+            className="mr-1 ml-auto h-6 rounded-[6px] px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-composer-secondary hover:text-foreground"
           >
             Stop
           </button>
@@ -68,7 +68,7 @@ export function Composer({
               <button
                 type="button"
                 onClick={() => onAnswer(false)}
-                className="ml-auto h-6 rounded-[6px] bg-hover px-2 text-[11.5px] font-medium hover:bg-selected"
+                className="ml-auto h-6 rounded-[6px] bg-composer-secondary px-2 text-[11.5px] font-medium hover:bg-background"
               >
                 Deny
               </button>
@@ -122,7 +122,7 @@ export function Composer({
               </>
             )}
           </Control>
-          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground">
+          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-composer-secondary hover:text-foreground">
             <PaperclipIcon className="size-3.5" />
           </span>
           <button
@@ -179,7 +179,7 @@ function Control({
   return (
     <span
       className={cn(
-        "flex h-7 cursor-default items-center gap-1.5 rounded-[7px] pr-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground",
+        "flex h-7 cursor-default items-center gap-1.5 rounded-[7px] pr-[11px] text-[12px] font-medium text-muted-foreground hover:bg-composer-secondary hover:text-foreground",
         icon ? "pl-[9px]" : "pl-[11px]"
       )}
     >

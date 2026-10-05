@@ -28,6 +28,8 @@ struct ControlLook {
     let size: ControlSize
     var selected = false
     var lit = false
+    /// The layer it lies on.
+    var surface = Surface.background
     /// Round ends, for the composer's buttons.
     var round = false
     /// The sides another control touches, which stay square.
@@ -48,9 +50,9 @@ struct ControlLook {
     private var fill: Color {
         switch variant {
         case .primary: .themePrimary
-        case .secondary: selected || lit ? .themeSelected : .themeHover
+        case .secondary: (selected || lit ? surface.further : surface.next).color
         case .danger: .themeDangerFill
-        case .ghost: selected ? .themeSelected : lit ? .themeHover : .clear
+        case .ghost: selected ? surface.further.color : lit ? surface.next.color : .clear
         case .link: lit ? .themeLinkHover : .clear
         case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
         }
@@ -158,9 +160,11 @@ private struct ControlBody<Label: View>: View {
     let margin: EdgeInsets
     @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.surface) private var surface
 
     var body: some View {
         var look = self.look
+        look.surface = surface
         look.lit = enabled && !pending && (hovering || pressed)
         return label
             .foregroundStyle(look.foreground)

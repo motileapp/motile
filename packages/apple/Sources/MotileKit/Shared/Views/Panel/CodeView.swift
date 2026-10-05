@@ -289,7 +289,7 @@ final class CodeSheet {
                 switch file.kind(line) {
                 case .added: Self.addedFill.setFill()
                 case .removed: Self.removedFill.setFill()
-                case .note: Theme.hover.setFill()
+                case .note: Theme.backgroundSecondary.setFill()
                 case .unchanged: continue
                 }
                 row.fillCurrent()
@@ -399,7 +399,7 @@ final class CodeSheet {
     func drawHeading(of index: Int, in rect: CGRect, lineAbove: Bool) {
         guard let document, index < document.files.count else { return }
         let file = document.files[index]
-        Theme.bubble.setFill()
+        Theme.backgroundSecondary.setFill()
         rect.fillCurrent()
         Theme.border.setFill()
         if lineAbove { CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: 1).fillCurrent() }
@@ -472,7 +472,7 @@ final class CodeSheet {
             RoundedBox.fill(box, radius: 3.5)
             TintedSymbol.draw(.check, size: 9, color: .white, in: box)
         } else {
-            Theme.strongBorder.setStroke()
+            Theme.borderSecondary.setStroke()
             RoundedBox.stroke(box.insetBy(dx: 0.5, dy: 0.5), radius: 3.5)
         }
         let label = NSAttributedString(string: "Viewed", attributes: [

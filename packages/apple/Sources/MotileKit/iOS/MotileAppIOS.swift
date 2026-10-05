@@ -223,7 +223,8 @@ struct RootView: View {
                     ThreadSettingsSheet()
                 }
             }
-            .presentationBackground(Color.themeSheet)
+            .presentationBackground(Color.themeBackgroundSecondary)
+            .environment(\.surface, .secondary)
         }
         .fullScreenCover(isPresented: Binding(get: { store.viewing != nil }, set: { if !$0 { store.closeViewer() } })) {
             if let viewing = store.viewing {
@@ -270,7 +271,8 @@ private struct SettingsScreen: View {
     var body: some View {
         NavigationStack {
             SettingsView()
-                .background(Color.themeSheet)
+                .background(Color.themeBackgroundSecondary)
+                .environment(\.surface, .secondary)
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

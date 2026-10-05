@@ -106,7 +106,7 @@ final class RowButton: FlippedView {
     }
 
     private func light(_ lit: Bool) {
-        highlight.fill = lit ? Theme.hover : .clear
+        highlight.fill = lit ? Theme.backgroundSecondary : .clear
         title.color = lit ? Theme.text : Theme.secondary
     }
 }
@@ -122,7 +122,7 @@ final class PictureView: LayerView {
     override func paint(_ layer: CALayer) {
         layer.contents = picture
         layer.contentsGravity = fills ? .resizeAspectFill : .resizeAspect
-        layer.backgroundColor = resolved(Theme.bubble)
+        layer.backgroundColor = resolved(Theme.backgroundSecondary)
         layer.cornerRadius = Self.radius
         layer.cornerCurve = .continuous
         layer.masksToBounds = true

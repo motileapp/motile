@@ -47,24 +47,24 @@ export function DiffPanel({
           pastWindowButtons ? "pl-[200px]" : "pl-2"
         )}
       >
-        <span className="flex h-7 items-center gap-1.5 rounded-[7px] bg-selected pr-0.5 pl-[9px] text-[12px] font-medium">
+        <span className="flex h-7 items-center gap-1.5 rounded-[7px] bg-background-tertiary pr-0.5 pl-[9px] text-[12px] font-medium">
           <DiffIcon className="size-[11px]" />
           Diff
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-hover hover:text-foreground"
+            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-background hover:text-foreground"
           >
             <XIcon className="size-[13px]" />
           </button>
         </span>
-        <span className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-hover hover:text-foreground">
+        <span className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground">
           <PlusIcon className="size-3.5" />
         </span>
       </div>
       <div className="flex h-9 shrink-0 items-center gap-1 border-t border-b pr-1 pl-3">
-        <span className="-ml-2 flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground">
+        <span className="-ml-2 flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-background-secondary hover:text-foreground">
           Uncommitted
           <MenuChevron />
         </span>
@@ -80,7 +80,7 @@ export function DiffPanel({
               setClosed(allClosed ? [] : files.map((file) => file.path))
             }
             aria-label={allClosed ? "Open every file" : "Close every file"}
-            className="ml-auto flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-hover hover:text-foreground"
+            className="ml-auto flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
           >
             {allClosed ? (
               <UnfoldVerticalIcon className="size-3.5" />
@@ -91,7 +91,7 @@ export function DiffPanel({
         )}
         <span
           className={cn(
-            "flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-hover hover:text-foreground",
+            "flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground",
             files.length < 2 && "ml-auto"
           )}
         >
@@ -122,7 +122,7 @@ export function DiffPanel({
 const LINE_FILLS = {
   added: "bg-added",
   removed: "bg-removed",
-  note: "bg-hover text-muted-foreground",
+  note: "bg-background-secondary text-muted-foreground",
   unchanged: "",
 }
 
@@ -143,7 +143,7 @@ function File({
         type="button"
         onClick={onToggle}
         className={cn(
-          "flex h-[34px] w-full items-center border-b bg-bubble pr-1.5 text-left text-[12.5px]",
+          "flex h-[34px] w-full items-center border-b bg-background-secondary pr-1.5 text-left text-[12.5px]",
           !first && "border-t"
         )}
       >

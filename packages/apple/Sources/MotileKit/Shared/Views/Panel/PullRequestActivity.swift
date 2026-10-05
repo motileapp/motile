@@ -24,7 +24,7 @@ struct ActivityRow: View {
                     PullRequestTextView(blocks: entry.body)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                 }
                 if let subject = entry.subject, entry.thread == nil, !entry.reactions.isEmpty {
                     ReactionBar(reactions: entry.reactions) { kind, on in actions.react(subject, kind, on) }
@@ -126,7 +126,7 @@ struct ThreadCard: View {
                 footer
             }
         }
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 

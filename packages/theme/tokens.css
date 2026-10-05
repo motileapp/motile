@@ -29,18 +29,18 @@
   --sidebar-foreground: #22242b;
   --sidebar-primary: #2a5bd7;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgb(0 0 0 / 0.08);
+  --sidebar-accent: #e1e4ed;
   --sidebar-accent-foreground: #22242b;
   --sidebar-border: #e2e3e5;
   --sidebar-ring: #2a5bd7;
 
   /* The Mac app's own colours, from Theme.swift */
-  --raised: #ffffff;
-  --bubble: #eceef4;
+  --background-secondary: #eceef4;
+  --background-tertiary: #e1e4ed;
+  --popover-secondary: #eceef4;
   --composer: #ffffff;
-  --hover: rgb(0 0 0 / 0.045);
-  --selected: rgb(0 0 0 / 0.08);
-  --strong-border: #d5d6d9;
+  --composer-secondary: #eceef4;
+  --border-secondary: #d5d6d9;
   --prose: #383b45;
   --tertiary: #9a9eab;
   --activity: #6b6f7c;
@@ -66,17 +66,17 @@
 .dark {
   --background: #0a0b0f;
   --foreground: #dcdee4;
-  --card: #15171d;
+  --card: #191a1f;
   --card-foreground: #dcdee4;
-  --popover: #15171d;
+  --popover: #191a1f;
   --popover-foreground: #dcdee4;
   --primary: #4f7cff;
   --primary-foreground: #ffffff;
-  --secondary: #16181e;
+  --secondary: #111217;
   --secondary-foreground: #dcdee4;
-  --muted: #16181e;
+  --muted: #111217;
   --muted-foreground: #9a9eab;
-  --accent: #16181e;
+  --accent: #111217;
   --accent-foreground: #dcdee4;
   --destructive: #ff7b72;
   --border: #191a1e;
@@ -91,17 +91,17 @@
   --sidebar-foreground: #dcdee4;
   --sidebar-primary: #4f7cff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgb(255 255 255 / 0.1);
+  --sidebar-accent: #191a1f;
   --sidebar-accent-foreground: #dcdee4;
   --sidebar-border: #191a1e;
   --sidebar-ring: #4f7cff;
 
-  --raised: #15171d;
-  --bubble: #111217;
+  --background-secondary: #111217;
+  --background-tertiary: #191a1f;
+  --popover-secondary: #222226;
   --composer: #111217;
-  --hover: rgb(255 255 255 / 0.06);
-  --selected: rgb(255 255 255 / 0.1);
-  --strong-border: #2b2b2f;
+  --composer-secondary: #191a1f;
+  --border-secondary: #2b2b2f;
   --prose: #a8abb6;
   --tertiary: #646875;
   --activity: #7a7e8b;
