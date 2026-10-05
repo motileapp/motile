@@ -229,11 +229,14 @@ final class UserRowView: RowView {
 /// dotted around instead of filled.
 final class QueuedRowView: RowView {
     /// The strip under the message, down to the bubble's edge, that holds the status and the buttons.
-    static let footHeight: CGFloat = scaled(34)
+    static let footHeight: CGFloat = buttonGap + RowButton.metrics.height + buttonMargin
     private static let radius: CGFloat = 18
-    /// The buttons' highlight is this far from the bubble's right and bottom, so that their words
-    /// end where the message's do.
-    private static let buttonMargin = BubbleFit.padding - RowButton.padding
+    /// The buttons are this far from the bubble's right and bottom.
+    private static let buttonMargin: CGFloat = 10
+    /// The room between the message and the buttons.
+    private static let buttonGap: CGFloat = 18
+    /// How far above the buttons a click still presses them.
+    private static let buttonReach: CGFloat = 4
 
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
@@ -260,7 +263,8 @@ final class QueuedRowView: RowView {
             title: "Steer",
             tooltip: "Send as a steer instead",
             radius: Self.radius - Self.buttonMargin,
-            insets: PlatformEdgeInsets(top: 4, left: 2, bottom: Self.buttonMargin, right: 2)
+            bordered: true,
+            insets: PlatformEdgeInsets(top: Self.buttonReach, left: 3, bottom: Self.buttonMargin, right: 3)
         ) { [weak self] in
             guard let self, self.messageID != RowModel.pendingID else { return }
             self.owner?.sendQueued(messageID: self.messageID)
@@ -269,7 +273,8 @@ final class QueuedRowView: RowView {
             title: "Edit",
             tooltip: "Edit in the composer",
             radius: Self.radius - Self.buttonMargin,
-            insets: PlatformEdgeInsets(top: 4, left: 2, bottom: Self.buttonMargin, right: Self.buttonMargin)
+            bordered: true,
+            insets: PlatformEdgeInsets(top: Self.buttonReach, left: 3, bottom: Self.buttonMargin, right: Self.buttonMargin)
         ) { [weak self] in
             guard let self, self.messageID != RowModel.pendingID else { return }
             self.owner?.cancelQueued(messageID: self.messageID)
@@ -307,19 +312,21 @@ final class QueuedRowView: RowView {
         let fit = BubbleFit(text: text.content, attachments: attached, width: width, least: max(footWidth, 12))
         let (innerWidth, top, between, files) = (fit.innerWidth, fit.top, fit.between, fit.files)
         let textHeight = hasText ? text.height(forWidth: innerWidth) : 0
-        let footY = top + files.height + between + textHeight + 2
+        let footY = top + files.height + between + textHeight
         let bubbleSize = CGSize(width: innerWidth + padding * 2, height: footY + Self.footHeight)
         bubble.frame = CGRect(x: width - bubbleSize.width, y: 14, width: bubbleSize.width, height: bubbleSize.height)
         attachments.frame = CGRect(x: padding, y: top, width: innerWidth, height: files.height)
         attachments.layout(width: innerWidth)
         text.frame = CGRect(x: padding, y: top + files.height + between, width: innerWidth, height: textHeight)
 
-        cancelButton.frame = CGRect(x: bubbleSize.width - cancelButton.width, y: footY, width: cancelButton.width, height: Self.footHeight)
-        sendButton.frame = CGRect(x: cancelButton.frame.minX - sendButton.width, y: footY, width: sendButton.width, height: Self.footHeight)
+        let buttonsY = footY + Self.buttonGap - Self.buttonReach
+        let buttonsHeight = Self.footHeight - Self.buttonGap + Self.buttonReach
+        cancelButton.frame = CGRect(x: bubbleSize.width - cancelButton.width, y: buttonsY, width: cancelButton.width, height: buttonsHeight)
+        sendButton.frame = CGRect(x: cancelButton.frame.minX - sendButton.width, y: buttonsY, width: sendButton.width, height: buttonsHeight)
         let statusEnd = sendButton.frame.minX - 6
-        // In the middle of what the buttons light up.
+        // In the middle of the buttons.
         let lineHeight = scaled(16)
-        let lineY = footY + ((4 + Self.footHeight - Self.buttonMargin - lineHeight) / 2).rounded()
+        let lineY = footY + Self.buttonGap + ((RowButton.metrics.height - lineHeight) / 2).rounded()
         clock.frame = CGRect(x: padding, y: lineY, width: 14, height: lineHeight)
         status.frame = CGRect(x: padding + 18, y: lineY, width: max(0, statusEnd - padding - 18), height: lineHeight)
         return bubbleSize.height + 14 + 14
