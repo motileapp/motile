@@ -60,7 +60,22 @@ const features = [
     </section>
 
     <section class="mx-auto mt-8 max-w-[1248px] px-3 sm:mt-10 sm:px-6">
-      <Demo client:load />
+      <div data-demo-frame>
+        <Demo client:load />
+      </div>
+      <script is:inline>
+        // Safari can paint a stale cqw, so the demo's scale is measured before the first paint.
+        {
+          const frame = document.querySelector("[data-demo-frame]")
+          const fit = () =>
+            frame.style.setProperty(
+              "--demo-fit",
+              Math.min(1, frame.clientWidth / 1200)
+            )
+          fit()
+          new ResizeObserver(fit).observe(frame)
+        }
+      </script>
       <p class="relative mt-5 text-center text-sm text-muted-foreground">
         A live demo. Open a thread, answer the agent, look at the diff.
       </p>
