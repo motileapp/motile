@@ -38,6 +38,8 @@ struct ControlLook {
     var joined: HorizontalEdge.Set = []
     /// A colour that says something, like a pull request's state, in place of the quiet ones.
     var tint: Color?
+    /// Only a symbol: too small for the next layer to show under the pointer.
+    var wordless = false
 
     var foreground: Color {
         if let tint, variant == .ghost || variant == .secondary { return tint }
@@ -56,10 +58,15 @@ struct ControlLook {
         case .secondary: (selected || lit ? surface.further : surface.next).color
         case .danger: .themeDangerFill
         case .warning: .themeWarning
-        case .ghost: selected ? surface.further.color : lit ? surface.next.color : .clear
+        case .ghost: selected ? surface.further.color : lit ? ghostLit.color : .clear
         case .link: lit ? .themeLinkHover : .clear
         case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
         }
+    }
+
+    private var ghostLit: Surface {
+        guard wordless, surface == .background else { return surface.next }
+        return .tertiary
     }
 
     private var shape: UnevenRoundedRectangle {
@@ -263,7 +270,7 @@ struct ActionButton: View {
         title = nil
         self.icon = .symbol(icon)
         self.help = help
-        look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
+        look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint, wordless: true)
         self.pending = pending
         pendingTitle = nil
         fills = false
@@ -341,7 +348,7 @@ struct ActionMenu<Content: View>: View {
         title = nil
         self.icon = .symbol(icon)
         self.help = help
-        look = ControlLook(variant: variant, size: size, round: round, joined: joined)
+        look = ControlLook(variant: variant, size: size, round: round, joined: joined, wordless: true)
         chevron = false
         self.pending = pending
         self.symbolSize = symbolSize
