@@ -25,14 +25,13 @@ function SignIn() {
       <Header>
         <ThemeToggle />
       </Header>
-      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-8 px-6 py-12">
+      <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-8 px-6 pt-12 pb-[calc(7rem+10vh)]">
         <div className="flex flex-col gap-2">
           <h1 className="text-2xl font-medium tracking-tight">
             Sign in to Motile
           </h1>
           <p className="text-muted-foreground">
-            See the servers and clients on your account, add a server, and
-            remove what you no longer use.
+            Manage your servers and clients.
           </p>
         </div>
         <div className="flex flex-col gap-3">

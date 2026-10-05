@@ -1,0 +1,64 @@
+@font-face {
+  font-family: "DM Sans Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 1000;
+  src: url(/fonts/dm-sans.woff2) format("woff2-variations");
+}
+* { box-sizing: border-box; }
+html {
+  font-family: "DM Sans Variable", sans-serif;
+  line-height: 1.5;
+  color-scheme: light;
+  scrollbar-gutter: stable;
+  -webkit-text-size-adjust: 100%;
+}
+html.dark { color-scheme: dark; }
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 72rem;
+  height: 4rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: calc(var(--radius) * 2.6);
+  color: var(--foreground);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  text-decoration: none;
+  outline: none;
+  transition: background-color 150ms;
+}
+header a:hover { background: var(--muted); }
+.dark header a:hover { background: color-mix(in oklab, var(--muted) 50%, transparent); }
+header a:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 30%, transparent); }
+header svg { width: 1.125rem; height: 1.125rem; fill: currentColor; }
+main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 24rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem calc(7rem + 10vh);
+}
+h1 { margin: 0; font-size: 1.5rem; line-height: 2rem; font-weight: 500; letter-spacing: -0.025em; }
+p { margin: 0; color: var(--muted-foreground); }
