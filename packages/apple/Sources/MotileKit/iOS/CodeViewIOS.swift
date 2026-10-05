@@ -52,6 +52,7 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.isDirectionalLockEnabled = true
         scrollView.alwaysBounceVertical = true
+        scrollView.keyboardDismissMode = .onDrag
         addSubview(scrollView)
         canvas.owner = self
         canvas.isUserInteractionEnabled = false
@@ -163,6 +164,7 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
     // MARK: Taps and selection
 
     @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
+        Platform.endEditing()
         let point = recognizer.location(in: scrollView)
         let left = scrollView.contentOffset.x
         if let pinned = pinnedHeading, pinned.frame.contains(point) {

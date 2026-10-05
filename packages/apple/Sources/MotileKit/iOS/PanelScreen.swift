@@ -23,6 +23,9 @@ struct PanelScreen: View {
             PanelContent(active: tabs.active)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { Platform.endEditing() }
+        .scrollDismissesKeyboard(.immediately)
         .background(Color.themeBackground.ignoresSafeArea())
         .navigationTitle(store.panelTarget?.name ?? "Files")
         .navigationBarTitleDisplayMode(.inline)
