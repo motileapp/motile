@@ -1,6 +1,8 @@
 ---
 import { RouteIcon, ServerIcon, ZapIcon } from "lucide-react"
 import Layout from "@/layouts/main.astro"
+import AppleIcon from "@/components/apple-icon.astro"
+import GithubIcon from "@/components/github-icon.astro"
 import { Demo } from "@/components/demo/demo"
 import { LinkButton } from "@/components/link-button"
 import { DOWNLOAD_URL, GITHUB_URL, TAGLINE } from "@/lib/links"
@@ -41,6 +43,7 @@ const features = [
           href={DOWNLOAD_URL}
           size="lg"
         >
+          <AppleIcon />
           Download for macOS
         </LinkButton>
         <LinkButton
@@ -50,6 +53,7 @@ const features = [
           size="lg"
           variant="outline"
         >
+          <GithubIcon />
           View the source
         </LinkButton>
       </div>
