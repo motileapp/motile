@@ -21,11 +21,19 @@ struct ComposerTextView: UIViewRepresentable {
     let onFiles: ([URL]) -> Void
     let onFileDrag: (Bool) -> Void
     var focused: Binding<Bool>?
+    var pressed = 0
 
     /// Says whether the text has the keyboard.
     func reporting(focus: Binding<Bool>) -> ComposerTextView {
         var view = self
         view.focused = focus
+        return view
+    }
+
+    /// Brings the keyboard when the number changes.
+    func focusing(on pressed: Int) -> ComposerTextView {
+        var view = self
+        view.pressed = pressed
         return view
     }
 
@@ -53,6 +61,10 @@ struct ComposerTextView: UIViewRepresentable {
         view.onSubmit = onSubmit
         view.onFiles = onFiles
         view.placeholder = placeholder
+        if context.coordinator.pressed != pressed {
+            context.coordinator.pressed = pressed
+            DispatchQueue.main.async { view.becomeFirstResponder() }
+        }
         guard view.text != text else { return }
         view.text = text
         view.showPlaceholder()
@@ -70,9 +82,11 @@ struct ComposerTextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: ComposerTextView
         weak var textView: ComposerUITextView?
+        var pressed: Int
 
         init(_ parent: ComposerTextView) {
             self.parent = parent
+            pressed = parent.pressed
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {

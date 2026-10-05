@@ -9,7 +9,7 @@ import {
   ShieldIcon,
   SquareTerminalIcon,
 } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import { AgentIcon, MenuChevron, ProjectIcon } from "./icons"
 import type { Thread } from "./threads"
 import { cn } from "@/lib/utils"
@@ -28,6 +28,7 @@ export function Composer({
   onStop: () => void
 }) {
   const [text, setText] = useState("")
+  const input = useRef<HTMLTextAreaElement>(null)
   const status = thread.status
   const send = () => {
     if (!text.trim()) return
@@ -82,6 +83,7 @@ export function Composer({
           </div>
         )}
         <textarea
+          ref={input}
           value={text}
           rows={2}
           onChange={(event) => setText(event.target.value)}
@@ -95,7 +97,13 @@ export function Composer({
           }
           className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none pointer-coarse:text-[16px] placeholder:text-tertiary"
         />
-        <div className="flex items-center px-1.5 py-2">
+        <div
+          onClick={(event) => {
+            if (event.target !== event.currentTarget) return
+            input.current?.focus()
+          }}
+          className="flex cursor-text items-center px-1.5 py-2"
+        >
           <Control icon>
             <AgentIcon agent={thread.agent} size={14} />
             {thread.model}
@@ -114,7 +122,7 @@ export function Composer({
               </>
             )}
           </Control>
-          <span className="ml-auto flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground">
+          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground">
             <PaperclipIcon className="size-3.5" />
           </span>
           <button
@@ -122,7 +130,7 @@ export function Composer({
             onClick={send}
             aria-label="Send"
             className={cn(
-              "ml-1 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground",
+              "ml-1 flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground",
               text.trim() ? "hover:brightness-110" : "opacity-45"
             )}
           >
@@ -171,7 +179,7 @@ function Control({
   return (
     <span
       className={cn(
-        "flex h-7 items-center gap-1.5 rounded-[7px] pr-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground",
+        "flex h-7 cursor-default items-center gap-1.5 rounded-[7px] pr-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground",
         icon ? "pl-[9px]" : "pl-[11px]"
       )}
     >

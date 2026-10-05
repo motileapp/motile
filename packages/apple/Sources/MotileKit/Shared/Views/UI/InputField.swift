@@ -55,6 +55,7 @@ struct InputField: View {
             if let icon {
                 Image(icon, size: size.smallSymbol)
                     .foregroundStyle(Color.themeTertiary)
+                    .allowsHitTesting(false)
             }
             TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.themeTertiary))
                 .textFieldStyle(.plain)
@@ -68,13 +69,32 @@ struct InputField: View {
         .padding(.horizontal, size.padding - 2)
         .frame(height: bare ? nil : size.height)
         .frame(maxHeight: bare ? .infinity : nil)
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { (focus ?? $ownFocus).wrappedValue = true }
+                .textPointer()
+        }
         .background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
         .overlay {
             if variant == .outlined {
                 RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
             }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { (focus ?? $ownFocus).wrappedValue = true }
+    }
+}
+
+extension View {
+    /// The cursor of text, over what starts typing when it is clicked. A control inside keeps the arrow.
+    @ViewBuilder func textPointer(_ shown: Bool = true) -> some View {
+        #if os(macOS)
+        if #available(macOS 15.0, *) {
+            pointerStyle(shown ? .horizontalText : .default)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }

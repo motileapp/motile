@@ -167,6 +167,20 @@ private struct ControlBody<Label: View>: View {
             .contentShape(Rectangle())
             .opacity(enabled || pending ? 1 : 0.45)
             .onHover { hovering = $0 }
+            .background { ArrowPointer() }
+    }
+}
+
+/// Keeps the arrow over a control that lies on what shows the cursor of text, also while the
+/// control is disabled.
+private struct ArrowPointer: View {
+    var body: some View {
+        #if os(macOS)
+        Color.clear
+            .contentShape(Rectangle())
+            .textPointer(false)
+            .environment(\.isEnabled, true)
+        #endif
     }
 }
 
@@ -318,6 +332,7 @@ struct ActionMenu<Content: View>: View {
         .background { look.background.padding(reach.around) }
         .opacity(enabled || pending ? 1 : 0.45)
         .onHover { hovering = $0 }
+        .background { ArrowPointer() }
         .padding(reach.outset)
         .allowsHitTesting(!pending)
         .help(help ?? "")

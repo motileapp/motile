@@ -9,6 +9,8 @@ import UniformTypeIdentifiers
 struct ComposerView: View {
     @Environment(AppStore.self) private var store
     @State private var textHeight: CGFloat = ComposerTextView.minimumHeight
+    /// Counts up when the composer is pressed beside its text, which then takes the keyboard.
+    @State private var pressed = 0
     #if os(iOS)
     @State private var focused = false
     #endif
@@ -47,7 +49,7 @@ struct ComposerView: View {
                 text: $store.draft,
                 height: $textHeight,
                 placeholder: placeholder,
-                focusKey: "\(store.draftKey)#\(store.composerFocus)",
+                focusKey: "\(store.draftKey)#\(store.composerFocus)#\(pressed)",
                 onSubmit: { store.send() },
                 onFiles: { store.attach($0) },
                 onFileDrag: { store.composerDropTargeted = $0 }
@@ -67,11 +69,18 @@ struct ComposerView: View {
             ComposerRows(collapsed: collapsed) {
                 text
                     .reporting(focus: $focused)
+                    .focusing(on: pressed)
                     .frame(height: textHeight)
                 ComposerTouchControls(collapsed: collapsed)
             }
             .animation(.easeOut(duration: 0.22), value: collapsed)
             #endif
+        }
+        .background {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { pressed += 1 }
+                .textPointer()
         }
         .composerSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }

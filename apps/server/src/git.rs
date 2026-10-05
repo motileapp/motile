@@ -635,9 +635,30 @@ pub async fn commit(folder: &str, environment: &Environment, message: &str, path
     Ok(())
 }
 
+/// Puts the branch's own commits on top of the remote's. A rebase that stops is undone.
 pub async fn pull(folder: &str, environment: &Environment) -> anyhow::Result<()> {
-    run(command("git", folder, environment, &["pull", "--ff-only", "--quiet"]), None, NETWORK_TIMEOUT).await?;
-    Ok(())
+    if rebasing(folder, environment).await {
+        bail!("A rebase is under way in this folder. Finish or abort it before pulling.");
+    }
+    let pulled =
+        run(command("git", folder, environment, &["pull", "--rebase", "--quiet"]), None, NETWORK_TIMEOUT).await;
+    if !rebasing(folder, environment).await {
+        return pulled.map(|_| ());
+    }
+    git(folder, environment, &["rebase", "--abort"]).await?;
+    bail!("Your commits and the remote's change the same lines. Ask the agent to rebase the branch.");
+}
+
+async fn rebasing(folder: &str, environment: &Environment) -> bool {
+    for state in ["rebase-merge", "rebase-apply"] {
+        let Ok(path) = git(folder, environment, &["rev-parse", "--git-path", state]).await else {
+            continue;
+        };
+        if Path::new(folder).join(path.trim()).exists() {
+            return true;
+        }
+    }
+    false
 }
 
 /// Pushes the branch to the branch it follows. One that follows none, or one of another name,
@@ -930,9 +951,7 @@ mod tests {
         assert_eq!((read.head.as_str(), read.branch.as_deref(), read.upstream), ("", Some("main"), false));
     }
 
-    /// A repository with a commit, a changed file, a new folder, and two repositories inside it:
-    /// one with a commit beside the new folder's file, one without in a folder of its own.
-    async fn repository_with_repositories_inside() -> (tempfile::TempDir, Environment) {
+    fn test_environment() -> Environment {
         let mut variables: std::collections::HashMap<String, String> =
             std::env::vars().filter(|(name, _)| name == "PATH").collect();
         for (name, value) in [("NAME", "Test"), ("EMAIL", "test@motile.app")] {
@@ -940,7 +959,13 @@ mod tests {
             variables.insert(format!("GIT_COMMITTER_{name}"), value.to_string());
         }
         variables.insert("GIT_CONFIG_GLOBAL".to_string(), "/dev/null".to_string());
-        let environment = Environment::fixed(variables, Default::default());
+        Environment::fixed(variables, Default::default())
+    }
+
+    /// A repository with a commit, a changed file, a new folder, and two repositories inside it:
+    /// one with a commit beside the new folder's file, one without in a folder of its own.
+    async fn repository_with_repositories_inside() -> (tempfile::TempDir, Environment) {
+        let environment = test_environment();
         let folder = tempfile::tempdir().unwrap();
         let path = |inside: &str| folder.path().join(inside).to_str().unwrap().to_string();
 
@@ -988,6 +1013,45 @@ mod tests {
 
         assert_eq!(files_of(folder, &environment, "HEAD").await, "notes/new.txt\ntracked.txt\n");
         assert_eq!(git(folder, &environment, &["show", "HEAD:tracked.txt"]).await.unwrap(), "one\n");
+    }
+
+    #[tokio::test]
+    async fn a_pull_rebases_the_branch_onto_the_remote_and_undoes_a_rebase_that_conflicts() {
+        let environment = test_environment();
+        let folder = tempfile::tempdir().unwrap();
+        let path = |inside: &str| folder.path().join(inside).to_str().unwrap().to_string();
+        let (origin, ours, theirs) = (path("origin"), path("ours"), path("theirs"));
+        let write = |clone: &str, file: &str, text: &str| std::fs::write(format!("{clone}/{file}"), text).unwrap();
+        let subjects = async |clone: &str| git(clone, &environment, &["log", "--format=%s"]).await.unwrap();
+        let root = path("");
+
+        git(&root, &environment, &["init", "--quiet", "--bare", &origin]).await.unwrap();
+        git(&root, &environment, &["clone", "--quiet", &origin, &ours]).await.unwrap();
+        write(&ours, "shared.txt", "start\n");
+        commit(&ours, &environment, "Start", &[]).await.unwrap();
+        git(&ours, &environment, &["push", "--quiet", "-u", "origin", "HEAD"]).await.unwrap();
+        git(&root, &environment, &["clone", "--quiet", &origin, &theirs]).await.unwrap();
+
+        write(&theirs, "theirs.txt", "theirs\n");
+        commit(&theirs, &environment, "Theirs", &[]).await.unwrap();
+        git(&theirs, &environment, &["push", "--quiet"]).await.unwrap();
+        write(&ours, "ours.txt", "ours\n");
+        commit(&ours, &environment, "Ours", &[]).await.unwrap();
+
+        pull(&ours, &environment).await.unwrap();
+        assert_eq!(subjects(&ours).await, "Ours\nTheirs\nStart\n");
+
+        write(&theirs, "shared.txt", "theirs\n");
+        commit(&theirs, &environment, "Theirs again", &[]).await.unwrap();
+        git(&theirs, &environment, &["push", "--quiet"]).await.unwrap();
+        write(&ours, "shared.txt", "ours\n");
+        commit(&ours, &environment, "Ours again", &[]).await.unwrap();
+
+        let refused = pull(&ours, &environment).await.unwrap_err().to_string();
+        assert_eq!(refused, "Your commits and the remote's change the same lines. Ask the agent to rebase the branch.");
+        assert_eq!(subjects(&ours).await, "Ours again\nOurs\nTheirs\nStart\n");
+        assert!(!rebasing(&ours, &environment).await);
+        assert_eq!(status(&ours, &environment).await.unwrap().1, []);
     }
 
     #[test]

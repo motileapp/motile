@@ -87,4 +87,11 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
         XCTAssertTrue(newThread.isHittable)
     }
+
+    func testATapBesideTheComposersTextBringsTheKeyboard() {
+        let text = app.textViews.firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: 10))
+        text.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: -5)).tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+    }
 }

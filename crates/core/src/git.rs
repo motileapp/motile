@@ -83,11 +83,8 @@ fn quick(status: &GitStatus) -> Quick {
     if !status.remote {
         return off("Commit", UP_TO_DATE);
     }
-    if status.upstream && status.ahead > 0 && status.behind > 0 {
-        return off("Sync", "The branch and the remote have both moved on. Rebase or merge first.");
-    }
     if status.behind > 0 {
-        return run("Pull", GitAction::Pull);
+        return run(if status.ahead > 0 { "Pull & Rebase" } else { "Pull" }, GitAction::Pull);
     }
     if status.ahead > 0 {
         if pushes_only {
@@ -275,7 +272,7 @@ mod tests {
     #[test]
     fn a_clean_branch_is_pulled_pushed_or_opened_as_a_pull_request() {
         assert_eq!(quick_of(GitStatus { behind: 2, ..branch() }), runs("Pull", GitAction::Pull));
-        assert_eq!(quick_of(GitStatus { behind: 2, ahead: 1, ..branch() }), off("Sync"));
+        assert_eq!(quick_of(GitStatus { behind: 2, ahead: 1, ..branch() }), runs("Pull & Rebase", GitAction::Pull));
         assert_eq!(quick_of(GitStatus { ahead: 1, ..branch() }), runs("Push & Create PR", GitAction::CreatePr));
         assert_eq!(quick_of(GitStatus { ahead: 1, ..main() }), runs("Push", GitAction::Push));
         assert_eq!(quick_of(GitStatus { ahead: 1, pull_request: open(), ..branch() }), runs("Push", GitAction::Push));

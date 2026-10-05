@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils"
 type Panel = "closed" | "open" | "maximized"
 
 /** The composer's height with no strip above it, so the page paints right before it is measured. */
-const IDLE_COMPOSER_HEIGHT = 195
+const IDLE_COMPOSER_HEIGHT = 193
 
 /** The Mac app's window, with made-up threads that can be opened, answered and written in. */
 export function Demo() {
