@@ -218,6 +218,7 @@ Mac app.
 - Do not open a dev app or a simulator, or take screenshots or videos, unless we ask for it or
   the change is to layout or behaviour you can't judge from the code. A colour, a token, a
   string, a font size or a padding is edited and reported, nothing more.
+- The app's screenshots and videos you show us should be in dark mode unless we say otherwise.
 - If we are missing a glaring issue when we ask you to do something, do not hesitate to
   point it out.
 - Never commit or push code unless explicitly asked to do so.
