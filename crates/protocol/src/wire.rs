@@ -830,7 +830,7 @@ pub struct PullRequestSettings {
 
 impl Default for PullRequestSettings {
     fn default() -> Self {
-        Self { done_on_merge: true, remove_merged_worktrees: false }
+        Self { done_on_merge: false, remove_merged_worktrees: false }
     }
 }
 

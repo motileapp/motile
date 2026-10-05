@@ -1859,6 +1859,8 @@ async fn a_linked_pull_request_is_watched_for_the_agent_until_it_merges_and_sett
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     next(&mut list).await;
 
+    let settings = Request::SetPullRequestSettings { done_on_merge: Some(true), remove_merged_worktrees: None };
+    assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
     let refused = Request::WatchPullRequest { thread_id: thread_id.clone(), watch: true };
     assert!(matches!(connection.request(&refused).await.unwrap(), Message::Error { .. }));
     let link = Request::LinkPullRequest { thread_id: thread_id.clone(), number: Some(7) };
@@ -1960,8 +1962,8 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
         text: None,
     };
     assert!(matches!(connection.request(&merge).await.unwrap(), Message::PullRequestDone { .. }));
-    let settled = thread_where(&mut list, |thread| thread.done_at.is_some()).await;
-    assert_eq!(settled.id, thread_id);
+    let merged = thread_where(&mut list, |thread| thread.pull_request.as_ref().is_some_and(|found| found.merged)).await;
+    assert_eq!((merged.id, merged.done_at), (thread_id, None));
     for _ in 0..50 {
         if !worktree.exists() {
             break;
