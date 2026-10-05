@@ -179,7 +179,7 @@ function File({
               <span className="w-9 shrink-0 pr-1.5 text-right text-[11px] text-tertiary tabular-nums select-none">
                 {line.new}
               </span>
-              <span className="pr-3 pl-3 whitespace-pre">
+              <span className="pr-3 pl-2 whitespace-pre">
                 {line.kind === "note" ? line.text : highlight(line.text)}
               </span>
             </div>
