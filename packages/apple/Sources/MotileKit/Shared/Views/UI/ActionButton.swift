@@ -58,15 +58,19 @@ struct ControlLook {
         case .secondary: (selected || lit ? surface.further : surface.next).color
         case .danger: .themeDangerFill
         case .warning: .themeWarning
-        case .ghost: selected ? surface.further.color : lit ? ghostLit.color : .clear
+        case .ghost: selected ? surface.further.color : lit ? ghostLit : .clear
         case .link: lit ? .themeLinkHover : .clear
         case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
         }
     }
 
-    private var ghostLit: Surface {
-        guard wordless, surface == .background else { return surface.next }
-        return .tertiary
+    private var ghostLit: Color {
+        guard wordless else { return surface.next.color }
+        switch surface {
+        case .background: return Surface.tertiary.color
+        case .popover: return .themeBorderSecondary
+        default: return surface.next.color
+        }
     }
 
     private var shape: UnevenRoundedRectangle {
