@@ -33,11 +33,12 @@ private struct HoverHighlight: ViewModifier {
 
     private var fill: Color {
         if selected { return Color.themeSelected }
-        return hovering || lit ? color : Color.clear
+        return enabled && (hovering || lit) ? color : Color.clear
     }
 
     private var text: Color {
-        guard enabled, selected || hovering || lit else { return Color.themeSecondary }
+        guard enabled else { return Color.themeTertiary }
+        guard selected || hovering || lit else { return Color.themeSecondary }
         return Color.themeText
     }
 }
