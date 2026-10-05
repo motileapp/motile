@@ -29,7 +29,7 @@ const REFUSAL_CHARS: usize = 2000;
 const SNAPSHOTS: &str = "refs/motile/threads";
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 /// A patch beyond this is cut; nobody reads more of it in a client.
-const MAX_PATCH_BYTES: usize = 4 * 1024 * 1024;
+pub(crate) const MAX_PATCH_BYTES: usize = 4 * 1024 * 1024;
 
 /// Whether the folder is inside a git repository, read from the folders themselves.
 pub fn in_repository(folder: &str) -> bool {
@@ -266,8 +266,12 @@ async fn usual_branch(folder: &str, environment: &Environment) -> Option<String>
 }
 
 pub(crate) fn on_path(program: &str, environment: &Environment) -> bool {
+    let program = environment.program(program);
+    if program.is_absolute() {
+        return program.is_file();
+    }
     let path = environment.variables.get("PATH").map(String::as_str).unwrap_or_default();
-    path.split(':').any(|folder| Path::new(folder).join(program).is_file())
+    path.split(':').any(|folder| Path::new(folder).join(&program).is_file())
 }
 
 /// Asks the remote for what is new. A remote that can't be reached leaves what was known.
@@ -735,7 +739,7 @@ async fn git(folder: &str, environment: &Environment, arguments: &[&str]) -> any
 }
 
 pub(crate) fn command(program: &str, folder: &str, environment: &Environment, arguments: &[&str]) -> Command {
-    let mut command = Command::new(program);
+    let mut command = Command::new(environment.program(program));
     command
         .args(arguments)
         .current_dir(folder)

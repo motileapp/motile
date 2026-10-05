@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+"""Stand-in for GitHub's `gh`, for tests and the dev apps.
+
+It keeps the pull requests of the repository it is run in in FAKE_GH_STATE, a JSON file beside it
+unless that says where, and
+answers the calls the server makes: `pr view` and `pr create` for the git button, `api graphql` for
+the pull request tab, `pr diff` for its changes, and `pr merge`, `ready`, `close`, `reopen`,
+`update-branch`, `revert`, `comment` and `review` for what the tab does. A new pull request's checks
+pass and it merges cleanly; to see it otherwise, edit the file. The checks of a pull request are
+`[name, status]` pairs, a status being `success`, `failure`, `pending` or another of GitHub's
+conclusions in lower case; `mergeable` is `MERGEABLE`, `CONFLICTING` or `UNKNOWN`. A merge is only
+written down: the branches stay as they are.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+STATE = os.environ.get("FAKE_GH_STATE") or os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "fake-gh.json")
+REPOSITORY = "https://github.com/acme/app"
+USER = "demo"
+
+
+def load():
+    try:
+        with open(STATE) as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {"pulls": [], "merge_methods": ["MERGE", "SQUASH", "REBASE"], "preferred": "SQUASH", "auto_merge": True}
+
+
+def save(state):
+    with open(STATE, "w") as file:
+        json.dump(state, file, indent=2)
+
+
+def now():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def fail(message):
+    print(message, file=sys.stderr)
+    sys.exit(1)
+
+
+def git(*arguments):
+    return subprocess.run(["git", *arguments], capture_output=True, text=True).stdout.strip()
+
+
+def option(arguments, name):
+    if name in arguments and arguments.index(name) + 1 < len(arguments):
+        return arguments[arguments.index(name) + 1]
+    return None
+
+
+def body(arguments):
+    if option(arguments, "--body-file") == "-":
+        return sys.stdin.read()
+    return option(arguments, "--body") or option(arguments, "--comment") or ""
+
+
+def find(state, arguments):
+    """The pull request a command names by number, or the open one of the branch checked out."""
+    numbers = [word for word in arguments[2:] if word.isdigit()]
+    if numbers:
+        pull = next((pull for pull in state["pulls"] if pull["number"] == int(numbers[0])), None)
+    else:
+        branch = git("rev-parse", "--abbrev-ref", "HEAD")
+        mine = [pull for pull in state["pulls"] if pull["head"] == branch]
+        pull = next((pull for pull in reversed(mine) if pull["state"] == "OPEN"), mine[-1] if mine else None)
+    if pull is None:
+        fail("no pull requests found for this branch")
+    return pull
+
+
+def url(pull):
+    return f"{REPOSITORY}/pull/{pull['number']}"
+
+
+def opened(state, title, text, head, base):
+    pull = {
+        "number": max([pull["number"] for pull in state["pulls"]] + [6]) + 1,
+        "title": title, "body": text, "head": head, "base": base, "state": "OPEN", "isDraft": False,
+        "mergeable": "MERGEABLE", "reviewDecision": None, "behindBy": 0, "autoMerge": None,
+        "checks": [["build", "success"], ["test", "success"]],
+        "createdAt": now(), "mergedAt": None, "closedAt": None, "mergedBy": None,
+        "headOid": git("rev-parse", head) or "0" * 40, "comments": [], "reviews": [],
+    }
+    state["pulls"].append(pull)
+    return pull
+
+
+def commits(pull):
+    listing = git("log", "--reverse", "--format=%h%x09%s%x09%an%x09%cI", f"{pull['base']}..{pull['head']}")
+    found = []
+    for line in listing.splitlines():
+        oid, headline, author, at = line.split("\t")
+        found.append({"commit": {"abbreviatedOid": oid, "messageHeadline": headline, "committedDate": at,
+                                 "author": {"name": author, "user": {"login": USER}}}})
+    return found
+
+
+def check(name, status):
+    finished = status not in ("pending", "queued", "in_progress")
+    return {
+        "__typename": "CheckRun", "name": name, "status": "COMPLETED" if finished else "IN_PROGRESS",
+        "conclusion": status.upper() if finished else None, "detailsUrl": f"{REPOSITORY}/actions/runs/1",
+        "startedAt": now(), "checkSuite": {"workflowRun": {"workflow": {"name": "CI"}}},
+    }
+
+
+def graphql(state, number):
+    pull = next((pull for pull in state["pulls"] if pull["number"] == number), None)
+    if pull is None:
+        print(json.dumps({"data": {"repository": {"pullRequest": None}}}))
+        return
+    allowed = state["merge_methods"]
+    found = {
+        "number": pull["number"], "title": pull["title"], "url": url(pull), "body": pull["body"],
+        "state": pull["state"], "isDraft": pull["isDraft"], "mergeable": pull["mergeable"],
+        "reviewDecision": pull["reviewDecision"], "additions": 0, "deletions": 0, "changedFiles": 0,
+        "createdAt": pull["createdAt"], "mergedAt": pull["mergedAt"], "closedAt": pull["closedAt"],
+        "baseRefName": pull["base"], "headRefName": pull["head"], "author": {"login": USER},
+        "mergedBy": {"login": pull["mergedBy"]} if pull["mergedBy"] else None,
+        "autoMergeRequest": {"mergeMethod": pull["autoMerge"]} if pull["autoMerge"] else None,
+        "viewerCanUpdate": True, "viewerDidAuthor": True, "viewerCanUpdateBranch": True,
+        "baseRef": {"compare": {"behindBy": pull["behindBy"]}},
+        "commits": {"totalCount": 0, "nodes": commits(pull)},
+        "lastCommit": {"nodes": [{"commit": {"statusCheckRollup": {"contexts": {
+            "nodes": [check(name, status) for name, status in pull["checks"]]}}}}]},
+        "comments": {"nodes": pull["comments"]},
+        "reviews": {"nodes": pull["reviews"]},
+    }
+    found["commits"]["totalCount"] = len(found["commits"]["nodes"])
+    stat = git("diff", "--shortstat", f"{pull['base']}...{pull['head']}")
+    numbers = [int(word) for word in stat.replace(",", "").split() if word.isdigit()]
+    for key, value in zip(["changedFiles", "additions", "deletions"], numbers + [0, 0, 0]):
+        found[key] = value
+    print(json.dumps({"data": {"repository": {
+        "mergeCommitAllowed": "MERGE" in allowed, "squashMergeAllowed": "SQUASH" in allowed,
+        "rebaseMergeAllowed": "REBASE" in allowed, "autoMergeAllowed": state["auto_merge"],
+        "viewerPermission": "ADMIN", "viewerDefaultMergeMethod": state["preferred"], "pullRequest": found,
+    }}}))
+
+
+def main(arguments):
+    command = " ".join(arguments[:2])
+    if arguments[:1] == ["--version"]:
+        print("gh version 2.0.0 (fake)")
+        return
+    if command == "auth token":
+        print("fake-token")
+        return
+    state = load()
+    if command == "api graphql":
+        number = next(int(word.split("=", 1)[1]) for word in arguments if word.startswith("number="))
+        graphql(state, number)
+        return
+    if arguments[:1] == ["api"]:
+        print("[]")
+        return
+    if command == "pr create":
+        head = git("rev-parse", "--abbrev-ref", "HEAD")
+        base = git("config", f"branch.{head}.gh-merge-base") or "main"
+        pull = opened(state, option(arguments, "--title") or head, body(arguments), head, base)
+        pull["isDraft"] = "--draft" in arguments
+        save(state)
+        print(url(pull))
+        return
+    pull = find(state, arguments)
+    if command == "pr view":
+        fields = (option(arguments, "--json") or "").split(",")
+        # A merged or closed pull request keeps the commit it ended at.
+        head = pull["headOid"] if pull["state"] != "OPEN" else git("rev-parse", pull["head"]) or pull["headOid"]
+        view = {"number": pull["number"], "title": pull["title"], "url": url(pull), "state": pull["state"],
+                "isDraft": pull["isDraft"], "headRefOid": head}
+        print(json.dumps({field: view.get(field) for field in fields}))
+        return
+    if command == "pr diff":
+        print(git("diff", f"{pull['base']}...{pull['head']}"))
+        return
+    open_only = {"pr merge", "pr ready", "pr close", "pr update-branch"}
+    if command in open_only and pull["state"] != "OPEN":
+        fail(f"Pull request #{pull['number']} is not open")
+    if command == "pr merge":
+        if "--disable-auto" in arguments:
+            pull["autoMerge"] = None
+        else:
+            method = next((name.upper() for name in ("merge", "squash", "rebase") if f"--{name}" in arguments), "MERGE")
+            if method not in state["merge_methods"]:
+                fail(f"{method.lower()} merges are not allowed on this repository")
+            if pull["mergeable"] == "CONFLICTING":
+                fail(f"Pull request #{pull['number']} is not mergeable: the merge commit cannot be cleanly created.")
+            waits = any(status != "success" for _, status in pull["checks"])
+            if "--auto" in arguments and waits:
+                pull["autoMerge"] = method
+            else:
+                pull.update(state="MERGED", mergedAt=now(), closedAt=now(), mergedBy=USER, autoMerge=None,
+                            headOid=git("rev-parse", pull["head"]) or pull["headOid"])
+    elif command == "pr ready":
+        pull["isDraft"] = "--undo" in arguments
+    elif command == "pr close":
+        pull.update(state="CLOSED", closedAt=now(), headOid=git("rev-parse", pull["head"]) or pull["headOid"])
+    elif command == "pr reopen":
+        pull.update(state="OPEN", closedAt=None)
+    elif command == "pr update-branch":
+        pull["behindBy"] = 0
+    elif command == "pr revert":
+        if pull["state"] != "MERGED":
+            fail(f"Pull request #{pull['number']} is not merged")
+        reverting = opened(state, f"Revert \"{pull['title']}\"", f"Reverts #{pull['number']}", f"revert-{pull['number']}", pull["base"])
+        save(state)
+        print(url(reverting))
+        return
+    elif command == "pr review":
+        verdict = "APPROVED" if "--approve" in arguments else "CHANGES_REQUESTED" if "--request-changes" in arguments else "COMMENTED"
+        pull["reviews"].append({"author": {"login": "reviewer"}, "body": body(arguments), "state": verdict,
+                                "submittedAt": now(), "url": url(pull)})
+        if verdict != "COMMENTED":
+            pull["reviewDecision"] = verdict
+    elif command != "pr comment":
+        fail(f"unknown command {command}")
+    text = body(arguments) if command in ("pr comment", "pr close", "pr reopen") else ""
+    if text:
+        pull["comments"].append({"author": {"login": USER}, "body": text, "createdAt": now(), "url": url(pull)})
+    save(state)
+
+
+main(sys.argv[1:])

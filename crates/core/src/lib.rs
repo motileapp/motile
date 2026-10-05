@@ -11,4 +11,5 @@ pub mod follow;
 pub mod git;
 pub mod link;
 pub mod media;
+pub mod pull_request;
 pub mod render;

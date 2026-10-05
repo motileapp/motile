@@ -45,6 +45,7 @@ struct PanelContent: View {
             case .file(let path): FileSurface(target: target, path: path).id(path)
             case .change(let turn, let path): ChangeSurface(target: target, turn: turn, path: path).id(active)
             case .agents: AgentsSurface()
+            case .pullRequest: PullRequestSurface(target: target)
             case .blank, nil: PanelLauncher(target: target)
             }
         }
@@ -237,6 +238,9 @@ private struct PanelLauncher: View {
                     store.sidePanel.showDiff()
                 }
                 row(.users, "Agents", keys: "⇧⌘A", reason: nil) { store.sidePanel.open(.agents) }
+                row(.gitPullRequest, "Pull Request", keys: "⇧⌘R", reason: store.pullRequestUnavailable) {
+                    store.sidePanel.open(.pullRequest)
+                }
             }
             .frame(width: 250)
         }
@@ -348,6 +352,9 @@ struct DiffSurface: View {
         return Menu {
             Toggle("Uncommitted changes", isOn: chosen(.uncommitted, scope))
             Toggle("Branch changes", isOn: chosen(.branch, scope))
+            if let number = target.pullRequest, store.pullRequestUnavailable == nil {
+                Toggle("Pull request #\(number)", isOn: chosen(.pullRequest(number), scope))
+            }
             if !panel.turns.isEmpty {
                 Divider()
                 ForEach(panel.turns.reversed()) { turn in
@@ -382,6 +389,7 @@ struct DiffSurface: View {
         switch scope {
         case .uncommitted: return "Uncommitted"
         case .branch: return "Branch"
+        case .pullRequest(let number): return "PR #\(number)"
         case .turn(let id): return store.sidePanel.name(ofTurn: id)
         }
     }

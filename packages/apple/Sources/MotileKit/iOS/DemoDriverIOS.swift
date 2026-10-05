@@ -74,6 +74,7 @@ enum DemoDriver {
             case "diff": store.sidePanel.showDiff()
             case "files": store.sidePanel.open(.files)
             case "agents": store.sidePanel.open(.agents)
+            case "pull request": store.sidePanel.open(.pullRequest)
             case "max": store.sidePanel.toggleMaximized()
             case "open": store.sidePanel.isOpen = true
             default: store.sidePanel.isOpen = false

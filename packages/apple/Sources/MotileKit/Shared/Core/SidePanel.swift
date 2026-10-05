@@ -9,12 +9,15 @@ enum DiffScope: Hashable, Codable {
     case branch
     /// What the turn that ended with the item changed.
     case turn(String)
+    /// What the pull request with the number changes, as GitHub has it.
+    case pullRequest(Int)
 
     var request: JSON {
         switch self {
         case .uncommitted: ["kind": "uncommitted"]
         case .branch: ["kind": "branch"]
         case .turn(let itemID): ["kind": "turn", "item_id": itemID]
+        case .pullRequest(let number): ["kind": "pull_request", "number": number]
         }
     }
 }
@@ -30,6 +33,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case change(turn: String, path: String)
     /// The agents the thread's agent has started, and what one of them did.
     case agents
+    /// The pull request of the branch the thread works on.
+    case pullRequest
     /// A tab that offers what there is to open. A thread can have several, told apart by number.
     case blank(Int)
 
@@ -39,6 +44,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff: "diff"
         case .files: "files"
         case .agents: "agents"
+        case .pullRequest: "pull_request"
         case .file(let path): "file:\(path)"
         case .change(_, let path): "change:\(path)"
         }
@@ -53,7 +59,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
     var path: String? {
         switch self {
         case .file(let path), .change(_, let path): path
-        case .diff, .files, .agents, .blank: nil
+        case .diff, .files, .agents, .pullRequest, .blank: nil
         }
     }
 
@@ -62,6 +68,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff: "Diff"
         case .files: "Files"
         case .agents: "Agents"
+        case .pullRequest: "Pull Request"
         case .blank: "New Tab"
         case .file(let path), .change(_, let path): URL(fileURLWithPath: path).lastPathComponent
         }
@@ -72,6 +79,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff, .change: .diff
         case .files: .folder
         case .agents: .users
+        case .pullRequest: .gitPullRequest
         case .blank: .plus
         case .file(let path): FileSymbol.symbol(for: path)
         }
@@ -103,6 +111,8 @@ struct PanelTarget: Equatable {
     let repository: Bool
     /// The thread works in a worktree of its own.
     let worktree: Bool
+    /// The number of the pull request of the branch it works on, when there is one.
+    let pullRequest: Int?
 
     /// Names the folder in a request to its server.
     var request: JSON {
@@ -194,16 +204,28 @@ final class SidePanel {
     /// What the tabs of one file show: the file, or what a turn changed in it.
     private(set) var contents: [PanelTab: Loaded<FileContent>] = [:]
 
+    private(set) var pullRequest: Loaded<PullRequestPage> = .loading
+    /// The label of the action on the pull request that runs.
+    private(set) var pullRequestWorking: String?
+    /// What the last action on the pull request did, or why it couldn't.
+    private(set) var pullRequestNotice: PullRequestNotice?
+    /// Goes up each time the pull request has been read.
+    private(set) var pullRequestReads = 0
+
     /// The folder all of the above is of.
     @ObservationIgnored private var shown: PanelTarget?
     @ObservationIgnored private var shownScope: DiffScope?
     @ObservationIgnored private var diffRequest: UInt64 = 0
     @ObservationIgnored private var fileRequests: [UInt64: PanelTab] = [:]
+    @ObservationIgnored private var shownPullRequest: Int?
+    /// How each project's pull requests were last merged, by project.
+    @ObservationIgnored private var mergeMethods: [String: String]
 
     init() {
         isOpen = defaults.bool(forKey: "panel.open")
         let saved = defaults.data(forKey: "panel.tabs").flatMap { try? JSONDecoder().decode([String: PanelTabs].self, from: $0) }
         tabsByKey = saved ?? [:]
+        mergeMethods = defaults.dictionary(forKey: "pullRequest.methods") as? [String: String] ?? [:]
     }
 
     // MARK: Tabs
@@ -358,11 +380,17 @@ final class SidePanel {
 
     /// What the diff tab shows: what was chosen, or the turn's work as far as it is known.
     func scope(for target: PanelTarget) -> DiffScope {
-        if let chosen = tabs.scope {
-            guard case .turn(let itemID) = chosen else { return chosen }
-            if turns.contains(where: { $0.id == itemID }) { return chosen }
-        }
+        if let chosen = tabs.scope, canShow(chosen, of: target) { return chosen }
         return target.worktree ? .branch : .uncommitted
+    }
+
+    /// A turn that is no longer known, or a pull request the folder no longer has, isn't shown.
+    private func canShow(_ scope: DiffScope, of target: PanelTarget) -> Bool {
+        switch scope {
+        case .turn(let itemID): turns.contains { $0.id == itemID }
+        case .pullRequest(let number): number == target.pullRequest
+        case .uncommitted, .branch: true
+        }
     }
 
     func choose(_ scope: DiffScope) {
@@ -524,6 +552,92 @@ final class SidePanel {
         }
     }
 
+    // MARK: Pull request
+
+    /// Asks the server for the pull request. What is shown of it stays until the answer is there,
+    /// unless it is another one.
+    func loadPullRequest(of target: PanelTarget, number: Int) {
+        look(into: target)
+        if shownPullRequest != number {
+            shownPullRequest = number
+            pullRequest = .loading
+            pullRequestNotice = nil
+        }
+        var command = target.request
+        command["server_id"] = target.serverID
+        command["number"] = number
+        if let method = mergeMethods[target.projectID] { command["method"] = method }
+        store?.core.send("pull_request", command, read: PullRequestPage.init) { [weak self] result in
+            guard let self, self.shown == target, self.shownPullRequest == number else { return }
+            switch result {
+            case .success(let page): self.pullRequest = .ready(page)
+            // A pull request that was read stays; only its notice says what went wrong.
+            case .failure(let error) where self.pullRequest.value != nil:
+                self.pullRequestNotice = PullRequestNotice(text: error.message, failed: true)
+            case .failure(let error): self.pullRequest = .failed(error.message)
+            }
+            self.pullRequestReads += 1
+        }
+    }
+
+    /// Does something to the pull request: an action of a button or a choice, with what the
+    /// comment box says. `done` is called when it worked.
+    func act(
+        _ action: String, method: String? = nil, text: String? = nil, label: String, on target: PanelTarget, number: Int,
+        done: (() -> Void)? = nil
+    ) {
+        guard pullRequestWorking == nil else { return }
+        pullRequestWorking = label
+        pullRequestNotice = nil
+        if action == "merge" || action == "enable_auto_merge", let method { remember(method, for: target.projectID) }
+        var command = target.request
+        command["server_id"] = target.serverID
+        command["number"] = number
+        command["action"] = action
+        if let method { command["method"] = method }
+        if let text, !text.isEmpty { command["text"] = text }
+        store?.core.send("pull_request_action", command, read: { answer in
+            (answer.string("title"), answer.optionalString("url"), PullRequestPage(json: answer.object("view") ?? [:]))
+        }) { [weak self] result in
+            guard let self else { return }
+            self.pullRequestWorking = nil
+            guard self.shown == target, self.shownPullRequest == number else { return }
+            switch result {
+            case .success(let (title, url, page)):
+                self.pullRequest = .ready(page)
+                self.pullRequestReads += 1
+                self.say(PullRequestNotice(text: title, failed: false, url: url.flatMap(URL.init(string:))))
+                done?()
+            case .failure(let error):
+                self.say(PullRequestNotice(text: error.message, failed: true))
+            }
+        }
+    }
+
+    /// How the project's pull requests merge from now on.
+    func chooseMethod(_ method: String, for target: PanelTarget, number: Int) {
+        remember(method, for: target.projectID)
+        loadPullRequest(of: target, number: number)
+    }
+
+    private func remember(_ method: String, for projectID: String) {
+        mergeMethods[projectID] = method
+        defaults.set(mergeMethods, forKey: "pullRequest.methods")
+    }
+
+    /// What worked goes away by itself; what failed stays until it is closed.
+    private func say(_ notice: PullRequestNotice) {
+        pullRequestNotice = notice
+        guard !notice.failed else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            if self?.pullRequestNotice == notice { self?.pullRequestNotice = nil }
+        }
+    }
+
+    func dismissPullRequestNotice() {
+        pullRequestNotice = nil
+    }
+
     // MARK: Both
 
     /// Forgets what was shown when the folder is another one than before.
@@ -540,6 +654,9 @@ final class SidePanel {
         filesError = nil
         contents = [:]
         fileRequests = [:]
+        shownPullRequest = nil
+        pullRequest = .loading
+        pullRequestNotice = nil
     }
 
     /// The highlighting of what a request answered with has arrived.
@@ -556,6 +673,15 @@ final class SidePanel {
         document.files[file].spans = lines
         NotificationCenter.default.post(name: .codeColoured, object: document, userInfo: ["file": file])
     }
+}
+
+/// What an action on a pull request did, or why it couldn't.
+struct PullRequestNotice: Equatable {
+    let id = UUID()
+    let text: String
+    let failed: Bool
+    /// The pull request the action opened.
+    var url: URL?
 }
 
 /// The symbol a file is shown with, by what its name ends in.

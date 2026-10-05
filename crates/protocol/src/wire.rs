@@ -343,6 +343,28 @@ pub enum Request {
         #[serde(default)]
         new_branch: bool,
     },
+    /// What GitHub says of the pull request, from the folder the thread works in or the
+    /// project's folder. `PullRequest` answers.
+    PullRequest {
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        number: u64,
+    },
+    /// Does something to the pull request. `method` is how to merge, or with `UpdateBranch`
+    /// whether to rebase; `text` is what a comment, a review or a close says. `PullRequestDone`
+    /// answers.
+    PullRequestAction {
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        number: u64,
+        action: PullRequestAction,
+        #[serde(default)]
+        method: Option<MergeMethod>,
+        #[serde(default)]
+        text: Option<String>,
+    },
     /// The changes in the folder the thread works in, or in the project's folder, as a patch.
     /// `Diff` answers.
     Diff {
@@ -516,6 +538,146 @@ impl PullRequest {
     }
 }
 
+/// All GitHub says of a pull request: where it stands, what stops it from merging and what was
+/// said on it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct PullRequestDetail {
+    #[serde(flatten)]
+    pub pull_request: PullRequest,
+    pub body: String,
+    pub author: String,
+    /// The branch it merges into, and the one it merges.
+    pub base: String,
+    pub head: String,
+    pub additions: u32,
+    pub deletions: u32,
+    pub changed_files: u32,
+    pub commits: u32,
+    pub created_at: f64,
+    pub merged_at: Option<f64>,
+    pub merged_by: Option<String>,
+    pub closed_at: Option<f64>,
+    pub mergeable: Mergeable,
+    /// Commits the base has that the branch hasn't, when GitHub says.
+    pub behind_by: Option<u32>,
+    pub review: Option<ReviewDecision>,
+    pub checks: Vec<Check>,
+    /// How it merges by itself once it may, when that was asked for.
+    pub auto_merge: Option<MergeMethod>,
+    /// The ways the repository lets it merge, the one it prefers first.
+    pub merge_methods: Vec<MergeMethod>,
+    pub auto_merge_allowed: bool,
+    pub viewer: Viewer,
+    /// Its commits, comments and reviews, the oldest first.
+    pub activity: Vec<PullRequestEvent>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Mergeable {
+    Mergeable,
+    Conflicting,
+    /// GitHub hasn't worked it out yet.
+    Unknown,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewDecision {
+    Approved,
+    ChangesRequested,
+    ReviewRequired,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum MergeMethod {
+    Merge,
+    Squash,
+    Rebase,
+}
+
+/// A check run or a commit status on the pull request's last commit.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Check {
+    pub name: String,
+    pub workflow: Option<String>,
+    pub status: CheckStatus,
+    pub description: Option<String>,
+    pub url: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckStatus {
+    Pending,
+    /// Waits for someone, like a workflow that needs approving.
+    ActionRequired,
+    Success,
+    Failure,
+    Cancelled,
+    Skipped,
+    Neutral,
+}
+
+/// What the user on the server may do to the pull request.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Viewer {
+    /// Can push to the repository, so merge.
+    pub can_write: bool,
+    /// Can close, reopen and mark it ready or a draft.
+    pub can_update: bool,
+    pub can_update_branch: bool,
+    /// Opened it, so can't approve it.
+    pub authored: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct PullRequestEvent {
+    pub at: f64,
+    pub author: String,
+    #[serde(flatten)]
+    pub kind: EventKind,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EventKind {
+    Commit { oid: String, headline: String },
+    Comment { body: String, url: Option<String> },
+    Review { verdict: Verdict, body: String, url: Option<String> },
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    Approved,
+    ChangesRequested,
+    Commented,
+    Dismissed,
+}
+
+/// What can be done to a pull request.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum PullRequestAction {
+    Merge,
+    /// Has GitHub merge it once its checks and reviews let it.
+    EnableAutoMerge,
+    DisableAutoMerge,
+    Ready,
+    Draft,
+    Close,
+    Reopen,
+    /// Brings the base's commits into the branch, with a merge commit or by rebasing.
+    UpdateBranch,
+    /// Opens a pull request that undoes a merged one.
+    Revert,
+    Comment,
+    Approve,
+    RequestChanges,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct ChangedFile {
     pub path: String,
@@ -545,6 +707,8 @@ pub enum DiffScope {
     Uncommitted,
     /// Everything since the branch left the one it started from, committed or not.
     Branch,
+    /// What the pull request changes, as GitHub has it.
+    PullRequest { number: u64 },
 }
 
 /// A file or a folder in a folder threads work in.
@@ -746,6 +910,16 @@ pub enum Message {
         url: Option<String>,
         /// What to do after it, if anything follows.
         next: Option<GitAction>,
+    },
+    PullRequest {
+        pull_request: Box<PullRequestDetail>,
+    },
+    /// What a `PullRequestAction` did, in words to show: "Merged PR #7". `url` is the pull
+    /// request it opened, if it opened one.
+    PullRequestDone {
+        title: String,
+        url: Option<String>,
+        pull_request: Box<PullRequestDetail>,
     },
     Uploaded {
         path: String,

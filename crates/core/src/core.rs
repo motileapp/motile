@@ -30,6 +30,7 @@ use crate::follow::{self, Followed};
 use crate::git;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
+use crate::pull_request;
 use crate::render::agents;
 use crate::render::diff;
 use crate::render::highlight::{self, Spans};
@@ -254,6 +255,10 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
 
 fn key_file(config: &Config) -> PathBuf {
     config.data_dir.join("device.key")
+}
+
+fn unexpected(answer: &Message) -> String {
+    format!("Your server gave an unexpected answer. Update it and try again. It said: {answer:?}")
 }
 
 fn error_text(error: anyhow::Error) -> String {
@@ -1320,15 +1325,7 @@ impl Core {
                 tokio::spawn(async move {
                     let (patch, truncated) = match link.request(&Request::Diff { project_id, thread_id, scope }).await {
                         Ok(Message::Diff { patch, truncated }) => (patch, truncated),
-                        Ok(other) => {
-                            return reply(
-                                &sink,
-                                id,
-                                Err(format!(
-                                    "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"
-                                )),
-                            );
-                        }
+                        Ok(other) => return reply(&sink, id, Err(unexpected(&other))),
                         Err(error) => return reply(&sink, id, Err(error_text(error))),
                     };
                     // Reading and highlighting a long patch takes a while.
@@ -1346,6 +1343,42 @@ impl Core {
                         }
                     })
                     .await;
+                });
+            }
+            Command::PullRequest { server_id, project_id, thread_id, number, method } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let answer = link.request(&Request::PullRequest { project_id, thread_id, number }).await;
+                    let detail = match answer {
+                        Ok(Message::PullRequest { pull_request }) => pull_request,
+                        Ok(other) => return reply(&sink, id, Err(unexpected(&other))),
+                        Err(error) => return reply(&sink, id, Err(error_text(error))),
+                    };
+                    // Its Markdown is parsed and its code highlighted.
+                    let view = tokio::task::spawn_blocking(move || pull_request::view(&detail, method)).await;
+                    reply(&sink, id, view.map(|view| json!(view)).map_err(|error| error.to_string()));
+                });
+            }
+            Command::PullRequestAction { server_id, project_id, thread_id, number, action, method, text } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let request = Request::PullRequestAction { project_id, thread_id, number, action, method, text };
+                    let (title, url, detail) = match link.request(&request).await {
+                        Ok(Message::PullRequestDone { title, url, pull_request }) => (title, url, pull_request),
+                        Ok(other) => return reply(&sink, id, Err(unexpected(&other))),
+                        Err(error) => return reply(&sink, id, Err(error_text(error))),
+                    };
+                    let view = tokio::task::spawn_blocking(move || pull_request::view(&detail, method)).await;
+                    let answer = view.map(|view| json!({ "title": title, "url": url, "view": view }));
+                    reply(&sink, id, answer.map_err(|error| error.to_string()));
                 });
             }
             Command::File { server_id, project_id, thread_id, path } => {

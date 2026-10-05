@@ -36,6 +36,7 @@ enum Symbol: String {
     case cornerLeftUp = "\u{e0a4}"
     case diff = "\u{e30c}"
     case download = "\u{e0b2}"
+    case ellipsis = "\u{e0b6}"
     case eye = "\u{e0ba}"
     case file = "\u{e0c0}"
     case fileText = "\u{e0cc}"
