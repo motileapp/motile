@@ -715,6 +715,11 @@ async fn latest(repository: &str, environment: &Environment, branch: &str) -> St
     if ahead || !known { branch.to_string() } else { on_remote }
 }
 
+/// Removes the worktree at `path`, which git refuses while it has changes. Its branch stays.
+pub async fn remove_worktree(repository: &str, environment: &Environment, path: &str) -> anyhow::Result<()> {
+    git(repository, environment, &["worktree", "remove", path]).await.map(|_| ())
+}
+
 /// Forgets the worktrees whose folders have gone.
 pub async fn prune_worktrees(repository: &str, environment: &Environment) {
     let _ = git(repository, environment, &["worktree", "prune"]).await;

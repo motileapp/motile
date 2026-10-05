@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
 use motile_protocol::wire::{
-    Activity, DiffScope, GitAction, GitStage, MergeMethod, NewThread, Project, PullRequestAction, Request, ServerInfo,
-    Thread,
+    Activity, DiffScope, GitAction, GitStage, MergeMethod, NewThread, Project, PullRequestAction, PullRequestEdit,
+    PullRequestSettings, PullRequestState, Request, ServerInfo, Thread,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -186,6 +186,43 @@ pub enum Command {
         #[serde(default)]
         text: Option<String>,
     },
+    /// Changes the pull request as `edit` says. Answers with the `title` of what it did and the
+    /// pull request's `view` afterwards.
+    PullRequestEdit {
+        server_id: String,
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        number: u64,
+        edit: PullRequestEdit,
+        #[serde(default)]
+        method: Option<MergeMethod>,
+    },
+    /// The repository's pull requests in that state, as the list shows them: `rows`, each a
+    /// `pull_request::Row`.
+    PullRequests {
+        server_id: String,
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        state: PullRequestState,
+    },
+    /// Markdown set for drawing, as `blocks`: what a description looks like before it is saved.
+    Markdown {
+        text: String,
+    },
+    /// The prompt that hands a line of a pull request and the user's note on it to the agent.
+    /// Answers with `prompt`.
+    LinePrompt {
+        number: u64,
+        url: String,
+        head: String,
+        path: String,
+        line: u32,
+        code: String,
+        #[serde(default)]
+        note: String,
+    },
     /// The file at `path` in that folder. Answers with its `kind` and `size`, and for a text
     /// with its `lines` and `truncated` when they are only its start, for an image with the
     /// `file` it is in on this device. A `code_spans` event follows with a text's highlighting.
@@ -202,6 +239,12 @@ pub enum Command {
         server_id: String,
         #[serde(default)]
         model: Option<String>,
+    },
+    /// What the server does with pull requests by itself: marking threads done and removing
+    /// worktrees once their pull requests merge.
+    SetPullRequestSettings {
+        server_id: String,
+        settings: PullRequestSettings,
     },
     /// Says how the server's writer names the branches it makes. Without `instructions` the
     /// server goes back to its own.

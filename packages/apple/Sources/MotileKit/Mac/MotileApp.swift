@@ -51,7 +51,10 @@ struct MotileApp: App {
                     .disabled(store.panelUnavailable != nil)
                 Button("Show Pull Request") { store.sidePanel.open(.pullRequest) }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
-                    .disabled(store.panelUnavailable != nil || store.pullRequestUnavailable != nil)
+                    .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil)
+                Button("Show All Pull Requests") { store.sidePanel.open(.pullRequests) }
+                    .keyboardShortcut("r", modifiers: [.command, .option, .shift])
+                    .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil || !store.pullRequestsExtended)
                 PanelTabCommands(store: store)
                 Divider()
             }

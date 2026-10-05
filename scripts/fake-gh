@@ -2,14 +2,20 @@
 """Stand-in for GitHub's `gh`, for tests and the dev apps.
 
 It keeps the pull requests of the repository it is run in in FAKE_GH_STATE, a JSON file beside it
-unless that says where, and
-answers the calls the server makes: `pr view` and `pr create` for the git button, `api graphql` for
-the pull request tab, `pr diff` for its changes, and `pr merge`, `ready`, `close`, `reopen`,
-`update-branch`, `revert`, `comment` and `review` for what the tab does. A new pull request's checks
-pass and it merges cleanly; to see it otherwise, edit the file. The checks of a pull request are
-`[name, status]` pairs, a status being `success`, `failure`, `pending` or another of GitHub's
-conclusions in lower case; `mergeable` is `MERGEABLE`, `CONFLICTING` or `UNKNOWN`. A merge is only
-written down: the branches stay as they are.
+unless that says where, and answers the calls the server makes: `pr view` and `pr create` for the
+git button; `api graphql` for the pull request tab, its reactions, conversations and viewed files;
+`pr list` for the list of pull requests; `pr diff` and `api …/commits/<sha>` for their changes;
+`api …/stacks` for stacks; `api …/pulls/<n>/reviews` for a review with comments on lines; and
+`pr merge`, `ready`, `close`, `reopen`, `update-branch`, `revert`, `comment`, `review` and `edit` for
+what the tab does.
+
+A new pull request's checks pass and it merges cleanly; to see it otherwise, edit the file. The
+checks of a pull request are `[name, status]` pairs, a status being `success`, `failure`, `pending`
+or another of GitHub's conclusions in lower case; `mergeable` is `MERGEABLE`, `CONFLICTING` or
+`UNKNOWN`. Comments, reviews and conversations can be added to a pull request's `comments`,
+`reviews` and `threads` as GitHub's API has them, and a stack to `stacks` as its REST API lists one.
+A merge is only written down: the branches stay as they are. The user is `demo`. A `delay` in
+the file, in seconds, slows down every call that changes something, to see a client wait.
 """
 import json
 import os
@@ -20,17 +26,34 @@ import time
 STATE = os.environ.get("FAKE_GH_STATE") or os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "fake-gh.json")
 REPOSITORY = "https://github.com/acme/app"
 USER = "demo"
+REACTIONS = ["THUMBS_UP", "THUMBS_DOWN", "LAUGH", "HOORAY", "CONFUSED", "HEART", "ROCKET", "EYES"]
 
 
 def load():
     try:
         with open(STATE) as file:
-            return json.load(file)
+            state = json.load(file)
     except FileNotFoundError:
-        return {"pulls": [], "merge_methods": ["MERGE", "SQUASH", "REBASE"], "preferred": "SQUASH", "auto_merge": True}
+        state = {}
+    state.setdefault("pulls", [])
+    state.setdefault("merge_methods", ["MERGE", "SQUASH", "REBASE"])
+    state.setdefault("preferred", "SQUASH")
+    state.setdefault("auto_merge", True)
+    state.setdefault("labels", [{"name": "bug", "color": "d73a4a"}, {"name": "documentation", "color": "0075ca"},
+                                {"name": "enhancement", "color": "a2eeef"}])
+    state.setdefault("users", [USER, "ana", "bo"])
+    state.setdefault("reactions", {})
+    state.setdefault("stacks", [])
+    state.setdefault("next_id", 1)
+    for pull in state["pulls"]:
+        for key, empty in (("comments", []), ("reviews", []), ("threads", []), ("labels", []), ("requested", []),
+                           ("viewed", [])):
+            pull.setdefault(key, empty)
+    return state
 
 
 def save(state):
+    time.sleep(state.get("delay", 0))
     with open(STATE, "w") as file:
         json.dump(state, file, indent=2)
 
@@ -54,17 +77,36 @@ def option(arguments, name):
     return None
 
 
+def options(arguments, name):
+    return [arguments[index + 1] for index, word in enumerate(arguments[:-1]) if word == name]
+
+
+def fields(arguments):
+    """The `-f name=value` and `-F name=value` of `gh api`."""
+    found = {}
+    for flag, word in zip(arguments, arguments[1:]):
+        if flag in ("-f", "-F") and "=" in word:
+            name, value = word.split("=", 1)
+            found[name] = value
+    return found
+
+
 def body(arguments):
     if option(arguments, "--body-file") == "-":
         return sys.stdin.read()
     return option(arguments, "--body") or option(arguments, "--comment") or ""
 
 
+def new_id(state, prefix):
+    state["next_id"] += 1
+    return f"{prefix}_{state['next_id']}"
+
+
 def find(state, arguments):
     """The pull request a command names by number, or the open one of the branch checked out."""
     numbers = [word for word in arguments[2:] if word.isdigit()]
     if numbers:
-        pull = next((pull for pull in state["pulls"] if pull["number"] == int(numbers[0])), None)
+        pull = numbered(state, int(numbers[0]))
     else:
         branch = git("rev-parse", "--abbrev-ref", "HEAD")
         mine = [pull for pull in state["pulls"] if pull["head"] == branch]
@@ -72,6 +114,10 @@ def find(state, arguments):
     if pull is None:
         fail("no pull requests found for this branch")
     return pull
+
+
+def numbered(state, number):
+    return next((pull for pull in state["pulls"] if pull["number"] == number), None)
 
 
 def url(pull):
@@ -84,19 +130,20 @@ def opened(state, title, text, head, base):
         "title": title, "body": text, "head": head, "base": base, "state": "OPEN", "isDraft": False,
         "mergeable": "MERGEABLE", "reviewDecision": None, "behindBy": 0, "autoMerge": None,
         "checks": [["build", "success"], ["test", "success"]],
-        "createdAt": now(), "mergedAt": None, "closedAt": None, "mergedBy": None,
-        "headOid": git("rev-parse", head) or "0" * 40, "comments": [], "reviews": [],
+        "createdAt": now(), "updatedAt": now(), "mergedAt": None, "closedAt": None, "mergedBy": None,
+        "headOid": git("rev-parse", head) or "0" * 40, "comments": [], "reviews": [], "threads": [],
+        "labels": [], "requested": [], "viewed": [],
     }
     state["pulls"].append(pull)
     return pull
 
 
 def commits(pull):
-    listing = git("log", "--reverse", "--format=%h%x09%s%x09%an%x09%cI", f"{pull['base']}..{pull['head']}")
+    listing = git("log", "--reverse", "--format=%H%x09%h%x09%s%x09%an%x09%cI", f"{pull['base']}..{pull['head']}")
     found = []
     for line in listing.splitlines():
-        oid, headline, author, at = line.split("\t")
-        found.append({"commit": {"abbreviatedOid": oid, "messageHeadline": headline, "committedDate": at,
+        sha, oid, headline, author, at = line.split("\t")
+        found.append({"commit": {"oid": sha, "abbreviatedOid": oid, "messageHeadline": headline, "committedDate": at,
                                  "author": {"name": author, "user": {"login": USER}}}})
     return found
 
@@ -110,15 +157,41 @@ def check(name, status):
     }
 
 
-def graphql(state, number):
-    pull = next((pull for pull in state["pulls"] if pull["number"] == number), None)
+def reacted(state, subject):
+    """What GitHub's API says of the reactions to a comment, a review or a review comment."""
+    given = {**subject, "reactionGroups": []}
+    for content in REACTIONS:
+        users = state["reactions"].get(subject["id"], {}).get(content, [])
+        given["reactionGroups"].append(
+            {"content": content, "viewerHasReacted": USER in users, "reactors": {"totalCount": len(users)}})
+    return given
+
+
+def labelled(state, names):
+    colours = {label["name"]: label["color"] for label in state["labels"]}
+    return [{"name": name, "color": colours.get(name, "cccccc")} for name in names]
+
+
+def latest_reviews(pull):
+    latest = {}
+    for review in pull["reviews"]:
+        latest[review["author"]["login"]] = review["state"]
+    return [{"author": {"login": author}, "state": verdict} for author, verdict in latest.items()]
+
+
+def files(pull):
+    paths = git("diff", "--name-only", f"{pull['base']}...{pull['head']}").splitlines()
+    return [{"path": path, "viewerViewedState": "VIEWED" if path in pull["viewed"] else "UNVIEWED"} for path in paths]
+
+
+def detail(state, number):
+    pull = numbered(state, number)
     if pull is None:
-        print(json.dumps({"data": {"repository": {"pullRequest": None}}}))
-        return
+        return {"data": {"viewer": {"login": USER}, "repository": {"pullRequest": None}}}
     allowed = state["merge_methods"]
     found = {
-        "number": pull["number"], "title": pull["title"], "url": url(pull), "body": pull["body"],
-        "state": pull["state"], "isDraft": pull["isDraft"], "mergeable": pull["mergeable"],
+        "id": f"PR_{pull['number']}", "number": pull["number"], "title": pull["title"], "url": url(pull),
+        "body": pull["body"], "state": pull["state"], "isDraft": pull["isDraft"], "mergeable": pull["mergeable"],
         "reviewDecision": pull["reviewDecision"], "additions": 0, "deletions": 0, "changedFiles": 0,
         "createdAt": pull["createdAt"], "mergedAt": pull["mergedAt"], "closedAt": pull["closedAt"],
         "baseRefName": pull["base"], "headRefName": pull["head"], "author": {"login": USER},
@@ -126,22 +199,120 @@ def graphql(state, number):
         "autoMergeRequest": {"mergeMethod": pull["autoMerge"]} if pull["autoMerge"] else None,
         "viewerCanUpdate": True, "viewerDidAuthor": True, "viewerCanUpdateBranch": True,
         "baseRef": {"compare": {"behindBy": pull["behindBy"]}},
+        "labels": {"nodes": labelled(state, pull["labels"])},
+        "reviewRequests": {"nodes": [{"requestedReviewer": {"__typename": "User", "login": login}}
+                                     for login in pull["requested"]]},
+        "latestReviews": {"nodes": latest_reviews(pull)},
+        "files": {"nodes": files(pull)},
         "commits": {"totalCount": 0, "nodes": commits(pull)},
         "lastCommit": {"nodes": [{"commit": {"statusCheckRollup": {"contexts": {
             "nodes": [check(name, status) for name, status in pull["checks"]]}}}}]},
-        "comments": {"nodes": pull["comments"]},
-        "reviews": {"nodes": pull["reviews"]},
+        "comments": {"nodes": [reacted(state, comment) for comment in pull["comments"]]},
+        "reviews": {"nodes": [reacted(state, review) for review in pull["reviews"]]},
+        "reviewThreads": {"nodes": [{**thread, "comments": {"nodes": [reacted(state, comment) for comment in
+                                                                     thread["comments"]]}}
+                                    for thread in pull["threads"]]},
     }
     found["commits"]["totalCount"] = len(found["commits"]["nodes"])
     stat = git("diff", "--shortstat", f"{pull['base']}...{pull['head']}")
     numbers = [int(word) for word in stat.replace(",", "").split() if word.isdigit()]
     for key, value in zip(["changedFiles", "additions", "deletions"], numbers + [0, 0, 0]):
         found[key] = value
-    print(json.dumps({"data": {"repository": {
+    return {"data": {"viewer": {"login": USER}, "repository": {
         "mergeCommitAllowed": "MERGE" in allowed, "squashMergeAllowed": "SQUASH" in allowed,
         "rebaseMergeAllowed": "REBASE" in allowed, "autoMergeAllowed": state["auto_merge"],
-        "viewerPermission": "ADMIN", "viewerDefaultMergeMethod": state["preferred"], "pullRequest": found,
-    }}}))
+        "viewerPermission": "ADMIN", "viewerDefaultMergeMethod": state["preferred"],
+        "defaultBranchRef": {"name": "main"},
+        "labels": {"nodes": state["labels"]},
+        "assignableUsers": {"nodes": [{"login": login} for login in state["users"]]},
+        "pullRequest": found,
+    }}}
+
+
+def thread_of(state, thread_id):
+    for pull in state["pulls"]:
+        for thread in pull["threads"]:
+            if thread["id"] == thread_id:
+                return pull, thread
+    fail(f"Could not resolve to a node with the global id of '{thread_id}'")
+
+
+def mutation(state, query, variables):
+    if "addReaction" in query or "removeReaction" in query:
+        users = state["reactions"].setdefault(variables["subject"], {}).setdefault(variables["content"], [])
+        if "addReaction" in query and USER not in users:
+            users.append(USER)
+        if "removeReaction" in query and USER in users:
+            users.remove(USER)
+    elif "addPullRequestReviewThreadReply" in query:
+        pull, thread = thread_of(state, variables["thread"])
+        thread["comments"].append({"id": new_id(state, "PRRC"), "author": {"login": USER}, "body": variables["body"],
+                                   "createdAt": now(), "url": url(pull), "diffHunk": None})
+    elif "resolveReviewThread" in query or "unresolveReviewThread" in query:
+        thread_of(state, variables["thread"])[1]["isResolved"] = "unresolveReviewThread" not in query
+    elif "markFileAsViewed" in query or "unmarkFileAsViewed" in query:
+        pull = numbered(state, int(variables["id"].split("_")[1]))
+        viewed = set(pull["viewed"])
+        (viewed.discard if "unmarkFileAsViewed" in query else viewed.add)(variables["path"])
+        pull["viewed"] = sorted(viewed)
+    else:
+        fail("unknown mutation")
+    save(state)
+    print(json.dumps({"data": {}}))
+
+
+def review(state, number):
+    """A review with comments on lines, as `POST …/pulls/<n>/reviews` makes it."""
+    pull = numbered(state, number)
+    asked = json.loads(sys.stdin.read())
+    verdict = {"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}.get(asked["event"], "COMMENTED")
+    pull["reviews"].append({"id": new_id(state, "PRR"), "author": {"login": USER}, "body": asked.get("body", ""),
+                            "state": verdict, "submittedAt": now(), "url": url(pull)})
+    for comment in asked.get("comments", []):
+        pull["threads"].append({
+            "id": new_id(state, "PRRT"), "isResolved": False, "isOutdated": False, "path": comment["path"],
+            "line": comment["line"], "diffSide": comment["side"],
+            "comments": [{"id": new_id(state, "PRRC"), "author": {"login": USER}, "body": comment["body"],
+                          "createdAt": now(), "url": url(pull), "diffHunk": None}],
+        })
+    if verdict != "COMMENTED":
+        pull["reviewDecision"] = verdict
+    save(state)
+    print(json.dumps({"id": 1}))
+
+
+def listed(state, arguments):
+    wanted = option(arguments, "--state") or "open"
+    head = option(arguments, "--head")
+    states = {"open": ["OPEN"], "closed": ["CLOSED"], "merged": ["MERGED"], "all": ["OPEN", "CLOSED", "MERGED"]}
+    found = [pull for pull in reversed(state["pulls"])
+             if pull["state"] in states[wanted] and (head is None or pull["head"] == head)]
+    rows = []
+    for pull in found[: int(option(arguments, "--limit") or 30)]:
+        rows.append({
+            "number": pull["number"], "title": pull["title"], "url": url(pull), "state": pull["state"],
+            "isDraft": pull["isDraft"], "author": {"login": USER}, "headRefName": pull["head"],
+            "baseRefName": pull["base"], "updatedAt": pull.get("updatedAt", pull["createdAt"]),
+            "reviewDecision": pull["reviewDecision"] or "",
+            "statusCheckRollup": [check(name, status) for name, status in pull["checks"]],
+            "additions": 0, "deletions": 0,
+        })
+    print(json.dumps(rows))
+
+
+def api(state, arguments):
+    path = arguments[1]
+    if "/stacks" in path:
+        number = int(path.split("pull_request=")[1])
+        print(json.dumps([stack for stack in state["stacks"]
+                          if any(layer["number"] == number for layer in stack["pull_requests"])][:1]))
+    elif "/commits/" in path:
+        sha = path.rsplit("/", 1)[1]
+        print(git("diff", f"{sha}^", sha))
+    elif path.endswith("/reviews"):
+        review(state, int(path.split("/pulls/")[1].split("/")[0]))
+    else:
+        print("[]")
 
 
 def main(arguments):
@@ -154,11 +325,18 @@ def main(arguments):
         return
     state = load()
     if command == "api graphql":
-        number = next(int(word.split("=", 1)[1]) for word in arguments if word.startswith("number="))
-        graphql(state, number)
+        variables = fields(arguments)
+        query = variables.pop("query", "")
+        if query.lstrip().startswith("mutation"):
+            mutation(state, query, variables)
+        else:
+            print(json.dumps(detail(state, int(variables["number"]))))
         return
     if arguments[:1] == ["api"]:
-        print("[]")
+        api(state, arguments)
+        return
+    if command == "pr list":
+        listed(state, arguments)
         return
     if command == "pr create":
         head = git("rev-parse", "--abbrev-ref", "HEAD")
@@ -170,12 +348,12 @@ def main(arguments):
         return
     pull = find(state, arguments)
     if command == "pr view":
-        fields = (option(arguments, "--json") or "").split(",")
+        wanted = (option(arguments, "--json") or "").split(",")
         # A merged or closed pull request keeps the commit it ended at.
         head = pull["headOid"] if pull["state"] != "OPEN" else git("rev-parse", pull["head"]) or pull["headOid"]
         view = {"number": pull["number"], "title": pull["title"], "url": url(pull), "state": pull["state"],
                 "isDraft": pull["isDraft"], "headRefOid": head}
-        print(json.dumps({field: view.get(field) for field in fields}))
+        print(json.dumps({field: view.get(field) for field in wanted}))
         return
     if command == "pr diff":
         print(git("diff", f"{pull['base']}...{pull['head']}"))
@@ -215,15 +393,33 @@ def main(arguments):
         return
     elif command == "pr review":
         verdict = "APPROVED" if "--approve" in arguments else "CHANGES_REQUESTED" if "--request-changes" in arguments else "COMMENTED"
-        pull["reviews"].append({"author": {"login": "reviewer"}, "body": body(arguments), "state": verdict,
-                                "submittedAt": now(), "url": url(pull)})
+        pull["reviews"].append({"id": new_id(state, "PRR"), "author": {"login": USER}, "body": body(arguments),
+                                "state": verdict, "submittedAt": now(), "url": url(pull)})
         if verdict != "COMMENTED":
             pull["reviewDecision"] = verdict
+    elif command == "pr edit":
+        if option(arguments, "--title"):
+            pull["title"] = option(arguments, "--title")
+        if option(arguments, "--body-file") == "-":
+            pull["body"] = sys.stdin.read()
+        known = {label["name"] for label in state["labels"]}
+        for name in options(arguments, "--add-label"):
+            if name not in known:
+                fail(f"'{name}' not found")
+            pull["labels"] = sorted(set(pull["labels"]) | {name})
+        pull["labels"] = [name for name in pull["labels"] if name not in options(arguments, "--remove-label")]
+        for login in options(arguments, "--add-reviewer"):
+            if login not in state["users"]:
+                fail(f"'{login}' not found")
+            pull["requested"] = sorted(set(pull["requested"]) | {login})
+        pull["requested"] = [login for login in pull["requested"] if login not in options(arguments, "--remove-reviewer")]
     elif command != "pr comment":
         fail(f"unknown command {command}")
     text = body(arguments) if command in ("pr comment", "pr close", "pr reopen") else ""
     if text:
-        pull["comments"].append({"author": {"login": USER}, "body": text, "createdAt": now(), "url": url(pull)})
+        pull["comments"].append({"id": new_id(state, "IC"), "author": {"login": USER}, "body": text,
+                                 "createdAt": now(), "url": url(pull)})
+    pull["updatedAt"] = now()
     save(state)
 
 

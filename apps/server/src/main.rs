@@ -9,7 +9,7 @@ use motile_protocol::identity::is_public_key;
 use motile_server::access::{Access, AccountSource};
 use motile_server::agents::environment::Environment;
 use motile_server::config::DataDir;
-use motile_server::hub::{Hub, PULL_REQUEST_FRESH};
+use motile_server::hub::{Hub, PULL_REQUEST_FRESH, PULL_REQUEST_WATCH};
 use motile_server::serve::{BindOptions, Server, bind};
 use motile_server::store::Store;
 use motile_server::{service, setup, update};
@@ -139,6 +139,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     let hub = Hub::new(store, data_dir.media(), data_dir.attachments(), data_dir.worktrees(), environment)?;
     hub.keep_uploads_swept();
     hub.keep_pull_requests_current(PULL_REQUEST_FRESH);
+    hub.watch_pull_requests(PULL_REQUEST_WATCH);
     let endpoint = bind(&key, &options).await?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), key = key.public(), "serving");
     if options.local_only {

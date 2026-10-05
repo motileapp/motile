@@ -11,6 +11,8 @@ enum DiffScope: Hashable, Codable {
     case turn(String)
     /// What the pull request with the number changes, as GitHub has it.
     case pullRequest(Int)
+    /// What one commit changed, by its whole name.
+    case commit(String)
 
     var request: JSON {
         switch self {
@@ -18,6 +20,7 @@ enum DiffScope: Hashable, Codable {
         case .branch: ["kind": "branch"]
         case .turn(let itemID): ["kind": "turn", "item_id": itemID]
         case .pullRequest(let number): ["kind": "pull_request", "number": number]
+        case .commit(let sha): ["kind": "commit", "sha": sha]
         }
     }
 }
@@ -35,6 +38,10 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case agents
     /// The pull request of the branch the thread works on.
     case pullRequest
+    /// Another pull request of the repository, by its number.
+    case pullRequestNumber(Int)
+    /// The repository's pull requests.
+    case pullRequests
     /// A tab that offers what there is to open. A thread can have several, told apart by number.
     case blank(Int)
 
@@ -45,6 +52,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .files: "files"
         case .agents: "agents"
         case .pullRequest: "pull_request"
+        case .pullRequestNumber(let number): "pull_request:\(number)"
+        case .pullRequests: "pull_requests"
         case .file(let path): "file:\(path)"
         case .change(_, let path): "change:\(path)"
         }
@@ -59,7 +68,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
     var path: String? {
         switch self {
         case .file(let path), .change(_, let path): path
-        case .diff, .files, .agents, .pullRequest, .blank: nil
+        case .diff, .files, .agents, .pullRequest, .pullRequestNumber, .pullRequests, .blank: nil
         }
     }
 
@@ -69,6 +78,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .files: "Files"
         case .agents: "Agents"
         case .pullRequest: "Pull Request"
+        case .pullRequestNumber(let number): "PR #\(number)"
+        case .pullRequests: "Pull Requests"
         case .blank: "New Tab"
         case .file(let path), .change(_, let path): URL(fileURLWithPath: path).lastPathComponent
         }
@@ -79,7 +90,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff, .change: .diff
         case .files: .folder
         case .agents: .users
-        case .pullRequest: .gitPullRequest
+        case .pullRequest, .pullRequestNumber, .pullRequests: .gitPullRequest
         case .blank: .plus
         case .file(let path): FileSymbol.symbol(for: path)
         }
@@ -205,8 +216,12 @@ final class SidePanel {
     private(set) var contents: [PanelTab: Loaded<FileContent>] = [:]
 
     private(set) var pullRequest: Loaded<PullRequestPage> = .loading
-    /// The label of the action on the pull request that runs.
-    private(set) var pullRequestWorking: String?
+    /// The action on the pull request that runs.
+    private(set) var pullRequestWorking: PullRequestWork?
+    /// The repository's pull requests, as the list tab shows them.
+    private(set) var pullRequestList: Loaded<[PullRequestRow]> = .loading
+    /// Comments on lines waiting to be sent with a review, by pull request.
+    private(set) var pendingComments: [Int: [PendingLineComment]] = [:]
     /// What the last action on the pull request did, or why it couldn't.
     private(set) var pullRequestNotice: PullRequestNotice?
     /// Goes up each time the pull request has been read.
@@ -388,7 +403,8 @@ final class SidePanel {
     private func canShow(_ scope: DiffScope, of target: PanelTarget) -> Bool {
         switch scope {
         case .turn(let itemID): turns.contains { $0.id == itemID }
-        case .pullRequest(let number): number == target.pullRequest
+        case .pullRequest(let number): number == target.pullRequest || number == pullRequest.value?.number
+        case .commit: true
         case .uncommitted, .branch: true
         }
     }
@@ -440,12 +456,27 @@ final class SidePanel {
             guard let self, self.shown == target, self.shownScope == scope else { return }
             switch result {
             case .success(let document):
-                if fresh { self.collapsed = Set(document.files.filter { $0.lines.count > CodeFile.openUpToLines }.map(\.path)) }
+                if fresh {
+                    let long = document.files.filter { $0.lines.count > CodeFile.openUpToLines }.map(\.path)
+                    self.collapsed = Set(long).union(self.viewedPaths(for: scope))
+                }
                 self.diff = .ready(document)
             case .failure(let error):
                 self.diff = .failed(error.message)
             }
         } ?? 0
+    }
+
+    /// The files of the pull request the user has marked as viewed, which its diff shows closed.
+    private func viewedPaths(for scope: DiffScope) -> [String] {
+        guard case .pullRequest(let number) = scope, let page = pullRequest.value, page.number == number else { return [] }
+        return page.viewed.filter(\.value).map(\.key)
+    }
+
+    /// Marks the file viewed, or not, and closes or opens it in the diff with that.
+    func setViewed(_ path: String, _ viewed: Bool, on target: PanelTarget, number: Int) {
+        if viewed { collapsed.insert(path) } else { collapsed.remove(path) }
+        edit(["kind": "viewed", "path": path, "viewed": viewed], on: target, number: number)
     }
 
     func toggleCollapsed(_ path: String) {
@@ -581,13 +612,14 @@ final class SidePanel {
     }
 
     /// Does something to the pull request: an action of a button or a choice, with what the
-    /// comment box says. `done` is called when it worked.
+    /// comment box says. `key` names the button it came from, which shows `label` meanwhile.
+    /// `done` is called when it worked.
     func act(
-        _ action: String, method: String? = nil, text: String? = nil, label: String, on target: PanelTarget, number: Int,
-        done: (() -> Void)? = nil
+        _ action: String, method: String? = nil, text: String? = nil, key: String, label: String, on target: PanelTarget,
+        number: Int, done: (() -> Void)? = nil
     ) {
         guard pullRequestWorking == nil else { return }
-        pullRequestWorking = label
+        pullRequestWorking = PullRequestWork(key: key, label: label)
         pullRequestNotice = nil
         if action == "merge" || action == "enable_auto_merge", let method { remember(method, for: target.projectID) }
         var command = target.request
@@ -610,6 +642,111 @@ final class SidePanel {
                 done?()
             case .failure(let error):
                 self.say(PullRequestNotice(text: error.message, failed: true))
+            }
+        }
+    }
+
+    /// Changes the pull request as `edit` says, the protocol's `PullRequestEdit` as JSON. Without a
+    /// `key` it goes quietly, like a reaction, and the page is only read again.
+    func edit(
+        _ edit: JSON, key: String? = nil, label: String = "", on target: PanelTarget, number: Int,
+        done: (() -> Void)? = nil
+    ) {
+        if let key {
+            guard pullRequestWorking == nil else { return }
+            pullRequestWorking = PullRequestWork(key: key, label: label)
+            pullRequestNotice = nil
+        }
+        var command = target.request
+        command["server_id"] = target.serverID
+        command["number"] = number
+        command["edit"] = edit
+        if let method = mergeMethods[target.projectID] { command["method"] = method }
+        store?.core.send("pull_request_edit", command, read: { answer in
+            (answer.string("title"), PullRequestPage(json: answer.object("view") ?? [:]))
+        }) { [weak self] result in
+            guard let self else { return }
+            if key != nil { self.pullRequestWorking = nil }
+            guard self.shown == target, self.shownPullRequest == number else { return }
+            switch result {
+            case .success(let (title, page)):
+                self.pullRequest = .ready(page)
+                self.pullRequestReads += 1
+                if !title.isEmpty { self.say(PullRequestNotice(text: title, failed: false)) }
+                done?()
+            case .failure(let error):
+                self.say(PullRequestNotice(text: error.message, failed: true))
+            }
+        }
+    }
+
+    /// Keeps a comment on a line for the next review of the pull request.
+    func addPending(_ comment: PendingLineComment, to number: Int) {
+        pendingComments[number, default: []].append(comment)
+    }
+
+    func removePending(_ comment: PendingLineComment, from number: Int) {
+        pendingComments[number]?.removeAll { $0.id == comment.id }
+    }
+
+    /// Sends a review with the comments kept for it, and forgets them once it is there.
+    func review(_ verdict: String, body: String, key: String, label: String, on target: PanelTarget, number: Int, done: (() -> Void)? = nil) {
+        let pending = pendingComments[number] ?? []
+        let comments: [JSON] = pending.map { ["path": $0.path, "line": $0.line, "side": $0.side, "body": $0.body] }
+        let review: JSON = ["kind": "review", "verdict": verdict, "body": body, "comments": comments]
+        edit(review, key: key, label: label, on: target, number: number) { [weak self] in
+            self?.pendingComments[number] = nil
+            done?()
+        }
+    }
+
+    /// Asks the server for the repository's pull requests in that state: "open", "closed",
+    /// "merged" or "all".
+    func loadPullRequests(of target: PanelTarget, state: String) {
+        look(into: target)
+        var command = target.request
+        command["server_id"] = target.serverID
+        command["state"] = state
+        store?.core.send("pull_requests", command, read: { $0.objects("rows").map(PullRequestRow.init) }) { [weak self] result in
+            guard let self, self.shown == target else { return }
+            switch result {
+            case .success(let rows): self.pullRequestList = .ready(rows)
+            case .failure(let error) where self.pullRequestList.value == nil: self.pullRequestList = .failed(error.message)
+            case .failure(let error): self.say(PullRequestNotice(text: error.message, failed: true))
+            }
+        }
+    }
+
+    /// Opens the pull request in a tab: the thread's own tab when it is the thread's.
+    func showPullRequest(_ number: Int, of target: PanelTarget) {
+        open(number == target.pullRequest ? .pullRequest : .pullRequestNumber(number))
+    }
+
+    /// Makes the pull request the thread's own, or with `nil` takes its own away.
+    func link(_ number: Int?, thread threadID: String, serverID: String) {
+        var request: JSON = ["type": "link_pull_request", "thread_id": threadID]
+        if let number { request["number"] = number }
+        store?.core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
+            switch result {
+            case .success:
+                let said = number.map { "Linked PR #\($0) to this thread" } ?? "Unlinked the pull request from this thread"
+                self?.say(PullRequestNotice(text: said, failed: false))
+            case .failure(let error): self?.say(PullRequestNotice(text: error.message, failed: true))
+            }
+        }
+    }
+
+    /// Has the thread's agent told what happens on its pull request, or stops it.
+    func watch(_ on: Bool, thread threadID: String, serverID: String) {
+        let request: JSON = ["type": "watch_pull_request", "thread_id": threadID, "watch": on]
+        store?.core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
+            switch result {
+            case .success:
+                let said = on
+                    ? "Watching: the agent hears when its checks finish, someone comments or it conflicts"
+                    : "No longer watching"
+                self?.say(PullRequestNotice(text: said, failed: false))
+            case .failure(let error): self?.say(PullRequestNotice(text: error.message, failed: true))
             }
         }
     }
@@ -657,6 +794,7 @@ final class SidePanel {
         shownPullRequest = nil
         pullRequest = .loading
         pullRequestNotice = nil
+        pullRequestList = .loading
     }
 
     /// The highlighting of what a request answered with has arrived.
@@ -673,6 +811,23 @@ final class SidePanel {
         document.files[file].spans = lines
         NotificationCenter.default.post(name: .codeColoured, object: document, userInfo: ["file": file])
     }
+}
+
+/// The action on a pull request that runs: `key` names the button that started it, which says
+/// `label` meanwhile.
+struct PullRequestWork: Equatable {
+    let key: String
+    let label: String
+}
+
+/// A comment on a line, kept for the next review.
+struct PendingLineComment: Identifiable, Equatable {
+    let id = UUID()
+    let path: String
+    let line: Int
+    /// "left" or "right".
+    let side: String
+    let body: String
 }
 
 /// What an action on a pull request did, or why it couldn't.

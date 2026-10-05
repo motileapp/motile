@@ -1,21 +1,29 @@
 import SwiftUI
 
-/// The pull request of the branch the thread works on: where it stands, what holds it up, the
-/// button its state calls for, and what was said on it, with a box to say more.
+/// A pull request of the repository: the one of the branch the thread works on, or another one by
+/// its number. Where it stands, what holds it up, the button its state calls for, what was said on
+/// it, and a box to say more.
 struct PullRequestSurface: View {
     @Environment(AppStore.self) private var store
     let target: PanelTarget
+    /// Another pull request than the thread's own.
+    var number: Int?
     @State private var asked = 0
+
+    private var shown: Int? { number ?? target.pullRequest }
 
     var body: some View {
         let panel = store.sidePanel
         VStack(spacing: 0) {
-            PanelBar { bar(panel.pullRequest.value) }
-            if let reason = store.pullRequestUnavailable {
-                unavailable(reason)
-            } else if let number = target.pullRequest {
+            PanelBar { bar(panel.pullRequest.value.flatMap { $0.number == shown ? $0 : nil }) }
+            if let notice = panel.pullRequestNotice {
+                PullRequestNoticeBar(notice: notice)
+            }
+            if let reason = store.pullRequestsUnavailable {
+                PanelMessage(text: reason)
+            } else if let number = shown {
                 content(number)
-                    .task(id: PanelTrigger(target: target, version: store.workspaceVersion, asked: asked)) {
+                    .task(id: PanelTrigger(target: target, path: String(number), version: store.workspaceVersion, asked: asked)) {
                         panel.loadPullRequest(of: target, number: number)
                     }
                     .task(id: panel.pullRequestReads) {
@@ -25,6 +33,8 @@ struct PullRequestSurface: View {
                         guard !Task.isCancelled else { return }
                         panel.loadPullRequest(of: target, number: number)
                     }
+            } else {
+                NoPullRequest(target: target)
             }
         }
     }
@@ -39,18 +49,22 @@ struct PullRequestSurface: View {
                 .foregroundStyle(Color.themeText)
                 .monospacedDigit()
                 .padding(.leading, 2)
+            if page.number == target.pullRequest, store.selectedThread?.watching == true {
+                Image(.eye, size: 12)
+                    .foregroundStyle(Color.themeLink)
+                    .padding(.leading, 4)
+                    .help("The agent hears when its checks finish, someone comments or it conflicts")
+            }
         } else {
             Text("Pull Request")
                 .font(.ui(size: 12.5, weight: .medium))
                 .foregroundStyle(Color.themeText)
         }
         Spacer(minLength: 4)
-        if let working = store.sidePanel.pullRequestWorking {
-            ProgressView()
-                .controlSize(.small)
-                .scaleEffect(0.7)
-                .frame(width: 16, height: 16)
-            Text(working)
+        if let work = store.sidePanel.pullRequestWorking, work.key.hasPrefix("menu:") {
+            Spinner(color: .themeSecondary)
+                .frame(width: 11, height: 11)
+            Text(work.label)
                 .font(.ui(size: 12))
                 .foregroundStyle(Color.themeSecondary)
                 .lineLimit(1)
@@ -59,43 +73,108 @@ struct PullRequestSurface: View {
         if let page, let url = page.url {
             IconOnlyButton(symbol: .squareArrowOutUpRight, help: "Open on GitHub") { Platform.open(url) }
         }
-        if store.pullRequestUnavailable == nil {
+        if shown != nil, store.pullRequestsUnavailable == nil {
             IconOnlyButton(symbol: .rotateCw, help: "Read the pull request again") { asked += 1 }
         }
-    }
-
-    /// Why there is nothing to show, and the way to a pull request when the branch can have one.
-    private func unavailable(_ reason: String) -> some View {
-        VStack(spacing: 12) {
-            Text(reason)
-                .font(.ui(size: 12.5))
-                .foregroundStyle(Color.themeSecondary)
-                .multilineTextAlignment(.center)
-            if let project = store.gitProject, let create = project.gitControl?.menu.first(where: { $0.action == "create_pr" }),
-                create.reason == nil, target.pullRequest == nil
-            {
-                PullRequestActionButton(label: "Create PR", style: "primary") { store.chooseGit(create, in: project) }
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
     private func content(_ number: Int) -> some View {
         let panel = store.sidePanel
-        if let notice = panel.pullRequestNotice {
-            PullRequestNoticeBar(notice: notice)
-        }
         switch panel.pullRequest {
-        case .loading:
-            PanelLoading()
+        case .ready(let page) where page.number == number:
+            PullRequestPageView(page: page, target: target, number: number)
         case .failed(let message):
             PanelMessage(text: message, failed: true)
-        case .ready(let page):
-            PullRequestPageView(page: page, target: target, number: number)
+        default:
+            PanelLoading()
         }
     }
+}
+
+/// The thread's tab while its branch has no pull request: the way to open one, or to link one.
+private struct NoPullRequest: View {
+    @Environment(AppStore.self) private var store
+    let target: PanelTarget
+    @State private var linking = ""
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(.gitPullRequest, size: 22)
+                .foregroundStyle(Color.themeTertiary)
+            Text("This branch has no pull request yet.")
+                .font(.ui(size: 13))
+                .foregroundStyle(Color.themeSecondary)
+            HStack(spacing: 8) {
+                if let project = store.gitProject, let create = project.gitControl?.menu.first(where: { $0.action == "create_pr" }),
+                    create.reason == nil
+                {
+                    PullRequestActionButton(label: "Create PR", style: "primary") { store.chooseGit(create, in: project) }
+                }
+                if store.pullRequestsExtended {
+                    PullRequestActionButton(label: "Show All Pull Requests", style: "plain") {
+                        store.sidePanel.open(.pullRequests)
+                    }
+                }
+            }
+            if store.pullRequestsExtended, let thread = store.selectedThread {
+                LinkPullRequestField(text: $linking) { number in
+                    store.sidePanel.link(number, thread: thread.id, serverID: thread.serverID)
+                }
+                .frame(maxWidth: 300)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A field that takes a pull request's number or address and links it to the thread.
+struct LinkPullRequestField: View {
+    @Binding var text: String
+    let link: (Int) -> Void
+
+    /// The number in "#12", "12" or "https://github.com/acme/app/pull/12".
+    private var number: Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let last = trimmed.split(separator: "/").last.map(String.init) ?? trimmed
+        return Int(last.hasPrefix("#") ? String(last.dropFirst()) : last)
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("Link a PR by number or address", text: $text)
+                .textFieldStyle(.plain)
+                .font(.ui(size: 12.5))
+                .padding(.horizontal, 9)
+                .frame(height: scaled(28))
+                .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+                }
+                .onSubmit(submit)
+            PullRequestActionButton(label: "Link", style: "plain", action: submit)
+                .disabled(number == nil)
+        }
+    }
+
+    private func submit() {
+        guard let number else { return }
+        link(number)
+        text = ""
+    }
+}
+
+/// What the tab can do to the pull request, for the parts of the page that do it.
+struct PullRequestActions {
+    let react: (_ subject: String, _ kind: String, _ on: Bool) -> Void
+    let reply: (_ thread: String, _ body: String, _ done: @escaping () -> Void) -> Void
+    let resolve: (_ thread: String, _ resolved: Bool) -> Void
+    let handOff: (String) -> Void
+    let showCommit: (String) -> Void
+    let editDescription: (() -> Void)?
+    /// The key of the action that runs, and what it says.
+    let working: PullRequestWork?
 }
 
 private struct PullRequestPageView: View {
@@ -105,14 +184,24 @@ private struct PullRequestPageView: View {
     let number: Int
     @State private var confirming: PullRequestButton?
     @State private var comment = ""
+    @State private var title: String?
+    @FocusState private var titleFocused: Bool
+    @State private var describing = false
+
+    private var panel: SidePanel { store.sidePanel }
+    private var extended: Bool { store.pullRequestsExtended }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                MergeBox(page: page, run: run)
+                if extended, let stack = page.stack, stack.layers.count > 1 {
+                    StackCard(stack: stack) { panel.showPullRequest($0, of: target) }
+                }
+                MergeBox(page: page, working: panel.pullRequestWorking, run: run)
+                activityTitle
                 ForEach(page.activity) { entry in
-                    ActivityRow(entry: entry)
+                    ActivityRow(entry: entry, actions: actions)
                 }
                 if page.state != .merged {
                     commentBox
@@ -129,19 +218,48 @@ private struct PullRequestPageView: View {
         } message: { button in
             Text(button.confirm?.message ?? "")
         }
+        .sheet(isPresented: $describing) {
+            DescriptionEditor(original: page.body) { body in
+                panel.edit(["kind": "body", "body": body], key: "menu:body", label: "Saving the description…", on: target, number: number)
+            }
+        }
     }
+
+    private var actions: PullRequestActions {
+        PullRequestActions(
+            react: { subject, kind, on in
+                panel.edit(["kind": "react", "subject": subject, "reaction": kind, "on": on], on: target, number: number)
+            },
+            reply: { thread, body, done in
+                panel.edit(["kind": "reply", "thread": thread, "body": body], key: "reply:\(thread)", label: "Replying…", on: target, number: number, done: done)
+            },
+            resolve: { thread, resolved in
+                let label = resolved ? "Resolving…" : "Opening…"
+                panel.edit(["kind": "resolve", "thread": thread, "resolved": resolved], key: "resolve:\(thread)", label: label, on: target, number: number)
+            },
+            handOff: { store.handOff($0) },
+            showCommit: { panel.showDiff(.commit($0)) },
+            editDescription: extended && page.canEdit ? { describing = true } : nil,
+            working: panel.pullRequestWorking)
+    }
+
+    // MARK: Header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
-                Text(page.title)
-                    .font(.ui(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.themeText)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                moreMenu
-                    .padding(.top, -4)
+                if let editing = title {
+                    titleEditor(editing)
+                } else {
+                    Text(page.title)
+                        .font(.ui(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.themeText)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    moreMenu
+                        .padding(.top, -4)
+                }
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 StateLabel(state: page.state)
@@ -157,7 +275,7 @@ private struct PullRequestPageView: View {
                 BranchName(name: page.head)
                 Spacer(minLength: 8)
                 Button {
-                    store.sidePanel.showDiff(.pullRequest(page.number))
+                    panel.showDiff(.pullRequest(page.number))
                 } label: {
                     HStack(spacing: 6) {
                         Image(.diff, size: 11)
@@ -176,18 +294,126 @@ private struct PullRequestPageView: View {
                 .buttonStyle(.highlight(radius: 6))
                 .help("Show what it changes")
             }
+            if extended, let below = page.stackedOn {
+                Button {
+                    panel.showPullRequest(below.number, of: target)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(.layers, size: 11)
+                            .foregroundStyle(Color.themeSecondary)
+                        (Text("Stacked on ").foregroundStyle(Color.themeSecondary)
+                            + Text(verbatim: "#\(below.number) ").foregroundStyle(below.state.color)
+                            + Text(below.title).foregroundStyle(Color.themeText))
+                            .lineLimit(1)
+                    }
+                    .font(.ui(size: 12))
+                    .padding(.horizontal, 6)
+                    .frame(height: pressable(24))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.highlight(radius: 6))
+                .padding(.leading, -6)
+                .help("Open the pull request it merges into")
+            }
+            if extended {
+                people
+            }
+        }
+    }
+
+    private func titleEditor(_ editing: String) -> some View {
+        let binding = Binding { title ?? "" } set: { title = $0 }
+        let working = panel.pullRequestWorking?.key == "title"
+        return VStack(alignment: .leading, spacing: 8) {
+            TextField("Title", text: binding)
+                .textFieldStyle(.plain)
+                .font(.ui(size: 15, weight: .semibold))
+                .padding(.horizontal, 8)
+                .frame(height: scaled(32))
+                .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+                }
+                .focused($titleFocused)
+                .onSubmit(saveTitle)
+                .onAppear { titleFocused = true }
+                #if os(macOS)
+                .onExitCommand { title = nil }
+                #endif
+            HStack(spacing: 8) {
+                Spacer()
+                PullRequestActionButton(label: "Cancel", style: "plain") { title = nil }
+                    .disabled(working)
+                PullRequestActionButton(label: "Save", style: "primary", working: working ? "Saving…" : nil, action: saveTitle)
+                    .disabled(working || editing.trimmingCharacters(in: .whitespaces).isEmpty || editing == page.title)
+            }
+        }
+    }
+
+    private func saveTitle() {
+        guard let edited = title?.trimmingCharacters(in: .whitespaces), !edited.isEmpty, edited != page.title else { return }
+        panel.edit(["kind": "title", "title": edited], key: "title", label: "Saving…", on: target, number: number) { title = nil }
+    }
+
+    /// Who reviews it and its labels, each with a menu to change them when the user may.
+    @ViewBuilder
+    private var people: some View {
+        let reviews = !page.reviewers.isEmpty || !page.reviewerChoices.isEmpty
+        let labelled = !page.labels.isEmpty || !page.labelChoices.isEmpty
+        if reviews || labelled {
+            VStack(alignment: .leading, spacing: 6) {
+                if reviews {
+                    PeopleRow(title: "Reviewers", empty: page.reviewers.isEmpty ? "None yet" : nil, choices: page.reviewerChoices, help: "Ask for a review") {
+                        ForEach(page.reviewers) { ReviewerChip(reviewer: $0) }
+                    } toggle: { name, on in
+                        let edit: JSON = ["kind": "reviewers", "add": on ? [name] : [], "remove": on ? [] : [name]]
+                        panel.edit(edit, key: "menu:reviewers", label: "Updating reviewers…", on: target, number: number)
+                    }
+                }
+                if labelled {
+                    PeopleRow(title: "Labels", empty: page.labels.isEmpty ? "None yet" : nil, choices: page.labelChoices, help: "Change the labels") {
+                        ForEach(page.labels, id: \.name) { LabelChip(name: $0.name, color: $0.color) }
+                    } toggle: { name, on in
+                        let edit: JSON = ["kind": "labels", "add": on ? [name] : [], "remove": on ? [] : [name]]
+                        panel.edit(edit, key: "menu:labels", label: "Updating labels…", on: target, number: number)
+                    }
+                }
+            }
+            .padding(.top, 2)
         }
     }
 
     /// Everything else there is to do, after what the merge box offers.
     private var moreMenu: some View {
-        let working = store.sidePanel.pullRequestWorking != nil
+        let working = panel.pullRequestWorking != nil
+        let thread = store.selectedThread
+        let ownPullRequest = thread?.pullRequest?.number == number
         return Menu {
             ForEach(page.menu) { button in
-                Button(role: button.style == "danger" ? .destructive : nil) { run(button) } label: { Text(button.label) }
+                Button(role: button.style == "danger" ? .destructive : nil) { run(button, fromMenu: true) } label: { Text(button.label) }
                     .disabled(working && button.prompt == nil)
             }
-            if !page.menu.isEmpty { Divider() }
+            if extended {
+                Divider()
+                if page.canEdit {
+                    Button("Edit Title") { title = page.title }
+                    Button("Edit Description…") { describing = true }
+                }
+                if let thread {
+                    if ownPullRequest {
+                        if page.watchable {
+                            Button(thread.watching ? "Stop Watching" : "Watch for Changes") {
+                                panel.watch(!thread.watching, thread: thread.id, serverID: thread.serverID)
+                            }
+                        }
+                        Button("Unlink from This Thread") { panel.link(nil, thread: thread.id, serverID: thread.serverID) }
+                    } else {
+                        Button("Link to This Thread") { panel.link(number, thread: thread.id, serverID: thread.serverID) }
+                    }
+                }
+                Button("Show All Pull Requests") { panel.open(.pullRequests) }
+            }
+            Divider()
             if let url = page.url {
                 Button("Copy Link") { Platform.copy(url.absoluteString) }
             }
@@ -206,65 +432,110 @@ private struct PullRequestPageView: View {
         .help("More")
     }
 
+    /// Parts the merge box, which is where the pull request stands now, from what happened on it.
+    private var activityTitle: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("Activity")
+                .font(.ui(size: 13, weight: .semibold))
+                .foregroundStyle(Color.themeText)
+            Text("Oldest first")
+                .font(.ui(size: 12))
+                .foregroundStyle(Color.themeTertiary)
+        }
+        .padding(.top, 6)
+    }
+
+    // MARK: Comment box
+
     private var commentBox: some View {
-        let working = store.sidePanel.pullRequestWorking != nil
+        let work = panel.pullRequestWorking
+        let busy = work != nil
         let written = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pending = panel.pendingComments[number] ?? []
         return VStack(alignment: .leading, spacing: 8) {
-            CommentField(text: $comment)
+            if !pending.isEmpty {
+                PendingComments(comments: pending) { panel.removePending($0, from: number) }
+            }
+            WritingField(text: $comment, placeholder: pending.isEmpty ? "Leave a comment" : "Say something with your review (optional)")
             HStack(spacing: 8) {
-                if let close = page.withComment {
-                    PullRequestActionButton(label: close.label, style: "plain") { choose(close) }
-                        .disabled(working || written.isEmpty)
+                if let close = page.withComment, pending.isEmpty {
+                    PullRequestActionButton(label: close.label, style: "plain", working: work?.key == "close" ? "\(close.action == "close" ? "Closing" : "Reopening")…" : nil) {
+                        choose(close, key: "close")
+                    }
+                    .disabled(busy || written.isEmpty)
                 }
                 Spacer(minLength: 0)
                 ForEach(page.verdicts) { verdict in
-                    PullRequestActionButton(label: verdict.label, style: "plain") { choose(verdict) }
-                        .disabled(working || (verdict.action == "request_changes" && written.isEmpty))
+                    let key = verdict.action
+                    PullRequestActionButton(label: verdict.label, style: "plain", working: work?.key == key ? (key == "approve" ? "Approving…" : "Sending…") : nil) {
+                        if pending.isEmpty {
+                            choose(verdict, key: key)
+                        } else {
+                            panel.review(key, body: written, key: key, label: "Sending…", on: target, number: number) { comment = "" }
+                        }
+                    }
+                    .disabled(busy || (verdict.action == "request_changes" && written.isEmpty && pending.isEmpty))
                 }
-                PullRequestActionButton(label: "Comment", style: "primary") {
-                    store.sidePanel.act("comment", text: written, label: "Commenting", on: target, number: number) { comment = "" }
+                PullRequestActionButton(
+                    label: pending.isEmpty ? "Comment" : "Send Review", style: "primary",
+                    working: work?.key == "comment" ? "Sending…" : nil
+                ) {
+                    if pending.isEmpty {
+                        panel.act("comment", text: written, key: "comment", label: "Sending…", on: target, number: number) { comment = "" }
+                    } else {
+                        panel.review("comment", body: written, key: "comment", label: "Sending…", on: target, number: number) { comment = "" }
+                    }
                 }
-                .disabled(working || written.isEmpty)
+                .disabled(busy || (written.isEmpty && pending.isEmpty))
             }
         }
         .padding(.top, 4)
     }
 
-    private func choose(_ choice: PullRequestChoice) {
+    private func choose(_ choice: PullRequestChoice, key: String) {
         let text = comment.trimmingCharacters(in: .whitespacesAndNewlines)
-        store.sidePanel.act(choice.action, method: choice.method, text: text, label: choice.label, on: target, number: number) {
+        panel.act(choice.action, method: choice.method, text: text, key: key, label: choice.label, on: target, number: number) {
             comment = ""
         }
     }
 
+    // MARK: Running
+
     /// A button's prompt goes to the composer; its action runs, after asking when it says to.
     private func run(_ button: PullRequestButton) {
+        run(button, fromMenu: false)
+    }
+
+    private func run(_ button: PullRequestButton, fromMenu: Bool) {
         if let prompt = button.prompt {
             store.handOff(prompt)
             return
         }
         guard button.confirm == nil else {
-            confirming = button
+            confirming = fromMenu ? button.inMenu : button
             return
         }
-        perform(button)
+        perform(fromMenu ? button.inMenu : button)
     }
 
     private func perform(_ button: PullRequestButton) {
         guard let action = button.action else { return }
-        store.sidePanel.act(action, method: button.method, label: Self.working(button), on: target, number: number)
+        panel.act(action, method: button.method, key: button.key, label: Self.working(button), on: target, number: number)
     }
 
-    /// What the bar says while the button's action runs.
-    private static func working(_ button: PullRequestButton) -> String {
+    /// What a button says while its action runs.
+    static func working(_ button: PullRequestButton) -> String {
         switch button.action {
-        case "merge": "Merging"
-        case "enable_auto_merge": "Turning on auto-merge"
-        case "update_branch": "Updating the branch"
-        case "revert": "Opening a revert"
-        case "close": "Closing"
-        case "reopen": "Reopening"
-        default: button.label
+        case "merge": "Merging…"
+        case "enable_auto_merge": "Turning on auto-merge…"
+        case "disable_auto_merge": "Cancelling auto-merge…"
+        case "update_branch": "Updating…"
+        case "ready": "Marking ready…"
+        case "draft": "Converting to draft…"
+        case "revert": "Opening a revert…"
+        case "close": "Closing…"
+        case "reopen": "Reopening…"
+        default: "\(button.label)…"
         }
     }
 
@@ -275,10 +546,189 @@ private struct PullRequestPageView: View {
     }
 }
 
+/// A row of who reviews or what labels, with a menu of the choices when there are any.
+private struct PeopleRow<Chips: View>: View {
+    let title: String
+    /// Said in place of the chips when there are none.
+    let empty: String?
+    let choices: [PullRequestPage.Toggle]
+    let help: String
+    @ViewBuilder let chips: Chips
+    let toggle: (String, Bool) -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(title)
+                .font(.ui(size: 12))
+                .foregroundStyle(Color.themeTertiary)
+                .frame(width: 70, alignment: .leading)
+            if let empty {
+                Text(empty)
+                    .font(.ui(size: 12))
+                    .foregroundStyle(Color.themeTertiary)
+            } else {
+                FlowRow(spacing: 5) { chips }
+            }
+            if !choices.isEmpty {
+                Menu {
+                    ForEach(choices) { choice in
+                        Toggle(choice.name, isOn: Binding { choice.on } set: { toggle(choice.name, $0) })
+                    }
+                } label: {
+                    Image(.plus, size: 11)
+                        .foregroundStyle(Color.themeSecondary)
+                        .frame(width: scaled(22), height: scaled(22))
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .hoverHighlight(radius: 6)
+                .help(help)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// Lays its views out in rows, as many to a row as fit.
+struct FlowRow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var (x, y, rowHeight, widest): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                y += rowHeight + spacing
+                x = 0
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: min(widest, width), height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var (x, y, rowHeight): (CGFloat, CGFloat, CGFloat) = (bounds.minX, bounds.minY, 0)
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                y += rowHeight + spacing
+                x = bounds.minX
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+/// The comments on lines that wait for the review, each one to take back.
+private struct PendingComments: View {
+    let comments: [PendingLineComment]
+    let remove: (PendingLineComment) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(comments.count == 1 ? "1 comment on a line goes with your review" : "\(comments.count) comments on lines go with your review")
+                .font(.ui(size: 12, weight: .medium))
+                .foregroundStyle(Color.themeSecondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 9)
+                .padding(.bottom, 4)
+            ForEach(comments) { comment in
+                HStack(alignment: .top, spacing: 8) {
+                    Text(verbatim: "\(URL(fileURLWithPath: comment.path).lastPathComponent):\(comment.line)")
+                        .font(.ui(size: 11.5, design: .monospaced))
+                        .foregroundStyle(Color.themeLink)
+                    Text(comment.body)
+                        .font(.ui(size: 12.5))
+                        .foregroundStyle(Color.themeText)
+                        .lineLimit(2)
+                    Spacer(minLength: 4)
+                    IconOnlyButton(symbol: .x, help: "Take it back", size: scaled(20), symbolSize: 10, faded: true) { remove(comment) }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+            }
+        }
+        .padding(.bottom, 6)
+        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// The stack the pull request is in, the top first, each one to open.
+private struct StackCard: View {
+    let stack: (url: URL?, base: String, layers: [PullRequestPage.StackLayer])
+    let open: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(.layers, size: 12)
+                    .foregroundStyle(Color.themeSecondary)
+                Text("Stack")
+                    .font(.ui(size: 13, weight: .medium))
+                    .foregroundStyle(Color.themeText)
+                Text("\(stack.layers.count) pull requests onto \(stack.base)")
+                    .font(.ui(size: 12))
+                    .foregroundStyle(Color.themeTertiary)
+                Spacer(minLength: 4)
+                if let url = stack.url {
+                    LinkButton("Open on GitHub") { Platform.open(url) }
+                        .help("A stack merges on GitHub, bottom first")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+            ForEach(stack.layers.reversed()) { layer in
+                Button {
+                    open(layer.number)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(layer.state.symbol, size: 11)
+                            .foregroundStyle(layer.state.color)
+                            .frame(width: 16)
+                        Text(verbatim: "#\(layer.number)")
+                            .font(.ui(size: 12, weight: .medium))
+                            .foregroundStyle(Color.themeSecondary)
+                            .monospacedDigit()
+                        Text(layer.title)
+                            .font(.ui(size: 12.5, weight: layer.current ? .semibold : .regular))
+                            .foregroundStyle(Color.themeText)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if layer.current {
+                            Text("This one")
+                                .font(.ui(size: 11.5))
+                                .foregroundStyle(Color.themeTertiary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(height: pressable(28))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.highlight(radius: 6, inset: EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)))
+                .disabled(layer.current)
+            }
+        }
+        .padding(.bottom, 6)
+        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
 /// What stands between the pull request and merging, and the button its state calls for.
 private struct MergeBox: View {
     @Environment(AppStore.self) private var store
     let page: PullRequestPage
+    let working: PullRequestWork?
     let run: (PullRequestButton) -> Void
     @State private var showsAllChecks = false
 
@@ -286,7 +736,7 @@ private struct MergeBox: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(page.statuses.enumerated()), id: \.element.id) { index, status in
                 if index > 0 { PanelLine() }
-                StatusRow(status: status, run: run)
+                StatusRow(status: status, working: working, run: run)
                 if status.kind == "checks" {
                     checks
                 }
@@ -296,10 +746,7 @@ private struct MergeBox: View {
                 actions
             }
         }
-        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
-        }
+        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     /// The checks that need looking at and the running ones, and the rest when asked for.
@@ -330,16 +777,19 @@ private struct MergeBox: View {
     }
 
     private var actions: some View {
-        let working = store.sidePanel.pullRequestWorking != nil
-        return HStack(spacing: 8) {
+        HStack(spacing: 8) {
             if let primary = page.primary {
                 HStack(spacing: 1) {
-                    PullRequestActionButton(label: primary.label, style: primary.style, joined: chooses(primary)) { run(primary) }
+                    PullRequestActionButton(
+                        label: primary.label, style: primary.style, joined: chooses(primary),
+                        working: working?.key == primary.key ? working?.label : nil
+                    ) { run(primary) }
                     if chooses(primary) {
                         methodMenu
+                            .opacity(working != nil ? 0.6 : 1)
                     }
                 }
-                .disabled(working)
+                .disabled(working != nil)
             }
             Spacer(minLength: 0)
         }
@@ -376,6 +826,7 @@ private struct MergeBox: View {
 
 private struct StatusRow: View {
     let status: PullRequestPage.Status
+    let working: PullRequestWork?
     let run: (PullRequestButton) -> Void
 
     var body: some View {
@@ -403,7 +854,11 @@ private struct StatusRow: View {
                 if !status.buttons.isEmpty {
                     HStack(spacing: 6) {
                         ForEach(status.buttons) { button in
-                            PullRequestActionButton(label: button.label, style: button.style) { run(button) }
+                            PullRequestActionButton(
+                                label: button.label, style: button.style,
+                                working: working?.key == button.key ? working?.label : nil
+                            ) { run(button) }
+                            .disabled(working != nil)
                         }
                     }
                     .padding(.top, 5)
@@ -472,298 +927,3 @@ private struct CheckRow: View {
         .frame(minHeight: pressable(26))
     }
 }
-
-/// One thing that happened on the pull request: its opening with the description, commits,
-/// comments and reviews, and how it ended.
-private struct ActivityRow: View {
-    let entry: PullRequestPage.Entry
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(symbol, size: 12)
-                .foregroundStyle(entry.tone == .neutral ? Color.themeSecondary : entry.tone.color)
-                .frame(width: 18, height: scaled(17))
-            VStack(alignment: .leading, spacing: 6) {
-                byline
-                ForEach(Array(entry.commits.enumerated()), id: \.offset) { _, commit in
-                    HStack(spacing: 8) {
-                        Text(commit.oid)
-                            .font(.ui(size: 11.5, design: .monospaced))
-                            .foregroundStyle(Color.themeTertiary)
-                        Text(commit.headline)
-                            .font(.ui(size: 12.5))
-                            .foregroundStyle(Color.themeText)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
-                if !entry.body.isEmpty {
-                    PullRequestTextView(blocks: entry.body)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
-                        }
-                }
-            }
-        }
-    }
-
-    private var byline: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            (Text(entry.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
-                + Text(entry.author.isEmpty ? entry.said : " \(entry.said)").foregroundStyle(Color.themeSecondary)
-                + Text(" · \(Time.ago(entry.at))").foregroundStyle(Color.themeTertiary))
-                .font(.ui(size: 12.5))
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 6)
-            if let url = entry.url {
-                IconOnlyButton(symbol: .squareArrowOutUpRight, help: "Open on GitHub", size: scaled(20), symbolSize: 10, faded: true) {
-                    Platform.open(url)
-                }
-            }
-        }
-    }
-
-    private var symbol: Symbol {
-        switch entry.kind {
-        case "opened": .gitPullRequest
-        case "commits": .gitCommitHorizontal
-        case "merged": .gitMerge
-        case "closed": .gitPullRequestClosed
-        case "review" where entry.tone == .success: .circleCheck
-        case "review" where entry.tone == .danger: .circleAlert
-        case "review": .eye
-        default: .messageSquareText
-        }
-    }
-}
-
-/// Markdown from the pull request, drawn as the transcript draws a reply.
-struct PullRequestTextView: View {
-    let blocks: [PullRequestText]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .prose(let text):
-                    ProseText(text: text)
-                case .code(let code):
-                    ProseText(text: code)
-                        .padding(10)
-                        .background(Color.themeField, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-            }
-        }
-    }
-}
-
-/// The pull request's state, as a label in its colour.
-private struct StateLabel: View {
-    let state: PullRequest.State
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(state.symbol, size: 11)
-            Text(state.title)
-                .font(.ui(size: 11.5, weight: .semibold))
-        }
-        .foregroundStyle(state.color)
-        .padding(.horizontal, 7)
-        .frame(height: scaled(20))
-        .background(state.color.opacity(0.14), in: Capsule())
-    }
-}
-
-private struct BranchName: View {
-    let name: String
-
-    var body: some View {
-        Text(name)
-            .font(.ui(size: 11.5, design: .monospaced))
-            .foregroundStyle(Color.themeText)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .padding(.horizontal, 6)
-            .frame(height: scaled(20))
-            .background(Color.themeHover, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .textSelection(.enabled)
-    }
-}
-
-/// A button of the pull request's tab, in the panel's colours: filled for what the state calls
-/// for, red for what fixes it, quiet for the rest.
-struct PullRequestActionButton: View {
-    @Environment(\.isEnabled) private var isEnabled
-    let label: String
-    let style: String
-    /// The method menu sits right of it, so its right corners are square.
-    var joined = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(.ui(size: 12, weight: .medium))
-                .foregroundStyle(foreground)
-                .lineLimit(1)
-                .padding(.horizontal, 11)
-                .frame(height: scaled(28))
-                .background(background, in: shape)
-                .overlay {
-                    if style == "danger" { shape.strokeBorder(Color.themeDanger.opacity(0.6), lineWidth: 1) }
-                }
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(DimButtonStyle())
-        .opacity(isEnabled ? 1 : 0.45)
-        .fixedSize()
-    }
-
-    private var shape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            topLeadingRadius: 7, bottomLeadingRadius: 7, bottomTrailingRadius: joined ? 0 : 7, topTrailingRadius: joined ? 0 : 7,
-            style: .continuous)
-    }
-
-    private var foreground: Color {
-        switch style {
-        case "primary": .white
-        case "danger": .themeDanger
-        default: .themeText
-        }
-    }
-
-    private var background: Color {
-        switch style {
-        case "primary": .themePrimary
-        case "danger": .themeDanger.opacity(0.1)
-        default: .themeSelected
-        }
-    }
-}
-
-/// What the last action did or why it couldn't, under the tab's bar.
-private struct PullRequestNoticeBar: View {
-    @Environment(AppStore.self) private var store
-    let notice: PullRequestNotice
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(notice.failed ? .circleAlert : .circleCheck, size: 13)
-                    .foregroundStyle(notice.failed ? Color.themeDanger : Color.themeSuccess)
-                    .frame(height: scaled(17))
-                Text(notice.text)
-                    .font(.ui(size: 12.5))
-                    .foregroundStyle(Color.themeText)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 4)
-                if let url = notice.url {
-                    LinkButton("Open") { Platform.open(url) }
-                }
-                IconOnlyButton(symbol: .x, help: "Close", size: scaled(20), symbolSize: 10, faded: true) {
-                    store.sidePanel.dismissPullRequestNotice()
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(notice.failed ? Color.themeDanger.opacity(0.08) : Color.themeSuccess.opacity(0.08))
-            PanelLine()
-        }
-    }
-}
-
-private struct CommentField: View {
-    @Binding var text: String
-
-    var body: some View {
-        TextEditor(text: $text)
-            .font(.ui(size: 12.5))
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 6)
-            .frame(height: 84)
-            .background(Color.themeField, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
-            }
-            .overlay(alignment: .topLeading) {
-                if text.isEmpty {
-                    Text("Leave a comment")
-                        .font(.ui(size: 12.5))
-                        .foregroundStyle(Color.themeTertiary)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 6)
-                        .allowsHitTesting(false)
-                }
-            }
-    }
-}
-
-extension PullRequest.State {
-    var title: String {
-        switch self {
-        case .open: "Open"
-        case .draft: "Draft"
-        case .merged: "Merged"
-        case .closed: "Closed"
-        }
-    }
-}
-
-extension PullRequestPage.Tone {
-    var color: Color {
-        switch self {
-        case .success: .themeSuccess
-        case .danger: .themeDanger
-        case .warning: .themeWarning
-        case .pending: .themeWorking
-        case .neutral: .themeSecondary
-        case .merged: .themeMerged
-        }
-    }
-}
-
-/// Text set by `Typesetter`, drawn in a text view of the transcript's, as tall as it needs.
-struct ProseText {
-    let text: NSAttributedString
-
-    fileprivate static func height(of view: RowTextView, proposal: ProposedViewSize) -> CGSize? {
-        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
-        return CGSize(width: width, height: view.height(forWidth: width))
-    }
-}
-
-#if os(macOS)
-extension ProseText: NSViewRepresentable {
-    func makeNSView(context: Context) -> RowTextView {
-        RowTextView.make()
-    }
-
-    func updateNSView(_ view: RowTextView, context: Context) {
-        view.content = text
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView view: RowTextView, context: Context) -> CGSize? {
-        Self.height(of: view, proposal: proposal)
-    }
-}
-#else
-extension ProseText: UIViewRepresentable {
-    func makeUIView(context: Context) -> RowTextView {
-        RowTextView.make()
-    }
-
-    func updateUIView(_ view: RowTextView, context: Context) {
-        view.content = text
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView view: RowTextView, context: Context) -> CGSize? {
-        Self.height(of: view, proposal: proposal)
-    }
-}
-#endif
