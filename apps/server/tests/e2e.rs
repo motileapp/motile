@@ -1599,8 +1599,8 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     next(&mut list).await;
     let whole = GitRun { paths: &["greet.py"], new_branch: true, ..run(GitAction::CommitPushPr) };
     let (stages, end) = git_run(&connection, &project.id, whole).await;
-    use GitStage::{Branch, Commit, Message as Written, Pull, PullRequest, PullRequestText, Push};
-    assert_eq!(stages, [Branch, Commit, Push, PullRequestText, PullRequest]);
+    use GitStage::{Commit, Message as Written, Pull, PullRequest, PullRequestText, Push};
+    assert_eq!(stages, [Written, Commit, Push, PullRequestText, PullRequest]);
     let Message::GitDone { title, description, url, next: None } = end else { panic!("the run failed: {end:?}") };
     assert_eq!((title.as_str(), description.as_deref()), ("Created PR #7", Some("Greet with an f-string")));
     assert_eq!(url.as_deref(), Some("https://github.com/acme/app/pull/7"));
@@ -1930,9 +1930,22 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
     finished_transcript(&connection, &thread_id).await;
+    let mut announced = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut announced).await;
     let opened = GitRun { thread_id: Some(&thread_id), ..run(GitAction::CommitPushPr) };
     let (_, end) = git_run(&connection, &project.id, opened).await;
     assert!(done(end).0.starts_with("Created PR #"));
+    // The thread says what its run is at to every client, and nothing once it is over.
+    let mut stages = Vec::new();
+    loop {
+        match next_thread(&mut announced).await.git_stage {
+            Some(stage) if stages.last() != Some(&stage) => stages.push(stage),
+            None if !stages.is_empty() => break,
+            _ => {}
+        }
+    }
+    use GitStage::{Commit, PullRequest, PullRequestText, Push};
+    assert_eq!(stages, [GitStage::Message, Commit, Push, PullRequestText, PullRequest]);
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     let Message::Welcome { threads, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
     let worktree = PathBuf::from(&threads.iter().find(|thread| thread.id == thread_id).unwrap().cwd);

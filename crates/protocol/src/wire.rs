@@ -64,6 +64,9 @@ pub struct Thread {
     /// or it starts to conflict.
     #[serde(default)]
     pub watching: bool,
+    /// What a commit, a push or the like that was started from the thread is at.
+    #[serde(default)]
+    pub git_stage: Option<GitStage>,
     /// The transcript's revision; a client whose copy is older has catching up to do.
     pub rev: u64,
 }
@@ -1031,7 +1034,7 @@ pub enum GitAction {
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum GitStage {
-    Branch,
+    /// The commit message is written, and with it the name of a branch the run makes.
     Message,
     Commit,
     Push,

@@ -291,7 +291,6 @@ struct GitConfirm: Equatable {
 }
 
 enum GitStage: String {
-    case branch
     case message
     case commit
     case push
@@ -301,8 +300,7 @@ enum GitStage: String {
 
     var label: String {
         switch self {
-        case .branch: "Branching"
-        case .message: "Writing"
+        case .message: "Writing Commit"
         case .commit: "Committing"
         case .push: "Pushing"
         case .pullRequestText: "Writing PR"
@@ -491,6 +489,8 @@ struct ThreadInfo: Equatable, Identifiable {
     let pullRequest: PullRequest?
     /// Its agent is told what happens on its pull request.
     let watching: Bool
+    /// What a commit, a push or the like that was started from it is at.
+    let gitStage: GitStage?
     let unread: Bool
 
     init(json: JSON) {
@@ -515,6 +515,7 @@ struct ThreadInfo: Equatable, Identifiable {
         turnEndedAt = json.optionalDouble("turn_ended_at")
         pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
         watching = json.bool("watching")
+        gitStage = json.optionalString("git_stage").flatMap { GitStage(rawValue: $0) }
         unread = json.bool("unread")
     }
 
