@@ -117,6 +117,10 @@ pub async fn switch(folder: &str, environment: &Environment, branch: &str, creat
 pub async fn status(folder: &str, environment: &Environment) -> Option<(GitStatus, Vec<ChangedFile>, String)> {
     let listing = git(folder, environment, &["status", "--porcelain=2", "--branch", "-z"]).await.ok()?;
     let mut read = read_status(&listing);
+    if read.files.iter().any(|file| file.path.ends_with('/')) {
+        let untracked = git(folder, environment, &at(UNTRACKED, &[])).await.ok()?;
+        leave_out_repositories(&mut read.files, &untracked);
+    }
     // A repository without a commit has nothing to compare with.
     let counts = git(folder, environment, &["diff", "HEAD", "--numstat", "--no-renames", "-z"]).await;
     count_lines(&mut read.files, &counts.unwrap_or_default());
@@ -203,6 +207,13 @@ fn read_status(listing: &str) -> ReadStatus {
         }
     }
     read
+}
+
+/// Leaves out the folders whose only new content is a repository of their own, which `untracked`
+/// lists with a slash at its end.
+fn leave_out_repositories(files: &mut Vec<ChangedFile>, untracked: &str) {
+    let holds_files = |folder: &str| untracked.split('\0').any(|path| path.starts_with(folder) && !path.ends_with('/'));
+    files.retain(|file| !file.path.ends_with('/') || holds_files(&file.path));
 }
 
 /// The change two letters of `git status` stand for: the index's and the folder's.
@@ -335,7 +346,7 @@ pub async fn pending_changes(
 ) -> anyhow::Result<(String, String)> {
     let index = IndexCopy::of(folder, environment).await?;
     let on_copy = |arguments: &[&str]| run(index.git(folder, environment, arguments), None, QUICK);
-    on_copy(&add_arguments(paths)).await?;
+    stage(folder, environment, Some(&index), paths).await?;
     let names = on_copy(&["diff", "--cached", "--name-status"]).await?;
     let patch = on_copy(&["diff", "--cached", "--no-ext-diff", "--patch", "--minimal"]).await?;
     Ok((names, patch))
@@ -370,7 +381,7 @@ impl Drop for IndexCopy {
 /// The folder as it is now, with the files git doesn't track yet, as a tree in the repository.
 async fn tree_of_folder(folder: &str, environment: &Environment) -> anyhow::Result<String> {
     let index = IndexCopy::of(folder, environment).await?;
-    run(index.git(folder, environment, &["add", "-A"]), None, SNAPSHOT_TIMEOUT).await?;
+    stage(folder, environment, Some(&index), &[]).await?;
     let tree = run(index.git(folder, environment, &["write-tree"]), None, QUICK).await?;
     Ok(tree.trim().to_string())
 }
@@ -540,11 +551,46 @@ pub async fn ignored(folder: &str, environment: &Environment, paths: &[String]) 
     found.split('\0').filter(|path| !path.is_empty()).map(str::to_string).collect()
 }
 
-fn add_arguments(paths: &[String]) -> Vec<&str> {
+/// Lists what git neither tracks nor ignores, from the top of the repository. A repository inside
+/// this one is a single entry with a slash at its end.
+const UNTRACKED: &[&str] = &["ls-files", "--others", "--exclude-standard", "--full-name", "-z"];
+
+/// The command limited to `paths`, or run on the whole repository when it is empty.
+fn at<'a>(arguments: &[&'a str], paths: &'a [String]) -> Vec<&'a str> {
     if paths.is_empty() {
-        return vec!["add", "-A"];
+        return arguments.iter().copied().chain(["--", ":/"]).collect();
     }
-    ["--literal-pathspecs", "add", "-A", "--"].into_iter().chain(paths.iter().map(String::as_str)).collect()
+    let paths = paths.iter().map(String::as_str);
+    ["--literal-pathspecs"].into_iter().chain(arguments.iter().copied()).chain(["--"]).chain(paths).collect()
+}
+
+/// Stages the changes at `paths`, or all of them when it is empty, in the copy of the index or
+/// in the repository's own. A repository inside this one is left out: git would stage it as a
+/// submodule, and fails when it has no commit.
+async fn stage(
+    folder: &str,
+    environment: &Environment,
+    index: Option<&IndexCopy>,
+    paths: &[String],
+) -> anyhow::Result<()> {
+    let git = |arguments: &[&str]| match index {
+        Some(index) => index.git(folder, environment, arguments),
+        None => command("git", folder, environment, arguments),
+    };
+    let changed = run(git(&at(&["diff", "--name-only", "-z"], paths)), None, SNAPSHOT_TIMEOUT).await?;
+    let untracked = run(git(&at(UNTRACKED, paths)), None, SNAPSHOT_TIMEOUT).await?;
+    let files: String = changed
+        .split('\0')
+        .chain(untracked.split('\0'))
+        .filter(|path| !path.is_empty() && !path.ends_with('/'))
+        .map(|path| format!(":(top,literal){path}\0"))
+        .collect();
+    if files.is_empty() {
+        return Ok(());
+    }
+    let add = git(&["add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"]);
+    run(add, Some(&files), SNAPSHOT_TIMEOUT).await?;
+    Ok(())
 }
 
 /// The subjects of the latest commits, which show how the repository words them.
@@ -572,7 +618,7 @@ pub async fn commit(folder: &str, environment: &Environment, message: &str, path
         bail!("A commit needs a message.");
     }
     if paths.is_empty() {
-        git(folder, environment, &["add", "-A"]).await?;
+        stage(folder, environment, None, &[]).await?;
         let commit = command("git", folder, environment, &["commit", "--quiet", "-F", "-"]);
         run(commit, Some(message), COMMIT_TIMEOUT).await?;
         return Ok(());
@@ -582,7 +628,7 @@ pub async fn commit(folder: &str, environment: &Environment, message: &str, path
     let left =
         read_status(&listing).files.into_iter().filter(|file| paths.contains(&file.path)).filter_map(|file| file.from);
     let paths: Vec<String> = paths.iter().cloned().chain(left).collect();
-    git(folder, environment, &add_arguments(&paths)).await?;
+    stage(folder, environment, None, &paths).await?;
     let arguments = ["--literal-pathspecs", "commit", "--quiet", "-F", "-", "--"];
     let arguments: Vec<&str> = arguments.into_iter().chain(paths.iter().map(String::as_str)).collect();
     run(command("git", folder, environment, &arguments), Some(message), COMMIT_TIMEOUT).await?;
@@ -882,6 +928,66 @@ mod tests {
         let read = read_status("# branch.oid (initial)\0# branch.head main\0? README\0");
 
         assert_eq!((read.head.as_str(), read.branch.as_deref(), read.upstream), ("", Some("main"), false));
+    }
+
+    /// A repository with a commit, a changed file, a new folder, and two repositories inside it:
+    /// one with a commit beside the new folder's file, one without in a folder of its own.
+    async fn repository_with_repositories_inside() -> (tempfile::TempDir, Environment) {
+        let mut variables: std::collections::HashMap<String, String> =
+            std::env::vars().filter(|(name, _)| name == "PATH").collect();
+        for (name, value) in [("NAME", "Test"), ("EMAIL", "test@motile.app")] {
+            variables.insert(format!("GIT_AUTHOR_{name}"), value.to_string());
+            variables.insert(format!("GIT_COMMITTER_{name}"), value.to_string());
+        }
+        variables.insert("GIT_CONFIG_GLOBAL".to_string(), "/dev/null".to_string());
+        let environment = Environment::fixed(variables, Default::default());
+        let folder = tempfile::tempdir().unwrap();
+        let path = |inside: &str| folder.path().join(inside).to_str().unwrap().to_string();
+
+        for repository in ["", "notes/clone", "tools/scratch"] {
+            std::fs::create_dir_all(path(repository)).unwrap();
+            init(&path(repository), &environment).await.unwrap();
+        }
+        std::fs::write(path("tracked.txt"), "one\n").unwrap();
+        commit(&path(""), &environment, "Start", &[]).await.unwrap();
+        git(&path("notes/clone"), &environment, &["commit", "--quiet", "--allow-empty", "-m", "Start"]).await.unwrap();
+        std::fs::write(path("tracked.txt"), "two\n").unwrap();
+        std::fs::write(path("notes/new.txt"), "new\n").unwrap();
+        std::fs::write(path("tools/scratch/private.txt"), "private\n").unwrap();
+        (folder, environment)
+    }
+
+    async fn files_of(folder: &str, environment: &Environment, tree: &str) -> String {
+        git(folder, environment, &["ls-tree", "-r", "--name-only", tree]).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_repository_inside_is_no_change_and_is_never_committed() {
+        let (folder, environment) = repository_with_repositories_inside().await;
+        let folder = folder.path().to_str().unwrap();
+
+        let (_, files, _) = status(folder, &environment).await.unwrap();
+        let mut changed: Vec<&str> = files.iter().map(|file| file.path.as_str()).collect();
+        changed.sort_unstable();
+        assert_eq!(changed, ["notes/", "tracked.txt"]);
+
+        let (_, tree) = uncommitted(folder, &environment).await.unwrap();
+        assert_eq!(files_of(folder, &environment, &tree).await, "notes/new.txt\ntracked.txt\n");
+
+        commit(folder, &environment, "Everything", &[]).await.unwrap();
+        assert_eq!(files_of(folder, &environment, "HEAD").await, "notes/new.txt\ntracked.txt\n");
+        assert_eq!(status(folder, &environment).await.unwrap().1, []);
+    }
+
+    #[tokio::test]
+    async fn a_chosen_folder_is_committed_without_the_repository_inside_it() {
+        let (folder, environment) = repository_with_repositories_inside().await;
+        let folder = folder.path().to_str().unwrap();
+
+        commit(folder, &environment, "Notes", &["notes/".to_string()]).await.unwrap();
+
+        assert_eq!(files_of(folder, &environment, "HEAD").await, "notes/new.txt\ntracked.txt\n");
+        assert_eq!(git(folder, &environment, &["show", "HEAD:tracked.txt"]).await.unwrap(), "one\n");
     }
 
     #[test]
