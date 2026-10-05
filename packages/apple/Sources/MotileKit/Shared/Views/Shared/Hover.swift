@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Lights up what the pointer is over, what is selected and what is `lit`. The light is drawn `inset` from the
 /// view's edges: that margin looks empty but is the view's, so neighbours leave no gap to miss.
-/// What is `faded` is in the secondary color until it lights up.
+/// What is `faded` is in the secondary color until it lights up. What is inside lies on the light,
+/// so a button in it lights up a layer further.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
@@ -15,9 +16,10 @@ private struct HoverHighlight: ViewModifier {
 
     func body(content: Content) -> some View {
         tinted(content)
+            .environment(\.surface, light ?? surface)
             .background {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(fill)
+                    .fill(light?.color ?? Color.clear)
                     .padding(inset)
             }
             .onHover { hovering = $0 }
@@ -31,9 +33,10 @@ private struct HoverHighlight: ViewModifier {
         }
     }
 
-    private var fill: Color {
-        if selected { return surface.further.color }
-        return enabled && (hovering || lit) ? surface.next.color : Color.clear
+    private var light: Surface? {
+        if selected { return surface.further }
+        guard enabled, hovering || lit else { return nil }
+        return surface.next
     }
 
     private var text: Color {

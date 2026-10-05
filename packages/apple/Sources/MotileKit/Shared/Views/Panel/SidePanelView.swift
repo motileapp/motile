@@ -177,6 +177,7 @@ private struct PanelTabChip: View {
     let tab: PanelTab
     let active: Bool
     @State private var hovering = false
+    @Environment(\.surface) private var surface
 
     private static let height = ControlSize.regular.height
     private static let closeSize = ControlSize.small.height
@@ -205,7 +206,7 @@ private struct PanelTabChip: View {
         .button(.highlight(selected: active, lit: hovering, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
             ActionButton(icon: .x, help: "Close (⌘W)", size: .small, symbolSize: 11) { panel.close(tab) }
-                .environment(\.surface, .tertiary)
+                .environment(\.surface, active ? surface.further : surface.next)
                 .padding(.trailing, Self.closeMargin)
                 .opacity(hovering || active ? 1 : 0)
         }

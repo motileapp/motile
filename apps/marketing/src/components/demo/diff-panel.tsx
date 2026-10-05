@@ -54,7 +54,7 @@ export function DiffPanel({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-background hover:text-foreground"
+            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-background-quaternary hover:text-foreground"
           >
             <XIcon className="size-[13px]" />
           </button>

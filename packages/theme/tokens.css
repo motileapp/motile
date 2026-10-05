@@ -37,6 +37,7 @@
   /* The Mac app's own colours, from Theme.swift */
   --background-secondary: #eceef4;
   --background-tertiary: #e1e4ed;
+  --background-quaternary: #d6dae6;
   --popover-secondary: #eceef4;
   --composer: #ffffff;
   --composer-secondary: #eceef4;
@@ -98,6 +99,7 @@
 
   --background-secondary: #111217;
   --background-tertiary: #191a1f;
+  --background-quaternary: #212227;
   --popover-secondary: #222226;
   --composer: #111217;
   --composer-secondary: #191a1f;

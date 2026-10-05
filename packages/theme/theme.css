@@ -41,6 +41,7 @@
   --color-background: var(--background);
   --color-background-secondary: var(--background-secondary);
   --color-background-tertiary: var(--background-tertiary);
+  --color-background-quaternary: var(--background-quaternary);
   --color-popover-secondary: var(--popover-secondary);
   --color-composer: var(--composer);
   --color-composer-secondary: var(--composer-secondary);
