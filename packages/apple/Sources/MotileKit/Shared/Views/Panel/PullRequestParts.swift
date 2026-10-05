@@ -74,17 +74,20 @@ struct PullRequestNoticeBar: View {
     @Environment(AppStore.self) private var store
     let notice: PullRequestNotice
 
+    private static let lineHeight = scaled(17)
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
                 Image(notice.failed ? .circleAlert : .circleCheck, size: 13)
                     .foregroundStyle(notice.failed ? Color.themeDanger : Color.themeSuccess)
-                    .frame(height: scaled(17))
+                    .frame(height: Self.lineHeight)
                 Text(notice.text)
                     .font(.ui(size: 12.5))
                     .foregroundStyle(Color.themeText)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(minHeight: Self.lineHeight)
                 Spacer(minLength: 4)
                 HStack(spacing: 2) {
                     if let url = notice.url {
@@ -92,7 +95,7 @@ struct PullRequestNoticeBar: View {
                     }
                     ActionButton(icon: .x, help: "Close", size: .small) { store.sidePanel.dismissPullRequestNotice() }
                 }
-                .padding(.vertical, (scaled(17) - ControlSize.small.height) / 2)
+                .frame(height: Self.lineHeight)
             }
             .padding(.leading, 12)
             .padding(.trailing, 6)

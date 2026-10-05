@@ -38,9 +38,8 @@ struct ControlLook {
     var foreground: Color {
         if let tint, variant == .ghost || variant == .secondary { return tint }
         switch variant {
-        case .primary: return .white
         case .secondary: return .themeText
-        case .danger: return .themeDanger
+        case .primary, .danger: return .white
         case .ghost: return selected || lit ? .themeText : .themeSecondary
         case .link, .accent: return .themeLink
         }
@@ -50,7 +49,7 @@ struct ControlLook {
         switch variant {
         case .primary: .themePrimary
         case .secondary: selected || lit ? .themeSelected : .themeHover
-        case .danger: .themeDanger.opacity(lit ? 0.18 : 0.1)
+        case .danger: .themeDangerFill
         case .ghost: selected ? .themeSelected : lit ? .themeHover : .clear
         case .link: lit ? .themeLinkHover : .clear
         case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
@@ -70,7 +69,7 @@ struct ControlLook {
         shape
             .fill(fill)
             .overlay {
-                if variant == .primary, lit { shape.fill(Color.white.opacity(0.12)) }
+                if variant == .primary || variant == .danger, lit { shape.fill(Color.white.opacity(0.12)) }
             }
     }
 }

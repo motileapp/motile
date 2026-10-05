@@ -6,12 +6,14 @@ struct ActivityRow: View {
     let entry: PullRequestPage.Entry
     let actions: PullRequestActions
 
+    private static let lineHeight = scaled(17)
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(symbol, size: 12)
                 .foregroundStyle(entry.tone == .neutral ? Color.themeSecondary : entry.tone.color)
-                .frame(width: 18, height: ControlSize.regular.height)
-            VStack(alignment: .leading, spacing: 0) {
+                .frame(width: 18, height: Self.lineHeight)
+            VStack(alignment: .leading, spacing: 8) {
                 byline
                 if !entry.commits.isEmpty {
                     commits
@@ -26,14 +28,11 @@ struct ActivityRow: View {
                 }
                 if let subject = entry.subject, entry.thread == nil, !entry.reactions.isEmpty {
                     ReactionBar(reactions: entry.reactions) { kind, on in actions.react(subject, kind, on) }
-                        .padding(.top, 6)
                 }
             }
         }
     }
 
-    /// As tall as its buttons, which are the pull request's own, with or without them. Its first
-    /// line is level with them.
     private var byline: some View {
         HStack(alignment: .top, spacing: 0) {
             (Text(entry.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
@@ -41,17 +40,19 @@ struct ActivityRow: View {
                 + Text(" · \(Time.ago(entry.at))").foregroundStyle(Color.themeTertiary))
                 .font(.ui(size: 12.5))
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.vertical, (ControlSize.regular.height - scaled(16)) / 2)
             Spacer(minLength: 6)
-            if let subject = entry.subject, entry.thread == nil, entry.reactions.isEmpty {
-                ReactionPicker(reactions: []) { kind, on in actions.react(subject, kind, on) }
+            HStack(spacing: 0) {
+                if let subject = entry.subject, entry.thread == nil, entry.reactions.isEmpty {
+                    ReactionPicker(reactions: []) { kind, on in actions.react(subject, kind, on) }
+                }
+                if entry.kind == "opened", let edit = actions.editDescription {
+                    ActionButton(icon: .pencil, help: "Edit the description", pending: actions.working?.key == "menu:body", action: edit)
+                }
+                if let url = entry.url {
+                    ActionButton(icon: .squareArrowOutUpRight, help: "Open on GitHub") { Platform.open(url) }
+                }
             }
-            if entry.kind == "opened", let edit = actions.editDescription {
-                ActionButton(icon: .pencil, help: "Edit the description", pending: actions.working?.key == "menu:body", action: edit)
-            }
-            if let url = entry.url {
-                ActionButton(icon: .squareArrowOutUpRight, help: "Open on GitHub") { Platform.open(url) }
-            }
+            .frame(height: Self.lineHeight)
         }
     }
 

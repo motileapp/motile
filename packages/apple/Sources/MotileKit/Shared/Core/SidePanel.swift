@@ -332,10 +332,14 @@ final class SidePanel {
         }
     }
 
-    /// What ⌘W does while the panel shows a tab. `false` when all it has is a blank one.
+    /// What ⌘W does while the panel is open: closes its tab, or hides it when all it has is a blank one.
     func closeActive() -> Bool {
+        guard isOpen else { return false }
         let tabs = tabs
-        guard isOpen, !tabs.isBlank, let active = tabs.active else { return false }
+        guard !tabs.isBlank, let active = tabs.active else {
+            isOpen = false
+            return true
+        }
         close(active)
         return true
     }
