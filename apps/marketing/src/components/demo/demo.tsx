@@ -20,6 +20,8 @@ import { cn } from "@/lib/utils"
 
 type Panel = "closed" | "open" | "maximized"
 
+const COMPOSER_ROOM = "px-6 pt-12 pb-4"
+
 /** The Mac app's window, with made-up threads that can be opened, answered and written in. */
 export function Demo() {
   const [threads, setThreads] = useState(startingThreads)
@@ -140,7 +142,7 @@ export function Demo() {
             </div>
             <div className="relative min-h-0 flex-1">
               <div className="absolute inset-0 flex flex-col-reverse overflow-y-auto">
-                <div className="flex min-h-full shrink-0 flex-col">
+                <div className="mb-auto">
                   <Transcript
                     key={thread.id}
                     thread={thread}
@@ -151,22 +153,40 @@ export function Demo() {
                     }
                     onOpenDiff={() => setPanel("open")}
                   />
-                  <div className="pointer-events-none sticky bottom-0 z-10 mt-auto px-6 pt-12 pb-4 *:pointer-events-auto">
-                    <TranscriptFade />
+                  <div
+                    aria-hidden
+                    inert
+                    className={cn(COMPOSER_ROOM, "invisible")}
+                  >
                     <Composer
-                      key={thread.id}
                       thread={thread}
                       elapsed={elapsed}
-                      onSend={send}
-                      onAnswer={answer}
-                      onStop={() =>
-                        update(thread.id, () => ({
-                          status: { kind: "idle", ago: "now" },
-                        }))
-                      }
+                      onSend={ignore}
+                      onAnswer={ignore}
+                      onStop={ignore}
                     />
                   </div>
                 </div>
+              </div>
+              <div
+                className={cn(
+                  COMPOSER_ROOM,
+                  "pointer-events-none absolute inset-x-0 bottom-0 z-10 *:pointer-events-auto"
+                )}
+              >
+                <TranscriptFade />
+                <Composer
+                  key={thread.id}
+                  thread={thread}
+                  elapsed={elapsed}
+                  onSend={send}
+                  onAnswer={answer}
+                  onStop={() =>
+                    update(thread.id, () => ({
+                      status: { kind: "idle", ago: "now" },
+                    }))
+                  }
+                />
               </div>
             </div>
           </main>
@@ -236,6 +256,8 @@ function GitButton() {
     </span>
   )
 }
+
+function ignore() {}
 
 /** Fades the transcript out from the room above the composer down to the composer's middle, as in the Mac app. */
 function TranscriptFade() {
