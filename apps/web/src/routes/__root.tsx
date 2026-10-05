@@ -14,6 +14,11 @@ export const Route = createRootRoute({
         name: "description",
         content: "The servers and clients on your Motile account.",
       },
+      { property: "og:title", content: "Motile" },
+      { property: "og:image", content: "https://app.motile.app/preview.png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
