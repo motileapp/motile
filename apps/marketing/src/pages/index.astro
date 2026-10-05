@@ -1,13 +1,9 @@
 ---
-import { getImage } from "astro:assets"
 import { RouteIcon, ServerIcon, ZapIcon } from "lucide-react"
 import Layout from "@/layouts/main.astro"
 import { Demo } from "@/components/demo/demo"
 import { LinkButton } from "@/components/link-button"
 import { DOWNLOAD_URL, GITHUB_URL, TAGLINE } from "@/lib/links"
-import thread from "@/assets/thread-light.png"
-
-const preview = await getImage({ src: thread, format: "webp" })
 
 const features = [
   {
@@ -28,7 +24,7 @@ const features = [
 ]
 ---
 
-<Layout image={preview.src}>
+<Layout>
   <main class="overflow-x-clip pb-24">
     <section class="relative z-10 mx-auto flex max-w-5xl flex-col items-center px-6 pt-10 text-center sm:pt-14">
       <h1 class="max-w-[16ch] text-4xl leading-[1.05] font-medium tracking-tight text-balance sm:text-6xl">
