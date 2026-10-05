@@ -77,8 +77,8 @@ export function Demo() {
   return (
     <div className="@container relative isolate w-full">
       <Glow />
-      <div className="[--demo-scale:min(1,tan(atan2(100cqw,1200px)))]">
-        <div className="relative flex h-[760px] w-[1200px] [zoom:var(--demo-scale)] overflow-hidden rounded-[16px] bg-background font-system text-[13px] text-foreground ring-1 ring-black/10 select-none dark:ring-white/12">
+      <div className="h-[calc(760px*var(--demo-scale))] [--demo-scale:min(1,tan(atan2(100cqw,1200px)))]">
+        <div className="relative flex h-[760px] w-[1200px] origin-top-left scale-(--demo-scale) overflow-hidden rounded-[16px] bg-background font-system text-[13px] text-foreground ring-1 ring-black/10 select-none dark:ring-white/12">
           <div className="absolute top-5 left-5 z-20">
             <TrafficLights />
           </div>

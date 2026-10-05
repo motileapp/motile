@@ -94,7 +94,7 @@ export function Composer({
           placeholder={
             status.kind === "working" ? "Send a follow-up" : "Ask anything"
           }
-          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none placeholder:text-tertiary"
+          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none pointer-coarse:text-[16px] placeholder:text-tertiary"
         />
         <div className="flex items-center px-1.5 py-2">
           <Control>
