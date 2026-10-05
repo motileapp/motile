@@ -183,8 +183,10 @@ struct CommandPanel: View {
                             .padding(.top, 10)
                             .padding(.bottom, 4)
                         ForEach(section.items) { item in
-                            PanelRow(item: item, highlighted: steered && item.selectable && item.index == highlighted)
-                                .button(.highlight(radius: PanelRow.radius, inset: PanelRow.margin)) { run(item) }
+                            PanelRow(item: item)
+                                .button(.highlight(
+                                    radius: PanelRow.radius, lit: steered && item.selectable && item.index == highlighted, inset: PanelRow.margin
+                                )) { run(item) }
                                 .onHover { if $0, item.index >= 0 { highlighted = item.index } }
                         }
                     }
@@ -741,7 +743,6 @@ private struct PanelRow: View {
     private static let detailHeight: CGFloat = scaled(15)
 
     let item: PanelItem
-    let highlighted: Bool
     @State private var faded = false
 
     var body: some View {
@@ -775,7 +776,6 @@ private struct PanelRow: View {
         .frame(height: Self.height)
         .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(item.off ? 0.45 : 1)
-        .background(highlighted ? surface.next.color : Color.clear, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .padding(.horizontal, Self.sideMargin)
         .opacity(faded ? 0.45 : 1)
         .animation(item.placeholderLines > 0 ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : nil, value: faded)

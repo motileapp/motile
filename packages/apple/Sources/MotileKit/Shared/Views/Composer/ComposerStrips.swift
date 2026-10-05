@@ -198,7 +198,6 @@ struct ContextStrip: View {
 /// it picks the branch a new worktree starts from instead, and switches nothing.
 struct BranchPicker: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.surface) private var surface
     let project: Project
     var base: String?
     @State private var query = ""
@@ -325,7 +324,7 @@ struct BranchPicker: View {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
                             row(choice, index: index)
-                                .button(.highlight(radius: 8)) { choose(choices, at: index) }
+                                .button(.highlight(radius: 8, lit: index == highlighted)) { choose(choices, at: index) }
                                 .onHover { if $0 { highlighted = index } }
                                 .id(choice.id)
                         }
@@ -376,7 +375,6 @@ struct BranchPicker: View {
         .padding(.horizontal, 8)
         .frame(height: Self.rowHeight)
         .frame(maxWidth: .infinity)
-        .background(index == highlighted ? surface.next.color : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .opacity(working ? 0.5 : 1)
     }
 

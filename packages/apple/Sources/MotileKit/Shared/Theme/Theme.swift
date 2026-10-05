@@ -23,6 +23,7 @@ enum Theme {
     static let background = dynamic(hex(0xf8f9fc), hex(0x0a0b0f))
     static let backgroundSecondary = dynamic(hex(0xeceef4), hex(0x111217))
     static let backgroundTertiary = dynamic(hex(0xe1e4ed), hex(0x191a1f))
+    static let backgroundQuaternary = dynamic(hex(0xd6dae6), hex(0x212227))
     static let popover = dynamic(hex(0xffffff), hex(0x191a1f))
     static let popoverSecondary = dynamic(hex(0xeceef4), hex(0x222226))
     static let composer = dynamic(hex(0xffffff), hex(0x111217))
@@ -202,7 +203,7 @@ enum Radius {
 /// so is what the pointer is over. What floats over the page, a popover or the composer, has one
 /// colour of its own for both.
 enum Surface {
-    case background, secondary, tertiary
+    case background, secondary, tertiary, quaternary
     case popover, popoverSecondary
     case composer, composerSecondary
 
@@ -211,7 +212,8 @@ enum Surface {
         switch self {
         case .background: .secondary
         case .secondary: .tertiary
-        case .tertiary: .background
+        case .tertiary: .quaternary
+        case .quaternary: .tertiary
         case .popover: .popoverSecondary
         case .popoverSecondary: .popover
         case .composer: .composerSecondary
@@ -224,7 +226,7 @@ enum Surface {
         switch self {
         case .background: .tertiary
         case .secondary, .popover, .popoverSecondary, .composer, .composerSecondary: .background
-        case .tertiary: .secondary
+        case .tertiary, .quaternary: .secondary
         }
     }
 
@@ -233,6 +235,7 @@ enum Surface {
         case .background: Theme.background
         case .secondary: Theme.backgroundSecondary
         case .tertiary: Theme.backgroundTertiary
+        case .quaternary: Theme.backgroundQuaternary
         case .popover: Theme.popover
         case .popoverSecondary: Theme.popoverSecondary
         case .composer: Theme.composer
@@ -270,6 +273,7 @@ extension Color {
     static let themeBackground = Color(platform: Theme.background)
     static let themeBackgroundSecondary = Color(platform: Theme.backgroundSecondary)
     static let themeBackgroundTertiary = Color(platform: Theme.backgroundTertiary)
+    static let themeBackgroundQuaternary = Color(platform: Theme.backgroundQuaternary)
     static let themePopover = Color(platform: Theme.popover)
     static let themeComposer = Color(platform: Theme.composer)
     static let themeBorder = Color(platform: Theme.border)
