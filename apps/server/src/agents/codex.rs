@@ -8,10 +8,10 @@
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Approval, Subagent, ToolCall, ToolStatus, TurnSummary};
+use motile_protocol::wire::{Access, Approval, Subagent, Tokens, ToolCall, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
 
-use super::{AgentEvent, PLAN_TOOL, Turn};
+use super::{AgentEvent, ModelUsage, PLAN_TOOL, Turn};
 
 const INITIALIZE: u64 = 1;
 const THREAD: u64 = 2;
@@ -147,6 +147,8 @@ pub struct Parser {
     agents: HashMap<String, String>,
     /// What each of them said last, which is what it reports.
     reports: HashMap<String, String>,
+    /// What each thread, its own and its agents', had spent in all when it last said.
+    spent: HashMap<String, [u64; 4]>,
 }
 
 impl Parser {
@@ -181,6 +183,7 @@ impl Parser {
             asked: HashMap::new(),
             agents: HashMap::new(),
             reports: HashMap::new(),
+            spent: HashMap::new(),
         }
     }
 
@@ -228,6 +231,9 @@ impl Parser {
     }
 
     fn parse_notification(&mut self, method: &str, params: &Value) -> Vec<AgentEvent> {
+        if method == "thread/tokenUsage/updated" {
+            return self.parse_usage(params).into_iter().collect();
+        }
         let own = self.thread_id.as_deref();
         if let Some(thread_id) = params["threadId"].as_str().filter(|id| own.is_some_and(|own| own != *id)) {
             return self.parse_subagent(method, thread_id, params);
@@ -293,6 +299,32 @@ impl Parser {
             }
             _ => vec![],
         }
+    }
+
+    /// What a thread spent since it last said: how far its total has grown, or its last answer
+    /// alone when the total is one this process hasn't seen grow, as a resumed thread's is.
+    fn parse_usage(&mut self, params: &Value) -> Option<AgentEvent> {
+        let usage = &params["tokenUsage"];
+        let counts = |counts: &Value| {
+            ["inputTokens", "cachedInputTokens", "cacheWriteInputTokens", "outputTokens"]
+                .map(|name| counts[name].as_u64().unwrap_or_default())
+        };
+        let (total, last) = (counts(&usage["total"]), counts(&usage["last"]));
+        let known = self.spent.insert(params["threadId"].as_str()?.to_string(), total);
+        let [input, cache_read, cache_write, output] = match known {
+            Some(known) if (0..4).all(|index| total[index] >= known[index]) => {
+                [0, 1, 2, 3].map(|index| total[index] - known[index])
+            }
+            _ => last,
+        };
+        // Codex counts what it read from the cache and wrote to it as input too.
+        let input = input.saturating_sub(cache_read + cache_write);
+        let tokens = Tokens { input, cache_read, cache_write, output };
+        if tokens == Tokens::default() {
+            return None;
+        }
+        let spent = ModelUsage { model: self.model.clone().unwrap_or_default(), tokens, cost_usd: None };
+        Some(AgentEvent::Usage { spent: vec![spent], total: false })
     }
 
     fn parse_turn_end(&mut self, turn: &Value) -> Vec<AgentEvent> {
@@ -573,6 +605,37 @@ mod tests {
 
         let stranger = r#"{"method":"turn/completed","params":{"threadId":"t9","turn":{"status":"completed"}}}"#;
         assert_eq!(parser.parse(stranger), vec![]);
+    }
+
+    #[test]
+    fn what_a_thread_spent_is_how_far_its_total_grew() {
+        let said = |thread: &str, total: [u64; 4], last: [u64; 4]| {
+            let counts = |[input, cached, written, output]: [u64; 4]| {
+                json!({"inputTokens": input, "cachedInputTokens": cached, "cacheWriteInputTokens": written,
+                       "outputTokens": output})
+            };
+            let usage = json!({"total": counts(total), "last": counts(last)});
+            json!({"method": "thread/tokenUsage/updated", "params": {"threadId": thread, "tokenUsage": usage}})
+                .to_string()
+        };
+        let spent = |events: Vec<AgentEvent>| match &events[..] {
+            [AgentEvent::Usage { spent, total: false }] => (spent[0].model.clone(), spent[0].tokens),
+            other => panic!("expected what it spent, got {other:?}"),
+        };
+        let mut parser = parser(turn(Access::Full, false));
+        parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);
+
+        // A resumed thread's total counts what was spent before: only its last answer is new.
+        let resumed = spent(parser.parse(&said("t1", [90_000, 80_000, 0, 900], [15_000, 12_000, 0, 50])));
+        let tokens = Tokens { input: 3_000, cache_read: 12_000, cache_write: 0, output: 50 };
+        assert_eq!(resumed, ("gpt-6".to_string(), tokens));
+
+        let grown = spent(parser.parse(&said("t1", [120_000, 108_000, 500, 1_000], [1, 1, 1, 1])));
+        assert_eq!(grown.1, Tokens { input: 1_500, cache_read: 28_000, cache_write: 500, output: 100 });
+        assert_eq!(parser.parse(&said("t1", [120_000, 108_000, 500, 1_000], [1, 1, 1, 1])), vec![]);
+
+        let agent = spent(parser.parse(&said("t2", [700, 0, 0, 30], [700, 0, 0, 30])));
+        assert_eq!(agent.1, Tokens { input: 700, cache_read: 0, cache_write: 0, output: 30 });
     }
 
     #[test]

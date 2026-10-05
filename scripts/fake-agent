@@ -153,6 +153,9 @@ def title_answer():
         return {"title": os.environ.get("FAKE_AGENT_REFINED_TITLE", "Refined From Transcript"), "needsRefinement": False}
     message = prompt.split("User message:")[-1].lower()
     title = "Use an F-String in Greet"
+    linked = re.search(r"Linked source control context.*?\n\S+\n(\{.*\})", prompt)
+    if linked:
+        return {"title": json.loads(linked.group(1))["title"], "needsRefinement": False}
     if "rate limiter" in message:
         title = "Add API Rate Limiting"
     if "long reply" in message:
@@ -169,13 +172,20 @@ def title_answer():
 
 
 if "--json-schema" in sys.argv:
-    print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "structured_output": title_answer()}))
+    usage = {"inputTokens": 19, "outputTokens": 120, "cacheReadInputTokens": 7279, "cacheCreationInputTokens": 0,
+             "costUSD": 0.0013}
+    print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "structured_output": title_answer(),
+                      "total_cost_usd": usage["costUSD"], "modelUsage": {"claude-haiku-4-5": usage}}))
     sys.exit(0)
 
 if "--output-last-message" in sys.argv:
     path = sys.argv[sys.argv.index("--output-last-message") + 1]
     with open(path, "w") as f:
         json.dump(title_answer(), f)
+    if "--json" in sys.argv:
+        usage = {"input_tokens": 14211, "cached_input_tokens": 12000, "cache_write_input_tokens": 0,
+                 "output_tokens": 19, "reasoning_output_tokens": 0}
+        print(json.dumps({"type": "turn.completed", "usage": usage}))
     sys.exit(0)
 
 
@@ -183,6 +193,7 @@ class Turn:
     """Writes Claude Code's stream-json for a scripted turn."""
 
     messages = 0
+    turns = 0
 
     def __init__(self, session_id, piece=24, pause=0.01):
         self.session_id = session_id
@@ -286,7 +297,13 @@ class Turn:
         return answer["response"]["response"]
 
     def done(self, terminal_reason="completed"):
-        emit({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 1, "total_cost_usd": 0.0412,
+        # Claude Code counts what the session spent from its start.
+        Turn.turns += 1
+        usage = {"inputTokens": 12 * Turn.turns, "outputTokens": 640 * Turn.turns,
+                 "cacheReadInputTokens": 41000 * Turn.turns, "cacheCreationInputTokens": 5200 * Turn.turns,
+                 "costUSD": 0.0138 * Turn.turns}
+        emit({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 1,
+              "total_cost_usd": usage["costUSD"], "modelUsage": {"claude-haiku-4-5-20251001": usage},
               "permission_denials": [], "terminal_reason": terminal_reason})
 
 
@@ -791,6 +808,11 @@ class Codex:
             status = "completed"
         except Stopped:
             status = "interrupted"
+        last = {"totalTokens": 15040, "inputTokens": 14800, "cachedInputTokens": 12288, "cacheWriteInputTokens": 0,
+                "outputTokens": 240, "reasoningOutputTokens": 64}
+        total = {name: count * self.turns for name, count in last.items()}
+        self.notify("thread/tokenUsage/updated", threadId=self.thread.get("threadId", self.THREAD), turnId=turn["id"],
+                    tokenUsage={"total": total, "last": last, "modelContextWindow": 258400})
         self.notify("turn/completed", turn=dict(turn, status=status))
 
     def serve(self):

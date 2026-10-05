@@ -156,6 +156,9 @@ impl Server {
             Request::PullRequests { project_id, thread_id, state } => {
                 hub.pull_requests(&project_id, thread_id.as_deref(), state).await
             }
+            Request::Usage { since, until, bucket_secs, utc_offset_secs } => {
+                hub.usage(since, until, bucket_secs, utc_offset_secs)
+            }
             Request::LinkPullRequest { thread_id, number } => {
                 hub.link_pull_request(&thread_id, number).await.map(|_| Message::Ok)
             }

@@ -3,40 +3,52 @@
 
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use motile_protocol::wire::Agent;
+use motile_protocol::wire::{Agent, Tokens};
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use crate::agents::environment::Environment;
+use crate::agents::{ModelUsage, claude};
 
 const TIMEOUT: Duration = Duration::from_secs(180);
 const CLAUDE_MODEL: &str = "claude-haiku-4-5";
 
 /// Who writes: an agent's CLI, with the model the user picked or its lightest one.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Writer {
     pub agent: Agent,
     pub model: Option<String>,
+    /// What its answers took, until whoever asked takes it to keep.
+    spent: Arc<Mutex<Vec<ModelUsage>>>,
+}
+
+impl Writer {
+    pub fn new(agent: Agent, model: Option<String>) -> Self {
+        Self { agent, model, spent: Arc::default() }
+    }
+
+    pub fn take_spent(&self) -> Vec<ModelUsage> {
+        std::mem::take(&mut self.spent.lock().unwrap_or_else(|poisoned| poisoned.into_inner()))
+    }
+
+    fn spend(&self, spent: impl IntoIterator<Item = ModelUsage>) {
+        self.spent.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).extend(spent);
+    }
 }
 
 /// The writer's answer to the prompt, in the shape of the JSON schema.
 pub async fn ask(environment: &Environment, writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
-    let model = writer.model.as_deref();
     match writer.agent {
-        Agent::Claude => ask_claude(environment, model, prompt, schema).await,
-        Agent::Codex => ask_codex(environment, model, prompt, schema).await,
+        Agent::Claude => ask_claude(environment, writer, prompt, schema).await,
+        Agent::Codex => ask_codex(environment, writer, prompt, schema).await,
     }
 }
 
-async fn ask_claude(
-    environment: &Environment,
-    model: Option<&str>,
-    prompt: &str,
-    schema: &Value,
-) -> anyhow::Result<Value> {
+async fn ask_claude(environment: &Environment, writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
     let executable = environment.executable(Agent::Claude).ok_or_else(|| anyhow::anyhow!("claude isn't installed"))?;
     let folder = TempFolder::new("motile-ask-")?;
     let mut command = Command::new(executable);
@@ -47,7 +59,7 @@ async fn ask_claude(
         "--json-schema",
         &schema.to_string(),
         "--model",
-        model.unwrap_or(CLAUDE_MODEL),
+        writer.model.as_deref().unwrap_or(CLAUDE_MODEL),
         "--settings",
         r#"{"disableAllHooks":true}"#,
         "--tools",
@@ -59,6 +71,7 @@ async fn ask_claude(
     ]);
     let output = run(command, environment, folder.path(), prompt).await?;
     let answer: Value = serde_json::from_str(output.trim())?;
+    writer.spend(claude::model_usage(&answer["modelUsage"]));
     if answer["structured_output"].is_object() {
         return Ok(answer["structured_output"].clone());
     }
@@ -66,12 +79,7 @@ async fn ask_claude(
         .ok_or_else(|| anyhow::anyhow!("claude answered without JSON"))
 }
 
-async fn ask_codex(
-    environment: &Environment,
-    model: Option<&str>,
-    prompt: &str,
-    schema: &Value,
-) -> anyhow::Result<Value> {
+async fn ask_codex(environment: &Environment, writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
     let executable = environment.executable(Agent::Codex).ok_or_else(|| anyhow::anyhow!("codex isn't installed"))?;
     let folder = TempFolder::new("motile-ask-")?;
     let schema_file = folder.path().join("schema.json");
@@ -79,15 +87,33 @@ async fn ask_codex(
     std::fs::write(&schema_file, schema.to_string())?;
 
     let mut command = Command::new(executable);
-    command.args(["exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only"]);
+    command.args(["exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "--json"]);
     command.args(["--config", "model_reasoning_effort=\"low\""]);
-    if let Some(model) = model.map(str::to_string).or_else(|| small_codex_model(environment)) {
-        command.args(["--model", &model]);
+    let model = writer.model.clone().or_else(|| small_codex_model(environment));
+    if let Some(model) = &model {
+        command.args(["--model", model]);
     }
     command.arg("--output-schema").arg(&schema_file).arg("--output-last-message").arg(&answer_file).arg("-");
-    run(command, environment, folder.path(), prompt).await?;
+    let events = run(command, environment, folder.path(), prompt).await?;
+    writer.spend(codex_usage(&events, model.unwrap_or_default()));
     let answer = std::fs::read_to_string(&answer_file)?;
     json_in(&answer).ok_or_else(|| anyhow::anyhow!("codex answered without JSON"))
+}
+
+/// What `codex exec --json` says its turn took. It counts what it read from the cache and wrote
+/// to it as input too.
+fn codex_usage(events: &str, model: String) -> Option<ModelUsage> {
+    let mut events = events.lines().filter_map(|line| serde_json::from_str::<Value>(line).ok());
+    let usage = events.rfind(|event| event["type"] == "turn.completed")?["usage"].clone();
+    let count = |name: &str| usage[name].as_u64().unwrap_or_default();
+    let (cache_read, cache_write) = (count("cached_input_tokens"), count("cache_write_input_tokens"));
+    let tokens = Tokens {
+        input: count("input_tokens").saturating_sub(cache_read + cache_write),
+        cache_read,
+        cache_write,
+        output: count("output_tokens"),
+    };
+    Some(ModelUsage { model, tokens, cost_usd: None })
 }
 
 /// The lightest model Codex lists, which is plenty for a title.
@@ -157,6 +183,17 @@ impl Drop for TempFolder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn what_codex_says_a_turn_took_is_read_without_the_cache_counted_twice() {
+        let events = r#"{"type":"thread.started","thread_id":"t"}
+not json
+{"type":"turn.completed","usage":{"input_tokens":14211,"cached_input_tokens":12000,"cache_write_input_tokens":11,"output_tokens":19,"reasoning_output_tokens":0}}"#;
+        let spent = codex_usage(events, "gpt-6-luna".to_string()).unwrap();
+        assert_eq!(spent.model, "gpt-6-luna");
+        assert_eq!(spent.tokens, Tokens { input: 2200, cache_read: 12000, cache_write: 11, output: 19 });
+        assert_eq!(codex_usage(r#"{"type":"turn.started"}"#, String::new()), None);
+    }
 
     #[test]
     fn json_is_read_from_text_around_it() {

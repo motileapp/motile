@@ -97,6 +97,8 @@ final class AppStore {
     var showsAddServer = false
     /// The settings are open over the client, where they aren't a window of their own.
     var showsSettings = false
+    /// What the agents spent is open over the settings.
+    var showsUsage = false
     /// The thread's settings are open over the client, where they aren't around the composer.
     var showsThreadSettings = false
     /// The project an icon is being chosen for.
@@ -1150,6 +1152,15 @@ final class AppStore {
         let confirm = project.gitControl?.menu.first { $0.action == next }?.confirm
         gitNotice = nil
         startGit(next, in: project, confirm: confirm)
+    }
+
+    /// What the agents spent on the connected servers in the last `buckets` spans of
+    /// `bucketSeconds`, by this device's clock.
+    func loadUsage(bucketSeconds: Int, buckets: Int, reply: @escaping (Result<UsageReport, CoreBridge.CoreError>) -> Void) {
+        let command: JSON = [
+            "bucket_secs": bucketSeconds, "buckets": buckets, "utc_offset_secs": TimeZone.current.secondsFromGMT(),
+        ]
+        core.send("usage", command, read: UsageReport.init, reply: reply)
     }
 
     /// Picks the model that writes titles, commit messages and pull requests on the server.

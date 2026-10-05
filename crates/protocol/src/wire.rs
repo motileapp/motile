@@ -463,6 +463,14 @@ pub enum Request {
     /// with `Updating` while it downloads, then `Ok` just before it restarts.
     #[serde(alias = "update_host")]
     UpdateServer,
+    /// What the agents spent between `since` and `until`, in buckets of `bucket_secs` that start
+    /// where the hours and days of a clock `utc_offset_secs` ahead of UTC do. `Usage` answers.
+    Usage {
+        since: f64,
+        until: f64,
+        bucket_secs: u32,
+        utc_offset_secs: i32,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -1048,6 +1056,45 @@ pub struct ModelInfo {
     pub default_effort: Option<String>,
 }
 
+/// Tokens by what each is billed as. `input` is what was neither read from the cache nor
+/// written to it, and `output` includes the reasoning.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Default)]
+pub struct Tokens {
+    pub input: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub output: u64,
+}
+
+/// What `Tokens` cost at the API's prices, in dollars.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Default)]
+pub struct TokenCosts {
+    pub input: f64,
+    pub cache_read: f64,
+    pub cache_write: f64,
+    pub output: f64,
+}
+
+/// What one model spent in one project during the time that starts at `start`.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct UsageBucket {
+    pub start: f64,
+    pub agent: Agent,
+    pub model: String,
+    pub project_id: String,
+    pub tokens: Tokens,
+    /// What the API would have charged. Missing when the model's prices aren't known.
+    pub cost_usd: Option<f64>,
+    /// That cost by kind of token, when the model's prices are known.
+    pub costs: Option<TokenCosts>,
+    /// What reading from the cache saved over sending the same tokens again.
+    pub cache_savings_usd: f64,
+    /// Spent on writing a title, a branch's name, a commit message or a pull request, not on a
+    /// thread's turn.
+    #[serde(default)]
+    pub writing: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct ServerInfo {
     pub version: String,
@@ -1241,6 +1288,9 @@ pub enum Message {
     /// A project's icon: the file's bytes in base64.
     Icon {
         data: String,
+    },
+    Usage {
+        buckets: Vec<UsageBucket>,
     },
     Error {
         message: String,

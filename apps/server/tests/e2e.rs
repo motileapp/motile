@@ -11,7 +11,8 @@ use motile_protocol::wire::{
     Access as AgentAccess, Agent, Approval, Change, CheckStatus, DiffScope, EventKind, FileKind, GitAction,
     GitHubState, GitStage, GitStatus, Item, ItemKind, LineComment, MergeMethod, Mergeable, Message, NewThread,
     NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState, Queued,
-    ReactionKind, Request, ReviewVerdict, Side, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary,
+    ReactionKind, Request, ReviewVerdict, Side, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges,
+    TurnSummary, UsageBucket,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -2416,4 +2417,98 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
         assert!(!Path::new(path).exists(), "{path} went with its thread");
     }
     assert!(Path::new(&unsent).exists(), "a file that was never sent waits for its message");
+}
+
+async fn usage(connection: &Connection, agent: Agent, writing: bool) -> Vec<UsageBucket> {
+    let request = Request::Usage { since: 0.0, until: f64::MAX, bucket_secs: 86400, utc_offset_secs: 3600 };
+    let Message::Usage { buckets } = connection.request(&request).await.unwrap() else { panic!("no usage came") };
+    buckets.into_iter().filter(|bucket| bucket.agent == agent && bucket.writing == writing).collect()
+}
+
+/// What the agent's turns spent.
+async fn spent(connection: &Connection, agent: Agent) -> Vec<UsageBucket> {
+    usage(connection, agent, false).await
+}
+
+/// What writing titles, branch names, commit messages and pull requests took, once some did.
+async fn written(connection: &Connection, agent: Agent) -> Vec<UsageBucket> {
+    for _ in 0..100 {
+        let written = usage(connection, agent, true).await;
+        if !written.is_empty() {
+            return written;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("nothing was written")
+}
+
+#[tokio::test]
+async fn what_the_agents_spend_is_kept_by_model_and_counted_once() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await.unwrap();
+    let project_id = new_thread.project_id.clone();
+    let thread_id = send(&connection, None, Some(new_thread), "Read greet.py and run it").await;
+    let first = finished_transcript(&connection, &thread_id).await;
+
+    let [claude] = &spent(&connection, Agent::Claude).await[..] else { panic!("one model in one project spent") };
+    assert_eq!((claude.model.as_str(), &claude.project_id), ("claude-haiku-4-5-20251001", &project_id));
+    assert_eq!(claude.tokens, Tokens { input: 932, cache_read: 35573, cache_write: 8487, output: 261 });
+    assert_eq!((claude.cost_usd, claude.costs), (Some(0.022768299999999995), None));
+    assert_eq!(claude.start % 86400.0, 82800.0, "a day starts at the midnight of the client's clock");
+    assert_eq!(first.turn_ends()[0].cost_usd, claude.cost_usd);
+
+    // The session reports what it has spent since it began, which the replay never adds to.
+    send(&connection, Some(thread_id.clone()), None, "Thanks").await;
+    let second = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(second.turn_ends()[1].cost_usd, None);
+    assert_eq!(spent(&connection, Agent::Claude).await, vec![claude.clone()]);
+
+    let new_thread = NewThread { agent: Agent::Codex, ..harness.new_thread(&connection, Agent::Claude).await.unwrap() };
+    let codex_thread = send(&connection, None, Some(new_thread), "Long reply with a lot of code").await;
+    finished_transcript(&connection, &codex_thread).await;
+    send(&connection, Some(codex_thread.clone()), None, "Long reply with a lot of code").await;
+    finished_transcript(&connection, &codex_thread).await;
+
+    let [codex] = &spent(&connection, Agent::Codex).await[..] else { panic!("one model in one project spent") };
+    let twice = Tokens { input: 2 * 2512, cache_read: 2 * 12288, cache_write: 0, output: 2 * 240 };
+    assert_eq!((codex.model.as_str(), codex.tokens, codex.cost_usd), ("gpt-fake", twice, None));
+
+    // Each thread's title was written by its agent's lightest model, which is kept apart.
+    let [title] = &written(&connection, Agent::Claude).await[..] else { panic!("one model wrote for Claude") };
+    assert_eq!((title.model.as_str(), &title.project_id), ("claude-haiku-4-5", &project_id));
+    assert_eq!(title.tokens, Tokens { input: 19, cache_read: 7279, cache_write: 0, output: 120 });
+    assert_eq!(title.cost_usd, Some(0.0013));
+    let [title] = &written(&connection, Agent::Codex).await[..] else { panic!("one model wrote for Codex") };
+    assert_eq!(title.tokens, Tokens { input: 2211, cache_read: 12000, cache_write: 0, output: 19 });
+
+    assert_eq!(connection.request(&Request::Delete { thread_id }).await.unwrap(), Message::Ok);
+    assert_eq!(spent(&connection, Agent::Claude).await, vec![claude.clone()], "it was spent all the same");
+}
+
+/// Stands in for GitHub: it knows one pull request.
+const FAKE_GH_SUBJECT: &str = r#"#!/bin/sh
+case "$1 $2" in
+"api repos/acme/app/issues/7") echo '{"title":"Stream Replies in Finished Blocks","body":"Passes a reply on in blocks."}' ;;
+*) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+esac
+"#;
+
+#[tokio::test]
+async fn a_thread_about_a_linked_pull_request_is_titled_after_what_that_is_about() {
+    use std::os::unix::fs::PermissionsExt;
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let bin = harness.dir.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(bin.join("gh"), FAKE_GH_SUBJECT).unwrap();
+    std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+
+    let message = "Take over https://github.com/acme/app/pull/7 and https://github.com/acme/app/issues/9.";
+    send(&connection, None, new_thread, message).await;
+
+    thread_where(&mut list, |thread| thread.title == "Stream Replies in Finished Blocks").await;
 }
