@@ -36,8 +36,6 @@ export function Demo() {
   const seconds = useSeconds()
   const composer = useRef<HTMLDivElement>(null)
   const composerRoom = useHeight(composer, 150)
-  const frame = useRef<HTMLDivElement>(null)
-  const scale = useScale(frame, 1200)
 
   const thread = threads.find((one) => one.id === selectedId) ?? threads[0]
   const elapsed = (since: number) => formatElapsed(since + seconds)
@@ -77,16 +75,9 @@ export function Demo() {
   const togglePanel = () => setPanel(panel === "closed" ? "open" : "closed")
 
   return (
-    <div ref={frame} className="@container relative isolate w-full">
+    <div className="@container relative isolate w-full">
       <Glow />
-      <div
-        className="h-[calc(760px*var(--demo-scale))] [--demo-scale:min(1,tan(atan2(100cqw,1200px)))]"
-        style={
-          scale === undefined
-            ? undefined
-            : ({ "--demo-scale": scale } as CSSProperties)
-        }
-      >
+      <div className="h-[calc(760px*var(--demo-scale))] [--demo-scale:var(--demo-fit,min(1,tan(atan2(100cqw,1200px))))]">
         <div className="relative flex h-[760px] w-[1200px] origin-top-left scale-(--demo-scale) overflow-hidden rounded-[16px] bg-background font-system text-[13px] text-foreground ring-1 ring-black/10 select-none dark:ring-white/12">
           <div className="absolute top-5 left-5 z-20">
             <TrafficLights />
@@ -280,21 +271,6 @@ function useHeight(ref: RefObject<HTMLElement | null>, initial: number) {
     return () => observer.disconnect()
   }, [ref])
   return height
-}
-
-/** Safari can keep a stale `cqw` after the page resizes, so once hydrated the scale comes from the measured width. */
-function useScale(ref: RefObject<HTMLElement | null>, width: number) {
-  const [scale, setScale] = useState<number>()
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const observer = new ResizeObserver(() =>
-      setScale(Math.min(1, element.clientWidth / width))
-    )
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [ref, width])
-  return scale
 }
 
 /** Seconds since the page opened, so the timers of working threads count up. */
