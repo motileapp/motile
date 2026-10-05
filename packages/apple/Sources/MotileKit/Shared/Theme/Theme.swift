@@ -142,6 +142,9 @@ enum ControlSize {
         }
     }
 
+    /// A symbol that should weigh less than the others, like the x that closes a tab.
+    var smallSymbol: CGFloat { symbol - 2 }
+
     var textSize: CGFloat {
         switch self {
         case .small: 11.5

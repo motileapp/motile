@@ -53,7 +53,7 @@ struct InputField: View {
     var body: some View {
         HStack(spacing: size.gap) {
             if let icon {
-                Image(icon, size: size.symbol - 2)
+                Image(icon, size: size.smallSymbol)
                     .foregroundStyle(Color.themeTertiary)
             }
             TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.themeTertiary))
