@@ -1,5 +1,4 @@
 import {
-  ChevronDownIcon,
   FolderPlusIcon,
   GitCommitHorizontalIcon,
   Maximize2Icon,
@@ -19,7 +18,7 @@ import {
 import { Composer } from "./composer"
 import { DiffPanel } from "./diff-panel"
 import { Glow } from "./glow"
-import { ProjectIcon, TrafficLights } from "./icons"
+import { MenuChevron, ProjectIcon, TrafficLights } from "./icons"
 import { Sidebar } from "./sidebar"
 import { threads as startingThreads, type Item, type Thread } from "./threads"
 import { Transcript } from "./transcript"
@@ -251,7 +250,7 @@ function GitButton() {
         Commit
       </span>
       <span className="flex h-full items-center justify-center border-l border-strong-border px-[11px] text-muted-foreground hover:bg-hover hover:text-foreground">
-        <ChevronDownIcon className="size-[9px] opacity-60" />
+        <MenuChevron />
       </span>
     </span>
   )

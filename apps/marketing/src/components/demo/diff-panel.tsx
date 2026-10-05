@@ -13,6 +13,7 @@ import {
 import { useState } from "react"
 import { parseDiff, type DiffFile } from "./diff"
 import { highlight } from "./highlight"
+import { MenuChevron } from "./icons"
 import { folderOf, LineCounts, nameOf } from "./transcript"
 import { cn } from "@/lib/utils"
 
@@ -65,7 +66,7 @@ export function DiffPanel({
       <div className="flex h-9 shrink-0 items-center gap-1 border-t border-b pr-1 pl-3">
         <span className="-ml-2 flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground">
           Uncommitted
-          <ChevronDownIcon className="size-[9px] opacity-60" />
+          <MenuChevron />
         </span>
         {files.length > 0 && (
           <span className="ml-1">

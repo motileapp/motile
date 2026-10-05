@@ -119,18 +119,20 @@ extension PlatformImage {
     }
 
     /// The symbol in one colour that a view tints, sized for text of `size`. Each is made once.
-    static func symbol(_ symbol: Symbol, size: CGFloat) -> PlatformImage {
+    /// `trimmed` leaves out the empty room Lucide draws around it, for one like a chevron that
+    /// fills little of its square.
+    static func symbol(_ symbol: Symbol, size: CGFloat, trimmed: Bool = false) -> PlatformImage {
         let side = symbolSide(size)
-        let key = "\(symbol.rawValue)/\(side)"
+        let key = "\(symbol.rawValue)/\(side)/\(trimmed)"
         symbolLock.lock()
         defer { symbolLock.unlock() }
         if let made = symbols[key] { return made }
-        let made = drawn(symbol, side: side)
+        let made = drawn(symbol, side: side, trimmed: trimmed)
         symbols[key] = made
         return made
     }
 
-    private static func drawn(_ symbol: Symbol, side: CGFloat) -> PlatformImage {
+    private static func drawn(_ symbol: Symbol, side: CGFloat, trimmed: Bool) -> PlatformImage {
         guard let symbolFont else { return PlatformImage() }
         let font = CTFontCreateWithFontDescriptor(symbolFont, side, nil)
         var character = Array(symbol.rawValue.utf16)
@@ -138,10 +140,11 @@ extension PlatformImage {
         guard CTFontGetGlyphsForCharacters(font, &character, &glyph, 1), let path = CTFontCreatePathForGlyph(font, glyph, nil) else {
             return PlatformImage()
         }
-        let size = CGSize(width: side, height: side)
+        let box = trimmed ? path.boundingBoxOfPath.integral : CGRect(x: 0, y: 0, width: side, height: side)
         #if os(macOS)
-        let image = NSImage(size: size, flipped: false) { _ in
+        let image = NSImage(size: box.size, flipped: false) { _ in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.translateBy(x: -box.minX, y: -box.minY)
             context.setFillColor(.black)
             context.addPath(path)
             context.fillPath()
@@ -150,10 +153,11 @@ extension PlatformImage {
         image.isTemplate = true
         return image
         #else
-        let image = UIGraphicsImageRenderer(size: size).image { renderer in
+        let image = UIGraphicsImageRenderer(size: box.size).image { renderer in
             let context = renderer.cgContext
-            context.translateBy(x: 0, y: side)
+            context.translateBy(x: 0, y: box.height)
             context.scaleBy(x: 1, y: -1)
+            context.translateBy(x: -box.minX, y: -box.minY)
             context.setFillColor(UIColor.black.cgColor)
             context.addPath(path)
             context.fillPath()
@@ -165,8 +169,8 @@ extension PlatformImage {
 
 extension Image {
     /// The symbol in the colour of the text around it, sized for text of `size`.
-    init(_ symbol: Symbol, size: CGFloat) {
-        self = Image(platform: .symbol(symbol, size: size)).renderingMode(.template)
+    init(_ symbol: Symbol, size: CGFloat, trimmed: Bool = false) {
+        self = Image(platform: .symbol(symbol, size: size, trimmed: trimmed)).renderingMode(.template)
     }
 }
 
