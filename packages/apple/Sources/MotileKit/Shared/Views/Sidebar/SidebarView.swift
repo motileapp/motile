@@ -187,7 +187,7 @@ struct ThreadRow: View, Equatable {
     @State private var hovering = false
 
     private static let sidePadding: CGFloat = 8
-    private static let topPadding: CGFloat = 3
+    private static let topPadding: CGFloat = 5
     /// A button on the first line is as far from the row's side as from its top.
     private static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
 
@@ -217,7 +217,6 @@ struct ThreadRow: View, Equatable {
             }
             .foregroundStyle(Color.themeSecondary)
             .frame(height: scaled(22))
-            .padding(.bottom, 2)
 
             Text(thread.title)
                 .font(.ui(size: 13, weight: .medium))
@@ -297,7 +296,7 @@ private struct DraftRow: View {
     @State private var hovering = false
 
     private static let sidePadding: CGFloat = 8
-    private static let topPadding: CGFloat = 3
+    private static let topPadding: CGFloat = 5
     private static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
 
     var body: some View {
