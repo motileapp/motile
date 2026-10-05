@@ -403,7 +403,7 @@ enum Typesetter {
         guard !after.isEmpty else { return 0 }
         let heading = json.objects("paras").first?.string("kind") == "heading" ? headingGap : 0
         switch after {
-        case "prose": return bodyStyle.lineSpacing + blockGap - ProseRowView.gap + heading
+        case "prose", "media": return bodyStyle.lineSpacing + blockGap - ProseRowView.gap + heading
         case "table": return blockGap - ProseRowView.gap + heading
         default: return heading
         }
