@@ -1544,6 +1544,7 @@ final class AppStore {
             attachmentsByKey[key, default: []].append(attachment)
             upload(attachment.id)
         }
+        composerFocus += 1
     }
 
     func removeAttachment(_ id: String) {
