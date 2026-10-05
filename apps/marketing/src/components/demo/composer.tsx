@@ -123,7 +123,7 @@ export function Composer({
             onClick={send}
             aria-label="Send"
             className={cn(
-              "ml-1 flex size-[30px] items-center justify-center rounded-full transition-colors",
+              "ml-1 flex size-[30px] items-center justify-center rounded-full",
               text.trim()
                 ? "bg-primary text-primary-foreground"
                 : "bg-hover text-muted-foreground"
