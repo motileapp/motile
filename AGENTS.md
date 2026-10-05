@@ -174,8 +174,8 @@ Mac app.
 - Keep it simple. Do not overcomplicate things.
 - The UI must never stall. Nothing slow runs on the main thread: parsing, highlighting, decoding
   and text layout preparation happen in the core or on a background queue, and the transcript
-  only ever builds what is on screen. If a change touches the transcript, run the macOS workflow
-  and read the stall numbers in `checks.txt`.
+  only ever builds what is on screen. If a change touches how the transcript builds, lays out
+  or scrolls its rows, run the macOS workflow and read the stall numbers in `checks.txt`.
 - The auth server is security-critical. The sign-in code is only ever sent to `motile://auth` or
   to the web app's callback, works once, and only with the secret that started the sign-in. A
   code sent to the web app only opens a session and never links a device. Codes and tokens are
@@ -208,6 +208,9 @@ Mac app.
   introduce a library. If you are solving a complex but common problem, there is likely a
   modern library for it, if so, use it.
 - Do not start editing code in response to a question. We'll tell you when to edit code.
+- Do not open a dev app or a simulator, or take screenshots or videos, unless we ask for it or
+  the change is to layout or behaviour you can't judge from the code. A colour, a token, a
+  string, a font size or a padding is edited and reported, nothing more.
 - If we are missing a glaring issue when we ask you to do something, do not hesitate to
   point it out.
 - Never commit or push code unless explicitly asked to do so.
@@ -253,7 +256,8 @@ The `Release` workflow runs the demo on every push to `main` that touches the cl
 
 ### The dev apps
 
-To see a UI change, use the dev app. A change to a view both clients share is looked at in both.
+When we ask to see a UI change, or a layout change can't be judged from the code, use the dev
+app. A change to a view both clients share is then looked at in both.
 
     # from apps/macos
     scripts/dev-app.sh             # builds what changed and opens the client

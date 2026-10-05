@@ -45,14 +45,14 @@ struct CommandPanel: View {
     private func panel(_ sections: [PanelSection], rows: Int) -> some View {
         VStack(spacing: 0) {
             header
-            ThemeDivider()
+            ThemeDivider(color: .themeStrongBorder)
             results(sections, rows: rows)
-            ThemeDivider()
+            ThemeDivider(color: .themeStrongBorder)
             hints
         }
         .frame(width: 620)
         .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 30, y: 14)
         .padding(.top, 70)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

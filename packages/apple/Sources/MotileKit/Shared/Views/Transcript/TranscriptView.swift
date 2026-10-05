@@ -236,9 +236,10 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     /// The row the working line goes above: the first of the messages that wait for the agent,
-    /// which are the last rows the core sends. Without them it goes under every row.
+    /// which are the last rows, the one on its way to the server among them. Without them it goes
+    /// under every row.
     private var workingIndex: Int {
-        let end = rows.count - (hasPending ? 1 : 0)
+        let end = rows.count - (hasPending && rows.last?.isQueued == false ? 1 : 0)
         var index = end
         while index > 0, rows[index - 1].isQueued { index -= 1 }
         return index == end ? rows.count : index

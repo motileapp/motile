@@ -299,11 +299,11 @@ impl Hub {
                 live.send_activity();
                 return Ok(thread_id);
             }
-            live.append_message(&self.store, text, attachments, media)?;
+            live.append_message(&self.store, new_id(), text, attachments, media)?;
             self.resume(live)?;
             return Ok(thread_id);
         }
-        live.append_message(&self.store, text.clone(), attachments, media)?;
+        live.append_message(&self.store, new_id(), text.clone(), attachments, media)?;
         self.start_turn(live, prompt)?;
         if is_new {
             tokio::spawn(self.clone().title_from_first_message(thread_id.clone(), text));
@@ -1832,7 +1832,7 @@ impl Hub {
     fn start_next_turn(self: &Arc<Self>, live: &mut Live, queued: Queued) -> anyhow::Result<()> {
         let prompt = prompt(&queued.text, &queued.attachments);
         live.save_queued(&self.store)?;
-        live.append_message(&self.store, queued.text, queued.attachments, queued.media)?;
+        live.append_message(&self.store, queued.id, queued.text, queued.attachments, queued.media)?;
         self.start_turn(live, prompt)
     }
 
@@ -1957,7 +1957,8 @@ impl Live {
     fn note_given(&mut self, store: &Store, index: usize) -> anyhow::Result<()> {
         let queued = self.queued.remove(index);
         self.save_queued(store)?;
-        self.append_message(store, queued.text.clone(), queued.attachments.clone(), queued.media.clone())?;
+        let Queued { id, text, attachments, media, .. } = queued.clone();
+        self.append_message(store, id, text, attachments, media)?;
         self.given.push(queued);
         self.send_activity();
         Ok(())
@@ -2049,14 +2050,17 @@ impl Live {
     }
 
     /// Adds a message of the user with the images and videos attached to it.
+    /// Adds the user's message to the transcript. A queued message keeps its id, so that the
+    /// client can tell which waiting row it replaces.
     fn append_message(
         &mut self,
         store: &Store,
+        id: String,
         text: String,
         attachments: Vec<String>,
         media: Vec<Media>,
     ) -> anyhow::Result<()> {
-        let mut item = self.new_item(new_id(), ItemKind::User { text, attachments });
+        let mut item = self.new_item(id, ItemKind::User { text, attachments });
         item.media = media;
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });

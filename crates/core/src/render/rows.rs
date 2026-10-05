@@ -356,7 +356,9 @@ impl Transcript {
     }
 
     /// Adds the item or replaces the one with its id. `live` items are highlighted as they grow.
+    /// A queued message that joins the transcript leaves the queue in the same splice.
     pub fn upsert(&mut self, item: Item, live: bool) -> Option<Splice> {
+        self.queued.retain(|queued| queued.id != item.id);
         let index = match self.items.iter().rposition(|existing| existing.id == item.id) {
             Some(index) => {
                 self.items[index] = item;
@@ -1608,6 +1610,28 @@ mod tests {
         assert_eq!(kinds, [false, false, true, true]);
         assert!(transcript.set_queued(Vec::new()).is_some());
         assert!(statuses(&transcript).is_empty());
+    }
+
+    #[test]
+    fn a_queued_message_becomes_the_users_message_in_one_splice() {
+        let message = Queued {
+            id: "m1".into(),
+            text: "Also this".into(),
+            attachments: Vec::new(),
+            media: Vec::new(),
+            held: false,
+            sending: false,
+        };
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![assistant("a", 0, "Working on it.")]);
+        transcript.set_queued(vec![message]);
+        let mut rows = transcript.rows().to_vec();
+
+        let user = ItemKind::User { text: "Also this".into(), attachments: Vec::new() };
+        apply(&mut rows, transcript.upsert(item("m1", 1, user), true).unwrap());
+        let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(ids, ["a/0", "m1/0"]);
+        assert!(transcript.set_queued(Vec::new()).is_none());
     }
 
     #[test]

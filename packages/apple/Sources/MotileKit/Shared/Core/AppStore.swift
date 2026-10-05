@@ -1270,7 +1270,8 @@ final class AppStore {
         let serverID = command.string("server_id")
         draft = ""
         attachmentsByKey[key] = nil
-        transcript.setPending(text, attachments: attached.map(\.attached))
+        // The server queues what is sent while the agent works.
+        transcript.setPending(text, attachments: attached.map(\.attached), queued: existing != nil && activity.running)
         transcriptIsEmpty = false
 
         core.send("send", command) { [weak self] result in

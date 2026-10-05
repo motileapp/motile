@@ -190,7 +190,7 @@ final class UserRowView: RowView {
         self.files = files
         text.isHidden = content.length == 0
         attachments.show(files, owner: owner)
-        pending = row.id == "pending"
+        pending = row.id == RowModel.pendingID
         bubble.opacity = pending ? 0.6 : 1
     }
 
@@ -264,7 +264,7 @@ final class QueuedRowView: RowView {
             radius: Self.radius - Self.buttonMargin,
             insets: PlatformEdgeInsets(top: 4, left: 2, bottom: Self.buttonMargin, right: 2)
         ) { [weak self] in
-            guard let self else { return }
+            guard let self, self.messageID != RowModel.pendingID else { return }
             self.owner?.sendQueued(messageID: self.messageID)
         }
         cancelButton = RowButton(
@@ -273,7 +273,7 @@ final class QueuedRowView: RowView {
             radius: Self.radius - Self.buttonMargin,
             insets: PlatformEdgeInsets(top: 4, left: 2, bottom: Self.buttonMargin, right: Self.buttonMargin)
         ) { [weak self] in
-            guard let self else { return }
+            guard let self, self.messageID != RowModel.pendingID else { return }
             self.owner?.cancelQueued(messageID: self.messageID)
         }
         bubble.addSubview(sendButton)
@@ -449,7 +449,7 @@ final class CodeRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.bubble
+        surface.fill = Theme.codeBlock
         surface.stroke = Theme.border
         surface.radius = 10
         addSubview(surface)

@@ -92,9 +92,17 @@ final class RowModel {
     }
 
     /// A user message shown the moment it is sent, before the server has it.
-    static func pending(text: String, attachments: [AttachedFile]) -> RowModel {
-        RowModel(id: "pending", itemID: "pending", kind: .user(text: Typesetter.plain(text, color: Theme.text), attachments: attachments, at: Date().timeIntervalSince1970))
+    /// A message on its way to the server. One sent while the agent works will wait for it, so
+    /// it shows as it will once the server has it.
+    static func pending(text: String, attachments: [AttachedFile], queued: Bool) -> RowModel {
+        guard !queued else {
+            let content = QueuedContent(text: Typesetter.plain(text, color: Theme.prose), attachments: attachments, status: "Queued")
+            return RowModel(id: pendingID, itemID: pendingID, kind: .queued(content))
+        }
+        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: Typesetter.plain(text, color: Theme.text), attachments: attachments, at: Date().timeIntervalSince1970))
     }
+
+    static let pendingID = "pending"
 
     /// The plain text of the row, for copying a whole reply.
     var plainText: String? {
@@ -310,6 +318,12 @@ struct QueuedContent {
     let attachments: [AttachedFile]
     /// How it waits: queued or held.
     let status: String
+
+    init(text: NSAttributedString, attachments: [AttachedFile], status: String) {
+        self.text = text
+        self.attachments = attachments
+        self.status = status
+    }
 
     init(json: JSON) {
         text = Typesetter.plain(json.string("text"), color: Theme.prose)
