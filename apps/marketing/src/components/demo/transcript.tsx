@@ -62,7 +62,7 @@ function Row({
     case "user":
       return (
         <div className="mb-5 flex justify-end pt-1">
-          <p className="max-w-[80%] rounded-[18px] bg-bubble px-3.5 py-2.5 text-[14px] leading-6 text-foreground">
+          <p className="max-w-[80%] rounded-[18px] bg-background-secondary px-3.5 py-2.5 text-[14px] leading-6 text-foreground">
             {item.text}
           </p>
         </div>
@@ -71,7 +71,7 @@ function Row({
       return <Prose text={item.text} />
     case "code":
       return (
-        <div className="my-3 overflow-hidden rounded-[10px] bg-bubble">
+        <div className="my-3 overflow-hidden rounded-[10px] bg-background-secondary">
           <div className="flex h-8 items-center justify-between px-3.5 text-[11.5px] text-tertiary">
             {item.lang}
             <CopyIcon className="size-3" />
@@ -176,7 +176,7 @@ function inline(text: string) {
       return (
         <code
           key={index}
-          className="rounded-[5px] bg-bubble px-1 py-px font-mono text-[12.5px] text-foreground"
+          className="rounded-[5px] bg-background-tertiary px-1 py-px font-mono text-[12.5px] text-foreground"
         >
           {part.slice(1, -1)}
         </code>
@@ -205,7 +205,7 @@ function Changes({
   const added = files.reduce((sum, file) => sum + file.added, 0)
   const removed = files.reduce((sum, file) => sum + file.removed, 0)
   return (
-    <div className="mt-3 mb-3 rounded-[10px] border bg-bubble pb-1.5">
+    <div className="mt-3 mb-3 rounded-[10px] border bg-background-secondary pb-1.5">
       <div className="flex h-10 items-center justify-between pr-1.5 pl-3.5">
         <span className="text-[13px] font-medium text-foreground">
           {files.length} files changed{" "}
@@ -214,7 +214,7 @@ function Changes({
         <button
           type="button"
           onClick={onOpenDiff}
-          className="h-7 rounded-md px-2 text-[12.5px] font-medium text-foreground hover:bg-hover"
+          className="h-7 rounded-md px-2 text-[12.5px] font-medium text-foreground hover:bg-background-tertiary"
         >
           Open diff
         </button>
@@ -224,7 +224,7 @@ function Changes({
           type="button"
           key={file.path}
           onClick={onOpenDiff}
-          className="mx-1.5 flex h-[26px] w-[calc(100%-12px)] items-center gap-2 rounded-md px-1.5 text-left text-[12.5px] hover:bg-hover"
+          className="mx-1.5 flex h-[26px] w-[calc(100%-12px)] items-center gap-2 rounded-md px-1.5 text-left text-[12.5px] hover:bg-background-tertiary"
         >
           <FileTextIcon className="size-3 shrink-0 text-muted-foreground" />
           <span className="truncate text-foreground">

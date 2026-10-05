@@ -120,7 +120,7 @@ struct WritingField: View {
             .padding(.horizontal, 4)
             .padding(.vertical, 6)
             .frame(minHeight: height, maxHeight: height ?? .infinity)
-            .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+            .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
             }
@@ -150,7 +150,7 @@ struct PullRequestTextView: View {
                 case .code(let code):
                     ProseText(text: code)
                         .padding(10)
-                        .background(Color(platform: Theme.codeBlock), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                 }
             }
         }
@@ -195,7 +195,7 @@ struct DescriptionEditor: View {
                 }
                 .padding(12)
                 .frame(maxHeight: .infinity)
-                .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             } else {
                 WritingField(text: $text, placeholder: "Say what this changes and why", height: nil)
             }

@@ -175,8 +175,8 @@ final class TranscriptView: FlippedView, RowOwner {
         working.isHidden = true
 
         let side = Self.jumpButtonSide
-        jumpButton.fill = Theme.raised
-        jumpButton.stroke = Theme.strongBorder
+        jumpButton.fill = Theme.popover
+        jumpButton.stroke = Theme.borderSecondary
         jumpButton.radius = side / 2
         jumpButton.frame = CGRect(x: 0, y: 0, width: side, height: side)
         jumpButton.isHidden = true

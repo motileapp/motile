@@ -37,7 +37,7 @@ export function Sidebar({
 
   return (
     <div className="flex h-full flex-col">
-      <label className="mx-2.5 mt-0.5 mb-1.5 flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] bg-hover px-[9px]">
+      <label className="mx-2.5 mt-0.5 mb-1.5 flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] bg-background-secondary px-[9px]">
         <SearchIcon className="size-3 text-tertiary" />
         <input
           value={search}
@@ -67,7 +67,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setDoneOpen(!doneOpen)}
-            className="flex h-[38px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-hover"
+            className="flex h-[38px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-secondary"
           >
             <ChevronRightIcon
               className={cn(
@@ -84,7 +84,7 @@ export function Sidebar({
             done.map((thread) => (
               <div
                 key={thread.title}
-                className="mx-2.5 flex h-[30px] items-center gap-[7px] rounded-lg px-2 hover:bg-hover"
+                className="mx-2.5 flex h-[30px] items-center gap-[7px] rounded-lg px-2 hover:bg-background-secondary"
               >
                 <ProjectIcon project={thread.project} />
                 <span className="truncate text-[13px] text-muted-foreground">
@@ -111,7 +111,7 @@ export function Sidebar({
             </span>
           </div>
         ))}
-        <div className="-mx-2 flex h-[30px] items-center gap-[7px] rounded-lg px-2 hover:bg-hover">
+        <div className="-mx-2 flex h-[30px] items-center gap-[7px] rounded-lg px-2 hover:bg-background-secondary">
           <CircleUserIcon className="size-3.5" />
           <span className="text-[12px]">you@motile.app</span>
         </div>
@@ -137,7 +137,7 @@ function ThreadRow({
       onClick={onSelect}
       className={cn(
         "mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-lg px-2 pt-[3px] pb-[7px] text-left",
-        selected ? "bg-selected" : "hover:bg-hover"
+        selected ? "bg-background-tertiary" : "hover:bg-background-secondary"
       )}
     >
       <span className="flex h-[22px] w-full items-center gap-1.5 pb-0.5 text-muted-foreground">

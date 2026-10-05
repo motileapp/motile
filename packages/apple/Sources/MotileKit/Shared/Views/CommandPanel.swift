@@ -45,14 +45,15 @@ struct CommandPanel: View {
     private func panel(_ sections: [PanelSection], rows: Int) -> some View {
         VStack(spacing: 0) {
             header
-            ThemeDivider(color: .themeStrongBorder)
+            ThemeDivider(color: .themeBorderSecondary)
             results(sections, rows: rows)
-            ThemeDivider(color: .themeStrongBorder)
+            ThemeDivider(color: .themeBorderSecondary)
             hints
         }
         .frame(width: 620)
-        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1))
+        .background(Color.themePopover, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .environment(\.surface, .popover)
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 30, y: 14)
         .padding(.top, 70)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -77,7 +78,8 @@ struct CommandPanel: View {
             ThemeDivider()
             results(sections, rows: rows)
         }
-        .background(Color.themeSheet)
+        .background(Color.themeBackgroundSecondary)
+        .environment(\.surface, .secondary)
         .onAppear(perform: focusIfTyped)
         .onChange(of: pages) { focusIfTyped() }
         .onKeyPress(.downArrow) { steer(1) }
@@ -258,11 +260,7 @@ struct CommandPanel: View {
     private func hint(_ keys: [String], _ text: String) -> some View {
         HStack(spacing: 5) {
             ForEach(keys, id: \.self) { key in
-                Text(key)
-                    .font(.ui(size: 11, weight: .medium))
-                    .padding(.horizontal, 6)
-                    .frame(minWidth: 22, minHeight: 20)
-                    .background(Color.themeHover, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                KeyCap(key: key)
             }
             Text(text)
                 .font(.ui(size: 12))
@@ -661,6 +659,19 @@ struct CommandPanel: View {
     #endif
 }
 
+private struct KeyCap: View {
+    let key: String
+    @Environment(\.surface) private var surface
+
+    var body: some View {
+        Text(key)
+            .font(.ui(size: 11, weight: .medium))
+            .padding(.horizontal, 6)
+            .frame(minWidth: 22, minHeight: 20)
+            .background(surface.next.color, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
+}
+
 private struct PanelSection: Identifiable {
     let title: String
     let items: [PanelItem]
@@ -721,6 +732,7 @@ private struct PanelItem: Identifiable {
 }
 
 private struct PanelRow: View {
+    @Environment(\.surface) private var surface
     static let height: CGFloat = scaled(46)
     static let sideMargin: CGFloat = 8
     static let radius: CGFloat = 9
@@ -763,7 +775,7 @@ private struct PanelRow: View {
         .frame(height: Self.height)
         .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(item.off ? 0.45 : 1)
-        .background(highlighted ? Color.themeHover : Color.clear, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .background(highlighted ? surface.next.color : Color.clear, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .padding(.horizontal, Self.sideMargin)
         .opacity(faded ? 0.45 : 1)
         .animation(item.placeholderLines > 0 ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : nil, value: faded)
@@ -806,7 +818,7 @@ private struct PanelRow: View {
 
     private func bar(width: CGFloat, height: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-            .fill(Color.themeSelected)
+            .fill(surface.next.color)
             .frame(width: width, height: height)
     }
 
@@ -833,7 +845,7 @@ private struct PanelRow: View {
         switch item.icon {
         case .symbol where item.placeholderLines > 0:
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(Color.themeSelected)
+                .fill(surface.next.color)
                 .frame(width: 20, height: 20)
         case .symbol(let name):
             Image(name, size: 15)

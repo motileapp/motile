@@ -591,7 +591,7 @@ private struct PendingComments: View {
             }
         }
         .padding(.bottom, 6)
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 }
 
@@ -653,7 +653,7 @@ private struct StackCard: View {
             }
         }
         .padding(.bottom, 6)
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 }
 
@@ -679,7 +679,7 @@ private struct MergeBox: View {
                 actions
             }
         }
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     /// The checks that need looking at and the running ones, and the rest when asked for.

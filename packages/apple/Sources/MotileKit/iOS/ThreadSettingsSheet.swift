@@ -21,7 +21,8 @@ struct ThreadSettingsSheet: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(Color.themeSheet)
+            .background(Color.themeBackgroundSecondary)
+            .environment(\.surface, .secondary)
             .navigationTitle("Thread settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -76,7 +77,7 @@ struct ThreadSettingsSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .listRowBackground(Color.themeField)
+                .listRowBackground(Color.themeBackgroundTertiary)
             }
         }
     }
@@ -103,7 +104,7 @@ struct ThreadSettingsSheet: View {
         } footer: {
             Text(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail)
         }
-        .listRowBackground(Color.themeField)
+        .listRowBackground(Color.themeBackgroundTertiary)
     }
 
     /// Where the thread works: the server, the folder or a worktree of its own, and the branch
@@ -143,7 +144,7 @@ struct ThreadSettingsSheet: View {
                 }
             }
         }
-        .listRowBackground(Color.themeField)
+        .listRowBackground(Color.themeBackgroundTertiary)
     }
 }
 #endif

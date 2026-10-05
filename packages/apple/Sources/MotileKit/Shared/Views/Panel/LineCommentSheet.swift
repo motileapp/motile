@@ -50,7 +50,7 @@ struct LineCommentSheet: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(platform: Theme.codeBlock), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .layered(in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
             if !threads.isEmpty {
                 ScrollView {
@@ -70,7 +70,7 @@ struct LineCommentSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 220)
-                .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             }
             WritingField(text: $text, placeholder: threads.isEmpty ? "Comment on this line" : "Reply, or say something new", height: 96)
             #if os(macOS)

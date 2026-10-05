@@ -102,7 +102,7 @@ struct ConnectServerView: View {
         }
         .padding(.leading, 14)
         .padding([.vertical, .trailing], 10)
-        .background(Color(platform: Theme.bubble), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Color.themeBorder))
     }
 

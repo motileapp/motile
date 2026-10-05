@@ -324,6 +324,8 @@ final class IconButton: UIButton {
     static let side = metrics.height
     private static let touchSide = Platform.minimumPress
 
+    /// The layer it lies on.
+    var surface = Surface.background
     private var symbolSize = IconButton.metrics.symbol
 
     convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat? = nil, tooltip: String, action: @escaping () -> Void) {
@@ -346,7 +348,7 @@ final class IconButton: UIButton {
 
     override var isHighlighted: Bool {
         didSet {
-            backgroundColor = isHighlighted ? Theme.hover : .clear
+            backgroundColor = isHighlighted ? surface.next.platform : .clear
             tintColor = isHighlighted ? Theme.text : Theme.secondary
         }
     }

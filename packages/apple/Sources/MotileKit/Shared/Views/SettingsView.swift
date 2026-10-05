@@ -297,7 +297,7 @@ private struct BranchInstructionsEditor: View {
                 .scrollContentBackground(.hidden)
                 .padding(6)
                 .frame(height: 64)
-                .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1) }
         }
         .padding(.horizontal, settingsInset)
@@ -327,7 +327,7 @@ private struct SetupSheet: View {
                 .scrollContentBackground(.hidden)
                 .padding(6)
                 .frame(height: 140)
-                .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1) }
             HStack {
                 Spacer()
@@ -346,7 +346,8 @@ private struct SetupSheet: View {
         #else
         .frame(maxHeight: .infinity, alignment: .top)
         .presentationDetents([.medium, .large])
-        .presentationBackground(Color.themeSheet)
+        .presentationBackground(Color.themeBackgroundSecondary)
+        .environment(\.surface, .secondary)
         #endif
         .onAppear { script = project.setup ?? "" }
     }
@@ -380,7 +381,7 @@ private struct SettingsSection<Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
-            .background(Color.themeHover, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .layered(in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
 }

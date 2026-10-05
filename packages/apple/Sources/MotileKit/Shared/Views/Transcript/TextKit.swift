@@ -97,7 +97,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
         storage.enumerateAttribute(.motileQuote, in: characters) { value, range, _ in
             guard let depth = (value as? NSNumber)?.intValue, depth > 0 else { return }
             let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            Theme.strongBorder.setFill()
+            Theme.borderSecondary.setFill()
             enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
                 for level in 0..<depth {
                     let bar = CGRect(x: rect.minX + CGFloat(level) * 14 + 1, y: rect.minY, width: 2, height: rect.height)
@@ -123,7 +123,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
             let frame = box.frame(of: glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: self)
                 .offsetBy(dx: origin.x, dy: origin.y)
                 .insetBy(dx: 0.5, dy: 0.5)
-            Theme.codeBlock.setFill()
+            Theme.backgroundSecondary.setFill()
             RoundedBox.fill(frame, radius: 10)
             Theme.border.setStroke()
             RoundedBox.stroke(frame, radius: 10)

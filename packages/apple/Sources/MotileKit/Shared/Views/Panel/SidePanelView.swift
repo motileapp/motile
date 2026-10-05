@@ -205,6 +205,7 @@ private struct PanelTabChip: View {
         .button(.highlight(selected: active, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
             ActionButton(icon: .x, help: "Close (⌘W)", size: .small, symbolSize: 11) { panel.close(tab) }
+                .environment(\.surface, .tertiary)
                 .padding(.trailing, Self.closeMargin)
                 .opacity(hovering || active ? 1 : 0)
         }
@@ -267,7 +268,7 @@ private struct PanelLauncher: View {
                     .foregroundStyle(Color.themeSecondary)
                     .padding(.horizontal, 6)
                     .frame(height: 20)
-                    .background(Color.themeHover, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .background(Color.themeBackgroundTertiary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                 #endif
             }
             .foregroundStyle(Color.themeText)

@@ -11,8 +11,6 @@ enum Theme {
         rgb(CGFloat((value >> 16) & 0xff) / 255, CGFloat((value >> 8) & 0xff) / 255, CGFloat(value & 0xff) / 255, alpha)
     }
 
-    private static func white(_ alpha: CGFloat) -> PlatformColor { rgb(1, 1, 1, alpha) }
-
     private static func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat) -> PlatformColor {
         #if os(macOS)
         NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
@@ -23,17 +21,15 @@ enum Theme {
 
     // Surfaces
     static let background = dynamic(hex(0xf8f9fc), hex(0x0a0b0f))
-    static let raised = dynamic(hex(0xffffff), hex(0x15171d))
-    static let sheet = dynamic(hex(0xf8f9fc), hex(0x0e1015))
-    static let field = dynamic(hex(0xffffff), white(0.04))
-    static let bubble = dynamic(hex(0xeceef4), hex(0x111217))
+    static let backgroundSecondary = dynamic(hex(0xeceef4), hex(0x111217))
+    static let backgroundTertiary = dynamic(hex(0xe1e4ed), hex(0x191a1f))
+    static let popover = dynamic(hex(0xffffff), hex(0x191a1f))
+    static let popoverSecondary = dynamic(hex(0xeceef4), hex(0x222226))
     static let composer = dynamic(hex(0xffffff), hex(0x111217))
-    static let codeBlock = dynamic(hex(0xeceef4), hex(0x111217))
-    static let hover = dynamic(hex(0x000000, alpha: 0.045), white(0.06))
-    static let selected = dynamic(hex(0x000000, alpha: 0.08), white(0.1))
+    static let composerSecondary = dynamic(hex(0xeceef4), hex(0x191a1f))
     /// Borders are solid, so that where two meet they do not darken.
     static let border = dynamic(hex(0xe2e3e5), hex(0x191a1e))
-    static let strongBorder = dynamic(hex(0xd5d6d9), hex(0x2b2b2f))
+    static let borderSecondary = dynamic(hex(0xd5d6d9), hex(0x2b2b2f))
 
     #if os(macOS)
     static let systemLink = NSColor.linkColor
@@ -198,17 +194,82 @@ enum Radius {
     static let sheet: CGFloat = 14
 }
 
+/// What a view lies on. The page is a ladder: what lies on one layer is filled with the next, and
+/// so is what the pointer is over. What floats over the page, a popover or the composer, has one
+/// colour of its own for both.
+enum Surface {
+    case background, secondary, tertiary
+    case popover, popoverSecondary
+    case composer, composerSecondary
+
+    /// What lies on it, and what the pointer is over.
+    var next: Surface {
+        switch self {
+        case .background: .secondary
+        case .secondary: .tertiary
+        case .tertiary: .background
+        case .popover: .popoverSecondary
+        case .popoverSecondary: .popover
+        case .composer: .composerSecondary
+        case .composerSecondary: .composer
+        }
+    }
+
+    /// What is selected, and a filled control under the pointer.
+    var further: Surface {
+        switch self {
+        case .background: .tertiary
+        case .secondary, .popover, .popoverSecondary, .composer, .composerSecondary: .background
+        case .tertiary: .secondary
+        }
+    }
+
+    var platform: PlatformColor {
+        switch self {
+        case .background: Theme.background
+        case .secondary: Theme.backgroundSecondary
+        case .tertiary: Theme.backgroundTertiary
+        case .popover: Theme.popover
+        case .popoverSecondary: Theme.popoverSecondary
+        case .composer: Theme.composer
+        case .composerSecondary: Theme.composerSecondary
+        }
+    }
+
+    var color: Color { Color(platform: platform) }
+}
+
+extension EnvironmentValues {
+    /// The layer the view lies on.
+    @Entry var surface = Surface.background
+}
+
+private struct Layered<S: Shape>: ViewModifier {
+    let shape: S
+    @Environment(\.surface) private var surface
+
+    func body(content: Content) -> some View {
+        content
+            .background(surface.next.color, in: shape)
+            .environment(\.surface, surface.next)
+    }
+}
+
+extension View {
+    /// Fills the view with what lies on the surface it is on.
+    func layered(in shape: some Shape) -> some View {
+        modifier(Layered(shape: shape))
+    }
+}
+
 extension Color {
     static let themeBackground = Color(platform: Theme.background)
-    static let themeRaised = Color(platform: Theme.raised)
-    static let themeSheet = Color(platform: Theme.sheet)
-    static let themeField = Color(platform: Theme.field)
-    static let themeBubble = Color(platform: Theme.bubble)
+    static let themeBackgroundSecondary = Color(platform: Theme.backgroundSecondary)
+    static let themeBackgroundTertiary = Color(platform: Theme.backgroundTertiary)
+    static let themePopover = Color(platform: Theme.popover)
     static let themeComposer = Color(platform: Theme.composer)
-    static let themeHover = Color(platform: Theme.hover)
-    static let themeSelected = Color(platform: Theme.selected)
     static let themeBorder = Color(platform: Theme.border)
-    static let themeStrongBorder = Color(platform: Theme.strongBorder)
+    static let themeBorderSecondary = Color(platform: Theme.borderSecondary)
     static let themeText = Color(platform: Theme.text)
     static let themeSecondary = Color(platform: Theme.secondary)
     static let themeTertiary = Color(platform: Theme.tertiary)

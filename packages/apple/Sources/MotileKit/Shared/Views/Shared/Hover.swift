@@ -8,9 +8,9 @@ private struct HoverHighlight: ViewModifier {
     let selected: Bool
     let lit: Bool
     let inset: EdgeInsets
-    let color: Color
     let faded: Bool
     @State private var hovering = false
+    @Environment(\.surface) private var surface
     @Environment(\.isEnabled) private var enabled
 
     func body(content: Content) -> some View {
@@ -32,8 +32,8 @@ private struct HoverHighlight: ViewModifier {
     }
 
     private var fill: Color {
-        if selected { return Color.themeSelected }
-        return enabled && (hovering || lit) ? color : Color.clear
+        if selected { return surface.further.color }
+        return enabled && (hovering || lit) ? surface.next.color : Color.clear
     }
 
     private var text: Color {
@@ -45,10 +45,9 @@ private struct HoverHighlight: ViewModifier {
 
 extension View {
     func hoverHighlight(
-        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover,
-        faded: Bool = false
+        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false
     ) -> some View {
-        modifier(HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, color: color, faded: faded))
+        modifier(HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded))
     }
 }
 
@@ -60,13 +59,12 @@ struct HighlightButtonStyle: ButtonStyle {
     var selected = false
     var lit = false
     var inset = EdgeInsets()
-    var color = Color.themeHover
     var faded = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .hoverHighlight(radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, color: color, faded: faded)
+            .hoverHighlight(radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, faded: faded)
     }
 }
 
@@ -81,10 +79,9 @@ struct DimButtonStyle: ButtonStyle {
 
 extension ButtonStyle where Self == HighlightButtonStyle {
     static func highlight(
-        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), color: Color = .themeHover,
-        faded: Bool = false
+        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false
     ) -> HighlightButtonStyle {
-        HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, color: color, faded: faded)
+        HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded)
     }
 }
 

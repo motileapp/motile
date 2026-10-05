@@ -12,7 +12,7 @@ struct AttachmentTile: View {
 
     var body: some View {
         ZStack {
-            Color.themeBubble
+            Color.themeBackgroundSecondary
             if let picture {
                 Image(decorative: picture, scale: 1)
                     .resizable()
@@ -85,7 +85,7 @@ struct AttachmentChip: View {
         .font(.ui(size: 12))
         .padding(.leading, 9)
         .padding([.vertical, .trailing], 2)
-        .background(Color.themeBubble, in: Capsule())
+        .layered(in: Capsule())
     }
 }
 

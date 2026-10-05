@@ -45,13 +45,13 @@ struct GitButton: View {
                 store.runQuickGit(in: project)
             }
             Rectangle()
-                .fill(Color.themeStrongBorder)
+                .fill(Color.themeBorderSecondary)
                 .frame(width: 1, height: Self.height)
             menuButton
         }
         .clipShape(RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeBorderSecondary, lineWidth: 1)
         }
         .background(MenuAnchor(anchor: anchor))
         .padding(.horizontal, 6)
@@ -232,9 +232,10 @@ struct GitNoticeView: View {
         .padding(.leading, Self.padding)
         .padding(.trailing, Self.closeMargin + Self.closeSize + 4)
         .frame(maxWidth: Platform.scale > 1 ? 440 : 320)
-        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .background(Color.themePopover, in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .environment(\.surface, .popover)
         .overlay {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
             ActionButton(icon: .x, help: "Close", size: .small) { store.dismissGitNotice() }
@@ -356,9 +357,9 @@ struct CommitSheet: View {
                 .padding(.vertical, 4)
             }
             .frame(height: min(CGFloat(files.count) * Self.rowHeight, 192) + 8)
-            .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+            .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1)
             }
         }
     }
