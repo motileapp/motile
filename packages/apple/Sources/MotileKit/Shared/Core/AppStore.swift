@@ -172,6 +172,8 @@ final class AppStore {
     /// shows this, so the sidebar doesn't change while the draft is being written.
     private(set) var openedDraftPreview: String?
     private(set) var undo: UndoNotice?
+    /// The thread its pull request's end last marked done, which the sidebar then shows.
+    private(set) var settledThreadID: String?
     /// Unknown until Settings asks for it.
     private(set) var mediaStorage: MediaStorage?
     private var drafts: [String: String] = [:]
@@ -420,7 +422,9 @@ final class AppStore {
         guard before != thread else { return }
         threads[thread.id] = thread
         markOpenThreadSeen()
-        guard selection == .thread(thread.id), let before else { return }
+        guard let before else { return }
+        if !before.isDone, thread.isDone, before.pullRequest != thread.pullRequest { settledThreadID = thread.id }
+        guard selection == .thread(thread.id) else { return }
         if before.turnEndedAt != thread.turnEndedAt || (before.running && !thread.running) { workspaceVersion += 1 }
     }
 

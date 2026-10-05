@@ -208,43 +208,47 @@ struct MainView: View {
             let panelWidths = SidePanel.widths.lowerBound...max(SidePanel.widths.lowerBound, fits ? rest - 1 - Self.threadBesidePanel : rest - 1)
             let shownPanel = min(panelWidths.upperBound, max(panelWidths.lowerBound, panelWidth))
             HStack(spacing: 0) {
+                SidebarView()
+                    .frame(width: shownWidth)
+                    .overlay(alignment: .topTrailing) {
+                        projectButtons
+                            .frame(height: window.safeAreaInsets.top)
+                            .offset(y: -window.safeAreaInsets.top)
+                            .padding(.trailing, SidebarView.rowInset - ToolbarButton.margin)
+                    }
+                    .frame(width: sidebarHidden ? 0 : shownWidth, alignment: .leading)
+                    .putAway(sidebarHidden)
                 if !sidebarHidden {
-                    SidebarView()
-                        .frame(width: shownWidth)
-                        .overlay(alignment: .topTrailing) {
-                            projectButtons
-                                .frame(height: window.safeAreaInsets.top)
-                                .offset(y: -window.safeAreaInsets.top)
-                                .padding(.trailing, SidebarView.rowInset - ToolbarButton.margin)
-                        }
                     PaneDivider(width: $sidebarWidth, widths: widths)
                         .zIndex(1)
                 }
                 ThreadPane(titleInset: sidebarHidden ? Self.pastWindowButtons : 20, besidePanel: beside)
                     // Behind the maximized panel the thread keeps the width it has beside it,
                     // so the transcript isn't laid out again for a width nobody sees.
-                    .frame(width: maximized && fits ? rest - 1 - shownPanel : nil)
+                    .frame(width: fits ? rest - 1 - shownPanel : nil)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .opacity(maximized ? 0 : 1)
                     .allowsHitTesting(!maximized)
-                    .overlay {
-                        if maximized {
-                            SidePanelView(topInset: window.safeAreaInsets.top, tabInset: sidebarHidden ? Self.pastWindowButtons : 0)
-                        }
-                    }
                     .overlay(alignment: .trailing) {
-                        if panelOpen && !beside && !maximized {
-                            panel(width: shownPanel, widths: panelWidths, topInset: window.safeAreaInsets.top)
-                                .background {
-                                    Color.themeBackground
-                                        .ignoresSafeArea()
-                                        .shadow(color: .black.opacity(0.18), radius: 14, x: -4)
-                                }
+                        // One panel for all the places it has, so that it is the same one in each.
+                        HStack(spacing: 0) {
+                            if !maximized {
+                                PaneDivider(width: $panelWidth, widths: panelWidths, growsLeft: true)
+                                    .zIndex(1)
+                            }
+                            SidePanelView(topInset: window.safeAreaInsets.top, tabInset: maximized && sidebarHidden ? Self.pastWindowButtons : 0)
+                                .frame(width: maximized ? rest : shownPanel)
                         }
+                        .background {
+                            if panelOpen && !fits && !maximized {
+                                Color.themeBackground
+                                    .ignoresSafeArea()
+                                    .shadow(color: .black.opacity(0.18), radius: 14, x: -4)
+                            }
+                        }
+                        .environment(\.panelInView, panelOpen)
+                        .putAway(!panelOpen)
                     }
-                if beside {
-                    panel(width: shownPanel, widths: panelWidths, topInset: window.safeAreaInsets.top)
-                }
             }
             .frame(width: window.size.width, alignment: .leading)
             .overlay(alignment: .topTrailing) {
@@ -268,16 +272,6 @@ struct MainView: View {
                 }
                 .withoutSystemGlass()
             }
-        }
-    }
-
-    /// The side panel behind the line that resizes it.
-    private func panel(width: Double, widths: ClosedRange<Double>, topInset: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            PaneDivider(width: $panelWidth, widths: widths, growsLeft: true)
-                .zIndex(1)
-            SidePanelView(topInset: topInset)
-                .frame(width: width)
         }
     }
 
@@ -314,6 +308,16 @@ struct MainView: View {
                 store.startNewThread(in: store.composerProject)
             }
         }
+    }
+}
+
+private extension View {
+    /// Out of sight and out of reach, but still there: it comes back as it was left.
+    func putAway(_ away: Bool) -> some View {
+        opacity(away ? 0 : 1)
+            .allowsHitTesting(!away)
+            .accessibilityHidden(away)
+            .disabled(away)
     }
 }
 

@@ -25,7 +25,7 @@ struct PullRequestListSurface: View {
                 PanelMessage(text: "Update your server to see its pull requests here.")
             } else {
                 content
-                    .task(id: PanelTrigger(target: target, path: state, version: store.workspaceVersion, asked: asked)) {
+                    .panelTask(id: PanelTrigger(target: target, path: state, version: store.workspaceVersion, asked: asked)) {
                         panel.loadPullRequests(of: target, state: state)
                     }
             }

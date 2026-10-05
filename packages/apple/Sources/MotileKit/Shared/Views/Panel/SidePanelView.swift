@@ -281,6 +281,37 @@ private struct PanelLauncher: View {
     }
 }
 
+extension EnvironmentValues {
+    /// Whether the panel can be seen. The Mac keeps a hidden one, which doesn't ask its server.
+    @Entry var panelInView = true
+}
+
+extension View {
+    /// Asks the server when `id` changes and when the panel comes back into view, never while
+    /// it is out of sight.
+    func panelTask<ID: Equatable>(id: ID, _ ask: @escaping @MainActor () async -> Void) -> some View {
+        modifier(PanelTask(id: id, ask: ask))
+    }
+}
+
+private struct PanelTask<ID: Equatable>: ViewModifier {
+    struct Trigger: Equatable {
+        let id: ID
+        let inView: Bool
+    }
+
+    @Environment(\.panelInView) private var inView
+    let id: ID
+    let ask: @MainActor () async -> Void
+
+    func body(content: Content) -> some View {
+        content.task(id: Trigger(id: id, inView: inView)) {
+            guard inView else { return }
+            await ask()
+        }
+    }
+}
+
 /// What makes a tab ask its server again: another folder, a turn that ended there, or the
 /// button that asks.
 struct PanelTrigger: Equatable {
@@ -343,7 +374,7 @@ struct DiffSurface: View {
                 changes(panel.diff, scope: scope)
             }
         }
-        .task(id: PanelTrigger(target: target, scope: scope, version: store.workspaceVersion, asked: asked)) {
+        .panelTask(id: PanelTrigger(target: target, scope: scope, version: store.workspaceVersion, asked: asked)) {
             guard target.repository else { return }
             // A pull request's diff shows which files were viewed and where its conversations are.
             if case .pullRequest(let number) = scope, store.pullRequestsExtended, panel.pullRequest.value?.number != number {
@@ -505,7 +536,7 @@ struct FilesSurface: View {
                 PanelLoading()
             }
         }
-        .task(id: PanelTrigger(target: target, version: store.workspaceVersion, asked: asked)) {
+        .panelTask(id: PanelTrigger(target: target, version: store.workspaceVersion, asked: asked)) {
             panel.loadFiles(of: target)
         }
     }
@@ -548,6 +579,7 @@ private struct FileRow: View {
 /// One file of the folder the thread works in.
 struct FileSurface: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.panelInView) private var inView
     let target: PanelTarget
     let path: String
     @State private var asked = 0
@@ -584,12 +616,12 @@ struct FileSurface: View {
                     CodeViewRepresentable(document: document)
                 }
             case .ready(.image(let image)):
-                ZoomableImage(image: image, size: image.size, margin: CGSize(width: 16, height: 16), keys: store.viewing == nil)
+                ZoomableImage(image: image, size: image.size, margin: CGSize(width: 16, height: 16), keys: store.viewing == nil && inView)
             case .ready(.binary(let size)):
                 PanelMessage(text: "This file isn't text, so it isn't shown. It is \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)).")
             }
         }
-        .task(id: PanelTrigger(target: target, path: path, version: store.workspaceVersion, asked: asked)) {
+        .panelTask(id: PanelTrigger(target: target, path: path, version: store.workspaceVersion, asked: asked)) {
             panel.loadFile(path, of: target)
         }
     }
@@ -637,7 +669,7 @@ struct ChangeSurface: View {
                 PanelMessage(text: "The turn's changes to this file can't be shown.")
             }
         }
-        .task(id: target) {
+        .panelTask(id: target) {
             panel.loadChange(turn: turn, path: path, of: target)
         }
     }

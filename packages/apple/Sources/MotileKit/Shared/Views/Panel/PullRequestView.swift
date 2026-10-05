@@ -23,10 +23,10 @@ struct PullRequestSurface: View {
                 PanelMessage(text: reason)
             } else if let number = shown {
                 content(number)
-                    .task(id: PanelTrigger(target: target, path: String(number), version: store.workspaceVersion, asked: asked)) {
+                    .panelTask(id: PanelTrigger(target: target, path: String(number), version: store.workspaceVersion, asked: asked)) {
                         panel.loadPullRequest(of: target, number: number)
                     }
-                    .task(id: panel.pullRequestReads) {
+                    .panelTask(id: panel.pullRequestReads) {
                         // While GitHub is still working something out, it is asked again.
                         guard panel.pullRequest.value?.settling == true else { return }
                         try? await Task.sleep(for: .seconds(10))
