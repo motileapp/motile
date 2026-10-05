@@ -194,6 +194,7 @@ final class AppStore {
     /// What the agent did that the side panel shows.
     @ObservationIgnored let agentTranscript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
+    @ObservationIgnored private let lifecycle = Lifecycle()
     @ObservationIgnored private var undoTimer: Timer?
     @ObservationIgnored private var openThreadID: String?
     @ObservationIgnored private let defaults = UserDefaults.standard
@@ -229,6 +230,7 @@ final class AppStore {
             errorMessage = "Motile couldn't start. Its data folder may not be writable."
         }
         if environment["MOTILE_DEMO"] != "1" { updater.start() }
+        lifecycle.start(self)
         NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { [weak self] _ in
             self?.markOpenThreadSeen()
             self?.readGit(fetch: true)

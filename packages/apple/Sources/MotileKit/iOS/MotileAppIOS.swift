@@ -1,5 +1,4 @@
 #if os(iOS)
-import Network
 import SwiftUI
 import UIKit
 
@@ -12,7 +11,7 @@ struct MotileApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var store = AppStore()
     @State private var drawer = Drawer()
-    @State private var lifecycle = Lifecycle()
+    @State private var backgroundTime = BackgroundTime()
     @AppStorage("appearance") private var appearance = Appearance.system
     @Environment(\.scenePhase) private var phase
 
@@ -29,11 +28,10 @@ struct MotileApp: App {
                     // A phone opens on the thread, not on the panel that was open last time.
                     if UIDevice.current.userInterfaceIdiom == .phone { store.sidePanel.isOpen = false }
                     store.start()
-                    lifecycle.start(store)
                     DemoDriver.startIfRequested(store: store, drawer: drawer)
                 }
                 .onChange(of: appearance) { appearance.apply() }
-                .onChange(of: phase) { lifecycle.sceneChanged(to: phase) }
+                .onChange(of: phase) { backgroundTime.sceneChanged(to: phase) }
         }
         .commands { MotileCommands(store: store, drawer: drawer) }
     }
@@ -48,43 +46,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-/// Tells the core when the client comes to the front, goes to the back or changes networks. iOS
-/// suspends an app in the background and its connections die there without a word, so the core
-/// dials again the moment the client is back instead of waiting to find out.
-final class Lifecycle {
-    private weak var store: AppStore?
-    private let monitor = NWPathMonitor()
-    private var path: String?
+/// Gives what is on its way when the client goes to the back, like a message or an upload, the
+/// time iOS allows to finish.
+final class BackgroundTime {
     private var background = UIBackgroundTaskIdentifier.invalid
-    private var leftAt: Date?
-
-    func start(_ store: AppStore) {
-        self.store = store
-        monitor.pathUpdateHandler = { [weak self] path in
-            let name = path.status == .satisfied ? path.availableInterfaces.first.map { "\($0.type)" } ?? "up" : "down"
-            DispatchQueue.main.async { self?.pathChanged(to: name) }
-        }
-        monitor.start(queue: DispatchQueue(label: "app.motile.network"))
-    }
-
-    private func pathChanged(to name: String) {
-        defer { path = name }
-        guard path != nil, path != name else { return }
-        store?.core.send("network_changed")
-    }
 
     func sceneChanged(to phase: ScenePhase) {
         switch phase {
         case .background:
-            leftAt = leftAt ?? Date()
-            // What is on its way, like a message or an upload, gets the time iOS allows to finish.
             guard background == .invalid else { return }
             background = UIApplication.shared.beginBackgroundTask { [weak self] in self?.endBackground() }
         case .active:
             endBackground()
-            guard let left = leftAt else { return }
-            leftAt = nil
-            store?.core.send("foreground", ["away_secs": Int(Date().timeIntervalSince(left))])
         default:
             break
         }

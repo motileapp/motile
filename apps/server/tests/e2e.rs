@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
+use motile_core::link::{Link, LinkEvent, State};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, Approval, Change, CheckStatus, DiffScope, EventKind, FileKind, GitAction,
@@ -20,6 +21,7 @@ use motile_server::hub::Hub;
 use motile_server::serve::{BindOptions, Server};
 use motile_server::store::Store;
 use serde_json::json;
+use tokio::sync::mpsc;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -496,6 +498,36 @@ async fn a_client_ahead_of_the_server_starts_over() {
 
     assert_eq!(stale.resets, 1);
     assert_eq!(stale.items, whole.items);
+}
+
+/// The states the link goes through until it is connected.
+async fn states_until_connected(events: &mut mpsc::UnboundedReceiver<(String, LinkEvent)>) -> Vec<State> {
+    let mut states = Vec::new();
+    while states.last() != Some(&State::Connected) {
+        let (_, event) = tokio::time::timeout(TIMEOUT, events.recv()).await.expect("the link didn't connect").unwrap();
+        let LinkEvent::Status(status) = event else { continue };
+        if states.last() != Some(&status.state) {
+            states.push(status.state);
+        }
+    }
+    states
+}
+
+#[tokio::test]
+async fn a_link_given_a_new_endpoint_leaves_the_old_one_and_connects_again() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let (events, mut received) = mpsc::unbounded_channel();
+    let stale = bind(&harness.app_key, true).await.unwrap();
+    let link = Link::connect(stale.clone(), harness.address.clone(), events);
+    assert_eq!(states_until_connected(&mut received).await, [State::Connected]);
+
+    link.redial_on(bind(&harness.app_key, true).await.unwrap());
+    assert_eq!(states_until_connected(&mut received).await, [State::Connecting, State::Connected]);
+
+    stale.close().await;
+    let add = Request::AddProject { path: harness.folder("project") };
+    assert_eq!(link.request(&add).await.unwrap(), Message::Ok);
+    link.shutdown();
 }
 
 #[tokio::test]

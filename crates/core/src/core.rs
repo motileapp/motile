@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context, bail};
 use base64::Engine;
@@ -52,8 +52,10 @@ const SHOWN_FILES: &str = "files";
 const ACCOUNT_CHECK_TICKS: u64 = 30;
 /// The servers before this one don't keep what their agents spend.
 const USAGE_PROTOCOL: u32 = 10;
-/// A connection that was out of the client's sight for this long isn't trusted to be alive.
+/// An endpoint that didn't run for this long isn't trusted to reach anything anymore.
 const STALE_AFTER: Duration = Duration::from_secs(10);
+/// An endpoint that reached no server for this long is replaced, in case the fault is its own.
+const WEDGED_AFTER: Duration = Duration::from_secs(60);
 
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
 
@@ -165,6 +167,10 @@ struct Core {
     cache: Cache,
     key: Arc<DeviceKey>,
     endpoint: Option<Endpoint>,
+    /// When the core last ran. A gap says the system had the client paused: asleep or suspended.
+    ran_at: SystemTime,
+    /// When the endpoint last had a server answer it, or was opened.
+    reached_at: Instant,
     me: Me,
     account_error: Option<String>,
     servers: Vec<Server>,
@@ -237,6 +243,8 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         cache,
         key: Arc::new(key),
         endpoint: None,
+        ran_at: SystemTime::now(),
+        reached_at: Instant::now(),
         account_error: None,
         servers: Vec::new(),
         open: HashMap::new(),
@@ -361,6 +369,8 @@ impl Core {
             Input::Stop => {}
             Input::Tick => {
                 self.ticks += 1;
+                self.replace_stale_endpoint();
+                self.replace_wedged_endpoint();
                 for (thread_id, followed) in &mut self.followed {
                     followed.save(&self.cache, thread_id);
                 }
@@ -547,19 +557,43 @@ impl Core {
 
     // ---- servers ----
 
-    /// Has the endpoint look at the network again and the links dial now: again from the start
-    /// with `redial`, or only the ones that wait to.
-    fn network_changed(&self, redial: bool) {
+    /// Has the endpoint look at the network again and the links that wait to dial do it now.
+    fn network_changed(&self) {
         if let Some(endpoint) = self.endpoint.clone() {
             tokio::spawn(async move { endpoint.network_change().await });
         }
         for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
-            if redial {
-                link.redial();
-            } else {
-                link.retry_now();
-            }
+            link.retry_now();
         }
+    }
+
+    /// Opens a new endpoint for the links once the client ran again after a pause. The system
+    /// cuts what a paused endpoint had open without a word, and the endpoint can go on dialing
+    /// through it for long.
+    fn replace_stale_endpoint(&mut self) {
+        let now = SystemTime::now();
+        let paused = now.duration_since(self.ran_at).unwrap_or_default();
+        self.ran_at = now;
+        if paused < STALE_AFTER || self.endpoint.is_none() {
+            return;
+        }
+        self.bind_endpoint();
+    }
+
+    /// Opens a new endpoint when the one there is has long reached none of the servers. They may
+    /// all be down, but an endpoint can also get stuck for good, and only a new one tells.
+    fn replace_wedged_endpoint(&mut self) {
+        let reaches =
+            self.servers.iter().any(|server| matches!(server.status.state, State::Connected | State::Refused));
+        if reaches || self.servers.is_empty() || self.endpoint.is_none() {
+            self.reached_at = Instant::now();
+            return;
+        }
+        if self.reached_at.elapsed() < WEDGED_AFTER {
+            return;
+        }
+        self.reached_at = Instant::now();
+        self.bind_endpoint();
     }
 
     fn bind_endpoint(&self) {
@@ -576,7 +610,12 @@ impl Core {
         }
         match result {
             Ok(endpoint) => {
-                self.endpoint = Some(endpoint);
+                for link in self.servers.iter().filter_map(|server| server.link.as_ref()) {
+                    link.redial_on(endpoint.clone());
+                }
+                if let Some(stale) = self.endpoint.replace(endpoint) {
+                    tokio::spawn(async move { stale.close().await });
+                }
                 self.connect_servers();
             }
             Err(error) => tracing::error!("the network endpoint couldn't be opened: {error}"),
@@ -1135,13 +1174,14 @@ impl Core {
                 self.check_account();
                 self.reply(id, Ok(json!({})));
             }
-            Command::Foreground { away_secs } => {
-                self.network_changed(Duration::from_secs(away_secs) >= STALE_AFTER);
+            Command::Foreground => {
+                self.replace_stale_endpoint();
+                self.network_changed();
                 self.check_account();
                 self.reply(id, Ok(json!({})));
             }
             Command::NetworkChanged => {
-                self.network_changed(false);
+                self.network_changed();
                 self.reply(id, Ok(json!({})));
             }
             Command::WatchServers { on } => {
