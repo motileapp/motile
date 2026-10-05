@@ -64,7 +64,11 @@ What the programs agree on.
 One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
 `pnpm dlx shadcn@latest add <name>` inside the app.
 
-- `apps/marketing` ships no JavaScript. `public/install.sh` is the installer.
+- Both take their colours from `packages/theme/theme.css`, the Mac app's `Theme.swift` in CSS.
+  Dark is the default; the theme switch keeps the choice in a cookie on motile.app, which both
+  read.
+- `apps/marketing` ships no JavaScript but the theme switch and the demo: `src/components/demo`
+  is the Mac app's window in React, with made-up threads. `public/install.sh` is the installer.
   `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
 - `apps/web`: `src/server/auth.ts` holds the session (the browser only gets an HttpOnly
   cookie), `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/`

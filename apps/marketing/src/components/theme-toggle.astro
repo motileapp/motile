@@ -1,0 +1,22 @@
+---
+import { MoonIcon, SunIcon } from "lucide-react"
+import { buttonVariants } from "@/components/ui/button"
+---
+
+<button
+  type="button"
+  class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+  aria-label="Switch between dark and light"
+  data-theme-toggle
+>
+  <SunIcon className="hidden dark:block" />
+  <MoonIcon className="dark:hidden" />
+</button>
+
+<script>
+  import { toggleTheme } from "@/lib/theme"
+
+  document
+    .querySelector("[data-theme-toggle]")
+    ?.addEventListener("click", toggleTheme)
+</script>

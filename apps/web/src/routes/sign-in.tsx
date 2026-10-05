@@ -2,6 +2,7 @@ import { useState } from "react"
 import { createFileRoute, redirect } from "@tanstack/react-router"
 import { devSignIn, getAccount, getDevLogin } from "@/lib/account"
 import { Logo } from "@/components/logo"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -21,16 +22,19 @@ function SignIn() {
 
   return (
     <main className="mx-auto flex min-h-svh w-full max-w-sm flex-col justify-center gap-8 px-6 py-12">
-      <a href="https://motile.app" className="self-start">
-        <Logo />
-      </a>
+      <div className="flex items-center justify-between">
+        <a href="https://motile.app">
+          <Logo />
+        </a>
+        <ThemeToggle />
+      </div>
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-medium tracking-tight">
           Sign in to Motile
         </h1>
         <p className="text-muted-foreground">
-          See the servers and clients on your account, add a server, and remove what
-          you no longer use.
+          See the servers and clients on your account, add a server, and remove
+          what you no longer use.
         </p>
       </div>
       <div className="flex flex-col gap-3">
