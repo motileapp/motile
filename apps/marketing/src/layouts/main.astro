@@ -14,7 +14,7 @@ interface Props {
 
 const {
   title,
-  description = "Run Claude Code and Codex on your own machines, and steer them from a native client.",
+  description = "Run Claude Code and Codex on your own servers, and steer them from a native client.",
   image,
 } = Astro.props
 const fullTitle = title ? `${title} · Motile` : `Motile · ${TAGLINE}`
@@ -45,7 +45,12 @@ const fullTitle = title ? `${title} · Motile` : `Motile · ${TAGLINE}`
         Motile
       </a>
       <nav class="flex items-center gap-1 text-muted-foreground">
-        <LinkButton href={GITHUB_URL} variant="ghost">
+        <LinkButton
+          target="_blank"
+          rel="noreferrer"
+          href={GITHUB_URL}
+          variant="ghost"
+        >
           GitHub
         </LinkButton>
         <LinkButton href={WEB_APP_URL} variant="ghost">
@@ -59,13 +64,31 @@ const fullTitle = title ? `${title} · Motile` : `Motile · ${TAGLINE}`
     </div>
     <footer class="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-1 border-t px-6 py-4 text-muted-foreground">
       <span class="mr-auto text-sm">Motile</span>
-      <LinkButton href="/privacy/" variant="ghost" size="sm">
+      <LinkButton
+        target="_blank"
+        rel="noreferrer"
+        href="/privacy/"
+        variant="ghost"
+        size="sm"
+      >
         Privacy
       </LinkButton>
-      <LinkButton href="/terms/" variant="ghost" size="sm">
+      <LinkButton
+        target="_blank"
+        rel="noreferrer"
+        href="/terms/"
+        variant="ghost"
+        size="sm"
+      >
         Terms
       </LinkButton>
-      <LinkButton href={GITHUB_URL} variant="ghost" size="sm">
+      <LinkButton
+        target="_blank"
+        rel="noreferrer"
+        href={GITHUB_URL}
+        variant="ghost"
+        size="sm"
+      >
         GitHub
       </LinkButton>
     </footer>

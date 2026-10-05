@@ -54,8 +54,8 @@ const web: Project = { name: "web", color: "#0f9f6e" }
 const mobile: Project = { name: "mobile", color: "#e8590c" }
 
 export const servers: Server[] = [
-  { name: "studio", path: "direct", ms: 3 },
-  { name: "build-box", path: "relay", ms: 41 },
+  { name: "studio", path: "direct", ms: 41 },
+  { name: "build-box", path: "direct", ms: 63 },
 ]
 
 const [studio, buildBox] = servers

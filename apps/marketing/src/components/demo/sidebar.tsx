@@ -185,7 +185,7 @@ function ThreadStatus({
     case "working":
       return (
         <span className={cn(label, "text-working")}>
-          <CircleDashedIcon className="size-[11px] animate-spin [animation-duration:3s]" />
+          <CircleDashedIcon className="size-[11px]" />
           {elapsed(thread.status.since)}
         </span>
       )

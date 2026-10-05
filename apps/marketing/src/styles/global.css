@@ -43,3 +43,27 @@
     background-position: -100% 0;
   }
 }
+
+.demo-glow {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .demo-glow {
+    animation: demo-glow 10s ease-in-out infinite;
+  }
+}
+
+@keyframes demo-glow {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.99);
+    background-position: 0% 50%;
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.01);
+    background-position: 100% 50%;
+  }
+}

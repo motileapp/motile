@@ -9,9 +9,16 @@ import {
   SquarePenIcon,
   type LucideIcon,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from "react"
 import { Composer } from "./composer"
 import { DiffPanel } from "./diff-panel"
+import { Glow } from "./glow"
 import { ProjectIcon, TrafficLights } from "./icons"
 import { Sidebar } from "./sidebar"
 import { threads as startingThreads, type Item, type Thread } from "./threads"
@@ -27,6 +34,8 @@ export function Demo() {
   const [panel, setPanel] = useState<Panel>("closed")
   const [sidebarShown, setSidebarShown] = useState(true)
   const seconds = useSeconds()
+  const composer = useRef<HTMLDivElement>(null)
+  const composerRoom = useHeight(composer, 150)
 
   const thread = threads.find((one) => one.id === selectedId) ?? threads[0]
   const elapsed = (since: number) => formatElapsed(since + seconds)
@@ -66,9 +75,10 @@ export function Demo() {
   const togglePanel = () => setPanel(panel === "closed" ? "open" : "closed")
 
   return (
-    <div className="@container w-full">
+    <div className="@container relative isolate w-full">
+      <Glow />
       <div className="[--demo-scale:min(1,tan(atan2(100cqw,1200px)))]">
-        <div className="relative flex h-[760px] w-[1200px] [zoom:var(--demo-scale)] overflow-hidden rounded-[16px] bg-background font-system text-[13px] text-foreground shadow-2xl ring-1 shadow-black/25 ring-black/10 select-none dark:shadow-black/70 dark:ring-white/12">
+        <div className="relative flex h-[760px] w-[1200px] [zoom:var(--demo-scale)] overflow-hidden rounded-[16px] bg-background font-system text-[13px] text-foreground ring-1 ring-black/10 select-none dark:ring-white/12">
           <div className="absolute top-5 left-5 z-20">
             <TrafficLights />
           </div>
@@ -137,33 +147,44 @@ export function Demo() {
               </div>
               {thread.diff && <GitButton />}
             </div>
-            <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto">
-              <div className="mb-auto">
-                <Transcript
+            <div className="relative min-h-0 flex-1">
+              <div
+                className="absolute inset-0 flex flex-col-reverse overflow-y-auto"
+                style={fadeUnder(composerRoom)}
+              >
+                <div
+                  className="mb-auto"
+                  style={{ paddingBottom: composerRoom }}
+                >
+                  <Transcript
+                    key={thread.id}
+                    thread={thread}
+                    elapsed={
+                      thread.status.kind === "working"
+                        ? elapsed(thread.status.since)
+                        : ""
+                    }
+                    onOpenDiff={() => setPanel("open")}
+                  />
+                </div>
+              </div>
+              <div
+                ref={composer}
+                className="pointer-events-none absolute inset-x-0 bottom-0 px-6 pt-6 pb-4 *:pointer-events-auto"
+              >
+                <Composer
                   key={thread.id}
                   thread={thread}
-                  elapsed={
-                    thread.status.kind === "working"
-                      ? elapsed(thread.status.since)
-                      : ""
+                  elapsed={elapsed}
+                  onSend={send}
+                  onAnswer={answer}
+                  onStop={() =>
+                    update(thread.id, () => ({
+                      status: { kind: "idle", ago: "now" },
+                    }))
                   }
-                  onOpenDiff={() => setPanel("open")}
                 />
               </div>
-            </div>
-            <div className="px-6 pt-1 pb-4">
-              <Composer
-                key={thread.id}
-                thread={thread}
-                elapsed={elapsed}
-                onSend={send}
-                onAnswer={answer}
-                onStop={() =>
-                  update(thread.id, () => ({
-                    status: { kind: "idle", ago: "now" },
-                  }))
-                }
-              />
             </div>
           </main>
 
@@ -231,6 +252,25 @@ function GitButton() {
       </span>
     </span>
   )
+}
+
+/** The transcript fades out from the room above the composer down to the composer's middle, as in the Mac app. */
+function fadeUnder(room: number): CSSProperties {
+  const middle = (room - 24 + 16) / 2
+  const mask = `linear-gradient(to bottom, #000 calc(100% - ${room}px), transparent calc(100% - ${middle}px))`
+  return { maskImage: mask }
+}
+
+function useHeight(ref: RefObject<HTMLElement | null>, initial: number) {
+  const [height, setHeight] = useState(initial)
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const observer = new ResizeObserver(() => setHeight(element.offsetHeight))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return height
 }
 
 /** Seconds since the page opened, so the timers of working threads count up. */
