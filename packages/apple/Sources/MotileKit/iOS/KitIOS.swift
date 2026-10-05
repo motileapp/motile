@@ -324,10 +324,11 @@ final class IconButton: UIButton {
     static let side = metrics.height
     private static let touchSide = Platform.minimumPress
 
-    private let symbolSize = IconButton.metrics.symbol
+    private var symbolSize = IconButton.metrics.symbol
 
-    convenience init(symbol: Symbol, title: String = "", tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat? = nil, tooltip: String, action: @escaping () -> Void) {
         self.init(type: .custom)
+        self.symbolSize = symbolSize ?? Self.metrics.symbol
         layer.cornerRadius = Self.metrics.radius
         layer.cornerCurve = .continuous
         tintColor = Theme.secondary

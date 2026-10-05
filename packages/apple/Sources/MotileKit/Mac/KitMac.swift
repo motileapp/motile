@@ -306,20 +306,21 @@ final class IconButton: NSButton {
     static let metrics = MotileKit.ControlSize.regular
     static let side = metrics.height
 
-    private let symbolSize = IconButton.metrics.symbol
+    private var symbolSize = IconButton.metrics.symbol
     private var action_: (() -> Void)?
     private var tracking: NSTrackingArea?
     private var hovering = false { didSet { light() } }
     private var pressing = false { didSet { light() } }
 
-    convenience init(symbol: Symbol, title: String = "", tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat? = nil, tooltip: String, action: @escaping () -> Void) {
         self.init(frame: .zero)
+        self.symbolSize = symbolSize ?? Self.metrics.symbol
         isBordered = false
         bezelStyle = .inline
         wantsLayer = true
         layer?.cornerRadius = Self.metrics.radius
         layer?.cornerCurve = .continuous
-        image = .symbol(symbol, size: symbolSize)
+        image = .symbol(symbol, size: self.symbolSize)
         imagePosition = title.isEmpty ? .imageOnly : .imageLeading
         self.title = title
         font = Theme.smallFont

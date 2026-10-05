@@ -83,10 +83,11 @@ struct ControlLabel: View {
     var chevron = false
     var pending = false
     var fills = false
-    var smallSymbol = false
+    /// The symbol's size where it isn't the one that goes with `size`.
+    var symbolSize: CGFloat?
 
     private var wordless: Bool { title == nil && !chevron }
-    private var symbolSize: CGFloat { smallSymbol ? size.smallSymbol : size.symbol }
+    private var markSize: CGFloat { symbolSize ?? size.symbol }
 
     var body: some View {
         HStack(spacing: size.gap) {
@@ -108,16 +109,16 @@ struct ControlLabel: View {
         .frame(minWidth: size.height)
         .frame(height: size.height)
         .overlay {
-            if pending, icon == nil { Spinner(size: symbolSize) }
+            if pending, icon == nil { Spinner(size: markSize) }
         }
     }
 
     @ViewBuilder private func mark(_ icon: ControlIcon) -> some View {
         if pending {
-            Spinner(size: symbolSize)
+            Spinner(size: markSize)
         } else {
             switch icon {
-            case .symbol(let symbol): Image(symbol, size: symbolSize)
+            case .symbol(let symbol): Image(symbol, size: markSize)
             case .picture(let picture): picture.frame(width: size.symbolSide, height: size.symbolSide)
             }
         }
@@ -204,15 +205,15 @@ struct ActionButton: View {
     private var chevron = false
     private let pending: Bool
     private let fills: Bool
-    private let smallSymbol: Bool
+    private let symbolSize: CGFloat?
     private let margin: EdgeInsets
     private let action: () -> Void
 
     init(
         _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .secondary,
-        size: ControlSize = .regular, pending: Bool = false, selected: Bool = false, round: Bool = false, fills: Bool = false,
-        opens: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil, margin: EdgeInsets = EdgeInsets(),
-        action: @escaping () -> Void
+        size: ControlSize = .regular, symbolSize: CGFloat? = nil, pending: Bool = false, selected: Bool = false, round: Bool = false,
+        fills: Bool = false, opens: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
+        margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
     ) {
         chevron = opens
         self.title = title
@@ -221,15 +222,15 @@ struct ActionButton: View {
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
         self.fills = fills
-        smallSymbol = false
+        self.symbolSize = symbolSize
         self.margin = margin
         self.action = action
     }
 
-    /// A button that is only a symbol says what it does in `help`. `smallSymbol` draws the
-    /// symbol smaller in a button of the same size.
+    /// A button that is only a symbol says what it does in `help`. `symbolSize` draws the
+    /// symbol in another size in a button of the same size.
     init(
-        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, smallSymbol: Bool = false,
+        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: CGFloat? = nil,
         pending: Bool = false, selected: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
         margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
     ) {
@@ -239,7 +240,7 @@ struct ActionButton: View {
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
         fills = false
-        self.smallSymbol = smallSymbol
+        self.symbolSize = symbolSize
         self.margin = margin
         self.action = action
     }
@@ -259,7 +260,7 @@ struct ActionButton: View {
     var body: some View {
         let reach = ControlReach(size: look.size, wordless: words == nil && !chevron, margin: margin)
         Button(action: action) {
-            ControlLabel(title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, fills: fills, smallSymbol: smallSymbol)
+            ControlLabel(title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, fills: fills, symbolSize: symbolSize)
                 .padding(reach.around)
         }
         .buttonStyle(ControlButtonStyle(look: look, pending: pending, margin: reach.around))
@@ -278,6 +279,7 @@ struct ActionMenu<Content: View>: View {
     private let look: ControlLook
     private let chevron: Bool
     private let pending: Bool
+    private let symbolSize: CGFloat?
     private let margin: EdgeInsets
     private let content: Content
     @State private var hovering = false
@@ -286,8 +288,8 @@ struct ActionMenu<Content: View>: View {
     /// A menu with words shows what is chosen, and a chevron after it.
     init(
         _ title: String?, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .ghost,
-        size: ControlSize = .regular, pending: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [],
-        margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
+        size: ControlSize = .regular, symbolSize: CGFloat? = nil, pending: Bool = false, round: Bool = false,
+        joined: HorizontalEdge.Set = [], margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture)
@@ -295,13 +297,15 @@ struct ActionMenu<Content: View>: View {
         look = ControlLook(variant: variant, size: size, round: round, joined: joined)
         chevron = true
         self.pending = pending
+        self.symbolSize = symbolSize
         self.margin = margin
         self.content = content()
     }
 
     init(
-        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, pending: Bool = false,
-        round: Bool = false, joined: HorizontalEdge.Set = [], margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
+        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: CGFloat? = nil,
+        pending: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], margin: EdgeInsets = EdgeInsets(),
+        @ViewBuilder content: () -> Content
     ) {
         title = nil
         self.icon = .symbol(icon)
@@ -309,6 +313,7 @@ struct ActionMenu<Content: View>: View {
         look = ControlLook(variant: variant, size: size, round: round, joined: joined)
         chevron = false
         self.pending = pending
+        self.symbolSize = symbolSize
         self.margin = margin
         self.content = content()
     }
@@ -320,7 +325,7 @@ struct ActionMenu<Content: View>: View {
         return Menu {
             content
         } label: {
-            ControlLabel(title: title, icon: icon, size: look.size, chevron: chevron, pending: pending)
+            ControlLabel(title: title, icon: icon, size: look.size, chevron: chevron, pending: pending, symbolSize: symbolSize)
                 .foregroundStyle(look.foreground)
                 .padding(reach.around)
                 .contentShape(Rectangle())
