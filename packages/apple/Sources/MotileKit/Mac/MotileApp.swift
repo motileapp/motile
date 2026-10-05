@@ -49,6 +49,9 @@ struct MotileApp: App {
                 Button("Show Agents") { store.sidePanel.open(.agents) }
                     .keyboardShortcut("a", modifiers: [.command, .shift])
                     .disabled(store.panelUnavailable != nil)
+                Button("Show Pull Request") { store.sidePanel.open(.pullRequest) }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .disabled(store.panelUnavailable != nil || store.pullRequestUnavailable != nil)
                 PanelTabCommands(store: store)
                 Divider()
             }

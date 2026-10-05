@@ -147,6 +147,13 @@ impl Server {
                 hub.git_status(&project_id, thread_id.as_deref(), fetch).await
             }
             Request::Diff { project_id, thread_id, scope } => hub.diff(&project_id, thread_id.as_deref(), scope).await,
+            Request::PullRequest { project_id, thread_id, number } => {
+                hub.pull_request(&project_id, thread_id.as_deref(), number).await
+            }
+            Request::PullRequestAction { project_id, thread_id, number, action, method, text } => {
+                hub.pull_request_action(&project_id, thread_id.as_deref(), number, action, method, text.as_deref())
+                    .await
+            }
             Request::ListFiles { project_id, thread_id, path } => {
                 hub.list_files(&project_id, thread_id.as_deref(), &path).await
             }

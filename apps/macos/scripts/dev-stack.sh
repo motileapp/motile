@@ -1,7 +1,8 @@
 # The account the dev apps are signed in to, which only exists on this Mac: PostgreSQL, an auth
-# server with the dev login, and a server whose agent is scripts/fake-agent, with a project and
-# a few threads. It lives in apps/macos/build/dev and is left running, so the Mac's and the iOS
-# dev app in one tree share it. Sourced by their dev-app.sh; `start_stack` brings it up.
+# server with the dev login, and a server whose agent is scripts/fake-agent and whose GitHub is
+# scripts/fake-gh, with a project and a few threads. It lives in apps/macos/build/dev and is left
+# running, so the Mac's and the iOS dev app in one tree share it. Sourced by their dev-app.sh;
+# `start_stack` brings it up.
 
 STACK_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(cd "$STACK_HOME/../.." && pwd)"
@@ -106,7 +107,7 @@ start_stack() {
         echo "▸ Starting the server…"
         stop server
         MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
-            FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6 \
+            MOTILE_GH_PATH="$ROOT/scripts/fake-gh" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6 \
             nohup "$BIN/motile" run --local --port "$SERVER_PORT" > "$DEV/server.log" 2>&1 &
         started server $! "$BIN/motile"
     fi
@@ -122,6 +123,11 @@ SVG
         git -C "$PROJECT" -c user.name=Dev -c user.email=demo@motile.app add -A
         git -C "$PROJECT" -c user.name=Dev -c user.email=demo@motile.app commit -q -m "Start"
         git -C "$PROJECT" branch release
+        # A remote of its own, so branches can be pushed and opened as pull requests.
+        git init -q --bare -b main "$DEV/origin.git"
+        git -C "$PROJECT" remote add origin "$DEV/origin.git"
+        git -C "$PROJECT" push -q -u origin main release
+        git -C "$PROJECT" remote set-head origin main
         rm -rf "$DEV/app.new"
         (cd "$ROOT" && cargo run --release -q -p motile-core --example seed -- "$DEV/app.new" "$AUTH_URL" "$PROJECT")
         mv "$DEV/app.new" "$DEV/app"

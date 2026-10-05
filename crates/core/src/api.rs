@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
 use motile_protocol::wire::{
-    Activity, DiffScope, GitAction, GitStage, NewThread, Project, Request, ServerInfo, Thread,
+    Activity, DiffScope, GitAction, GitStage, MergeMethod, NewThread, Project, PullRequestAction, Request, ServerInfo,
+    Thread,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -158,6 +159,32 @@ pub enum Command {
         scope: DiffScope,
         #[serde(default)]
         path: Option<String>,
+    },
+    /// The pull request with that number, read in the folder the thread works in or the
+    /// project's, as the tab shows it: a `pull_request::View`, merging with `method` when the
+    /// repository allows it.
+    PullRequest {
+        server_id: String,
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        number: u64,
+        #[serde(default)]
+        method: Option<MergeMethod>,
+    },
+    /// Does `action` to the pull request. Answers with the `title` of what it did, the `url` of a
+    /// pull request it opened, and the pull request's `view` afterwards.
+    PullRequestAction {
+        server_id: String,
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        number: u64,
+        action: PullRequestAction,
+        #[serde(default)]
+        method: Option<MergeMethod>,
+        #[serde(default)]
+        text: Option<String>,
     },
     /// The file at `path` in that folder. Answers with its `kind` and `size`, and for a text
     /// with its `lines` and `truncated` when they are only its start, for an image with the

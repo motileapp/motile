@@ -18,6 +18,8 @@ pub struct Environment {
     executables: HashMap<Agent, PathBuf>,
     versions: HashMap<Agent, String>,
     models: Vec<ModelInfo>,
+    /// A stand-in for GitHub's `gh` from `MOTILE_GH_PATH`, for the dev apps.
+    gh: Option<PathBuf>,
 }
 
 impl Environment {
@@ -32,14 +34,23 @@ impl Environment {
             versions.insert(agent, version);
         }
         let models = installed_models(&variables, &executables);
-        Self { variables, executables, versions, models }
+        let gh = std::env::var_os("MOTILE_GH_PATH").map(PathBuf::from);
+        Self { variables, executables, versions, models, gh }
     }
 
     /// Skips the lookup, for tests that stand in for the agents.
     pub fn fixed(variables: HashMap<String, String>, executables: HashMap<Agent, PathBuf>) -> Self {
         let versions = executables.keys().map(|agent| (*agent, "test".to_string())).collect();
         let models = installed_models(&variables, &executables);
-        Self { variables, executables, versions, models }
+        Self { variables, executables, versions, models, gh: None }
+    }
+
+    /// The program to run for `name`: the stand-in for `gh` when there is one.
+    pub fn program(&self, name: &str) -> PathBuf {
+        match &self.gh {
+            Some(gh) if name == "gh" => gh.clone(),
+            _ => PathBuf::from(name),
+        }
     }
 
     pub fn executable(&self, agent: Agent) -> Option<&Path> {

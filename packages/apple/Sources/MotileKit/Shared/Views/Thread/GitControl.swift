@@ -242,7 +242,7 @@ struct GitNoticeView: View {
                 if url != nil || notice.nextLabel != nil {
                     HStack(spacing: 8) {
                         if let url {
-                            action("View PR", prominent: notice.nextLabel == nil) { Platform.open(url) }
+                            action("View PR", prominent: notice.nextLabel == nil) { store.showPullRequest(url) }
                         }
                         if let next = notice.nextLabel {
                             action(next, prominent: true) { store.runNextGit() }

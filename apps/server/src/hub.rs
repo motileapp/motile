@@ -19,8 +19,8 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
     Activity, Agent, BranchInstructions, ChangedFile, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
-    Item, ItemKind, Media, Message, NewThread, Project, PullRequest, Queued, ServerInfo, Subagent, Thread,
-    ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    Item, ItemKind, Media, MergeMethod, Message, NewThread, Project, PullRequest, PullRequestAction, Queued,
+    ServerInfo, Subagent, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -33,7 +33,7 @@ use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claud
 use crate::generate::Writer;
 use crate::media::MediaStore;
 use crate::store::{Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
-use crate::{drafts, files, git, github, icons, pacing, title};
+use crate::{drafts, files, git, github, icons, pacing, pull_requests, title};
 
 const UPDATES_BUFFER: usize = 4096;
 const ROOT_BYPASS_REFUSAL: &str = "cannot be used with root/sudo privileges";
@@ -880,6 +880,10 @@ impl Hub {
         let folder = self.git_folder(project_id, thread_id).await?;
         let environment = &self.environment;
         let (from, to) = match scope {
+            DiffScope::PullRequest { number } => {
+                let (patch, truncated) = pull_requests::diff(&folder, environment, number).await?;
+                return Ok(Message::Diff { patch, truncated });
+            }
             DiffScope::Turn { item_id } => {
                 let thread_id = thread_id.context("A turn's changes are asked for with its thread.")?;
                 let changes = match self.store.item(thread_id, &item_id)?.map(|item| item.kind) {
@@ -906,6 +910,38 @@ impl Hub {
         };
         let (patch, truncated) = git::patch_between(&folder, environment, &from, &to).await?;
         Ok(Message::Diff { patch, truncated })
+    }
+
+    /// What GitHub says of the pull request, read in the folder the thread works in or the
+    /// project's. The threads in that folder that opened it are told what became of it.
+    pub async fn pull_request(
+        &self,
+        project_id: &str,
+        thread_id: Option<&str>,
+        number: u64,
+    ) -> anyhow::Result<Message> {
+        let folder = self.git_folder(project_id, thread_id).await?;
+        let pull_request = pull_requests::detail(&folder, &self.environment, number).await?;
+        self.keep_pull_request_of(&folder, &pull_request.pull_request).await;
+        Ok(Message::PullRequest { pull_request: Box::new(pull_request) })
+    }
+
+    /// Does something to the pull request, then reads it and the folder's git state again.
+    pub async fn pull_request_action(
+        &self,
+        project_id: &str,
+        thread_id: Option<&str>,
+        number: u64,
+        action: PullRequestAction,
+        method: Option<MergeMethod>,
+        text: Option<&str>,
+    ) -> anyhow::Result<Message> {
+        let folder = self.git_folder(project_id, thread_id).await?;
+        let (title, url) = pull_requests::act(&folder, &self.environment, number, action, method, text).await?;
+        let pull_request = pull_requests::detail(&folder, &self.environment, number).await?;
+        self.keep_pull_request_of(&folder, &pull_request.pull_request).await;
+        self.read_git(&folder, true).await;
+        Ok(Message::PullRequestDone { title, url, pull_request: Box::new(pull_request) })
     }
 
     /// What is in a folder inside the one the thread works in, or inside the project's.

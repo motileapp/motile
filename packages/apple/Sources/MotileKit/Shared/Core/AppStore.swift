@@ -548,7 +548,32 @@ final class AppStore {
         return PanelTarget(
             key: draftKey, serverID: project.serverID, projectID: project.id, threadID: selectedThread?.id,
             name: URL(fileURLWithPath: project.worktree?.path ?? project.path).lastPathComponent,
-            repository: project.branch != nil, worktree: project.worktree != nil)
+            repository: project.branch != nil, worktree: project.worktree != nil,
+            pullRequest: (selectedThread?.pullRequest ?? project.git?.pullRequest)?.number)
+    }
+
+    /// Why the pull request tab has nothing to show here, when it hasn't.
+    var pullRequestUnavailable: String? {
+        guard let target = panelTarget, let server = server(target.serverID) else { return nil }
+        guard server.protocolVersion >= 8 else { return "Update \(server.name) to see pull requests here." }
+        guard target.repository else { return "This folder isn't a git repository." }
+        return target.pullRequest == nil ? "This branch has no pull request yet." : nil
+    }
+
+    /// Opens the pull request's tab, or the pull request on GitHub where the tab can't show it.
+    func showPullRequest(_ url: URL) {
+        guard panelUnavailable == nil, pullRequestUnavailable == nil else { return Platform.open(url) }
+        sidePanel.open(.pullRequest)
+    }
+
+    /// Puts a prompt that a pull request's tab wrote in the composer, under what is there, for
+    /// the user to read and send.
+    func handOff(_ prompt: String) {
+        let written = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = written.isEmpty ? prompt : "\(written)\n\n\(prompt)"
+        if sidePanel.isMaximized { sidePanel.toggleMaximized() }
+        if Platform.panelCoversThread { sidePanel.isOpen = false }
+        composerFocus += 1
     }
 
     /// Why the side panel has nothing to show here, when it hasn't.
@@ -1002,7 +1027,7 @@ final class AppStore {
     func runQuickGit(in project: Project) {
         guard let quick = project.gitControl?.quick, gitStages[project.checkoutID] == nil else { return }
         if let url = quick.url.flatMap({ URL(string: $0) }) {
-            Platform.open(url)
+            showPullRequest(url)
             return
         }
         guard let action = quick.action else {

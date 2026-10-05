@@ -44,6 +44,15 @@ enum Platform {
         #endif
     }
 
+    /// The side panel is a screen of its own over the thread, as on a phone.
+    static var panelCoversThread: Bool {
+        #if os(macOS)
+        false
+        #else
+        UIDevice.current.userInterfaceIdiom == .phone
+        #endif
+    }
+
     static func open(_ url: URL) {
         #if os(macOS)
         NSWorkspace.shared.open(url)

@@ -8,9 +8,10 @@ use std::time::Duration;
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, Approval, Change, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
-    Item, ItemKind, Message, NewThread, NewWorktree, Project, Queued, Request, Thread, ThreadChange, ToolCall,
-    ToolStatus, TurnChanges, TurnSummary,
+    Access as AgentAccess, Agent, Approval, Change, CheckStatus, DiffScope, EventKind, FileKind, GitAction,
+    GitHubState, GitStage, GitStatus, Item, ItemKind, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project,
+    PullRequestAction, PullRequestDetail, Queued, Request, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges,
+    TurnSummary,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -1403,18 +1404,112 @@ async fn a_projects_branches_are_listed_switched_and_created() {
     assert!(matches!(connection.request(&request).await.unwrap(), Message::Error { .. }));
 }
 
-const FAKE_GH: &str = r#"#!/bin/sh
-opened="$(dirname "$0")/pull-request"
-case "$1 $2" in
-"pr view")
-    [ -f "$opened" ] || { echo "no pull requests found for this branch" >&2; exit 1; }
-    cat "$opened" ;;
-"pr create")
-    cat > "$opened.body"
-    printf '{"number": 7, "title": "%s", "url": "https://github.com/acme/app/pull/7", "state": "OPEN", "isDraft": true}' "$4" > "$opened"
-    echo "https://github.com/acme/app/pull/7" ;;
-esac
-"#;
+async fn pull_request_action(
+    connection: &Connection,
+    project_id: &str,
+    action: PullRequestAction,
+    method: Option<MergeMethod>,
+    text: Option<&str>,
+) -> Result<(String, Option<String>, PullRequestDetail), String> {
+    let request = Request::PullRequestAction {
+        project_id: project_id.to_string(),
+        thread_id: None,
+        number: 7,
+        action,
+        method,
+        text: text.map(str::to_string),
+    };
+    match connection.request(&request).await.unwrap() {
+        Message::PullRequestDone { title, url, pull_request } => Ok((title, url, *pull_request)),
+        Message::Error { message } => Err(message),
+        other => panic!("expected what the action did: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_pull_request_is_read_reviewed_and_merged_from_its_folder() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.2").await;
+    let connection = harness.connect().await;
+    let root = harness.dir.path();
+    let bin = root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::copy(repo_file("scripts/fake-gh"), bin.join("gh")).unwrap();
+
+    git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
+    git(root, &["clone", "-q", "origin.git", "repository"]);
+    let repository = root.join("repository");
+    std::fs::write(repository.join("greet.py"), "print('hello')\n").unwrap();
+    git(&repository, &["add", "."]);
+    git(&repository, &["commit", "-q", "-m", "Add the greeting"]);
+    git(&repository, &["push", "-q", "-u", "origin", "main"]);
+    git(&repository, &["switch", "-q", "-c", "greet"]);
+    std::fs::write(repository.join("greet.py"), "print('hello you')\n").unwrap();
+    git(&repository, &["commit", "-q", "-am", "Greet you"]);
+
+    let path = repository.to_string_lossy().into_owned();
+    assert_eq!(connection.request(&Request::AddProject { path }).await.unwrap(), Message::Ok);
+    let project = projects_now(&connection).await.remove(0);
+    let (_, end) = git_run(&connection, &project.id, run(GitAction::CreatePr)).await;
+    assert_eq!(done(end).0, "Created PR #7");
+
+    // The tab reads where it stands, and what it changes.
+    let request = Request::PullRequest { project_id: project.id.clone(), thread_id: None, number: 7 };
+    let Message::PullRequest { pull_request } = connection.request(&request).await.unwrap() else {
+        panic!("expected the pull request")
+    };
+    assert_eq!((pull_request.base.as_str(), pull_request.head.as_str()), ("main", "greet"));
+    assert_eq!(
+        (pull_request.commits, pull_request.changed_files, pull_request.mergeable),
+        (1, 1, Mergeable::Mergeable)
+    );
+    assert_eq!(pull_request.merge_methods, [MergeMethod::Squash, MergeMethod::Merge, MergeMethod::Rebase]);
+    assert!(pull_request.checks.iter().all(|check| check.status == CheckStatus::Success));
+    assert!(matches!(&pull_request.activity[0].kind, EventKind::Commit { headline, .. } if headline == "Greet you"));
+    let diff =
+        Request::Diff { project_id: project.id.clone(), thread_id: None, scope: DiffScope::PullRequest { number: 7 } };
+    let Message::Diff { patch, truncated: false } = connection.request(&diff).await.unwrap() else {
+        panic!("expected the pull request's patch")
+    };
+    assert!(patch.contains("+print('hello you')"), "{patch}");
+
+    // A comment joins its activity.
+    let (title, _, commented) =
+        pull_request_action(&connection, &project.id, PullRequestAction::Comment, None, Some("Looks good"))
+            .await
+            .unwrap();
+    assert_eq!(title, "Commented on PR #7");
+    assert!(
+        commented
+            .activity
+            .iter()
+            .any(|event| matches!(&event.kind, EventKind::Comment { body, .. } if body == "Looks good"))
+    );
+
+    // GitHub's refusal is said as it is, and nothing changes.
+    change_pull_request(&bin, json!({"mergeable": "CONFLICTING"}));
+    let refused =
+        pull_request_action(&connection, &project.id, PullRequestAction::Merge, Some(MergeMethod::Squash), None).await;
+    assert!(refused.unwrap_err().contains("is not mergeable"));
+    change_pull_request(&bin, json!({"mergeable": "MERGEABLE"}));
+
+    // Merged, it is merged for the git button too, and can be reverted.
+    let (title, _, merged) =
+        pull_request_action(&connection, &project.id, PullRequestAction::Merge, Some(MergeMethod::Squash), None)
+            .await
+            .unwrap();
+    assert_eq!(title, "Squashed and merged PR #7");
+    assert!(merged.pull_request.merged && merged.merged_at.is_some());
+    let (status, _) = git_status(&connection, &project.id, false).await;
+    assert_eq!(status.pull_request.map(|found| found.merged), Some(true));
+    let (title, url, _) =
+        pull_request_action(&connection, &project.id, PullRequestAction::Revert, None, None).await.unwrap();
+    assert_eq!(
+        (title.as_str(), url.as_deref()),
+        ("Opened PR #8 to revert PR #7", Some("https://github.com/acme/app/pull/8"))
+    );
+    let refused = pull_request_action(&connection, &project.id, PullRequestAction::Close, None, None).await;
+    assert!(refused.unwrap_err().contains("is not open"));
+}
 
 async fn git_status(connection: &Connection, project_id: &str, fetch: bool) -> (GitStatus, Vec<String>) {
     let request = Request::GitStatus { project_id: project_id.to_string(), thread_id: None, fetch };
@@ -1464,14 +1559,12 @@ fn done(end: Message) -> (String, String, Option<GitAction>) {
 
 #[tokio::test]
 async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
-    use std::os::unix::fs::PermissionsExt;
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.2").await;
     let connection = harness.connect().await;
     let root = harness.dir.path();
     let bin = root.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    std::fs::write(bin.join("gh"), FAKE_GH).unwrap();
-    std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::copy(repo_file("scripts/fake-gh"), bin.join("gh")).unwrap();
 
     git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
     git(root, &["clone", "-q", "origin.git", "repository"]);
@@ -1511,8 +1604,9 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     assert_eq!((title.as_str(), description.as_deref()), ("Created PR #7", Some("Greet with an f-string")));
     assert_eq!(url.as_deref(), Some("https://github.com/acme/app/pull/7"));
     git(&root.join("origin.git"), &["rev-parse", "--verify", "-q", "refs/heads/greet-f-string"]);
-    let body = std::fs::read_to_string(bin.join("pull-request.body")).unwrap();
-    assert_eq!(body.trim(), "Greets by name.\n\nGreet with an f-string");
+    let state: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(bin.join("fake-gh.json")).unwrap()).unwrap();
+    assert_eq!(state["pulls"][0]["body"].as_str().unwrap().trim(), "Greets by name.\n\nGreet with an f-string");
 
     let (status, files) = git_status(&connection, &project.id, false).await;
     assert_eq!((status.branch.as_deref(), status.default, status.upstream), (Some("greet-f-string"), false, true));
@@ -1570,10 +1664,7 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
 
     // A merged pull request stays the branch's until the branch has a commit it doesn't.
     let head = git_says(&repository, &["rev-parse", "HEAD"]);
-    let merged = format!(
-        r#"{{"number": 7, "title": "Greet", "url": "https://github.com/acme/app/pull/7", "state": "MERGED", "isDraft": false, "headRefOid": "{head}"}}"#
-    );
-    std::fs::write(bin.join("pull-request"), merged).unwrap();
+    change_pull_request(&bin, json!({"state": "MERGED", "headOid": head}));
     let (status, _) = git_status(&connection, &project.id, true).await;
     assert_eq!(status.pull_request.map(|merged| (merged.number, merged.merged)), Some((7, true)));
     std::fs::write(repository.join("notes.txt"), "now\n").unwrap();
@@ -1582,8 +1673,7 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
 
     // A pull request opened for a thread is that thread's own: it stays with it whatever the
     // folder's branch does, and follows what GitHub says of it, done or not.
-    let open = r#"{"number": 7, "title": "Greet", "url": "https://github.com/acme/app/pull/7", "state": "OPEN", "isDraft": false}"#;
-    std::fs::write(bin.join("pull-request"), open).unwrap();
+    change_pull_request(&bin, json!({"state": "OPEN"}));
     let new_thread =
         NewThread { project_id: project.id.clone(), ..harness.new_thread(&connection, Agent::Claude).await.unwrap() };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by an f-string").await;
@@ -1598,9 +1688,19 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     let done = ThreadChange { done: Some(true), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
     git(&repository, &["checkout", "-q", "main"]);
-    std::fs::write(bin.join("pull-request"), open.replace("OPEN", "CLOSED")).unwrap();
+    change_pull_request(&bin, json!({"state": "CLOSED"}));
     let closed = thread_where(&mut list, |thread| thread.pull_request.as_ref().is_some_and(|found| found.closed)).await;
     assert_eq!(closed.id, thread_id);
+}
+
+/// Changes what `scripts/fake-gh` in `bin` says of the first pull request it opened.
+fn change_pull_request(bin: &Path, change: serde_json::Value) {
+    let file = bin.join("fake-gh.json");
+    let mut state: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    for (key, value) in change.as_object().unwrap() {
+        state["pulls"][0][key] = value.clone();
+    }
+    std::fs::write(file, state.to_string()).unwrap();
 }
 
 fn git_says(folder: &Path, arguments: &[&str]) -> String {
