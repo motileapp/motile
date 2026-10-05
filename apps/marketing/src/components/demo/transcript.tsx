@@ -103,7 +103,7 @@ function Row({
       return <Changes thread={thread} onOpenDiff={onOpenDiff} />
     case "end":
       return (
-        <div className="mt-2 mb-4 flex h-7 items-center gap-2 text-[12px] text-tertiary">
+        <div className="mt-2 mb-4 flex h-7 items-center gap-2 pl-[7px] text-[12px] text-tertiary">
           {item.worked}
           <CopyIcon className="size-3.5" />
         </div>
