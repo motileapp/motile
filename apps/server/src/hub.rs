@@ -228,7 +228,7 @@ impl Hub {
             text_model: std::sync::Mutex::new(store.setting(TEXT_MODEL)),
             branch_instructions: std::sync::Mutex::new(store.setting(BRANCH_INSTRUCTIONS)),
             pull_request_settings: std::sync::Mutex::new(PullRequestSettings {
-                done_on_merge: store.setting(DONE_ON_MERGE).is_none_or(|value| value == "true"),
+                done_on_merge: store.setting(DONE_ON_MERGE).is_some_and(|value| value == "true"),
                 remove_merged_worktrees: store.setting(REMOVE_MERGED_WORKTREES).is_some_and(|value| value == "true"),
             }),
             prices: std::sync::Mutex::new(
@@ -446,6 +446,7 @@ impl Hub {
             turn_ended_at: None,
             pull_request: None,
             watching: false,
+            git_stage: None,
             rev: 0,
         };
         Ok(StoredThread { thread, session_id: None, title_source: TitleSource::Placeholder, next_seq: 0, worktree })
@@ -1367,6 +1368,7 @@ impl Hub {
     pub async fn git_run(&self, project_id: &str, run: GitRun, started: impl Fn(GitStage)) -> anyhow::Result<Message> {
         let path = self.git_folder(project_id, run.thread_id.as_deref()).await?;
         let done = self.git_stages(project_id, &path, &run, started).await;
+        self.set_git_stage(run.thread_id.as_deref(), None).await;
         self.read_git(&path, true).await;
         done
     }
@@ -1379,11 +1381,15 @@ impl Hub {
         started: impl Fn(GitStage),
     ) -> anyhow::Result<Message> {
         let environment = &self.environment;
+        let started = async |stage| {
+            self.set_git_stage(run.thread_id.as_deref(), Some(stage)).await;
+            started(stage);
+        };
         let done = |title: String, description: Option<String>, url: Option<String>, next: Option<GitAction>| {
             Ok(Message::GitDone { title, description: description.filter(|text| !text.is_empty()), url, next })
         };
         if run.action == GitAction::Pull {
-            started(GitStage::Pull);
+            started(GitStage::Pull).await;
             let before = git::head(path, environment).await.ok();
             git::pull(path, environment).await?;
             let pulled = git::head(path, environment).await.ok() != before;
@@ -1406,7 +1412,7 @@ impl Hub {
             let draft = match (message, run.new_branch) {
                 (Some(_), false) => None,
                 _ => {
-                    started(if run.new_branch { GitStage::Branch } else { GitStage::Message });
+                    started(GitStage::Message).await;
                     let naming = self.branch_instructions().text;
                     let draft = drafts::commit_message(path, environment, &writer, &thread, &run.paths, &naming).await;
                     self.keep_written(&writer, Purpose::Commit, project_id, run.thread_id.as_deref());
@@ -1417,13 +1423,12 @@ impl Hub {
                 let suggested = draft.as_ref().and_then(|draft| draft.branch.clone());
                 self.branch_off(path, suggested).await?;
             }
-            started(GitStage::Commit);
+            started(GitStage::Commit).await;
             let message = message.map(str::to_string).or(draft.map(|draft| draft.message())).unwrap_or_default();
             git::commit(path, environment, &message, &run.paths).await?;
         } else if run.action == GitAction::Commit {
             bail!("There is nothing to commit.");
         } else if run.new_branch {
-            started(GitStage::Branch);
             let subject = git::head(path, environment).await?.1;
             self.branch_off(path, drafts::branch_name(&subject)).await?;
         }
@@ -1432,7 +1437,7 @@ impl Hub {
         let mut pushed = None;
         let status = git::status(path, environment).await.map(|read| read.0).unwrap_or(status);
         if pushes && (!status.upstream || status.ahead > 0) {
-            started(GitStage::Push);
+            started(GitStage::Push).await;
             git::push(path, environment).await?;
             pushed = git::upstream(path, environment).await;
         }
@@ -1441,11 +1446,11 @@ impl Hub {
                 self.set_pull_request(run.thread_id.as_deref(), open.clone()).await;
                 return done(format!("PR #{} is already open", open.number), Some(open.title), Some(open.url), None);
             }
-            started(GitStage::PullRequestText);
+            started(GitStage::PullRequestText).await;
             let draft = drafts::pull_request(path, environment, &writer, &thread).await;
             self.keep_written(&writer, Purpose::PullRequest, project_id, run.thread_id.as_deref());
             let (title, body) = draft?;
-            started(GitStage::PullRequest);
+            started(GitStage::PullRequest).await;
             let url = git::open_pull_request(path, environment, &title, &body).await?;
             let number = url.rsplit('/').next().unwrap_or_default();
             let opened = match (git::pull_request(path, environment).await, number.parse()) {
@@ -1474,6 +1479,16 @@ impl Hub {
             return done(format!("Committed {commit}"), Some(subject), None, status.remote.then_some(GitAction::Push));
         }
         done("Already up to date".to_string(), None, None, None)
+    }
+
+    async fn set_git_stage(&self, thread_id: Option<&str>, stage: Option<GitStage>) {
+        let mut threads = self.threads.lock().await;
+        let Some(live) = thread_id.and_then(|thread_id| threads.get_mut(thread_id)) else { return };
+        if live.stored.thread.git_stage == stage {
+            return;
+        }
+        live.stored.thread.git_stage = stage;
+        self.announce(&live.stored.thread);
     }
 
     /// Makes a branch for the work from what is checked out and switches to it.

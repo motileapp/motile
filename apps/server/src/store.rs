@@ -167,6 +167,7 @@ impl Store {
                     turn_ended_at: row.get(15)?,
                     pull_request: pull_request.and_then(|json| serde_json::from_str(&json).ok()),
                     watching: row.get(22)?,
+                    git_stage: None,
                     rev: rev as u64,
                 },
                 session_id: row.get(10)?,

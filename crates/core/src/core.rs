@@ -1903,6 +1903,7 @@ mod tests {
             turn_ended_at: None,
             pull_request: None,
             watching: false,
+            git_stage: None,
             rev: 3,
         }
     }

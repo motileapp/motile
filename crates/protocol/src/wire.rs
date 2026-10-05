@@ -64,6 +64,9 @@ pub struct Thread {
     /// or it starts to conflict.
     #[serde(default)]
     pub watching: bool,
+    /// What a commit, a push or the like that was started from the thread is at.
+    #[serde(default)]
+    pub git_stage: Option<GitStage>,
     /// The transcript's revision; a client whose copy is older has catching up to do.
     pub rev: u64,
 }
@@ -825,18 +828,12 @@ pub struct LineComment {
 }
 
 /// What the server does with pull requests by itself.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct PullRequestSettings {
     /// A thread is marked done when its pull request merges or closes.
     pub done_on_merge: bool,
     /// A thread's worktree is removed once its pull request merges, when nothing in it is lost.
     pub remove_merged_worktrees: bool,
-}
-
-impl Default for PullRequestSettings {
-    fn default() -> Self {
-        Self { done_on_merge: true, remove_merged_worktrees: false }
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -1039,7 +1036,7 @@ pub enum GitAction {
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum GitStage {
-    Branch,
+    /// The commit message is written, and with it the name of a branch the run makes.
     Message,
     Commit,
     Push,

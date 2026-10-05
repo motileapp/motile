@@ -136,11 +136,11 @@ function ThreadRow({
       type="button"
       onClick={onSelect}
       className={cn(
-        "mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-lg px-2 pt-[3px] pb-[7px] text-left",
+        "mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-lg px-2 pt-[5px] pb-[7px] text-left",
         selected ? "bg-selected" : "hover:bg-hover"
       )}
     >
-      <span className="flex h-[22px] w-full items-center gap-1.5 pb-0.5 text-muted-foreground">
+      <span className="flex h-5 w-full items-center gap-1.5 text-muted-foreground">
         <ProjectIcon project={thread.project} />
         <span className="text-[11px] font-medium">{thread.project.name}</span>
         <span className="ml-auto">
