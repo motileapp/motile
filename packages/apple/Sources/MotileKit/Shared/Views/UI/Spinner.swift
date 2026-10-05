@@ -13,8 +13,9 @@ struct Spinner: View {
         let side = PlatformImage.symbolSide(size)
         Image(.loader, size: size * Self.fill)
             .frame(width: side, height: side)
-            .rotationEffect(.degrees(turned ? 360 : 0))
-            .animation(.linear(duration: 1.2).repeatForever(autoreverses: false), value: turned)
+            .animation(.linear(duration: 1.2).repeatForever(autoreverses: false)) { loader in
+                loader.rotationEffect(.degrees(turned ? 360 : 0))
+            }
             .onAppear { turned = true }
             .accessibilityLabel("Working")
     }

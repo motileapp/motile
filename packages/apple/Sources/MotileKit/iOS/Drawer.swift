@@ -16,7 +16,6 @@ final class Drawer {
 struct DrawerView<Sidebar: View, Content: View, Panel: View>: UIViewControllerRepresentable {
     let drawer: Drawer
     let sidePanel: SidePanel
-    let panelAvailable: Bool
     @ViewBuilder let sidebar: Sidebar
     @ViewBuilder let content: Content
     @ViewBuilder let panel: Panel
@@ -34,7 +33,6 @@ struct DrawerView<Sidebar: View, Content: View, Panel: View>: UIViewControllerRe
         (controller.sidebar as? UIHostingController<AnyView>)?.rootView = AnyView(sidebar)
         (controller.content as? UIHostingController<AnyView>)?.rootView = AnyView(content)
         controller.panelContent = AnyView(panel)
-        controller.panelAvailable = panelAvailable
         controller.follow(sidebar: drawer.isOpen, panel: sidePanel.isOpen)
     }
 }
@@ -57,7 +55,6 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     var panelContent = AnyView(EmptyView()) {
         didSet { showPanelContent() }
     }
-    var panelAvailable = true
     var onChange: ((Side?) -> Void)?
 
     private let panel = UIHostingController(rootView: AnyView(EmptyView()))
@@ -296,9 +293,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         // Only the swipe back is the drawer's: one to the right is the sidebar's rows'.
         case .sidebar: return !rightwards
         case .panel: return rightwards && !scrollsSideways(under: point, rightwards: true)
-        case nil:
-            guard rightwards || panelAvailable else { return false }
-            return !scrollsSideways(under: point, rightwards: rightwards)
+        case nil: return !scrollsSideways(under: point, rightwards: rightwards)
         }
     }
 
