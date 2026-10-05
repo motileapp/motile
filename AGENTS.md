@@ -70,6 +70,8 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
 - `apps/marketing` ships no JavaScript but the theme switch and the demo: `src/components/demo`
   is the Mac app's window in React, with made-up threads. `public/install.sh` is the installer.
   `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
+  `scripts/preview.mjs` draws the link preview image from the `/preview/` page, the tagline over
+  the demo: `pnpm --filter motile-marketing preview-image`. Run it when the demo changes.
 - `apps/web`: `src/server/auth.ts` holds the session (the browser only gets an HttpOnly
   cookie), `src/lib/account.ts` is the server functions the pages call, and `src/routes/auth/`
   starts and finishes a sign-in.

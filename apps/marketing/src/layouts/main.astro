@@ -9,13 +9,11 @@ import { THEME_SCRIPT } from "@/lib/theme"
 interface Props {
   title?: string
   description?: string
-  image?: string
 }
 
 const {
   title,
   description = "Run Claude Code and Codex on your own servers, and steer them from a native client.",
-  image,
 } = Astro.props
 const fullTitle = title ? `${title} · Motile` : `Motile · ${TAGLINE}`
 ---
@@ -35,8 +33,11 @@ const fullTitle = title ? `${title} · Motile` : `Motile · ${TAGLINE}`
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
-    {image && <meta property="og:image" content={new URL(image, Astro.site)} />}
-    {image && <meta name="twitter:card" content="summary_large_image" />}
+    <meta property="og:image" content={new URL("/preview.png", Astro.site)} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={TAGLINE} />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body class="flex min-h-svh flex-col">
     <header class="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">

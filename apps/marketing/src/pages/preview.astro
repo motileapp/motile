@@ -1,0 +1,21 @@
+---
+import "@/styles/global.css"
+import { Demo } from "@/components/demo/demo"
+import { TAGLINE } from "@/lib/links"
+---
+
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <title>Motile</title>
+  </head>
+  <body class="h-[630px] w-[1200px] overflow-hidden">
+    <h1 class="pt-14 text-center text-[56px] leading-none font-medium tracking-tight">
+      {TAGLINE}
+    </h1>
+    <div class="mx-auto mt-12 w-[1040px]">
+      <Demo />
+    </div>
+  </body>
+</html>

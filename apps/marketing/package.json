@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,astro}\"",
     "typecheck": "astro check",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "preview-image": "node scripts/preview.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^7",
@@ -41,6 +42,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17",
+    "playwright": "^1.63.0",
     "prettier": "^3.9.9",
     "prettier-plugin-astro": "^1.1.0",
     "prettier-plugin-tailwindcss": "^0.8.1",
