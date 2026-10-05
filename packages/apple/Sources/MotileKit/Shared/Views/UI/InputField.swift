@@ -71,7 +71,7 @@ struct InputField: View {
         .background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
         .overlay {
             if variant == .outlined {
-                RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
             }
         }
         .contentShape(Rectangle())
