@@ -53,35 +53,34 @@ export function Composer({
           </button>
         </Strip>
       )}
-      <div className="relative z-10 rounded-[22px] border bg-composer">
-        {status.kind === "approval" && thread.approval && (
-          <div className="mx-2.5 mt-2.5 rounded-xl bg-warning-background p-3 text-[12.5px]">
-            <p className="text-[12px] font-semibold text-warning">
-              Waiting for you
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <SquareTerminalIcon className="size-[13px] text-muted-foreground" />
-              <span className="font-medium">{thread.approval.verb}</span>
-              <span className="truncate font-mono text-[12px]">
-                {thread.approval.target}
-              </span>
-              <button
-                type="button"
-                onClick={() => onAnswer(false)}
-                className="ml-auto h-6 rounded-[6px] bg-composer-secondary px-2 text-[11.5px] font-medium hover:bg-background"
-              >
-                Deny
-              </button>
-              <button
-                type="button"
-                onClick={() => onAnswer(true)}
-                className="h-6 rounded-[6px] bg-primary px-2 text-[11.5px] font-medium text-primary-foreground hover:brightness-110"
-              >
-                Allow
-              </button>
-            </div>
+      {status.kind === "approval" && thread.approval && (
+        <Strip edge="top" tall>
+          <div className="flex items-center gap-2">
+            <SquareTerminalIcon className="size-[13px] text-warning" />
+            <span className="text-[12px] font-semibold text-warning">
+              {thread.approval.verb}
+            </span>
+            <button
+              type="button"
+              onClick={() => onAnswer(false)}
+              className="ml-auto h-6 rounded-[6px] bg-composer-secondary px-2 text-[11.5px] font-medium hover:bg-background"
+            >
+              Refuse
+            </button>
+            <button
+              type="button"
+              onClick={() => onAnswer(true)}
+              className="h-6 rounded-[6px] bg-warning px-2 text-[11.5px] font-medium text-background hover:brightness-110"
+            >
+              Allow
+            </button>
           </div>
-        )}
+          <p className="mt-2 font-mono text-[12px] break-words">
+            {thread.approval.target}
+          </p>
+        </Strip>
+      )}
+      <div className="relative z-10 rounded-[22px] border bg-composer">
         <textarea
           ref={input}
           value={text}
@@ -192,15 +191,20 @@ function Control({
 /** A strip above or under the composer, narrower than it, with its outer corners rounded. */
 function Strip({
   edge,
+  tall,
   children,
 }: {
   edge: "top" | "bottom"
+  tall?: boolean
   children: ReactNode
 }) {
   return (
     <div
       className={cn(
-        "mx-[22px] flex h-8 items-center border bg-composer text-[12px] text-muted-foreground",
+        "mx-[22px] border bg-composer text-[12px] text-muted-foreground",
+        tall
+          ? "p-3 text-[12.5px]"
+          : "flex h-8 items-center",
         edge === "top"
           ? "-mb-px rounded-t-[14px] text-foreground"
           : "-mt-px rounded-b-[14px]"

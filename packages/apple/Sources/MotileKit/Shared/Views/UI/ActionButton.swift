@@ -8,6 +8,8 @@ enum ButtonVariant {
     case secondary
     /// What can't be taken back.
     case danger
+    /// What the user is asked to let happen.
+    case warning
     /// Nothing until the pointer is over it: the buttons of bars and rows.
     case ghost
     /// In the colour of a link.
@@ -42,6 +44,7 @@ struct ControlLook {
         switch variant {
         case .secondary: return .themeText
         case .primary, .danger: return .white
+        case .warning: return .themeBackground
         case .ghost: return selected || lit ? .themeText : .themeSecondary
         case .link, .accent: return .themeLink
         }
@@ -52,6 +55,7 @@ struct ControlLook {
         case .primary: .themePrimary
         case .secondary: (selected || lit ? surface.further : surface.next).color
         case .danger: .themeDangerFill
+        case .warning: .themeWarning
         case .ghost: selected ? surface.further.color : lit ? surface.next.color : .clear
         case .link: lit ? .themeLinkHover : .clear
         case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
@@ -71,7 +75,7 @@ struct ControlLook {
         shape
             .fill(fill)
             .overlay {
-                if variant == .primary || variant == .danger, lit { shape.fill(Color.white.opacity(0.12)) }
+                if variant == .primary || variant == .danger || variant == .warning, lit { shape.fill(Color.white.opacity(0.12)) }
             }
     }
 }

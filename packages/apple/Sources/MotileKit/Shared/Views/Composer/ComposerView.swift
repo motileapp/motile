@@ -1,11 +1,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Where messages are written. A strip above says when the agent is monitoring. On the Mac the
-/// model, the reasoning effort and how much the agent may do without asking are under the text,
-/// and a strip below says where the thread works: the server, the folder and the branch. On iOS
-/// all of that is in the thread's settings, which the model's name opens, and the composer is
-/// one line until it is written in.
+/// Where messages are written. A strip above says what the agent waits for or that it is
+/// monitoring. On the Mac the model, the reasoning effort and how much the agent may do without
+/// asking are under the text, and a strip below says where the thread works: the server, the
+/// folder and the branch. On iOS all of that is in the thread's settings, which the model's name
+/// opens, and the composer is one line until it is written in.
 struct ComposerView: View {
     @Environment(AppStore.self) private var store
     @State private var textHeight: CGFloat = ComposerTextView.minimumHeight
@@ -18,7 +18,9 @@ struct ComposerView: View {
     var body: some View {
         GlassGroup {
             VStack(spacing: 0) {
-                if store.selectedThread != nil, store.activity.monitoring {
+                if store.selectedThread != nil, let approval = store.activity.approvals.first {
+                    WaitingStrip(approval: approval, count: store.activity.approvals.count)
+                } else if store.selectedThread != nil, store.activity.monitoring {
                     monitoringStrip
                 }
                 box
@@ -38,9 +40,6 @@ struct ComposerView: View {
         return VStack(alignment: .leading, spacing: 0) {
             if let thread = store.selectedThread, thread.isDone {
                 doneBanner(thread)
-            }
-            if store.selectedThread != nil, !store.activity.approvals.isEmpty {
-                approvals
             }
             if !store.attachments.isEmpty {
                 attachments
@@ -136,41 +135,6 @@ struct ComposerView: View {
         .padding(.leading, 16)
         .padding(.trailing, 16 - Self.undoneButtonPadding)
         .padding(.top, 12)
-    }
-
-    /// The tool calls the agent waits with: each is allowed or refused, and one that asks
-    /// questions is answered.
-    private var approvals: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Waiting for you")
-                .font(.ui(size: 12, weight: .semibold))
-                .foregroundStyle(Color.themeWarning)
-            ForEach(store.activity.approvals) { approval in
-                if approval.questions.isEmpty {
-                    HStack(spacing: 8) {
-                        Image(approval.symbol, size: 13)
-                            .foregroundStyle(Color.themeSecondary)
-                        Text(approval.title)
-                            .fontWeight(.medium)
-                        Text(approval.target)
-                            .font(.ui(size: 12, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer(minLength: 8)
-                        ActionButton(approval.refuseLabel, size: .small) { store.answer(approval, allow: false) }
-                        ActionButton(approval.allowLabel, variant: .primary, size: .small) { store.answer(approval, allow: true) }
-                    }
-                } else {
-                    QuestionsView(approval: approval)
-                        .id(approval.id)
-                }
-            }
-        }
-        .font(.ui(size: 12.5))
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(platform: Theme.warningBackground), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .padding([.horizontal, .top], 10)
     }
 
     private var attachments: some View {
