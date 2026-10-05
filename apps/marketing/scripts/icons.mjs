@@ -31,7 +31,7 @@ const square = (ratio) =>
 
 // How much of a tile's width the mark takes up: a margin of 5 on each side of 32.
 const MARK_IN_TILE = 22 / 32
-const MARK_IN_APPLE_TILE = 0.66
+const MARK_IN_APPLE_TILE = 0.68
 
 /** Rasterised at twice the size it is asked for, then scaled down. */
 function png(source, size) {
