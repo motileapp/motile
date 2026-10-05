@@ -178,7 +178,7 @@ struct ThreadScreen: View {
                 .frame(height: 48)
                 .contentShape(Rectangle())
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.themeBorder, lineWidth: 1)
                 }
             }
             .buttonStyle(.plain)
