@@ -508,9 +508,9 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
 
     static let indicatorWidth: CGFloat = 10
 
-    /// How tall the bar over the transcript's top is. The scroll indicator keeps clear of it.
+    /// How tall the bar over the transcript's top is. The scroll indicator already keeps clear
+    /// of it, since the bar is in the scroll view's safe area.
     func setTopBar(height: CGFloat) {
-        scrollView.verticalScrollIndicatorInsets = UIEdgeInsets(top: height, left: 0, bottom: 0, right: 0)
         topBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: height)
     }
 
