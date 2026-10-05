@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils"
 type Panel = "closed" | "open" | "maximized"
 
 /** The composer's height with no strip above it, so the page paints right before it is measured. */
-const IDLE_COMPOSER_HEIGHT = 171
+const IDLE_COMPOSER_HEIGHT = 195
 
 /** The Mac app's window, with made-up threads that can be opened, answered and written in. */
 export function Demo() {
@@ -172,7 +172,7 @@ export function Demo() {
               </div>
               <div
                 ref={composer}
-                className="pointer-events-none absolute inset-x-0 bottom-0 px-6 pt-6 pb-4 *:pointer-events-auto"
+                className="pointer-events-none absolute inset-x-0 bottom-0 px-6 pt-12 pb-4 *:pointer-events-auto"
               >
                 <Composer
                   key={thread.id}
@@ -258,7 +258,7 @@ function GitButton() {
 
 /** The transcript fades out from the room above the composer down to the composer's middle, as in the Mac app. */
 function fadeUnder(room: number): CSSProperties {
-  const middle = (room - 24 + 16) / 2
+  const middle = (room - 48 + 16) / 2
   const mask = `linear-gradient(to bottom, #000 calc(100% - ${room}px), transparent calc(100% - ${middle}px))`
   return { maskImage: mask }
 }
