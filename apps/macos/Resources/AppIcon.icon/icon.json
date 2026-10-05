@@ -15,7 +15,7 @@
           "image-name" : "icon.svg",
           "name" : "icon",
           "position" : {
-            "scale" : 30,
+            "scale" : 28,
             "translation-in-points" : [
               1.1934704275518015e-05,
               0.0003169704291394737
