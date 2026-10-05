@@ -106,7 +106,6 @@ struct ComposerView: View {
                     .frame(height: 24)
                     .padding(ComposerStrip.margin)
                     .frame(minHeight: Platform.minimumPress)
-                    .contentShape(Rectangle())
             }
             .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin, faded: true))
             .help("Stop monitoring (⌘.)")
@@ -141,7 +140,6 @@ struct ComposerView: View {
                     .padding(.horizontal, Self.undoneButtonPadding)
                     .frame(height: scaled(24))
                     .padding(.vertical, Self.undoneReach)
-                    .contentShape(Rectangle())
             }
             .buttonStyle(.highlight(radius: 7, inset: EdgeInsets(top: Self.undoneReach, leading: 0, bottom: Self.undoneReach, trailing: 0), color: .themePrimaryHover))
             .padding(.vertical, -4 - Self.undoneReach)
@@ -376,7 +374,6 @@ struct ComposerSendButtons: View {
                         .frame(width: 30, height: 30)
                         .background(Color.themeDanger.opacity(0.9), in: Circle())
                         .padding(ComposerView.margin(leading: 4, trailing: sends ? 4 : 8))
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(DimButtonStyle())
                 .help("Stop (⌘.)")
@@ -391,7 +388,6 @@ struct ComposerSendButtons: View {
                         .frame(width: 30, height: 30)
                         .background(store.canSend ? Color.themePrimary : Color.themeSelected, in: Circle())
                         .padding(ComposerView.margin(leading: 4, trailing: 8))
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(DimButtonStyle())
                 .disabled(!store.canSend)

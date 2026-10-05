@@ -75,7 +75,6 @@ struct ComposerTouchControls: View {
             .padding(.horizontal, 10)
             .frame(height: 34)
             .padding(.vertical, 6)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.highlight(radius: 10, inset: EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0), faded: true))
         .accessibilityLabel("Thread settings")
