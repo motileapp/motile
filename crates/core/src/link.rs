@@ -22,6 +22,8 @@ const RETRY_DELAYS: [Duration; 4] =
 const RTT_REFRESH: Duration = Duration::from_secs(5);
 /// How long to wait before asking again a server that turned this device away.
 const REFUSED_RETRY: Duration = Duration::from_secs(10);
+/// A dial that takes longer than this is given up and started again.
+const DIAL_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug)]
 pub enum LinkEvent {
@@ -57,11 +59,13 @@ pub struct Status {
 
 pub struct Link {
     server_id: String,
-    endpoint: Endpoint,
+    endpoint: Mutex<Endpoint>,
     events: mpsc::UnboundedSender<(String, LinkEvent)>,
     inner: Mutex<Inner>,
     /// Ends the wait before the next dial.
     wake: Notify,
+    /// Ends the dial or the connection there is, to dial again at once.
+    restart: Notify,
 }
 
 #[derive(Default)]
@@ -73,8 +77,6 @@ struct Inner {
     /// Tasks tied to the current connection.
     followers: Vec<AbortHandle>,
     open: HashMap<String, OpenThread>,
-    /// The connection was closed here to dial again, so its end is no failure to tell about.
-    redialing: bool,
 }
 
 struct OpenThread {
@@ -91,10 +93,11 @@ impl Link {
     ) -> Arc<Self> {
         let link = Arc::new(Self {
             server_id: server.key.clone(),
-            endpoint,
+            endpoint: Mutex::new(endpoint),
             events,
             inner: Mutex::default(),
             wake: Notify::new(),
+            restart: Notify::new(),
         });
         let dialer = tokio::spawn(link.clone().dial_forever(server));
         link.lock().dialer = Some(dialer.abort_handle());
@@ -131,18 +134,11 @@ impl Link {
         self.drop_connection();
     }
 
-    /// Lets go of the connection and dials again at once. For when the client comes back after a
-    /// time in which the system may have cut the connection without saying so.
-    pub fn redial(&self) {
-        let connection = {
-            let mut inner = self.lock();
-            inner.redialing = inner.connection.is_some();
-            inner.connection.clone()
-        };
-        if let Some(connection) = connection {
-            connection.close();
-        }
-        self.wake.notify_one();
+    /// Lets go of the dial or the connection there is and dials again at once, on `endpoint`.
+    /// For when the old endpoint can't be trusted to reach anything anymore.
+    pub fn redial_on(&self, endpoint: Endpoint) {
+        *self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = endpoint;
+        self.restart.notify_one();
     }
 
     /// Dials now if the link is waiting to dial again. For when the network has changed.
@@ -169,20 +165,17 @@ impl Link {
             self.update_status(|status| {
                 *status = Status { state: State::Connecting, error: status.error.take(), ..Status::default() }
             });
-            let closed = match Connection::dial(&self.endpoint, &server).await {
-                Ok(connection) => {
-                    self.attach(&connection);
-                    let closed = connection.closed().await;
-                    self.drop_connection();
-                    closed
-                }
-                Err(error) => Closed { refused: false, reason: format!("{error:#}") },
+            let endpoint = self.endpoint.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+            let closed = tokio::select! {
+                biased;
+                _ = self.restart.notified() => None,
+                closed = self.connect_until_closed(&endpoint, &server) => Some(closed),
             };
-
-            if std::mem::take(&mut self.lock().redialing) {
+            self.drop_connection();
+            let Some(closed) = closed else {
                 failures = 0;
                 continue;
-            }
+            };
 
             // A server that turns the device away still completes the handshake first, so only a
             // connection that got its thread list counts as having worked.
@@ -208,8 +201,19 @@ impl Link {
             tokio::select! {
                 _ = tokio::time::sleep(delay) => {}
                 _ = self.wake.notified() => failures = 0,
+                _ = self.restart.notified() => failures = 0,
             }
         }
+    }
+
+    async fn connect_until_closed(self: &Arc<Self>, endpoint: &Endpoint, server: &ServerAddr) -> Closed {
+        let connection = match tokio::time::timeout(DIAL_TIMEOUT, Connection::dial(endpoint, server)).await {
+            Ok(Ok(connection)) => connection,
+            Ok(Err(error)) => return Closed { refused: false, reason: format!("{error:#}") },
+            Err(_) => return Closed { refused: false, reason: "Your server didn't answer in time.".to_string() },
+        };
+        self.attach(&connection);
+        connection.closed().await
     }
 
     /// Starts using a connection whose handshake is done. It counts as connected once the server

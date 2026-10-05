@@ -60,11 +60,9 @@ pub enum Command {
     },
     SignOut,
     RefreshAccount,
-    /// The client is in front again after `away_secs` in the background, where the system may have
-    /// cut its connections without a word. After a long time away every server is dialed again.
-    Foreground {
-        away_secs: u64,
-    },
+    /// The client is in front again: what waits to dial again dials now, and if the system had
+    /// the client paused in the background, every server is dialed again.
+    Foreground,
     /// The device changed networks: what waits to dial again dials now.
     NetworkChanged,
     /// Asks the auth server about the account every couple of seconds, while waiting for a server.
