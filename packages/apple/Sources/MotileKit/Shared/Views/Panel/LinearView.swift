@@ -63,6 +63,8 @@ private struct LinearIssues: View {
     @State private var search = ""
     @State private var asked = 0
     @State private var filing = false
+    /// The statuses folded up, by id.
+    @State private var collapsed: Set<String> = []
 
     private struct Trigger: Equatable {
         let target: PanelTarget
@@ -154,14 +156,20 @@ private struct LinearIssues: View {
             let filtered = choice.mine || !choice.states.isEmpty
             PanelMessage(text: !search.isEmpty ? "None have “\(search)”." : filtered ? "No issues match the filter." : "No issues.")
         case .ready(let groups):
+            let linear = store.linear
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(groups) { group in
-                        LinearGroupHeader(state: group.state, count: group.rows.count)
-                        ForEach(group.rows) { row in
-                            LinearIssueRow(
-                                row: row, state: group.state, states: teams.first { $0.id == row.team }?.states ?? [],
-                                workspace: workspace, target: target)
+                        let folded = collapsed.contains(group.state.id)
+                        LinearGroupHeader(state: group.state, count: group.rows.count, folded: folded) {
+                            if folded { collapsed.remove(group.state.id) } else { collapsed.insert(group.state.id) }
+                        }
+                        if !folded {
+                            ForEach(group.rows) { row in
+                                LinearIssueRow(
+                                    row: row, state: group.state, states: teams.first { $0.id == row.team }?.states ?? [],
+                                    workspace: workspace, target: target, pending: linear.working.contains(row.id))
+                            }
                         }
                     }
                 }
@@ -171,9 +179,18 @@ private struct LinearIssues: View {
     }
 }
 
+/// The space between the rows' lights, and around each one: it looks empty but is the row's.
+private let rowGap: CGFloat = 2
+private let rowMargin = EdgeInsets(top: rowGap / 2, leading: 0, bottom: rowGap / 2, trailing: 0)
+
+/// A status over its issues, which it folds up and out.
 private struct LinearGroupHeader: View {
     let state: LinearState
     let count: Int
+    let folded: Bool
+    let toggle: () -> Void
+
+    private static let margin = EdgeInsets(top: 6 + rowGap / 2, leading: 0, bottom: rowGap / 2, trailing: 0)
 
     var body: some View {
         HStack(spacing: 8) {
@@ -187,11 +204,15 @@ private struct LinearGroupHeader: View {
                 .font(.ui(size: 12))
                 .foregroundStyle(Color.themeTertiary)
             Spacer(minLength: 0)
+            Image(.chevronDown, size: 10)
+                .rotationEffect(.degrees(folded ? -90 : 0))
+                .foregroundStyle(Color.themeTertiary)
         }
         .padding(.horizontal, 10)
-        .frame(height: scaled(30))
-        .background(Color.themeBackgroundTertiary.opacity(0.6), in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-        .padding(.top, 6)
+        .frame(height: pressable(30))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Self.margin)
+        .button(.highlight(radius: Radius.control, inset: Self.margin), action: toggle)
     }
 }
 
@@ -222,9 +243,10 @@ private enum LinearChoices {
     }
 }
 
-/// An issue on one line as Linear lists it: its priority and its status, which menus change, its
-/// identifier and title, then its labels, who has it and when it last changed.
-private struct LinearIssueRow: View {
+/// An issue on one line as Linear lists it: its priority and its status, which a click changes,
+/// its identifier and title, then its labels, who has it and when it last changed. It is redrawn
+/// only when what it shows changes.
+private struct LinearIssueRow: View, Equatable {
     @Environment(AppStore.self) private var store
     let row: LinearRow
     let state: LinearState
@@ -232,61 +254,29 @@ private struct LinearIssueRow: View {
     let states: [LinearState]
     let workspace: String
     let target: PanelTarget
+    /// Its status, priority or assignee is being changed.
+    let pending: Bool
+    @State private var offered: [Choice] = []
 
     private static let inset: CGFloat = 6
-    private static let spacing: CGFloat = 4
-    private static let menuSize = ControlSize.small.height
+
+    static func == (one: Self, other: Self) -> Bool {
+        one.row == other.row && one.state == other.state && one.states == other.states && one.workspace == other.workspace
+            && one.target == other.target && one.pending == other.pending
+    }
 
     var body: some View {
-        let linear = store.linear
-        Button {
-            store.sidePanel.open(.linearIssue(workspace: workspace, id: row.id, identifier: row.identifier))
-        } label: {
-            ViewThatFits(in: .horizontal) {
-                line(labels: 2)
-                line(labels: 1)
-                line(labels: 0)
-            }
-            .padding(.leading, Self.inset)
-            .padding(.trailing, 10)
-            .frame(height: pressable(34))
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.highlight())
-        .overlay(alignment: .leading) {
-            HStack(spacing: Self.spacing) {
-                ActionMenu(
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                ActionButton(
                     icon: row.prioritySymbol, help: row.priorityLabel, size: .small, tint: row.priority == 1 ? Color.themeWarning : nil
                 ) {
-                    LinearChoices.priorities(current: row.priority) { change(["priority": $0]) }
+                    Choice.offer(priorities, in: $offered)
                 }
-                ActionMenu(icon: state.symbol, help: "Status: \(state.name)", size: .small, pending: linear.working.contains(row.id), tint: state.color) {
-                    LinearChoices.states(states, current: state.id) { change(["state": $0.id]) }
+                ActionButton(icon: state.symbol, help: "Status: \(state.name)", size: .small, pending: pending, tint: state.color) {
+                    Choice.offer(statuses, in: $offered)
                 }
             }
-            .padding(.leading, Self.inset)
-        }
-        .contextMenu {
-            Menu("Assign To") {
-                LinearChoices.assignees(linear.users[workspace] ?? [], current: row.assigneeID) { change(["assignee": $0 ?? ""]) }
-            }
-            Divider()
-            if let url = row.url {
-                Button("Open in Linear") { Platform.open(url) }
-                Button("Copy Link") { Platform.copy(url.absoluteString) }
-            }
-            Button("Copy Identifier") { Platform.copy(row.identifier) }
-        }
-    }
-
-    private func change(_ change: JSON) {
-        store.linear.change(row.id, change, of: workspace, on: target.serverID)
-    }
-
-    private func line(labels: Int) -> some View {
-        HStack(spacing: 8) {
-            Color.clear
-                .frame(width: 2 * Self.menuSize + Self.spacing, height: Self.menuSize)
             Text(verbatim: row.identifier)
                 .font(.ui(size: 11.5))
                 .foregroundStyle(Color.themeTertiary)
@@ -296,7 +286,7 @@ private struct LinearIssueRow: View {
                 .foregroundStyle(Color.themeText)
                 .lineLimit(1)
             Spacer(minLength: 4)
-            ForEach(row.labels.prefix(labels), id: \.name) { label in
+            ForEach(row.labels.prefix(2), id: \.name) { label in
                 Chip(label.name, dot: label.color)
                     .fixedSize()
             }
@@ -308,6 +298,44 @@ private struct LinearIssueRow: View {
                 .foregroundStyle(Color.themeTertiary)
                 .fixedSize()
         }
+        .padding(.leading, Self.inset)
+        .padding(.trailing, 10)
+        .frame(height: pressable(34))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(rowMargin)
+        .button(.highlight(inset: rowMargin)) {
+            store.sidePanel.open(.linearIssue(workspace: workspace, id: row.id, identifier: row.identifier))
+        }
+        .choices($offered)
+        .contextMenu {
+            Menu("Assign To") {
+                LinearChoices.assignees(store.linear.users[workspace] ?? [], current: row.assigneeID) { change(["assignee": $0 ?? ""]) }
+            }
+            Divider()
+            if let url = row.url {
+                Button("Open in Linear") { Platform.open(url) }
+                Button("Copy Link") { Platform.copy(url.absoluteString) }
+            }
+            Button("Copy Identifier") { Platform.copy(row.identifier) }
+        }
+    }
+
+    private var priorities: [Choice] {
+        LinearRow.priorities.map { priority in
+            Choice(priority.name, symbol: LinearRow.symbol(priority: priority.value), chosen: priority.value == row.priority) {
+                change(["priority": priority.value])
+            }
+        }
+    }
+
+    private var statuses: [Choice] {
+        states.map { status in
+            Choice(status.name, symbol: status.symbol, chosen: status.id == state.id) { change(["state": status.id]) }
+        }
+    }
+
+    private func change(_ change: JSON) {
+        store.linear.change(row.id, change, of: workspace, on: target.serverID)
     }
 }
 

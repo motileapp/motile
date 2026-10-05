@@ -74,7 +74,7 @@ struct LinearTeam: Equatable, Identifiable {
 }
 
 /// The issues of one status, as the core lists them.
-struct LinearGroup: Identifiable {
+struct LinearGroup: Equatable, Identifiable {
     let state: LinearState
     let rows: [LinearRow]
 
@@ -86,7 +86,12 @@ struct LinearGroup: Identifiable {
     }
 }
 
-struct LinearRow: Identifiable {
+struct LinearRow: Equatable, Identifiable {
+    struct Label: Equatable {
+        let name: String
+        let color: Color
+    }
+
     let id: String
     let identifier: String
     let title: String
@@ -97,7 +102,7 @@ struct LinearRow: Identifiable {
     let assignee: String?
     let assigneeID: String?
     let initials: String?
-    let labels: [(name: String, color: Color)]
+    let labels: [Label]
     let updatedAt: Double
 
     init(json: JSON) {
@@ -111,7 +116,7 @@ struct LinearRow: Identifiable {
         assignee = json.optionalString("assignee")
         assigneeID = json.optionalString("assignee_id")
         initials = json.optionalString("initials")
-        labels = json.objects("labels").map { ($0.string("name"), PullRequestPage.color(hex: $0.string("color"))) }
+        labels = json.objects("labels").map { Label(name: $0.string("name"), color: PullRequestPage.color(hex: $0.string("color"))) }
         updatedAt = json.double("updated_at")
     }
 
