@@ -36,7 +36,7 @@ private struct FileDrop: ViewModifier {
         }
         .background(Color.themeBackground.opacity(0.9).ignoresSafeArea(edges: [.bottom, .horizontal]))
         .allowsHitTesting(false)
-        .transition(.opacity)
+        .appearing()
     }
 }
 

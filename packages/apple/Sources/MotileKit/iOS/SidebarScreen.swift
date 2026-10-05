@@ -68,7 +68,7 @@ struct SidebarScreen: View {
             }
             if let undo = store.undo {
                 UndoRow(notice: undo)
-                    .transition(.opacity)
+                    .appearing()
             }
             footer
         }

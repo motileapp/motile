@@ -145,7 +145,7 @@ struct RootView: View {
                     Color.black.opacity(0.32)
                         .ignoresSafeArea()
                         .onTapGesture { store.closePanel() }
-                        .transition(.opacity)
+                        .appearing()
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: store.panel != nil)

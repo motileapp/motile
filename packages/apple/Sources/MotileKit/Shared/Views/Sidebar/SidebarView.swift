@@ -88,7 +88,7 @@ struct SidebarView: View {
             }
             if let undo = store.undo {
                 UndoRow(notice: undo)
-                    .transition(.opacity)
+                    .appearing()
             }
             if !done.isEmpty {
                 DoneShelf(

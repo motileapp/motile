@@ -51,7 +51,7 @@ struct ComposerTouchControls: View {
             Spacer(minLength: 8)
             if !collapsed {
                 settingsButton
-                    .transition(.opacity)
+                    .appearing()
             }
             ComposerSendButtons()
         }

@@ -48,7 +48,7 @@ struct ThreadScreen: View {
                 GitNoticeView(notice: notice)
                     .padding(.top, 6)
                     .padding(.horizontal, 14)
-                    .transition(.opacity.combined(with: .offset(y: -6)))
+                    .appearing(.opacity.combined(with: .offset(y: -6)))
             }
         }
         .animation(.easeOut(duration: 0.15), value: store.gitNotice)
