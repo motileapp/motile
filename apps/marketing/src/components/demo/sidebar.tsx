@@ -43,7 +43,7 @@ export function Sidebar({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search"
-          className="w-full bg-transparent text-[13px] outline-none placeholder:text-tertiary"
+          className="w-full bg-transparent text-[13px] outline-none placeholder:text-tertiary pointer-coarse:text-[16px]"
         />
       </label>
       <div className="min-h-0 flex-1 overflow-y-auto py-[3px]">
