@@ -14,10 +14,12 @@ struct ComposerStrip: ViewModifier {
     static let margin = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 8)
 
     let edge: Edge
+    /// Nil for a strip that is as tall as what is in it.
+    var height: CGFloat? = Self.height
 
     func body(content: Content) -> some View {
         content
-            .frame(height: Self.height)
+            .frame(height: height)
             .composerSurface(in: StripShape(edge: edge))
             .padding(.horizontal, ComposerView.radius)
             .padding(edge == .top ? .bottom : .top, -Self.overlap)
