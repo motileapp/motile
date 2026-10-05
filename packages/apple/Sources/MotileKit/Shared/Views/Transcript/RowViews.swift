@@ -926,7 +926,7 @@ final class MessageMeta: FlippedView {
         self.trailing = trailing
         super.init(frame: .zero)
         addSubview(time)
-        let button = IconButton(symbol: .copy, tooltip: tooltip) { [weak self] in self?.copy() }
+        let button = IconButton(symbol: .copy, symbolSize: 12, tooltip: tooltip) { [weak self] in self?.copy() }
         self.button = button
         addSubview(button)
         opacity = shown ? 1 : 0
