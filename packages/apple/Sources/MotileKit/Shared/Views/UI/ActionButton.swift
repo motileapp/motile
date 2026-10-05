@@ -83,8 +83,10 @@ struct ControlLabel: View {
     var chevron = false
     var pending = false
     var fills = false
+    var smallSymbol = false
 
     private var wordless: Bool { title == nil && !chevron }
+    private var symbolSize: CGFloat { smallSymbol ? size.smallSymbol : size.symbol }
 
     var body: some View {
         HStack(spacing: size.gap) {
@@ -105,16 +107,16 @@ struct ControlLabel: View {
         .frame(minWidth: size.height)
         .frame(height: size.height)
         .overlay {
-            if pending, icon == nil { Spinner(size: size.symbol) }
+            if pending, icon == nil { Spinner(size: symbolSize) }
         }
     }
 
     @ViewBuilder private func mark(_ icon: ControlIcon) -> some View {
         if pending {
-            Spinner(size: size.symbol)
+            Spinner(size: symbolSize)
         } else {
             switch icon {
-            case .symbol(let symbol): Image(symbol, size: size.symbol)
+            case .symbol(let symbol): Image(symbol, size: symbolSize)
             case .picture(let picture): picture.frame(width: size.symbolSide, height: size.symbolSide)
             }
         }
@@ -187,6 +189,7 @@ struct ActionButton: View {
     private var chevron = false
     private let pending: Bool
     private let fills: Bool
+    private let smallSymbol: Bool
     private let margin: EdgeInsets
     private let action: () -> Void
 
@@ -203,14 +206,16 @@ struct ActionButton: View {
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
         self.fills = fills
+        smallSymbol = false
         self.margin = margin
         self.action = action
     }
 
-    /// A button that is only a symbol says what it does in `help`.
+    /// A button that is only a symbol says what it does in `help`. `smallSymbol` draws the
+    /// symbol smaller in a button of the same size.
     init(
-        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, pending: Bool = false,
-        selected: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
+        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, smallSymbol: Bool = false,
+        pending: Bool = false, selected: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
         margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
     ) {
         title = nil
@@ -219,6 +224,7 @@ struct ActionButton: View {
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
         fills = false
+        self.smallSymbol = smallSymbol
         self.margin = margin
         self.action = action
     }
@@ -238,7 +244,7 @@ struct ActionButton: View {
     var body: some View {
         let reach = ControlReach(size: look.size, wordless: words == nil && !chevron, margin: margin)
         Button(action: action) {
-            ControlLabel(title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, fills: fills)
+            ControlLabel(title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, fills: fills, smallSymbol: smallSymbol)
                 .padding(reach.around)
         }
         .buttonStyle(ControlButtonStyle(look: look, pending: pending, margin: reach.around))
