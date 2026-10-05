@@ -106,6 +106,15 @@ class FlippedView: UIView, UIContextMenuInteractionDelegate {
         bounds.contains(point)
     }
 
+    /// Also true on a subview's touch area that reaches past the view, such as a small button's.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        guard !super.point(inside: point, with: event) else { return true }
+        guard !clipsToBounds else { return false }
+        return subviews.contains { view in
+            !view.isHidden && view.alpha > 0.01 && view.isUserInteractionEnabled && view.point(inside: convert(point, to: view), with: event)
+        }
+    }
+
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard onPress != nil, !isHidden, alpha > 0.01, isUserInteractionEnabled, takesPress(at: point) else {
             return super.hitTest(point, with: event)
@@ -311,6 +320,7 @@ final class SymbolView: UIImageView {
 /// A borderless button with a symbol and, optionally, a title. It lights up under a finger.
 final class IconButton: UIButton {
     static let side: CGFloat = 36
+    private static let touchSide: CGFloat = 44
 
     private var symbolSize: CGFloat = 14
 
@@ -334,6 +344,12 @@ final class IconButton: UIButton {
 
     override var isHighlighted: Bool {
         didSet { backgroundColor = isHighlighted ? Theme.hover : .clear }
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        let dx = min(0, (bounds.width - Self.touchSide) / 2)
+        let dy = min(0, (bounds.height - Self.touchSide) / 2)
+        return bounds.insetBy(dx: dx, dy: dy).contains(point)
     }
 }
 
