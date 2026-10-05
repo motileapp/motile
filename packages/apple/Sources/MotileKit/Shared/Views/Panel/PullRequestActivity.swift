@@ -6,12 +6,14 @@ struct ActivityRow: View {
     let entry: PullRequestPage.Entry
     let actions: PullRequestActions
 
+    private static let lineHeight = scaled(17)
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(symbol, size: 12)
                 .foregroundStyle(entry.tone == .neutral ? Color.themeSecondary : entry.tone.color)
-                .frame(width: 18, height: scaled(17))
-            VStack(alignment: .leading, spacing: 6) {
+                .frame(width: 18, height: Self.lineHeight)
+            VStack(alignment: .leading, spacing: 8) {
                 byline
                 if !entry.commits.isEmpty {
                     commits
@@ -32,24 +34,27 @@ struct ActivityRow: View {
     }
 
     private var byline: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             (Text(entry.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
                 + Text(entry.author.isEmpty ? entry.said : " \(entry.said)").foregroundStyle(Color.themeSecondary)
                 + Text(" · \(Time.ago(entry.at))").foregroundStyle(Color.themeTertiary))
                 .font(.ui(size: 12.5))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 6)
-            if let subject = entry.subject, entry.thread == nil, entry.reactions.isEmpty {
-                ReactionPicker(reactions: []) { kind, on in actions.react(subject, kind, on) }
-            }
-            if entry.kind == "opened", let edit = actions.editDescription {
-                IconOnlyButton(symbol: .pencil, help: "Edit the description", size: scaled(20), symbolSize: 10, faded: true, action: edit)
-            }
-            if let url = entry.url {
-                IconOnlyButton(symbol: .squareArrowOutUpRight, help: "Open on GitHub", size: scaled(20), symbolSize: 10, faded: true) {
-                    Platform.open(url)
+            HStack(spacing: 0) {
+                if let subject = entry.subject, entry.thread == nil, entry.reactions.isEmpty {
+                    ReactionPicker(reactions: []) { kind, on in actions.react(subject, kind, on) }
+                }
+                if entry.kind == "opened", let edit = actions.editDescription {
+                    IconOnlyButton(symbol: .pencil, help: "Edit the description", size: scaled(20), symbolSize: 10, faded: true, action: edit)
+                }
+                if let url = entry.url {
+                    IconOnlyButton(symbol: .squareArrowOutUpRight, help: "Open on GitHub", size: scaled(20), symbolSize: 10, faded: true) {
+                        Platform.open(url)
+                    }
                 }
             }
+            .frame(height: Self.lineHeight)
         }
     }
 
