@@ -13,7 +13,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Run Claude Code and Codex on your own servers. Steer every thread from a native Mac app: opens in a second, connects in a tenth.",
+          "Run Claude Code and Codex on your own servers. Steer every thread from a native Mac app: opens in under a second, connects in 1/10th.",
       },
       { property: "og:title", content: "Motile" },
       { property: "og:image", content: "https://app.motile.app/preview.png" },
