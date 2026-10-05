@@ -111,6 +111,7 @@ private struct PullRequestPageView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 MergeBox(page: page, run: run)
+                activityTitle
                 ForEach(page.activity) { entry in
                     ActivityRow(entry: entry)
                 }
@@ -206,6 +207,19 @@ private struct PullRequestPageView: View {
         .help("More")
     }
 
+    /// Parts the merge box, which is where the pull request stands now, from what happened on it.
+    private var activityTitle: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("Activity")
+                .font(.ui(size: 13, weight: .semibold))
+                .foregroundStyle(Color.themeText)
+            Text("Oldest first")
+                .font(.ui(size: 12))
+                .foregroundStyle(Color.themeTertiary)
+        }
+        .padding(.top, 6)
+    }
+
     private var commentBox: some View {
         let working = store.sidePanel.pullRequestWorking != nil
         let written = comment.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -296,10 +310,7 @@ private struct MergeBox: View {
                 actions
             }
         }
-        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
-        }
+        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     /// The checks that need looking at and the running ones, and the rest when asked for.
@@ -501,10 +512,7 @@ private struct ActivityRow: View {
                     PullRequestTextView(blocks: entry.body)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
-                        }
+                        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
         }
@@ -553,7 +561,7 @@ struct PullRequestTextView: View {
                 case .code(let code):
                     ProseText(text: code)
                         .padding(10)
-                        .background(Color.themeField, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Color(platform: Theme.codeBlock), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
             }
         }
