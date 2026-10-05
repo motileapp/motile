@@ -1,5 +1,6 @@
 //! Keeps the client connected to one server: reconnects when the connection drops, and follows the
-//! thread list and the threads the client has open, catching each up from the revision it had.
+//! thread list and the threads the client has open or that are active, catching each up from the
+//! revision it had.
 
 use std::collections::HashMap;
 use std::path::Path;

@@ -7,6 +7,7 @@ pub mod cache;
 pub mod connection;
 pub mod core;
 pub mod ffi;
+pub mod follow;
 pub mod git;
 pub mod link;
 pub mod media;

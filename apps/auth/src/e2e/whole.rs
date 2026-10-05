@@ -336,7 +336,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
     let send = Command::Send {
         server_id: server.id.clone(),
         thread_id: None,
-        new_thread: Some(new_thread),
+        new_thread: Some(new_thread.clone()),
         text: "Show the screenshot".into(),
         attachments: Vec::new(),
     };
@@ -357,6 +357,22 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
     let storage = client.ask(Command::Storage).await.unwrap();
     assert_eq!((storage["media_bytes"].as_u64(), storage["media_limit"].as_u64()), (Some(size), Some(2_000_000_000)));
 
+    // A thread that is never opened here is followed while its agent works.
+    let send = Command::Send {
+        server_id: server.id.clone(),
+        thread_id: None,
+        new_thread: Some(new_thread),
+        text: "Add a rate limiter to the API".into(),
+        attachments: Vec::new(),
+    };
+    let unopened = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
+    client
+        .until("the unopened thread is at rest with its title", |client| {
+            let thread = client.threads.get(&unopened).map(|view| &view.thread);
+            thread.is_some_and(|thread| !thread.running && thread.title == "Add API Rate Limiting")
+        })
+        .await;
+
     client.handle.stop();
     server_endpoint.close().await;
     let mut reopened = Client::start(&client_data, &auth.base, server_port);
@@ -376,6 +392,8 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         .await
         .unwrap();
     reopened.until("the code is highlighted again", |client| client.rows == before).await;
+    reopened.ask(Command::OpenThread { server_id: server.id.clone(), thread_id: unopened }).await.unwrap();
+    assert_eq!(kinds(&reopened), ["user", "fold", "prose", "code", "prose", "code", "prose", "turn_end"]);
 
     // The image is here without the server, until the copies on this device are cleared.
     assert_eq!(reopened.ask(find()).await.unwrap()["path"], fetched.as_str());
