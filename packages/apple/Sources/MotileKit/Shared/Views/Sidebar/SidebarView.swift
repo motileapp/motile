@@ -317,7 +317,7 @@ private struct DraftRow: View {
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
                 } else {
                     HStack(spacing: 3) {
-                        Image(.squarePen, size: 11)
+                        Image(.file, size: 11)
                         Text("Draft")
                             .font(.ui(size: 11, weight: .medium))
                     }
