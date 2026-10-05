@@ -26,7 +26,7 @@ struct MotileApp: App {
                     guard !delegate.started else { return }
                     delegate.started = true
                     appearance.apply()
-                    // A phone opens on the thread, not on the panel that was pushed over it last time.
+                    // A phone opens on the thread, not on the panel that was open last time.
                     if UIDevice.current.userInterfaceIdiom == .phone { store.sidePanel.isOpen = false }
                     store.start()
                     lifecycle.start(store)
@@ -276,8 +276,8 @@ private struct SettingsScreen: View {
     }
 }
 
-/// The sidebar, the thread and its panel. A narrow window has the sidebar under the thread and
-/// pushes the panel over it; a wide one has all three side by side.
+/// The sidebar, the thread and its panel. A narrow window has the sidebar and the panel under
+/// the thread; a wide one has all three side by side.
 struct MainScreen: View {
     private static let sidebarWidth: CGFloat = 320
     private static let panelWidth: CGFloat = 420
@@ -300,9 +300,8 @@ struct MainScreen: View {
     }
 
     private var narrow: some View {
-        @Bindable var panel = store.sidePanel
         let (store, drawer) = (store, drawer)
-        return DrawerView(drawer: drawer) {
+        return DrawerView(drawer: drawer, sidePanel: store.sidePanel, panelAvailable: store.panelUnavailable == nil) {
             SidebarScreen()
                 .environment(store)
                 .environment(drawer)
@@ -310,16 +309,18 @@ struct MainScreen: View {
         } content: {
             NavigationStack {
                 ThreadScreen()
-                    .navigationDestination(isPresented: $panel.isOpen) {
-                        PanelScreen()
-                    }
             }
             .environment(store)
             .environment(drawer)
             .foregroundStyle(Color.themeText)
+        } panel: {
+            NavigationStack {
+                PanelScreen()
+            }
+            .environment(store)
+            .foregroundStyle(Color.themeText)
         }
         .ignoresSafeArea()
-        .onChange(of: panel.isOpen, initial: true) { drawer.isEnabled = !panel.isOpen }
     }
 
     private func wide(_ width: CGFloat) -> some View {

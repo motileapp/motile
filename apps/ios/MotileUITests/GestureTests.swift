@@ -1,7 +1,7 @@
 import XCTest
 
-/// What fingers do, against the dev account (scripts/ui-test.sh starts it): the swipe that shows
-/// the sidebar, and the ones that must not.
+/// What fingers do, against the dev account (scripts/ui-test.sh starts it): the swipes that show
+/// the sidebar and the panel, and the ones that must not.
 final class GestureTests: XCTestCase {
     private let app = XCUIApplication()
 
@@ -46,15 +46,23 @@ final class GestureTests: XCTestCase {
         XCTAssertFalse(newThread.exists && newThread.isHittable)
     }
 
-    func testThePanelIsLeftByTheSwipeBackAndTheSidebarStaysAway() {
-        app.buttons["Files and changes"].tap()
-        let back = app.navigationBars.buttons.firstMatch
-        XCTAssertTrue(back.waitForExistence(timeout: 3))
-        // From the screen's edge, where going back starts.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)))
-        XCTAssertTrue(app.buttons["Threads"].waitForExistence(timeout: 3))
+    func testASwipeToTheLeftShowsThePanelAndOneBackHidesItWithoutTheSidebar() {
+        let back = app.navigationBars.buttons["Back"]
+        app.swipeLeft()
+        XCTAssertTrue(shown(back))
+        app.swipeRight()
+        XCTAssertTrue(back.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Threads"].isHittable)
         XCTAssertFalse(newThread.exists && newThread.isHittable)
+    }
+
+    func testThePanelsBackButtonHidesIt() {
+        app.buttons["Files and changes"].tap()
+        let back = app.navigationBars.buttons["Back"]
+        XCTAssertTrue(shown(back))
+        back.tap()
+        XCTAssertTrue(back.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Threads"].isHittable)
     }
 
     func testASwipeToTheRightOnAThreadInTheSidebarMarksItDone() {
