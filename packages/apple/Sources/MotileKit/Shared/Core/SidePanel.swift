@@ -645,7 +645,7 @@ final class SidePanel {
             case .success(let (title, url, page)):
                 self.pullRequest = .ready(page)
                 self.pullRequestReads += 1
-                self.say(PullRequestNotice(text: title, failed: false, url: url.flatMap(URL.init(string:))))
+                if let url { self.say(PullRequestNotice(text: title, failed: false, url: URL(string: url))) }
                 done?()
             case .failure(let error):
                 self.say(PullRequestNotice(text: error.message, failed: true))
@@ -653,8 +653,8 @@ final class SidePanel {
         }
     }
 
-    /// Changes the pull request as `edit` says, the protocol's `PullRequestEdit` as JSON. Without a
-    /// `key` it goes quietly, like a reaction, and the page is only read again.
+    /// Changes the pull request as `edit` says, the protocol's `PullRequestEdit` as JSON. A `key`
+    /// names the control that waits for it; without one it goes like a reaction.
     func edit(
         _ edit: JSON, key: String? = nil, on target: PanelTarget, number: Int,
         done: (() -> Void)? = nil
@@ -669,17 +669,14 @@ final class SidePanel {
         command["number"] = number
         command["edit"] = edit
         if let method = mergeMethods[target.projectID] { command["method"] = method }
-        store?.core.send("pull_request_edit", command, read: { answer in
-            (answer.string("title"), PullRequestPage(json: answer.object("view") ?? [:]))
-        }) { [weak self] result in
+        store?.core.send("pull_request_edit", command, read: { PullRequestPage(json: $0.object("view") ?? [:]) }) { [weak self] result in
             guard let self else { return }
             if key != nil { self.pullRequestWorking = nil }
             guard self.shown == target, self.shownPullRequest == number else { return }
             switch result {
-            case .success(let (title, page)):
+            case .success(let page):
                 self.pullRequest = .ready(page)
                 self.pullRequestReads += 1
-                if !title.isEmpty { self.say(PullRequestNotice(text: title, failed: false)) }
                 done?()
             case .failure(let error):
                 self.say(PullRequestNotice(text: error.message, failed: true))
