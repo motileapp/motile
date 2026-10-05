@@ -39,6 +39,12 @@ struct LinearState: Equatable, Identifiable {
         default: .circle
         }
     }
+
+    /// The kinds of status in the order an issue goes through them, with what Linear calls them.
+    static let kinds: [(kind: String, name: String)] = [
+        ("triage", "Triage"), ("backlog", "Backlog"), ("unstarted", "Todo"), ("started", "In Progress"),
+        ("completed", "Done"), ("canceled", "Canceled"),
+    ]
 }
 
 struct LinearUser: Equatable, Identifiable {
@@ -137,7 +143,6 @@ struct LinearPage {
 
     let row: LinearRow
     let state: LinearState
-    let branch: String
     let description: [PullRequestText]
     let comments: [Comment]
     /// What hands the issue to an agent.
@@ -146,7 +151,6 @@ struct LinearPage {
     init(json: JSON) {
         row = LinearRow(json: json.object("row") ?? [:])
         state = LinearState(json: json.object("state") ?? [:])
-        branch = json.string("branch")
         description = PullRequestText.blocks(json.objects("description"))
         comments = json.objects("comments").map { comment in
             Comment(
@@ -162,7 +166,8 @@ struct LinearChoice: Codable, Equatable {
     var workspace: String?
     var team: String?
     var mine = true
-    var closed = false
+    /// The kinds of status listed, or none for all of them.
+    var states = ["unstarted", "started"]
 }
 
 /// The Linear workspaces the servers are connected to, and the issues the tab lists.
@@ -181,8 +186,9 @@ final class Linear {
     private(set) var issues: Loaded<[LinearGroup]> = .loading
     /// The open issues, by id.
     private(set) var pages: [String: Loaded<LinearPage>] = [:]
-    /// The issues that are being changed, those commented on as `comment:` and their id, and
-    /// `create` while one is filed.
+    /// The issues that are being changed, those commented on as `comment:` and their id, those
+    /// read as `read:` and their id, `issues` while the list is read and `create` while one is
+    /// filed.
     private(set) var working: Set<String> = []
     /// By project.
     private var choices: [String: LinearChoice]
@@ -275,16 +281,22 @@ final class Linear {
         let choice = choice(for: target)
         guard let workspace = choice.workspace else { return }
         let asked = Listed(target: target, choice: choice, search: search.trimmingCharacters(in: .whitespaces))
-        if listed != asked {
+        if listed != asked || issues.value == nil {
             listed = asked
             issues = .loading
         }
+        working.insert("issues")
         if teams[workspace] == nil { loadTeams(of: workspace, on: target.serverID) }
-        var command: JSON = ["server_id": target.serverID, "workspace": workspace, "mine": choice.mine, "closed": choice.closed]
+        // A server that doesn't read `states` yet goes by `closed`.
+        let closed = choice.states.isEmpty || choice.states.contains { ["completed", "canceled"].contains($0) }
+        var command: JSON = [
+            "server_id": target.serverID, "workspace": workspace, "mine": choice.mine, "closed": closed, "states": choice.states,
+        ]
         if let team = choice.team { command["team"] = team }
         if !asked.search.isEmpty { command["search"] = asked.search }
         store?.core.send("linear_issues", command, read: { $0.objects("groups").map(LinearGroup.init) }) { [weak self] result in
             guard let self, listed == asked else { return }
+            working.remove("issues")
             switch result {
             case .success(let groups):
                 issues = .ready(groups)
@@ -304,8 +316,11 @@ final class Linear {
             command["comment"] = comment
             working.insert("comment:\(id)")
         }
+        if pages[id]?.value == nil { pages[id] = .loading }
+        working.insert("read:\(id)")
         store?.core.send("linear_issue", command, read: { LinearPage(json: $0.object("page") ?? [:]) }) { [weak self] result in
             guard let self else { return }
+            working.remove("read:\(id)")
             if comment != nil { working.remove("comment:\(id)") }
             switch result {
             case .success(let page):
@@ -351,9 +366,9 @@ final class Linear {
         }
     }
 
-    /// Starts a draft for the issue with what it asks for in the composer, on the branch Linear
-    /// names for it. An issue nobody works on yet is taken: assigned to the user and moved to
-    /// the first status of work.
+    /// Puts what the issue asks for in the open draft's composer, or from a thread in that of a
+    /// new draft. An issue nobody works on yet is taken:
+    /// assigned to the user and moved to the first status of work.
     func work(on page: LinearPage, of workspace: String, in target: PanelTarget) {
         var taking: JSON = [:]
         let states = teams[workspace]?.first { $0.id == page.row.team }?.states ?? []
@@ -364,7 +379,7 @@ final class Linear {
             taking["assignee"] = me.id
         }
         if !taking.isEmpty { change(page.row.id, taking, of: workspace, on: target.serverID) }
-        store?.startWork(page.prompt, branch: page.branch.isEmpty ? nil : page.branch, in: target.projectID)
+        store?.startWork(page.prompt, in: target.projectID)
     }
 
     private func refresh(issue id: String?, of workspace: String, on serverID: String) {

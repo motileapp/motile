@@ -380,12 +380,14 @@ struct DiffSurface: View {
             }
             if !target.repository {
                 PanelMessage(text: "This folder isn't a git repository.")
+            } else if target.awaitsWorktree {
+                PanelMessage(text: "Nothing has changed.")
             } else {
                 changes(panel.diff, scope: scope)
             }
         }
         .panelTask(id: PanelTrigger(target: target, scope: scope, version: store.workspaceVersion, asked: asked)) {
-            guard target.repository else { return }
+            guard target.repository, !target.awaitsWorktree else { return }
             // A pull request's diff shows which files were viewed and where its conversations are.
             if case .pullRequest(let number) = scope, store.pullRequestsExtended, panel.pullRequest.value?.number != number {
                 panel.loadPullRequest(of: target, number: number)

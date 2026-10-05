@@ -37,6 +37,8 @@ pub struct Wanted {
     pub team: Option<String>,
     pub mine: bool,
     pub closed: bool,
+    /// The kinds of status to list, or none for what `closed` says.
+    pub states: Vec<LinearStateKind>,
     pub search: Option<String>,
 }
 
@@ -208,7 +210,9 @@ impl Linear {
                 if wanted.mine {
                     filter["assignee"] = json!({ "isMe": { "eq": true } });
                 }
-                if !wanted.closed {
+                if !wanted.states.is_empty() {
+                    filter["state"] = json!({ "type": { "in": wanted.states } });
+                } else if !wanted.closed {
                     filter["state"] = json!({ "type": { "nin": ["completed", "canceled"] } });
                 }
             }
@@ -713,7 +717,7 @@ mod tests {
     }
 
     fn wanted(team: Option<&str>, mine: bool, closed: bool, search: Option<&str>) -> Wanted {
-        Wanted { team: team.map(str::to_string), mine, closed, search: search.map(str::to_string) }
+        Wanted { team: team.map(str::to_string), mine, closed, states: Vec::new(), search: search.map(str::to_string) }
     }
 
     /// The variables of the query the stand-in was last asked.
@@ -741,6 +745,11 @@ mod tests {
 
         linear.issues(&store, "org", &wanted(None, false, true, None)).await.unwrap();
         assert_eq!(last_variables(&asked)["filter"], json!({}));
+
+        let kinds = vec![LinearStateKind::Unstarted, LinearStateKind::Started];
+        linear.issues(&store, "org", &Wanted { states: kinds, ..wanted(None, false, false, None) }).await.unwrap();
+        let filter = json!({ "state": { "type": { "in": ["unstarted", "started"] } } });
+        assert_eq!(last_variables(&asked)["filter"], filter);
 
         linear.issues(&store, "org", &wanted(Some("team"), true, false, Some(" eng-7 "))).await.unwrap();
         let searched = json!({

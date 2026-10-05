@@ -74,7 +74,8 @@ pub fn page(detail: &LinearIssueDetail) -> Page {
 /// The issue in words for an agent: what it is, what it asks for and what was said of it.
 fn prompt(detail: &LinearIssueDetail) -> String {
     let issue = &detail.issue;
-    let mut prompt = format!("Work on the Linear issue {}, \"{}\": {}", issue.identifier, issue.title, issue.url);
+    let mut prompt =
+        format!("Create a plan to work on the Linear issue {}, \"{}\": {}", issue.identifier, issue.title, issue.url);
     let description = detail.description.trim();
     if !description.is_empty() {
         prompt.push_str(&format!("\n\nIts description:\n\n{description}"));
@@ -239,7 +240,7 @@ mod tests {
         detail.issue.url = "https://linear.app/engines/issue/ENG-7".to_string();
 
         let page = page(&detail);
-        let expected = "Work on the Linear issue ENG-7, \"ENG-7\": https://linear.app/engines/issue/ENG-7\n\n\
+        let expected = "Create a plan to work on the Linear issue ENG-7, \"ENG-7\": https://linear.app/engines/issue/ENG-7\n\n\
             Its description:\n\nSay **hello** to whoever runs it.\n\n\
             The comments on it, the oldest first:\n\nGrace Hopper: Which name?\n\nAda: The one given.";
         assert_eq!(page.prompt, expected);
@@ -248,7 +249,7 @@ mod tests {
 
         detail.description.clear();
         detail.comments.clear();
-        let bare = "Work on the Linear issue ENG-7, \"ENG-7\": https://linear.app/engines/issue/ENG-7";
+        let bare = "Create a plan to work on the Linear issue ENG-7, \"ENG-7\": https://linear.app/engines/issue/ENG-7";
         assert_eq!(super::page(&detail).prompt, bare);
     }
 }

@@ -1513,14 +1513,15 @@ impl Core {
                     reply(&sink, id, page.map(|page| json!({ "page": page })).map_err(|error| error.to_string()));
                 });
             }
-            Command::LinearIssues { server_id, workspace, team, mine, closed, search } => {
+            Command::LinearIssues { server_id, workspace, team, mine, closed, states, search } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
-                    let answer = link.request(&Request::LinearIssues { workspace, team, mine, closed, search }).await;
+                    let answer =
+                        link.request(&Request::LinearIssues { workspace, team, mine, closed, states, search }).await;
                     let answer = match answer {
                         Ok(Message::LinearIssues { issues }) => Ok(json!({ "groups": linear::groups(&issues) })),
                         Ok(other) => Err(unexpected(&other)),

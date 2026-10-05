@@ -25,8 +25,6 @@ struct ThreadDraft: Identifiable, Equatable, Codable {
     /// The thread starts in a new worktree, on a branch that starts from `base`.
     var worktree: Bool?
     var base: String?
-    /// What the worktree's branch is called, where the server's writer isn't to name it.
-    var branch: String?
 }
 
 /// A draft as the sidebar lists it.
@@ -554,14 +552,15 @@ final class AppStore {
     }
 
     /// The folder the side panel looks into: the one the open thread works in, or the project's
-    /// when the open draft's thread would start there.
+    /// for the open draft.
     var panelTarget: PanelTarget? {
-        guard let project = threadProject ?? (draftUsesWorktree ? nil : project(selectedDraft?.projectID)) else { return nil }
+        guard let project = threadProject ?? project(selectedDraft?.projectID) else { return nil }
+        let awaitsWorktree = selectedThread == nil && draftUsesWorktree
         return PanelTarget(
             key: draftKey, serverID: project.serverID, projectID: project.id, threadID: selectedThread?.id,
             name: URL(fileURLWithPath: project.worktree?.path ?? project.path).lastPathComponent,
-            repository: project.branch != nil, worktree: project.worktree != nil,
-            pullRequest: (selectedThread?.pullRequest ?? project.git?.pullRequest)?.number)
+            repository: project.branch != nil, worktree: project.worktree != nil, awaitsWorktree: awaitsWorktree,
+            pullRequest: awaitsWorktree ? nil : (selectedThread?.pullRequest ?? project.git?.pullRequest)?.number)
     }
 
     /// Why no pull request can be shown here, when none can.
@@ -608,24 +607,20 @@ final class AppStore {
         composerFocus += 1
     }
 
-    /// Opens a draft in the project with the prompt in the composer, to start in a worktree on
-    /// `branch` where the project can have one.
-    func startWork(_ prompt: String, branch: String?, in projectID: String) {
+    /// Puts the prompt in the composer of the open draft. From a thread it opens a draft in the
+    /// project first, which takes the panel's open tab along.
+    func startWork(_ prompt: String, in projectID: String) {
+        guard selectedDraft == nil else { return handOff(prompt) }
         guard let project = project(projectID) else { return }
+        let tab = sidePanel.tabs.active
         startNewThread(in: project)
-        if canUseWorktrees(of: project), let index = threadDrafts.firstIndex(where: { selection == .draft($0.id) }) {
-            threadDrafts[index].worktree = true
-            threadDrafts[index].branch = branch
-            saveThreadDrafts()
-        }
+        if let tab, tab.blankNumber == nil { sidePanel.open(tab) }
         handOff(prompt)
     }
 
     /// Why the side panel has nothing to show here, when it hasn't.
     var panelUnavailable: String? {
-        guard let target = panelTarget else {
-            return draftUsesWorktree ? "The worktree is made when the thread starts." : "Add a project to see its files."
-        }
+        guard let target = panelTarget else { return "Add a project to see its files." }
         guard let server = server(target.serverID), server.state == .connected else { return "Your server isn't connected." }
         return server.protocolVersion >= 7 ? nil : "Update \(server.name) to see files and changes."
     }
@@ -1372,7 +1367,6 @@ final class AppStore {
             if let effort = composerEffort { settings["effort"] = effort }
             if draftUsesWorktree, let base = draftBase {
                 var worktree: JSON = ["base": base]
-                if let branch = draft.branch { worktree["branch"] = branch }
                 settings["worktree"] = worktree
             }
             command["server_id"] = project.serverID

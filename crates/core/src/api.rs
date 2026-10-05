@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
 use motile_protocol::wire::{
-    Activity, DiffScope, GitAction, GitStage, MergeMethod, NewThread, Project, PullRequestAction, PullRequestEdit,
-    PullRequestSettings, PullRequestState, Request, ServerInfo, Thread,
+    Activity, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread, Project, PullRequestAction,
+    PullRequestEdit, PullRequestSettings, PullRequestState, Request, ServerInfo, Thread,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -210,8 +210,9 @@ pub enum Command {
     },
     /// The issues of a Linear workspace the server is connected to, as the list shows them:
     /// `groups`, each a `linear::Group`. They are of one team or of all, assigned to the user or
-    /// to anyone, and with `closed` also the completed and cancelled ones, or with `search` the
-    /// ones that have the words.
+    /// to anyone, and in a status of one of the kinds in `states` (without them `closed` says
+    /// whether the completed and cancelled ones are among them), or with `search` the ones that
+    /// have the words.
     LinearIssues {
         server_id: String,
         workspace: String,
@@ -219,6 +220,8 @@ pub enum Command {
         team: Option<String>,
         mine: bool,
         closed: bool,
+        #[serde(default)]
+        states: Vec<LinearStateKind>,
         #[serde(default)]
         search: Option<String>,
     },

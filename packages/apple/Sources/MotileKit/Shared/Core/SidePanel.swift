@@ -131,6 +131,8 @@ struct PanelTarget: Equatable {
     let repository: Bool
     /// The thread works in a worktree of its own.
     let worktree: Bool
+    /// The thread will start in a worktree that isn't made yet, so the folder is still the project's.
+    let awaitsWorktree: Bool
     /// The number of the pull request of the branch it works on, when there is one.
     let pullRequest: Int?
 
@@ -356,7 +358,7 @@ final class SidePanel {
     /// The panel covers the thread, so the window shows the sidebar and the panel.
     var isMaximized: Bool { isOpen && tabs.maximized == true }
 
-    /// A panel that has no folder to show, like a draft's whose worktree isn't made yet, stays beside the thread.
+    /// A panel that has no folder to show stays beside the thread.
     var canMaximize: Bool { isOpen && key != nil }
 
     func toggleMaximized() {

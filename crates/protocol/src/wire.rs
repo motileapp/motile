@@ -313,15 +313,18 @@ pub enum Request {
         workspace: String,
     },
     /// The workspace's issues, the last updated first: of one team or of all, assigned to the
-    /// user or to anyone, and with `closed` also the completed and cancelled ones. With `search`
-    /// they are the team's issues that have the words, whoever has them and closed ones too.
-    /// `LinearIssues` answers.
+    /// user or to anyone, and in a status of one of the kinds in `states`. Without `states`,
+    /// which servers before 0.1.268 don't read, `closed` says whether the completed and
+    /// cancelled ones are among them. With `search` they are the team's issues that have the
+    /// words, whoever has them and whatever their status. `LinearIssues` answers.
     LinearIssues {
         workspace: String,
         #[serde(default)]
         team: Option<String>,
         mine: bool,
         closed: bool,
+        #[serde(default)]
+        states: Vec<LinearStateKind>,
         #[serde(default)]
         search: Option<String>,
     },

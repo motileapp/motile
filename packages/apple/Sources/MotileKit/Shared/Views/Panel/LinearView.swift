@@ -34,7 +34,7 @@ private struct LinearConnect: View {
                 Text("Connect Linear")
                     .font(.ui(size: 15, weight: .semibold))
                     .foregroundStyle(Color.themeText)
-                Text("See your issues here and hand them to your agents. You pick a workspace and approve Motile in your browser, and the connection is kept on \(store.server(target.serverID)?.name ?? "your server").")
+                Text("See your issues and hand them to your agents. The connection is kept on your server.")
                     .font(.ui(size: 12.5))
                     .foregroundStyle(Color.themeSecondary)
                     .multilineTextAlignment(.center)
@@ -127,9 +127,17 @@ private struct LinearIssues: View {
             .frame(maxWidth: 180)
         ActionMenu(icon: .listFilter, help: "Which issues to show") {
             Toggle("Assigned to Me", isOn: Binding { choice.mine } set: { mine in linear.choose(for: target) { $0.mine = mine } })
-            Toggle("Show Closed", isOn: Binding { choice.closed } set: { closed in linear.choose(for: target) { $0.closed = closed } })
+            Divider()
+            ForEach(LinearState.kinds, id: \.kind) { kind in
+                Toggle(kind.name, isOn: Binding { choice.states.contains(kind.kind) } set: { listed in
+                    linear.choose(for: target) { choice in
+                        choice.states.removeAll { $0 == kind.kind }
+                        if listed { choice.states.append(kind.kind) }
+                    }
+                })
+            }
         }
-        ActionButton(icon: .rotateCw, help: "Read the issues again") { asked += 1 }
+        ActionButton(icon: .rotateCw, help: "Read the issues again", pending: linear.working.contains("issues")) { asked += 1 }
         ActionButton(icon: .plus, help: "New Issue") { filing = true }
     }
 
@@ -143,7 +151,8 @@ private struct LinearIssues: View {
         case .failed(let message):
             PanelMessage(text: message, failed: true)
         case .ready(let groups) where groups.isEmpty:
-            PanelMessage(text: search.isEmpty ? "No issues." : "None have “\(search)”.")
+            let filtered = choice.mine || !choice.states.isEmpty
+            PanelMessage(text: !search.isEmpty ? "None have “\(search)”." : filtered ? "No issues match the filter." : "No issues.")
         case .ready(let groups):
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
@@ -343,7 +352,7 @@ struct LinearIssueSurface: View {
                 if let url = page.value?.row.url {
                     ActionButton(icon: .squareArrowOutUpRight, help: "Open in Linear") { Platform.open(url) }
                 }
-                ActionButton(icon: .rotateCw, help: "Read the issue again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the issue again", pending: linear.working.contains("read:\(id)")) { asked += 1 }
             }
             if let error = linear.error {
                 PanelNote(text: error)

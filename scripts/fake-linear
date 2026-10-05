@@ -135,7 +135,10 @@ def wanted(issue, filter, state):
         return words in f"{issue['title']} {issue['description']}".lower() or issue["number"] in numbers
     if "assignee" in filter and issue.get("assignee") != state["viewer"]:
         return False
-    return status["type"] not in filter.get("state", {}).get("type", {}).get("nin", [])
+    kinds = filter.get("state", {}).get("type", {})
+    if "in" in kinds:
+        return status["type"] in kinds["in"]
+    return status["type"] not in kinds.get("nin", [])
 
 
 def answer(query, variables):

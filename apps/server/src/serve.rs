@@ -205,8 +205,8 @@ impl Server {
                 let found = hub.linear.teams(hub.store(), &workspace).await;
                 found.map(|(teams, users)| Message::LinearTeams { teams, users })
             }
-            Request::LinearIssues { workspace, team, mine, closed, search } => {
-                let wanted = linear::Wanted { team, mine, closed, search };
+            Request::LinearIssues { workspace, team, mine, closed, states, search } => {
+                let wanted = linear::Wanted { team, mine, closed, states, search };
                 let found = hub.linear.issues(hub.store(), &workspace, &wanted).await;
                 found.map(|issues| Message::LinearIssues { issues })
             }
