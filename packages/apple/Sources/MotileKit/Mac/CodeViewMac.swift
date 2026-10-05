@@ -7,14 +7,20 @@ struct CodeViewRepresentable: NSViewRepresentable {
     let document: CodeDocument
     var collapsed: Set<String> = []
     var reveal: (path: String, count: Int)?
+    var marks = CodeMarks()
     var onToggle: (String) -> Void = { _ in }
     var onOpenFile: (String) -> Void = { _ in }
+    var onViewed: (String) -> Void = { _ in }
+    var onComment: (CodeSheet.Place) -> Void = { _ in }
 
     func makeNSView(context: Context) -> CodeView { CodeView() }
 
     func updateNSView(_ view: CodeView, context: Context) {
         view.onToggle = onToggle
         view.onOpenFile = onOpenFile
+        view.onViewed = onViewed
+        view.onComment = onComment
+        view.mark(marks)
         view.show(document, collapsed: collapsed)
         if let reveal { view.reveal(reveal.path, count: reveal.count) }
     }
@@ -25,6 +31,8 @@ struct CodeViewRepresentable: NSViewRepresentable {
 final class CodeView: NSView {
     var onToggle: (String) -> Void = { _ in }
     var onOpenFile: (String) -> Void = { _ in }
+    var onViewed: (String) -> Void = { _ in }
+    var onComment: (CodeSheet.Place) -> Void = { _ in }
 
     private let scrollView = NSScrollView()
     private let canvas = CodeCanvas()
@@ -68,6 +76,13 @@ final class CodeView: NSView {
         scrollView.frame = bounds
         canvas.fit(to: scrollView.contentSize)
         place()
+    }
+
+    func mark(_ marks: CodeMarks) {
+        guard sheet.marks != marks else { return }
+        sheet.marks = marks
+        canvas.needsDisplay = true
+        pinned.needsDisplay = true
     }
 
     func show(_ document: CodeDocument, collapsed: Set<String>) {
@@ -134,7 +149,11 @@ final class CodeView: NSView {
     fileprivate func pressedHeading(of file: Int, at x: CGFloat, width: CGFloat) {
         guard let document = sheet.document else { return }
         let path = document.files[file].path
-        guard sheet.headingPress(at: x, width: width) == .toggle else { return onOpenFile(path) }
+        switch sheet.headingPress(at: x, width: width, file: file) {
+        case .open: return onOpenFile(path)
+        case .viewed: return onViewed(path)
+        case .toggle: break
+        }
         // A file that is closed from under its pinned heading leaves the view at its heading.
         if let top = sheet.top(ofFile: path), top < scrollView.contentView.bounds.minY {
             scroll(to: NSPoint(x: scrollView.contentView.bounds.minX, y: top))
@@ -193,12 +212,46 @@ private final class CodeCanvas: NSView, NSMenuItemValidation {
         sheet.draw(visible: visibleRect, dirty: dirtyRect, in: context)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    /// The line under the pointer shows that it can be commented on, while the pointer is on
+    /// the numbers.
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        var hovered: (file: Int, line: Int)?
+        if sheet.marks.commentable, sheet.inGutter(point.x - visibleRect.minX), let block = sheet.block(at: point.y),
+            point.y >= block.linesTop, let place = sheet.place(at: point), sheet.commentable(place) != nil
+        {
+            hovered = (place.file, place.line)
+        }
+        guard hovered?.file != sheet.hovered?.file || hovered?.line != sheet.hovered?.line else { return }
+        sheet.hovered = hovered
+        needsDisplay = true
+        if hovered != nil { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard sheet.hovered != nil else { return }
+        sheet.hovered = nil
+        needsDisplay = true
+    }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
         guard let block = sheet.block(at: point.y) else { return }
         if sheet.document?.headed == true, point.y < block.linesTop {
             owner?.pressedHeading(of: block.file, at: point.x - visibleRect.minX, width: visibleRect.width)
+            return
+        }
+        if sheet.marks.commentable, sheet.inGutter(point.x - visibleRect.minX), let place = sheet.place(at: point),
+            sheet.commentable(place) != nil
+        {
+            owner?.onComment(place)
             return
         }
         guard let start = sheet.place(at: point) else { return }

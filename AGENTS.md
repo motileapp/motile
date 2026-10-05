@@ -89,8 +89,10 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   (`rev`); a client asks for what changed after the revision it has.
 - `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),
   snapshots and patches.
-- `pull_requests.rs`: what GitHub says of a pull request (one `gh api graphql` read) and what
-  the pull request tab does to it: merge, auto-merge, update its branch, close, revert, review.
+- `pull_requests.rs`: what GitHub says of a pull request (one `gh api graphql` read), the
+  repository's list of them, and what the pull request tab does to one: merge, auto-merge, update
+  its branch, close, revert, review its lines, edit, react. `hub.rs` watches a thread's pull
+  request for its agent and settles the thread once it merges.
 - `files.rs`: browses the server's folders, takes uploads, and reads the files of a thread's
   folder, never outside it.
 - `media.rs`: keeps the images and videos threads show, named by their contents.
@@ -116,9 +118,9 @@ for tests.
   time.
 - `media.rs`: the images and videos the client has fetched, as files, with a size limit.
 - `git.rs`: which git action a project's status calls for.
-- `pull_request.rs`: the pull request tab: its statuses, the button its state calls for, its
-  menu, its activity with the Markdown set, and the prompts that hand conflicts and failures to
-  the agent.
+- `pull_request.rs`: the pull request tabs: a pull request's statuses, the button its state calls
+  for, its menu, its activity and conversations with the Markdown set, the list's rows, and the
+  prompts that hand conflicts, failures and lines to the agent.
 - `browse.rs`: browsing a server's folders by typing a path.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
@@ -145,8 +147,9 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   `RowViews.swift` are the rows.
 - `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI.
 - `Shared/Views/CommandPanel.swift`: the panel behind ⌘K, ⌘N and ⌘P, a sheet on iOS.
-- `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and the
-  pull request (`PullRequestView.swift`).
+- `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
+  requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
+  `LineCommentSheet.swift`, `PullRequestParts.swift`).
   `CodeView.swift` draws a diff or a file.
 - `Mac/`: `MotileApp.swift` lays out the window, `MediaViewer.swift`, `AppUpdater.swift`,
   `Glass.swift`, `Demo/DemoDriver.swift`.
@@ -320,8 +323,8 @@ name, it writes one.
 
 `scripts/fake-gh` stands in for GitHub's `gh` in the tests and the dev apps (through
 `MOTILE_GH_PATH`), whose project has a local `origin` to push to. It keeps its pull requests in
-`build/dev/github.json`; edit that file to see a pull request fail its checks, conflict or wait
-for a review.
+`build/dev/github.json`; edit that file to see a pull request fail its checks, conflict, wait for
+a review, have conversations on its lines or sit in a stack, and set `delay` to see a client wait.
 
 ## Releasing and deploying
 

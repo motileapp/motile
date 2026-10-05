@@ -16,6 +16,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0006_attachments.sql"),
     include_str!("../migrations/0007_thread_pull_requests.sql"),
     include_str!("../migrations/0008_queued.sql"),
+    include_str!("../migrations/0009_watching.sql"),
 ];
 
 pub struct Store {
@@ -109,7 +110,7 @@ impl Store {
             "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access, t.plan,
                     t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.undone_at,
                     COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
-                    t.pull_request
+                    t.pull_request, t.watching
              FROM threads t LEFT JOIN items i ON i.thread_id = t.id
              GROUP BY t.id",
         )?;
@@ -139,6 +140,7 @@ impl Store {
                     agents: 0,
                     turn_ended_at: row.get(15)?,
                     pull_request: pull_request.and_then(|json| serde_json::from_str(&json).ok()),
+                    watching: row.get(22)?,
                     rev: rev as u64,
                 },
                 session_id: row.get(10)?,
@@ -158,8 +160,8 @@ impl Store {
         self.connection().execute(
             "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access, plan,
                                   session_id, created_at, updated_at, done_at, needs_approval, turn_ended_at, undone_at,
-                                  worktree_branch, worktree_base, pull_request)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+                                  worktree_branch, worktree_base, pull_request, watching)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
@@ -174,7 +176,8 @@ impl Store {
                  turn_ended_at = excluded.turn_ended_at,
                  undone_at = excluded.undone_at,
                  worktree_branch = excluded.worktree_branch,
-                 pull_request = excluded.pull_request",
+                 pull_request = excluded.pull_request,
+                 watching = excluded.watching",
             params![
                 thread.id,
                 thread.title,
@@ -196,6 +199,7 @@ impl Store {
                 stored.worktree.as_ref().map(|worktree| &worktree.branch),
                 stored.worktree.as_ref().map(|worktree| &worktree.base),
                 thread.pull_request.as_ref().and_then(|found| serde_json::to_string(found).ok()),
+                thread.watching,
             ],
         )?;
         Ok(())

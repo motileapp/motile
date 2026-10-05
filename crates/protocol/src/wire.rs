@@ -57,9 +57,13 @@ pub struct Thread {
     pub agents: u32,
     /// When the last turn ended, for telling the user about replies they haven't seen.
     pub turn_ended_at: Option<f64>,
-    /// The pull request that was opened for the thread, whatever became of it.
+    /// The pull request that was opened for the thread or linked to it, whatever became of it.
     #[serde(default)]
     pub pull_request: Option<PullRequest>,
+    /// The thread's agent is told when its pull request's checks finish, someone comments on it
+    /// or it starts to conflict.
+    #[serde(default)]
+    pub watching: bool,
     /// The transcript's revision; a client whose copy is older has catching up to do.
     pub rev: u64,
 }
@@ -365,6 +369,40 @@ pub enum Request {
         #[serde(default)]
         text: Option<String>,
     },
+    /// Changes the pull request's title, text, labels, reviewers, reactions, review comments or
+    /// viewed files, or reviews it with comments on lines. `PullRequestDone` answers.
+    PullRequestEdit {
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        number: u64,
+        edit: PullRequestEdit,
+    },
+    /// The repository's pull requests, the last updated first. `PullRequests` answers.
+    PullRequests {
+        project_id: String,
+        #[serde(default)]
+        thread_id: Option<String>,
+        state: PullRequestState,
+    },
+    /// Makes the pull request with that number the thread's own, read in the folder it works in;
+    /// `None` takes the one it has away.
+    LinkPullRequest {
+        thread_id: String,
+        number: Option<u64>,
+    },
+    /// Has the server tell the thread's agent what happens on its pull request, or stop.
+    WatchPullRequest {
+        thread_id: String,
+        watch: bool,
+    },
+    /// What the server does with pull requests by itself; `None` leaves a setting as it is.
+    SetPullRequestSettings {
+        #[serde(default)]
+        done_on_merge: Option<bool>,
+        #[serde(default)]
+        remove_merged_worktrees: Option<bool>,
+    },
     /// The changes in the folder the thread works in, or in the project's folder, as a patch.
     /// `Diff` answers.
     Diff {
@@ -570,6 +608,227 @@ pub struct PullRequestDetail {
     pub viewer: Viewer,
     /// Its commits, comments and reviews, the oldest first.
     pub activity: Vec<PullRequestEvent>,
+    /// Names it in GitHub's API.
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub default_branch: Option<String>,
+    #[serde(default)]
+    pub labels: Vec<Label>,
+    /// The labels the repository has, to add from.
+    #[serde(default)]
+    pub repository_labels: Vec<Label>,
+    /// Who was asked to review it and who did, with their latest verdict.
+    #[serde(default)]
+    pub reviewers: Vec<Reviewer>,
+    /// Who can be asked to review it.
+    #[serde(default)]
+    pub assignable: Vec<String>,
+    /// Its files, and which of them the user has marked as viewed.
+    #[serde(default)]
+    pub files: Vec<FileViewed>,
+    /// The comments on its lines, by the line they were written against.
+    #[serde(default)]
+    pub threads: Vec<ReviewThread>,
+    /// The stack GitHub keeps it in, bottom first.
+    #[serde(default)]
+    pub stack: Option<Stack>,
+    /// The pull request of the branch it merges into, when that isn't the default branch.
+    #[serde(default)]
+    pub stacked_on: Option<PullRequest>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct Label {
+    pub name: String,
+    /// Hex without the `#`.
+    pub color: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct Reviewer {
+    /// A login, or a team's name.
+    pub name: String,
+    /// Asked and hasn't answered yet.
+    pub requested: bool,
+    pub verdict: Option<Verdict>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct FileViewed {
+    pub path: String,
+    pub viewed: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ReviewThread {
+    pub id: String,
+    pub path: String,
+    /// The line in the file as it is now, missing when the thread is outdated.
+    pub line: Option<u32>,
+    pub side: Side,
+    pub resolved: bool,
+    pub outdated: bool,
+    pub comments: Vec<ThreadComment>,
+}
+
+/// Which version of a file a line comment is on: as it was, or as the pull request makes it.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Side {
+    Left,
+    Right,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ThreadComment {
+    pub id: String,
+    pub author: String,
+    pub body: String,
+    pub at: f64,
+    pub url: Option<String>,
+    /// The lines of the diff it was written under.
+    pub hunk: Option<String>,
+    pub reactions: Vec<Reaction>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ReactionKind {
+    ThumbsUp,
+    ThumbsDown,
+    Laugh,
+    Hooray,
+    Confused,
+    Heart,
+    Rocket,
+    Eyes,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct Reaction {
+    pub kind: ReactionKind,
+    pub count: u32,
+    /// The user on the server reacted so.
+    pub mine: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Stack {
+    pub number: u64,
+    pub url: String,
+    pub base: String,
+    pub layers: Vec<StackLayer>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct StackLayer {
+    pub number: u64,
+    pub title: String,
+    pub head: String,
+    pub draft: bool,
+    pub merged: bool,
+    pub closed: bool,
+}
+
+/// A pull request as the repository's list shows it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct PullRequestSummary {
+    #[serde(flatten)]
+    pub pull_request: PullRequest,
+    pub author: String,
+    pub head: String,
+    pub base: String,
+    pub updated_at: f64,
+    pub review: Option<ReviewDecision>,
+    /// How its checks went, all of them together; missing without checks.
+    pub checks: Option<CheckStatus>,
+    pub additions: u32,
+    pub deletions: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum PullRequestState {
+    Open,
+    Closed,
+    Merged,
+    All,
+}
+
+/// A change to a pull request that says more than an action does.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PullRequestEdit {
+    Title {
+        title: String,
+    },
+    Body {
+        body: String,
+    },
+    Labels {
+        add: Vec<String>,
+        remove: Vec<String>,
+    },
+    Reviewers {
+        add: Vec<String>,
+        remove: Vec<String>,
+    },
+    /// Adds the reaction to a comment, a review or a review comment, or takes it back.
+    React {
+        subject: String,
+        reaction: ReactionKind,
+        on: bool,
+    },
+    Reply {
+        thread: String,
+        body: String,
+    },
+    Resolve {
+        thread: String,
+        resolved: bool,
+    },
+    Viewed {
+        path: String,
+        viewed: bool,
+    },
+    /// A review with comments on lines.
+    Review {
+        verdict: ReviewVerdict,
+        body: String,
+        comments: Vec<LineComment>,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewVerdict {
+    Comment,
+    Approve,
+    RequestChanges,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LineComment {
+    pub path: String,
+    pub line: u32,
+    pub side: Side,
+    pub body: String,
+}
+
+/// What the server does with pull requests by itself.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub struct PullRequestSettings {
+    /// A thread is marked done when its pull request merges or closes.
+    pub done_on_merge: bool,
+    /// A thread's worktree is removed once its pull request merges, when nothing in it is lost.
+    pub remove_merged_worktrees: bool,
+}
+
+impl Default for PullRequestSettings {
+    fn default() -> Self {
+        Self { done_on_merge: true, remove_merged_worktrees: false }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -621,7 +880,7 @@ pub enum CheckStatus {
 }
 
 /// What the user on the server may do to the pull request.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Default)]
 pub struct Viewer {
     /// Can push to the repository, so merge.
     pub can_write: bool,
@@ -630,6 +889,11 @@ pub struct Viewer {
     pub can_update_branch: bool,
     /// Opened it, so can't approve it.
     pub authored: bool,
+    /// Can change its labels.
+    #[serde(default)]
+    pub can_triage: bool,
+    #[serde(default)]
+    pub login: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -643,9 +907,30 @@ pub struct PullRequestEvent {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum EventKind {
-    Commit { oid: String, headline: String },
-    Comment { body: String, url: Option<String> },
-    Review { verdict: Verdict, body: String, url: Option<String> },
+    Commit {
+        oid: String,
+        headline: String,
+        /// The whole name, for asking for its changes.
+        #[serde(default)]
+        sha: String,
+    },
+    Comment {
+        body: String,
+        url: Option<String>,
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        reactions: Vec<Reaction>,
+    },
+    Review {
+        verdict: Verdict,
+        body: String,
+        url: Option<String>,
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        reactions: Vec<Reaction>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -709,6 +994,8 @@ pub enum DiffScope {
     Branch,
     /// What the pull request changes, as GitHub has it.
     PullRequest { number: u64 },
+    /// What one commit changed, as GitHub has it.
+    Commit { sha: String },
 }
 
 /// A file or a folder in a folder threads work in.
@@ -778,6 +1065,8 @@ pub struct ServerInfo {
     pub text_model: Option<String>,
     #[serde(default)]
     pub branch_instructions: BranchInstructions,
+    #[serde(default)]
+    pub pull_request_settings: PullRequestSettings,
 }
 
 /// How the writer is told to name the branches it makes.
@@ -913,6 +1202,9 @@ pub enum Message {
     },
     PullRequest {
         pull_request: Box<PullRequestDetail>,
+    },
+    PullRequests {
+        pull_requests: Vec<PullRequestSummary>,
     },
     /// What a `PullRequestAction` did, in words to show: "Merged PR #7". `url` is the pull
     /// request it opened, if it opened one.

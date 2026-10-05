@@ -117,6 +117,18 @@ final class CodeDocument {
     var removed: Int { files.reduce(0) { $0 + $1.removed } }
 }
 
+/// What a pull request's diff shows besides its lines: which files the user has viewed, and the
+/// lines that can have comments and those that have some.
+struct CodeMarks: Equatable {
+    /// Each file's heading has a box to mark it viewed.
+    var viewable = false
+    var viewed: Set<String> = []
+    /// A line's number can be clicked to comment on it.
+    var commentable = false
+    /// The lines with conversations or comments waiting, by file, by their index in it.
+    var marked: [String: Set<Int>] = [:]
+}
+
 /// A document as the code view shows it: where every file's heading and lines are, how they
 /// are drawn, and what is selected. The view around it scrolls it and takes the clicks.
 final class CodeSheet {
@@ -170,11 +182,14 @@ final class CodeSheet {
 
     /// What a click on a file's heading does.
     enum HeadingPress {
-        case toggle, open
+        case toggle, open, viewed
     }
 
     private(set) var document: CodeDocument?
     private(set) var collapsed: Set<String> = []
+    var marks = CodeMarks()
+    /// The line under the pointer, which shows that a comment can be written on it.
+    var hovered: (file: Int, line: Int)?
     private(set) var blocks: [Block] = []
     private(set) var gutter: CGFloat = 0
     private var numberWidth: CGFloat = 0
@@ -303,7 +318,45 @@ final class CodeSheet {
                 }
                 if document.headed { drawNumber(file.old[line], right: visible.minX + numberWidth, y: y) }
                 drawNumber(file.new[line], right: visible.minX + gutter - 4, y: y)
+                if marks.marked[file.path]?.contains(line) == true {
+                    Theme.link.setFill()
+                    RoundedBox.fill(CGRect(x: visible.minX + 3, y: y + 5, width: 3, height: Self.lineHeight - 10), radius: 1.5)
+                }
+                if marks.commentable, let hovered, hovered.file == block.file, hovered.line == line {
+                    drawCommentBadge(at: CGPoint(x: visible.minX + gutter - 2, y: y))
+                }
             }
+        }
+    }
+
+    /// The sign that a comment can be written on the line, over the end of its number.
+    private func drawCommentBadge(at topRight: CGPoint) {
+        let size: CGFloat = 16
+        let badge = CGRect(x: topRight.x - size, y: topRight.y + (Self.lineHeight - size) / 2, width: size, height: size)
+        Theme.primary.setFill()
+        RoundedBox.fill(badge, radius: 4)
+        TintedSymbol.draw(.plus, size: 10, color: .white, in: badge)
+    }
+
+    /// Whether a click at `x` from the view's left edge is on the numbers of the lines.
+    func inGutter(_ x: CGFloat) -> Bool {
+        x < gutter
+    }
+
+    /// The line of the file at the place, as GitHub counts it, and on which side, when a comment
+    /// can be written on it.
+    func commentable(_ place: Place) -> (path: String, line: Int, side: String, code: String)? {
+        guard marks.commentable, let document, place.file < document.files.count else { return nil }
+        let file = document.files[place.file]
+        guard place.line < file.lines.count else { return nil }
+        switch file.kind(place.line) {
+        case .note: return nil
+        case .removed:
+            let line = Int(file.old[place.line])
+            return line > 0 ? (file.path, line, "left", file.lines[place.line]) : nil
+        case .added, .unchanged:
+            let line = Int(file.new[place.line])
+            return line > 0 ? (file.path, line, "right", file.lines[place.line]) : nil
         }
     }
 
@@ -366,10 +419,14 @@ final class CodeSheet {
         if file.added + file.removed > 0 {
             counts.draw(at: CGPoint(x: countsX, y: rect.minY + ((rect.height - countsSize.height) / 2).rounded()))
         }
+        let viewedBox = viewedBox(of: file, in: rect)
+        if let viewedBox {
+            drawViewed(marks.viewed.contains(file.path), in: viewedBox)
+        }
 
         let name = Self.title(of: file)
         let nameX = rect.minX + 50
-        let room = (file.added + file.removed > 0 ? countsX : open.minX) - 10 - nameX
+        let room = (viewedBox?.minX ?? (file.added + file.removed > 0 ? countsX : open.minX)) - 10 - nameX
         let height = ceil(name.size().height)
         name.drawTruncated(in: CGRect(x: nameX, y: rect.minY + ((rect.height - height) / 2).rounded(), width: max(0, room), height: height))
     }
@@ -400,9 +457,41 @@ final class CodeSheet {
 
     // MARK: Clicks and selection
 
-    /// What a click does in a heading as wide as `width`, `x` from its left.
-    func headingPress(at x: CGFloat, width: CGFloat) -> HeadingPress {
-        x > width - 38 ? .open : .toggle
+    /// Where a file's box to mark it viewed is in its heading, when it has one.
+    private func viewedBox(of file: CodeFile, in rect: CGRect) -> CGRect? {
+        guard marks.viewable else { return nil }
+        let countsWidth = file.added + file.removed > 0 ? LineCountText.text(added: file.added, removed: file.removed).size().width + 10 : 0
+        let right = rect.maxX - 38 - countsWidth
+        return CGRect(x: right - 70, y: rect.minY, width: 70, height: rect.height)
+    }
+
+    private func drawViewed(_ viewed: Bool, in rect: CGRect) {
+        let box = CGRect(x: rect.minX + 6, y: rect.midY - 7, width: 14, height: 14)
+        if viewed {
+            Theme.primary.setFill()
+            RoundedBox.fill(box, radius: 3.5)
+            TintedSymbol.draw(.check, size: 9, color: .white, in: box)
+        } else {
+            Theme.strongBorder.setStroke()
+            RoundedBox.stroke(box.insetBy(dx: 0.5, dy: 0.5), radius: 3.5)
+        }
+        let label = NSAttributedString(string: "Viewed", attributes: [
+            .font: PlatformFont.ui(11.5), .foregroundColor: viewed ? Theme.text : Theme.secondary,
+        ])
+        let size = label.size()
+        label.draw(at: CGPoint(x: box.maxX + 6, y: rect.minY + ((rect.height - size.height) / 2).rounded()))
+    }
+
+    /// What a click in the heading of file `index`, as wide as `width`, `x` from its left, does.
+    func headingPress(at x: CGFloat, width: CGFloat, file index: Int) -> HeadingPress {
+        if x > width - 38 { return .open }
+        if let document, index < document.files.count,
+            let box = viewedBox(of: document.files[index], in: CGRect(x: 0, y: 0, width: width, height: Self.headingHeight)),
+            box.minX <= x, x <= box.maxX
+        {
+            return .viewed
+        }
+        return .toggle
     }
 
     func block(at y: CGFloat) -> Block? {

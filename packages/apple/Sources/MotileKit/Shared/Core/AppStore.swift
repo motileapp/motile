@@ -552,12 +552,31 @@ final class AppStore {
             pullRequest: (selectedThread?.pullRequest ?? project.git?.pullRequest)?.number)
     }
 
-    /// Why the pull request tab has nothing to show here, when it hasn't.
-    var pullRequestUnavailable: String? {
+    /// Why no pull request can be shown here, when none can.
+    var pullRequestsUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
         guard server.protocolVersion >= 8 else { return "Update \(server.name) to see pull requests here." }
-        guard target.repository else { return "This folder isn't a git repository." }
-        return target.pullRequest == nil ? "This branch has no pull request yet." : nil
+        return target.repository ? nil : "This folder isn't a git repository."
+    }
+
+    /// Why the thread's pull request tab has nothing to show here, when it hasn't.
+    var pullRequestUnavailable: String? {
+        guard let target = panelTarget else { return nil }
+        return pullRequestsUnavailable ?? (target.pullRequest == nil ? "This branch has no pull request yet." : nil)
+    }
+
+    /// The server lists, links, edits and watches pull requests, and reviews their lines.
+    var pullRequestsExtended: Bool {
+        guard let target = panelTarget, let server = server(target.serverID) else { return false }
+        return server.protocolVersion >= 9
+    }
+
+    /// What the server does with pull requests by itself.
+    func setPullRequestSettings(doneOnMerge: Bool, removeMergedWorktrees: Bool, on server: Server) {
+        let settings: JSON = ["done_on_merge": doneOnMerge, "remove_merged_worktrees": removeMergedWorktrees]
+        core.send("set_pull_request_settings", ["server_id": server.id, "settings": settings]) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
     }
 
     /// Opens the pull request's tab, or the pull request on GitHub where the tab can't show it.

@@ -7,14 +7,20 @@ struct CodeViewRepresentable: UIViewRepresentable {
     let document: CodeDocument
     var collapsed: Set<String> = []
     var reveal: (path: String, count: Int)?
+    var marks = CodeMarks()
     var onToggle: (String) -> Void = { _ in }
     var onOpenFile: (String) -> Void = { _ in }
+    var onViewed: (String) -> Void = { _ in }
+    var onComment: (CodeSheet.Place) -> Void = { _ in }
 
     func makeUIView(context: Context) -> CodeView { CodeView() }
 
     func updateUIView(_ view: CodeView, context: Context) {
         view.onToggle = onToggle
         view.onOpenFile = onOpenFile
+        view.onViewed = onViewed
+        view.onComment = onComment
+        view.mark(marks)
         view.show(document, collapsed: collapsed)
         if let reveal { view.reveal(reveal.path, count: reveal.count) }
     }
@@ -27,6 +33,8 @@ struct CodeViewRepresentable: UIViewRepresentable {
 final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegate {
     var onToggle: (String) -> Void = { _ in }
     var onOpenFile: (String) -> Void = { _ in }
+    var onViewed: (String) -> Void = { _ in }
+    var onComment: (CodeSheet.Place) -> Void = { _ in }
 
     private let scrollView = UIScrollView()
     private let canvas = Canvas()
@@ -82,6 +90,12 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         scrollView.contentSize = CGSize(
             width: max(bounds.width, sheet.contentSize.width),
             height: max(bounds.height, sheet.contentSize.height))
+    }
+
+    func mark(_ marks: CodeMarks) {
+        guard sheet.marks != marks else { return }
+        sheet.marks = marks
+        canvas.setNeedsDisplay()
     }
 
     func show(_ document: CodeDocument, collapsed: Set<String>) {
@@ -157,6 +171,9 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         if sheet.document?.headed == true, let block = sheet.block(at: point.y), point.y < block.linesTop {
             return pressedHeading(of: block.file, at: point.x - left)
         }
+        if sheet.marks.commentable, sheet.inGutter(point.x - left), let place = sheet.place(at: point), sheet.commentable(place) != nil {
+            return onComment(place)
+        }
         guard sheet.selection != nil else { return }
         sheet.selection = nil
         canvas.setNeedsDisplay()
@@ -165,7 +182,11 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
     private func pressedHeading(of file: Int, at x: CGFloat) {
         guard let document = sheet.document else { return }
         let path = document.files[file].path
-        guard sheet.headingPress(at: x, width: bounds.width) == .toggle else { return onOpenFile(path) }
+        switch sheet.headingPress(at: x, width: bounds.width, file: file) {
+        case .open: return onOpenFile(path)
+        case .viewed: return onViewed(path)
+        case .toggle: break
+        }
         // A file that is closed from under its pinned heading leaves the view at its heading.
         if let top = sheet.top(ofFile: path), top < scrollView.contentOffset.y {
             scroll(to: CGPoint(x: scrollView.contentOffset.x, y: top))

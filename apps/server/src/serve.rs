@@ -150,6 +150,21 @@ impl Server {
             Request::PullRequest { project_id, thread_id, number } => {
                 hub.pull_request(&project_id, thread_id.as_deref(), number).await
             }
+            Request::PullRequestEdit { project_id, thread_id, number, edit } => {
+                hub.pull_request_edit(&project_id, thread_id.as_deref(), number, edit).await
+            }
+            Request::PullRequests { project_id, thread_id, state } => {
+                hub.pull_requests(&project_id, thread_id.as_deref(), state).await
+            }
+            Request::LinkPullRequest { thread_id, number } => {
+                hub.link_pull_request(&thread_id, number).await.map(|_| Message::Ok)
+            }
+            Request::WatchPullRequest { thread_id, watch } => {
+                hub.watch_pull_request(&thread_id, watch).await.map(|_| Message::Ok)
+            }
+            Request::SetPullRequestSettings { done_on_merge, remove_merged_worktrees } => {
+                hub.set_pull_request_settings(done_on_merge, remove_merged_worktrees).map(|_| Message::Ok)
+            }
             Request::PullRequestAction { project_id, thread_id, number, action, method, text } => {
                 hub.pull_request_action(&project_id, thread_id.as_deref(), number, action, method, text.as_deref())
                     .await

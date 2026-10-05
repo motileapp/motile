@@ -9,9 +9,9 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, Approval, Change, CheckStatus, DiffScope, EventKind, FileKind, GitAction,
-    GitHubState, GitStage, GitStatus, Item, ItemKind, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project,
-    PullRequestAction, PullRequestDetail, Queued, Request, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges,
-    TurnSummary,
+    GitHubState, GitStage, GitStatus, Item, ItemKind, LineComment, MergeMethod, Mergeable, Message, NewThread,
+    NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState, Queued,
+    ReactionKind, Request, ReviewVerdict, Side, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -141,6 +141,7 @@ async fn serve(
     )
     .unwrap();
     hub.keep_pull_requests_current(Duration::from_millis(200));
+    hub.watch_pull_requests(Duration::from_millis(300));
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
@@ -1691,6 +1692,273 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     change_pull_request(&bin, json!({"state": "CLOSED"}));
     let closed = thread_where(&mut list, |thread| thread.pull_request.as_ref().is_some_and(|found| found.closed)).await;
     assert_eq!(closed.id, thread_id);
+}
+
+/// Edits the pull request with the number 7 through the server, as the tab does.
+async fn pull_request_edit(
+    connection: &Connection,
+    project_id: &str,
+    edit: PullRequestEdit,
+) -> Result<(String, PullRequestDetail), String> {
+    let request = Request::PullRequestEdit { project_id: project_id.to_string(), thread_id: None, number: 7, edit };
+    match connection.request(&request).await.unwrap() {
+        Message::PullRequestDone { title, pull_request, .. } => Ok((title, *pull_request)),
+        Message::Error { message } => Err(message),
+        other => panic!("expected what the edit did: {other:?}"),
+    }
+}
+
+/// A repository with a remote, `greet.py` on `main` and a branch `greet` that changes it, added
+/// as a project, with `scripts/fake-gh` as GitHub's `gh`.
+async fn project_with_a_branch(harness: &Harness, connection: &Connection) -> (Project, PathBuf) {
+    let root = harness.dir.path();
+    let bin = root.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::copy(repo_file("scripts/fake-gh"), bin.join("gh")).unwrap();
+    git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
+    git(root, &["clone", "-q", "origin.git", "repository"]);
+    let repository = root.join("repository");
+    std::fs::write(repository.join("greet.py"), "print('hello')\n").unwrap();
+    git(&repository, &["add", "."]);
+    git(&repository, &["commit", "-q", "-m", "Add the greeting"]);
+    git(&repository, &["push", "-q", "-u", "origin", "main"]);
+    git(&repository, &["switch", "-q", "-c", "greet"]);
+    std::fs::write(repository.join("greet.py"), "print('hello you')\n").unwrap();
+    git(&repository, &["commit", "-q", "-am", "Greet you"]);
+    let path = repository.to_string_lossy().into_owned();
+    assert_eq!(connection.request(&Request::AddProject { path }).await.unwrap(), Message::Ok);
+    (projects_now(connection).await.remove(0), bin)
+}
+
+/// The text of the first message the thread's agent was given that has `wanted` in it.
+async fn told(connection: &Connection, thread_id: &str, wanted: &str) -> String {
+    let mut follow = open(connection, thread_id, 0).await;
+    loop {
+        let Message::Items { items } = next(&mut follow).await else { continue };
+        for item in items {
+            if let ItemKind::User { text, .. } = item.kind
+                && text.contains(wanted)
+            {
+                return text;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_pull_request_is_listed_edited_reviewed_on_its_lines_and_reacted_to() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let (project, bin) = project_with_a_branch(&harness, &connection).await;
+    let (_, end) = git_run(&connection, &project.id, run(GitAction::CreatePr)).await;
+    assert_eq!(done(end).0, "Created PR #7");
+
+    let list = Request::PullRequests { project_id: project.id.clone(), thread_id: None, state: PullRequestState::Open };
+    let Message::PullRequests { pull_requests } = connection.request(&list).await.unwrap() else {
+        panic!("expected the list")
+    };
+    let listed: Vec<(u64, &str, Option<CheckStatus>)> =
+        pull_requests.iter().map(|found| (found.pull_request.number, found.head.as_str(), found.checks)).collect();
+    assert_eq!(listed, [(7, "greet", Some(CheckStatus::Success))]);
+
+    let (title, edited) =
+        pull_request_edit(&connection, &project.id, PullRequestEdit::Title { title: "Greet whoever".into() })
+            .await
+            .unwrap();
+    assert_eq!((title.as_str(), edited.pull_request.title.as_str()), ("Renamed PR #7", "Greet whoever"));
+    let body = PullRequestEdit::Body { body: "Says hello **to you**.".into() };
+    assert_eq!(pull_request_edit(&connection, &project.id, body).await.unwrap().1.body, "Says hello **to you**.");
+    let labels = PullRequestEdit::Labels { add: vec!["bug".into()], remove: Vec::new() };
+    let labelled = pull_request_edit(&connection, &project.id, labels).await.unwrap().1;
+    assert_eq!(labelled.labels.iter().map(|label| label.name.as_str()).collect::<Vec<_>>(), ["bug"]);
+    assert_eq!(labelled.repository_labels.len(), 3);
+    let unknown = PullRequestEdit::Labels { add: vec!["nope".into()], remove: Vec::new() };
+    assert!(pull_request_edit(&connection, &project.id, unknown).await.unwrap_err().contains("'nope' not found"));
+    let reviewers = PullRequestEdit::Reviewers { add: vec!["ana".into()], remove: Vec::new() };
+    let asked = pull_request_edit(&connection, &project.id, reviewers).await.unwrap().1;
+    assert_eq!(
+        asked.reviewers.iter().map(|reviewer| (reviewer.name.as_str(), reviewer.requested)).collect::<Vec<_>>(),
+        [("ana", true)]
+    );
+
+    // A review with a comment on a line opens a conversation there, which is answered and resolved.
+    let comment = LineComment { path: "greet.py".into(), line: 1, side: Side::Right, body: "Who is you?".into() };
+    let review =
+        PullRequestEdit::Review { verdict: ReviewVerdict::Comment, body: String::new(), comments: vec![comment] };
+    let (title, reviewed) = pull_request_edit(&connection, &project.id, review).await.unwrap();
+    assert_eq!(title, "Reviewed PR #7 with a comment");
+    let thread = reviewed.threads[0].clone();
+    assert_eq!((thread.path.as_str(), thread.line, thread.side), ("greet.py", Some(1), Side::Right));
+    let reply = PullRequestEdit::Reply { thread: thread.id.clone(), body: "The reader".into() };
+    let replied = pull_request_edit(&connection, &project.id, reply).await.unwrap().1;
+    assert_eq!(replied.threads[0].comments.len(), 2);
+    let resolve = PullRequestEdit::Resolve { thread: thread.id.clone(), resolved: true };
+    assert!(pull_request_edit(&connection, &project.id, resolve).await.unwrap().1.threads[0].resolved);
+
+    let subject = thread.comments[0].id.clone();
+    let react = PullRequestEdit::React { subject: subject.clone(), reaction: ReactionKind::Heart, on: true };
+    let (title, reacted) = pull_request_edit(&connection, &project.id, react).await.unwrap();
+    assert!(title.is_empty());
+    let reactions = &reacted.threads[0].comments[0].reactions;
+    assert_eq!(
+        reactions.iter().map(|reaction| (reaction.kind, reaction.count, reaction.mine)).collect::<Vec<_>>(),
+        [(ReactionKind::Heart, 1, true)]
+    );
+    let unreact = PullRequestEdit::React { subject, reaction: ReactionKind::Heart, on: false };
+    assert!(
+        pull_request_edit(&connection, &project.id, unreact).await.unwrap().1.threads[0].comments[0]
+            .reactions
+            .is_empty()
+    );
+
+    let viewed = PullRequestEdit::Viewed { path: "greet.py".into(), viewed: true };
+    let files = pull_request_edit(&connection, &project.id, viewed).await.unwrap().1.files;
+    assert_eq!(files.iter().map(|file| (file.path.as_str(), file.viewed)).collect::<Vec<_>>(), [("greet.py", true)]);
+
+    // A commit's changes are read by its whole name.
+    let sha = reviewed
+        .activity
+        .iter()
+        .find_map(|event| match &event.kind {
+            EventKind::Commit { sha, .. } => Some(sha.clone()),
+            _ => None,
+        })
+        .unwrap();
+    let diff = Request::Diff { project_id: project.id.clone(), thread_id: None, scope: DiffScope::Commit { sha } };
+    let Message::Diff { patch, .. } = connection.request(&diff).await.unwrap() else { panic!("expected the patch") };
+    assert!(patch.contains("+print('hello you')"), "{patch}");
+    let wrong = Request::Diff {
+        project_id: project.id.clone(),
+        thread_id: None,
+        scope: DiffScope::Commit { sha: "x; rm".into() },
+    };
+    assert_eq!(connection.request(&wrong).await.unwrap(), Message::Error { message: "That isn't a commit.".into() });
+
+    // A stack GitHub keeps it in is read with it.
+    let file = bin.join("fake-gh.json");
+    let mut state: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    state["stacks"] = json!([{"number": 2, "url": "api", "html_url": "https://github.com/acme/app/stacks/2", "base": {"ref": "main"},
+        "pull_requests": [{"number": 7, "title": "Greet whoever", "head": {"ref": "greet"}, "state": "open", "merged_at": null}]}]);
+    std::fs::write(&file, state.to_string()).unwrap();
+    let read = Request::PullRequest { project_id: project.id.clone(), thread_id: None, number: 7 };
+    let Message::PullRequest { pull_request } = connection.request(&read).await.unwrap() else { panic!("expected it") };
+    assert_eq!(pull_request.stack.map(|stack| (stack.number, stack.layers.len())), Some((2, 1)));
+}
+
+#[tokio::test]
+async fn a_linked_pull_request_is_watched_for_the_agent_until_it_merges_and_settles_the_thread() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let (project, bin) = project_with_a_branch(&harness, &connection).await;
+    let (_, end) = git_run(&connection, &project.id, run(GitAction::CreatePr)).await;
+    assert_eq!(done(end).0, "Created PR #7");
+    let new_thread =
+        NewThread { project_id: project.id.clone(), ..harness.new_thread(&connection, Agent::Claude).await.unwrap() };
+    let thread_id = send(&connection, None, Some(new_thread), "Look around").await;
+    finished_transcript(&connection, &thread_id).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+
+    let refused = Request::WatchPullRequest { thread_id: thread_id.clone(), watch: true };
+    assert!(matches!(connection.request(&refused).await.unwrap(), Message::Error { .. }));
+    let link = Request::LinkPullRequest { thread_id: thread_id.clone(), number: Some(7) };
+    assert_eq!(connection.request(&link).await.unwrap(), Message::Ok);
+    let linked = thread_where(&mut list, |thread| thread.pull_request.is_some()).await;
+    assert_eq!(linked.pull_request.map(|found| found.number), Some(7));
+    let watch = Request::WatchPullRequest { thread_id: thread_id.clone(), watch: true };
+    assert_eq!(connection.request(&watch).await.unwrap(), Message::Ok);
+    assert!(thread_where(&mut list, |thread| thread.watching).await.watching);
+
+    // Once the server has looked, a comment and checks that finish are told to the agent.
+    change_pull_request(&bin, json!({"checks": [["build", "pending"]]}));
+    tokio::time::sleep(Duration::from_millis(900)).await;
+    change_pull_request(
+        &bin,
+        json!({"checks": [["build", "failure"]], "comments": [{"id": "IC_99", "author": {"login": "ana"},
+            "body": "Please greet by name", "createdAt": "2026-10-05T04:00:00Z", "url": "u"}]}),
+    );
+    let text = told(&connection, &thread_id, "changed on GitHub").await;
+    assert!(text.starts_with("PR #7 (https://github.com/acme/app/pull/7) changed on GitHub:"), "{text}");
+    assert!(text.contains("- Its checks finished: 1 of 1 failed: CI / build."), "{text}");
+    assert!(text.contains("- ana commented: \"Please greet by name\""), "{text}");
+    finished_transcript(&connection, &thread_id).await;
+
+    // Merged, the thread is done and no longer watches.
+    let merge = Request::PullRequestAction {
+        project_id: project.id.clone(),
+        thread_id: None,
+        number: 7,
+        action: PullRequestAction::Merge,
+        method: Some(MergeMethod::Squash),
+        text: None,
+    };
+    assert!(matches!(connection.request(&merge).await.unwrap(), Message::PullRequestDone { .. }));
+    let settled = thread_where(&mut list, |thread| thread.done_at.is_some()).await;
+    assert!(!settled.watching && settled.pull_request.is_some_and(|found| found.merged));
+
+    let unlink = Request::LinkPullRequest { thread_id: thread_id.clone(), number: None };
+    assert_eq!(connection.request(&unlink).await.unwrap(), Message::Ok);
+    assert!(thread_where(&mut list, |thread| thread.pull_request.is_none()).await.pull_request.is_none());
+
+    let settings = Request::SetPullRequestSettings { done_on_merge: Some(false), remove_merged_worktrees: Some(true) };
+    assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    assert!(!server.pull_request_settings.done_on_merge && server.pull_request_settings.remove_merged_worktrees);
+}
+
+#[tokio::test]
+async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_lost() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let (project, _) = project_with_a_branch(&harness, &connection).await;
+    let repository = harness.dir.path().join("repository");
+    git(&repository, &["config", "user.name", "Test"]);
+    git(&repository, &["config", "user.email", "test@example.com"]);
+    git(&repository, &["switch", "-q", "main"]);
+    let settings = Request::SetPullRequestSettings { done_on_merge: None, remove_merged_worktrees: Some(true) };
+    assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
+
+    let new_thread = NewThread {
+        project_id: project.id.clone(),
+        agent: Agent::Claude,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        plan: false,
+        worktree: Some(NewWorktree { base: "main".to_string() }),
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
+    finished_transcript(&connection, &thread_id).await;
+    let opened = GitRun { thread_id: Some(&thread_id), ..run(GitAction::CommitPushPr) };
+    let (_, end) = git_run(&connection, &project.id, opened).await;
+    assert!(done(end).0.starts_with("Created PR #"));
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { threads, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    let worktree = PathBuf::from(&threads.iter().find(|thread| thread.id == thread_id).unwrap().cwd);
+    assert!(worktree.is_dir());
+
+    let merge = Request::PullRequestAction {
+        project_id: project.id.clone(),
+        thread_id: Some(thread_id.clone()),
+        number: 7,
+        action: PullRequestAction::Merge,
+        method: Some(MergeMethod::Squash),
+        text: None,
+    };
+    assert!(matches!(connection.request(&merge).await.unwrap(), Message::PullRequestDone { .. }));
+    let settled = thread_where(&mut list, |thread| thread.done_at.is_some()).await;
+    assert_eq!(settled.id, thread_id);
+    for _ in 0..50 {
+        if !worktree.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(!worktree.exists(), "the merged worktree is still there");
+    // Its branch stays, for the thread to work on again.
+    let branch = git_says(&repository, &["branch", "--list", "--format=%(refname:short)"]);
+    assert!(branch.lines().count() > 2, "{branch}");
 }
 
 /// Changes what `scripts/fake-gh` in `bin` says of the first pull request it opened.

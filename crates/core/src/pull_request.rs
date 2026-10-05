@@ -3,7 +3,8 @@
 //! conflicts and failures to the thread's agent. Every client shows the same.
 
 use motile_protocol::wire::{
-    CheckStatus, EventKind, MergeMethod, Mergeable, PullRequestAction, PullRequestDetail, ReviewDecision, Verdict,
+    CheckStatus, EventKind, FileViewed, Label, MergeMethod, Mergeable, PullRequestAction, PullRequestDetail,
+    PullRequestSummary, Reaction, ReviewDecision, ReviewThread, Side, Verdict,
 };
 use serde::Serialize;
 
@@ -40,6 +41,114 @@ pub struct View {
     pub with_comment: Option<Choice>,
     /// Something is still being worked out, so the tab asks again in a while.
     pub settling: bool,
+    /// The description as it was written, for editing it.
+    pub body: String,
+    /// The title and the description can be changed.
+    pub can_edit: bool,
+    pub labels: Vec<Label>,
+    /// The labels that can be put on it or taken off, when the user may.
+    pub label_choices: Vec<Toggle>,
+    pub reviewers: Vec<ReviewerView>,
+    /// Who can be asked to review it or no longer be, when the user may.
+    pub reviewer_choices: Vec<Toggle>,
+    /// Its files, and which of them the user has marked as viewed.
+    pub viewed: Vec<FileViewed>,
+    /// Its comments on lines can be written: it is open.
+    pub can_review_lines: bool,
+    /// The comments on its lines, by the line they were written against.
+    pub threads: Vec<ThreadView>,
+    pub stack: Option<StackView>,
+    /// The pull request of the branch it merges into.
+    pub stacked_on: Option<Linked>,
+    /// It can be watched for the agent: it is open.
+    pub watchable: bool,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Toggle {
+    pub name: String,
+    /// A label's colour, as hex.
+    pub color: Option<String>,
+    pub on: bool,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ReviewerView {
+    pub name: String,
+    /// "Approved", "Changes requested", "Commented", "Waiting".
+    pub label: &'static str,
+    pub tone: Tone,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ThreadView {
+    pub id: String,
+    pub path: String,
+    pub line: Option<u32>,
+    pub side: Side,
+    pub resolved: bool,
+    pub outdated: bool,
+    /// The last lines of the diff it was written under, the line itself last.
+    pub hunk: Vec<String>,
+    pub comments: Vec<CommentView>,
+    pub at: f64,
+    /// The prompt that has the agent do what it asks.
+    pub fix: Option<String>,
+    pub can_resolve: bool,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct CommentView {
+    pub id: String,
+    pub author: String,
+    pub at: f64,
+    pub body: Vec<Text>,
+    pub url: Option<String>,
+    pub reactions: Vec<Reaction>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct StackView {
+    pub number: u64,
+    pub url: String,
+    pub base: String,
+    /// Bottom first.
+    pub layers: Vec<StackLayerView>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct StackLayerView {
+    pub number: u64,
+    pub title: String,
+    pub state: State,
+    /// It is the pull request the tab shows.
+    pub current: bool,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Linked {
+    pub number: u64,
+    pub title: String,
+    pub state: State,
+}
+
+/// A pull request in the repository's list.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct Row {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub state: State,
+    pub author: String,
+    pub head: String,
+    pub base: String,
+    pub updated_at: f64,
+    pub checks: Option<Tone>,
+    /// "Checks failed", for the dot.
+    pub checks_label: Option<&'static str>,
+    pub review: Option<(Tone, &'static str)>,
+    pub additions: u32,
+    pub deletions: u32,
 }
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -161,6 +270,11 @@ pub struct Entry {
     pub body: Vec<Text>,
     pub commits: Vec<CommitLine>,
     pub url: Option<String>,
+    /// Names the comment or the review, to react to it.
+    pub id: Option<String>,
+    pub reactions: Vec<Reaction>,
+    /// A conversation on a line.
+    pub thread: Option<ThreadView>,
 }
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -172,23 +286,20 @@ pub enum EntryKind {
     Review,
     Merged,
     Closed,
+    Thread,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct CommitLine {
     pub oid: String,
     pub headline: String,
+    pub sha: String,
 }
 
 /// The tab for the pull request, merging with `preferred` when the repository allows it.
 pub fn view(detail: &PullRequestDetail, preferred: Option<MergeMethod>) -> View {
     let found = &detail.pull_request;
-    let state = match (found.merged, found.closed, found.draft) {
-        (true, _, _) => State::Merged,
-        (_, true, _) => State::Closed,
-        (_, _, true) => State::Draft,
-        _ => State::Open,
-    };
+    let state = state_of(found.merged, found.closed, found.draft);
     let method = detail
         .auto_merge
         .or(preferred.filter(|method| detail.merge_methods.contains(method)))
@@ -246,8 +357,194 @@ pub fn view(detail: &PullRequestDetail, preferred: Option<MergeMethod>) -> View 
             && (detail.mergeable == Mergeable::Unknown
                 || detail.auto_merge.is_some()
                 || detail.checks.iter().any(|check| check.status == CheckStatus::Pending)),
+        body: detail.body.clone(),
+        can_edit: detail.viewer.can_update,
+        labels: detail.labels.clone(),
+        label_choices: if detail.viewer.can_triage && open { label_choices(detail) } else { Vec::new() },
+        reviewers: reviewers(detail),
+        reviewer_choices: if detail.viewer.can_write && open { reviewer_choices(detail) } else { Vec::new() },
+        viewed: detail.files.clone(),
+        can_review_lines: open,
+        threads: detail.threads.iter().map(|thread| thread_view(detail, thread)).collect(),
+        stack: detail.stack.as_ref().map(|stack| StackView {
+            number: stack.number,
+            url: stack.url.clone(),
+            base: stack.base.clone(),
+            layers: stack
+                .layers
+                .iter()
+                .map(|layer| StackLayerView {
+                    number: layer.number,
+                    title: layer.title.clone(),
+                    state: state_of(layer.merged, layer.closed, layer.draft),
+                    current: layer.number == found.number,
+                })
+                .collect(),
+        }),
+        stacked_on: detail.stacked_on.as_ref().map(|below| Linked {
+            number: below.number,
+            title: below.title.clone(),
+            state: state_of(below.merged, below.closed, below.draft),
+        }),
+        watchable: open,
         checks,
     }
+}
+
+fn state_of(merged: bool, closed: bool, draft: bool) -> State {
+    match (merged, closed, draft) {
+        (true, _, _) => State::Merged,
+        (_, true, _) => State::Closed,
+        (_, _, true) => State::Draft,
+        _ => State::Open,
+    }
+}
+
+/// The repository's labels, those it has first, each marked when it has it.
+fn label_choices(detail: &PullRequestDetail) -> Vec<Toggle> {
+    let has = |name: &str| detail.labels.iter().any(|label| label.name == name);
+    let mut choices: Vec<Toggle> = detail
+        .repository_labels
+        .iter()
+        .map(|label| Toggle { name: label.name.clone(), color: Some(label.color.clone()), on: has(&label.name) })
+        .collect();
+    choices.sort_by_key(|choice| !choice.on);
+    choices
+}
+
+fn reviewers(detail: &PullRequestDetail) -> Vec<ReviewerView> {
+    let reviewers = detail.reviewers.iter().map(|reviewer| {
+        let (label, tone) = match (reviewer.requested, reviewer.verdict) {
+            (true, _) => ("Waiting", Tone::Pending),
+            (_, Some(Verdict::Approved)) => ("Approved", Tone::Success),
+            (_, Some(Verdict::ChangesRequested)) => ("Changes requested", Tone::Danger),
+            _ => ("Commented", Tone::Neutral),
+        };
+        ReviewerView { name: reviewer.name.clone(), label, tone }
+    });
+    reviewers.collect()
+}
+
+/// Who can be asked to review, those asked first. The author can't review their own.
+fn reviewer_choices(detail: &PullRequestDetail) -> Vec<Toggle> {
+    let asked = |name: &str| detail.reviewers.iter().any(|reviewer| reviewer.name == name && reviewer.requested);
+    let mut choices: Vec<Toggle> = detail
+        .assignable
+        .iter()
+        .filter(|name| **name != detail.author)
+        .map(|name| Toggle { name: name.clone(), color: None, on: asked(name) })
+        .collect();
+    choices.sort_by_key(|choice| !choice.on);
+    choices
+}
+
+fn thread_view(detail: &PullRequestDetail, thread: &ReviewThread) -> ThreadView {
+    let hunk: Vec<String> = thread
+        .comments
+        .first()
+        .and_then(|comment| comment.hunk.as_deref())
+        .map(|hunk| {
+            let lines: Vec<&str> = hunk.lines().filter(|line| !line.starts_with("@@")).collect();
+            lines[lines.len().saturating_sub(4)..].iter().map(|line| line.to_string()).collect()
+        })
+        .unwrap_or_default();
+    let open = detail.pull_request.is_open();
+    ThreadView {
+        id: thread.id.clone(),
+        path: thread.path.clone(),
+        line: thread.line,
+        side: thread.side,
+        resolved: thread.resolved,
+        outdated: thread.outdated,
+        at: thread.comments.first().map_or(0.0, |comment| comment.at),
+        comments: thread
+            .comments
+            .iter()
+            .map(|comment| CommentView {
+                id: comment.id.clone(),
+                author: comment.author.clone(),
+                at: comment.at,
+                body: text(&comment.body),
+                url: comment.url.clone(),
+                reactions: comment.reactions.clone(),
+            })
+            .collect(),
+        fix: (open && !thread.resolved).then(|| fix_thread_prompt(detail, thread)),
+        can_resolve: open && (detail.viewer.can_write || detail.viewer.authored),
+        hunk,
+    }
+}
+
+/// The repository's pull requests as the list shows them.
+pub fn rows(found: &[PullRequestSummary]) -> Vec<Row> {
+    found
+        .iter()
+        .map(|summary| {
+            let pull_request = &summary.pull_request;
+            let checks = summary.checks.map(|status| match status {
+                CheckStatus::Failure | CheckStatus::Cancelled => (Tone::Danger, "Checks failed"),
+                CheckStatus::Pending => (Tone::Pending, "Checks running"),
+                CheckStatus::ActionRequired => (Tone::Warning, "Checks waiting"),
+                CheckStatus::Success => (Tone::Success, "Checks passed"),
+                _ => (Tone::Neutral, "Checks finished"),
+            });
+            Row {
+                number: pull_request.number,
+                title: pull_request.title.clone(),
+                url: pull_request.url.clone(),
+                state: state_of(pull_request.merged, pull_request.closed, pull_request.draft),
+                author: summary.author.clone(),
+                head: summary.head.clone(),
+                base: summary.base.clone(),
+                updated_at: summary.updated_at,
+                checks: checks.map(|(tone, _)| tone),
+                checks_label: checks.map(|(_, label)| label),
+                review: summary.review.map(|review| match review {
+                    ReviewDecision::Approved => (Tone::Success, "Approved"),
+                    ReviewDecision::ChangesRequested => (Tone::Danger, "Changes requested"),
+                    ReviewDecision::ReviewRequired => (Tone::Warning, "Review required"),
+                }),
+                additions: summary.additions,
+                deletions: summary.deletions,
+            }
+        })
+        .collect()
+}
+
+/// The prompt that hands one line of the pull request and what the user said of it to the agent.
+pub fn line_prompt(number: u64, url: &str, head: &str, path: &str, line: u32, code: &str, note: &str) -> String {
+    let mut lines = vec![
+        format!("About `{path}` line {line} in PR #{number} ({url}), on the branch `{head}`:"),
+        format!("> {}", one_line(code)),
+    ];
+    if !note.trim().is_empty() {
+        lines.push(String::new());
+        lines.push(note.trim().to_string());
+    }
+    lines.join("\n")
+}
+
+fn fix_thread_prompt(detail: &PullRequestDetail, thread: &ReviewThread) -> String {
+    let found = &detail.pull_request;
+    let place = match thread.line {
+        Some(line) => format!("`{}` line {line}", thread.path),
+        None => format!("`{}`", thread.path),
+    };
+    let mut lines = vec![
+        format!(
+            "Do what the review conversation below asks on {place} in PR #{}, titled `{}`, at {}.",
+            found.number,
+            one_line(&found.title),
+            found.url
+        ),
+        branch_line(detail),
+        UNTRUSTED.to_string(),
+        String::new(),
+    ];
+    for comment in &thread.comments {
+        lines.push(format!("> {}: {}", comment.author, quoted(&comment.body)));
+    }
+    lines.join("\n")
 }
 
 fn byline(detail: &PullRequestDetail, state: State) -> String {
@@ -427,7 +724,7 @@ fn checks(detail: &PullRequestDetail) -> Vec<CheckView> {
 
 /// The one button the pull request's state calls for.
 fn primary(detail: &PullRequestDetail, state: State, method: Option<MergeMethod>) -> Option<Button> {
-    let viewer = detail.viewer;
+    let viewer = &detail.viewer;
     match state {
         State::Merged => return None,
         State::Closed => return viewer.can_update.then(|| action("Reopen", PullRequestAction::Reopen)),
@@ -472,7 +769,7 @@ fn menu(
     method: Option<MergeMethod>,
     primary: Option<&Button>,
 ) -> Vec<Button> {
-    let viewer = detail.viewer;
+    let viewer = &detail.viewer;
     let is_primary = |candidate: &Button| {
         primary.is_some_and(|primary| primary.action == candidate.action && primary.prompt == candidate.prompt)
     };
@@ -745,8 +1042,12 @@ fn quoted(text: &str) -> String {
     text.lines().collect::<Vec<_>>().join("\n> ")
 }
 
+fn file_name(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
+}
+
 /// Markdown as text blocks, its code coloured.
-fn text(markdown: &str) -> Vec<Text> {
+pub fn text(markdown: &str) -> Vec<Text> {
     markdown::parse(markdown)
         .into_iter()
         .filter_map(|block| match block {
@@ -777,6 +1078,9 @@ fn activity(detail: &PullRequestDetail) -> Vec<Entry> {
         body: Vec::new(),
         commits: Vec::new(),
         url: None,
+        id: None,
+        reactions: Vec::new(),
+        thread: None,
     };
     let mut opened =
         entry(EntryKind::Opened, &detail.author, "opened this pull request", Tone::Neutral, detail.created_at);
@@ -784,8 +1088,8 @@ fn activity(detail: &PullRequestDetail) -> Vec<Entry> {
     let mut entries = vec![opened];
     for event in &detail.activity {
         match &event.kind {
-            EventKind::Commit { oid, headline } => {
-                let line = CommitLine { oid: oid.clone(), headline: headline.clone() };
+            EventKind::Commit { oid, headline, sha } => {
+                let line = CommitLine { oid: oid.clone(), headline: headline.clone(), sha: sha.clone() };
                 match entries.last_mut() {
                     Some(last) if last.kind == EntryKind::Commits && last.author == event.author => {
                         last.commits.push(line);
@@ -799,13 +1103,17 @@ fn activity(detail: &PullRequestDetail) -> Vec<Entry> {
                     }
                 }
             }
-            EventKind::Comment { body, url } => {
+            EventKind::Comment { body, url, id, reactions } => {
                 let mut comment = entry(EntryKind::Comment, &event.author, "commented", Tone::Neutral, event.at);
                 comment.body = text(body);
                 comment.url = url.clone();
+                comment.id = Some(id.clone()).filter(|id| !id.is_empty());
+                comment.reactions = reactions.clone();
                 entries.push(comment);
             }
-            EventKind::Review { verdict, body, url } => {
+            // A review that only carries comments on lines is said by its conversations.
+            EventKind::Review { verdict: Verdict::Commented, body, .. } if body.trim().is_empty() => {}
+            EventKind::Review { verdict, body, url, id, reactions } => {
                 let (said, tone) = match verdict {
                     Verdict::Approved => ("approved these changes", Tone::Success),
                     Verdict::ChangesRequested => ("requested changes", Tone::Danger),
@@ -815,10 +1123,25 @@ fn activity(detail: &PullRequestDetail) -> Vec<Entry> {
                 let mut review = entry(EntryKind::Review, &event.author, said, tone, event.at);
                 review.body = text(body);
                 review.url = url.clone();
+                review.id = Some(id.clone()).filter(|id| !id.is_empty());
+                review.reactions = reactions.clone();
                 entries.push(review);
             }
         }
     }
+    for thread in &detail.threads {
+        let view = thread_view(detail, thread);
+        let Some(first) = thread.comments.first() else { continue };
+        let said = match thread.line {
+            Some(line) => format!("commented on {} line {line}", file_name(&thread.path)),
+            None => format!("commented on {}", file_name(&thread.path)),
+        };
+        let mut conversation = entry(EntryKind::Thread, &first.author, &said, Tone::Neutral, view.at);
+        conversation.thread = Some(view);
+        entries.push(conversation);
+    }
+    // Conversations on lines go where they started, after what came before them.
+    entries.sort_by(|a, b| a.at.total_cmp(&b.at));
     if let Some(at) = detail.merged_at {
         let who = detail.merged_by.as_deref().unwrap_or(&detail.author);
         entries.push(entry(EntryKind::Merged, who, &format!("merged this into {}", detail.base), Tone::Merged, at));
@@ -863,8 +1186,28 @@ mod tests {
             auto_merge: None,
             merge_methods: vec![MergeMethod::Squash, MergeMethod::Merge],
             auto_merge_allowed: true,
-            viewer: Viewer { can_write: true, can_update: true, can_update_branch: true, authored: true },
+            viewer: Viewer {
+                can_write: true,
+                can_update: true,
+                can_update_branch: true,
+                authored: true,
+                can_triage: true,
+                login: "yekta".into(),
+            },
             activity: Vec::new(),
+            id: "PR_7".into(),
+            default_branch: Some("main".into()),
+            labels: vec![Label { name: "bug".into(), color: "d73a4a".into() }],
+            repository_labels: vec![
+                Label { name: "docs".into(), color: "0075ca".into() },
+                Label { name: "bug".into(), color: "d73a4a".into() },
+            ],
+            reviewers: Vec::new(),
+            assignable: vec!["yekta".into(), "ana".into(), "bo".into()],
+            files: Vec::new(),
+            threads: Vec::new(),
+            stack: None,
+            stacked_on: None,
         }
     }
 
@@ -989,7 +1332,7 @@ mod tests {
         let review = |author: &str, verdict, body: &str| PullRequestEvent {
             at: 2.0,
             author: author.into(),
-            kind: EventKind::Review { verdict, body: body.into(), url: None },
+            kind: EventKind::Review { verdict, body: body.into(), url: None, id: String::new(), reactions: Vec::new() },
         };
         found.activity = vec![
             review("ana", Verdict::ChangesRequested, "Rename it\nand test it"),
@@ -1006,9 +1349,24 @@ mod tests {
         let mut found = detail();
         let event = |author: &str, kind| PullRequestEvent { at: 2.0, author: author.into(), kind };
         found.activity = vec![
-            event("yekta", EventKind::Commit { oid: "1a2b3c4".into(), headline: "Greet".into() }),
-            event("yekta", EventKind::Commit { oid: "5d6e7f8".into(), headline: "Test".into() }),
-            event("ana", EventKind::Review { verdict: Verdict::Approved, body: "".into(), url: None }),
+            event(
+                "yekta",
+                EventKind::Commit { oid: "1a2b3c4".into(), headline: "Greet".into(), sha: "1a2b3c4d".into() },
+            ),
+            event(
+                "yekta",
+                EventKind::Commit { oid: "5d6e7f8".into(), headline: "Test".into(), sha: "5d6e7f8a".into() },
+            ),
+            event(
+                "ana",
+                EventKind::Review {
+                    verdict: Verdict::Approved,
+                    body: "".into(),
+                    url: None,
+                    id: "R1".into(),
+                    reactions: Vec::new(),
+                },
+            ),
         ];
         found.pull_request.merged = true;
         found.merged_at = Some(3.0);
@@ -1027,5 +1385,123 @@ mod tests {
         );
         assert_eq!(view(&found, None).byline, "ana merged 2 commits into main from greet");
         assert!(matches!(&entries[0].body[0], Text::Prose { prose } if prose.text == "Greets by name."));
+    }
+
+    #[test]
+    fn labels_and_reviewers_are_offered_to_who_may_change_them() {
+        let mut found = detail();
+        found.reviewers = vec![
+            motile_protocol::wire::Reviewer { name: "ana".into(), requested: false, verdict: Some(Verdict::Approved) },
+            motile_protocol::wire::Reviewer { name: "bo".into(), requested: true, verdict: None },
+        ];
+        let shown = view(&found, None);
+        let labels: Vec<(&str, bool)> =
+            shown.label_choices.iter().map(|choice| (choice.name.as_str(), choice.on)).collect();
+        assert_eq!(labels, [("bug", true), ("docs", false)]);
+        // The author can't review their own pull request.
+        let reviewers: Vec<(&str, bool)> =
+            shown.reviewer_choices.iter().map(|choice| (choice.name.as_str(), choice.on)).collect();
+        assert_eq!(reviewers, [("bo", true), ("ana", false)]);
+        let verdicts: Vec<(&str, &str)> =
+            shown.reviewers.iter().map(|reviewer| (reviewer.name.as_str(), reviewer.label)).collect();
+        assert_eq!(verdicts, [("ana", "Approved"), ("bo", "Waiting")]);
+
+        found.viewer = Viewer::default();
+        let reader = view(&found, None);
+        assert!(reader.label_choices.is_empty() && reader.reviewer_choices.is_empty() && !reader.can_edit);
+    }
+
+    #[test]
+    fn a_conversation_on_a_line_sits_where_it_started_and_can_be_handed_to_the_agent() {
+        let mut found = detail();
+        let comment = |id: &str, author: &str, at: f64, body: &str| motile_protocol::wire::ThreadComment {
+            id: id.into(),
+            author: author.into(),
+            body: body.into(),
+            at,
+            url: None,
+            hunk: Some(
+                "@@ -1,2 +1,2 @@\n def greet(name):\n-    print(\"Hello \" + name)\n+    print(f\"Hello {name}\")"
+                    .into(),
+            ),
+            reactions: Vec::new(),
+        };
+        found.threads = vec![ReviewThread {
+            id: "T1".into(),
+            path: "src/greet.py".into(),
+            line: Some(2),
+            side: Side::Right,
+            resolved: false,
+            outdated: false,
+            comments: vec![comment("C1", "ana", 3.0, "Return it instead"), comment("C2", "yekta", 4.0, "Will do")],
+        }];
+        found.activity = vec![
+            PullRequestEvent {
+                at: 2.0,
+                author: "yekta".into(),
+                kind: EventKind::Commit { oid: "1a2b3c4".into(), headline: "Greet".into(), sha: "1a2b3c4d".into() },
+            },
+            PullRequestEvent {
+                at: 5.0,
+                author: "bo".into(),
+                kind: EventKind::Comment { body: "Nice".into(), url: None, id: "C3".into(), reactions: Vec::new() },
+            },
+        ];
+        let entries = view(&found, None).activity;
+        let said: Vec<&str> = entries.iter().map(|entry| entry.said.as_str()).collect();
+        assert_eq!(said, ["opened this pull request", "pushed a commit", "commented on greet.py line 2", "commented"]);
+        let thread = entries[2].thread.as_ref().unwrap();
+        assert_eq!(thread.hunk.last().map(String::as_str), Some("+    print(f\"Hello {name}\")"));
+        let fix = thread.fix.as_deref().unwrap();
+        assert!(
+            fix.starts_with("Do what the review conversation below asks on `src/greet.py` line 2 in PR #7"),
+            "{fix}"
+        );
+        assert!(fix.ends_with("> ana: Return it instead\n> yekta: Will do"), "{fix}");
+        assert_eq!(entries[1].commits[0].sha, "1a2b3c4d");
+    }
+
+    #[test]
+    fn the_list_says_how_checks_and_reviews_went() {
+        let summary = PullRequestSummary {
+            pull_request: motile_protocol::wire::PullRequest {
+                number: 9,
+                title: "Draft it".into(),
+                url: "u".into(),
+                draft: true,
+                merged: false,
+                closed: false,
+            },
+            author: "ana".into(),
+            head: "draft".into(),
+            base: "main".into(),
+            updated_at: 1.0,
+            review: Some(ReviewDecision::ChangesRequested),
+            checks: Some(CheckStatus::Failure),
+            additions: 1,
+            deletions: 0,
+        };
+        let row = &rows(&[summary])[0];
+        assert_eq!(
+            (row.state, row.checks_label, row.review),
+            (State::Draft, Some("Checks failed"), Some((Tone::Danger, "Changes requested")))
+        );
+    }
+
+    #[test]
+    fn a_line_is_handed_to_the_agent_with_the_note() {
+        let prompt = line_prompt(
+            7,
+            "https://github.com/acme/app/pull/7",
+            "greet",
+            "greet.py",
+            2,
+            "    print(name)",
+            " Why not return it? ",
+        );
+        assert_eq!(
+            prompt,
+            "About `greet.py` line 2 in PR #7 (https://github.com/acme/app/pull/7), on the branch `greet`:\n> print(name)\n\nWhy not return it?"
+        );
     }
 }

@@ -78,6 +78,7 @@ struct SettingsView: View {
                 if store.account.signedIn {
                     servers
                     textGeneration
+                    pullRequests
                     projects
                 }
             }
@@ -149,6 +150,58 @@ struct SettingsView: View {
                     }
                     if server.protocolVersion >= 6 {
                         BranchInstructionsEditor(server: server)
+                    }
+                    if server.id != servers.last?.id { SettingsDivider() }
+                }
+            }
+        }
+    }
+
+    /// What each server does with pull requests by itself.
+    @ViewBuilder private var pullRequests: some View {
+        let servers = store.servers.filter { $0.state == .connected && $0.protocolVersion >= 9 }
+        if !servers.isEmpty {
+            SettingsSection("Pull requests", caption: "What your servers do once a thread's pull request merges") {
+                ForEach(servers) { server in
+                    if servers.count > 1 {
+                        SettingsRow {
+                            Image(.server, size: 13)
+                                .foregroundStyle(Color.themeSecondary)
+                            Text(server.name)
+                                .fontWeight(.medium)
+                        } trailing: {
+                            EmptyView()
+                        }
+                    }
+                    SettingsRow {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Mark the thread done")
+                            Text("When its pull request merges or closes")
+                                .font(.caption)
+                                .foregroundStyle(Color.themeSecondary)
+                        }
+                    } trailing: {
+                        Toggle("", isOn: Binding { server.doneOnMerge } set: {
+                            store.setPullRequestSettings(doneOnMerge: $0, removeMergedWorktrees: server.removeMergedWorktrees, on: server)
+                        })
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                    }
+                    SettingsDivider()
+                    SettingsRow {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Remove the thread's worktree")
+                            Text("After its pull request merges, if all of it is pushed")
+                                .font(.caption)
+                                .foregroundStyle(Color.themeSecondary)
+                        }
+                        .help("Its branch stays, and the worktree is made again if the thread goes on.")
+                    } trailing: {
+                        Toggle("", isOn: Binding { server.removeMergedWorktrees } set: {
+                            store.setPullRequestSettings(doneOnMerge: server.doneOnMerge, removeMergedWorktrees: $0, on: server)
+                        })
+                        .labelsHidden()
+                        .toggleStyle(.switch)
                     }
                     if server.id != servers.last?.id { SettingsDivider() }
                 }

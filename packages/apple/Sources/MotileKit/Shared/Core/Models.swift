@@ -86,6 +86,9 @@ struct Server: Equatable, Identifiable {
     let models: [ModelInfo]
     /// The model picked to write titles, commit messages and pull requests there.
     let textModel: String?
+    /// What the server does with pull requests by itself.
+    let doneOnMerge: Bool
+    let removeMergedWorktrees: Bool
     /// How the writer there is told to name branches, and what that is until it is changed.
     let branchInstructions: String
     let defaultBranchInstructions: String
@@ -109,6 +112,9 @@ struct Server: Equatable, Identifiable {
         protocolVersion = (info?["protocol"] as? NSNumber)?.intValue ?? 0
         models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
         textModel = info?.optionalString("text_model")
+        let settings = info?.object("pull_request_settings")
+        doneOnMerge = settings?.bool("done_on_merge") ?? true
+        removeMergedWorktrees = settings?.bool("remove_merged_worktrees") ?? false
         let naming = info?.object("branch_instructions")
         branchInstructions = naming?.string("text") ?? ""
         defaultBranchInstructions = naming?.string("default") ?? ""
@@ -481,8 +487,10 @@ struct ThreadInfo: Equatable, Identifiable {
     /// How many agents the thread's agent has started that still work.
     let agents: Int
     let turnEndedAt: Double?
-    /// The pull request that was opened for it.
+    /// The pull request that was opened for it or linked to it.
     let pullRequest: PullRequest?
+    /// Its agent is told what happens on its pull request.
+    let watching: Bool
     let unread: Bool
 
     init(json: JSON) {
@@ -506,6 +514,7 @@ struct ThreadInfo: Equatable, Identifiable {
         agents = json.int("agents")
         turnEndedAt = json.optionalDouble("turn_ended_at")
         pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
+        watching = json.bool("watching")
         unread = json.bool("unread")
     }
 

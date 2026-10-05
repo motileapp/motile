@@ -46,6 +46,8 @@ struct PanelContent: View {
             case .change(let turn, let path): ChangeSurface(target: target, turn: turn, path: path).id(active)
             case .agents: AgentsSurface()
             case .pullRequest: PullRequestSurface(target: target)
+            case .pullRequestNumber(let number): PullRequestSurface(target: target, number: number).id(number)
+            case .pullRequests: PullRequestListSurface(target: target)
             case .blank, nil: PanelLauncher(target: target)
             }
         }
@@ -238,8 +240,13 @@ private struct PanelLauncher: View {
                     store.sidePanel.showDiff()
                 }
                 row(.users, "Agents", keys: "⇧⌘A", reason: nil) { store.sidePanel.open(.agents) }
-                row(.gitPullRequest, "Pull Request", keys: "⇧⌘R", reason: store.pullRequestUnavailable) {
+                row(.gitPullRequest, "Pull Request", keys: "⇧⌘R", reason: store.pullRequestsUnavailable) {
                     store.sidePanel.open(.pullRequest)
+                }
+                if store.pullRequestsExtended {
+                    row(.list, "All Pull Requests", keys: "⌥⇧⌘R", reason: store.pullRequestsUnavailable) {
+                        store.sidePanel.open(.pullRequests)
+                    }
                 }
             }
             .frame(width: 250)
@@ -292,6 +299,18 @@ struct DiffSurface: View {
     @Environment(AppStore.self) private var store
     let target: PanelTarget
     @State private var asked = 0
+    @State private var commenting: CommentedLine?
+
+    /// The pull request the diff shows, when it shows one or one of its commits, as far as it
+    /// has been read.
+    private func page(for scope: DiffScope) -> PullRequestPage? {
+        let page = store.sidePanel.pullRequest.value
+        switch scope {
+        case .pullRequest(let number): return page?.number == number ? page : nil
+        case .commit(let sha): return page?.activity.contains { $0.commits.contains { $0.sha == sha } } == true ? page : nil
+        default: return nil
+        }
+    }
 
     var body: some View {
         let panel = store.sidePanel
@@ -302,6 +321,14 @@ struct DiffSurface: View {
                 if let document = panel.diff.value, !document.files.isEmpty {
                     Text(AttributedString(LineCountText.text(added: document.added, removed: document.removed)))
                         .padding(.leading, 4)
+                }
+                if case .pullRequest = scope, let page = page(for: scope), store.pullRequestsExtended, !page.viewed.isEmpty {
+                    let viewed = page.viewed.values.filter { $0 }.count
+                    Text("\(viewed) of \(page.viewed.count) viewed")
+                        .font(.ui(size: 12))
+                        .foregroundStyle(Color.themeTertiary)
+                        .padding(.leading, 6)
+                        .help(page.canReviewLines ? "Click a line's number to comment on it" : "")
                 }
                 Spacer(minLength: 4)
                 if let document = panel.diff.value, document.files.count > 1 {
@@ -323,8 +350,35 @@ struct DiffSurface: View {
         }
         .task(id: PanelTrigger(target: target, scope: scope, version: store.workspaceVersion, asked: asked)) {
             guard target.repository else { return }
+            // A pull request's diff shows which files were viewed and where its conversations are.
+            if case .pullRequest(let number) = scope, store.pullRequestsExtended, panel.pullRequest.value?.number != number {
+                panel.loadPullRequest(of: target, number: number)
+            }
             panel.loadDiff(of: target, scope: scope)
         }
+        .sheet(item: $commenting) { line in
+            if let page = page(for: scope) {
+                LineCommentSheet(target: target, page: page, commented: line)
+            }
+        }
+    }
+
+    /// What the diff shows of the pull request besides its lines.
+    private func marks(_ document: CodeDocument, scope: DiffScope) -> CodeMarks {
+        guard case .pullRequest(let number) = scope, store.pullRequestsExtended, let page = page(for: scope) else { return CodeMarks() }
+        var marks = CodeMarks(viewable: true, viewed: Set(page.viewed.filter(\.value).keys), commentable: page.canReviewLines)
+        let pending = store.sidePanel.pendingComments[number] ?? []
+        let places = page.threads.compactMap { thread in thread.line.map { (thread.path, $0, thread.side) } }
+            + pending.map { ($0.path, $0.line, $0.side) }
+        for (path, line, side) in places {
+            guard let file = document.files.first(where: { $0.path == path }) else { continue }
+            let index = (0..<file.lines.count).first { index in
+                let removed = file.kind(index) == .removed
+                return side == "left" ? removed && Int(file.old[index]) == line : !removed && Int(file.new[index]) == line
+            }
+            if let index { marks.marked[path, default: []].insert(index) }
+        }
+        return marks
     }
 
     @ViewBuilder
@@ -341,10 +395,26 @@ struct DiffSurface: View {
             if document.truncated {
                 PanelNote(text: "These changes are too long to show in full. This is their start.")
             }
+            let marks = marks(document, scope: scope)
             CodeViewRepresentable(
-                document: document, collapsed: panel.collapsed, reveal: panel.reveal,
-                onToggle: { panel.toggleCollapsed($0) }, onOpenFile: { panel.open(.file($0)) })
+                document: document, collapsed: panel.collapsed, reveal: panel.reveal, marks: marks,
+                onToggle: { panel.toggleCollapsed($0) }, onOpenFile: { panel.open(.file($0)) },
+                onViewed: { path in
+                    guard case .pullRequest(let number) = scope else { return }
+                    panel.setViewed(path, !marks.viewed.contains(path), on: target, number: number)
+                },
+                onComment: { place in comment(on: place, in: document) })
         }
+    }
+
+    private func comment(on place: CodeSheet.Place, in document: CodeDocument) {
+        guard place.file < document.files.count else { return }
+        let file = document.files[place.file]
+        guard place.line < file.lines.count else { return }
+        let removed = file.kind(place.line) == .removed
+        let line = Int(removed ? file.old[place.line] : file.new[place.line])
+        guard line > 0 else { return }
+        commenting = CommentedLine(path: file.path, line: line, side: removed ? "left" : "right", code: file.lines[place.line])
     }
 
     private func scopeMenu(_ scope: DiffScope) -> some View {
@@ -352,8 +422,18 @@ struct DiffSurface: View {
         return Menu {
             Toggle("Uncommitted changes", isOn: chosen(.uncommitted, scope))
             Toggle("Branch changes", isOn: chosen(.branch, scope))
-            if let number = target.pullRequest, store.pullRequestUnavailable == nil {
+            if let number = pullRequestNumber(scope), store.pullRequestsUnavailable == nil {
                 Toggle("Pull request #\(number)", isOn: chosen(.pullRequest(number), scope))
+                if let page = store.sidePanel.pullRequest.value, page.number == number {
+                    let commits = page.activity.flatMap(\.commits).filter { !$0.sha.isEmpty }
+                    if commits.count > 1 || scope == .commit(commits.first?.sha ?? "") {
+                        Menu("Its Commits") {
+                            ForEach(commits) { commit in
+                                Toggle("\(commit.oid)  \(commit.headline)", isOn: chosen(.commit(commit.sha), scope))
+                            }
+                        }
+                    }
+                }
             }
             if !panel.turns.isEmpty {
                 Divider()
@@ -390,8 +470,15 @@ struct DiffSurface: View {
         case .uncommitted: return "Uncommitted"
         case .branch: return "Branch"
         case .pullRequest(let number): return "PR #\(number)"
+        case .commit(let sha): return "Commit \(sha.prefix(7))"
         case .turn(let id): return store.sidePanel.name(ofTurn: id)
         }
+    }
+
+    /// The pull request the scope menu offers: the thread's, or the one the panel shows.
+    private func pullRequestNumber(_ scope: DiffScope) -> Int? {
+        if case .pullRequest(let number) = scope { return number }
+        return target.pullRequest ?? store.sidePanel.pullRequest.value?.number
     }
 
     private func label(of turn: TurnChange) -> String {

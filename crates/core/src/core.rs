@@ -16,7 +16,8 @@ use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, FileKind, Item, ItemKind, Message, Project, Request, ServerInfo, Thread, ToolStatus, Worktree,
+    Activity, FileKind, Item, ItemKind, Message, Project, PullRequestSettings, Request, ServerInfo, Thread, ToolStatus,
+    Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -101,6 +102,11 @@ enum Input {
     TextModelSet {
         server_id: String,
         model: Option<String>,
+    },
+    /// The server took what it is to do with pull requests by itself.
+    PullRequestSettingsSet {
+        server_id: String,
+        settings: PullRequestSettings,
     },
     /// The server took the instructions for naming its branches, or went back to its own.
     BranchInstructionsSet {
@@ -313,6 +319,14 @@ impl Core {
                 let Some(server) = self.server_mut(&server_id) else { return };
                 let Some(info) = &mut server.info else { return };
                 info.text_model = model;
+                let info = info.clone();
+                self.cache.set_server_info(&server_id, &info);
+                self.emit_servers();
+            }
+            Input::PullRequestSettingsSet { server_id, settings } => {
+                let Some(server) = self.server_mut(&server_id) else { return };
+                let Some(info) = &mut server.info else { return };
+                info.pull_request_settings = settings;
                 let info = info.clone();
                 self.cache.set_server_info(&server_id, &info);
                 self.emit_servers();
@@ -1289,6 +1303,24 @@ impl Core {
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
             }
+            Command::SetPullRequestSettings { server_id, settings } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
+                tokio::spawn(async move {
+                    let request = Request::SetPullRequestSettings {
+                        done_on_merge: Some(settings.done_on_merge),
+                        remove_merged_worktrees: Some(settings.remove_merged_worktrees),
+                    };
+                    let set = link.request(&request).await;
+                    if set.is_ok() {
+                        let _ = inputs.send(Input::PullRequestSettingsSet { server_id, settings });
+                    }
+                    reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
+                });
+            }
             Command::SetBranchInstructions { server_id, instructions } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
@@ -1380,6 +1412,52 @@ impl Core {
                     let answer = view.map(|view| json!({ "title": title, "url": url, "view": view }));
                     reply(&sink, id, answer.map_err(|error| error.to_string()));
                 });
+            }
+            Command::PullRequestEdit { server_id, project_id, thread_id, number, edit, method } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let request = Request::PullRequestEdit { project_id, thread_id, number, edit };
+                    let (title, detail) = match link.request(&request).await {
+                        Ok(Message::PullRequestDone { title, pull_request, .. }) => (title, pull_request),
+                        Ok(other) => return reply(&sink, id, Err(unexpected(&other))),
+                        Err(error) => return reply(&sink, id, Err(error_text(error))),
+                    };
+                    let view = tokio::task::spawn_blocking(move || pull_request::view(&detail, method)).await;
+                    let answer = view.map(|view| json!({ "title": title, "view": view }));
+                    reply(&sink, id, answer.map_err(|error| error.to_string()));
+                });
+            }
+            Command::PullRequests { server_id, project_id, thread_id, state } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let answer = link.request(&Request::PullRequests { project_id, thread_id, state }).await;
+                    let answer = match answer {
+                        Ok(Message::PullRequests { pull_requests }) => {
+                            Ok(json!({ "rows": pull_request::rows(&pull_requests) }))
+                        }
+                        Ok(other) => Err(unexpected(&other)),
+                        Err(error) => Err(error_text(error)),
+                    };
+                    reply(&sink, id, answer);
+                });
+            }
+            Command::Markdown { text } => {
+                let sink = self.sink.clone();
+                tokio::task::spawn_blocking(move || {
+                    reply(&sink, id, Ok(json!({ "blocks": pull_request::text(&text) })))
+                });
+            }
+            Command::LinePrompt { number, url, head, path, line, code, note } => {
+                let prompt = pull_request::line_prompt(number, &url, &head, &path, line, &code, &note);
+                self.reply(id, Ok(json!({ "prompt": prompt })));
             }
             Command::File { server_id, project_id, thread_id, path } => {
                 let link = match self.link(&server_id) {
@@ -1779,6 +1857,7 @@ mod tests {
             agents: 0,
             turn_ended_at: None,
             pull_request: None,
+            watching: false,
             rev: 3,
         }
     }
