@@ -213,6 +213,12 @@ private struct LinearGroupHeader: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Self.margin)
         .button(.highlight(radius: Radius.control, inset: Self.margin), action: toggle)
+        .background {
+            RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                .fill(Color.themeBackgroundSecondary)
+                .padding(Self.margin)
+        }
+        .environment(\.surface, .secondary)
     }
 }
 
