@@ -12,7 +12,8 @@ export const Route = createRootRoute({
       { title: "Motile" },
       {
         name: "description",
-        content: "The servers and clients on your Motile account.",
+        content:
+          "Run Claude Code and Codex on your own servers. Steer every thread from a native Mac app: open in a second, connected in a tenth.",
       },
     ],
     links: [
