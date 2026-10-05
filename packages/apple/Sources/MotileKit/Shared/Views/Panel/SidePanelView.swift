@@ -130,11 +130,10 @@ struct PanelTabStrip: View {
                             PanelTabChip(tab: tab, active: tab == tabs.active)
                         }
                     }
-                    if store.panelUnavailable == nil {
+                    if store.panelUnavailable == nil, !tabs.isBlank {
                         IconOnlyButton(symbol: .plus, help: "New tab", size: scaled(28), symbolSize: 12, faded: true) {
                             store.sidePanel.openBlank()
                         }
-                        .disabled(tabs.isBlank)
                     }
                 }
                 .padding(.horizontal, 8)
