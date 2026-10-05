@@ -43,6 +43,8 @@ final class CodeView: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        // The pinned heading leaves through the top, under the bar above.
+        clipsToBounds = true
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
