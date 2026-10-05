@@ -131,7 +131,7 @@ struct SearchField: View {
 
     var body: some View {
         InputField(
-            "Search", text: $text, icon: .search, variant: bare ? .bare : .outlined, size: Platform.scale > 1 ? .large : .regular, clearable: true
+            "Search", text: $text, icon: .search, variant: bare ? .bare : .filled, size: Platform.scale > 1 ? .large : .regular, clearable: true
         )
     }
 }
