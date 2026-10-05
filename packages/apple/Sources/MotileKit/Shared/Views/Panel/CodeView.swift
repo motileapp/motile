@@ -136,7 +136,7 @@ final class CodeSheet {
     /// Lines are as small on iOS as on the Mac, so that as much of one fits.
     static let lineHeight: CGFloat = 18
     private static let fileGap: CGFloat = 12
-    private static let textInset: CGFloat = 12
+    private static let textInset: CGFloat = 8
     private static let font = PlatformFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
     private static let numberFont = PlatformFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
     private static let advance = font.letterWidth
