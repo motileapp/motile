@@ -62,19 +62,30 @@ final class SurfaceView: LayerView {
 
 /// A button of words inside a row. All of its frame takes the click, and what lights up under
 /// the pointer is inset from it, so buttons that touch each other and the row's edge look apart.
+/// A bordered one is drawn as a regular button is, with a line around it.
 final class RowButton: FlippedView {
+    static let metrics = ControlSize.regular
+
     private let highlight = SurfaceView()
-    private let title = TextLabel(font: Theme.smallFont, color: Theme.secondary)
+    private let title: TextLabel
+    private let font: PlatformFont
+    private let bordered: Bool
+    private let sidePadding: CGFloat
     private let insets: PlatformEdgeInsets
     private static let titleHeight = scaled(16)
 
-    /// The room between the words and the highlight's sides.
+    /// The room between the words and the highlight's sides, without a border.
     static let padding: CGFloat = 8
 
-    init(title: String, tooltip: String, radius: CGFloat, insets: PlatformEdgeInsets, action: @escaping () -> Void) {
+    init(title: String, tooltip: String, radius: CGFloat, bordered: Bool = false, insets: PlatformEdgeInsets, action: @escaping () -> Void) {
         self.insets = insets
+        self.bordered = bordered
+        font = bordered ? .ui(Self.metrics.textSize, weight: .medium) : Theme.smallFont
+        sidePadding = bordered ? Self.metrics.padding : Self.padding
+        self.title = TextLabel(font: font, color: bordered ? Theme.text : Theme.secondary)
         super.init(frame: .zero)
         highlight.radius = radius
+        if bordered { highlight.stroke = Theme.borderSecondary }
         addSubview(highlight)
         self.title.string = title
         self.title.centered = true
@@ -88,8 +99,8 @@ final class RowButton: FlippedView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     var width: CGFloat {
-        let words = ceil(title.string.size(withAttributes: [.font: Theme.smallFont]).width)
-        return words + 2 * Self.padding + insets.left + insets.right
+        let words = ceil(title.string.size(withAttributes: [.font: font]).width)
+        return words + 2 * sidePadding + insets.left + insets.right
     }
 
     override var frame: CGRect {
@@ -107,7 +118,7 @@ final class RowButton: FlippedView {
 
     private func light(_ lit: Bool) {
         highlight.fill = lit ? Theme.backgroundSecondary : .clear
-        title.color = lit ? Theme.text : Theme.secondary
+        title.color = lit || bordered ? Theme.text : Theme.secondary
     }
 }
 
