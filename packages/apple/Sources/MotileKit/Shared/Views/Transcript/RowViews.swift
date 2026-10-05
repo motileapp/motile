@@ -196,7 +196,7 @@ final class UserRowView: RowView {
 
     private static let margin: CGFloat = 14
     /// The room under the bubble for when the message was sent and the button that copies it.
-    static let footHeight = metaGap + MessageMeta.height + 4
+    static let footHeight = metaGap + MessageMeta.height + 25
     private static let metaGap: CGFloat = 4
 
     static func height(_ fit: BubbleFit, textHeight: CGFloat) -> CGFloat {
