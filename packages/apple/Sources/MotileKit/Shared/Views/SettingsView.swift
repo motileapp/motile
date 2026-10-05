@@ -18,7 +18,7 @@ struct SettingsView: View {
                         Text(store.account.signedIn ? store.account.email : "Not signed in")
                             .foregroundStyle(Color.themeSecondary)
                         if store.account.signedIn {
-                            Button("Sign Out") { store.signOut() }
+                            ActionButton("Sign Out", size: .small) { store.signOut() }
                         }
                     }
                 }
@@ -28,8 +28,7 @@ struct SettingsView: View {
                     SettingsRow {
                         Text("Motile \(store.updater.current)")
                     } trailing: {
-                        Button("Check for Updates") { store.updater.check(asked: true) }
-                            .disabled(store.updater.state == .checking)
+                        ActionButton("Check for Updates", size: .small, pending: store.updater.state == .checking) { store.updater.check(asked: true) }
                     }
                     if store.updater.state != .idle {
                         SettingsDivider()
@@ -70,7 +69,7 @@ struct SettingsView: View {
                                 .foregroundStyle(Color.themeSecondary)
                         }
                     } trailing: {
-                        Button("Clear") { store.clearMedia() }
+                        ActionButton("Clear", size: .small) { store.clearMedia() }
                             .disabled((store.mediaStorage?.used ?? 0) == 0)
                     }
                 }
@@ -115,12 +114,12 @@ struct SettingsView: View {
                     }
                 } trailing: {
                     ServerUpdateStatus(server: server) { EmptyView() }
-                    Button("Remove") { store.removeServer(server) }
+                    ActionButton("Remove", size: .small) { store.removeServer(server) }
                 }
                 SettingsDivider()
             }
             SettingsRow {
-                Button("Add a Server…") { store.showsAddServer = true }
+                ActionButton("Add a Server…", size: .small) { store.showsAddServer = true }
             } trailing: {
                 EmptyView()
             }
@@ -227,21 +226,21 @@ struct SettingsView: View {
                             .truncationMode(.head)
                     }
                 } trailing: {
-                    Menu("Icon") {
+                    ActionMenu("Icon", variant: .secondary, size: .small) {
                         Button("Choose an Image…") { store.iconProject = project }
                         Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
                     }
-                    .fixedSize()
                     if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
-                        Button("Setup…") { setupProject = project }
-                            .help("The script that runs in each new worktree of \(project.name)")
+                        ActionButton("Setup…", help: "The script that runs in each new worktree of \(project.name)", size: .small) {
+                            setupProject = project
+                        }
                     }
-                    Button("Remove") { store.removeProject(project) }
+                    ActionButton("Remove", size: .small) { store.removeProject(project) }
                 }
                 SettingsDivider()
             }
             SettingsRow {
-                Button("Add a Project…") {
+                ActionButton("Add a Project…", size: .small) {
                     #if os(macOS)
                     openWindow(id: "main")
                     #else
@@ -285,22 +284,21 @@ private struct BranchInstructionsEditor: View {
                     .font(.caption)
                     .foregroundStyle(Color.themeSecondary)
                 Spacer()
-                Button("Reset") {
+                ActionButton("Reset", size: .small) {
                     text = server.defaultBranchInstructions
                     store.setBranchInstructions(nil, on: server)
                 }
                 .disabled(server.branchInstructions == server.defaultBranchInstructions && !changed)
-                Button("Save") { store.setBranchInstructions(text, on: server) }
+                ActionButton("Save", variant: .primary, size: .small) { store.setBranchInstructions(text, on: server) }
                     .disabled(!changed)
             }
-            .controlSize(.small)
             TextEditor(text: $text)
                 .font(.ui(size: 12))
                 .scrollContentBackground(.hidden)
                 .padding(6)
                 .frame(height: 64)
-                .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeBorder, lineWidth: 1) }
+                .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1) }
         }
         .padding(.horizontal, settingsInset)
         .padding(.bottom, 10)
@@ -329,13 +327,13 @@ private struct SetupSheet: View {
                 .scrollContentBackground(.hidden)
                 .padding(6)
                 .frame(height: 140)
-                .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay { RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeBorder, lineWidth: 1) }
+                .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .overlay { RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1) }
             HStack {
                 Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
+                ActionButton("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") {
+                ActionButton("Save", variant: .primary) {
                     store.setSetup(of: project, to: script)
                     dismiss()
                 }
@@ -413,13 +411,7 @@ private struct SettingsRow<Leading: View, Trailing: View>: View {
     }
 
     @ViewBuilder private var controls: some View {
-        #if os(macOS)
         trailing
-        #else
-        Group { trailing }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        #endif
     }
 }
 

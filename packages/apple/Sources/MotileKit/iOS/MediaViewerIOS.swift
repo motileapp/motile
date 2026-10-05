@@ -152,8 +152,10 @@ private struct MediaPage: View {
         case .other(let url):
             VStack(spacing: 14) {
                 Text("This video can't be played here.")
-                ShareLink("Open in Another App", item: url)
-                    .buttonStyle(.borderedProminent)
+                ShareLink(item: url) {
+                    ControlLabel(title: "Open in Another App", icon: nil, size: .large)
+                }
+                .buttonStyle(.control(.primary, size: .large))
             }
             .font(.system(size: 15))
             .foregroundStyle(.white.opacity(0.8))
@@ -164,7 +166,7 @@ private struct MediaPage: View {
                 } else if let fraction {
                     Text("Downloading \(item.name) · \(Int(fraction * 100))%").monospacedDigit()
                 } else {
-                    ProgressView().colorScheme(.dark)
+                    Spinner(size: ControlSize.large.symbol)
                 }
             }
             .font(.system(size: 15))

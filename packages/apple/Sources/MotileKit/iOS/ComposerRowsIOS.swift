@@ -59,24 +59,10 @@ struct ComposerTouchControls: View {
 
     private var settingsButton: some View {
         let model = store.composerModel
-        return Button {
+        let logo = model.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
+        return ActionButton(model?.name ?? "No agent", picture: logo, variant: .ghost, opens: true) {
             store.showsThreadSettings = true
-        } label: {
-            HStack(spacing: 6) {
-                if let model {
-                    AgentIcon(agent: model.agent, size: 15)
-                }
-                Text(model?.name ?? "No agent")
-                    .font(.ui(size: 13, weight: .medium))
-                    .lineLimit(1)
-                Image(.chevronDown, size: 9)
-                    .foregroundStyle(Color.themeTertiary)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 34)
-            .padding(.vertical, 6)
         }
-        .buttonStyle(.highlight(radius: 10, inset: EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0), faded: true))
         .accessibilityLabel("Thread settings")
     }
 }

@@ -16,26 +16,17 @@ struct SignInView: View {
                 .foregroundStyle(Color.themeSecondary)
                 .padding(.top, 6)
 
-            Button {
+            ActionButton("Continue with Google", picture: AnyView(GoogleMark()), size: .large, pending: store.signingIn, fills: true) {
                 store.signIn()
-            } label: {
-                HStack(spacing: 10) {
-                    if store.signingIn {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        GoogleMark().frame(width: 16, height: 16)
-                    }
-                    Text(store.signingIn ? "Waiting for the browser…" : "Continue with Google")
-                        .font(.ui(size: 14, weight: .medium))
-                }
-                .frame(width: 250, height: 40)
-                .background(Color.themeRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.themeStrongBorder))
-                .contentShape(RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.plain)
-            .disabled(store.signingIn)
+            .frame(width: 250)
             .padding(.top, 34)
+            if store.signingIn {
+                Text("Waiting for the browser")
+                    .font(.ui(size: 12))
+                    .foregroundStyle(Color.themeTertiary)
+                    .padding(.top, 10)
+            }
 
             if let error = store.signInError {
                 Text(error)

@@ -615,14 +615,14 @@ final class SidePanel {
     }
 
     /// Does something to the pull request: an action of a button or a choice, with what the
-    /// comment box says. `key` names the button it came from, which shows `label` meanwhile.
+    /// comment box says. `key` names the button it came from, which is pending meanwhile.
     /// `done` is called when it worked.
     func act(
-        _ action: String, method: String? = nil, text: String? = nil, key: String, label: String, on target: PanelTarget,
+        _ action: String, method: String? = nil, text: String? = nil, key: String, on target: PanelTarget,
         number: Int, done: (() -> Void)? = nil
     ) {
         guard pullRequestWorking == nil else { return }
-        pullRequestWorking = PullRequestWork(key: key, label: label)
+        pullRequestWorking = PullRequestWork(key: key)
         pullRequestNotice = nil
         if action == "merge" || action == "enable_auto_merge", let method { remember(method, for: target.projectID) }
         var command = target.request
@@ -652,12 +652,12 @@ final class SidePanel {
     /// Changes the pull request as `edit` says, the protocol's `PullRequestEdit` as JSON. Without a
     /// `key` it goes quietly, like a reaction, and the page is only read again.
     func edit(
-        _ edit: JSON, key: String? = nil, label: String = "", on target: PanelTarget, number: Int,
+        _ edit: JSON, key: String? = nil, on target: PanelTarget, number: Int,
         done: (() -> Void)? = nil
     ) {
         if let key {
             guard pullRequestWorking == nil else { return }
-            pullRequestWorking = PullRequestWork(key: key, label: label)
+            pullRequestWorking = PullRequestWork(key: key)
             pullRequestNotice = nil
         }
         var command = target.request
@@ -693,11 +693,11 @@ final class SidePanel {
     }
 
     /// Sends a review with the comments kept for it, and forgets them once it is there.
-    func review(_ verdict: String, body: String, key: String, label: String, on target: PanelTarget, number: Int, done: (() -> Void)? = nil) {
+    func review(_ verdict: String, body: String, key: String, on target: PanelTarget, number: Int, done: (() -> Void)? = nil) {
         let pending = pendingComments[number] ?? []
         let comments: [JSON] = pending.map { ["path": $0.path, "line": $0.line, "side": $0.side, "body": $0.body] }
         let review: JSON = ["kind": "review", "verdict": verdict, "body": body, "comments": comments]
-        edit(review, key: key, label: label, on: target, number: number) { [weak self] in
+        edit(review, key: key, on: target, number: number) { [weak self] in
             self?.pendingComments[number] = nil
             done?()
         }
@@ -816,11 +816,10 @@ final class SidePanel {
     }
 }
 
-/// The action on a pull request that runs: `key` names the button that started it, which says
-/// `label` meanwhile.
+/// The action on a pull request that runs: `key` names the button that started it, which is
+/// pending meanwhile.
 struct PullRequestWork: Equatable {
     let key: String
-    let label: String
 }
 
 /// A comment on a line, kept for the next review.

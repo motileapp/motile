@@ -59,6 +59,7 @@ enum Symbol: String {
     case link = "\u{e102}"
     case list = "\u{e106}"
     case listChecks = "\u{e1d0}"
+    case loader = "\u{e109}"
     case lockOpen = "\u{e10c}"
     case logOut = "\u{e10e}"
     case maximize2 = "\u{e113}"
@@ -112,9 +113,14 @@ extension PlatformImage {
         return fonts.first
     }()
 
+    /// The side of the square a symbol for text of `size` is drawn in.
+    static func symbolSide(_ size: CGFloat) -> CGFloat {
+        (size * Platform.scale * symbolScale).rounded()
+    }
+
     /// The symbol in one colour that a view tints, sized for text of `size`. Each is made once.
     static func symbol(_ symbol: Symbol, size: CGFloat) -> PlatformImage {
-        let side = (size * Platform.scale * symbolScale).rounded()
+        let side = symbolSide(size)
         let key = "\(symbol.rawValue)/\(side)"
         symbolLock.lock()
         defer { symbolLock.unlock() }

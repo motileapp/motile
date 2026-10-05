@@ -70,48 +70,36 @@ struct LineCommentSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 220)
-                .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             }
             WritingField(text: $text, placeholder: threads.isEmpty ? "Comment on this line" : "Reply, or say something new", height: 96)
             #if os(macOS)
             HStack(spacing: 8) {
-                Button("Ask the Agent", action: askAgent)
+                ActionButton("Ask the Agent", help: "Put this line and what you wrote in the composer", action: askAgent)
                     .disabled(written.isEmpty)
-                    .help("Put this line and what you wrote in the composer")
                 Spacer()
-                Button("Cancel") { dismiss() }
+                ActionButton("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 if let thread = threads.last {
-                    Button("Reply") { replyTo(thread) }
+                    ActionButton("Reply") { replyTo(thread) }
                         .disabled(written.isEmpty)
                 }
-                Button("Add to Review", action: addToReview)
+                ActionButton("Add to Review", variant: .primary, action: addToReview)
                     .keyboardShortcut(.defaultAction)
                     .disabled(written.isEmpty)
             }
             #else
             VStack(spacing: 8) {
-                Button(action: addToReview) {
-                    Text("Add to Review").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(written.isEmpty)
-                if let thread = threads.last {
-                    Button { replyTo(thread) } label: {
-                        Text("Reply").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
+                ActionButton("Add to Review", variant: .primary, size: .large, fills: true, action: addToReview)
                     .disabled(written.isEmpty)
+                if let thread = threads.last {
+                    ActionButton("Reply", size: .large, fills: true) { replyTo(thread) }
+                        .disabled(written.isEmpty)
                 }
-                Button(action: askAgent) {
-                    Text("Ask the Agent").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(written.isEmpty)
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .padding(.top, 4)
+                ActionButton("Ask the Agent", size: .large, fills: true, action: askAgent)
+                    .disabled(written.isEmpty)
+                ActionButton("Cancel", variant: .ghost, size: .large, fills: true) { dismiss() }
             }
-            .controlSize(.large)
             #endif
         }
         .padding(20)

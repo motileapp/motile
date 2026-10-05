@@ -137,8 +137,8 @@ private struct AgentTranscript: View {
     var body: some View {
         VStack(spacing: 0) {
             PanelBar {
-                IconOnlyButton(symbol: .chevronLeft, help: "All agents") { store.sidePanel.showAgents() }
-                    .padding(.leading, -6)
+                ActionButton(icon: .chevronLeft, help: "All agents") { store.sidePanel.showAgents() }
+                    .padding(.leading, -8)
                 AgentStatusIcon(status: agent.status)
                     .frame(width: 16)
                 Text(agent.title)

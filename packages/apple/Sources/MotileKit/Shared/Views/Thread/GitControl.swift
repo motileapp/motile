@@ -10,8 +10,8 @@ struct GitButton: View {
     let control: GitControl
 
     #if os(macOS)
-    private static let height = ToolbarButton.width - 2 * ToolbarButton.margin
-    private static let radius: CGFloat = 7
+    private static let height = ControlSize.regular.height
+    private static let radius = ControlSize.regular.radius
     /// What leaves the room under the button that the composer's menus leave over theirs.
     private static let menuGap: CGFloat = 16
     @State private var anchor = MenuAnchorView()
@@ -38,29 +38,12 @@ struct GitButton: View {
         let stage = store.gitStages[project.checkoutID]
         let quick = control.quick
         return HStack(spacing: 0) {
-            Button {
+            ActionButton(
+                quick.title, icon: symbol(of: quick), help: quick.hint ?? project.git?.pullRequest?.title ?? quick.title, variant: .ghost,
+                pending: stage != nil, joined: .all, tint: tint(of: quick, at: stage)
+            ) {
                 store.runQuickGit(in: project)
-            } label: {
-                HStack(spacing: 6) {
-                    if stage != nil {
-                        ProgressView()
-                            .controlSize(.small)
-                            .scaleEffect(0.7)
-                            .frame(width: 14, height: 14)
-                    } else {
-                        Image(symbol(of: quick), size: 12)
-                    }
-                    Text(stage?.label ?? quick.title)
-                        .font(.ui(size: 12, weight: .medium))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(color(of: quick, at: stage))
-                .padding(.horizontal, 9)
-                .frame(height: Self.height)
             }
-            .buttonStyle(.highlight(radius: 0))
-            .disabled(stage != nil)
-            .help(quick.hint ?? project.git?.pullRequest?.title ?? quick.title)
             Rectangle()
                 .fill(Color.themeStrongBorder)
                 .frame(width: 1, height: Self.height)
@@ -74,22 +57,16 @@ struct GitButton: View {
         .padding(.horizontal, 6)
     }
 
-    private func color(of quick: GitQuick, at stage: GitStage?) -> Color {
+    /// A pull request is in the colour of its state, and what has nothing to do is quiet.
+    private func tint(of quick: GitQuick, at stage: GitStage?) -> Color? {
         if stage != nil { return .themeText }
         if quick.url != nil, let pullRequest = project.git?.pullRequest { return pullRequest.state.color }
         guard quick.action != nil || quick.url != nil else { return .themeTertiary }
         return .themeText
     }
 
-    private var chevron: some View {
-        Image(.chevronDown, size: 9)
-            .frame(width: 24, height: Self.height)
-    }
-
     private var menuButton: some View {
-        Button(action: showMenu) { chevron }
-            .buttonStyle(.highlight(radius: 0, faded: true))
-            .help("Commit, push or open a pull request")
+        ActionButton.chevron(help: "Commit, push or open a pull request", joined: .all, action: showMenu)
     }
 
     /// Opens the menu under the button, its right edge on the button's. An item that can't run
@@ -147,7 +124,7 @@ struct GitButton: View {
             }
         } label: {
             if running {
-                ProgressView()
+                Spinner(size: 15)
             } else {
                 Image(.gitBranch, size: 15)
             }
@@ -209,11 +186,11 @@ struct GitNoticeView: View {
     @Environment(AppStore.self) private var store
     let notice: GitNotice
 
-    private static let radius: CGFloat = 14
+    private static let radius = Radius.sheet
     private static let padding: CGFloat = 14
-    private static let closeSize: CGFloat = 24
-    /// The close button is this far from the top and the right, and its corners follow the notice's.
-    private static let closeMargin: CGFloat = 9
+    private static let closeSize = ControlSize.small.height
+    /// The close button is this far from the top and the right.
+    private static let closeMargin: CGFloat = 8
     private static let titleHeight: CGFloat = scaled(16)
 
     var body: some View {
@@ -260,25 +237,15 @@ struct GitNoticeView: View {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
-            IconOnlyButton(symbol: .x, help: "Close", size: Self.closeSize, symbolSize: 12, radius: Self.radius - Self.closeMargin, faded: true) {
-                store.dismissGitNotice()
-            }
-            .padding(Self.closeMargin)
+            ActionButton(icon: .x, help: "Close", size: .small) { store.dismissGitNotice() }
+                .padding(Self.closeMargin)
         }
         .shadow(color: .black.opacity(0.05), radius: 1.5, y: 1)
         .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
     }
 
     private func action(_ title: String, prominent: Bool, run: @escaping () -> Void) -> some View {
-        Button(action: run) {
-            Text(title)
-                .font(.ui(size: 12, weight: .medium))
-                .foregroundStyle(prominent ? Color.white : Color.themeText)
-                .padding(.horizontal, 10)
-                .frame(height: scaled(26))
-                .background(prominent ? Color.themePrimary : Color.themeSelected, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }
-        .buttonStyle(DimButtonStyle())
+        ActionButton(title, variant: prominent ? .primary : .secondary, action: run)
     }
 }
 
@@ -322,40 +289,28 @@ struct CommitSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Commit message (optional)")
                     .font(.ui(size: 12.5, weight: .medium))
-                CommitMessageBox(text: $message)
+                WritingField(text: $message, placeholder: "Leave empty to have one written")
             }
             #if os(macOS)
             HStack(spacing: 8) {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                ActionButton("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Commit on New Branch") { commit(onNewBranch: true) }
+                ActionButton("Commit on New Branch") { commit(onNewBranch: true) }
                     .disabled(included.isEmpty)
-                Button("Commit") { commit(onNewBranch: false) }
+                ActionButton("Commit", variant: .primary) { commit(onNewBranch: false) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(included.isEmpty)
             }
             #else
             VStack(spacing: 8) {
-                Button {
-                    commit(onNewBranch: false)
-                } label: {
-                    Text("Commit").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(included.isEmpty)
-                Button {
-                    commit(onNewBranch: true)
-                } label: {
-                    Text("Commit on New Branch").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(included.isEmpty)
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .padding(.top, 4)
+                ActionButton("Commit", variant: .primary, size: .large, fills: true) { commit(onNewBranch: false) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(included.isEmpty)
+                ActionButton("Commit on New Branch", size: .large, fills: true) { commit(onNewBranch: true) }
+                    .disabled(included.isEmpty)
+                ActionButton("Cancel", variant: .ghost, size: .large, fills: true) { dismiss() }
             }
-            .controlSize(.large)
             #endif
         }
         .padding(20)
@@ -379,13 +334,16 @@ struct CommitSheet: View {
                         .foregroundStyle(Color.themeSecondary)
                 }
                 Spacer()
-                if editing {
-                    LinkButton(excluded.isEmpty ? "Select None" : "Select All") {
-                        excluded = excluded.isEmpty ? Set(files.map(\.path)) : []
+                HStack(spacing: 0) {
+                    if editing {
+                        ActionButton(excluded.isEmpty ? "Select None" : "Select All", variant: .link, size: .small) {
+                            excluded = excluded.isEmpty ? Set(files.map(\.path)) : []
+                        }
                     }
-                    .padding(.trailing, 2 * LinkButton.padding - 8)
+                    ActionButton(editing ? "Done" : "Edit", variant: .link, size: .small) { editing.toggle() }
                 }
-                LinkButton(editing ? "Done" : "Edit") { editing.toggle() }
+                .padding(.vertical, -4)
+                .padding(.trailing, -ControlSize.small.padding)
             }
             .font(.ui(size: 12))
             ScrollView {
@@ -398,9 +356,9 @@ struct CommitSheet: View {
                 .padding(.vertical, 4)
             }
             .frame(height: min(CGFloat(files.count) * Self.rowHeight, 192) + 8)
-            .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1)
             }
         }
     }
@@ -414,13 +372,13 @@ struct CommitSheet: View {
                     .toggleStyle(.checkbox)
                     .labelsHidden()
                 #else
-                Button {
+                ActionButton(
+                    icon: isExcluded ? .circle : .circleCheck, help: isExcluded ? "Include" : "Leave out", size: .small,
+                    tint: isExcluded ? .themeTertiary : .themePrimary
+                ) {
                     includes(file.path).wrappedValue.toggle()
-                } label: {
-                    Image(isExcluded ? .circle : .circleCheck, size: 17)
-                        .foregroundStyle(isExcluded ? Color.themeTertiary : Color.themePrimary)
                 }
-                .buttonStyle(.plain)
+                .padding(.leading, -6)
                 #endif
             }
             Text(file.path)
@@ -473,32 +431,5 @@ private struct LineCounts: View {
             }
         }
         .font(.ui(size: 11, weight: .medium).monospacedDigit())
-    }
-}
-
-private struct CommitMessageBox: View {
-    @Binding var text: String
-
-    var body: some View {
-        TextEditor(text: $text)
-            .font(.ui(size: 12.5))
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 6)
-            .frame(height: 84)
-            .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
-            }
-            .overlay(alignment: .topLeading) {
-                if text.isEmpty {
-                    Text("Leave empty to have one written")
-                        .font(.ui(size: 12.5))
-                        .foregroundStyle(Color.themeTertiary)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 6)
-                        .allowsHitTesting(false)
-                }
-            }
     }
 }

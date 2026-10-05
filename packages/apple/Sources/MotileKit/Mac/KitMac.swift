@@ -299,22 +299,28 @@ final class SymbolView: NSImageView {
     }
 }
 
-/// A borderless button with a symbol and, optionally, a title. It lights up under the
-/// pointer.
+/// The transcript's button: a symbol and, optionally, a title, sized and lit as `ActionButton`
+/// is. Under the pointer and while it is pressed it has a background and its symbol is in the
+/// colour of text.
 final class IconButton: NSButton {
-    static let side: CGFloat = 28
+    static let metrics = MotileKit.ControlSize.regular
+    static let side = metrics.height
+    /// How far the symbol is from the button's edge.
+    static let symbolInset = ((side - metrics.symbolSide) / 2).rounded()
 
-    private var symbolSize: CGFloat = 14
+    private let symbolSize = IconButton.metrics.symbol
     private var action_: (() -> Void)?
     private var tracking: NSTrackingArea?
+    private var hovering = false { didSet { light() } }
+    private var pressing = false { didSet { light() } }
 
-    convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat = 14, tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", tooltip: String, action: @escaping () -> Void) {
         self.init(frame: .zero)
-        self.symbolSize = symbolSize
         isBordered = false
         bezelStyle = .inline
         wantsLayer = true
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = Self.metrics.radius
+        layer?.cornerCurve = .continuous
         image = .symbol(symbol, size: symbolSize)
         imagePosition = title.isEmpty ? .imageOnly : .imageLeading
         self.title = title
@@ -342,13 +348,26 @@ final class IconButton: NSButton {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = Theme.hover.cgColor
-        }
+        hovering = true
     }
 
     override func mouseExited(with event: NSEvent) {
-        layer?.backgroundColor = nil
+        hovering = false
+    }
+
+    // The button tracks the mouse inside `mouseDown` until it is let go.
+    override func mouseDown(with event: NSEvent) {
+        pressing = true
+        super.mouseDown(with: event)
+        pressing = false
+    }
+
+    private func light() {
+        let lit = hovering || pressing
+        contentTintColor = lit ? Theme.text : Theme.secondary
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = lit ? Theme.hover.cgColor : nil
+        }
     }
 
     @objc private func pressed() {

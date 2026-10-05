@@ -108,11 +108,11 @@ struct CommandPanel: View {
     private var header: some View {
         HStack(spacing: 10) {
             if pages.count > 1 {
-                IconOnlyButton(symbol: .arrowLeft, help: "Back", size: 26, symbolSize: 14, faded: true) { back() }
+                ActionButton(icon: .arrowLeft, help: "Back") { back() }
             } else {
                 Image(.search, size: 15)
                     .foregroundStyle(Color.themeTertiary)
-                    .frame(width: 26, height: 26)
+                    .frame(width: ControlSize.regular.height, height: ControlSize.regular.height)
             }
             TextField(prompt, text: $query)
                 .textFieldStyle(.plain)
@@ -132,17 +132,10 @@ struct CommandPanel: View {
         .frame(height: 52)
     }
 
-    /// Lists the repositories again, to find one made since. A spinner while the server lists them.
-    @ViewBuilder private func refreshRepos(_ id: String) -> some View {
-        if store.listingRepos.contains(id) {
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: 26, height: 26)
-                .help("Refreshing your repositories")
-        } else {
-            IconOnlyButton(symbol: .rotateCw, help: Platform.name == "macos" ? "Refresh (⌘R)" : "Refresh", size: 26, symbolSize: 14, faded: true) {
-                store.loadRepos(id, fresh: true)
-            }
+    /// Lists the repositories again, to find one made since. Pending while the server lists them.
+    private func refreshRepos(_ id: String) -> some View {
+        ActionButton(icon: .rotateCw, help: Platform.name == "macos" ? "Refresh (⌘R)" : "Refresh", pending: store.listingRepos.contains(id)) {
+            store.loadRepos(id, fresh: true)
         }
     }
 
@@ -819,8 +812,8 @@ private struct PanelRow: View {
 
     @ViewBuilder private var trailing: some View {
         if item.busy {
-            ProgressView()
-                .controlSize(.small)
+            Spinner()
+                .foregroundStyle(Color.themeSecondary)
         } else if let note = item.note {
             Text(note)
                 .font(.ui(size: 12, weight: .medium))

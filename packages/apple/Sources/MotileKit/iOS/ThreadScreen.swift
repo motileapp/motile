@@ -119,13 +119,7 @@ struct ThreadScreen: View {
                     .font(.system(size: 16))
                     .foregroundStyle(Color.themeSecondary)
                     .multilineTextAlignment(.center)
-                Button {
-                    store.addProject()
-                } label: {
-                    Label("Add Project", symbol: .folderPlus, size: 15)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                ActionButton("Add Project", icon: .folderPlus, variant: .primary, size: .large) { store.addProject() }
                 .disabled(!store.servers.contains { $0.state == .connected })
                 .padding(.top, 10)
             } else {

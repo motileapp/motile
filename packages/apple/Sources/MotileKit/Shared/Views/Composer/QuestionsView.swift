@@ -39,19 +39,15 @@ struct QuestionsView: View {
                         .padding(.vertical, -Self.optionGap / 2)
                         .padding(.horizontal, -Self.optionReach)
                     }
-                    TextField("Something else", text: typedAnswer(for: question))
-                        .textFieldStyle(.roundedBorder)
+                    InputField("Something else", text: typedAnswer(for: question))
                 }
             }
             HStack(spacing: 8) {
                 Spacer()
-                Button(approval.refuseLabel) { store.answer(approval, allow: false) }
-                    .buttonStyle(.bordered)
-                Button(approval.allowLabel) { store.answer(approval, allow: true, answers: answers) }
-                    .buttonStyle(.borderedProminent)
+                ActionButton(approval.refuseLabel, size: .small) { store.answer(approval, allow: false) }
+                ActionButton(approval.allowLabel, variant: .primary, size: .small) { store.answer(approval, allow: true, answers: answers) }
                     .disabled(answers.count < approval.questions.count)
             }
-            .controlSize(.small)
         }
     }
 

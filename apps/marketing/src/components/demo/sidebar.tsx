@@ -37,13 +37,13 @@ export function Sidebar({
 
   return (
     <div className="flex h-full flex-col">
-      <label className="mx-2.5 mt-0.5 mb-1.5 flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-hover px-2">
+      <label className="mx-2.5 mt-0.5 mb-1.5 flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] border border-strong-border bg-white px-[9px] dark:bg-white/4">
         <SearchIcon className="size-3 text-tertiary" />
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search"
-          className="w-full bg-transparent text-[13px] outline-none placeholder:text-tertiary pointer-coarse:text-[16px]"
+          className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-tertiary pointer-coarse:text-[16px]"
         />
       </label>
       <div className="min-h-0 flex-1 overflow-y-auto py-[3px]">

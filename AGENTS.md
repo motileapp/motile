@@ -146,6 +146,9 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   rows on screen, `Rows.swift` builds their text and measures them off the main thread,
   `RowViews.swift` are the rows.
 - `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI.
+- `Shared/Views/UI`: the components every view is made of. `ActionButton` and `ActionMenu` (a
+  variant, one of three sizes, an optional symbol, a pending state), `Spinner`, `Chip`,
+  `InputField`. Their sizes are `ControlSize` and their corners `Radius`, in `Theme.swift`.
 - `Shared/Views/CommandPanel.swift`: the panel behind ⌘K, ⌘N and ⌘P, a sheet on iOS.
 - `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
   requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
@@ -214,6 +217,12 @@ Mac app.
 - The Mac app and the iOS app do the same things. What one gets, the other gets in the same
   change, and what both do is written once, in `packages/apple/Sources/MotileKit/Shared`. Only
   what a system does differently is written twice.
+- A button, a menu, a spinner, a chip or a field in the clients comes from
+  `packages/apple/Sources/MotileKit/Shared/Views/UI`. Its size is a `ControlSize`, never a
+  number, and nothing is smaller than `.small`. A view does not style a control by hand; what is
+  missing is added to the component. A button inside something is as far from its top and bottom
+  as from its side. A button that waits is `pending`: it shows the spinner and keeps its words,
+  and a spinner is never followed by "…".
 - Ignore `apps/gpui` for now. We are not working on it currently: do not read it, change it or
   keep it in step with the Mac app unless we ask for it.
 - Do not leave paragraphs of comments on top of the code. You should try to avoid them as much
@@ -270,6 +279,7 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     export DATABASE_URL=postgres://motile:motile@localhost:5435/motile
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
+    packages/apple/scripts/check-ui.sh                    # after changing the clients' views
 
 The `Release` workflow runs the demo on every push to `main` that touches the client or the server:
 

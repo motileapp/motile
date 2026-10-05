@@ -32,8 +32,9 @@ struct ConnectServerView: View {
                 .padding(.top, 26)
 
             HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Waiting for your server…")
+                Spinner()
+                    .foregroundStyle(Color.themeSecondary)
+                Text("Waiting for your server")
                     .font(.ui(size: 13))
                     .foregroundStyle(Color.themeSecondary)
             }
@@ -49,15 +50,15 @@ struct ConnectServerView: View {
 
             if isFirst {
                 Spacer()
-                HStack(spacing: 6) {
+                HStack(spacing: 0) {
                     Text("Signed in as \(store.account.email)")
-                    LinkButton("Sign out") { store.signOut() }
+                    ActionButton("Sign out", variant: .link, size: .small) { store.signOut() }
                 }
                 .font(.ui(size: 12))
                 .foregroundStyle(Color.themeTertiary)
-                .padding(.bottom, 24)
+                .padding(.bottom, 20)
             } else {
-                Button("Done") { dismiss() }
+                ActionButton("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .padding(.vertical, 26)
             }
@@ -67,9 +68,6 @@ struct ConnectServerView: View {
         .onAppear { store.prepareToAddServer() }
         .onDisappear { store.stopAddingServer() }
     }
-
-    private static let buttonSize = scaled(28)
-    private static let symbolSize: CGFloat = 14
 
     private var commandBox: some View {
         #if os(macOS)
@@ -88,13 +86,12 @@ struct ConnectServerView: View {
             HStack(spacing: 4) {
                 #if os(iOS)
                 ShareLink(item: store.enrollToken?.command ?? "") {
-                    Image(.share, size: Self.symbolSize)
-                        .frame(width: Self.buttonSize, height: Self.buttonSize)
+                    ControlLabel(title: nil, icon: .symbol(.share), size: .regular)
                 }
-                .buttonStyle(.highlight(radius: 6, faded: true))
+                .buttonStyle(.control())
                 .accessibilityLabel("Share the command")
                 #endif
-                IconOnlyButton(symbol: copied ? .check : .copy, help: "Copy the command", size: Self.buttonSize, symbolSize: Self.symbolSize, faded: true) {
+                ActionButton(icon: copied ? .check : .copy, help: "Copy the command") {
                     guard let command = store.enrollToken?.command else { return }
                     Platform.copy(command)
                     copied = true
@@ -105,8 +102,8 @@ struct ConnectServerView: View {
         }
         .padding(.leading, 14)
         .padding([.vertical, .trailing], 10)
-        .background(Color(platform: Theme.bubble), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.themeBorder))
+        .background(Color(platform: Theme.bubble), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Color.themeBorder))
     }
 
     /// Lets the command wrap between any two characters, as CSS's `break-all` does. Not selectable,

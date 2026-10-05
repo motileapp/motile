@@ -11,14 +11,12 @@ struct AppUpdateRow: View {
         case .idle:
             EmptyView()
         case .checking:
-            line("Checking for updates…", symbol: .refreshCw) {
-                ProgressView().controlSize(.small)
-            }
+            line("Checking for updates", symbol: .refreshCw) { spinner }
         case .upToDate:
             line("Motile \(updater.current) is the newest version", symbol: .circleCheck)
         case .available(let version):
             line("Motile \(version) is available", symbol: .circleArrowDown) {
-                PillButton("Update") { updater.install() }
+                ActionButton("Update", size: .small) { updater.install() }
             }
         case .downloading(let version, let fraction):
             VStack(alignment: .leading, spacing: 5) {
@@ -34,17 +32,15 @@ struct AppUpdateRow: View {
                     .tint(Color.themeSecondary)
             }
         case .installing(let version):
-            line("Installing Motile \(version)…", symbol: .circleArrowDown) {
-                ProgressView().controlSize(.small)
-            }
+            line("Installing Motile \(version)", symbol: .circleArrowDown) { spinner }
         case .ready(let version):
             line("Motile \(version) is installed", symbol: .circleCheck) {
-                PillButton("Restart") { updater.relaunch() }
+                ActionButton("Restart", size: .small) { updater.relaunch() }
             }
         case .failed(let message):
             VStack(alignment: .leading, spacing: 4) {
                 line("The update didn’t work", symbol: .triangleAlert) {
-                    PillButton("Try Again") { updater.retry() }
+                    ActionButton("Try Again", size: .small) { updater.retry() }
                 }
                 Text(message)
                     .font(.ui(size: 11))
@@ -52,6 +48,11 @@ struct AppUpdateRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var spinner: some View {
+        Spinner(size: ControlSize.small.symbol)
+            .foregroundStyle(Color.themeSecondary)
     }
 
     private func line(_ text: String, symbol: Symbol) -> some View {
@@ -68,7 +69,7 @@ struct AppUpdateRow: View {
             Spacer(minLength: 4)
             trailing()
         }
-        .frame(minHeight: 22)
+        .frame(minHeight: ControlSize.small.height)
     }
 }
 
@@ -88,44 +89,24 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                     .font(.ui(size: 11))
                     .foregroundStyle(Color.themeSecondary)
                     .monospacedDigit()
-                ProgressView().controlSize(.small)
+                Spinner(size: ControlSize.small.symbol)
+                    .foregroundStyle(Color.themeSecondary)
             }
         } else if store.isOutdated(server) {
-            PillButton("Update") { store.update(server) }
-                .help("Install version \(store.updater.latest ?? "") on \(server.name). It restarts, and no agent may be working.")
+            ActionButton(
+                "Update", help: "Install version \(store.updater.latest ?? "") on \(server.name). It restarts, and no agent may be working.",
+                size: .small
+            ) {
+                store.update(server)
+            }
         } else {
             otherwise()
         }
     }
 
     private func progress(of update: ServerUpdate) -> String {
-        if update.restarting { return "Restarting…" }
-        guard let fraction = update.fraction else { return "Updating…" }
+        if update.restarting { return "Restarting" }
+        guard let fraction = update.fraction else { return "Updating" }
         return "Updating \(Int(fraction * 100))%"
-    }
-}
-
-/// A small button that says what it does.
-struct PillButton: View {
-    let title: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    init(_ title: String, action: @escaping () -> Void) {
-        self.title = title
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.ui(size: 11, weight: .medium))
-                .padding(.horizontal, scaled(9))
-                .frame(height: scaled(20))
-                .background(hovering ? Color.themeSelected : Color.themeHover, in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
     }
 }

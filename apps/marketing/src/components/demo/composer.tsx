@@ -47,7 +47,7 @@ export function Composer({
           <button
             type="button"
             onClick={onStop}
-            className="mr-1 ml-auto h-6 rounded-[7px] px-[9px] text-[12.5px] font-medium hover:bg-hover"
+            className="mr-1 ml-auto h-6 rounded-[6px] px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground"
           >
             Stop
           </button>
@@ -68,14 +68,14 @@ export function Composer({
               <button
                 type="button"
                 onClick={() => onAnswer(false)}
-                className="ml-auto h-[22px] rounded-md border border-strong-border bg-composer px-2.5 text-[12px] hover:bg-hover"
+                className="ml-auto h-6 rounded-[6px] bg-hover px-2 text-[11.5px] font-medium hover:bg-selected"
               >
                 Deny
               </button>
               <button
                 type="button"
                 onClick={() => onAnswer(true)}
-                className="h-[22px] rounded-md bg-primary px-2.5 text-[12px] text-primary-foreground hover:bg-primary/85"
+                className="h-6 rounded-[6px] bg-primary px-2 text-[11.5px] font-medium text-primary-foreground hover:brightness-110"
               >
                 Allow
               </button>
@@ -105,31 +105,29 @@ export function Composer({
           <Control>
             {thread.approval ? (
               <>
-                <ShieldIcon className="size-[13px]" />
+                <ShieldIcon className="size-3.5" />
                 Supervised
               </>
             ) : (
               <>
-                <LockOpenIcon className="size-[13px]" />
+                <LockOpenIcon className="size-3.5" />
                 Full access
               </>
             )}
           </Control>
-          <span className="ml-auto flex size-[30px] items-center justify-center rounded-full text-muted-foreground hover:bg-hover">
-            <PaperclipIcon className="size-[15px]" />
+          <span className="ml-auto flex size-7 items-center justify-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground">
+            <PaperclipIcon className="size-3.5" />
           </span>
           <button
             type="button"
             onClick={send}
             aria-label="Send"
             className={cn(
-              "ml-1 flex size-[30px] items-center justify-center rounded-full",
-              text.trim()
-                ? "bg-primary text-primary-foreground"
-                : "bg-hover text-muted-foreground"
+              "ml-1 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground",
+              text.trim() ? "hover:brightness-110" : "opacity-45"
             )}
           >
-            <ArrowUpIcon className="size-4" />
+            <ArrowUpIcon className="size-3.5" />
           </button>
         </div>
       </div>
@@ -152,11 +150,11 @@ export function Composer({
           {thread.worktree ? "Worktree" : "Local checkout"}
         </span>
         <span className="mx-2.5 h-3 w-px bg-border" />
-        <span className="mr-3.5 flex items-center gap-1.5">
-          <GitBranchIcon className="size-[11px]" />
+        <span className="mr-3.5 flex items-center gap-[5px] text-[11.5px] font-medium">
+          <GitBranchIcon className="size-[13px]" />
           {thread.branch}
           {!thread.worktree && (
-            <ChevronDownIcon className="size-[9px] text-tertiary" />
+            <ChevronDownIcon className="size-[9px] opacity-60" />
           )}
         </span>
       </Strip>
@@ -166,9 +164,9 @@ export function Composer({
 
 function Control({ children }: { children: ReactNode }) {
   return (
-    <span className="flex h-[30px] items-center gap-1.5 rounded-[15px] px-[9px] text-[12.5px] font-medium hover:bg-hover">
+    <span className="flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground">
       {children}
-      <ChevronDownIcon className="size-[9px] text-tertiary" />
+      <ChevronDownIcon className="size-[9px] opacity-60" />
     </span>
   )
 }

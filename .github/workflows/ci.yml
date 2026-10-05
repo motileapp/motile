@@ -37,6 +37,13 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  apple:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: packages/apple/scripts/check-ui.sh
+
   web:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
