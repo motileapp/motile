@@ -13,3 +13,4 @@ DerivedData/
 node_modules/
 /apps/gpui/build
 /apps/gpui/target
+/.claude/
