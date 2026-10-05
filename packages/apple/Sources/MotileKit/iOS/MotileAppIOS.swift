@@ -282,7 +282,7 @@ struct MainScreen: View {
 
     private var narrow: some View {
         let (store, drawer) = (store, drawer)
-        return DrawerView(drawer: drawer, sidePanel: store.sidePanel, panelAvailable: store.panelUnavailable == nil) {
+        return DrawerView(drawer: drawer, sidePanel: store.sidePanel) {
             SidebarScreen()
                 .environment(store)
                 .environment(drawer)
