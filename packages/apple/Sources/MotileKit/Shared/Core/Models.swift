@@ -884,3 +884,68 @@ enum Time {
         return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
     }
 }
+
+/// What the agents spent on the account's servers in a stretch of time, as the core added it up.
+struct UsageReport {
+    struct Series: Identifiable {
+        let agent: Agent
+        let costUSD: Double
+        let tokens: Int
+        let costPoints: [Double]
+        let tokenPoints: [Double]
+
+        var id: Agent { agent }
+    }
+
+    /// A model, a project or a kind of token, and its part of the whole.
+    struct Line: Identifiable {
+        let name: String
+        let agent: Agent?
+        let tokens: Int
+        let costUSD: Double?
+        let share: Double
+
+        var id: String { "\(agent?.rawValue ?? "")/\(name)" }
+    }
+
+    let costUSD: Double
+    let tokens: Int
+    let unpricedTokens: Int
+    let cacheSavingsUSD: Double
+    /// The part that went into writing titles, branch names, commit messages and pull requests.
+    let writingCostUSD: Double
+    let writingTokens: Int
+    let starts: [Date]
+    let agents: [Series]
+    let kinds: [Line]
+    let models: [Line]
+    let projects: [Line]
+
+    init(json: JSON) {
+        costUSD = json.double("cost_usd")
+        tokens = json.int("tokens")
+        unpricedTokens = json.int("unpriced_tokens")
+        cacheSavingsUSD = json.double("cache_savings_usd")
+        writingCostUSD = json.double("writing_cost_usd")
+        writingTokens = json.int("writing_tokens")
+        starts = (json["starts"] as? [NSNumber] ?? []).map { Date(timeIntervalSince1970: $0.doubleValue) }
+        agents = json.objects("agents").map { series in
+            let points = { (key: String) in (series[key] as? [NSNumber] ?? []).map(\.doubleValue) }
+            return Series(
+                agent: Agent(rawValue: series.string("agent")) ?? .claude, costUSD: series.double("cost_usd"),
+                tokens: series.int("tokens"), costPoints: points("cost_points"), tokenPoints: points("token_points"))
+        }
+        let line = { (line: JSON, share: Double?) in
+            Line(
+                name: line.string("name"), agent: line.optionalString("agent").flatMap(Agent.init(rawValue:)),
+                tokens: line.int("tokens"), costUSD: line.optionalDouble("cost_usd"), share: share ?? line.double("share"))
+        }
+        let (cost, tokens) = (costUSD, tokens)
+        kinds = json.objects("kinds").map { kind in
+            let share = cost > 0 ? kind.double("cost_usd") / cost : Double(kind.int("tokens")) / Double(max(tokens, 1))
+            return line(kind, share)
+        }
+        models = json.objects("models").map { line($0, nil) }
+        projects = json.objects("projects").map { line($0, nil) }
+    }
+}

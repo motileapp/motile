@@ -4,8 +4,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
-use motile_protocol::wire::{Access, Agent, Item, Queued, Thread};
+use motile_protocol::wire::{Access, Agent, Item, Queued, Thread, Tokens, UsageBucket};
 use rusqlite::{Connection, OptionalExtension, params};
+
+use crate::agents::ModelUsage;
 
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
@@ -17,6 +19,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0007_thread_pull_requests.sql"),
     include_str!("../migrations/0008_queued.sql"),
     include_str!("../migrations/0009_watching.sql"),
+    include_str!("../migrations/0010_usage.sql"),
+    include_str!("../migrations/0011_usage_purpose.sql"),
 ];
 
 pub struct Store {
@@ -45,6 +49,28 @@ impl TitleSource {
             "generated" => Self::Generated,
             "user" => Self::User,
             _ => Self::Placeholder,
+        }
+    }
+}
+
+/// What tokens were spent on.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Purpose {
+    Turn,
+    Title,
+    Branch,
+    Commit,
+    PullRequest,
+}
+
+impl Purpose {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Turn => "turn",
+            Self::Title => "title",
+            Self::Branch => "branch",
+            Self::Commit => "commit",
+            Self::PullRequest => "pull_request",
         }
     }
 }
@@ -304,6 +330,131 @@ impl Store {
         Ok(())
     }
 
+    /// Keeps what the thread's agent spent and returns what it says that cost. With `total` it is
+    /// what `session_id` has spent since it began, and only what was added since it last said
+    /// is kept.
+    pub fn save_usage(
+        &self,
+        at: f64,
+        thread: &Thread,
+        session_id: &str,
+        spent: &[ModelUsage],
+        total: bool,
+    ) -> rusqlite::Result<Option<f64>> {
+        let mut connection = self.connection();
+        let transaction = connection.transaction()?;
+        let known: Option<bool> = transaction
+            .query_row("SELECT usage_known FROM threads WHERE id = ?1", [&thread.id], |row| row.get(0))
+            .optional()?;
+        let known = known.unwrap_or(true);
+        let mut cost = None;
+        for usage in spent {
+            let (mut tokens, mut cost_usd) = (usage.tokens, usage.cost_usd);
+            if total {
+                let last = transaction
+                    .query_row(
+                        "SELECT input, cache_read, cache_write, output, cost_usd FROM usage_totals
+                         WHERE thread_id = ?1 AND session_id = ?2 AND model = ?3",
+                        params![thread.id, session_id, usage.model],
+                        |row| Ok((tokens_at(row, 0)?, row.get::<_, f64>(4)?)),
+                    )
+                    .optional()?;
+                transaction.execute(
+                    "INSERT OR REPLACE INTO usage_totals
+                         (thread_id, session_id, model, input, cache_read, cache_write, output, cost_usd)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![
+                        thread.id,
+                        session_id,
+                        usage.model,
+                        tokens.input as i64,
+                        tokens.cache_read as i64,
+                        tokens.cache_write as i64,
+                        tokens.output as i64,
+                        cost_usd.unwrap_or_default(),
+                    ],
+                )?;
+                if !known {
+                    continue;
+                }
+                if let Some((last, last_cost)) = last.filter(|(last, _)| grew_from(&tokens, last)) {
+                    tokens = Tokens {
+                        input: tokens.input - last.input,
+                        cache_read: tokens.cache_read - last.cache_read,
+                        cache_write: tokens.cache_write - last.cache_write,
+                        output: tokens.output - last.output,
+                    };
+                    cost_usd = cost_usd.map(|cost| (cost - last_cost).max(0.0));
+                }
+            }
+            if tokens == Tokens::default() {
+                continue;
+            }
+            let usage = ModelUsage { model: usage.model.clone(), tokens, cost_usd };
+            insert_usage(&transaction, at, &thread.id, &thread.project_id, thread.agent, Purpose::Turn, &usage)?;
+            if let Some(cost_usd) = cost_usd {
+                cost = Some(cost.unwrap_or(0.0) + cost_usd);
+            }
+        }
+        if total && !known {
+            transaction.execute("UPDATE threads SET usage_known = 1 WHERE id = ?1", [&thread.id])?;
+        }
+        transaction.commit()?;
+        Ok(cost)
+    }
+
+    /// Keeps what writing something took. `thread_id` is missing for what was written outside
+    /// a thread.
+    pub fn save_written(
+        &self,
+        at: f64,
+        project_id: &str,
+        thread_id: Option<&str>,
+        agent: Agent,
+        purpose: Purpose,
+        spent: &[ModelUsage],
+    ) -> rusqlite::Result<()> {
+        let connection = self.connection();
+        for usage in spent.iter().filter(|usage| usage.tokens != Tokens::default()) {
+            insert_usage(&connection, at, thread_id.unwrap_or_default(), project_id, agent, purpose, usage)?;
+        }
+        Ok(())
+    }
+
+    /// What was spent from `since` until `until`, by model and project, in buckets of
+    /// `bucket_secs` that start where a clock `utc_offset_secs` ahead of UTC starts them.
+    pub fn usage(
+        &self,
+        since: f64,
+        until: f64,
+        bucket_secs: u32,
+        utc_offset_secs: i32,
+    ) -> rusqlite::Result<Vec<UsageBucket>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT CAST((at + ?3) / ?4 AS INTEGER) AS bucket, agent, model, project_id,
+                    SUM(input), SUM(cache_read), SUM(cache_write), SUM(output), SUM(cost_usd),
+                    purpose != 'turn' AS writing
+             FROM usage WHERE at >= ?1 AND at < ?2
+             GROUP BY bucket, agent, model, project_id, writing ORDER BY bucket",
+        )?;
+        let (size, offset) = (f64::from(bucket_secs.max(60)), f64::from(utc_offset_secs));
+        let buckets = statement.query_map(params![since, until, offset, size], |row| {
+            Ok(UsageBucket {
+                start: row.get::<_, i64>(0)? as f64 * size - offset,
+                agent: from_text(&row.get::<_, String>(1)?).unwrap_or(Agent::Claude),
+                model: row.get(2)?,
+                project_id: row.get(3)?,
+                tokens: tokens_at(row, 4)?,
+                cost_usd: row.get(8)?,
+                costs: None,
+                cache_savings_usd: 0.0,
+                writing: row.get(9)?,
+            })
+        })?;
+        buckets.collect()
+    }
+
     /// The items changed after revision `since`, in transcript order.
     pub fn items_since(&self, thread_id: &str, since: u64) -> rusqlite::Result<Vec<Item>> {
         let connection = self.connection();
@@ -371,6 +522,50 @@ impl Store {
         )?;
         Ok(())
     }
+}
+
+fn insert_usage(
+    connection: &Connection,
+    at: f64,
+    thread_id: &str,
+    project_id: &str,
+    agent: Agent,
+    purpose: Purpose,
+    usage: &ModelUsage,
+) -> rusqlite::Result<()> {
+    let tokens = usage.tokens;
+    connection.execute(
+        "INSERT INTO usage (at, thread_id, project_id, agent, model, input, cache_read, cache_write, output, cost_usd,
+                            purpose)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            at,
+            thread_id,
+            project_id,
+            as_text(&agent),
+            usage.model,
+            tokens.input as i64,
+            tokens.cache_read as i64,
+            tokens.cache_write as i64,
+            tokens.output as i64,
+            usage.cost_usd,
+            purpose.as_str(),
+        ],
+    )?;
+    Ok(())
+}
+
+fn tokens_at(row: &rusqlite::Row, first: usize) -> rusqlite::Result<Tokens> {
+    let count = |index: usize| row.get::<_, i64>(first + index).map(|count| count as u64);
+    Ok(Tokens { input: count(0)?, cache_read: count(1)?, cache_write: count(2)?, output: count(3)? })
+}
+
+/// A total that is smaller than the last one counts a session that began again.
+fn grew_from(total: &Tokens, last: &Tokens) -> bool {
+    total.input >= last.input
+        && total.cache_read >= last.cache_read
+        && total.cache_write >= last.cache_write
+        && total.output >= last.output
 }
 
 fn migrate(connection: &Connection) -> anyhow::Result<()> {

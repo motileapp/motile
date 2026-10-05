@@ -36,6 +36,7 @@ use crate::render::agents;
 use crate::render::diff;
 use crate::render::highlight::{self, Spans};
 use crate::render::rows::{Splice, Transcript, Uncoloured};
+use crate::usage;
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
 const FIRST_ITEMS: usize = 30;
@@ -49,6 +50,8 @@ const PROGRESS_EVERY: Duration = Duration::from_millis(200);
 const SHOWN_FILES: &str = "files";
 /// How many ticks pass between account checks when nobody is waiting for a server.
 const ACCOUNT_CHECK_TICKS: u64 = 30;
+/// The servers before this one don't keep what their agents spend.
+const USAGE_PROTOCOL: u32 = 10;
 /// A connection that was out of the client's sight for this long isn't trusted to be alive.
 const STALE_AFTER: Duration = Duration::from_secs(10);
 
@@ -1445,6 +1448,48 @@ impl Core {
                         }
                         Ok(other) => Err(unexpected(&other)),
                         Err(error) => Err(error_text(error)),
+                    };
+                    reply(&sink, id, answer);
+                });
+            }
+            Command::Usage { bucket_secs, buckets, utc_offset_secs } => {
+                let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
+                let asked = self
+                    .servers
+                    .iter()
+                    .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= USAGE_PROTOCOL));
+                let links: Vec<(String, Arc<Link>)> =
+                    asked.filter_map(|server| Some((server.device.public_key.clone(), server.link.clone()?))).collect();
+                let mut project_names = HashMap::new();
+                for (server_id, _) in &links {
+                    for project in self.cache.projects(server_id) {
+                        project_names.insert((server_id.clone(), project.id), project.name);
+                    }
+                }
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let request = Request::Usage {
+                        since: window.since,
+                        until: window.until,
+                        bucket_secs: window.bucket_secs,
+                        utc_offset_secs: window.utc_offset_secs,
+                    };
+                    let mut spent = Vec::new();
+                    let mut failure = None;
+                    for (server_id, link) in &links {
+                        match link.request(&request).await {
+                            Ok(Message::Usage { buckets }) => {
+                                let of_server = |bucket| usage::Spent { server_id: server_id.clone(), bucket };
+                                spent.extend(buckets.into_iter().map(of_server));
+                            }
+                            Ok(other) => failure = Some(unexpected(&other)),
+                            Err(error) => failure = Some(error_text(error)),
+                        }
+                    }
+                    let answer = match failure {
+                        Some(failure) if spent.is_empty() => Err(failure),
+                        _ => serde_json::to_value(usage::view(&spent, window, &project_names))
+                            .map_err(|error| error.to_string()),
                     };
                     reply(&sink, id, answer);
                 });

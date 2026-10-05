@@ -12,7 +12,7 @@ use motile_server::config::DataDir;
 use motile_server::hub::{Hub, PULL_REQUEST_FRESH, PULL_REQUEST_WATCH};
 use motile_server::serve::{BindOptions, Server, bind};
 use motile_server::store::Store;
-use motile_server::{service, setup, update};
+use motile_server::{pricing, service, setup, update};
 
 /// Runs coding agents on this machine for the Motile clients.
 #[derive(Parser)]
@@ -140,6 +140,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     hub.keep_uploads_swept();
     hub.keep_pull_requests_current(PULL_REQUEST_FRESH);
     hub.watch_pull_requests(PULL_REQUEST_WATCH);
+    hub.keep_prices_current(std::env::var("MOTILE_PRICES_URL").unwrap_or_else(|_| pricing::LIST_URL.to_string()));
     let endpoint = bind(&key, &options).await?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), key = key.public(), "serving");
     if options.local_only {

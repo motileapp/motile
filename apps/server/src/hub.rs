@@ -32,7 +32,8 @@ use crate::agents::environment::Environment;
 use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name};
 use crate::generate::Writer;
 use crate::media::MediaStore;
-use crate::store::{Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
+use crate::pricing::{self, Prices};
+use crate::store::{Purpose, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::{drafts, files, git, github, icons, pacing, pull_requests, title};
 use motile_protocol::wire::{
     CheckStatus, EventKind, Mergeable, PullRequestDetail, PullRequestEdit, PullRequestSettings, PullRequestState,
@@ -50,6 +51,9 @@ const DONE_ON_MERGE: &str = "done_on_merge";
 const REMOVE_MERGED_WORKTREES: &str = "remove_merged_worktrees";
 const TEXT_MODEL: &str = "text_model";
 const BRANCH_INSTRUCTIONS: &str = "branch_instructions";
+const PRICES: &str = "prices";
+const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
+const PRICES_RETRY: Duration = Duration::from_secs(3600);
 const MAX_INSTRUCTIONS_CHARS: usize = 4000;
 const MAX_SETUP_CHARS: usize = 20_000;
 /// A worktree's setup script installs what the work needs, which can take minutes.
@@ -91,6 +95,8 @@ pub struct Hub {
     /// How the user wants branches named.
     branch_instructions: std::sync::Mutex<Option<String>>,
     pull_request_settings: std::sync::Mutex<PullRequestSettings>,
+    /// What the models cost at the API's prices, as last fetched.
+    prices: std::sync::Mutex<Prices>,
     /// What was last seen of each watched thread's pull request, by thread.
     watched: std::sync::Mutex<HashMap<String, Seen>>,
     /// Held while a folder is kept as it is, so a thread's snapshots follow one another.
@@ -147,6 +153,8 @@ struct Live {
     /// Messages given to the agent that it hasn't taken yet. They are in the transcript already.
     given: Vec<Queued>,
     title_needs_refinement: bool,
+    /// What the agent says the turn that runs has cost so far.
+    cost_usd: Option<f64>,
 }
 
 /// What happens before a turn's agent starts: the thread's worktree is made when it isn't
@@ -223,6 +231,9 @@ impl Hub {
                 done_on_merge: store.setting(DONE_ON_MERGE).is_none_or(|value| value == "true"),
                 remove_merged_worktrees: store.setting(REMOVE_MERGED_WORKTREES).is_some_and(|value| value == "true"),
             }),
+            prices: std::sync::Mutex::new(
+                store.setting(PRICES).and_then(|prices| serde_json::from_str(&prices).ok()).unwrap_or_default(),
+            ),
             watched: std::sync::Mutex::default(),
             worktrees: std::sync::Mutex::new(worktrees),
             snapshotting: Mutex::default(),
@@ -442,7 +453,10 @@ impl Hub {
 
     async fn title_from_first_message(self: Arc<Self>, thread_id: String, text: String) {
         let Some(agent) = self.agent_of(&thread_id).await else { return };
-        match title::from_first_message(&self.environment, &self.writer(agent), &text).await {
+        let writer = self.writer(agent);
+        let generated = title::from_first_message(&self.environment, &writer, &text).await;
+        self.keep_written_in(&thread_id, &writer, Purpose::Title).await;
+        match generated {
             Some(generated) if !generated.needs_refinement => {
                 self.set_generated_title(&thread_id, generated.title).await
             }
@@ -470,10 +484,24 @@ impl Hub {
             (live.stored.thread.title.clone(), items)
         };
         let writer = self.writer(agent);
-        let Some(generated) = title::from_transcript(&self.environment, &writer, &previous_title, &items).await else {
-            return;
-        };
+        let generated = title::from_transcript(&self.environment, &writer, &previous_title, &items).await;
+        self.keep_written_in(&thread_id, &writer, Purpose::Title).await;
+        let Some(generated) = generated else { return };
         self.set_generated_title(&thread_id, generated.title).await;
+    }
+
+    /// Keeps what the writer's answers took, with what the tokens of the turns took.
+    fn keep_written(&self, writer: &Writer, purpose: Purpose, project_id: &str, thread_id: Option<&str>) {
+        let spent = writer.take_spent();
+        if let Err(error) = self.store.save_written(now(), project_id, thread_id, writer.agent, purpose, &spent) {
+            tracing::warn!("couldn't keep what writing took: {error:#}");
+        }
+    }
+
+    async fn keep_written_in(&self, thread_id: &str, writer: &Writer, purpose: Purpose) {
+        let project_id = self.threads.lock().await.get(thread_id).map(|live| live.stored.thread.project_id.clone());
+        let Some(project_id) = project_id else { return };
+        self.keep_written(writer, purpose, &project_id, Some(thread_id));
     }
 
     /// Who writes titles, commit messages and pull requests: the model the user picked, or the
@@ -482,8 +510,8 @@ impl Hub {
         let picked = self.text_model.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
         let model = picked.and_then(|id| self.environment.models().iter().find(|model| model.id == id));
         match model {
-            Some(model) => Writer { agent: model.agent, model: Some(model.id.clone()) },
-            None => Writer { agent, model: None },
+            Some(model) => Writer::new(model.agent, Some(model.id.clone())),
+            None => Writer::new(agent, None),
         }
     }
 
@@ -1067,6 +1095,40 @@ impl Hub {
         self.watched.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// Fetches the price list from `url` now and once a day, and keeps it for when it can't.
+    pub fn keep_prices_current(self: &Arc<Self>, url: String) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            loop {
+                let fetched = pricing::fetch(&url).await;
+                let wait = if fetched.is_ok() { PRICES_STALE } else { PRICES_RETRY };
+                match fetched {
+                    Ok(prices) => hub.set_prices(prices),
+                    Err(error) => tracing::warn!("couldn't fetch the price list: {error:#}"),
+                }
+                tokio::time::sleep(wait).await;
+            }
+        });
+    }
+
+    pub fn set_prices(&self, prices: Prices) {
+        let saved = serde_json::to_string(&prices).ok();
+        if let Err(error) = self.store.set_setting(PRICES, saved.as_deref()) {
+            tracing::warn!("couldn't keep the price list: {error:#}");
+        }
+        *self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = prices;
+    }
+
+    /// What the agents spent from `since` until `until` and what the API would have charged.
+    pub fn usage(&self, since: f64, until: f64, bucket_secs: u32, utc_offset_secs: i32) -> anyhow::Result<Message> {
+        let mut buckets = self.store.usage(since, until, bucket_secs, utc_offset_secs)?;
+        let prices = self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        for bucket in &mut buckets {
+            prices.price(bucket);
+        }
+        Ok(Message::Usage { buckets })
+    }
+
     /// Looks at the watched pull requests every so often and tells their threads' agents what
     /// changed.
     pub fn watch_pull_requests(self: &Arc<Self>, every: Duration) {
@@ -1304,12 +1366,18 @@ impl Hub {
     /// telling `started` each stage as it starts, and answers with what it did.
     pub async fn git_run(&self, project_id: &str, run: GitRun, started: impl Fn(GitStage)) -> anyhow::Result<Message> {
         let path = self.git_folder(project_id, run.thread_id.as_deref()).await?;
-        let done = self.git_stages(&path, &run, started).await;
+        let done = self.git_stages(project_id, &path, &run, started).await;
         self.read_git(&path, true).await;
         done
     }
 
-    async fn git_stages(&self, path: &str, run: &GitRun, started: impl Fn(GitStage)) -> anyhow::Result<Message> {
+    async fn git_stages(
+        &self,
+        project_id: &str,
+        path: &str,
+        run: &GitRun,
+        started: impl Fn(GitStage),
+    ) -> anyhow::Result<Message> {
         let environment = &self.environment;
         let done = |title: String, description: Option<String>, url: Option<String>, next: Option<GitAction>| {
             Ok(Message::GitDone { title, description: description.filter(|text| !text.is_empty()), url, next })
@@ -1340,7 +1408,9 @@ impl Hub {
                 _ => {
                     started(if run.new_branch { GitStage::Branch } else { GitStage::Message });
                     let naming = self.branch_instructions().text;
-                    Some(drafts::commit_message(path, environment, &writer, &thread, &run.paths, &naming).await?)
+                    let draft = drafts::commit_message(path, environment, &writer, &thread, &run.paths, &naming).await;
+                    self.keep_written(&writer, Purpose::Commit, project_id, run.thread_id.as_deref());
+                    Some(draft?)
                 }
             };
             if run.new_branch {
@@ -1372,7 +1442,9 @@ impl Hub {
                 return done(format!("PR #{} is already open", open.number), Some(open.title), Some(open.url), None);
             }
             started(GitStage::PullRequestText);
-            let (title, body) = drafts::pull_request(path, environment, &writer, &thread).await?;
+            let draft = drafts::pull_request(path, environment, &writer, &thread).await;
+            self.keep_written(&writer, Purpose::PullRequest, project_id, run.thread_id.as_deref());
+            let (title, body) = draft?;
             started(GitStage::PullRequest);
             let url = git::open_pull_request(path, environment, &title, &body).await?;
             let number = url.rsplit('/').next().unwrap_or_default();
@@ -1602,7 +1674,10 @@ impl Hub {
     async fn name_branch(self: Arc<Self>, thread_id: String, message: String) {
         let Some(agent) = self.agent_of(&thread_id).await else { return };
         let instructions = self.branch_instructions().text;
-        let name = match drafts::branch_for(&self.environment, &self.writer(agent), &instructions, &message).await {
+        let writer = self.writer(agent);
+        let name = drafts::branch_for(&self.environment, &writer, &instructions, &message).await;
+        self.keep_written_in(&thread_id, &writer, Purpose::Branch).await;
+        let name = match name {
             Ok(name) => name,
             Err(error) => return tracing::warn!(thread_id, "couldn't name a branch: {error:#}"),
         };
@@ -1890,6 +1965,7 @@ impl Hub {
                 | AgentEvent::TextStarted { .. }
                 | AgentEvent::TextDelta { .. }
                 | AgentEvent::Text { .. }
+                | AgentEvent::Usage { .. }
         );
         if !more_text {
             live.release_held(store)?;
@@ -1941,6 +2017,12 @@ impl Hub {
                     live.send_activity();
                 }
             }
+            AgentEvent::Usage { spent, total } => {
+                let thread = &live.stored.thread;
+                let session_id = live.stored.session_id.as_deref().unwrap_or(&thread.id);
+                let cost = store.save_usage(now(), thread, session_id, &spent, total)?;
+                live.cost_usd = cost.map(|cost| cost + live.cost_usd.unwrap_or_default()).or(live.cost_usd);
+            }
             AgentEvent::Completed { mut summary, result_text, preempted } => {
                 live.set_thinking(false);
                 // A turn stopped for the message it was given goes on with it.
@@ -1964,6 +2046,7 @@ impl Hub {
                 }
                 live.activity.approvals.clear();
                 live.stored.thread.needs_approval = false;
+                summary.cost_usd = live.cost_usd.take();
                 live.end_turn(store, summary)?;
             }
             AgentEvent::Approval(approval) => {
@@ -2111,6 +2194,7 @@ impl Live {
             queued: Vec::new(),
             given: Vec::new(),
             title_needs_refinement: false,
+            cost_usd: None,
         }
     }
 

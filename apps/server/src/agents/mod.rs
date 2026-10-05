@@ -10,7 +10,7 @@ pub mod models;
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Agent, Approval, Subagent, ToolCall, TurnSummary};
+use motile_protocol::wire::{Access, Agent, Approval, Subagent, Tokens, ToolCall, TurnSummary};
 
 const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedding it in your reply as a \
      Markdown image with the absolute path of the file, like ![what it shows](/path/to/file.png).";
@@ -85,6 +85,12 @@ pub enum AgentEvent {
         /// The turn was stopped for a message the agent was given, which it answers next.
         preempted: bool,
     },
+    /// What the agent spent, by model. Claude Code counts from the start of its session
+    /// (`total`), Codex since it last said.
+    Usage {
+        spent: Vec<ModelUsage>,
+        total: bool,
+    },
     /// A tool call the turn waits with until the user has allowed or refused it.
     Approval(Approval),
     /// The agent no longer waits for that answer.
@@ -122,6 +128,14 @@ pub enum AgentEvent {
     Failed {
         message: String,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModelUsage {
+    pub model: String,
+    pub tokens: Tokens,
+    /// What the agent says it cost at the API's prices.
+    pub cost_usd: Option<f64>,
 }
 
 /// The work that outlives a turn. Claude Code's process stays until all of it has ended.

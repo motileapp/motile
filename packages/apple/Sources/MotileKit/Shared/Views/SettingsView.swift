@@ -75,6 +75,18 @@ struct SettingsView: View {
                 }
 
                 if store.account.signedIn {
+                    SettingsSection("Usage") {
+                        SettingsRow {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Tokens and cost")
+                                Text("What the agents on your servers spent, at the API's prices")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.themeSecondary)
+                            }
+                        } trailing: {
+                            ActionButton("Show Usage", size: .small) { store.showsUsage = true }
+                        }
+                    }
                     servers
                     textGeneration
                     pullRequests
@@ -89,6 +101,9 @@ struct SettingsView: View {
         .onAppear { store.refreshMediaStorage() }
         .sheet(item: $setupProject) { project in
             SetupSheet(project: project)
+        }
+        .sheet(isPresented: Binding { store.showsUsage } set: { store.showsUsage = $0 }) {
+            UsageView()
         }
     }
 

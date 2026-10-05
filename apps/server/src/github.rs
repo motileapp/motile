@@ -16,6 +16,8 @@ const QUICK: Duration = Duration::from_secs(30);
 const PER_PAGE: usize = 100;
 const PAGES_AT_ONCE: usize = 4;
 const CLONE_TIMEOUT: Duration = Duration::from_secs(1800);
+/// A thread's title doesn't wait longer than this for what a link in its message is about.
+const SUBJECT_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Read from what `gh` has stored, without asking GitHub.
 pub async fn state(environment: &Environment) -> GitHubState {
@@ -26,6 +28,14 @@ pub async fn state(environment: &Environment) -> GitHubState {
         Ok(_) => GitHubState::Ready,
         Err(_) => GitHubState::SignedOut,
     }
+}
+
+/// The title and the start of the text of an issue or a pull request, as JSON.
+pub async fn subject(environment: &Environment, owner: &str, repo: &str, number: u64) -> anyhow::Result<String> {
+    let path = format!("repos/{owner}/{repo}/issues/{number}");
+    let jq = r#"{title: .title[:300], body: (.body // "")[:1200]}"#;
+    let read = command("gh", home(environment), environment, &["api", &path, "--jq", jq]);
+    Ok(run(read, None, SUBJECT_TIMEOUT).await?.trim().to_string())
 }
 
 /// Every repository of the login, of its organizations and the ones it was invited to, the
