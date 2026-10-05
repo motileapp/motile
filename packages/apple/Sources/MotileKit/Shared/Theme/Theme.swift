@@ -180,6 +180,9 @@ enum ControlSize {
 
     /// The side of the square its symbol is drawn in.
     var symbolSide: CGFloat { PlatformImage.symbolSide(symbol) }
+
+    /// How much nearer its side a symbol stands than words do, so that both look as far from it.
+    var symbolOutset: CGFloat { (symbolSide / 5 * 2).rounded() / 2 }
 }
 
 /// How round corners are.

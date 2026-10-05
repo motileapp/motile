@@ -245,7 +245,7 @@ function WindowButton({
 function GitButton() {
   return (
     <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-[7px] border border-strong-border text-[12px] font-medium">
-      <span className="flex h-full items-center gap-1.5 px-[11px] hover:bg-hover">
+      <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-hover">
         <GitCommitHorizontalIcon className="size-3.5" />
         Commit
       </span>
