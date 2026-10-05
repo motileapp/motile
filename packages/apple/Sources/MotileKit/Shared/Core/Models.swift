@@ -113,7 +113,7 @@ struct Server: Equatable, Identifiable {
         models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
         textModel = info?.optionalString("text_model")
         let settings = info?.object("pull_request_settings")
-        doneOnMerge = settings?.bool("done_on_merge") ?? true
+        doneOnMerge = settings?.bool("done_on_merge") ?? false
         removeMergedWorktrees = settings?.bool("remove_merged_worktrees") ?? false
         let naming = info?.object("branch_instructions")
         branchInstructions = naming?.string("text") ?? ""

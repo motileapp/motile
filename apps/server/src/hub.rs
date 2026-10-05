@@ -220,7 +220,7 @@ impl Hub {
             text_model: std::sync::Mutex::new(store.setting(TEXT_MODEL)),
             branch_instructions: std::sync::Mutex::new(store.setting(BRANCH_INSTRUCTIONS)),
             pull_request_settings: std::sync::Mutex::new(PullRequestSettings {
-                done_on_merge: store.setting(DONE_ON_MERGE).is_none_or(|value| value == "true"),
+                done_on_merge: store.setting(DONE_ON_MERGE).is_some_and(|value| value == "true"),
                 remove_merged_worktrees: store.setting(REMOVE_MERGED_WORKTREES).is_some_and(|value| value == "true"),
             }),
             watched: std::sync::Mutex::default(),
