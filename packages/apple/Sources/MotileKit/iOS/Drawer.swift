@@ -174,15 +174,14 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         panel.rootView = panelShown ? panelContent : AnyView(EmptyView())
     }
 
-    /// The shadow comes in as the card leaves its place and goes as it leaves the screen, so
-    /// neither end of the slide shows it.
+    /// The shadow goes as the card leaves the screen, so it doesn't fall on the side that opened.
     private func placeShadow() {
         if cardShadow.bounds.size != card.bounds.size {
             cardShadow.layer.shadowPath = UIBezierPath(roundedRect: card.bounds, cornerRadius: Self.cardRadius).cgPath
         }
         cardShadow.frame = card.frame
         let onScreen = (view.bounds.width - abs(card.frame.minX)) / max(1, view.bounds.width)
-        cardShadow.alpha = smoothstep(abs(progress) * 4) * smoothstep(onScreen * 4)
+        cardShadow.alpha = smoothstep(onScreen * 4)
     }
 
     private func smoothstep(_ value: CGFloat) -> CGFloat {
