@@ -342,13 +342,13 @@ struct ActionMenu<Content: View>: View {
 
     init(
         icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: CGFloat? = nil,
-        pending: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], margin: EdgeInsets = EdgeInsets(),
-        @ViewBuilder content: () -> Content
+        pending: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
+        margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
     ) {
         title = nil
         self.icon = .symbol(icon)
         self.help = help
-        look = ControlLook(variant: variant, size: size, round: round, joined: joined, wordless: true)
+        look = ControlLook(variant: variant, size: size, round: round, joined: joined, tint: tint, wordless: true)
         chevron = false
         self.pending = pending
         self.symbolSize = symbolSize

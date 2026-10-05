@@ -775,7 +775,7 @@ fn login(author: &Value) -> String {
     author["login"].as_str().unwrap_or("ghost").to_string()
 }
 
-fn time(value: &Value) -> Option<f64> {
+pub(crate) fn time(value: &Value) -> Option<f64> {
     let at = chrono::DateTime::parse_from_rfc3339(value.as_str()?).ok()?;
     Some(at.timestamp_millis() as f64 / 1000.0)
 }

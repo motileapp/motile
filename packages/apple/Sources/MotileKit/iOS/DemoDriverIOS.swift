@@ -82,6 +82,11 @@ enum DemoDriver {
             default: store.sidePanel.isOpen = false
             }
         case "file": store.sidePanel.open(.file(rest))
+        case "issue":
+            // "issue motile issue-1 ENG-1": the workspace, the issue's id and its identifier.
+            let named = rest.split(separator: " ").map(String.init)
+            guard named.count == 3 else { return }
+            store.sidePanel.open(.linearIssue(workspace: named[0], id: named[1], identifier: named[2]))
         case "change":
             guard let turn = store.sidePanel.turns.last else { return }
             store.sidePanel.showChange(turn: turn.id, path: rest)

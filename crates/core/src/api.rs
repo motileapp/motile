@@ -208,6 +208,29 @@ pub enum Command {
         thread_id: Option<String>,
         state: PullRequestState,
     },
+    /// The issues of a Linear workspace the server is connected to, as the list shows them:
+    /// `groups`, each a `linear::Group`. They are of one team or of all, assigned to the user or
+    /// to anyone, and with `closed` also the completed and cancelled ones, or with `search` the
+    /// ones that have the words.
+    LinearIssues {
+        server_id: String,
+        workspace: String,
+        #[serde(default)]
+        team: Option<String>,
+        mine: bool,
+        closed: bool,
+        #[serde(default)]
+        search: Option<String>,
+    },
+    /// One issue as its tab shows it: `page`, a `linear::Page`. With `comment` that is said on
+    /// the issue first.
+    LinearIssue {
+        server_id: String,
+        workspace: String,
+        issue: String,
+        #[serde(default)]
+        comment: Option<String>,
+    },
     /// What the agents spent on every connected server in the last `buckets` spans of
     /// `bucket_secs`, on a clock `utc_offset_secs` ahead of UTC: a `usage::View`.
     Usage {

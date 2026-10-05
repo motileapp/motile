@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Stand-in for Linear, for the dev apps.
+
+    scripts/fake-linear <port>
+
+It approves every connection and answers the server's queries from FAKE_LINEAR_STATE, a JSON file
+it writes on its first run: a workspace, its users, a team with its statuses and a few issues. Edit
+the file to see other issues, and change one in a client to see it change there.
+"""
+
+import datetime
+import json
+import os
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlencode, urlparse
+
+STATE = os.environ.get("FAKE_LINEAR_STATE") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "linear.json")
+
+
+def ago(hours):
+    at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=hours)
+    return at.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def first_state():
+    states = [
+        ("backlog", "Backlog", "backlog", "#bec2c8"),
+        ("todo", "Todo", "unstarted", "#e2e2e2"),
+        ("progress", "In Progress", "started", "#f2c94c"),
+        ("review", "In Review", "started", "#0f783c"),
+        ("done", "Done", "completed", "#5e6ad2"),
+        ("canceled", "Canceled", "canceled", "#95a2b3"),
+    ]
+    issues = [
+        ("Greet by name", "progress", 2, "demo", ["Feature"], 1),
+        ("Read the greeting from a file", "progress", 3, "demo", [], 5),
+        ("Greet in the user's language", "review", 1, "demo", ["Feature", "i18n"], 3),
+        ("greet.py fails on an empty name", "todo", 1, "demo", ["Bug"], 2),
+        ("Add tests for greet", "todo", 3, "demo", [], 30),
+        ("Say goodbye too", "todo", 4, "ada", ["Feature"], 50),
+        ("Package greet for pip", "backlog", 0, "demo", [], 200),
+        ("Write the README", "backlog", 4, None, ["Docs"], 400),
+        ("Start the repository", "done", 0, "demo", [], 700),
+        ("Greet with a GUI", "canceled", 0, "ada", [], 600),
+    ]
+    colors = {"Feature": "#bb87fc", "Bug": "#eb5757", "i18n": "#4ea7fc", "Docs": "#26b5ce"}
+    description = (
+        "`greet.py` greets the world. It should greet whoever runs it.\n\n"
+        "- Take the name as an argument\n- Fall back to `world` without one\n\n"
+        "```python\ngreet(\"Ada\")  # Hello Ada\n```"
+    )
+    comments = [
+        {"id": "comment-1", "user": "ada", "body": "Should it read `$USER` when there is no argument?", "createdAt": ago(20)},
+        {"id": "comment-2", "user": "demo", "body": "No, **world** is fine for now.", "createdAt": ago(19)},
+    ]
+    return {
+        "organization": {"id": "motile", "name": "Motile"},
+        "viewer": "demo",
+        "users": [{"id": "demo", "name": "Demo"}, {"id": "ada", "name": "Ada Lovelace"}],
+        "teams": [
+            {
+                "id": "eng",
+                "key": "ENG",
+                "name": "Engineering",
+                "states": [
+                    {"id": id, "name": name, "type": kind, "color": color, "position": position}
+                    for position, (id, name, kind, color) in enumerate(states)
+                ],
+            }
+        ],
+        "issues": [
+            {
+                "id": f"issue-{number}",
+                "number": number,
+                "title": title,
+                "description": description if number == 1 else "",
+                "priority": priority,
+                "updatedAt": ago(hours),
+                "team": "eng",
+                "state": state,
+                "assignee": assignee,
+                "labels": [{"name": label, "color": colors[label]} for label in labels],
+                "comments": comments if number == 1 else [],
+            }
+            for number, (title, state, priority, assignee, labels, hours) in enumerate(issues, start=1)
+        ],
+    }
+
+
+def load():
+    if not os.path.exists(STATE):
+        save(first_state())
+    with open(STATE) as file:
+        return json.load(file)
+
+
+def save(state):
+    with open(STATE, "w") as file:
+        json.dump(state, file, indent=2)
+
+
+def user(id, state):
+    found = next((user for user in state["users"] if user["id"] == id), None)
+    return found and {**found, "isMe": id == state["viewer"], "active": True}
+
+
+def shown(issue, state):
+    """The issue as Linear's API gives it, with its status, its team and its people in full."""
+    team = next(team for team in state["teams"] if team["id"] == issue["team"])
+    status = next(status for status in team["states"] if status["id"] == issue["state"])
+    identifier = f"{team['key']}-{issue['number']}"
+    slug = "-".join("".join(letter if letter.isalnum() else " " for letter in issue["title"].lower()).split())
+    comments = [{**comment, "user": user(comment["user"], state)} for comment in issue["comments"]]
+    return {
+        **issue,
+        "identifier": identifier,
+        "url": f"https://linear.app/motile/issue/{identifier}",
+        "branchName": f"demo/{identifier.lower()}-{slug}",
+        "team": {"id": team["id"]},
+        "state": status,
+        "assignee": user(issue.get("assignee"), state),
+        "labels": {"nodes": issue["labels"]},
+        "comments": {"nodes": comments},
+    }
+
+
+def wanted(issue, filter, state):
+    status = shown(issue, state)["state"]
+    if "team" in filter and issue["team"] != filter["team"]["id"]["eq"]:
+        return False
+    if "or" in filter:
+        words = filter["or"][0]["title"]["containsIgnoreCase"].lower()
+        numbers = [either["number"]["eq"] for either in filter["or"] if "number" in either]
+        return words in f"{issue['title']} {issue['description']}".lower() or issue["number"] in numbers
+    if "assignee" in filter and issue.get("assignee") != state["viewer"]:
+        return False
+    return status["type"] not in filter.get("state", {}).get("type", {}).get("nin", [])
+
+
+def answer(query, variables):
+    state = load()
+    find = lambda id: next(issue for issue in state["issues"] if issue["id"] == id)
+    if "issueUpdate" in query:
+        issue, input = find(variables["id"]), variables["input"]
+        for name, field in (("stateId", "state"), ("assigneeId", "assignee"), ("priority", "priority")):
+            if name in input:
+                issue[field] = input[name]
+        issue["updatedAt"] = ago(0)
+        save(state)
+        return {"issueUpdate": {"issue": shown(issue, state)}}
+    if "issueCreate" in query:
+        input = variables["input"]
+        team = next(team for team in state["teams"] if team["id"] == input["teamId"])
+        number = max(issue["number"] for issue in state["issues"]) + 1
+        issue = {
+            "id": f"issue-{number}",
+            "number": number,
+            "title": input["title"],
+            "description": input.get("description", ""),
+            "priority": input.get("priority", 0),
+            "updatedAt": ago(0),
+            "team": team["id"],
+            "state": input.get("stateId") or team["states"][0]["id"],
+            "assignee": input.get("assigneeId"),
+            "labels": [],
+            "comments": [],
+        }
+        state["issues"].append(issue)
+        save(state)
+        return {"issueCreate": {"issue": shown(issue, state)}}
+    if "commentCreate" in query:
+        issue = find(variables["input"]["issueId"])
+        comment = {"id": f"comment-{ago(0)}", "user": state["viewer"], "body": variables["input"]["body"], "createdAt": ago(0)}
+        issue["comments"].append(comment)
+        issue["updatedAt"] = ago(0)
+        save(state)
+        return {"commentCreate": {"success": True}}
+    if "issue(id" in query:
+        return {"issue": shown(find(variables["id"]), state)}
+    if "issues(" in query:
+        found = [issue for issue in state["issues"] if wanted(issue, variables.get("filter") or {}, state)]
+        found.sort(key=lambda issue: issue["updatedAt"], reverse=True)
+        return {"issues": {"nodes": [shown(issue, state) for issue in found]}}
+    if "teams(" in query:
+        teams = [{**team, "states": {"nodes": team["states"]}} for team in state["teams"]]
+        users = [user(found["id"], state) for found in state["users"]]
+        return {"teams": {"nodes": teams}, "users": {"nodes": users}}
+    return {"viewer": user(state["viewer"], state), "organization": state["organization"]}
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+    def reply(self, body):
+        body = json.dumps(body).encode()
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        asked = parse_qs(urlparse(self.path).query)
+        back = {"code": "dev", "state": asked.get("state", [""])[0]}
+        self.send_response(302)
+        self.send_header("location", f"{asked.get('redirect_uri', ['motile://linear'])[0]}?{urlencode(back)}")
+        self.end_headers()
+
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("content-length") or 0))
+        if self.path == "/graphql":
+            asked = json.loads(body)
+            return self.reply({"data": answer(asked["query"], asked.get("variables") or {})})
+        if self.path == "/oauth/token":
+            return self.reply({"access_token": "dev", "refresh_token": "dev", "expires_in": 86399})
+        self.reply({})
+
+
+if __name__ == "__main__":
+    load()
+    ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()

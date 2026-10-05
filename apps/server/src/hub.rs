@@ -427,7 +427,10 @@ impl Hub {
             Some(new) => {
                 let name: String = uuid::Uuid::new_v4().simple().to_string().chars().take(8).collect();
                 let folder = self.worktrees_folder.join(file_name(&project.path)).join(&name);
-                let branch = temporary_branch(&folder.to_string_lossy());
+                let branch = match new.branch.filter(|branch| !branch.is_empty() && !branch.starts_with('-')) {
+                    Some(wanted) => git::free_branch_name(&project.path, &self.environment, &wanted).await,
+                    None => temporary_branch(&folder.to_string_lossy()),
+                };
                 Some((folder.to_string_lossy().into_owned(), StoredWorktree { branch, base: new.base }))
             }
             None => None,

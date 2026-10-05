@@ -19,7 +19,7 @@ use tokio::sync::broadcast::error::RecvError;
 use crate::access::Access;
 use crate::hub::{GitRun, Hub, ListSubscription, ThreadSubscription};
 use crate::media::MediaStore;
-use crate::{files, update};
+use crate::{files, linear, update};
 
 const NOT_LINKED: u32 = 403;
 const RECHECK_ACCESS_EVERY: Duration = Duration::from_secs(30);
@@ -191,14 +191,40 @@ impl Server {
             Request::CloneRepo { repo } => {
                 hub.clone_repo(&repo).await.map(|project_id| Message::ProjectAdded { project_id })
             }
-            Request::LinearStatus => Ok(Message::Linear { connection: hub.linear.connection(hub.store()) }),
+            Request::LinearStatus => Ok(Message::Linear { connections: hub.linear.connections(hub.store()) }),
             Request::LinearConnect => hub.linear.connect().map(|url| Message::LinearAuthorize { url }),
             Request::LinearFinish { code, state } => {
                 let connected = hub.linear.finish(hub.store(), &code, &state).await;
-                connected.map(|connection| Message::Linear { connection: Some(connection) })
+                connected.map(|connections| Message::Linear { connections })
             }
-            Request::LinearDisconnect => {
-                hub.linear.disconnect(hub.store()).await.map(|_| Message::Linear { connection: None })
+            Request::LinearDisconnect { workspace } => {
+                let left = hub.linear.disconnect(hub.store(), &workspace).await;
+                left.map(|connections| Message::Linear { connections })
+            }
+            Request::LinearTeams { workspace } => {
+                let found = hub.linear.teams(hub.store(), &workspace).await;
+                found.map(|(teams, users)| Message::LinearTeams { teams, users })
+            }
+            Request::LinearIssues { workspace, team, mine, closed, search } => {
+                let wanted = linear::Wanted { team, mine, closed, search };
+                let found = hub.linear.issues(hub.store(), &workspace, &wanted).await;
+                found.map(|issues| Message::LinearIssues { issues })
+            }
+            Request::LinearIssue { workspace, issue } => {
+                let read = hub.linear.issue(hub.store(), &workspace, &issue).await;
+                read.map(|detail| Message::LinearIssueDetail { detail: Box::new(detail) })
+            }
+            Request::LinearUpdate { workspace, issue, change } => {
+                let changed = hub.linear.update(hub.store(), &workspace, &issue, &change).await;
+                changed.map(|issue| Message::LinearIssue { issue })
+            }
+            Request::LinearComment { workspace, issue, body } => {
+                let read = hub.linear.comment(hub.store(), &workspace, &issue, &body).await;
+                read.map(|detail| Message::LinearIssueDetail { detail: Box::new(detail) })
+            }
+            Request::LinearCreate { workspace, issue } => {
+                let filed = hub.linear.create(hub.store(), &workspace, &issue).await;
+                filed.map(|issue| Message::LinearIssue { issue })
             }
             Request::ListDir { path, icons, hidden } => {
                 files::list_dir(path.as_deref(), &hub.server_info().home, icons, hidden)

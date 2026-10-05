@@ -29,6 +29,7 @@ use crate::cache::{Cache, Page};
 use crate::connection::{ServerAddr, bind};
 use crate::follow::{self, Followed};
 use crate::git;
+use crate::linear;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
 use crate::pull_request;
@@ -1486,6 +1487,42 @@ impl Core {
                         Ok(Message::PullRequests { pull_requests }) => {
                             Ok(json!({ "rows": pull_request::rows(&pull_requests) }))
                         }
+                        Ok(other) => Err(unexpected(&other)),
+                        Err(error) => Err(error_text(error)),
+                    };
+                    reply(&sink, id, answer);
+                });
+            }
+            Command::LinearIssue { server_id, workspace, issue, comment } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let request = match comment {
+                        Some(body) => Request::LinearComment { workspace, issue, body },
+                        None => Request::LinearIssue { workspace, issue },
+                    };
+                    let detail = match link.request(&request).await {
+                        Ok(Message::LinearIssueDetail { detail }) => detail,
+                        Ok(other) => return reply(&sink, id, Err(unexpected(&other))),
+                        Err(error) => return reply(&sink, id, Err(error_text(error))),
+                    };
+                    let page = tokio::task::spawn_blocking(move || linear::page(&detail)).await;
+                    reply(&sink, id, page.map(|page| json!({ "page": page })).map_err(|error| error.to_string()));
+                });
+            }
+            Command::LinearIssues { server_id, workspace, team, mine, closed, search } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let answer = link.request(&Request::LinearIssues { workspace, team, mine, closed, search }).await;
+                    let answer = match answer {
+                        Ok(Message::LinearIssues { issues }) => Ok(json!({ "groups": linear::groups(&issues) })),
                         Ok(other) => Err(unexpected(&other)),
                         Err(error) => Err(error_text(error)),
                     };

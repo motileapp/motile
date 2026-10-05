@@ -1,6 +1,8 @@
 # The account the dev apps are signed in to, which only exists on this Mac: PostgreSQL, an auth
-# server with the dev login, and a server whose agent is scripts/fake-agent and whose GitHub is
-# scripts/fake-gh, with a project and a few threads. It lives in apps/macos/build/dev and is left
+# server with the dev login, and a server whose agent is scripts/fake-agent, whose GitHub is
+# scripts/fake-gh and whose Linear is scripts/fake-linear, with a project and a few threads.
+# MOTILE_DEV_LINEAR=real leaves Linear the real one, to connect a workspace of yours; it takes
+# hold when the server starts, so stop the stack first. It lives in apps/macos/build/dev and is left
 # running, so the Mac's and the iOS dev app in one tree share it. Sourced by their dev-app.sh;
 # `start_stack` brings it up.
 
@@ -27,6 +29,7 @@ free_port() {
 if [ ! -f "$DEV/ports" ]; then
     echo "PG_PORT=$(free_port TCP 5436) AUTH_PORT=$(free_port TCP 3112) SERVER_PORT=$(free_port UDP 47614)" > "$DEV/ports"
 fi
+grep -q LINEAR_PORT "$DEV/ports" || echo "LINEAR_PORT=$(free_port TCP 3212)" >> "$DEV/ports"
 # shellcheck disable=SC1091
 source "$DEV/ports"
 AUTH_URL="http://127.0.0.1:$AUTH_PORT"
@@ -61,6 +64,7 @@ post() { curl -fsS "$AUTH_URL$1" -H 'content-type: application/json' "${@:2}"; }
 
 stop_stack() {
     stop server
+    stop linear
     stop auth
     [ -d "$DEV/pg" ] && pg_ctl -D "$DEV/pg" stop -m fast >/dev/null 2>&1 || true
 }
@@ -103,13 +107,32 @@ start_stack() {
         mv "$DEV/server.new" "$DEV/server"
     fi
 
+    local linear_url=""
+    if [ "${MOTILE_DEV_LINEAR:-}" != real ]; then
+        linear_url="http://127.0.0.1:$LINEAR_PORT"
+        if ! current linear "$ROOT/scripts/fake-linear"; then
+            stop linear
+            FAKE_LINEAR_STATE="$DEV/linear.json" nohup "$ROOT/scripts/fake-linear" "$LINEAR_PORT" > "$DEV/linear.log" 2>&1 &
+            started linear $! "$ROOT/scripts/fake-linear"
+        fi
+    fi
+
     if ! current server "$BIN/motile"; then
         echo "▸ Starting the server…"
         stop server
-        MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
+        MOTILE_LINEAR_URL="$linear_url" MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
             MOTILE_GH_PATH="$ROOT/scripts/fake-gh" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6 \
             nohup "$BIN/motile" run --local --port "$SERVER_PORT" > "$DEV/server.log" 2>&1 &
         started server $! "$BIN/motile"
+    fi
+
+    # The server starts out connected to the stand-in's workspace.
+    if [ -n "$linear_url" ]; then
+        grant='[{"access_token":"dev","refresh_token":"dev","expires_at":4102444800,"connection":{"id":"motile","workspace":"Motile","user":"Demo"}}]'
+        for _ in $(seq 1 50); do
+            sqlite3 "$DEV/server/motile.sqlite" "INSERT OR IGNORE INTO settings (name, value) VALUES ('linear', '$grant')" 2>/dev/null && break
+            sleep 0.2
+        done
     fi
 
     if [ ! -d "$DEV/app" ]; then

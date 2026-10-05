@@ -1972,6 +1972,30 @@ async fn a_linked_pull_request_is_watched_for_the_agent_until_it_merges_and_sett
 }
 
 #[tokio::test]
+async fn a_worktree_asked_for_with_a_branch_is_made_on_it() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let (project, _) = project_with_a_branch(&harness, &connection).await;
+    let new_thread = NewThread {
+        project_id: project.id.clone(),
+        agent: Agent::Claude,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        plan: false,
+        worktree: Some(NewWorktree { base: "main".to_string(), branch: Some("ada/eng-7-greet-by-name".to_string()) }),
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
+    finished_transcript(&connection, &thread_id).await;
+
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { threads, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    let worktree = &threads.iter().find(|thread| thread.id == thread_id).unwrap().cwd;
+    let branch = std::process::Command::new("git").args(["-C", worktree, "branch", "--show-current"]).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&branch.stdout).trim(), "ada/eng-7-greet-by-name");
+}
+
+#[tokio::test]
 async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_lost() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
@@ -1990,7 +2014,7 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
         effort: None,
         access: AgentAccess::Full,
         plan: false,
-        worktree: Some(NewWorktree { base: "main".to_string() }),
+        worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
     finished_transcript(&connection, &thread_id).await;
@@ -2091,7 +2115,7 @@ async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
         effort: None,
         access: AgentAccess::Full,
         plan: false,
-        worktree: Some(NewWorktree { base: "main".to_string() }),
+        worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
     };
     let thread_id = send(&connection, None, Some(new_thread), "Show the screenshot").await;
     let transcript = finished_transcript(&connection, &thread_id).await;

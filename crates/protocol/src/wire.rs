@@ -206,6 +206,9 @@ pub struct NewWorktree {
     /// The branch the worktree's branch starts from: as the remote has it, unless the local one
     /// is ahead.
     pub base: String,
+    /// What to call the worktree's branch, where the writer isn't to name it.
+    #[serde(default)]
+    pub branch: Option<String>,
 }
 
 /// Settings of a thread to change; `None` leaves one as it is.
@@ -290,18 +293,60 @@ pub enum Request {
     CloneRepo {
         repo: String,
     },
-    /// Whether the server is connected to Linear. `Linear` answers.
+    /// The Linear workspaces the server is connected to. `Linear` answers.
     LinearStatus,
-    /// Starts connecting the server to Linear. `LinearAuthorize` answers with the page where the
-    /// user approves it, which ends at `LINEAR_REDIRECT` with a `code` and a `state`.
+    /// Starts connecting the server to a Linear workspace. `LinearAuthorize` answers with the page
+    /// where the user picks the workspace and approves, which ends at `LINEAR_REDIRECT` with a
+    /// `code` and a `state`.
     LinearConnect,
     /// Finishes connecting with what Linear sent the browser back with. `Linear` answers.
     LinearFinish {
         code: String,
         state: String,
     },
-    /// Takes back what Linear granted and forgets it. `Linear` answers.
-    LinearDisconnect,
+    /// Takes back what Linear granted for the workspace and forgets it. `Linear` answers.
+    LinearDisconnect {
+        workspace: String,
+    },
+    /// The workspace's teams with their statuses, and its users. `LinearTeams` answers.
+    LinearTeams {
+        workspace: String,
+    },
+    /// The workspace's issues, the last updated first: of one team or of all, assigned to the
+    /// user or to anyone, and with `closed` also the completed and cancelled ones. With `search`
+    /// they are the team's issues that have the words, whoever has them and closed ones too.
+    /// `LinearIssues` answers.
+    LinearIssues {
+        workspace: String,
+        #[serde(default)]
+        team: Option<String>,
+        mine: bool,
+        closed: bool,
+        #[serde(default)]
+        search: Option<String>,
+    },
+    /// One issue with its description and comments. `LinearIssueDetail` answers.
+    LinearIssue {
+        workspace: String,
+        issue: String,
+    },
+    /// Changes the issue's status, assignee or priority. `LinearIssue` answers.
+    LinearUpdate {
+        workspace: String,
+        issue: String,
+        change: LinearChange,
+    },
+    /// Comments on the issue. `LinearIssueDetail` answers.
+    LinearComment {
+        workspace: String,
+        issue: String,
+        body: String,
+    },
+    /// Files a new issue. `LinearIssue` answers.
+    LinearCreate {
+        workspace: String,
+        issue: NewLinearIssue,
+    },
     /// Takes the folder off the list. Its threads stay.
     RemoveProject {
         project_id: String,
@@ -538,11 +583,117 @@ pub enum GitHubState {
     Missing,
 }
 
-/// The Linear workspace a server is connected to, and the user who connected it.
+/// A Linear workspace a server is connected to, and the user who connected it.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct LinearConnection {
+    /// Names the workspace in requests.
+    pub id: String,
     pub workspace: String,
     pub user: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LinearTeam {
+    pub id: String,
+    /// What its issues' identifiers start with: `ENG`.
+    pub key: String,
+    pub name: String,
+    pub states: Vec<LinearState>,
+}
+
+/// A status a team's issues can have.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LinearState {
+    pub id: String,
+    pub name: String,
+    pub kind: LinearStateKind,
+    /// Hex without the `#`.
+    pub color: String,
+    /// Where it stands among the team's statuses of its kind.
+    pub position: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum LinearStateKind {
+    Triage,
+    Backlog,
+    Unstarted,
+    Started,
+    Completed,
+    Canceled,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LinearIssue {
+    pub id: String,
+    /// `ENG-123`.
+    pub identifier: String,
+    pub title: String,
+    pub url: String,
+    /// 0 is none, 1 urgent, 2 high, 3 medium and 4 low.
+    pub priority: u8,
+    pub state: LinearState,
+    /// Its team's id.
+    pub team: String,
+    pub assignee: Option<LinearUser>,
+    pub labels: Vec<Label>,
+    /// What Linear would call a branch for it.
+    pub branch_name: String,
+    pub updated_at: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LinearUser {
+    pub id: String,
+    pub name: String,
+    /// The one who connected the workspace.
+    #[serde(default)]
+    pub me: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LinearIssueDetail {
+    pub issue: LinearIssue,
+    /// Markdown.
+    pub description: String,
+    /// The oldest first.
+    pub comments: Vec<LinearComment>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LinearComment {
+    pub id: String,
+    pub author: String,
+    /// Markdown.
+    pub body: String,
+    pub created_at: f64,
+}
+
+/// What to change of an issue; `None` leaves it as it is.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct LinearChange {
+    #[serde(default)]
+    pub state: Option<String>,
+    /// A user's id, or nothing in it for nobody.
+    #[serde(default)]
+    pub assignee: Option<String>,
+    #[serde(default)]
+    pub priority: Option<u8>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct NewLinearIssue {
+    pub team: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub assignee: Option<String>,
+    #[serde(default)]
+    pub priority: u8,
 }
 
 /// A repository on GitHub.
@@ -1246,10 +1397,23 @@ pub enum Message {
         repos: Vec<Repo>,
     },
     Linear {
-        connection: Option<LinearConnection>,
+        connections: Vec<LinearConnection>,
     },
     LinearAuthorize {
         url: String,
+    },
+    LinearTeams {
+        teams: Vec<LinearTeam>,
+        users: Vec<LinearUser>,
+    },
+    LinearIssues {
+        issues: Vec<LinearIssue>,
+    },
+    LinearIssue {
+        issue: LinearIssue,
+    },
+    LinearIssueDetail {
+        detail: Box<LinearIssueDetail>,
     },
     /// Local branches first, then the ones only on the remote.
     Branches {

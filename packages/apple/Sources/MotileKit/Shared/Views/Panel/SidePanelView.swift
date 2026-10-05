@@ -49,6 +49,7 @@ struct PanelContent: View {
             case .pullRequestNumber(let number): PullRequestSurface(target: target, number: number).id(number)
             case .pullRequests: PullRequestListSurface(target: target)
             case .linear: LinearSurface(target: target)
+            case .linearIssue(let workspace, let id, _): LinearIssueSurface(target: target, workspace: workspace, id: id).id(id)
             case .blank, nil: PanelLauncher(target: target)
             }
         }
@@ -250,14 +251,14 @@ private struct PanelLauncher: View {
                         store.sidePanel.open(.pullRequests)
                     }
                 }
-                row(.linear, store.linear[target.serverID] == nil ? "Connect Linear" : "Linear", keys: nil, reason: store.linearUnavailable) {
+                row(.linear, store.linear.connected(target.serverID).isEmpty ? "Connect Linear" : "Linear", keys: nil, reason: store.linearUnavailable) {
                     store.sidePanel.open(.linear)
                 }
             }
             .frame(width: 250)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: target.serverID) { store.readLinear(target.serverID) }
+        .task(id: target.serverID) { store.linear.read(target.serverID) }
     }
 
     private func row(_ symbol: Symbol, _ title: String, keys: String?, reason: String?, action: @escaping () -> Void) -> some View {

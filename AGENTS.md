@@ -106,9 +106,12 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   with the usage. A title is told what the pull requests and issues its message links to are
   about.
 - `github.rs`: the server's GitHub login, its repositories and cloning one.
-- `linear.rs`: the server's connection to Linear. The user approves Motile's application in a
-  browser and the server exchanges the code with the verifier it made (PKCE, no secret), so the
-  token never leaves the server. `MOTILE_LINEAR_URL` stands in for Linear.
+- `linear.rs`: the server's connections to Linear workspaces. The user approves Motile's
+  application in a browser and the server exchanges the code with the verifier it made (PKCE, no
+  secret), so the token never leaves the server, which renews it. With it the server reads a
+  workspace's teams, users and issues, searches them, reads one with its comments, changes its
+  status, assignee and priority, comments on it and files new ones. `MOTILE_LINEAR_URL` stands
+  in for Linear.
 - `icons.rs`: finds a project's icon in its folder.
 - `access.rs`: asks the auth server which clients belong to the account.
 - `setup.rs`, `service.rs`: what the installer runs, and the systemd or launchd service.
@@ -131,6 +134,8 @@ for tests.
 - `pull_request.rs`: the pull request tabs: a pull request's statuses, the button its state calls
   for, its menu, its activity and conversations with the Markdown set, the list's rows, and the
   prompts that hand conflicts, failures and lines to the agent.
+- `linear.rs`: the Linear tabs: issues under their statuses, as Linear lists them, one issue
+  with its description and comments set, and the prompt that hands it to an agent.
 - `browse.rs`: browsing a server's folders by typing a path.
 - `usage.rs`: what the agents spent on every server, added up for the usage view: a series for
   each agent, and the models, projects and kinds of token.
@@ -153,7 +158,7 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   SF Symbols. A new one is a case with the character it has in lucide-static's
   `font/codepoints.json`. Linear's logo, which Lucide doesn't have, is drawn by hand there.
 - `Shared/Core`: `CoreBridge.swift` calls the Rust core, `AppStore.swift` is the state the
-  views show, `SidePanel.swift` the side panel's state.
+  views show, `SidePanel.swift` the side panel's state, `Linear.swift` the Linear tab's.
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
   rows on screen, `Rows.swift` builds their text and measures them off the main thread,
   `RowViews.swift` are the rows.
@@ -349,6 +354,11 @@ name, it writes one.
 `MOTILE_GH_PATH`), whose project has a local `origin` to push to. It keeps its pull requests in
 `build/dev/github.json`; edit that file to see a pull request fail its checks, conflict, wait for
 a review, have conversations on its lines or sit in a stack, and set `delay` to see a client wait.
+
+`scripts/fake-linear` stands in for Linear in the dev apps (through `MOTILE_LINEAR_URL`), whose
+server starts out connected to its workspace. It keeps its team, users and issues in
+`build/dev/linear.json`. `MOTILE_DEV_LINEAR=real scripts/dev-app.sh`, after a `--stop`, leaves
+Linear the real one, to connect a workspace of your own.
 
 ## Releasing and deploying
 

@@ -44,6 +44,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case pullRequests
     /// The issues of the Linear workspace the server is connected to, or how to connect it.
     case linear
+    /// One issue of a workspace, by its id there, titled with its identifier.
+    case linearIssue(workspace: String, id: String, identifier: String)
     /// A tab that offers what there is to open. A thread can have several, told apart by number.
     case blank(Int)
 
@@ -57,6 +59,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .pullRequestNumber(let number): "pull_request:\(number)"
         case .pullRequests: "pull_requests"
         case .linear: "linear"
+        case .linearIssue(_, let id, _): "linear:\(id)"
         case .file(let path): "file:\(path)"
         case .change(_, let path): "change:\(path)"
         }
@@ -71,7 +74,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
     var path: String? {
         switch self {
         case .file(let path), .change(_, let path): path
-        case .diff, .files, .agents, .pullRequest, .pullRequestNumber, .pullRequests, .linear, .blank: nil
+        case .diff, .files, .agents, .pullRequest, .pullRequestNumber, .pullRequests, .linear, .linearIssue, .blank: nil
         }
     }
 
@@ -84,6 +87,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .pullRequestNumber(let number): "PR #\(number)"
         case .pullRequests: "Pull Requests"
         case .linear: "Linear"
+        case .linearIssue(_, _, let identifier): identifier
         case .blank: "New Tab"
         case .file(let path), .change(_, let path): URL(fileURLWithPath: path).lastPathComponent
         }
@@ -95,7 +99,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .files: .folder
         case .agents: .users
         case .pullRequest, .pullRequestNumber, .pullRequests: .gitPullRequest
-        case .linear: .linear
+        case .linear, .linearIssue: .linear
         case .blank: .plus
         case .file(let path): FileSymbol.symbol(for: path)
         }
