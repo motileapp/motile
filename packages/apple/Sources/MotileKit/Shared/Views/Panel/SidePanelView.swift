@@ -202,7 +202,7 @@ private struct PanelTabChip: View {
         .frame(height: Self.height)
         .frame(maxWidth: 180)
         .padding(.vertical, Self.reach)
-        .button(.highlight(selected: active, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
+        .button(.highlight(selected: active, lit: hovering, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
             ActionButton(icon: .x, help: "Close (⌘W)", size: .small, symbolSize: 11) { panel.close(tab) }
                 .environment(\.surface, .tertiary)

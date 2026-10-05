@@ -288,6 +288,7 @@ struct ActionMenu<Content: View>: View {
     private let content: Content
     @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.surface) private var surface
 
     /// A menu with words shows what is chosen, and a chevron after it.
     init(
@@ -325,6 +326,7 @@ struct ActionMenu<Content: View>: View {
     var body: some View {
         let reach = ControlReach(size: look.size, wordless: title == nil && !chevron, margin: margin)
         var look = self.look
+        look.surface = surface
         look.lit = enabled && !pending && hovering
         return Menu {
             content
