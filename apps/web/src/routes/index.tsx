@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { AccountMenu } from "@/components/account-menu"
 import { AddServer } from "@/components/add-server"
 import { DeviceList } from "@/components/device-list"
-import { Logo } from "@/components/logo"
+import { Header } from "@/components/header"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
 import {
@@ -30,17 +30,12 @@ function Account() {
   const account = Route.useLoaderData()
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 pb-16 sm:px-6">
-      <header className="flex h-16 items-center justify-between">
-        <a href="https://motile.app">
-          <Logo />
-        </a>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <AccountMenu user={account.user} />
-        </div>
-      </header>
-      <main className="flex flex-col gap-12 pt-8">
+    <div className="pb-16">
+      <Header>
+        <ThemeToggle />
+        <AccountMenu user={account.user} />
+      </Header>
+      <main className="mx-auto flex w-full max-w-2xl flex-col gap-12 px-4 pt-8 sm:px-6">
         <section className="flex flex-col gap-4">
           <div className="flex items-end justify-between gap-4">
             <Heading
