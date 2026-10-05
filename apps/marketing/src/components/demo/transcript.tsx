@@ -31,7 +31,7 @@ export function Transcript({
   onOpenDiff: () => void
 }) {
   return (
-    <div className="mx-auto flex max-w-[768px] flex-col px-[38px] pt-6 pb-4">
+    <div className="mx-auto flex max-w-[844px] flex-col px-[38px] pt-6">
       {thread.items.map((item, index) => (
         <Row key={index} item={item} thread={thread} onOpenDiff={onOpenDiff} />
       ))}

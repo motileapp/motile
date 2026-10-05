@@ -1,6 +1,6 @@
 ---
 import { getImage } from "astro:assets"
-import { LayersIcon, RouteIcon, ServerIcon } from "lucide-react"
+import { RouteIcon, ServerIcon, ZapIcon } from "lucide-react"
 import Layout from "@/layouts/main.astro"
 import { Demo } from "@/components/demo/demo"
 import { LinkButton } from "@/components/link-button"
@@ -11,8 +11,13 @@ const preview = await getImage({ src: thread, format: "webp" })
 
 const features = [
   {
+    icon: ZapIcon,
+    title: "Native, and fast",
+    text: "Motile is a real Mac app. It opens and is talking to your server in under 100 ms.",
+  },
+  {
     icon: ServerIcon,
-    title: "Your machines",
+    title: "Your servers",
     text: "Agents run on your Mac or Linux box, with your tools and your keys. They keep going after you close the window.",
   },
   {
@@ -20,40 +25,43 @@ const features = [
     title: "Nothing in between",
     text: "Your Mac connects straight to your server, encrypted end to end. No ports to open, and we never see a thread.",
   },
-  {
-    icon: LayersIcon,
-    title: "Every thread at a glance",
-    text: "See which agents are working, which need you and what each one changed, on all your servers.",
-  },
 ]
 ---
 
 <Layout image={preview.src}>
-  <main class="pb-24">
-    <section class="mx-auto flex max-w-5xl flex-col items-center px-6 pt-16 text-center sm:pt-24">
+  <main class="overflow-x-clip pb-24">
+    <section class="relative z-10 mx-auto flex max-w-5xl flex-col items-center px-6 pt-10 text-center sm:pt-14">
       <h1 class="max-w-[16ch] text-4xl leading-[1.05] font-medium tracking-tight text-balance sm:text-6xl">
         {TAGLINE}
       </h1>
       <p class="mt-5 max-w-md text-lg text-pretty text-muted-foreground">
-        Run Claude Code and Codex on your own machines. Steer every thread from
+        Run Claude Code and Codex on your own servers. Steer every thread from
         your Mac.
       </p>
       <div class="mt-8 flex flex-wrap justify-center gap-3">
-        <LinkButton href={DOWNLOAD_URL} size="lg">
+        <LinkButton
+          target="_blank"
+          rel="noreferrer"
+          href={DOWNLOAD_URL}
+          size="lg"
+        >
           Download for macOS
         </LinkButton>
-        <LinkButton href={GITHUB_URL} size="lg" variant="outline">
+        <LinkButton
+          target="_blank"
+          rel="noreferrer"
+          href={GITHUB_URL}
+          size="lg"
+          variant="outline"
+        >
           View the source
         </LinkButton>
       </div>
-      <p class="mt-4 text-sm text-muted-foreground">
-        Free and open source. macOS 14 or later on Apple silicon.
-      </p>
     </section>
 
-    <section class="mx-auto mt-14 max-w-[1248px] px-6 sm:mt-20">
+    <section class="mx-auto mt-8 max-w-[1248px] px-3 sm:mt-10 sm:px-6">
       <Demo client:load />
-      <p class="mt-5 text-center text-sm text-muted-foreground">
+      <p class="relative mt-5 text-center text-sm text-muted-foreground">
         A live demo. Open a thread, answer the agent, look at the diff.
       </p>
     </section>

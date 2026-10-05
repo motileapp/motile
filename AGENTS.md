@@ -194,6 +194,9 @@ Mac app.
   dev app.
 - Rendering logic belongs in `crates/core`, not in a client, so that every future client (Android,
   Windows, Linux) gets it.
+- The marketing site's demo (`apps/marketing/src/components/demo`) shows the Mac app as it is.
+  When a change alters anything it shows (a view, a colour, a label, a state), update the demo in
+  the same change.
 - The Mac app and the iOS app do the same things. What one gets, the other gets in the same
   change, and what both do is written once, in `packages/apple/Sources/MotileKit/Shared`. Only
   what a system does differently is written twice.
