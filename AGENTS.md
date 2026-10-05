@@ -109,6 +109,7 @@ for tests.
 - `core.rs`: one loop that owns all state. Anything that waits on the network runs in its own
   task.
 - `link.rs`: keeps one server connected and follows its threads.
+- `follow.rs`: keeps the cached copy of an active thread that isn't open current.
 - `cache.rs`: the client's SQLite copy of its servers' threads, read a page of whole turns at a
   time.
 - `media.rs`: the images and videos the client has fetched, as files, with a size limit.

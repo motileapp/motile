@@ -284,6 +284,10 @@ impl Cache {
         self.items_where(thread_id, "json_extract(payload, '$.parent') = ?2", Some(parent))
     }
 
+    pub fn item(&self, thread_id: &str, id: &str) -> Option<Item> {
+        self.items_where(thread_id, "id = ?2", Some(id)).pop()
+    }
+
     fn items_where(&self, thread_id: &str, condition: &str, value: Option<&str>) -> Vec<Item> {
         let connection = self.connection();
         let query = format!("SELECT payload FROM items WHERE thread_id = ?1 AND {condition} ORDER BY seq");

@@ -26,6 +26,7 @@ use crate::api::{AccountView, Command, Config, Event, ProjectView, ServerView, T
 use crate::browse;
 use crate::cache::{Cache, Page};
 use crate::connection::{ServerAddr, bind};
+use crate::follow::{self, Followed};
 use crate::git;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
@@ -158,6 +159,8 @@ struct Core {
     account_error: Option<String>,
     servers: Vec<Server>,
     open: HashMap<String, OpenThread>,
+    /// Active threads that aren't open, kept current in the cache.
+    followed: HashMap<String, Followed>,
     /// The secret and the state of the sign-in the browser is busy with.
     pending_sign_in: Option<(String, String)>,
     watch_servers: bool,
@@ -227,6 +230,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         account_error: None,
         servers: Vec::new(),
         open: HashMap::new(),
+        followed: HashMap::new(),
         pending_sign_in: None,
         watch_servers: false,
         render_scheduled: false,
@@ -335,6 +339,9 @@ impl Core {
             Input::Stop => {}
             Input::Tick => {
                 self.ticks += 1;
+                for (thread_id, followed) in &mut self.followed {
+                    followed.save(&self.cache, thread_id);
+                }
                 if self.watch_servers || self.ticks.is_multiple_of(ACCOUNT_CHECK_TICKS) {
                     self.check_account();
                 }
@@ -345,6 +352,9 @@ impl Core {
     async fn stop(mut self) {
         for (thread_id, open) in &mut self.open {
             save_streamed(&self.cache, thread_id, open);
+        }
+        for (thread_id, followed) in &mut self.followed {
+            followed.save(&self.cache, thread_id);
         }
         for server in &self.servers {
             if let Some(link) = &server.link {
@@ -498,6 +508,7 @@ impl Core {
         self.pending_sign_in = None;
         self.sync_servers();
         self.open.clear();
+        self.followed.clear();
         self.cache.clear();
         self.media.clear();
         if let Some(endpoint) = self.endpoint.take() {
@@ -564,6 +575,7 @@ impl Core {
                 link.shutdown();
             }
             self.open.retain(|_, open| open.server_id != server_id);
+            self.followed.retain(|_, followed| followed.server_id != server_id);
             self.cache.remove_server(&server_id);
             self.emit(Event::Threads { server_id: server_id.clone(), threads: Vec::new() });
             self.emit_projects(&server_id, Vec::new());
@@ -615,6 +627,9 @@ impl Core {
             // Threads the client opened before there was a connection to follow them on.
             for (thread_id, open) in self.open.iter().filter(|(_, open)| open.server_id == server_id) {
                 link.open(thread_id.clone(), open.rev);
+            }
+            for (thread_id, followed) in self.followed.iter().filter(|(_, followed)| followed.server_id == server_id) {
+                link.open(thread_id.clone(), followed.rev);
             }
             server.link = Some(link);
         }
@@ -792,7 +807,10 @@ impl Core {
                 }
             }
             LinkEvent::List(message) => self.list_message(server_id, message),
-            LinkEvent::Thread { thread_id, message } => self.thread_message(&thread_id, message),
+            LinkEvent::Thread { thread_id, message } if self.open.contains_key(&thread_id) => {
+                self.thread_message(&thread_id, message)
+            }
+            LinkEvent::Thread { thread_id, message } => self.followed_message(&thread_id, message),
         }
     }
 
@@ -809,9 +827,14 @@ impl Core {
                 // Threads deleted while the client was away are no longer followed.
                 let known: HashSet<String> = server.threads.keys().cloned().collect();
                 self.open.retain(|thread_id, open| open.server_id != server_id || known.contains(thread_id));
+                self.followed
+                    .retain(|thread_id, followed| followed.server_id != server_id || known.contains(thread_id));
                 self.emit_servers();
                 self.emit(Event::Threads { server_id: server_id.to_string(), threads: views });
                 self.emit_projects(server_id, projects);
+                for thread_id in known {
+                    self.refollow(server_id, &thread_id);
+                }
             }
             Message::Projects { projects } => {
                 self.cache.set_projects(server_id, &projects);
@@ -821,12 +844,15 @@ impl Core {
                 self.cache.upsert_thread(server_id, &thread);
                 let view = self.thread_view(server_id, &thread);
                 let Some(server) = self.server_mut(server_id) else { return };
-                server.threads.insert(thread.id.clone(), thread);
+                let thread_id = thread.id.clone();
+                server.threads.insert(thread_id.clone(), thread);
                 self.emit(Event::ThreadUpsert { thread: view });
+                self.refollow(server_id, &thread_id);
             }
             Message::ThreadDeleted { thread_id } => {
                 self.cache.remove_thread(&thread_id);
                 self.open.remove(&thread_id);
+                self.followed.remove(&thread_id);
                 if let Some(server) = self.server_mut(server_id) {
                     server.threads.remove(&thread_id);
                 }
@@ -834,6 +860,40 @@ impl Core {
             }
             other => tracing::debug!("unexpected message on the thread list: {other:?}"),
         }
+    }
+
+    /// Follows an active thread that isn't open, until its agent is done.
+    fn refollow(&mut self, server_id: &str, thread_id: &str) {
+        if self.open.contains_key(thread_id) {
+            return;
+        }
+        let Ok(link) = self.link(server_id) else { return };
+        let server = self.servers.iter().find(|server| server.device.public_key == server_id);
+        let active = server.and_then(|server| server.threads.get(thread_id)).is_some_and(follow::is_active);
+        match self.followed.get_mut(thread_id) {
+            None if active => {
+                let since = self.cache.synced_rev(thread_id);
+                let followed = Followed::new(server_id.to_string(), since, false, true);
+                self.followed.insert(thread_id.to_string(), followed);
+                link.open(thread_id.to_string(), since);
+            }
+            Some(followed) if !active && followed.is_done() => {
+                followed.save(&self.cache, thread_id);
+                self.followed.remove(thread_id);
+                link.close(thread_id);
+            }
+            _ => {}
+        }
+    }
+
+    fn followed_message(&mut self, thread_id: &str, message: Message) {
+        let Some(followed) = self.followed.get_mut(thread_id) else { return };
+        if !followed.take(&self.cache, thread_id, message) {
+            self.followed.remove(thread_id);
+            return;
+        }
+        let server_id = followed.server_id.clone();
+        self.refollow(&server_id, thread_id);
     }
 
     fn thread_message(&mut self, thread_id: &str, message: Message) {
@@ -1405,6 +1465,12 @@ impl Core {
         let server =
             self.servers.iter().find(|server| server.device.public_key == server_id).ok_or("That server is gone.")?;
         let thread = server.threads.get(thread_id).cloned();
+        // A followed thread's stream carries on, and the cache it saves to is where the thread opens from.
+        let followed = self.followed.remove(thread_id);
+        let live = followed.is_some_and(|mut followed| {
+            followed.save(&self.cache, thread_id);
+            followed.live
+        });
         let cwd = thread.as_ref().map(|thread| thread.cwd.clone()).unwrap_or_default();
         let link = server.link.clone();
 
@@ -1445,13 +1511,16 @@ impl Core {
             agents,
             agent: None,
             earlier,
-            live: false,
+            live,
             rev: since,
             unrendered: HashSet::new(),
             unsaved: HashSet::new(),
             saved_at: Instant::now(),
         };
         self.open.insert(thread_id.to_string(), open);
+        if live {
+            self.emit(Event::Live { thread_id: thread_id.to_string(), live });
+        }
         if let Some(link) = link {
             link.open(thread_id.to_string(), since);
         }
@@ -1461,6 +1530,14 @@ impl Core {
     fn close_thread(&mut self, thread_id: &str) {
         let Some(mut open) = self.open.remove(thread_id) else { return };
         save_streamed(&self.cache, thread_id, &mut open);
+        let server = self.servers.iter().find(|server| server.device.public_key == open.server_id);
+        let active = server.and_then(|server| server.threads.get(thread_id)).is_some_and(follow::is_active);
+        if active {
+            let working = self.cache.activity(thread_id).is_some_and(|activity| follow::is_working(&activity));
+            let followed = Followed::new(open.server_id, open.rev, open.live, working);
+            self.followed.insert(thread_id.to_string(), followed);
+            return;
+        }
         if let Ok(link) = self.link(&open.server_id) {
             link.close(thread_id);
         }
