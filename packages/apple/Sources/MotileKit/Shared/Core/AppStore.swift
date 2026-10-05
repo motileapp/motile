@@ -123,6 +123,11 @@ final class AppStore {
     var panelNotice: String?
     /// Whether GitHub can be used on each server, as last heard.
     private(set) var github: [String: GitHubState] = [:]
+    /// The Linear workspace each server is connected to, as last heard.
+    private(set) var linear: [String: LinearConnection] = [:]
+    /// The server that waits for the user to approve it at Linear.
+    private(set) var connectingLinear: String?
+    var linearError: String?
     /// The GitHub repositories each server last listed, and why one couldn't.
     private(set) var repos: [String: [Repo]] = [:]
     private(set) var repoErrors: [String: String] = [:]
@@ -194,6 +199,7 @@ final class AppStore {
     /// What the agent did that the side panel shows.
     @ObservationIgnored let agentTranscript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
+    @ObservationIgnored private var linearSession: SignInSession?
     @ObservationIgnored private let lifecycle = Lifecycle()
     @ObservationIgnored private var undoTimer: Timer?
     @ObservationIgnored private var openThreadID: String?
@@ -904,6 +910,74 @@ final class AppStore {
         guard let state = GitHubState(rawValue: answer.string("state")) else { return }
         github[serverID] = state
         defaults.set(state.rawValue, forKey: "github-\(serverID)")
+    }
+
+    // MARK: Linear
+
+    /// Why Linear can't be shown here, when it can't.
+    var linearUnavailable: String? {
+        guard let target = panelTarget, let server = server(target.serverID) else { return nil }
+        return server.protocolVersion >= 11 ? nil : "Update \(server.name) to connect it to Linear."
+    }
+
+    func readLinear(_ serverID: String) {
+        guard let server = server(serverID), server.protocolVersion >= 11 else { return }
+        if linear[serverID] == nil, let kept = defaults.dictionary(forKey: "linear-\(serverID)") {
+            linear[serverID] = LinearConnection(json: kept)
+        }
+        askLinear(["type": "linear_status"], on: serverID)
+    }
+
+    /// Has the user approve Motile at Linear in the browser, then hands what Linear sent back to
+    /// the server, which alone can finish with it.
+    func connectLinear(_ serverID: String) {
+        guard connectingLinear == nil else { return }
+        connectingLinear = serverID
+        linearError = nil
+        core.send("request", ["server_id": serverID, "request": ["type": "linear_connect"]]) { [weak self] result in
+            guard let self else { return }
+            var refusal = "The connection couldn't be started."
+            if case .failure(let error) = result { refusal = error.message }
+            guard case .success(let answer) = result, let url = URL(string: answer.string("url")) else {
+                connectingLinear = nil
+                linearError = refusal
+                return
+            }
+            let session = SignInSession()
+            linearSession = session
+            session.start(url: url) { [weak self] callback in
+                guard let self else { return }
+                linearSession = nil
+                let sent = callback.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems ?? []
+                let value = { (name: String) in sent.first { $0.name == name }?.value }
+                guard let code = value("code"), let state = value("state") else {
+                    connectingLinear = nil
+                    if let refusal = value("error"), refusal != "access_denied" { linearError = "Linear didn't connect: \(refusal)" }
+                    return
+                }
+                askLinear(["type": "linear_finish", "code": code, "state": state], on: serverID)
+            }
+        }
+    }
+
+    func disconnectLinear(_ serverID: String) {
+        askLinear(["type": "linear_disconnect"], on: serverID)
+    }
+
+    private func askLinear(_ request: JSON, on serverID: String) {
+        core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
+            guard let self else { return }
+            if request.string("type") == "linear_finish" { connectingLinear = nil }
+            switch result {
+            case .success(let answer):
+                let connection = answer.object("connection")
+                linear[serverID] = connection.map { LinearConnection(json: $0) }
+                defaults.set(connection, forKey: "linear-\(serverID)")
+            case .failure(let error):
+                guard request.string("type") != "linear_status" else { return }
+                linearError = error.message
+            }
+        }
     }
 
     /// Asks the server for its GitHub repositories, unless it listed them in the last minute or

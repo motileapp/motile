@@ -42,6 +42,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case pullRequestNumber(Int)
     /// The repository's pull requests.
     case pullRequests
+    /// The issues of the Linear workspace the server is connected to, or how to connect it.
+    case linear
     /// A tab that offers what there is to open. A thread can have several, told apart by number.
     case blank(Int)
 
@@ -54,6 +56,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .pullRequest: "pull_request"
         case .pullRequestNumber(let number): "pull_request:\(number)"
         case .pullRequests: "pull_requests"
+        case .linear: "linear"
         case .file(let path): "file:\(path)"
         case .change(_, let path): "change:\(path)"
         }
@@ -68,7 +71,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
     var path: String? {
         switch self {
         case .file(let path), .change(_, let path): path
-        case .diff, .files, .agents, .pullRequest, .pullRequestNumber, .pullRequests, .blank: nil
+        case .diff, .files, .agents, .pullRequest, .pullRequestNumber, .pullRequests, .linear, .blank: nil
         }
     }
 
@@ -80,6 +83,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .pullRequest: "Pull Request"
         case .pullRequestNumber(let number): "PR #\(number)"
         case .pullRequests: "Pull Requests"
+        case .linear: "Linear"
         case .blank: "New Tab"
         case .file(let path), .change(_, let path): URL(fileURLWithPath: path).lastPathComponent
         }
@@ -91,6 +95,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .files: .folder
         case .agents: .users
         case .pullRequest, .pullRequestNumber, .pullRequests: .gitPullRequest
+        case .linear: .linear
         case .blank: .plus
         case .file(let path): FileSymbol.symbol(for: path)
         }

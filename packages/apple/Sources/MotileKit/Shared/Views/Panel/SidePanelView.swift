@@ -48,6 +48,7 @@ struct PanelContent: View {
             case .pullRequest: PullRequestSurface(target: target)
             case .pullRequestNumber(let number): PullRequestSurface(target: target, number: number).id(number)
             case .pullRequests: PullRequestListSurface(target: target)
+            case .linear: LinearSurface(target: target)
             case .blank, nil: PanelLauncher(target: target)
             }
         }
@@ -249,13 +250,17 @@ private struct PanelLauncher: View {
                         store.sidePanel.open(.pullRequests)
                     }
                 }
+                row(.linear, store.linear[target.serverID] == nil ? "Connect Linear" : "Linear", keys: nil, reason: store.linearUnavailable) {
+                    store.sidePanel.open(.linear)
+                }
             }
             .frame(width: 250)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: target.serverID) { store.readLinear(target.serverID) }
     }
 
-    private func row(_ symbol: Symbol, _ title: String, keys: String, reason: String?, action: @escaping () -> Void) -> some View {
+    private func row(_ symbol: Symbol, _ title: String, keys: String?, reason: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(symbol, size: 13)
@@ -264,12 +269,14 @@ private struct PanelLauncher: View {
                     .font(.ui(size: 13))
                 Spacer()
                 #if os(macOS)
-                Text(keys)
-                    .font(.ui(size: 11, weight: .medium))
-                    .foregroundStyle(Color.themeSecondary)
-                    .padding(.horizontal, 6)
-                    .frame(height: 20)
-                    .background(Color.themeBackgroundTertiary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                if let keys {
+                    Text(keys)
+                        .font(.ui(size: 11, weight: .medium))
+                        .foregroundStyle(Color.themeSecondary)
+                        .padding(.horizontal, 6)
+                        .frame(height: 20)
+                        .background(Color.themeBackgroundTertiary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                }
                 #endif
             }
             .foregroundStyle(Color.themeText)
