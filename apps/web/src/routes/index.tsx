@@ -37,7 +37,7 @@ function Account() {
       </Header>
       <main className="mx-auto flex w-full max-w-2xl flex-col gap-12 px-4 pt-8 sm:px-6">
         <section className="flex flex-col gap-4">
-          <div className="flex items-end justify-between gap-4">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
             <Heading
               title="Servers"
               description="The machines your agents run on."
@@ -103,7 +103,7 @@ function Heading({
   description: string
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 px-2">
       <h2 className="text-lg font-medium tracking-tight">{title}</h2>
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>
