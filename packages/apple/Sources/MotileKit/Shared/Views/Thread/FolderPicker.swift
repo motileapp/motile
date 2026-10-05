@@ -22,16 +22,11 @@ struct FolderPicker: View {
                 .font(.ui(size: 15, weight: .semibold))
                 .padding([.horizontal, .top], 18)
             HStack(spacing: 8) {
-                Button {
+                ActionButton(icon: .chevronUp, help: "Enclosing folder", variant: .secondary) {
                     if let parent = folder?.parent { load(parent) }
-                } label: {
-                    Image(.chevronUp, size: 13)
                 }
                 .disabled(folder?.parent == nil)
-                .help("Enclosing folder")
-                TextField("Path on the server", text: $path)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.ui(size: 12.5, design: .monospaced))
+                InputField("Path on the server", text: $path, monospaced: true)
                     .onSubmit { load(path) }
             }
             .padding(.horizontal, 18)
@@ -74,9 +69,9 @@ struct FolderPicker: View {
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer()
-                Button("Cancel") { dismiss() }
+                ActionButton("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Use as Icon") {
+                ActionButton("Use as Icon", variant: .primary) {
                     if let selectedImage { useAsIcon(selectedImage) }
                 }
                 .keyboardShortcut(.defaultAction)

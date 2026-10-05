@@ -236,9 +236,9 @@ function WindowButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="m-0.5 flex size-7 items-center justify-center rounded-[7px] hover:bg-hover"
+      className="m-0.5 flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-hover hover:text-foreground"
     >
-      <Icon className="size-[15px]" />
+      <Icon className="size-3.5" />
     </button>
   )
 }
@@ -246,12 +246,12 @@ function WindowButton({
 function GitButton() {
   return (
     <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-[7px] border border-strong-border text-[12px] font-medium">
-      <span className="flex h-full items-center gap-1.5 px-[9px] hover:bg-hover">
-        <GitCommitHorizontalIcon className="size-3" />
+      <span className="flex h-full items-center gap-1.5 px-[11px] hover:bg-hover">
+        <GitCommitHorizontalIcon className="size-3.5" />
         Commit
       </span>
-      <span className="flex h-full w-6 items-center justify-center border-l border-strong-border text-muted-foreground hover:bg-hover">
-        <ChevronDownIcon className="size-3" />
+      <span className="flex h-full items-center justify-center border-l border-strong-border px-[11px] text-muted-foreground hover:bg-hover hover:text-foreground">
+        <ChevronDownIcon className="size-[9px] opacity-60" />
       </span>
     </span>
   )

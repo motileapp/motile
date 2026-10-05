@@ -24,7 +24,7 @@ struct ActivityRow: View {
                     PullRequestTextView(blocks: entry.body)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                 }
                 if let subject = entry.subject, entry.thread == nil, !entry.reactions.isEmpty {
                     ReactionBar(reactions: entry.reactions) { kind, on in actions.react(subject, kind, on) }
@@ -46,12 +46,10 @@ struct ActivityRow: View {
                     ReactionPicker(reactions: []) { kind, on in actions.react(subject, kind, on) }
                 }
                 if entry.kind == "opened", let edit = actions.editDescription {
-                    IconOnlyButton(symbol: .pencil, help: "Edit the description", size: scaled(20), symbolSize: 10, faded: true, action: edit)
+                    ActionButton(icon: .pencil, help: "Edit the description", pending: actions.working?.key == "menu:body", action: edit)
                 }
                 if let url = entry.url {
-                    IconOnlyButton(symbol: .squareArrowOutUpRight, help: "Open on GitHub", size: scaled(20), symbolSize: 10, faded: true) {
-                        Platform.open(url)
-                    }
+                    ActionButton(icon: .squareArrowOutUpRight, help: "Open on GitHub") { Platform.open(url) }
                 }
             }
             .frame(height: Self.lineHeight)
@@ -128,8 +126,8 @@ struct ThreadCard: View {
                 footer
             }
         }
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     private var header: some View {
@@ -153,8 +151,8 @@ struct ThreadCard: View {
                         .foregroundStyle(Color.themeTertiary)
                         .fixedSize()
                 }
-                if thread.outdated { tag("Outdated", .themeWarning) }
-                if thread.resolved { tag("Resolved", .themeSuccess) }
+                if thread.outdated { Chip("Outdated", tone: .themeWarning).fixedSize() }
+                if thread.resolved { Chip("Resolved", tone: .themeSuccess).fixedSize() }
                 Spacer(minLength: 0)
                 if !isOpen {
                     Text(thread.comments.count == 1 ? "1 comment" : "\(thread.comments.count) comments")
@@ -164,19 +162,8 @@ struct ThreadCard: View {
             }
             .padding(.horizontal, 12)
             .frame(height: pressable(32))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-    }
-
-    private func tag(_ text: String, _ color: Color) -> some View {
-        Text(text)
-            .font(.ui(size: 10.5, weight: .semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .frame(height: scaled(17))
-            .background(color.opacity(0.14), in: Capsule())
-            .fixedSize()
+        .buttonStyle(.highlight(radius: 0))
     }
 
     @ViewBuilder
@@ -187,11 +174,11 @@ struct ThreadCard: View {
                 WritingField(text: $reply, placeholder: "Reply", height: 64)
                 HStack(spacing: 8) {
                     Spacer()
-                    PullRequestActionButton(label: "Cancel", style: "plain") {
+                    ActionButton("Cancel") {
                         replying = false
                         reply = ""
                     }
-                    PullRequestActionButton(label: "Reply", style: "primary", working: actions.working?.key == "reply:\(thread.id)" ? "Replying…" : nil) {
+                    ActionButton("Reply", variant: .primary, pending: actions.working?.key == "reply:\(thread.id)") {
                         actions.reply(thread.id, reply.trimmingCharacters(in: .whitespacesAndNewlines)) {
                             replying = false
                             reply = ""
@@ -203,18 +190,13 @@ struct ThreadCard: View {
             .padding(10)
         } else {
             HStack(spacing: 6) {
-                PullRequestActionButton(label: "Reply", style: "plain") { replying = true }
+                ActionButton("Reply") { replying = true }
                 if let fix = thread.fix {
-                    PullRequestActionButton(label: "Fix", style: "plain") { actions.handOff(fix) }
-                        .help("Have the agent do what it asks")
+                    ActionButton("Fix", help: "Have the agent do what it asks") { actions.handOff(fix) }
                 }
                 Spacer(minLength: 0)
                 if thread.canResolve {
-                    let resolving = actions.working?.key == "resolve:\(thread.id)"
-                    PullRequestActionButton(
-                        label: thread.resolved ? "Unresolve" : "Resolve", style: "plain",
-                        working: resolving ? actions.working?.label : nil
-                    ) {
+                    ActionButton(thread.resolved ? "Unresolve" : "Resolve", pending: actions.working?.key == "resolve:\(thread.id)") {
                         actions.resolve(thread.id, !thread.resolved)
                     }
                     .disabled(busy)
@@ -264,14 +246,16 @@ private struct CommentView: View {
                     + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeTertiary))
                     .font(.ui(size: 12.5))
                 Spacer(minLength: 4)
-                if comment.reactions.isEmpty {
-                    ReactionPicker(reactions: []) { kind, on in react(comment.id, kind, on) }
-                }
-                if let url = comment.url {
-                    IconOnlyButton(symbol: .squareArrowOutUpRight, help: "Open on GitHub", size: scaled(20), symbolSize: 10, faded: true) {
-                        Platform.open(url)
+                HStack(spacing: 0) {
+                    if comment.reactions.isEmpty {
+                        ReactionPicker(reactions: [], size: .small) { kind, on in react(comment.id, kind, on) }
+                    }
+                    if let url = comment.url {
+                        ActionButton(icon: .squareArrowOutUpRight, help: "Open on GitHub", size: .small) { Platform.open(url) }
                     }
                 }
+                .padding(.vertical, -4)
+                .padding(.trailing, -6)
             }
             PullRequestTextView(blocks: comment.body)
             if !comment.reactions.isEmpty {

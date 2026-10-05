@@ -97,7 +97,7 @@ struct MediaViewer: View {
                 } else if let fraction {
                     Text("Downloading \(item.name) · \(Int(fraction * 100))%").monospacedDigit()
                 } else {
-                    ProgressView().controlSize(.small).colorScheme(.dark)
+                    Spinner(size: ControlSize.large.symbol)
                 }
             }
             .font(.ui(size: 13))

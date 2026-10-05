@@ -1,88 +1,13 @@
 import SwiftUI
 
-/// A button of the pull request's tab, in the panel's colours: filled for what the state calls
-/// for, red for what fixes it, quiet for the rest. While its action runs it turns, and says so.
-struct PullRequestActionButton: View {
-    @Environment(\.isEnabled) private var isEnabled
-    let label: String
-    let style: String
-    /// The method menu sits right of it, so its right corners are square.
-    var joined = false
-    /// What it says while its action runs: "Merging…".
-    var working: String?
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if working != nil {
-                    Spinner(color: foreground)
-                        .frame(width: 11, height: 11)
-                }
-                Text(working ?? label)
-                    .font(.ui(size: 12, weight: .medium))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 11)
-            .frame(height: scaled(28))
-            .background(background, in: shape)
-        }
-        .buttonStyle(DimButtonStyle())
-        .opacity(isEnabled || working != nil ? 1 : 0.45)
-        .fixedSize()
-        .animation(.easeOut(duration: 0.15), value: working)
-    }
-
-    private var shape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            topLeadingRadius: 7, bottomLeadingRadius: 7, bottomTrailingRadius: joined ? 0 : 7, topTrailingRadius: joined ? 0 : 7,
-            style: .continuous)
-    }
-
-    private var foreground: Color {
-        style == "plain" ? .themeText : .white
-    }
-
-    private var background: Color {
+extension ButtonVariant {
+    /// The look of a button as the core names it.
+    init(style: String) {
         switch style {
-        case "primary": .themePrimary
-        case "danger": .themeDangerFill
-        default: .themeSelected
+        case "primary": self = .primary
+        case "danger": self = .danger
+        default: self = .secondary
         }
-    }
-}
-
-/// A ring that turns, in any colour, for what is under way.
-struct Spinner: View {
-    let color: Color
-    @State private var turned = false
-
-    var body: some View {
-        Circle()
-            .trim(from: 0.15, to: 1)
-            .stroke(color, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-            .rotationEffect(.degrees(turned ? 360 : 0))
-            .onAppear {
-                withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) { turned = true }
-            }
-    }
-}
-
-/// The pull request's state, as a label in its colour.
-struct StateLabel: View {
-    let state: PullRequest.State
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(state.symbol, size: 11)
-            Text(state.title)
-                .font(.ui(size: 11.5, weight: .semibold))
-        }
-        .foregroundStyle(state.color)
-        .padding(.horizontal, 7)
-        .frame(height: scaled(20))
-        .background(state.color.opacity(0.14), in: Capsule())
     }
 }
 
@@ -90,37 +15,9 @@ struct BranchName: View {
     let name: String
 
     var body: some View {
-        Text(name)
-            .font(.ui(size: 11.5, design: .monospaced))
-            .foregroundStyle(Color.themeText)
-            .lineLimit(1)
+        Chip(name, monospaced: true)
             .truncationMode(.middle)
-            .padding(.horizontal, 6)
-            .frame(height: scaled(20))
-            .background(Color.themeHover, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             .textSelection(.enabled)
-    }
-}
-
-/// A label of the pull request, in GitHub's colour for it.
-struct LabelChip: View {
-    let name: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-            Text(name)
-                .font(.ui(size: 11.5, weight: .medium))
-                .foregroundStyle(Color.themeText)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 7)
-        .frame(height: scaled(20))
-        .background(color.opacity(0.16), in: Capsule())
-        .overlay { Capsule().strokeBorder(color.opacity(0.35), lineWidth: 1) }
     }
 }
 
@@ -129,19 +26,8 @@ struct ReviewerChip: View {
     let reviewer: PullRequestPage.Reviewer
 
     var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(reviewer.tone == .neutral ? Color.themeTertiary : reviewer.tone.color)
-                .frame(width: 7, height: 7)
-            Text(reviewer.name)
-                .font(.ui(size: 11.5, weight: .medium))
-                .foregroundStyle(Color.themeText)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 7)
-        .frame(height: scaled(20))
-        .background(Color.themeHover, in: Capsule())
-        .help("\(reviewer.name): \(reviewer.label)")
+        Chip(reviewer.name, dot: reviewer.tone == .neutral ? Color.themeTertiary : reviewer.tone.color)
+            .help("\(reviewer.name): \(reviewer.label)")
     }
 }
 
@@ -154,27 +40,15 @@ struct ReactionBar: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(reactions) { reaction in
-                Button {
+                ActionButton(
+                    "\(reaction.emoji) \(reaction.count)", help: reaction.mine ? "Take your reaction back" : "React so too",
+                    variant: reaction.mine ? .accent : .secondary, size: .small, round: true
+                ) {
                     react(reaction.kind, !reaction.mine)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(reaction.emoji)
-                            .font(.system(size: 11.5))
-                        Text(verbatim: "\(reaction.count)")
-                            .font(.ui(size: 11.5, weight: .medium))
-                            .monospacedDigit()
-                            .foregroundStyle(reaction.mine ? Color.themeLink : Color.themeSecondary)
-                    }
-                    .padding(.horizontal, 7)
-                    .frame(height: scaled(22))
-                    .background(reaction.mine ? Color.themeLink.opacity(0.14) : Color.themeHover, in: Capsule())
-                    .overlay { Capsule().strokeBorder(reaction.mine ? Color.themeLink.opacity(0.45) : Color.clear, lineWidth: 1) }
-                    .contentShape(Capsule())
                 }
-                .buttonStyle(DimButtonStyle())
-                .help(reaction.mine ? "Take your reaction back" : "React so too")
+                .monospacedDigit()
             }
-            ReactionPicker(reactions: reactions, react: react)
+            ReactionPicker(reactions: reactions, size: .small, react: react)
         }
     }
 }
@@ -182,26 +56,16 @@ struct ReactionBar: View {
 /// The menu of GitHub's reactions, to add one or take it back.
 struct ReactionPicker: View {
     let reactions: [PullRequestPage.Reaction]
+    var size = ControlSize.regular
     let react: (String, Bool) -> Void
 
     var body: some View {
-        Menu {
+        ActionMenu(icon: .smilePlus, help: "Add a reaction", size: size) {
             ForEach(PullRequestPage.Reaction.all, id: \.kind) { choice in
                 let mine = reactions.first { $0.kind == choice.kind }?.mine ?? false
                 Button("\(choice.emoji)  \(mine ? "Take Back" : "React")") { react(choice.kind, !mine) }
             }
-        } label: {
-            Image(.smilePlus, size: 12)
-                .foregroundStyle(Color.themeTertiary)
-                .frame(width: scaled(26), height: scaled(22))
-                .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .hoverHighlight(radius: 11)
-        .help("Add a reaction")
     }
 }
 
@@ -225,17 +89,16 @@ struct PullRequestNoticeBar: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(minHeight: Self.lineHeight)
                 Spacer(minLength: 4)
-                HStack(spacing: 8) {
+                HStack(spacing: 2) {
                     if let url = notice.url {
-                        LinkButton("Open") { Platform.open(url) }
+                        ActionButton("Open", variant: .link, size: .small) { Platform.open(url) }
                     }
-                    IconOnlyButton(symbol: .x, help: "Close", size: scaled(20), symbolSize: 10, faded: true) {
-                        store.sidePanel.dismissPullRequestNotice()
-                    }
+                    ActionButton(icon: .x, help: "Close", size: .small) { store.sidePanel.dismissPullRequestNotice() }
                 }
                 .frame(height: Self.lineHeight)
             }
-            .padding(.horizontal, 12)
+            .padding(.leading, 12)
+            .padding(.trailing, 6)
             .padding(.vertical, 8)
             .background(notice.failed ? Color.themeDanger.opacity(0.08) : Color.themeSuccess.opacity(0.08))
             PanelLine()
@@ -257,9 +120,9 @@ struct WritingField: View {
             .padding(.horizontal, 4)
             .padding(.vertical, 6)
             .frame(minHeight: height, maxHeight: height ?? .infinity)
-            .background(Color.themeField, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(Color.themeField, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeStrongBorder, lineWidth: 1)
             }
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
@@ -287,7 +150,7 @@ struct PullRequestTextView: View {
                 case .code(let code):
                     ProseText(text: code)
                         .padding(10)
-                        .background(Color(platform: Theme.codeBlock), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(Color(platform: Theme.codeBlock), in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                 }
             }
         }
@@ -332,15 +195,15 @@ struct DescriptionEditor: View {
                 }
                 .padding(12)
                 .frame(maxHeight: .infinity)
-                .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             } else {
                 WritingField(text: $text, placeholder: "Say what this changes and why", height: nil)
             }
             HStack(spacing: 8) {
                 Spacer()
-                Button("Cancel") { dismiss() }
+                ActionButton("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Save") {
+                ActionButton("Save", variant: .primary) {
                     save(text)
                     dismiss()
                 }

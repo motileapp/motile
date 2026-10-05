@@ -317,17 +317,20 @@ final class SymbolView: UIImageView {
     }
 }
 
-/// A borderless button with a symbol and, optionally, a title. It lights up under a finger.
+/// The transcript's button: a symbol and, optionally, a title, sized and lit as `ActionButton`
+/// is. Under a finger it has a background and its symbol is in the colour of text.
 final class IconButton: UIButton {
-    static let side: CGFloat = 36
-    private static let touchSide: CGFloat = 44
+    static let metrics = MotileKit.ControlSize.regular
+    static let side = metrics.height
+    /// How far the symbol is from the button's edge.
+    static let symbolInset = ((side - metrics.symbolSide) / 2).rounded()
+    private static let touchSide = Platform.minimumPress
 
-    private var symbolSize: CGFloat = 14
+    private let symbolSize = IconButton.metrics.symbol
 
-    convenience init(symbol: Symbol, title: String = "", symbolSize: CGFloat = 14, tooltip: String, action: @escaping () -> Void) {
+    convenience init(symbol: Symbol, title: String = "", tooltip: String, action: @escaping () -> Void) {
         self.init(type: .custom)
-        self.symbolSize = symbolSize
-        layer.cornerRadius = 8
+        layer.cornerRadius = Self.metrics.radius
         layer.cornerCurve = .continuous
         tintColor = Theme.secondary
         setTitleColor(Theme.secondary, for: .normal)
@@ -343,7 +346,10 @@ final class IconButton: UIButton {
     }
 
     override var isHighlighted: Bool {
-        didSet { backgroundColor = isHighlighted ? Theme.hover : .clear }
+        didSet {
+            backgroundColor = isHighlighted ? Theme.hover : .clear
+            tintColor = isHighlighted ? Theme.text : Theme.secondary
+        }
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {

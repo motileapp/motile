@@ -911,7 +911,7 @@ final class TurnEndRowView: RowView {
 final class MessageMeta: FlippedView {
     static let height = IconButton.side
     /// How far the button's symbol is from the button's edge, which goes past the column's.
-    private static let symbolInset: CGFloat = Platform.scale > 1 ? 10 : 7
+    private static let symbolInset = IconButton.symbolInset
 
     var onCopy: (() -> Void)?
     var shown = !Platform.hoverReveals {
@@ -930,7 +930,7 @@ final class MessageMeta: FlippedView {
         self.trailing = trailing
         super.init(frame: .zero)
         addSubview(time)
-        let button = IconButton(symbol: .copy, symbolSize: 12, tooltip: tooltip) { [weak self] in self?.copy() }
+        let button = IconButton(symbol: .copy, tooltip: tooltip) { [weak self] in self?.copy() }
         self.button = button
         addSubview(button)
         opacity = shown ? 1 : 0

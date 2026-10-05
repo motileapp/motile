@@ -80,8 +80,8 @@ struct PanelMessage: View {
 
 struct PanelLoading: View {
     var body: some View {
-        ProgressView()
-            .controlSize(.small)
+        Spinner(size: ControlSize.large.symbol)
+            .foregroundStyle(Color.themeTertiary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -94,7 +94,7 @@ struct PanelBar<Content: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 4) { content }
                 .padding(.leading, 12)
-                .padding(.trailing, 6)
+                .padding(.trailing, 4)
                 .frame(height: pressable(36))
             PanelLine()
         }
@@ -133,9 +133,7 @@ struct PanelTabStrip: View {
                         }
                     }
                     if store.panelUnavailable == nil, !tabs.isBlank {
-                        IconOnlyButton(symbol: .plus, help: "New tab", size: scaled(28), symbolSize: 12, faded: true) {
-                            store.sidePanel.openBlank()
-                        }
+                        ActionButton(icon: .plus, help: "New tab") { store.sidePanel.openBlank() }
                     }
                 }
                 .padding(.horizontal, 8)
@@ -180,10 +178,12 @@ private struct PanelTabChip: View {
     let active: Bool
     @State private var hovering = false
 
-    private static let closeSize: CGFloat = Platform.scale > 1 ? 24 : 16
-    private static let closeMargin: CGFloat = 6
+    private static let height = ControlSize.regular.height
+    private static let closeSize = ControlSize.small.height
+    /// The close button is as far from the tab's side as from its top and bottom.
+    private static let closeMargin = (height - closeSize) / 2
     /// How far above and under the tab a finger still presses it.
-    private static let reach = max(0, (Platform.minimumPress - scaled(28)) / 2)
+    private static let reach = max(0, (Platform.minimumPress - height) / 2)
 
     var body: some View {
         let panel = store.sidePanel
@@ -199,12 +199,12 @@ private struct PanelTabChip: View {
         }
         .padding(.leading, 9)
         .padding(.trailing, Self.closeMargin)
-        .frame(height: scaled(28))
+        .frame(height: Self.height)
         .frame(maxWidth: 180)
         .padding(.vertical, Self.reach)
         .button(.highlight(selected: active, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
-            IconOnlyButton(symbol: .x, help: "Close (⌘W)", size: Self.closeSize, symbolSize: 8, radius: 4, faded: true) { panel.close(tab) }
+            ActionButton(icon: .x, help: "Close (⌘W)", size: .small) { panel.close(tab) }
                 .padding(.trailing, Self.closeMargin)
                 .opacity(hovering || active ? 1 : 0)
         }
@@ -331,14 +331,11 @@ struct DiffSurface: View {
                 Spacer(minLength: 4)
                 if let document = panel.diff.value, document.files.count > 1 {
                     let allClosed = panel.collapsed.count >= document.files.count
-                    IconOnlyButton(
-                        symbol: allClosed ? .unfoldVertical : .foldVertical,
-                        help: allClosed ? "Open every file" : "Close every file"
-                    ) {
+                    ActionButton(icon: allClosed ? .unfoldVertical : .foldVertical, help: allClosed ? "Open every file" : "Close every file") {
                         panel.setAllCollapsed(!allClosed)
                     }
                 }
-                IconOnlyButton(symbol: .rotateCw, help: "Read the changes again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the changes again") { asked += 1 }
             }
             if !target.repository {
                 PanelMessage(text: "This folder isn't a git repository.")
@@ -417,7 +414,7 @@ struct DiffSurface: View {
 
     private func scopeMenu(_ scope: DiffScope) -> some View {
         let panel = store.sidePanel
-        return Menu {
+        return ActionMenu(title(of: scope)) {
             Toggle("Uncommitted changes", isOn: chosen(.uncommitted, scope))
             Toggle("Branch changes", isOn: chosen(.branch, scope))
             if let number = pullRequestNumber(scope), store.pullRequestsUnavailable == nil {
@@ -439,23 +436,7 @@ struct DiffSurface: View {
                     Toggle(label(of: turn), isOn: chosen(.turn(turn.id), scope))
                 }
             }
-        } label: {
-            HStack(spacing: 5) {
-                Text(title(of: scope))
-                    .font(.ui(size: 12.5, weight: .medium))
-                Image(.chevronDown, size: 8)
-                    .foregroundStyle(Color.themeTertiary)
-            }
-            .foregroundStyle(Color.themeText)
-            .padding(.horizontal, 8)
-            .frame(height: pressable(26))
-            .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .hoverHighlight()
         .padding(.leading, -8)
     }
 
@@ -503,7 +484,7 @@ struct FilesSurface: View {
                     .lineLimit(1)
                     .padding(.leading, 3)
                 Spacer(minLength: 4)
-                IconOnlyButton(symbol: .rotateCw, help: "Read the folder again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the folder again") { asked += 1 }
             }
             if let error = panel.filesError {
                 PanelMessage(text: error, failed: true)
@@ -581,12 +562,12 @@ struct FileSurface: View {
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer(minLength: 4)
-                IconOnlyButton(symbol: copied ? .check : .copy, help: "Copy the path") {
+                ActionButton(icon: copied ? .check : .copy, help: "Copy the path") {
                     Platform.copy(path)
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
                 }
-                IconOnlyButton(symbol: .rotateCw, help: "Read the file again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the file again") { asked += 1 }
             }
             switch panel.contents[.file(path)] {
             case nil, .loading:
@@ -636,7 +617,7 @@ struct ChangeSurface: View {
                     .foregroundStyle(Color.themeText)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                IconOnlyButton(symbol: .diff, help: "Show everything this turn changed") {
+                ActionButton(icon: .diff, help: "Show everything this turn changed") {
                     panel.showDiff(.turn(turn), revealing: path)
                 }
             }

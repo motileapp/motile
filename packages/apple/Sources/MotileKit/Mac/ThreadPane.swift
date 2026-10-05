@@ -118,12 +118,7 @@ struct ThreadPane: View {
                     Text("A project is a folder on your server that threads work in.")
                         .font(.ui(size: 14))
                         .foregroundStyle(Color.themeSecondary)
-                    Button {
-                        store.addProject()
-                    } label: {
-                        Label("Add Project", symbol: .folderPlus)
-                    }
-                    .controlSize(.large)
+                    ActionButton("Add Project", icon: .folderPlus, variant: .primary, size: .large) { store.addProject() }
                     .disabled(!store.servers.contains { $0.state == .connected })
                     .padding(.top, 8)
                 }

@@ -46,26 +46,26 @@ export function DiffPanel({
           pastWindowButtons ? "pl-[200px]" : "pl-2"
         )}
       >
-        <span className="flex h-7 items-center gap-1.5 rounded-lg bg-selected pr-1.5 pl-[9px] text-[12px] font-medium">
+        <span className="flex h-7 items-center gap-1.5 rounded-[7px] bg-selected pr-0.5 pl-[9px] text-[12px] font-medium">
           <DiffIcon className="size-[11px]" />
           Diff
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="ml-1 flex size-4 items-center justify-center rounded-[4px] text-muted-foreground hover:bg-hover"
+            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-hover hover:text-foreground"
           >
-            <XIcon className="size-2.5" />
+            <XIcon className="size-[13px]" />
           </button>
         </span>
-        <span className="flex size-7 items-center justify-center rounded-lg text-muted-foreground">
-          <PlusIcon className="size-3" />
+        <span className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-hover hover:text-foreground">
+          <PlusIcon className="size-3.5" />
         </span>
       </div>
-      <div className="flex h-9 shrink-0 items-center gap-1 border-t border-b pr-1.5 pl-3">
-        <span className="flex items-center gap-1 text-[12.5px] font-medium">
+      <div className="flex h-9 shrink-0 items-center gap-1 border-t border-b pr-1 pl-3">
+        <span className="-ml-2 flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground">
           Uncommitted
-          <ChevronDownIcon className="size-[9px] text-tertiary" />
+          <ChevronDownIcon className="size-[9px] opacity-60" />
         </span>
         {files.length > 0 && (
           <span className="ml-1">
@@ -79,7 +79,7 @@ export function DiffPanel({
               setClosed(allClosed ? [] : files.map((file) => file.path))
             }
             aria-label={allClosed ? "Open every file" : "Close every file"}
-            className="ml-auto flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-hover"
+            className="ml-auto flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-hover hover:text-foreground"
           >
             {allClosed ? (
               <UnfoldVerticalIcon className="size-3.5" />
@@ -90,7 +90,7 @@ export function DiffPanel({
         )}
         <span
           className={cn(
-            "flex size-7 items-center justify-center text-muted-foreground",
+            "flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-hover hover:text-foreground",
             files.length < 2 && "ml-auto"
           )}
         >

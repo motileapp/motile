@@ -116,6 +116,82 @@ enum Theme {
     static let resizeGrab: CGFloat = 17
 }
 
+/// How large a control is. Its height, symbol, text, padding and corners go together, so that
+/// no view picks them one by one. Sizes are as on the Mac; iOS enlarges them.
+enum ControlSize {
+    /// Inside a row, a tab, a chip or a card.
+    case small
+    /// Everywhere else.
+    case regular
+    /// What a screen is about, and the bars fingers press.
+    case large
+
+    var height: CGFloat {
+        switch self {
+        case .small: scaled(24)
+        case .regular: scaled(28)
+        case .large: scaled(36)
+        }
+    }
+
+    var symbol: CGFloat {
+        switch self {
+        case .small: 13
+        case .regular: 14
+        case .large: 16
+        }
+    }
+
+    var textSize: CGFloat {
+        switch self {
+        case .small: 11.5
+        case .regular: 12
+        case .large: 13
+        }
+    }
+
+    var font: Font { .ui(size: textSize, weight: .medium) }
+
+    /// The room between what it says and its sides.
+    var padding: CGFloat {
+        switch self {
+        case .small: 8
+        case .regular: 11
+        case .large: 14
+        }
+    }
+
+    /// The room between its symbol and its words.
+    var gap: CGFloat {
+        switch self {
+        case .small: 5
+        case .regular: 6
+        case .large: 8
+        }
+    }
+
+    var radius: CGFloat {
+        switch self {
+        case .small: Radius.small
+        case .regular: Radius.control
+        case .large: Radius.large
+        }
+    }
+
+    /// The side of the square its symbol is drawn in.
+    var symbolSide: CGFloat { PlatformImage.symbolSide(symbol) }
+}
+
+/// How round corners are.
+enum Radius {
+    static let small: CGFloat = 6
+    static let control: CGFloat = 7
+    static let large: CGFloat = 9
+    /// Boxes that hold text or rows: cards, code, notices.
+    static let card: CGFloat = 10
+    static let sheet: CGFloat = 14
+}
+
 extension Color {
     static let themeBackground = Color(platform: Theme.background)
     static let themeRaised = Color(platform: Theme.raised)

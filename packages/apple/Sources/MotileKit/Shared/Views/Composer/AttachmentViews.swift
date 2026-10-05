@@ -27,22 +27,17 @@ struct AttachmentTile: View {
         }
         .frame(width: Self.side, height: Self.side)
         .overlay(alignment: .bottom) { AttachmentProgress(attachment: attachment, onPicture: true) }
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.themeBorder, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Color.themeBorder, lineWidth: 1))
         .button(DimButtonStyle(), action: open)
         .overlay(alignment: .topTrailing) {
-            Button {
+            // Over a picture the button is as in the dark, on a backdrop that shows on any picture.
+            ActionButton(icon: .x, help: "Remove", variant: .secondary, size: .small, round: true) {
                 store.removeAttachment(attachment.id)
-            } label: {
-                Image(.x, size: 8)
-                    .foregroundStyle(.white)
-                    .frame(width: 16, height: 16)
-                    .background(.black.opacity(0.6), in: Circle())
-                    .padding(4)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .help("Remove")
+            .background(.black.opacity(0.6), in: Circle())
+            .environment(\.colorScheme, .dark)
+            .padding(2)
         }
         .help(attachment.name)
         .accessibilityLabel(attachment.name)
@@ -85,13 +80,11 @@ struct AttachmentChip: View {
                     .foregroundStyle(Color.themeSecondary)
             }
             AttachmentProgress(attachment: attachment, onPicture: false)
-            IconOnlyButton(symbol: .x, help: "Remove", size: 18, symbolSize: 10) {
-                store.removeAttachment(attachment.id)
-            }
+            ActionButton(icon: .x, help: "Remove", size: .small, round: true) { store.removeAttachment(attachment.id) }
         }
         .font(.ui(size: 12))
         .padding(.leading, 9)
-        .padding([.vertical, .trailing], 5)
+        .padding([.vertical, .trailing], 2)
         .background(Color.themeBubble, in: Capsule())
     }
 }
@@ -121,23 +114,20 @@ private struct AttachmentProgress: View {
                 percent.foregroundStyle(Color.themeSecondary)
             }
         case .failed(let reason):
-            Button {
-                store.retryAttachment(attachment.id)
-            } label: {
-                if onPicture {
-                    Label("Retry", symbol: .rotateCw, size: 10)
-                        .font(.ui(size: 10, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 2)
-                        .background(Color.themeDanger.opacity(0.85))
-                } else {
-                    Label("Retry", symbol: .rotateCw)
-                        .foregroundStyle(Color.themeDanger)
+            if onPicture {
+                Label("Retry", symbol: .rotateCw, size: 10)
+                    .font(.ui(size: 10, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 2)
+                    .background(Color.themeDanger.opacity(0.85))
+                    .button(DimButtonStyle()) { store.retryAttachment(attachment.id) }
+                    .help("\(reason) Click to try again.")
+            } else {
+                ActionButton("Retry", icon: .rotateCw, help: "\(reason) Click to try again.", variant: .danger, size: .small, round: true) {
+                    store.retryAttachment(attachment.id)
                 }
             }
-            .buttonStyle(.plain)
-            .help("\(reason) Click to try again.")
         }
     }
 }

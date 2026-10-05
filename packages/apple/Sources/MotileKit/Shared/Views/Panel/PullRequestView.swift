@@ -61,20 +61,11 @@ struct PullRequestSurface: View {
                 .foregroundStyle(Color.themeText)
         }
         Spacer(minLength: 4)
-        if let work = store.sidePanel.pullRequestWorking, work.key.hasPrefix("menu:") {
-            Spinner(color: .themeSecondary)
-                .frame(width: 11, height: 11)
-            Text(work.label)
-                .font(.ui(size: 12))
-                .foregroundStyle(Color.themeSecondary)
-                .lineLimit(1)
-                .padding(.trailing, 4)
-        }
         if let page, let url = page.url {
-            IconOnlyButton(symbol: .squareArrowOutUpRight, help: "Open on GitHub") { Platform.open(url) }
+            ActionButton(icon: .squareArrowOutUpRight, help: "Open on GitHub") { Platform.open(url) }
         }
         if shown != nil, store.pullRequestsUnavailable == nil {
-            IconOnlyButton(symbol: .rotateCw, help: "Read the pull request again") { asked += 1 }
+            ActionButton(icon: .rotateCw, help: "Read the pull request again") { asked += 1 }
         }
     }
 
@@ -109,12 +100,10 @@ private struct NoPullRequest: View {
                 if let project = store.gitProject, let create = project.gitControl?.menu.first(where: { $0.action == "create_pr" }),
                     create.reason == nil
                 {
-                    PullRequestActionButton(label: "Create PR", style: "primary") { store.chooseGit(create, in: project) }
+                    ActionButton("Create PR", variant: .primary) { store.chooseGit(create, in: project) }
                 }
                 if store.pullRequestsExtended {
-                    PullRequestActionButton(label: "Show All Pull Requests", style: "plain") {
-                        store.sidePanel.open(.pullRequests)
-                    }
+                    ActionButton("Show All Pull Requests") { store.sidePanel.open(.pullRequests) }
                 }
             }
             if store.pullRequestsExtended, let thread = store.selectedThread {
@@ -143,17 +132,9 @@ struct LinkPullRequestField: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            TextField("Link a PR by number or address", text: $text)
-                .textFieldStyle(.plain)
-                .font(.ui(size: 12.5))
-                .padding(.horizontal, 9)
-                .frame(height: scaled(28))
-                .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
-                }
+            InputField("Link a PR by number or address", text: $text)
                 .onSubmit(submit)
-            PullRequestActionButton(label: "Link", style: "plain", action: submit)
+            ActionButton("Link", action: submit)
                 .disabled(number == nil)
         }
     }
@@ -173,7 +154,7 @@ struct PullRequestActions {
     let handOff: (String) -> Void
     let showCommit: (String) -> Void
     let editDescription: (() -> Void)?
-    /// The key of the action that runs, and what it says.
+    /// The action that runs.
     let working: PullRequestWork?
 }
 
@@ -220,7 +201,7 @@ private struct PullRequestPageView: View {
         }
         .sheet(isPresented: $describing) {
             DescriptionEditor(original: page.body) { body in
-                panel.edit(["kind": "body", "body": body], key: "menu:body", label: "Saving the description…", on: target, number: number)
+                panel.edit(["kind": "body", "body": body], key: "menu:body", on: target, number: number)
             }
         }
     }
@@ -231,11 +212,10 @@ private struct PullRequestPageView: View {
                 panel.edit(["kind": "react", "subject": subject, "reaction": kind, "on": on], on: target, number: number)
             },
             reply: { thread, body, done in
-                panel.edit(["kind": "reply", "thread": thread, "body": body], key: "reply:\(thread)", label: "Replying…", on: target, number: number, done: done)
+                panel.edit(["kind": "reply", "thread": thread, "body": body], key: "reply:\(thread)", on: target, number: number, done: done)
             },
             resolve: { thread, resolved in
-                let label = resolved ? "Resolving…" : "Opening…"
-                panel.edit(["kind": "resolve", "thread": thread, "resolved": resolved], key: "resolve:\(thread)", label: label, on: target, number: number)
+                panel.edit(["kind": "resolve", "thread": thread, "resolved": resolved], key: "resolve:\(thread)", on: target, number: number)
             },
             handOff: { store.handOff($0) },
             showCommit: { panel.showDiff(.commit($0)) },
@@ -262,7 +242,7 @@ private struct PullRequestPageView: View {
                 }
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StateLabel(state: page.state)
+                Chip(page.state.title, icon: page.state.symbol, tone: page.state.color)
                 Text(page.byline)
                     .font(.ui(size: 12))
                     .foregroundStyle(Color.themeSecondary)
@@ -323,16 +303,7 @@ private struct PullRequestPageView: View {
         let binding = Binding { title ?? "" } set: { title = $0 }
         let working = panel.pullRequestWorking?.key == "title"
         return VStack(alignment: .leading, spacing: 8) {
-            TextField("Title", text: binding)
-                .textFieldStyle(.plain)
-                .font(.ui(size: 15, weight: .semibold))
-                .padding(.horizontal, 8)
-                .frame(height: scaled(32))
-                .background(Color.themeField, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(Color.themeStrongBorder, lineWidth: 1)
-                }
-                .focused($titleFocused)
+            InputField("Title", text: binding, size: .large, focus: $titleFocused)
                 .onSubmit(saveTitle)
                 .onAppear { titleFocused = true }
                 #if os(macOS)
@@ -340,9 +311,9 @@ private struct PullRequestPageView: View {
                 #endif
             HStack(spacing: 8) {
                 Spacer()
-                PullRequestActionButton(label: "Cancel", style: "plain") { title = nil }
+                ActionButton("Cancel") { title = nil }
                     .disabled(working)
-                PullRequestActionButton(label: "Save", style: "primary", working: working ? "Saving…" : nil, action: saveTitle)
+                ActionButton("Save", variant: .primary, pending: working, action: saveTitle)
                     .disabled(working || editing.trimmingCharacters(in: .whitespaces).isEmpty || editing == page.title)
             }
         }
@@ -350,30 +321,31 @@ private struct PullRequestPageView: View {
 
     private func saveTitle() {
         guard let edited = title?.trimmingCharacters(in: .whitespaces), !edited.isEmpty, edited != page.title else { return }
-        panel.edit(["kind": "title", "title": edited], key: "title", label: "Saving…", on: target, number: number) { title = nil }
+        panel.edit(["kind": "title", "title": edited], key: "title", on: target, number: number) { title = nil }
     }
 
     /// Who reviews it and its labels, each with a menu to change them when the user may.
     @ViewBuilder
     private var people: some View {
+        let working = panel.pullRequestWorking
         let reviews = !page.reviewers.isEmpty || !page.reviewerChoices.isEmpty
         let labelled = !page.labels.isEmpty || !page.labelChoices.isEmpty
         if reviews || labelled {
             VStack(alignment: .leading, spacing: 6) {
                 if reviews {
-                    PeopleRow(title: "Reviewers", empty: page.reviewers.isEmpty ? "None yet" : nil, choices: page.reviewerChoices, help: "Ask for a review") {
+                    PeopleRow(title: "Reviewers", empty: page.reviewers.isEmpty ? "None yet" : nil, choices: page.reviewerChoices, help: "Ask for a review", pending: working?.key == "menu:reviewers") {
                         ForEach(page.reviewers) { ReviewerChip(reviewer: $0) }
                     } toggle: { name, on in
                         let edit: JSON = ["kind": "reviewers", "add": on ? [name] : [], "remove": on ? [] : [name]]
-                        panel.edit(edit, key: "menu:reviewers", label: "Updating reviewers…", on: target, number: number)
+                        panel.edit(edit, key: "menu:reviewers", on: target, number: number)
                     }
                 }
                 if labelled {
-                    PeopleRow(title: "Labels", empty: page.labels.isEmpty ? "None yet" : nil, choices: page.labelChoices, help: "Change the labels") {
-                        ForEach(page.labels, id: \.name) { LabelChip(name: $0.name, color: $0.color) }
+                    PeopleRow(title: "Labels", empty: page.labels.isEmpty ? "None yet" : nil, choices: page.labelChoices, help: "Change the labels", pending: working?.key == "menu:labels") {
+                        ForEach(page.labels, id: \.name) { Chip($0.name, dot: $0.color, tone: $0.color) }
                     } toggle: { name, on in
                         let edit: JSON = ["kind": "labels", "add": on ? [name] : [], "remove": on ? [] : [name]]
-                        panel.edit(edit, key: "menu:labels", label: "Updating labels…", on: target, number: number)
+                        panel.edit(edit, key: "menu:labels", on: target, number: number)
                     }
                 }
             }
@@ -383,10 +355,13 @@ private struct PullRequestPageView: View {
 
     /// Everything else there is to do, after what the merge box offers.
     private var moreMenu: some View {
-        let working = panel.pullRequestWorking != nil
+        let work = panel.pullRequestWorking
+        let working = work != nil
         let thread = store.selectedThread
         let ownPullRequest = thread?.pullRequest?.number == number
-        return Menu {
+        // What a menu started has no button of its own to be pending.
+        let pending = work.map { $0.key.hasPrefix("menu:") && !["menu:reviewers", "menu:labels"].contains($0.key) } ?? false
+        return ActionMenu(icon: .ellipsis, help: "More", pending: pending) {
             ForEach(page.menu) { button in
                 Button(role: button.style == "danger" ? .destructive : nil) { run(button, fromMenu: true) } label: { Text(button.label) }
                     .disabled(working && button.prompt == nil)
@@ -416,18 +391,7 @@ private struct PullRequestPageView: View {
                 Button("Copy Link") { Platform.copy(url.absoluteString) }
             }
             Button("Copy Branch Name") { Platform.copy(page.head) }
-        } label: {
-            Image(.ellipsis, size: 14)
-                .foregroundStyle(Color.themeSecondary)
-                .frame(width: scaled(28), height: scaled(28))
-                .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .hoverHighlight()
-        .help("More")
     }
 
     /// Parts the merge box, which is where the pull request stands now, from what happened on it.
@@ -457,31 +421,26 @@ private struct PullRequestPageView: View {
             WritingField(text: $comment, placeholder: pending.isEmpty ? "Leave a comment" : "Say something with your review (optional)")
             HStack(spacing: 8) {
                 if let close = page.withComment, pending.isEmpty {
-                    PullRequestActionButton(label: close.label, style: "plain", working: work?.key == "close" ? "\(close.action == "close" ? "Closing" : "Reopening")…" : nil) {
-                        choose(close, key: "close")
-                    }
+                    ActionButton(close.label, pending: work?.key == "close") { choose(close, key: "close") }
                     .disabled(busy || written.isEmpty)
                 }
                 Spacer(minLength: 0)
                 ForEach(page.verdicts) { verdict in
                     let key = verdict.action
-                    PullRequestActionButton(label: verdict.label, style: "plain", working: work?.key == key ? (key == "approve" ? "Approving…" : "Sending…") : nil) {
+                    ActionButton(verdict.label, pending: work?.key == key) {
                         if pending.isEmpty {
                             choose(verdict, key: key)
                         } else {
-                            panel.review(key, body: written, key: key, label: "Sending…", on: target, number: number) { comment = "" }
+                            panel.review(key, body: written, key: key, on: target, number: number) { comment = "" }
                         }
                     }
                     .disabled(busy || (verdict.action == "request_changes" && written.isEmpty && pending.isEmpty))
                 }
-                PullRequestActionButton(
-                    label: pending.isEmpty ? "Comment" : "Send Review", style: "primary",
-                    working: work?.key == "comment" ? "Sending…" : nil
-                ) {
+                ActionButton(pending.isEmpty ? "Comment" : "Send Review", variant: .primary, pending: work?.key == "comment") {
                     if pending.isEmpty {
-                        panel.act("comment", text: written, key: "comment", label: "Sending…", on: target, number: number) { comment = "" }
+                        panel.act("comment", text: written, key: "comment", on: target, number: number) { comment = "" }
                     } else {
-                        panel.review("comment", body: written, key: "comment", label: "Sending…", on: target, number: number) { comment = "" }
+                        panel.review("comment", body: written, key: "comment", on: target, number: number) { comment = "" }
                     }
                 }
                 .disabled(busy || (written.isEmpty && pending.isEmpty))
@@ -492,7 +451,7 @@ private struct PullRequestPageView: View {
 
     private func choose(_ choice: PullRequestChoice, key: String) {
         let text = comment.trimmingCharacters(in: .whitespacesAndNewlines)
-        panel.act(choice.action, method: choice.method, text: text, key: key, label: choice.label, on: target, number: number) {
+        panel.act(choice.action, method: choice.method, text: text, key: key, on: target, number: number) {
             comment = ""
         }
     }
@@ -518,23 +477,7 @@ private struct PullRequestPageView: View {
 
     private func perform(_ button: PullRequestButton) {
         guard let action = button.action else { return }
-        panel.act(action, method: button.method, key: button.key, label: Self.working(button), on: target, number: number)
-    }
-
-    /// What a button says while its action runs.
-    static func working(_ button: PullRequestButton) -> String {
-        switch button.action {
-        case "merge": "Merging…"
-        case "enable_auto_merge": "Turning on auto-merge…"
-        case "disable_auto_merge": "Cancelling auto-merge…"
-        case "update_branch": "Updating…"
-        case "ready": "Marking ready…"
-        case "draft": "Converting to draft…"
-        case "revert": "Opening a revert…"
-        case "close": "Closing…"
-        case "reopen": "Reopening…"
-        default: "\(button.label)…"
-        }
+        panel.act(action, method: button.method, key: button.key, on: target, number: number)
     }
 
     private var confirmingShown: Binding<Bool> {
@@ -551,6 +494,7 @@ private struct PeopleRow<Chips: View>: View {
     let empty: String?
     let choices: [PullRequestPage.Toggle]
     let help: String
+    var pending = false
     @ViewBuilder let chips: Chips
     let toggle: (String, Bool) -> Void
 
@@ -568,22 +512,11 @@ private struct PeopleRow<Chips: View>: View {
                 FlowRow(spacing: 5) { chips }
             }
             if !choices.isEmpty {
-                Menu {
+                ActionMenu(icon: .plus, help: help, size: .small, pending: pending) {
                     ForEach(choices) { choice in
                         Toggle(choice.name, isOn: Binding { choice.on } set: { toggle(choice.name, $0) })
                     }
-                } label: {
-                    Image(.plus, size: 11)
-                        .foregroundStyle(Color.themeSecondary)
-                        .frame(width: scaled(22), height: scaled(22))
-                        .contentShape(Rectangle())
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .hoverHighlight(radius: 6)
-                .help(help)
             }
             Spacer(minLength: 0)
         }
@@ -650,14 +583,15 @@ private struct PendingComments: View {
                         .foregroundStyle(Color.themeText)
                         .lineLimit(2)
                     Spacer(minLength: 4)
-                    IconOnlyButton(symbol: .x, help: "Take it back", size: scaled(20), symbolSize: 10, faded: true) { remove(comment) }
+                    ActionButton(icon: .x, help: "Take it back", size: .small) { remove(comment) }
+                        .padding(.vertical, -4)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
             }
         }
         .padding(.bottom, 6)
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 }
 
@@ -679,13 +613,15 @@ private struct StackCard: View {
                     .foregroundStyle(Color.themeTertiary)
                 Spacer(minLength: 4)
                 if let url = stack.url {
-                    LinkButton("Open on GitHub") { Platform.open(url) }
-                        .help("A stack merges on GitHub, bottom first")
+                    ActionButton("Open on GitHub", help: "A stack merges on GitHub, bottom first", variant: .link, size: .small) {
+                        Platform.open(url)
+                    }
+                    .padding(.trailing, -8)
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .frame(minHeight: ControlSize.small.height)
+            .padding(.top, 4)
             ForEach(stack.layers.reversed()) { layer in
                 Button {
                     open(layer.number)
@@ -717,7 +653,7 @@ private struct StackCard: View {
             }
         }
         .padding(.bottom, 6)
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 }
 
@@ -743,7 +679,7 @@ private struct MergeBox: View {
                 actions
             }
         }
-        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color.themeBubble, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     /// The checks that need looking at and the running ones, and the rest when asked for.
@@ -756,16 +692,12 @@ private struct MergeBox: View {
                 CheckRow(check: check)
             }
             if !settled.isEmpty {
-                Button {
+                ActionButton(
+                    showsAllChecks ? "Hide Finished Checks" : "Show \(settled.count) Finished \(settled.count == 1 ? "Check" : "Checks")",
+                    variant: .link, size: .small
+                ) {
                     showsAllChecks.toggle()
-                } label: {
-                    Text(showsAllChecks ? "Hide Finished Checks" : "Show \(settled.count) Finished \(settled.count == 1 ? "Check" : "Checks")")
-                        .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeLink)
-                        .padding(.horizontal, 8)
-                        .frame(height: pressable(24))
                 }
-                .buttonStyle(.highlight(radius: 6))
                 .padding(.leading, 30)
             }
         }
@@ -776,13 +708,12 @@ private struct MergeBox: View {
         HStack(spacing: 8) {
             if let primary = page.primary {
                 HStack(spacing: 1) {
-                    PullRequestActionButton(
-                        label: primary.label, style: primary.style, joined: chooses(primary),
-                        working: working?.key == primary.key ? working?.label : nil
+                    ActionButton(
+                        primary.label, variant: ButtonVariant(style: primary.style), pending: working?.key == primary.key,
+                        joined: chooses(primary) ? .trailing : []
                     ) { run(primary) }
                     if chooses(primary) {
-                        methodMenu
-                            .opacity(working != nil ? 0.6 : 1)
+                        methodMenu(ButtonVariant(style: primary.style))
                     }
                 }
                 .disabled(working != nil)
@@ -797,26 +728,15 @@ private struct MergeBox: View {
         !page.methods.isEmpty && (button.action == "merge" || button.action == "enable_auto_merge")
     }
 
-    private var methodMenu: some View {
-        Menu {
+    private func methodMenu(_ variant: ButtonVariant) -> some View {
+        ActionMenu(nil, help: "Choose how it merges", variant: variant, joined: .leading) {
             ForEach(page.methods) { choice in
                 Toggle(choice.label, isOn: Binding { choice.method == page.method } set: { _ in
                     guard let method = choice.method, let target = store.panelTarget else { return }
                     store.sidePanel.chooseMethod(method, for: target, number: page.number)
                 })
             }
-        } label: {
-            Image(.chevronDown, size: 9)
-                .foregroundStyle(Color.white)
-                .frame(width: scaled(24), height: scaled(28))
-                .background(Color.themePrimary, in: UnevenRoundedRectangle(bottomTrailingRadius: 7, topTrailingRadius: 7, style: .continuous))
-                .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(DimButtonStyle())
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Choose how it merges")
     }
 }
 
@@ -850,10 +770,9 @@ private struct StatusRow: View {
                 if !status.buttons.isEmpty {
                     HStack(spacing: 6) {
                         ForEach(status.buttons) { button in
-                            PullRequestActionButton(
-                                label: button.label, style: button.style,
-                                working: working?.key == button.key ? working?.label : nil
-                            ) { run(button) }
+                            ActionButton(button.label, variant: ButtonVariant(style: button.style), pending: working?.key == button.key) {
+                                run(button)
+                            }
                             .disabled(working != nil)
                         }
                     }
@@ -909,17 +828,14 @@ private struct CheckRow: View {
                 .font(.ui(size: 12))
                 .foregroundStyle(check.tone == .neutral ? Color.themeTertiary : check.tone.color)
             if let fix = check.fix {
-                LinkButton("Fix") { store.handOff(fix) }
-                    .help("Have the agent fix it")
+                ActionButton("Fix", help: "Have the agent fix it", variant: .link, size: .small) { store.handOff(fix) }
             }
             if let url = check.url {
-                IconOnlyButton(symbol: .squareArrowOutUpRight, help: "Show its details", size: scaled(22), symbolSize: 11, faded: true) {
-                    Platform.open(url)
-                }
+                ActionButton(icon: .squareArrowOutUpRight, help: "Show its details", size: .small) { Platform.open(url) }
             }
         }
         .padding(.leading, 12)
-        .padding(.trailing, 8)
+        .padding(.trailing, 6)
         .frame(minHeight: pressable(26))
     }
 }

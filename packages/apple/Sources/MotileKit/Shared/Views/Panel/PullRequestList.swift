@@ -34,42 +34,16 @@ struct PullRequestListSurface: View {
 
     @ViewBuilder
     private var bar: some View {
-        Menu {
+        ActionMenu(Self.states.first { $0.0 == state }?.1 ?? "Open", help: "Which pull requests to show") {
             ForEach(Self.states, id: \.0) { choice in
                 Toggle(choice.1, isOn: Binding { state == choice.0 } set: { _ in state = choice.0 })
             }
-        } label: {
-            HStack(spacing: 5) {
-                Text(Self.states.first { $0.0 == state }?.1 ?? "Open")
-                    .font(.ui(size: 12.5, weight: .medium))
-                Image(.chevronDown, size: 8)
-                    .foregroundStyle(Color.themeTertiary)
-            }
-            .foregroundStyle(Color.themeText)
-            .padding(.horizontal, 8)
-            .frame(height: pressable(26))
-            .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .hoverHighlight()
         .padding(.leading, -8)
-        .help("Which pull requests to show")
-        HStack(spacing: 5) {
-            Image(.search, size: 11)
-                .foregroundStyle(Color.themeTertiary)
-            TextField("Search", text: $search)
-                .textFieldStyle(.plain)
-                .font(.ui(size: 12.5))
-        }
-        .padding(.horizontal, 8)
-        .frame(height: scaled(26))
-        .background(Color.themeHover, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .frame(maxWidth: 220)
+        InputField("Search", text: $search, icon: .search, clearable: true)
+            .frame(maxWidth: 220)
         Spacer(minLength: 4)
-        IconOnlyButton(symbol: .rotateCw, help: "Read the pull requests again") { asked += 1 }
+        ActionButton(icon: .rotateCw, help: "Read the pull requests again") { asked += 1 }
     }
 
     @ViewBuilder
@@ -139,12 +113,7 @@ private struct PullRequestListRow: View {
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
                         if linked {
-                            Text("This thread")
-                                .font(.ui(size: 10.5, weight: .semibold))
-                                .foregroundStyle(Color.themeLink)
-                                .padding(.horizontal, 6)
-                                .frame(height: scaled(17))
-                                .background(Color.themeLink.opacity(0.14), in: Capsule())
+                            Chip("This thread", tone: .themeLink)
                                 .fixedSize()
                         }
                         Spacer(minLength: 4)

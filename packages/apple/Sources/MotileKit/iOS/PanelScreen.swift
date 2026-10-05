@@ -43,16 +43,13 @@ struct PanelScreen: View {
     private var paneButtons: some View {
         HStack(spacing: 0) {
             let maximized = store.sidePanel.isMaximized
-            IconOnlyButton(
-                symbol: maximized ? .minimize2 : .maximize2,
-                help: maximized ? "Restore the side panel" : "Maximize the side panel", size: 36, symbolSize: 14, faded: true
+            ActionButton(
+                icon: maximized ? .minimize2 : .maximize2, help: maximized ? "Restore the side panel" : "Maximize the side panel", size: .large
             ) {
                 store.sidePanel.toggleMaximized()
             }
             .disabled(!store.sidePanel.canMaximize)
-            IconOnlyButton(symbol: .x, help: "Close the side panel", size: 36, symbolSize: 14, faded: true) {
-                store.sidePanel.isOpen = false
-            }
+            ActionButton(icon: .x, help: "Close the side panel", size: .large) { store.sidePanel.isOpen = false }
         }
         .padding(.trailing, 6)
     }

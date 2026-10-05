@@ -128,32 +128,9 @@ struct SearchField: View {
     @Binding var text: String
     /// Without a background or a height of its own, for a field that lies on glass.
     var bare = false
-    @FocusState private var focused: Bool
-
-    private static let height: CGFloat = Platform.scale > 1 ? 38 : 28
-    private static let sidePadding: CGFloat = Platform.scale > 1 ? 10 : 8
-    private static let clearSize: CGFloat = Platform.scale > 1 ? 24 : 18
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(.search, size: 12)
-                .foregroundStyle(Color.themeTertiary)
-            TextField("Search", text: $text)
-                .textFieldStyle(.plain)
-                .font(.ui(size: 13))
-                .focused($focused)
-            if !text.isEmpty {
-                IconOnlyButton(symbol: .circleX, help: "Clear", size: Self.clearSize, symbolSize: 12) { text = "" }
-                    .foregroundStyle(Color.themeTertiary)
-                    .padding(.trailing, (Self.height - Self.clearSize) / 2 - Self.sidePadding)
-            }
-        }
-        .padding(.horizontal, Self.sidePadding)
-        .frame(height: bare ? nil : Self.height)
-        .frame(maxHeight: bare ? .infinity : nil)
-        .background(bare ? Color.clear : Color.themeHover, in: RoundedRectangle(cornerRadius: Platform.scale > 1 ? 11 : 8, style: .continuous))
-        .contentShape(Rectangle())
-        .onTapGesture { focused = true }
+        InputField("Search", text: $text, icon: .search, size: Platform.scale > 1 ? .large : .regular, clearable: true, bare: bare)
     }
 }
 
@@ -181,18 +158,8 @@ private struct MarkDoneButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 3) {
-                Image(.check, size: 11)
-                Text("Mark Done")
-                    .font(.ui(size: 11, weight: .medium))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 5)
-            .frame(height: 22)
-        }
-        .buttonStyle(.highlight(radius: 6, faded: true))
-        .fixedSize()
+        ActionButton("Mark Done", icon: .check, variant: .ghost, size: .small, action: action)
+            .fixedSize()
     }
 }
 
@@ -215,6 +182,8 @@ struct ThreadRow: View, Equatable {
 
     private static let sidePadding: CGFloat = 8
     private static let topPadding: CGFloat = 3
+    /// A button on the first line is as far from the row's side as from its top.
+    private static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
 
     static func == (one: ThreadRow, other: ThreadRow) -> Bool {
         one.thread == other.thread && one.project == other.project && one.selected == other.selected
@@ -232,7 +201,7 @@ struct ThreadRow: View, Equatable {
                 #if os(macOS)
                 if hovering && !thread.busy {
                     MarkDoneButton { store.setDone([thread.id], done: true, fromSidebar: true) }
-                        .padding(.trailing, Self.topPadding - Self.sidePadding)
+                        .padding(.trailing, Self.buttonInset - Self.sidePadding)
                 } else {
                     ThreadStatus(thread: thread)
                 }
@@ -323,6 +292,7 @@ private struct DraftRow: View {
 
     private static let sidePadding: CGFloat = 8
     private static let topPadding: CGFloat = 3
+    private static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
 
     var body: some View {
         let project = store.project(listed.draft.projectID)
@@ -338,10 +308,8 @@ private struct DraftRow: View {
                 }
                 Spacer(minLength: 6)
                 if hovering {
-                    IconOnlyButton(symbol: .x, help: "Discard draft", size: 22, symbolSize: 12, faded: true) {
-                        store.discard(listed.draft)
-                    }
-                    .padding(.trailing, Self.topPadding - Self.sidePadding)
+                    ActionButton(icon: .x, help: "Discard draft", size: .small) { store.discard(listed.draft) }
+                        .padding(.trailing, Self.buttonInset - Self.sidePadding)
                 } else {
                     HStack(spacing: 3) {
                         Image(.squarePen, size: 11)
@@ -516,7 +484,7 @@ struct DoneRow: View, Equatable {
     @State private var hovering = false
 
     private static let sidePadding = 8.0
-    private static let buttonSize = 22.0
+    private static let buttonSize = ControlSize.small.height
 
     static func == (one: DoneRow, other: DoneRow) -> Bool {
         one.thread == other.thread && one.project?.iconPath == other.project?.iconPath && one.pullRequest == other.pullRequest
@@ -537,9 +505,7 @@ struct DoneRow: View, Equatable {
                 PullRequestLabel(pullRequest: pullRequest, colored: false)
             }
             if hovering {
-                IconOnlyButton(symbol: .undo2, help: "Mark undone", size: Self.buttonSize, symbolSize: 12, faded: true) {
-                    store.setDone([thread.id], done: false)
-                }
+                ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
                 .padding(.trailing, (doneRowHeight - Self.buttonSize) / 2 - Self.sidePadding)
             } else {
                 TimelineView(agoClock) { context in

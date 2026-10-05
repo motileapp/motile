@@ -109,23 +109,23 @@ struct ContextStrip: View {
         let startsInWorktree = store.draftUsesWorktree
         if let branch {
             if project.worktree != nil {
-                branchLabel(branch, opens: false)
-                    .foregroundStyle(Color.themeSecondary)
+                branchLabel(branch)
                     .help("The branch of this thread's worktree")
             } else if store.canSwitchBranches(of: project) {
-                Button {
+                ActionButton(
+                    startsInWorktree ? "From \(branch)" : branch, icon: .gitBranch,
+                    help: startsInWorktree ? "The branch the worktree's branch starts from" : "Switch the branch of \(project.name)",
+                    variant: .ghost, size: .small, opens: true, margin: ComposerStrip.margin
+                ) {
                     store.showBranches(of: project)
-                } label: {
-                    branchLabel(startsInWorktree ? "From \(branch)" : branch, opens: true)
                 }
-                .buttonStyle(.highlight(radius: 7, inset: ComposerStrip.margin, faded: true))
-                .help(startsInWorktree ? "The branch the worktree's branch starts from" : "Switch the branch of \(project.name)")
+                .truncationMode(.middle)
+                .layoutPriority(1)
                 .popover(isPresented: $store.showsBranches, arrowEdge: .bottom) {
                     BranchPicker(project: project, base: startsInWorktree ? branch : nil)
                 }
             } else {
-                branchLabel(branch, opens: false)
-                    .foregroundStyle(Color.themeSecondary)
+                branchLabel(branch)
                     .help(server?.known == true ? "Update \(server?.name ?? "your server") to switch branches from here" : "The branch checked out there")
             }
         }
@@ -142,7 +142,11 @@ struct ContextStrip: View {
         } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
             let inWorktree = store.draftUsesWorktree
             let margin = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
-            Menu {
+            ActionMenu(
+                inWorktree ? "New worktree" : "Current checkout", icon: inWorktree ? .folderGit2 : .folder,
+                help: inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder",
+                size: .small, margin: margin
+            ) {
                 Section("Workspace") {
                     Toggle(isOn: Binding(get: { !inWorktree }, set: { _ in store.setDraftWorktree(false) })) {
                         Label("Current checkout", symbol: .folder)
@@ -151,26 +155,7 @@ struct ContextStrip: View {
                         Label("New worktree", symbol: .folderGit2)
                     }
                 }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(inWorktree ? .folderGit2 : .folder, size: 11)
-                    Text(inWorktree ? "New worktree" : "Current checkout")
-                        .font(.ui(size: 12))
-                        .lineLimit(1)
-                    Image(.chevronDown, size: 9)
-                        .foregroundStyle(Color.themeTertiary)
-                }
-                .padding(.horizontal, 9)
-                .frame(height: 24)
-                .padding(margin)
-                .contentShape(Rectangle())
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .hoverHighlight(radius: 7, inset: margin, faded: true)
-            .help(inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder")
         }
     }
 
@@ -198,22 +183,12 @@ struct ContextStrip: View {
         .foregroundStyle(Color.themeSecondary)
     }
 
-    private func branchLabel(_ branch: String, opens: Bool) -> some View {
-        HStack(spacing: 5) {
-            Image(.gitBranch, size: 11)
-            Text(branch)
-                .font(.ui(size: 12))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if opens {
-                Image(.chevronDown, size: 9)
-                    .foregroundStyle(Color.themeTertiary)
-            }
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 24)
-        .padding(ComposerStrip.margin)
-        .contentShape(Rectangle())
+    /// A branch that can't be switched from here, set as the button that switches one is.
+    private func branchLabel(_ branch: String) -> some View {
+        ControlLabel(title: branch, icon: .symbol(.gitBranch), size: .small)
+            .truncationMode(.middle)
+            .foregroundStyle(Color.themeSecondary)
+            .padding(ComposerStrip.margin)
     }
 }
 #endif
