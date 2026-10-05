@@ -74,7 +74,7 @@ function Row({
         <div className="my-3 overflow-hidden rounded-[10px] bg-bubble">
           <div className="flex h-8 items-center justify-between px-3.5 text-[11.5px] text-tertiary">
             {item.lang}
-            <CopyIcon className="size-3.5" />
+            <CopyIcon className="size-3" />
           </div>
           <pre className="overflow-x-auto px-3.5 pb-3 font-mono text-[12.5px] leading-[18px] text-foreground">
             {item.code.split("\n").map((line, index) => (

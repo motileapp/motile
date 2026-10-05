@@ -86,12 +86,12 @@ struct ConnectServerView: View {
             HStack(spacing: 4) {
                 #if os(iOS)
                 ShareLink(item: store.enrollToken?.command ?? "") {
-                    ControlLabel(title: nil, icon: .symbol(.share), size: .regular)
+                    ControlLabel(title: nil, icon: .symbol(.share), size: .regular, symbolSize: 12)
                 }
                 .buttonStyle(.control())
                 .accessibilityLabel("Share the command")
                 #endif
-                ActionButton(icon: copied ? .check : .copy, help: "Copy the command") {
+                ActionButton(icon: copied ? .check : .copy, help: "Copy the command", symbolSize: 12) {
                     guard let command = store.enrollToken?.command else { return }
                     Platform.copy(command)
                     copied = true

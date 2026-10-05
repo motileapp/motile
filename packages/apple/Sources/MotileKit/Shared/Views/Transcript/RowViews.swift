@@ -404,7 +404,7 @@ final class CodeHeader: FlippedView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(language)
-        copyButton = IconButton(symbol: .copy, tooltip: "Copy code") { [weak self] in self?.copy() }
+        copyButton = IconButton(symbol: .copy, symbolSize: 12, tooltip: "Copy code") { [weak self] in self?.copy() }
         addSubview(copyButton)
     }
 
