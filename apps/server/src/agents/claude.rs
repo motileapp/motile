@@ -9,10 +9,10 @@
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Approval, Subagent, ToolStatus, TurnSummary};
+use motile_protocol::wire::{Access, Approval, Subagent, Tokens, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
 
-use super::{AgentEvent, Background, Turn};
+use super::{AgentEvent, Background, ModelUsage, Turn};
 
 /// Background tasks that watch a command: the Monitor tool's and shells left running.
 const WATCH_TASKS: [&str; 4] = ["local_bash", "shell", "monitor", "monitor_mcp"];
@@ -155,7 +155,8 @@ impl Parser {
             Some("result") if object["num_turns"] == 0 && object["is_error"] == false => vec![],
             Some("result") => {
                 self.ended = true;
-                vec![parse_result(&object, self.api_error.take())]
+                let usage = parse_usage(&object["modelUsage"]);
+                usage.into_iter().chain([parse_result(&object, self.api_error.take())]).collect()
             }
             _ => vec![],
         }
@@ -370,12 +371,32 @@ fn parse_control_request(object: &Value) -> Vec<AgentEvent> {
     vec![AgentEvent::Approval(approval)]
 }
 
+/// What the session has spent so far on each model, which every result repeats.
+fn parse_usage(models: &Value) -> Option<AgentEvent> {
+    let spent = model_usage(models);
+    (!spent.is_empty()).then_some(AgentEvent::Usage { spent, total: true })
+}
+
+/// A result's `modelUsage`: what its process's session has spent on each model.
+pub fn model_usage(models: &Value) -> Vec<ModelUsage> {
+    let spent = |(model, usage): (&String, &Value)| ModelUsage {
+        model: model.clone(),
+        tokens: Tokens {
+            input: usage["inputTokens"].as_u64().unwrap_or_default(),
+            cache_read: usage["cacheReadInputTokens"].as_u64().unwrap_or_default(),
+            cache_write: usage["cacheCreationInputTokens"].as_u64().unwrap_or_default(),
+            output: usage["outputTokens"].as_u64().unwrap_or_default(),
+        },
+        cost_usd: usage["costUSD"].as_f64(),
+    };
+    models.as_object().into_iter().flatten().map(spent).collect()
+}
+
 fn parse_result(object: &Value, api_error: Option<String>) -> AgentEvent {
     let is_error = object["is_error"].as_bool().unwrap_or(object["subtype"] != "success");
     let result_text = object["result"].as_str().filter(|text| is_error && !text.is_empty()).map(String::from);
     let summary = TurnSummary {
         duration_ms: object["duration_ms"].as_u64(),
-        cost_usd: object["total_cost_usd"].as_f64(),
         is_error: is_error || api_error.is_some(),
         ..TurnSummary::default()
     };
@@ -414,6 +435,21 @@ fn random_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_result_says_what_the_session_has_spent_on_each_model() {
+        let result = r#"{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.5,"modelUsage":{
+            "claude-haiku-4-5-20251001":{"inputTokens":28,"outputTokens":197,"cacheReadInputTokens":58455,
+            "cacheCreationInputTokens":14737,"costUSD":0.0363325}}}"#;
+        let events = Parser::default().parse(result);
+        let [AgentEvent::Usage { spent, total: true }, AgentEvent::Completed { summary, .. }] = &events[..] else {
+            panic!("expected what it spent and then the turn's end, got {events:?}")
+        };
+        let tokens = Tokens { input: 28, cache_read: 58455, cache_write: 14737, output: 197 };
+        let haiku = ModelUsage { model: "claude-haiku-4-5-20251001".to_string(), tokens, cost_usd: Some(0.0363325) };
+        assert_eq!(spent, &vec![haiku]);
+        assert_eq!(summary.cost_usd, None, "the session's cost isn't the turn's");
+    }
 
     #[test]
     fn a_watch_that_outlives_the_turn_is_reported_and_wakes_the_agent() {

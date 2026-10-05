@@ -97,6 +97,8 @@ final class AppStore {
     var showsAddServer = false
     /// The settings are open over the client, where they aren't a window of their own.
     var showsSettings = false
+    /// What the agents spent is open over the settings.
+    var showsUsage = false
     /// The thread's settings are open over the client, where they aren't around the composer.
     var showsThreadSettings = false
     /// The project an icon is being chosen for.
@@ -286,7 +288,7 @@ final class AppStore {
             }
         case "git_progress":
             let (projectID, threadID) = (event.string("project_id"), event.optionalString("thread_id"))
-            let stage = GitStage(rawValue: event.string("stage"))
+            guard let stage = GitStage(rawValue: event.string("stage")) else { return nil }
             return { [weak self] in
                 guard let self, let project = self.project(projectID) else { return }
                 let checkoutID = (threadID.flatMap { self.threads[$0] }.map { project.seen(from: $0) } ?? project).checkoutID
@@ -1047,9 +1049,28 @@ final class AppStore {
         }
     }
 
+    /// What the run in the project's checkout is at, started here or from another client.
+    func gitStage(in project: Project) -> GitStage? {
+        if let stage = gitStages[project.checkoutID] { return stage }
+        guard let thread = selectedThread, thread.projectID == project.id else { return nil }
+        return thread.gitStage
+    }
+
+    /// What a run starts with, until your server says what it is at.
+    private func firstStage(of action: String, in project: Project, written: Bool) -> GitStage {
+        switch action {
+        case "pull": return .pull
+        case "push": return .push
+        case "create_pr":
+            let pushes = project.gitControl?.menu.contains { $0.action == "push" && $0.reason == nil } ?? false
+            return pushes ? .push : .pullRequestText
+        default: return written ? .commit : .message
+        }
+    }
+
     /// What a click on the git button does: the one action the repository calls for, at once.
     func runQuickGit(in project: Project) {
-        guard let quick = project.gitControl?.quick, gitStages[project.checkoutID] == nil else { return }
+        guard let quick = project.gitControl?.quick, gitStage(in: project) == nil else { return }
         if let url = quick.url.flatMap({ URL(string: $0) }) {
             showPullRequest(url)
             return
@@ -1063,7 +1084,7 @@ final class AppStore {
 
     /// What a pick from the menu does: a commit opens its sheet, the others happen at once.
     func chooseGit(_ item: GitMenuItem, in project: Project) {
-        guard item.reason == nil, gitStages[project.checkoutID] == nil else { return }
+        guard item.reason == nil, gitStage(in: project) == nil else { return }
         guard item.action == "commit" else { return startGit(item.action, in: project, confirm: item.confirm) }
         // A sheet takes its size from what it opens with, so the files come first.
         readGit { [weak self] files in
@@ -1087,8 +1108,8 @@ final class AppStore {
     /// is none, and the pull request. What it did, or what git refused, shows under the button.
     func runGit(_ action: String, in project: Project, message: String? = nil, paths: [String] = [], newBranch: Bool = false) {
         let checkoutID = project.checkoutID
-        guard gitStages[checkoutID] == nil else { return }
-        gitStages[checkoutID] = action == "pull" ? .pull : action == "push" ? .push : newBranch ? .branch : .message
+        guard gitStage(in: project) == nil else { return }
+        gitStages[checkoutID] = firstStage(of: action, in: project, written: message?.isEmpty == false && !newBranch)
         gitNotice = nil
         var command: JSON = [
             "server_id": project.serverID, "project_id": project.id, "action": action, "paths": paths, "new_branch": newBranch,
@@ -1131,6 +1152,15 @@ final class AppStore {
         let confirm = project.gitControl?.menu.first { $0.action == next }?.confirm
         gitNotice = nil
         startGit(next, in: project, confirm: confirm)
+    }
+
+    /// What the agents spent on the connected servers in the last `buckets` spans of
+    /// `bucketSeconds`, by this device's clock.
+    func loadUsage(bucketSeconds: Int, buckets: Int, reply: @escaping (Result<UsageReport, CoreBridge.CoreError>) -> Void) {
+        let command: JSON = [
+            "bucket_secs": bucketSeconds, "buckets": buckets, "utc_offset_secs": TimeZone.current.secondsFromGMT(),
+        ]
+        core.send("usage", command, read: UsageReport.init, reply: reply)
     }
 
     /// Picks the model that writes titles, commit messages and pull requests on the server.

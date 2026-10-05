@@ -113,7 +113,7 @@ struct Server: Equatable, Identifiable {
         models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
         textModel = info?.optionalString("text_model")
         let settings = info?.object("pull_request_settings")
-        doneOnMerge = settings?.bool("done_on_merge") ?? true
+        doneOnMerge = settings?.bool("done_on_merge") ?? false
         removeMergedWorktrees = settings?.bool("remove_merged_worktrees") ?? false
         let naming = info?.object("branch_instructions")
         branchInstructions = naming?.string("text") ?? ""
@@ -291,7 +291,6 @@ struct GitConfirm: Equatable {
 }
 
 enum GitStage: String {
-    case branch
     case message
     case commit
     case push
@@ -301,8 +300,7 @@ enum GitStage: String {
 
     var label: String {
         switch self {
-        case .branch: "Branching"
-        case .message: "Writing"
+        case .message: "Writing Commit"
         case .commit: "Committing"
         case .push: "Pushing"
         case .pullRequestText: "Writing PR"
@@ -491,6 +489,8 @@ struct ThreadInfo: Equatable, Identifiable {
     let pullRequest: PullRequest?
     /// Its agent is told what happens on its pull request.
     let watching: Bool
+    /// What a commit, a push or the like that was started from it is at.
+    let gitStage: GitStage?
     let unread: Bool
 
     init(json: JSON) {
@@ -515,6 +515,7 @@ struct ThreadInfo: Equatable, Identifiable {
         turnEndedAt = json.optionalDouble("turn_ended_at")
         pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
         watching = json.bool("watching")
+        gitStage = json.optionalString("git_stage").flatMap { GitStage(rawValue: $0) }
         unread = json.bool("unread")
     }
 
@@ -882,5 +883,70 @@ enum Time {
         if seconds < 60 { return "\(seconds)s" }
         if seconds < 3600 { return "\(seconds / 60)m \(seconds % 60)s" }
         return "\(seconds / 3600)h \(seconds % 3600 / 60)m"
+    }
+}
+
+/// What the agents spent on the account's servers in a stretch of time, as the core added it up.
+struct UsageReport {
+    struct Series: Identifiable {
+        let agent: Agent
+        let costUSD: Double
+        let tokens: Int
+        let costPoints: [Double]
+        let tokenPoints: [Double]
+
+        var id: Agent { agent }
+    }
+
+    /// A model, a project or a kind of token, and its part of the whole.
+    struct Line: Identifiable {
+        let name: String
+        let agent: Agent?
+        let tokens: Int
+        let costUSD: Double?
+        let share: Double
+
+        var id: String { "\(agent?.rawValue ?? "")/\(name)" }
+    }
+
+    let costUSD: Double
+    let tokens: Int
+    let unpricedTokens: Int
+    let cacheSavingsUSD: Double
+    /// The part that went into writing titles, branch names, commit messages and pull requests.
+    let writingCostUSD: Double
+    let writingTokens: Int
+    let starts: [Date]
+    let agents: [Series]
+    let kinds: [Line]
+    let models: [Line]
+    let projects: [Line]
+
+    init(json: JSON) {
+        costUSD = json.double("cost_usd")
+        tokens = json.int("tokens")
+        unpricedTokens = json.int("unpriced_tokens")
+        cacheSavingsUSD = json.double("cache_savings_usd")
+        writingCostUSD = json.double("writing_cost_usd")
+        writingTokens = json.int("writing_tokens")
+        starts = (json["starts"] as? [NSNumber] ?? []).map { Date(timeIntervalSince1970: $0.doubleValue) }
+        agents = json.objects("agents").map { series in
+            let points = { (key: String) in (series[key] as? [NSNumber] ?? []).map(\.doubleValue) }
+            return Series(
+                agent: Agent(rawValue: series.string("agent")) ?? .claude, costUSD: series.double("cost_usd"),
+                tokens: series.int("tokens"), costPoints: points("cost_points"), tokenPoints: points("token_points"))
+        }
+        let line = { (line: JSON, share: Double?) in
+            Line(
+                name: line.string("name"), agent: line.optionalString("agent").flatMap(Agent.init(rawValue:)),
+                tokens: line.int("tokens"), costUSD: line.optionalDouble("cost_usd"), share: share ?? line.double("share"))
+        }
+        let (cost, tokens) = (costUSD, tokens)
+        kinds = json.objects("kinds").map { kind in
+            let share = cost > 0 ? kind.double("cost_usd") / cost : Double(kind.int("tokens")) / Double(max(tokens, 1))
+            return line(kind, share)
+        }
+        models = json.objects("models").map { line($0, nil) }
+        projects = json.objects("projects").map { line($0, nil) }
     }
 }

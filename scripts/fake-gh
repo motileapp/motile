@@ -309,6 +309,12 @@ def api(state, arguments):
     elif "/commits/" in path:
         sha = path.rsplit("/", 1)[1]
         print(git("diff", f"{sha}^", sha))
+    elif "/issues/" in path:
+        number = int(path.rsplit("/", 1)[1])
+        pull = next((pull for pull in state["pulls"] if pull["number"] == number), None)
+        if pull is None:
+            sys.exit("gh: Not Found (HTTP 404)")
+        print(json.dumps({"title": pull["title"], "body": pull.get("body", "")}))
     elif path.endswith("/reviews"):
         review(state, int(path.split("/pulls/")[1].split("/")[0]))
     else:

@@ -737,11 +737,14 @@ final class TranscriptView: FlippedView, RowOwner {
         scroll(to: target)
     }
 
-    /// Rows are stacked without room between them and are as wide as the transcript for this,
+    /// Rows are stacked without room between them and are as wide as the column for this,
     /// so the pointer never leaves a message on its way to the message's copy button.
     private func updateMetaRow() {
         guard Platform.hoverReveals else { return }
-        let id = pointerAt.flatMap { metaRow(at: $0.y + scroller.offsetY - topPadding) }
+        let column = columnX..<(columnX + columnWidth)
+        let id = pointerAt.flatMap { point in
+            column.contains(point.x) ? metaRow(at: point.y + scroller.offsetY - topPadding) : nil
+        }
         guard id != metaRowID else { return }
         if let metaRowID { views[metaRowID]?.showsMeta = false }
         metaRowID = id

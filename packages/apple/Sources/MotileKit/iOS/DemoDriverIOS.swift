@@ -91,6 +91,7 @@ enum DemoDriver {
             case "threads": store.openPanel(.threads)
             case "add": store.addProject()
             case "settings": store.showsSettings = true
+            case "usage": store.showsUsage = true
             case "server": store.showsAddServer = true
             case "icon": store.iconProject = store.projects.first
             case "thread": store.showsThreadSettings = true
@@ -99,6 +100,7 @@ enum DemoDriver {
                 store.chooseGit(item, in: project)
             default:
                 store.closePanel()
+                store.showsUsage = false
                 store.showsSettings = false
                 store.showsAddServer = false
                 store.showsThreadSettings = false

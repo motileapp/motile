@@ -64,6 +64,9 @@ pub struct Thread {
     /// or it starts to conflict.
     #[serde(default)]
     pub watching: bool,
+    /// What a commit, a push or the like that was started from the thread is at.
+    #[serde(default)]
+    pub git_stage: Option<GitStage>,
     /// The transcript's revision; a client whose copy is older has catching up to do.
     pub rev: u64,
 }
@@ -460,6 +463,14 @@ pub enum Request {
     /// with `Updating` while it downloads, then `Ok` just before it restarts.
     #[serde(alias = "update_host")]
     UpdateServer,
+    /// What the agents spent between `since` and `until`, in buckets of `bucket_secs` that start
+    /// where the hours and days of a clock `utc_offset_secs` ahead of UTC do. `Usage` answers.
+    Usage {
+        since: f64,
+        until: f64,
+        bucket_secs: u32,
+        utc_offset_secs: i32,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -817,18 +828,12 @@ pub struct LineComment {
 }
 
 /// What the server does with pull requests by itself.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct PullRequestSettings {
     /// A thread is marked done when its pull request merges or closes.
     pub done_on_merge: bool,
     /// A thread's worktree is removed once its pull request merges, when nothing in it is lost.
     pub remove_merged_worktrees: bool,
-}
-
-impl Default for PullRequestSettings {
-    fn default() -> Self {
-        Self { done_on_merge: true, remove_merged_worktrees: false }
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -1031,7 +1036,7 @@ pub enum GitAction {
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum GitStage {
-    Branch,
+    /// The commit message is written, and with it the name of a branch the run makes.
     Message,
     Commit,
     Push,
@@ -1049,6 +1054,45 @@ pub struct ModelInfo {
     /// Reasoning efforts it accepts, weakest first. Empty when it has no such setting.
     pub efforts: Vec<String>,
     pub default_effort: Option<String>,
+}
+
+/// Tokens by what each is billed as. `input` is what was neither read from the cache nor
+/// written to it, and `output` includes the reasoning.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Default)]
+pub struct Tokens {
+    pub input: u64,
+    pub cache_read: u64,
+    pub cache_write: u64,
+    pub output: u64,
+}
+
+/// What `Tokens` cost at the API's prices, in dollars.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Default)]
+pub struct TokenCosts {
+    pub input: f64,
+    pub cache_read: f64,
+    pub cache_write: f64,
+    pub output: f64,
+}
+
+/// What one model spent in one project during the time that starts at `start`.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct UsageBucket {
+    pub start: f64,
+    pub agent: Agent,
+    pub model: String,
+    pub project_id: String,
+    pub tokens: Tokens,
+    /// What the API would have charged. Missing when the model's prices aren't known.
+    pub cost_usd: Option<f64>,
+    /// That cost by kind of token, when the model's prices are known.
+    pub costs: Option<TokenCosts>,
+    /// What reading from the cache saved over sending the same tokens again.
+    pub cache_savings_usd: f64,
+    /// Spent on writing a title, a branch's name, a commit message or a pull request, not on a
+    /// thread's turn.
+    #[serde(default)]
+    pub writing: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -1244,6 +1288,9 @@ pub enum Message {
     /// A project's icon: the file's bytes in base64.
     Icon {
         data: String,
+    },
+    Usage {
+        buckets: Vec<UsageBucket>,
     },
     Error {
         message: String,

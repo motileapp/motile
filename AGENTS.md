@@ -86,7 +86,12 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `models.rs` lists Claude's models by hand.
 - `store.rs`: SQLite. Every item has a position (`seq`) and the revision that last changed it
-  (`rev`); a client asks for what changed after the revision it has.
+  (`rev`); a client asks for what changed after the revision it has. It also keeps what the
+  agents spend, by model and by what it was spent on (a turn, or writing a title, a branch's
+  name, a commit message or a pull request): Claude Code reports a session's total with each
+  result and Codex what each answer took.
+- `pricing.rs`: what the models cost at the API's prices, fetched from LiteLLM's list once a day,
+  to say what the tokens Codex spent would have cost. Claude Code says what its own cost.
 - `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),
   snapshots and patches.
 - `pull_requests.rs`: what GitHub says of a pull request (one `gh api graphql` read), the
@@ -97,7 +102,9 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   folder, never outside it.
 - `media.rs`: keeps the images and videos threads show, named by their contents.
 - `title.rs`, `drafts.rs`: have an agent write titles, commit messages, pull request texts and
-  branch names, through `generate.rs`.
+  branch names, through `generate.rs`, which also says what each answer took so that it is kept
+  with the usage. A title is told what the pull requests and issues its message links to are
+  about.
 - `github.rs`: the server's GitHub login, its repositories and cloning one.
 - `icons.rs`: finds a project's icon in its folder.
 - `access.rs`: asks the auth server which clients belong to the account.
@@ -122,6 +129,8 @@ for tests.
   for, its menu, its activity and conversations with the Markdown set, the list's rows, and the
   prompts that hand conflicts, failures and lines to the agent.
 - `browse.rs`: browsing a server's folders by typing a path.
+- `usage.rs`: what the agents spent on every server, added up for the usage view: a series for
+  each agent, and the models, projects and kinds of token.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
 - `api.rs`: the JSON the client and the core exchange.
@@ -150,6 +159,8 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   variant, one of three sizes, an optional symbol, a pending state), `Spinner`, `Chip`,
   `InputField`. Their sizes are `ControlSize` and their corners `Radius`, in `Theme.swift`.
 - `Shared/Views/CommandPanel.swift`: the panel behind ⌘K, ⌘N and ⌘P, a sheet on iOS.
+- `Shared/Views/UsageView.swift`: what the agents spent, opened from Settings: a chart of cost
+  or tokens by agent, and the models, projects and kinds of token under it.
 - `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
   requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
   `LineCommentSheet.swift`, `PullRequestParts.swift`).
@@ -221,8 +232,8 @@ Mac app.
   `packages/apple/Sources/MotileKit/Shared/Views/UI`. Its size is a `ControlSize`, never a
   number, and nothing is smaller than `.small`. A view does not style a control by hand; what is
   missing is added to the component. A button inside something is as far from its top and bottom
-  as from its side. A button that waits is `pending`: it shows the spinner and keeps its words,
-  and a spinner is never followed by "…".
+  as from its side. A button that waits is `pending`: it shows the spinner, and a spinner is
+  never followed by "…".
 - Ignore `apps/gpui` for now. We are not working on it currently: do not read it, change it or
   keep it in step with the Mac app unless we ask for it.
 - Do not leave paragraphs of comments on top of the code. You should try to avoid them as much
