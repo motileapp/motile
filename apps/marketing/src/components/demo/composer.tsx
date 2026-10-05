@@ -97,12 +97,12 @@ export function Composer({
           className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none pointer-coarse:text-[16px] placeholder:text-tertiary"
         />
         <div className="flex items-center px-1.5 py-2">
-          <Control>
+          <Control icon>
             <AgentIcon agent={thread.agent} size={14} />
             {thread.model}
           </Control>
           <Control>High</Control>
-          <Control>
+          <Control icon>
             {thread.approval ? (
               <>
                 <ShieldIcon className="size-3.5" />
@@ -162,9 +162,20 @@ export function Composer({
   )
 }
 
-function Control({ children }: { children: ReactNode }) {
+function Control({
+  icon = false,
+  children,
+}: {
+  icon?: boolean
+  children: ReactNode
+}) {
   return (
-    <span className="flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground">
+    <span
+      className={cn(
+        "flex h-7 items-center gap-1.5 rounded-[7px] pr-[11px] text-[12px] font-medium text-muted-foreground hover:bg-hover hover:text-foreground",
+        icon ? "pl-[9px]" : "pl-[11px]"
+      )}
+    >
       {children}
       <ChevronDownIcon className="size-[9px] opacity-60" />
     </span>
