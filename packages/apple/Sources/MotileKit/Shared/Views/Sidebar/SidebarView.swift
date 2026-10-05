@@ -36,6 +36,10 @@ struct SidebarView: View {
                 threads(active: active, done: done, projects: projects, selection: selection, maxDoneHeight: list.size.height * 0.6)
             }
         }
+        .onChange(of: store.settledThreadID) { _, settled in
+            guard settled != nil else { return }
+            doneExpanded = true
+        }
         .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Title", text: $newTitle)
             Button("Rename") {
@@ -425,18 +429,24 @@ private struct DoneShelf: View {
             .buttonStyle(.highlight(radius: 0, faded: true))
 
             if expanded {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(threads) { thread in
-                            DoneRow(
-                                thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
-                                rename: rename, delete: delete
-                            ) { store.select($0) }
-                            .equatable()
-                            .frame(height: Self.rowHeight + rowGap)
+                ScrollViewReader { list in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(threads) { thread in
+                                DoneRow(
+                                    thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
+                                    rename: rename, delete: delete
+                                ) { store.select($0) }
+                                .equatable()
+                                .frame(height: Self.rowHeight + rowGap)
+                            }
                         }
+                        .padding(.bottom, 4 - rowGap / 2)
                     }
-                    .padding(.bottom, 4 - rowGap / 2)
+                    .onChange(of: store.settledThreadID) { _, settled in
+                        guard let settled else { return }
+                        withAnimation(.easeOut(duration: 0.15)) { list.scrollTo(settled) }
+                    }
                 }
                 .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
             }
