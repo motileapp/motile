@@ -52,7 +52,8 @@ What the programs agree on.
 - `api.rs`: what clients, servers and the web app call. A caller is a device that signed the
   request or a session's `Bearer` token.
 - `config.rs`: builds the install command a token comes with.
-- `pages.rs`: the page a failed sign-in ends on.
+- `pages.rs`: the page a failed sign-in ends on, drawn like the web app's with the colours of
+  `packages/theme/tokens.css` and DM Sans from `assets/`.
 - `migrations/`: the schema.
 - `e2e/`: the real router on a fresh database per test, with a fake Google. `e2e/whole.rs`
   runs all three programs together.

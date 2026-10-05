@@ -33,6 +33,7 @@ fn router(state: AppState) -> Router {
     let header = |name, value| SetResponseHeaderLayer::if_not_present(name, HeaderValue::from_static(value));
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
+        .route("/fonts/dm-sans.woff2", get(pages::font))
         .route("/auth/start", get(sign_in::start))
         .route("/auth/google/callback", get(sign_in::google_callback))
         .route("/api/auth/exchange", post(api::exchange))
