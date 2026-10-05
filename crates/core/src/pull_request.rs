@@ -213,6 +213,8 @@ pub struct CheckView {
 #[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct Button {
     pub label: String,
+    /// What it says while its action runs, where that isn't only a spinner.
+    pub pending_label: Option<&'static str>,
     pub action: Option<PullRequestAction>,
     pub method: Option<MergeMethod>,
     pub prompt: Option<String>,
@@ -861,6 +863,7 @@ fn merge(detail: &PullRequestDetail, method: MergeMethod, label: &str) -> Button
     };
     Button {
         label: label.to_string(),
+        pending_label: Some("Merging"),
         action: Some(PullRequestAction::Merge),
         method: Some(method),
         style: Style::Primary,
@@ -1237,8 +1240,9 @@ mod tests {
         assert_eq!(chosen.methods.len(), 2);
         // A way the repository doesn't allow isn't taken.
         assert_eq!(view(&detail(), Some(MergeMethod::Rebase)).method, Some(MergeMethod::Squash));
-        let confirm = chosen.primary.unwrap().confirm.unwrap();
-        assert_eq!(confirm.message, "This merges its 2 commits into main with a merge commit.");
+        let button = chosen.primary.unwrap();
+        assert_eq!(button.pending_label, Some("Merging"));
+        assert_eq!(button.confirm.unwrap().message, "This merges its 2 commits into main with a merge commit.");
     }
 
     #[test]

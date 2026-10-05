@@ -319,6 +319,7 @@ struct PullRequestRow: Identifiable {
 /// Something the tab offers: an action on the pull request, or a prompt for the thread's agent.
 struct PullRequestButton: Identifiable {
     let label: String
+    let pendingLabel: String?
     let action: String?
     let method: String?
     let prompt: String?
@@ -341,6 +342,7 @@ struct PullRequestButton: Identifiable {
 
     init(json: JSON) {
         label = json.string("label")
+        pendingLabel = json.optionalString("pending_label")
         action = json.optionalString("action")
         method = json.optionalString("method")
         prompt = json.optionalString("prompt")

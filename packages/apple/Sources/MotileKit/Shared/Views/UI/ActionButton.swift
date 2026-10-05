@@ -81,28 +81,31 @@ struct ControlLook {
 }
 
 /// What a button or a menu says: a symbol, words, or both. While `pending` the spinner stands
-/// where the symbol is, or over the words when there is none, and the width stays.
+/// where the symbol is, or over the words when there is none, and the width stays. With a
+/// `pendingTitle` it says that beside the spinner instead.
 struct ControlLabel: View {
     let title: String?
     let icon: ControlIcon?
     let size: ControlSize
     var chevron = false
     var pending = false
+    var pendingTitle: String?
     var fills = false
     /// The symbol's size where it isn't the one that goes with `size`.
     var symbolSize: CGFloat?
 
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: CGFloat { symbolSize ?? size.symbol }
+    private var waitingTitle: String? { pending ? pendingTitle : nil }
 
     var body: some View {
         HStack(spacing: size.gap) {
-            if let icon { mark(icon) }
-            if let title {
-                Text(title)
-                    .font(size.font)
-                    .lineLimit(1)
-                    .opacity(pending && icon == nil ? 0 : 1)
+            if icon != nil || title != nil {
+                ZStack {
+                    words(title, spins: pending && icon != nil)
+                        .opacity(waitingTitle == nil ? 1 : 0)
+                    if let waitingTitle { words(waitingTitle, spins: true) }
+                }
             }
             if chevron {
                 Image(.chevronDown, size: size.textSize, trimmed: true)
@@ -115,18 +118,30 @@ struct ControlLabel: View {
         .frame(minWidth: size.height)
         .frame(height: size.height)
         .overlay {
-            if pending, icon == nil { Spinner(size: markSize) }
+            if pending, icon == nil, waitingTitle == nil { Spinner(size: markSize) }
+        }
+    }
+
+    private func words(_ title: String?, spins: Bool) -> some View {
+        HStack(spacing: size.gap) {
+            if spins {
+                Spinner(size: markSize)
+            } else if let icon {
+                mark(icon)
+            }
+            if let title {
+                Text(title)
+                    .font(size.font)
+                    .lineLimit(1)
+                    .opacity(pending && !spins ? 0 : 1)
+            }
         }
     }
 
     @ViewBuilder private func mark(_ icon: ControlIcon) -> some View {
-        if pending {
-            Spinner(size: markSize)
-        } else {
-            switch icon {
-            case .symbol(let symbol): Image(symbol, size: markSize)
-            case .picture(let picture): picture.frame(width: size.symbolSide, height: size.symbolSide)
-            }
+        switch icon {
+        case .symbol(let symbol): Image(symbol, size: markSize)
+        case .picture(let picture): picture.frame(width: size.symbolSide, height: size.symbolSide)
         }
     }
 }
@@ -212,6 +227,7 @@ struct ActionButton: View {
     /// It opens something to choose from, and shows a chevron for it.
     private var chevron = false
     private let pending: Bool
+    private let pendingTitle: String?
     private let fills: Bool
     private let symbolSize: CGFloat?
     private let margin: EdgeInsets
@@ -219,7 +235,8 @@ struct ActionButton: View {
 
     init(
         _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .secondary,
-        size: ControlSize = .regular, symbolSize: CGFloat? = nil, pending: Bool = false, selected: Bool = false, round: Bool = false,
+        size: ControlSize = .regular, symbolSize: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
+        selected: Bool = false, round: Bool = false,
         fills: Bool = false, opens: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
         margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
     ) {
@@ -229,6 +246,7 @@ struct ActionButton: View {
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
+        self.pendingTitle = pendingTitle
         self.fills = fills
         self.symbolSize = symbolSize
         self.margin = margin
@@ -247,6 +265,7 @@ struct ActionButton: View {
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
+        pendingTitle = nil
         fills = false
         self.symbolSize = symbolSize
         self.margin = margin
@@ -268,8 +287,11 @@ struct ActionButton: View {
     var body: some View {
         let reach = ControlReach(size: look.size, wordless: words == nil && !chevron, margin: margin)
         Button(action: action) {
-            ControlLabel(title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, fills: fills, symbolSize: symbolSize)
-                .padding(reach.around)
+            ControlLabel(
+                title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, pendingTitle: pendingTitle, fills: fills,
+                symbolSize: symbolSize
+            )
+            .padding(reach.around)
         }
         .buttonStyle(ControlButtonStyle(look: look, pending: pending, margin: reach.around))
         .padding(reach.outset)

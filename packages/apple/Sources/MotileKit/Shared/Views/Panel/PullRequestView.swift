@@ -710,7 +710,7 @@ private struct MergeBox: View {
                 HStack(spacing: 1) {
                     ActionButton(
                         primary.label, variant: ButtonVariant(style: primary.style), pending: working?.key == primary.key,
-                        joined: chooses(primary) ? .trailing : []
+                        pendingTitle: primary.pendingLabel, joined: chooses(primary) ? .trailing : []
                     ) { run(primary) }
                     if chooses(primary) {
                         methodMenu(ButtonVariant(style: primary.style))
