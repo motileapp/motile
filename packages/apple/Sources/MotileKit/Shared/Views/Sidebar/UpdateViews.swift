@@ -76,14 +76,28 @@ struct AppUpdateRow: View {
 #endif
 
 /// What stands at the end of a server's line: the offer to update it, the update as it goes, or
-/// `otherwise`.
+/// `otherwise`. While agents work there, the server restarts once they have finished, or at once
+/// with their threads going on after.
 struct ServerUpdateStatus<Otherwise: View>: View {
     @Environment(AppStore.self) private var store
     let server: Server
     @ViewBuilder let otherwise: () -> Otherwise
 
     var body: some View {
-        if let update = store.serverUpdates[server.id] {
+        if let update = store.serverUpdates[server.id], update.waiting, !update.restarting {
+            HStack(spacing: 6) {
+                Text("Waiting")
+                    .font(.ui(size: 11))
+                    .foregroundStyle(Color.themeSecondary)
+                ActionButton(
+                    "Restart Now", help: "Stop the agents on \(server.name) and restart it. Their threads continue once it is back.",
+                    size: .small
+                ) {
+                    store.update(server, when: .now)
+                }
+            }
+            .help("\(server.name) restarts once its agents have finished")
+        } else if let update = store.serverUpdates[server.id] {
             HStack(spacing: 6) {
                 Text(progress(of: update))
                     .font(.ui(size: 11))
@@ -92,16 +106,27 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                 Spinner(size: ControlSize.small.symbol)
                     .foregroundStyle(Color.themeSecondary)
             }
-        } else if store.isOutdated(server) {
-            ActionButton(
-                "Update", help: "Install version \(store.updater.latest ?? "") on \(server.name). It restarts, and no agent may be working.",
-                size: .small
+        } else if store.isOutdated(server), store.isBusy(server), store.canChooseRestart(server) {
+            ActionMenu(
+                "Update", help: "Agents are working on \(server.name). Update it once they finish, or now: they stop and continue once it is back.",
+                variant: .secondary, size: .small
             ) {
+                Button("Update When Agents Finish") { store.update(server, when: .idle) }
+                Button("Update Now and Continue Them After") { store.update(server, when: .now) }
+            }
+        } else if store.isOutdated(server) {
+            ActionButton("Update", help: updateHelp, size: .small) {
                 store.update(server)
             }
         } else {
             otherwise()
         }
+    }
+
+    private var updateHelp: String {
+        let version = store.updater.latest ?? ""
+        guard store.canChooseRestart(server) else { return "Install version \(version) on \(server.name). It restarts, and no agent may be working." }
+        return "Install version \(version) on \(server.name). It restarts once no agent works there."
     }
 
     private func progress(of update: ServerUpdate) -> String {

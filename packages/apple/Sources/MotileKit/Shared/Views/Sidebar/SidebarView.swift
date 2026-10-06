@@ -615,6 +615,11 @@ struct ThreadStatus: View {
                     symbol(.eye)
                 }
             }
+        } else if let interruption = thread.interruption {
+            label(interruption.word.capitalized, Color.themeWarning) {
+                symbol(interruption.symbol)
+            }
+            .help(interruption.detail())
         } else if thread.unread {
             label("Finished", Color.themeSuccess) {
                 symbol(.flag)

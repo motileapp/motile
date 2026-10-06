@@ -117,7 +117,7 @@ struct SettingsPage: View {
         return "\(used) of \(limit) on this \(Platform.device). Your servers keep them all."
     }
 
-    private var servers: some View {
+    @ViewBuilder private var servers: some View {
         SettingsGroup("servers", "Servers") {
             ForEach(store.servers) { server in
                 SettingsRow {
@@ -132,6 +132,42 @@ struct SettingsPage: View {
                 ActionButton("Add a Server…", size: .small) { store.showsAddServer = true }
             } trailing: {
                 EmptyView()
+            }
+        }
+        continuing
+    }
+
+    /// What each server goes on with by itself: threads whose usage limit reset, and threads whose
+    /// agents a restart cut off.
+    @ViewBuilder private var continuing: some View {
+        let servers = store.servers.filter { $0.state == .connected && store.canChooseRestart($0) }
+        if !servers.isEmpty {
+            SettingsGroup("continue-limits", "Continue after usage limits", caption: "A thread whose agent reached its usage limit goes on once the limit resets") {
+                ForEach(servers) { server in
+                    SettingsRow {
+                        serverName(server)
+                    } trailing: {
+                        Switch(isOn: Binding { server.continueAfterLimits } set: {
+                            store.setContinueSettings(afterLimits: $0, afterRestarts: server.continueAfterRestarts, on: server)
+                        })
+                    }
+                    if server.id != servers.last?.id { ThemeDivider() }
+                }
+            }
+            SettingsGroup(
+                "continue-restarts", "Continue after restarts",
+                caption: "A thread whose agent was working when your server restarted goes on once it is back. Updating it now while agents work always does."
+            ) {
+                ForEach(servers) { server in
+                    SettingsRow {
+                        serverName(server)
+                    } trailing: {
+                        Switch(isOn: Binding { server.continueAfterRestarts } set: {
+                            store.setContinueSettings(afterLimits: server.continueAfterLimits, afterRestarts: $0, on: server)
+                        })
+                    }
+                    if server.id != servers.last?.id { ThemeDivider() }
+                }
             }
         }
     }

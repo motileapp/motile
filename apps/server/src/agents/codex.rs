@@ -97,6 +97,13 @@ pub fn answer(approval: &Approval, allow: bool, answers: &HashMap<String, String
     Some(line(json!({"id": id, "result": result})))
 }
 
+/// Whether what Codex says of an error is that a usage limit was reached. It names the error, or
+/// is an object keyed by its name.
+fn is_limit(info: &Value) -> bool {
+    let name = info.as_str().or_else(|| info.as_object()?.keys().next().map(String::as_str));
+    matches!(name, Some("usageLimitExceeded" | "rateLimitExceeded"))
+}
+
 /// Codex runs commands as `/bin/bash -lc '<command>'`; this is the command inside.
 fn shell_command(command: &str) -> String {
     let Some(quoted) = ["/bin/bash -lc ", "bash -lc ", "/bin/zsh -lc ", "/bin/sh -c "]
@@ -149,6 +156,10 @@ pub struct Parser {
     reports: HashMap<String, String>,
     /// What each thread, its own and its agents', had spent in all when it last said.
     spent: HashMap<String, [u64; 4]>,
+    /// The usage limit stopped the turn that runs.
+    limited: bool,
+    /// When the usage limits that ran out reset, as Codex last said.
+    resets_at: Option<f64>,
 }
 
 impl Parser {
@@ -184,6 +195,8 @@ impl Parser {
             agents: HashMap::new(),
             reports: HashMap::new(),
             spent: HashMap::new(),
+            limited: false,
+            resets_at: None,
         }
     }
 
@@ -234,6 +247,10 @@ impl Parser {
         if method == "thread/tokenUsage/updated" {
             return self.parse_usage(params).into_iter().collect();
         }
+        if method == "account/rateLimits/updated" {
+            self.note_rate_limits(&params["rateLimits"]);
+            return vec![];
+        }
         let own = self.thread_id.as_deref();
         if let Some(thread_id) = params["threadId"].as_str().filter(|id| own.is_some_and(|own| own != *id)) {
             return self.parse_subagent(method, thread_id, params);
@@ -253,6 +270,10 @@ impl Parser {
             },
             "turn/plan/updated" => todo_list(params),
             "turn/completed" => self.parse_turn_end(&params["turn"]),
+            "error" if params["willRetry"] != true => {
+                self.limited |= is_limit(&params["error"]["codexErrorInfo"]);
+                vec![]
+            }
             "serverRequest/resolved" => match self.asked.remove(&params["requestId"].to_string()) {
                 Some(id) => vec![AgentEvent::ApprovalWithdrawn { id }],
                 None => vec![],
@@ -327,12 +348,28 @@ impl Parser {
         Some(AgentEvent::Usage { spent: vec![spent], total: false })
     }
 
+    /// Keeps when the limits that ran out reset. Only the account's own limits count, not a
+    /// model's.
+    fn note_rate_limits(&mut self, limits: &Value) {
+        if limits["limitId"].as_str().is_some_and(|id| id != "codex") {
+            return;
+        }
+        let windows = [&limits["primary"], &limits["secondary"]];
+        let exhausted =
+            windows.into_iter().filter(|window| window["usedPercent"].as_f64().is_some_and(|used| used >= 100.0));
+        let resets: Vec<Option<f64>> = exhausted.map(|window| window["resetsAt"].as_f64()).collect();
+        self.resets_at = if resets.is_empty() { None } else { super::latest_reset(resets) };
+    }
+
     fn parse_turn_end(&mut self, turn: &Value) -> Vec<AgentEvent> {
         self.ended = true;
         let failed = turn["status"] == "failed";
         let summary = TurnSummary { is_error: failed, ..Default::default() };
         let result_text = turn["error"]["message"].as_str().map(String::from);
-        let mut events = vec![AgentEvent::Completed { summary, result_text, preempted: false }];
+        let limited = std::mem::take(&mut self.limited) || is_limit(&turn["error"]["codexErrorInfo"]);
+        let mut events: Vec<AgentEvent> =
+            (failed && limited).then_some(AgentEvent::Limited { resets_at: self.resets_at }).into_iter().collect();
+        events.push(AgentEvent::Completed { summary, result_text, preempted: false });
         events.extend(self.plan_approval());
         events
     }
@@ -711,6 +748,32 @@ mod tests {
             AgentEvent::Completed { summary, result_text: Some("Out of credits".to_string()), preempted: false };
         assert_eq!(ended, vec![completed]);
         assert_eq!(parser.parse(started), vec![AgentEvent::Woke, turn, AgentEvent::Thinking { active: true }]);
+    }
+
+    #[test]
+    fn a_turn_the_usage_limit_ends_says_when_the_limit_resets() {
+        let mut parser = parser(turn(Access::Full, false));
+        parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
+        let limits = r#"{"method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":"codex",
+            "primary":{"usedPercent":100,"resetsAt":1800000000},"secondary":{"usedPercent":40,"resetsAt":1800500000}}}}"#;
+        let model = r#"{"method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":"spark",
+            "primary":{"usedPercent":100,"resetsAt":1900000000}}}}"#;
+        let error = r#"{"method":"error","params":{"threadId":"t1","turnId":"u1","willRetry":false,
+            "error":{"message":"You've hit your usage limit.","codexErrorInfo":"usageLimitExceeded"}}}"#;
+        let failed = r#"{"method":"turn/completed","params":{"threadId":"t1","turn":{"id":"u1","status":"failed",
+            "error":{"message":"You've hit your usage limit."}}}}"#;
+
+        assert_eq!(parser.parse(limits), vec![]);
+        assert_eq!(parser.parse(model), vec![], "a model's own limit isn't the account's");
+        assert_eq!(parser.parse(error), vec![]);
+        let ended = parser.parse(failed);
+        assert!(
+            matches!(&ended[..], [AgentEvent::Limited { resets_at: Some(at) }, AgentEvent::Completed { .. }] if *at == 1_800_000_000.0)
+        );
+
+        let other = r#"{"method":"turn/completed","params":{"threadId":"t1","turn":{"status":"failed",
+            "error":{"message":"Bad request","codexErrorInfo":{"badRequest":{}}}}}}"#;
+        assert!(matches!(parser.parse(other)[..], [AgentEvent::Completed { .. }]));
     }
 
     #[test]

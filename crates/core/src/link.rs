@@ -10,7 +10,7 @@ use std::time::Duration;
 use futures_lite::StreamExt;
 use iroh::Endpoint;
 use iroh::endpoint::PathEvent;
-use motile_protocol::wire::{FileKind, GitStage, Message, Request};
+use motile_protocol::wire::{FileKind, GitStage, Message, Request, RestartWhen};
 use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
@@ -346,9 +346,15 @@ impl Link {
         }
     }
 
-    /// Has the server install the latest release, telling `progress` how far the download is.
-    pub async fn update(&self, mut progress: impl FnMut(u64, Option<u64>)) -> anyhow::Result<()> {
-        let mut follow = self.connection()?.follow(&Request::UpdateServer).await?;
+    /// Has the server install the latest release, telling `progress` how far the download is
+    /// and `waiting` once it waits for its agents to finish before it restarts.
+    pub async fn update(
+        &self,
+        when: Option<RestartWhen>,
+        mut progress: impl FnMut(u64, Option<u64>),
+        mut waiting: impl FnMut(),
+    ) -> anyhow::Result<()> {
+        let mut follow = self.connection()?.follow(&Request::UpdateServer { when }).await?;
         loop {
             // A server from before it could update itself closes the stream without an answer.
             let Some(message) = follow.next().await? else {
@@ -356,6 +362,7 @@ impl Link {
             };
             match message {
                 Message::Updating { received, total } => progress(received, total),
+                Message::UpdateWaiting => waiting(),
                 Message::Ok => return Ok(()),
                 Message::Error { message } => anyhow::bail!(message),
                 other => {

@@ -21,6 +21,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0009_watching.sql"),
     include_str!("../migrations/0010_usage.sql"),
     include_str!("../migrations/0011_usage_purpose.sql"),
+    include_str!("../migrations/0012_interruptions.sql"),
 ];
 
 pub struct Store {
@@ -136,7 +137,7 @@ impl Store {
             "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access, t.plan,
                     t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.undone_at,
                     COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
-                    t.pull_request, t.watching
+                    t.pull_request, t.watching, t.running, t.monitoring, t.interruption
              FROM threads t LEFT JOIN items i ON i.thread_id = t.id
              GROUP BY t.id",
         )?;
@@ -145,6 +146,7 @@ impl Store {
             let next_seq: i64 = row.get(18)?;
             let worktree: (Option<String>, Option<String>) = (row.get(19)?, row.get(20)?);
             let pull_request: Option<String> = row.get(21)?;
+            let interruption: Option<String> = row.get(25)?;
             Ok(StoredThread {
                 thread: Thread {
                     id: row.get(0)?,
@@ -160,14 +162,15 @@ impl Store {
                     updated_at: row.get(12)?,
                     done_at: row.get(13)?,
                     undone_at: row.get(16)?,
-                    running: false,
-                    monitoring: false,
+                    running: row.get(23)?,
+                    monitoring: row.get(24)?,
                     needs_approval: row.get(14)?,
                     agents: 0,
                     turn_ended_at: row.get(15)?,
                     pull_request: pull_request.and_then(|json| serde_json::from_str(&json).ok()),
                     watching: row.get(22)?,
                     git_stage: None,
+                    interruption: interruption.and_then(|json| serde_json::from_str(&json).ok()),
                     rev: rev as u64,
                 },
                 session_id: row.get(10)?,
@@ -187,8 +190,10 @@ impl Store {
         self.connection().execute(
             "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access, plan,
                                   session_id, created_at, updated_at, done_at, needs_approval, turn_ended_at, undone_at,
-                                  worktree_branch, worktree_base, pull_request, watching)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+                                  worktree_branch, worktree_base, pull_request, watching, running, monitoring,
+                                  interruption)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
+                     ?23, ?24)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
@@ -204,7 +209,10 @@ impl Store {
                  undone_at = excluded.undone_at,
                  worktree_branch = excluded.worktree_branch,
                  pull_request = excluded.pull_request,
-                 watching = excluded.watching",
+                 watching = excluded.watching,
+                 running = excluded.running,
+                 monitoring = excluded.monitoring,
+                 interruption = excluded.interruption",
             params![
                 thread.id,
                 thread.title,
@@ -227,6 +235,9 @@ impl Store {
                 stored.worktree.as_ref().map(|worktree| &worktree.base),
                 thread.pull_request.as_ref().and_then(|found| serde_json::to_string(found).ok()),
                 thread.watching,
+                thread.running,
+                thread.monitoring,
+                thread.interruption.as_ref().and_then(|interruption| serde_json::to_string(interruption).ok()),
             ],
         )?;
         Ok(())

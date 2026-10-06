@@ -68,8 +68,18 @@ struct ServerUpdate: Equatable {
     let from: String
     /// How much of the download has arrived, when the server knows how much there is.
     var fraction: Double?
+    /// The new version is installed, and the server starts it once its agents have finished.
+    var waiting = false
     /// The new version is installed and the server is starting it.
     var restarting = false
+}
+
+/// When an updated server restarts while its agents work.
+enum RestartWhen: String {
+    /// Once no agent works.
+    case idle
+    /// At once: the agents are stopped and their threads continue after the restart.
+    case now
 }
 
 /// What the images and videos fetched from the servers take on this Mac, and what they may take.
@@ -300,7 +310,12 @@ final class AppStore {
         case "server_update":
             let serverID = event.string("server_id")
             let (received, total) = (event.double("received"), event.optionalDouble("total"))
+            let waiting = event.bool("waiting")
             return { [weak self] in
+                guard !waiting else {
+                    self?.serverUpdates[serverID]?.waiting = true
+                    return
+                }
                 self?.serverUpdates[serverID]?.fraction = total.flatMap { $0 > 0 ? received / $0 : nil }
             }
         case "git_progress":
@@ -891,14 +906,32 @@ final class AppStore {
         server.state == .connected && Version.isOlder(server.version, than: updater.latest)
     }
 
-    /// Has the server install the newest release and start it.
-    func update(_ server: Server) {
+    /// Whether an agent works on the server: in a turn, or watching something it left running.
+    func isBusy(_ server: Server) -> Bool {
+        threads.values.contains { $0.serverID == server.id && $0.busy }
+    }
+
+    /// Whether the server can wait for its agents before it restarts, or stop them and go on with
+    /// them after.
+    func canChooseRestart(_ server: Server) -> Bool {
+        server.protocolVersion >= 14
+    }
+
+    /// Has the server install the newest release and start it: `when` its agents work, once they
+    /// have finished or at once. A server that can't choose refuses while they work.
+    func update(_ server: Server, when: RestartWhen = .idle) {
+        if serverUpdates[server.id]?.waiting == true, when == .now {
+            return restartNow(server)
+        }
         guard serverUpdates[server.id] == nil else { return }
         serverUpdates[server.id] = ServerUpdate(from: server.version)
-        core.send("update_server", ["server_id": server.id]) { [weak self] result in
+        var command: JSON = ["server_id": server.id]
+        if canChooseRestart(server) { command["when"] = when.rawValue }
+        core.send("update_server", command) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success:
+                self.serverUpdates[server.id]?.waiting = false
                 self.serverUpdates[server.id]?.restarting = true
                 // If the server never says it is back, the row stops waiting for it.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
@@ -908,6 +941,21 @@ final class AppStore {
                 self.serverUpdates[server.id] = nil
                 self.errorMessage = error.message
             }
+        }
+    }
+
+    /// Has a server that waits for its agents to update stop them and restart now. The request
+    /// that started the update answers once it restarts.
+    private func restartNow(_ server: Server) {
+        core.send("update_server", ["server_id": server.id, "when": RestartWhen.now.rawValue]) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
+        }
+    }
+
+    func setContinueSettings(afterLimits: Bool, afterRestarts: Bool, on server: Server) {
+        let settings: JSON = ["after_limits": afterLimits, "after_restarts": afterRestarts]
+        core.send("set_continue_settings", ["server_id": server.id, "settings": settings]) { [weak self] result in
+            if case .failure(let error) = result { self?.errorMessage = error.message }
         }
     }
 
@@ -1656,6 +1704,18 @@ final class AppStore {
             return
         }
         showUndo(UndoNotice(threadIDs: changed.map(\.id), text: changed.count == 1 ? "Marked done" : "Marked \(changed.count) threads done"))
+    }
+
+    /// Has the agent of the open thread go on with what it was doing when it was interrupted.
+    func continueThread() {
+        guard let thread = selectedThread else { return }
+        request(thread.serverID, ["type": "continue", "thread_id": thread.id])
+    }
+
+    /// Whether the open thread goes on by itself once its usage limit resets.
+    func setContinues(_ on: Bool) {
+        guard let thread = selectedThread, case .limit(let resetsAt, _) = thread.interruption else { return }
+        update(thread, ["continues": on]) { $0.interruption = .limit(resetsAt: resetsAt, continues: on) }
     }
 
     func toggleDone() {

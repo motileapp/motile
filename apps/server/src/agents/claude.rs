@@ -125,6 +125,10 @@ pub struct Parser {
     compacting: bool,
     /// What Claude Code said about a failed API call, which it reports again as the turn's error.
     api_error: Option<String>,
+    /// The failed API call was refused for the usage limit.
+    rate_limited: bool,
+    /// The usage limits that refuse the agent, by window, with when each resets.
+    refused: HashMap<String, Option<f64>>,
 }
 
 impl Parser {
@@ -138,6 +142,11 @@ impl Parser {
             Some("stream_event") => self.parse_stream_event(&object["event"]),
             Some("assistant") if object["error"].is_string() => {
                 self.api_error = Some(content_text(&object["message"]["content"]));
+                self.rate_limited = object["error"] == "rate_limit";
+                vec![]
+            }
+            Some("rate_limit_event") => {
+                self.note_rate_limit(&object["rate_limit_info"]);
                 vec![]
             }
             Some("assistant") => self.parse_assistant(&object["message"]),
@@ -156,10 +165,42 @@ impl Parser {
             Some("result") => {
                 self.ended = true;
                 let usage = parse_usage(&object["modelUsage"]);
-                usage.into_iter().chain([parse_result(&object, self.api_error.take())]).collect()
+                let limited = self.limit(&object);
+                usage.into_iter().chain(limited).chain([parse_result(&object, self.api_error.take())]).collect()
             }
             _ => vec![],
         }
+    }
+
+    /// Keeps which usage limits refuse the agent. One that allows overage doesn't.
+    fn note_rate_limit(&mut self, info: &Value) {
+        let window = info["rateLimitType"].as_str().unwrap_or("unknown").to_string();
+        let overage = matches!(info["overageStatus"].as_str(), Some("allowed" | "allowed_warning"))
+            || info["isUsingOverage"] == true
+            || info["overageInUse"] == true;
+        match info["status"].as_str() {
+            Some("rejected") if !overage => self.refused.insert(window, info["resetsAt"].as_f64()),
+            Some(_) => self.refused.remove(&window),
+            None => None,
+        };
+    }
+
+    /// The usage limit that ended the turn this result ends, if one did.
+    fn limit(&mut self, result: &Value) -> Option<AgentEvent> {
+        let is_error =
+            result["is_error"].as_bool().unwrap_or(result["subtype"] != "success") || self.api_error.is_some();
+        let reason = result["terminal_reason"].as_str();
+        let status = result["api_error_status"].as_u64();
+        let limited = std::mem::take(&mut self.rate_limited)
+            || !self.refused.is_empty()
+            || status == Some(429)
+            || reason == Some("blocking_limit");
+        let for_limit =
+            matches!(reason, None | Some("api_error" | "blocking_limit")) && matches!(status, None | Some(429));
+        if !is_error || !limited || !for_limit {
+            return None;
+        }
+        Some(AgentEvent::Limited { resets_at: super::latest_reset(self.refused.values().copied()) })
     }
 
     /// What an agent the thread's agent started says and does, which arrives in whole messages.
@@ -561,6 +602,62 @@ mod tests {
         let [AgentEvent::Completed { summary, result_text, .. }] = &parser.parse(ended)[..] else { panic!() };
         assert!(summary.is_error);
         assert_eq!(result_text.as_deref(), Some("You're out of usage credits."));
+    }
+
+    #[test]
+    fn a_turn_the_usage_limit_ends_says_when_the_limit_resets() {
+        let mut parser = Parser::default();
+        let refused = |window: &str, resets: u64| {
+            format!(
+                r#"{{"type":"rate_limit_event","rate_limit_info":{{"status":"rejected","rateLimitType":"{window}",
+                "resetsAt":{resets},"overageStatus":"rejected"}}}}"#
+            )
+        };
+        let message = r#"{"type":"assistant","error":"rate_limit","message":{"id":"m1","model":"<synthetic>",
+            "content":[{"type":"text","text":"You've hit your limit"}]}}"#;
+        let failed = r#"{"type":"result","subtype":"success","is_error":true,"result":"You've hit your limit"}"#;
+
+        assert_eq!(parser.parse(&refused("five_hour", 1_800_000_000)), vec![]);
+        assert_eq!(parser.parse(&refused("seven_day", 1_800_003_600)), vec![]);
+        assert_eq!(parser.parse(message), vec![]);
+        let events = parser.parse(failed);
+        let [AgentEvent::Limited { resets_at }, AgentEvent::Completed { summary, result_text, .. }] = &events[..]
+        else {
+            panic!("expected the limit and then the turn's end, got {events:?}")
+        };
+        assert_eq!(*resets_at, Some(1_800_003_600.0), "the agent works again once both limits reset");
+        assert!(summary.is_error);
+        assert_eq!(result_text.as_deref(), Some("You've hit your limit"));
+    }
+
+    #[test]
+    fn a_limit_that_allows_overage_or_was_lifted_ends_no_turn() {
+        let mut parser = Parser::default();
+        let overage = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","rateLimitType":"five_hour",
+            "resetsAt":1800000000,"overageStatus":"allowed"}}"#;
+        let refused = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","rateLimitType":"five_hour",
+            "resetsAt":1800000000}}"#;
+        let allowed =
+            r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimitType":"five_hour"}}"#;
+        let failed =
+            r#"{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"model_error"}"#;
+        let ended = r#"{"type":"result","subtype":"success","is_error":false}"#;
+
+        parser.parse(overage);
+        assert!(matches!(parser.parse(failed)[..], [AgentEvent::Completed { .. }]));
+        parser.parse(refused);
+        parser.parse(allowed);
+        assert!(matches!(parser.parse(failed)[..], [AgentEvent::Completed { .. }]));
+        parser.parse(refused);
+        assert!(
+            matches!(parser.parse(ended)[..], [AgentEvent::Completed { .. }]),
+            "a turn that ended well wasn't limited"
+        );
+        let blocked = r#"{"type":"result","subtype":"success","is_error":true,"terminal_reason":"blocking_limit"}"#;
+        assert!(matches!(
+            parser.parse(blocked)[..],
+            [AgentEvent::Limited { resets_at: Some(_) }, AgentEvent::Completed { .. }]
+        ));
     }
 
     #[test]

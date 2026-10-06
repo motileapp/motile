@@ -81,7 +81,8 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
 ### apps/server
 
 - `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
-  worktrees, snapshots and the agents an agent starts.
+  worktrees, snapshots and the agents an agent starts. It continues a thread once its usage limit
+  resets, and after a restart that cut its agent off, where the server's settings say so.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `models.rs` lists Claude's models by hand.
@@ -357,6 +358,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "ask two agents" (Claude Code), "ask an agent" (Codex) | Starts agents that say what they do and report |
 | "which color" | Asks the user a question |
 | "plan the hello" | Presents a plan to approve |
+| "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
 
 A message sent now while it works is read after its next tool call, or stops a reply that
 streams (Claude Code). Asked for a title, a commit message, a pull request's text or a branch's

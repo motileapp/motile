@@ -123,11 +123,22 @@ pub enum AgentEvent {
     Turn {
         id: String,
     },
+    /// The agent's usage limit ended the turn. `resets_at` is when it resets, when that is known.
+    Limited {
+        resets_at: Option<f64>,
+    },
     /// Lines the agent's process has to be given now.
     Write(String),
     Failed {
         message: String,
     },
+}
+
+/// When the agent may work again: once the last of the limits that stopped it resets. `None`
+/// when no limit said when it resets.
+fn latest_reset(resets: impl IntoIterator<Item = Option<f64>>) -> Option<f64> {
+    let resets: Option<Vec<f64>> = resets.into_iter().collect();
+    resets?.into_iter().reduce(f64::max)
 }
 
 #[derive(Debug, Clone, PartialEq)]

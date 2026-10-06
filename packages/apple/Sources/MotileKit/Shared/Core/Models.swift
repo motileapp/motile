@@ -89,6 +89,10 @@ struct Server: Equatable, Identifiable {
     /// What the server does with pull requests by itself.
     let doneOnMerge: Bool
     let removeMergedWorktrees: Bool
+    /// What the server goes on with by itself: threads whose usage limit reset, and threads whose
+    /// agents worked when it restarted.
+    let continueAfterLimits: Bool
+    let continueAfterRestarts: Bool
     /// How the writer there is told to name branches, and what that is until it is changed.
     let branchInstructions: String
     let defaultBranchInstructions: String
@@ -115,6 +119,9 @@ struct Server: Equatable, Identifiable {
         let settings = info?.object("pull_request_settings")
         doneOnMerge = settings?.bool("done_on_merge") ?? false
         removeMergedWorktrees = settings?.bool("remove_merged_worktrees") ?? false
+        let continues = info?.object("continue_settings")
+        continueAfterLimits = continues?.bool("after_limits") ?? false
+        continueAfterRestarts = continues?.bool("after_restarts") ?? false
         let naming = info?.object("branch_instructions")
         branchInstructions = naming?.string("text") ?? ""
         defaultBranchInstructions = naming?.string("default") ?? ""
@@ -491,6 +498,8 @@ struct ThreadInfo: Equatable, Identifiable {
     let watching: Bool
     /// What a commit, a push or the like that was started from it is at.
     let gitStage: GitStage?
+    /// Why the agent stopped before it finished, until it works again.
+    var interruption: Interruption?
     let unread: Bool
 
     init(json: JSON) {
@@ -516,6 +525,7 @@ struct ThreadInfo: Equatable, Identifiable {
         pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
         watching = json.bool("watching")
         gitStage = json.optionalString("git_stage").flatMap { GitStage(rawValue: $0) }
+        interruption = json.object("interruption").flatMap { Interruption(json: $0) }
         unread = json.bool("unread")
     }
 
@@ -552,6 +562,57 @@ extension [ThreadInfo] {
     func index(of thread: ThreadInfo) -> Int? {
         let place = place(of: thread)
         return place < count && self[place].id == thread.id ? place : nil
+    }
+}
+
+/// Why a thread's agent stopped before it finished.
+enum Interruption: Equatable {
+    /// The agent reached its usage limit. `resetsAt` is when it resets, when the agent said; with
+    /// `continues` the thread goes on by itself then.
+    case limit(resetsAt: Double?, continues: Bool)
+    /// The server restarted while the agent worked.
+    case restart
+
+    init?(json: JSON) {
+        switch json.string("kind") {
+        case "limit": self = .limit(resetsAt: json.optionalDouble("resets_at"), continues: json.bool("continues"))
+        case "restart": self = .restart
+        default: return nil
+        }
+    }
+
+    /// What a thread's status says of it.
+    var word: String {
+        switch self {
+        case .limit: "limited"
+        case .restart: "interrupted"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .limit: "Usage limit reached"
+        case .restart: "Interrupted"
+        }
+    }
+
+    var symbol: Symbol {
+        switch self {
+        case .limit: .clock
+        case .restart: .refreshCw
+        }
+    }
+
+    /// When the thread goes on, or what it waits for to be continued.
+    func detail(now: Double = Date().timeIntervalSince1970) -> String {
+        switch self {
+        case .restart: "Your server restarted before the agent finished"
+        case .limit(let resetsAt?, let continues) where resetsAt > now:
+            continues ? "Continues at \(Time.stamp(resetsAt))" : "Resets at \(Time.stamp(resetsAt))"
+        case .limit(_?, true): "Continues in a moment"
+        case .limit(_?, false): "The limit has reset"
+        case .limit(nil, _): "Reset time unknown"
+        }
     }
 }
 
