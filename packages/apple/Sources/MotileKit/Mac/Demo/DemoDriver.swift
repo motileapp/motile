@@ -208,6 +208,7 @@ private final class Demo {
 
         // A message sent while the agent works waits in the queue until the turn ends. It can be
         // taken back, or sent now: then the agent takes it in the turn that runs.
+        UserDefaults.standard.set(false, forKey: AppStore.steersKey)
         store.startNewThread()
         store.setAccess(.supervised)
         send("Change greet.py to use an f-string, then run greet.py.")
@@ -235,6 +236,7 @@ private final class Demo {
             turnEnded && turnEnds == 1 && queuedStatuses.isEmpty && store.transcript.rows.filter(\.isUser).count == 2
         }
         await shoot("07-queue-taken")
+        UserDefaults.standard.removeObject(forKey: AppStore.steersKey)
 
         // A question the agent asks is answered in place, and the turn goes on with the answer.
         store.startNewThread()
