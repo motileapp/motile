@@ -224,6 +224,12 @@ class TextLabel: UILabel {
     }
 
     var naturalWidth: CGFloat { intrinsicContentSize.width }
+
+    /// The size the words take, whatever width it was last given.
+    var natural: CGSize {
+        let size = intrinsicContentSize
+        return CGSize(width: ceil(size.width), height: size.height)
+    }
 }
 
 /// A bright copy of a label, laid over it and seen only through a soft band that sweeps across.

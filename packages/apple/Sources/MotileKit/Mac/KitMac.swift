@@ -202,6 +202,12 @@ class TextLabel: NSTextField {
     }
 
     var naturalWidth: CGFloat { intrinsicContentSize.width }
+
+    /// The size the words take with the room the field draws around them, whatever width it
+    /// was last given.
+    var natural: CGSize {
+        CGSize(width: ceil(cell?.cellSize.width ?? 0), height: intrinsicContentSize.height)
+    }
 }
 
 /// A bright copy of a label, laid over it and seen only through a soft band that sweeps across.
