@@ -559,6 +559,15 @@ struct DoneRow: View, Equatable {
     }
 }
 
+extension ThreadInfo {
+    /// The colour of its status when it waits for the user: an approval, or a reply they haven't seen.
+    var attentionColor: Color? {
+        if needsApproval { return .themeWarning }
+        if unread { return .themeSuccess }
+        return nil
+    }
+}
+
 /// What a thread is up to, or how long ago it last was.
 struct ThreadStatus: View {
     let thread: ThreadInfo
