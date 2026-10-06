@@ -1536,13 +1536,17 @@ impl Core {
                     .servers
                     .iter()
                     .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= USAGE_PROTOCOL));
-                let links: Vec<(String, Arc<Link>)> =
-                    asked.filter_map(|server| Some((server.device.public_key.clone(), server.link.clone()?))).collect();
+                let mut links: Vec<(String, Arc<Link>)> = Vec::new();
                 let mut project_names = HashMap::new();
-                for (server_id, _) in &links {
-                    for project in self.cache.projects(server_id) {
+                let mut server_names = HashMap::new();
+                for server in asked {
+                    let Some(link) = server.link.clone() else { continue };
+                    let server_id = server.device.public_key.clone();
+                    for project in self.cache.projects(&server_id) {
                         project_names.insert((server_id.clone(), project.id), project.name);
                     }
+                    server_names.insert(server_id.clone(), server.device.name.clone());
+                    links.push((server_id, link));
                 }
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
@@ -1566,7 +1570,7 @@ impl Core {
                     }
                     let answer = match failure {
                         Some(failure) if spent.is_empty() => Err(failure),
-                        _ => serde_json::to_value(usage::view(&spent, window, &project_names))
+                        _ => serde_json::to_value(usage::view(&spent, window, &project_names, &server_names))
                             .map_err(|error| error.to_string()),
                     };
                     reply(&sink, id, answer);
