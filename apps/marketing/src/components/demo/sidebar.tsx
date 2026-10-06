@@ -147,7 +147,7 @@ function ThreadRow({
           <ThreadStatus thread={thread} elapsed={elapsed} />
         </span>
       </span>
-      <span className="w-full truncate pb-1 text-[13px] font-medium">
+      <span className="w-full truncate pt-px pb-[5px] text-[13px] font-medium">
         {thread.title}
       </span>
       <span className="flex h-4 w-full items-center gap-1.5 text-tertiary">
