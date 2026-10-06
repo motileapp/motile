@@ -178,8 +178,8 @@ impl Connection {
     }
 
     /// A file in a folder threads work in: what kind it is, its size, and the bytes the server
-    /// sends of it.
-    pub async fn file(&self, request: &Request) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
+    /// sends of a text. Those of an image or a video are written to `shown`.
+    pub async fn file(&self, request: &Request, shown: &Path) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
         let (mut send, mut recv) = self.inner.open_bi().await?;
         write_frame(&mut send, request).await?;
         send.finish()?;
@@ -188,6 +188,10 @@ impl Connection {
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to a file request: {other:?}"),
         };
+        if matches!(kind, FileKind::Image | FileKind::Video) {
+            receive(&mut recv, shown, sent, |_, _| {}).await?;
+            return Ok((kind, size, Vec::new()));
+        }
         if sent > MAX_FILE_BYTES {
             bail!("The file is too large to show.");
         }
@@ -198,7 +202,7 @@ impl Connection {
 
     /// Fetches the server's copy of an image or a video into `file`, telling `progress` how many
     /// of its bytes have arrived.
-    pub async fn media(&self, id: &str, file: &Path, mut progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {
+    pub async fn media(&self, id: &str, file: &Path, progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {
         let (mut send, mut recv) = self.inner.open_bi().await?;
         write_frame(&mut send, &Request::Media { id: id.to_string() }).await?;
         send.finish()?;
@@ -207,20 +211,29 @@ impl Connection {
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to a media request: {other:?}"),
         };
-
-        let mut output = tokio::fs::File::create(file).await?;
-        let mut buffer = vec![0u8; 64 * 1024];
-        let mut received = 0;
-        while received < size {
-            let wanted = buffer.len().min((size - received) as usize);
-            let read = recv.read(&mut buffer[..wanted]).await?.context("The download was cut off. Try again.")?;
-            output.write_all(&buffer[..read]).await?;
-            received += read as u64;
-            progress(received, size);
-        }
-        output.flush().await?;
-        Ok(())
+        receive(&mut recv, file, size, progress).await
     }
+}
+
+/// Writes the next `size` bytes of the stream to `file`, telling `progress` how many have arrived.
+async fn receive(
+    recv: &mut RecvStream,
+    file: &Path,
+    size: u64,
+    mut progress: impl FnMut(u64, u64),
+) -> anyhow::Result<()> {
+    let mut output = tokio::fs::File::create(file).await?;
+    let mut buffer = vec![0u8; 64 * 1024];
+    let mut received = 0;
+    while received < size {
+        let wanted = buffer.len().min((size - received) as usize);
+        let read = recv.read(&mut buffer[..wanted]).await?.context("The download was cut off. Try again.")?;
+        output.write_all(&buffer[..read]).await?;
+        received += read as u64;
+        progress(received, size);
+    }
+    output.flush().await?;
+    Ok(())
 }
 
 pub struct Follow {

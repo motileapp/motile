@@ -396,8 +396,8 @@ impl Link {
         self.connection()?.upload(path, poster_of, progress).await
     }
 
-    pub async fn file(&self, request: &Request) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
-        self.connection()?.file(request).await
+    pub async fn file(&self, request: &Request, shown: &Path) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
+        self.connection()?.file(request, shown).await
     }
 
     pub async fn media(&self, id: &str, file: &Path, progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {

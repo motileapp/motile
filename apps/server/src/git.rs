@@ -11,7 +11,7 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use motile_protocol::wire::{Branch, Change, ChangedFile, GitStatus, PullRequest};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::process::Command;
+use tokio::process::{ChildStdout, Command};
 
 use crate::agents::environment::Environment;
 
@@ -510,6 +510,7 @@ pub async fn patch_between(
         "--no-color",
         "--no-ext-diff",
         "--no-textconv",
+        "--full-index",
         "-M",
         "--patch",
         from,
@@ -537,6 +538,20 @@ pub async fn patch_between(
         bail!("{}", refusal(&String::from_utf8_lossy(&output.stderr)));
     }
     Ok((String::from_utf8_lossy(&patch).into_owned(), false))
+}
+
+/// The size of the file git keeps under the name, and its bytes as git reads them out.
+pub async fn read_blob(folder: &str, environment: &Environment, blob: &str) -> anyhow::Result<(u64, ChildStdout)> {
+    if !(4..=64).contains(&blob.len()) || !blob.chars().all(|letter| letter.is_ascii_hexdigit()) {
+        bail!("{blob} isn't the name of a file in git.");
+    }
+    let size = git(folder, environment, &["cat-file", "-s", &format!("{blob}^{{blob}}")]).await.ok();
+    let size = size.and_then(|size| size.trim().parse().ok()).context("Git on your server doesn't have that file.")?;
+    let mut read = command("git", folder, environment, &["cat-file", "blob", blob]);
+    read.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    let mut child = read.spawn().context("Git isn't installed on your server.")?;
+    let bytes = child.stdout.take().context("Git's answer can't be read.")?;
+    Ok((size, bytes))
 }
 
 /// Which of the paths git ignores.

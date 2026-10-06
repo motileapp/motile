@@ -1,3 +1,4 @@
+import AVKit
 import SwiftUI
 
 #if os(macOS)
@@ -460,7 +461,8 @@ struct DiffSurface: View {
                     guard case .pullRequest(let number) = scope else { return }
                     panel.setViewed(path, !marks.viewed.contains(path), on: target, number: number)
                 },
-                onComment: { place in comment(on: place, in: document) })
+                onComment: { place in comment(on: place, in: document) },
+                onMedia: { panel.loadMedia(of: $0, in: target) }, onOpenMedia: { panel.viewMedia(of: $0) })
         }
     }
 
@@ -643,8 +645,10 @@ struct FileSurface: View {
                 }
             case .ready(.image(let image)):
                 ZoomableImage(image: image, size: image.size, margin: CGSize(width: 16, height: 16), keys: store.viewing == nil && inView)
+            case .ready(.video(let file)):
+                FileVideo(file: file)
             case .ready(.binary(let size)):
-                PanelMessage(text: "This file isn't text, so it isn't shown. It is \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)).")
+                PanelMessage(text: "This file can't be shown here. It is \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)).")
             }
         }
         .panelTask(id: PanelTrigger(target: target, path: path, version: store.workspaceVersion, asked: asked)) {
@@ -655,6 +659,19 @@ struct FileSurface: View {
     private var folder: String {
         let folder = (path as NSString).deletingLastPathComponent
         return folder.isEmpty ? "" : folder + "/"
+    }
+}
+
+/// A video of the folder, which plays where it is.
+private struct FileVideo: View {
+    let file: URL
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .padding(16)
+            .task(id: file) { player = AVPlayer(url: file) }
+            .onDisappear { player?.pause() }
     }
 }
 
@@ -690,7 +707,8 @@ struct ChangeSurface: View {
                 }
                 CodeViewRepresentable(
                     document: document, collapsed: closed ? [path] : [],
-                    onToggle: { _ in closed.toggle() }, onOpenFile: { panel.open(.file($0)) })
+                    onToggle: { _ in closed.toggle() }, onOpenFile: { panel.open(.file($0)) },
+                    onMedia: { panel.loadMedia(of: $0, in: target) }, onOpenMedia: { panel.viewMedia(of: $0) })
             case .ready:
                 PanelMessage(text: "The turn's changes to this file can't be shown.")
             }

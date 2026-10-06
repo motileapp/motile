@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Observation
 
@@ -184,12 +185,16 @@ struct FileNode: Identifiable, Equatable {
 enum FileContent {
     case text(CodeDocument, truncated: Bool)
     case image(PlatformImage)
+    case video(URL)
     case binary(size: Int)
 }
 
 extension Notification.Name {
     /// A document's highlighting has arrived; the object is the `CodeDocument`.
     static let codeColoured = Notification.Name("motile.codeColoured")
+    /// The picture of an image or a video a diff shows has arrived, or couldn't; the object is
+    /// the `CodeMedia`.
+    static let codeMedia = Notification.Name("motile.codeMedia")
 }
 
 /// The panel beside the thread: whether it is open, the tabs each thread has in it, and what the
@@ -241,6 +246,8 @@ final class SidePanel {
     /// The folder all of the above is of.
     @ObservationIgnored private var shown: PanelTarget?
     @ObservationIgnored private var shownScope: DiffScope?
+    /// Where the images and videos diffs show are on this device, by their blobs.
+    @ObservationIgnored private var mediaFiles: [String: URL] = [:]
     @ObservationIgnored private var diffRequest: UInt64 = 0
     @ObservationIgnored private var fileRequests: [UInt64: PanelTab] = [:]
     @ObservationIgnored private var shownPullRequest: Int?
@@ -563,6 +570,38 @@ final class SidePanel {
         load(.file(path), "file", ["path": path], of: target) { Self.read(file: $0, path: path, id: id) }
     }
 
+    /// Fetches the image or the video a diff shows in place of the file's lines, and decodes its
+    /// picture off the main thread.
+    func loadMedia(of file: CodeFile, in target: PanelTarget) {
+        guard let media = file.media, !media.asked else { return }
+        media.asked = true
+        var command = target.request
+        command["server_id"] = target.serverID
+        command["path"] = file.path
+        command["blob"] = media.blob
+        let shown = { (picture: CGImage?) in
+            media.failed = picture == nil
+            NotificationCenter.default.post(name: .codeMedia, object: media)
+        }
+        store?.core.send("file", command) { [weak self] result in
+            guard case .success(let answer) = result, !answer.string("file").isEmpty else { return shown(nil) }
+            let url = URL(fileURLWithPath: answer.string("file"))
+            self?.mediaFiles[media.blob] = url
+            if media.video {
+                Pictures.firstFrame(url, id: media.id, maxPixels: CodeSheet.mediaPixels, done: shown)
+            } else {
+                Pictures.decode(url, id: media.id, maxPixels: CodeSheet.mediaPixels, done: shown)
+            }
+        }
+    }
+
+    /// Opens the image or the video a diff shows in the viewer, once it is on this device.
+    func viewMedia(of file: CodeFile) {
+        guard let media = file.media, let url = mediaFiles[media.blob] else { return }
+        let name = (file.path as NSString).lastPathComponent
+        store?.view([ViewedMedia(name: name, video: media.video, source: .file(url))], at: 0)
+    }
+
     /// Asks the server for what the turn changed in the file.
     func loadChange(turn: String, path: String, of target: PanelTarget) {
         let tab = PanelTab.change(turn: turn, path: path)
@@ -596,6 +635,8 @@ final class SidePanel {
         case "image":
             let image = (try? Data(contentsOf: URL(fileURLWithPath: answer.string("file")))).flatMap(PlatformImage.decoded)
             return image.map { .image($0) } ?? .binary(size: answer.int("size"))
+        case "video":
+            return .video(URL(fileURLWithPath: answer.string("file")))
         default:
             return .binary(size: answer.int("size"))
         }
@@ -858,6 +899,7 @@ enum FileSymbol {
     static func symbol(for path: String) -> Symbol {
         switch (path as NSString).pathExtension.lowercased() {
         case "png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "ico", "svg": .image
+        case "mp4", "mov", "m4v", "webm": .circlePlay
         case "md", "markdown", "txt", "rst": .fileText
         case "json", "yaml", "yml", "toml", "xml", "plist", "lock": .braces
         case "sh", "bash", "zsh", "fish": .terminal

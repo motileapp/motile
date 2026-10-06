@@ -261,15 +261,18 @@ pub enum Command {
         #[serde(default)]
         note: String,
     },
-    /// The file at `path` in that folder. Answers with its `kind` and `size`, and for a text
-    /// with its `lines` and `truncated` when they are only its start, for an image with the
-    /// `file` it is in on this device. A `code_spans` event follows with a text's highlighting.
+    /// The file at `path` in that folder, or with `blob` the image or the video a diff calls so.
+    /// Answers with its `kind` and `size`, and for a text with its `lines` and `truncated` when
+    /// they are only its start, for an image or a video with the `file` it is in on this device.
+    /// A `code_spans` event follows with a text's highlighting.
     File {
         server_id: String,
         project_id: String,
         #[serde(default)]
         thread_id: Option<String>,
         path: String,
+        #[serde(default)]
+        blob: Option<String>,
     },
     /// Picks the model that writes titles, commit messages and pull requests on the server.
     /// Without `model` the lightest model of the thread's agent writes.

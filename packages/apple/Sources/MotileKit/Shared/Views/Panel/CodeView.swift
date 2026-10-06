@@ -7,6 +7,22 @@ import AppKit
 import UIKit
 #endif
 
+/// An image or a video a diff shows in place of a file's lines, by the blob git keeps it as.
+final class CodeMedia {
+    let blob: String
+    let video: Bool
+    /// It couldn't be fetched or drawn.
+    var failed = false
+    var asked = false
+
+    var id: String { "blob:\(blob)" }
+
+    init(blob: String, video: Bool) {
+        self.blob = blob
+        self.video = video
+    }
+}
+
 /// The lines of one file: of its diff, or all of them.
 final class CodeFile {
     /// A file with more lines than this starts closed in a diff.
@@ -24,6 +40,7 @@ final class CodeFile {
     let change: String
     let added: Int
     let removed: Int
+    let media: CodeMedia?
     let lines: [String]
     let kinds: [UInt8]
     /// Each line's number in the file as it was and as it is, 0 where it isn't in that one.
@@ -40,7 +57,14 @@ final class CodeFile {
         change = json.string("change")
         added = json.int("added")
         removed = json.int("removed")
+        let blob = json.string("blob")
+        let kind = json.string("media")
+        media = blob.isEmpty || kind.isEmpty ? nil : CodeMedia(blob: blob, video: kind == "video")
         let lines = json.strings("lines")
+        guard media == nil else {
+            (self.lines, kinds, old, new, columns) = ([], [], [], [], 0)
+            return
+        }
         guard !lines.isEmpty else {
             let note = json.bool("binary") ? "Binary file" : change == "renamed" ? "Renamed without changes" : "Empty file"
             self.lines = [note]
@@ -64,6 +88,7 @@ final class CodeFile {
         change = ""
         added = 0
         removed = 0
+        media = nil
         self.lines = lines
         kinds = [UInt8](repeating: Kind.unchanged.rawValue, count: lines.count)
         old = [Int32](repeating: 0, count: lines.count)
@@ -136,6 +161,12 @@ final class CodeSheet {
     /// Lines are as small on iOS as on the Mac, so that as much of one fits.
     static let lineHeight: CGFloat = 18
     private static let fileGap: CGFloat = 12
+    private static let mediaInset: CGFloat = 12
+    private static let mediaMaxHeight: CGFloat = 320
+    /// The height of an image or a video until its picture is there.
+    private static let mediaWaitingHeight: CGFloat = 96
+    /// The pictures of images and videos are decoded no larger than this on a side.
+    static let mediaPixels: CGFloat = 1600
     private static let textInset: CGFloat = 8
     private static let font = PlatformFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
     private static let numberFont = PlatformFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
@@ -159,9 +190,11 @@ final class CodeSheet {
         let top: CGFloat
         let rows: Int
         let headingHeight: CGFloat
+        /// The room an image or a video takes in place of the lines.
+        var mediaHeight: CGFloat = 0
 
         var linesTop: CGFloat { top + headingHeight }
-        var bottom: CGFloat { linesTop + CGFloat(rows) * CodeSheet.lineHeight }
+        var bottom: CGFloat { linesTop + CGFloat(rows) * CodeSheet.lineHeight + mediaHeight }
     }
 
     /// A place in the text: a line of a file and a position in it, in UTF-16 units.
@@ -187,7 +220,11 @@ final class CodeSheet {
 
     private(set) var document: CodeDocument?
     private(set) var collapsed: Set<String> = []
+    /// How wide the view is, which images and videos fit in.
+    private(set) var width: CGFloat = 0
     var marks = CodeMarks()
+    /// Asked for the picture of a file's image or video once it is to be drawn.
+    var wantsMedia: (CodeFile) -> Void = { _ in }
     /// The line under the pointer, which shows that a comment can be written on it.
     var hovered: (file: Int, line: Int)?
     private(set) var blocks: [Block] = []
@@ -200,13 +237,14 @@ final class CodeSheet {
 
     // MARK: Layout
 
-    func set(_ document: CodeDocument, collapsed: Set<String>) {
+    func set(_ document: CodeDocument, collapsed: Set<String>, width: CGFloat) {
         if self.document !== document {
             typeset.removeAll()
             selection = nil
         }
         self.document = document
         self.collapsed = collapsed
+        self.width = width
         var blocks: [Block] = []
         var y: CGFloat = 0
         var lastNumber: Int32 = 1
@@ -214,7 +252,8 @@ final class CodeSheet {
         for (index, file) in document.files.enumerated() {
             let closed = document.headed && collapsed.contains(file.path)
             let heading = document.headed ? Self.headingHeight : 0
-            let block = Block(file: index, top: y, rows: closed ? 0 : file.lines.count, headingHeight: heading)
+            var block = Block(file: index, top: y, rows: closed ? 0 : file.lines.count, headingHeight: heading)
+            if let media = file.media, !closed { block.mediaHeight = Self.height(of: media, width: width) }
             blocks.append(block)
             y = block.bottom + (document.headed ? Self.fileGap : 0)
             lastNumber = max(lastNumber, file.old.max() ?? 0, file.new.max() ?? 0)
@@ -225,6 +264,34 @@ final class CodeSheet {
         numberWidth = CGFloat(digits) * 6.8 + 12
         gutter = (document.headed ? 2 : 1) * numberWidth + 4
         contentSize = CGSize(width: gutter + Self.textInset + CGFloat(columns) * Self.advance + 24, height: y + 8)
+    }
+
+    /// Lays the document out again for a view `width` wide, when its images and videos take
+    /// other room in it. Answers whether it did.
+    func fit(width: CGFloat) -> Bool {
+        guard width != self.width, let document else { return false }
+        self.width = width
+        guard document.files.contains(where: { $0.media != nil }) else { return false }
+        set(document, collapsed: collapsed, width: width)
+        return true
+    }
+
+    private static func height(of media: CodeMedia, width: CGFloat) -> CGFloat {
+        guard let picture = Pictures.cached(media.id) else { return mediaWaitingHeight + 2 * mediaInset }
+        let room = CGSize(width: width - 2 * mediaInset, height: mediaMaxHeight)
+        return size(of: picture, in: room).height + 2 * mediaInset
+    }
+
+    /// The size a picture is drawn at: its own, or smaller to fit the room.
+    private static func size(of picture: CGImage, in room: CGSize) -> CGSize {
+        let points = CGSize(width: CGFloat(picture.width) / Platform.pixelsPerPoint, height: CGFloat(picture.height) / Platform.pixelsPerPoint)
+        let scale = max(0, min(1, room.width / points.width, room.height / points.height))
+        return CGSize(width: (points.width * scale).rounded(), height: (points.height * scale).rounded())
+    }
+
+    /// Whether the point is on the image or the video a file shows.
+    func onMedia(_ point: CGPoint, of block: Block) -> Bool {
+        block.mediaHeight > 0 && point.y >= block.linesTop && point.y < block.bottom
     }
 
     /// The colours are other ones now, so every line is typeset again.
@@ -278,6 +345,10 @@ final class CodeSheet {
                 let heading = CGRect(x: visible.minX, y: block.top, width: visible.width, height: Self.headingHeight)
                 drawHeading(of: block.file, in: heading, lineAbove: block.file > 0)
             }
+            if let media = file.media, block.mediaHeight > 0 {
+                let room = CGRect(x: visible.minX, y: block.linesTop, width: visible.width, height: block.mediaHeight)
+                drawMedia(media, of: file, in: room.insetBy(dx: Self.mediaInset, dy: Self.mediaInset), context: context)
+            }
             guard block.rows > 0 else { continue }
             let first = max(0, Int(floor((dirty.minY - block.linesTop) / Self.lineHeight)))
             let last = min(block.rows - 1, Int(floor((dirty.maxY - block.linesTop) / Self.lineHeight)))
@@ -326,6 +397,37 @@ final class CodeSheet {
                     drawCommentBadge(at: CGPoint(x: visible.minX + gutter - 2, y: y))
                 }
             }
+        }
+    }
+
+    /// The picture of an image or a video, as large as it is or smaller to fit, or the room it
+    /// waits in. A video's picture is its first frame, under the sign that it plays.
+    private func drawMedia(_ media: CodeMedia, of file: CodeFile, in room: CGRect, context: CGContext) {
+        guard let picture = Pictures.cached(media.id) else {
+            Theme.backgroundSecondary.setFill()
+            RoundedBox.fill(room, radius: Radius.large)
+            guard media.failed else {
+                if !media.asked { wantsMedia(file) }
+                return
+            }
+            let note = NSAttributedString(
+                string: media.video ? "This video couldn't be shown." : "This image couldn't be shown.",
+                attributes: [.font: PlatformFont.ui(12.5), .foregroundColor: Theme.secondary])
+            let size = note.size()
+            note.draw(at: CGPoint(x: (room.midX - size.width / 2).rounded(), y: (room.midY - size.height / 2).rounded()))
+            return
+        }
+        let frame = CGRect(origin: room.origin, size: Self.size(of: picture, in: room.size))
+        context.saveGState()
+        context.addPath(RoundedBox.path(frame, radius: Radius.small))
+        context.clip()
+        // The sheet is drawn from the top down and the picture from the bottom up.
+        context.translateBy(x: 0, y: frame.minY + frame.maxY)
+        context.scaleBy(x: 1, y: -1)
+        context.draw(picture, in: frame)
+        context.restoreGState()
+        if media.video {
+            TintedSymbol.draw(.circlePlay, size: 40, color: .white, in: frame)
         }
     }
 

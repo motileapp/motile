@@ -12,6 +12,8 @@ struct CodeViewRepresentable: NSViewRepresentable {
     var onOpenFile: (String) -> Void = { _ in }
     var onViewed: (String) -> Void = { _ in }
     var onComment: (CodeSheet.Place) -> Void = { _ in }
+    var onMedia: (CodeFile) -> Void = { _ in }
+    var onOpenMedia: (CodeFile) -> Void = { _ in }
 
     func makeNSView(context: Context) -> CodeView { CodeView() }
 
@@ -21,6 +23,8 @@ struct CodeViewRepresentable: NSViewRepresentable {
         view.onOpenFile = onOpenFile
         view.onViewed = onViewed
         view.onComment = onComment
+        view.onMedia = onMedia
+        view.onOpenMedia = onOpenMedia
         view.mark(marks)
         view.show(document, collapsed: collapsed)
         if let reveal { view.reveal(reveal.path, count: reveal.count) }
@@ -34,6 +38,8 @@ final class CodeView: NSView {
     var onOpenFile: (String) -> Void = { _ in }
     var onViewed: (String) -> Void = { _ in }
     var onComment: (CodeSheet.Place) -> Void = { _ in }
+    var onMedia: (CodeFile) -> Void = { _ in }
+    var onOpenMedia: (CodeFile) -> Void = { _ in }
 
     private let scrollView = NSScrollView()
     private let canvas = CodeCanvas()
@@ -62,6 +68,8 @@ final class CodeView: NSView {
         NotificationCenter.default.addObserver(
             self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         NotificationCenter.default.addObserver(self, selector: #selector(coloured(_:)), name: .codeColoured, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(pictured(_:)), name: .codeMedia, object: nil)
+        sheet.wantsMedia = { [weak self] file in self?.onMedia(file) }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -77,6 +85,7 @@ final class CodeView: NSView {
     override func layout() {
         super.layout()
         scrollView.frame = bounds
+        if sheet.fit(width: scrollView.contentSize.width) { canvas.needsDisplay = true }
         canvas.fit(to: scrollView.contentSize)
         place()
     }
@@ -133,6 +142,15 @@ final class CodeView: NSView {
         guard notification.object as AnyObject? === sheet.document, let file = notification.userInfo?["file"] as? Int else { return }
         sheet.recolour(file: file)
         canvas.needsDisplay = true
+    }
+
+    /// A picture has arrived and takes the room it needs, while what is at the top stays there.
+    @objc private func pictured(_ notification: Notification) {
+        guard let document = sheet.document, document.files.contains(where: { $0.media === notification.object as AnyObject? }) else { return }
+        let anchor = sheet.anchor(at: scrollView.contentView.bounds.minY)
+        canvas.set(document, collapsed: sheet.collapsed, size: scrollView.contentSize)
+        guard let anchor else { return }
+        scroll(to: NSPoint(x: scrollView.contentView.bounds.minX, y: sheet.offset(of: anchor)))
     }
 
     /// Keeps the heading of the file whose lines are at the top in view, until the next file's
@@ -198,7 +216,7 @@ private final class CodeCanvas: NSView, NSMenuItemValidation {
     }
 
     func set(_ document: CodeDocument, collapsed: Set<String>, size: NSSize) {
-        sheet.set(document, collapsed: collapsed)
+        sheet.set(document, collapsed: collapsed, width: size.width)
         fit(to: size)
         needsDisplay = true
     }
@@ -249,6 +267,10 @@ private final class CodeCanvas: NSView, NSMenuItemValidation {
         guard let block = sheet.block(at: point.y) else { return }
         if sheet.document?.headed == true, point.y < block.linesTop {
             owner?.pressedHeading(of: block.file, at: point.x - visibleRect.minX, width: visibleRect.width)
+            return
+        }
+        if sheet.onMedia(point, of: block), let file = sheet.document?.files[block.file] {
+            owner?.onOpenMedia(file)
             return
         }
         if sheet.marks.commentable, sheet.inGutter(point.x - visibleRect.minX), let place = sheet.place(at: point),
