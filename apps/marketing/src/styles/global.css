@@ -59,11 +59,9 @@
   100% {
     opacity: 0.3;
     transform: scale(0.99);
-    background-position: 0% 50%;
   }
   50% {
     opacity: 0.5;
     transform: scale(1.01);
-    background-position: 100% 50%;
   }
 }
