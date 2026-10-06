@@ -119,16 +119,11 @@ export function Sidebar({
             </span>
           </div>
         ))}
-        <div className="-mx-2 flex items-center gap-0.5">
+        <div className="-mx-[7px] flex items-center gap-1">
           <FooterButton icon={SettingsIcon} label="Settings" />
           <FooterButton icon={ChartColumnIcon} label="Usage" />
-          <button
-            type="button"
-            aria-label="Check for updates"
-            className="ml-auto flex size-6 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
-          >
-            <RefreshCwIcon className="size-[13px]" />
-          </button>
+          <span className="ml-auto" />
+          <FooterButton icon={RefreshCwIcon} label="Check for updates" />
         </div>
       </div>
     </div>
@@ -139,10 +134,11 @@ function FooterButton({ icon: Icon, label }: { icon: LucideIcon; label: string }
   return (
     <button
       type="button"
-      className="flex h-6 items-center gap-1.5 rounded-[7px] px-2 text-[11.5px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
+      aria-label={label}
+      title={label}
+      className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
     >
-      <Icon className="size-[13px]" />
-      {label}
+      <Icon className="size-3.5" />
     </button>
   )
 }

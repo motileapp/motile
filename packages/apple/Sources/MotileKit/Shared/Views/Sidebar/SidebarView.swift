@@ -730,23 +730,23 @@ private struct SidebarFooter: View {
                 AppUpdateRow(updater: store.updater)
             }
             ForEach(store.servers) { ServerLine(server: $0) }
-            HStack(spacing: 2) {
+            HStack(spacing: 2 * ToolbarButton.margin) {
                 if store.showsUsage {
-                    ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, size: .small, fills: true, alignment: .leading) {
+                    ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, fills: true, alignment: .leading) {
                         store.closeRoute()
                     }
                 } else {
-                    ActionButton("Settings", icon: .settings, help: "Settings (⌘,)", variant: .ghost, size: .small) { store.openSettings() }
-                    ActionButton("Usage", icon: .chartColumn, help: "What the agents spent and what is left of their plans", variant: .ghost, size: .small) {
+                    ActionButton(icon: .settings, help: "Settings (⌘,)") { store.openSettings() }
+                    ActionButton(icon: .chartColumn, help: "Usage: what the agents spent and what is left of their plans") {
                         store.openUsage()
                     }
                 }
                 Spacer(minLength: 0)
-                ActionButton(icon: .refreshCw, help: "Check for Updates", size: .small, pending: store.updater.state == .checking) {
+                ActionButton(icon: .refreshCw, help: "Check for Updates", pending: store.updater.state == .checking) {
                     store.updater.check(asked: true)
                 }
             }
-            .padding(.horizontal, -ControlSize.small.padding)
+            .padding(.horizontal, -(ControlSize.regular.height - ControlSize.regular.symbol) / 2)
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
