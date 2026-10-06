@@ -202,8 +202,8 @@ private struct MarkDoneButton: View {
 #endif
 
 /// An active thread: its project and what it is doing on the first line, its title on the second,
-/// its project's branch, its pull request, its server and its agent on the third. It is redrawn only when what it
-/// shows changes.
+/// its branch (or its folder outside git), its pull request, its server and its agent on the third.
+/// It is redrawn only when what it shows changes.
 struct ThreadRow: View, Equatable {
     @Environment(AppStore.self) private var store
     let thread: ThreadInfo
@@ -255,11 +255,10 @@ struct ThreadRow: View, Equatable {
                 .padding(.bottom, 5)
 
             HStack(spacing: 6) {
-                if let branch = project?.branch {
-                    Text(branch)
-                        .font(.ui(size: 11))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                if let project, let branch = project.branch {
+                    CheckoutLabel(symbol: project.checkoutSymbol, text: branch)
+                } else {
+                    ThreadFolderLabel(serverID: thread.serverID, folder: thread.cwd)
                 }
                 Spacer(minLength: 6)
                 if let pullRequest = project?.pullRequest(of: thread) {
@@ -297,6 +296,48 @@ private struct ThreadPullRequestLabel: View {
             guard let url = URL(string: pullRequest.url) else { return }
             store.showPullRequest(url)
         }
+    }
+}
+
+/// The folder a thread works in, with its server's home as `~`. It is its own view so that news
+/// of a server only redraws this.
+private struct ThreadFolderLabel: View {
+    @Environment(AppStore.self) private var store
+    let serverID: String
+    let folder: String
+
+    var body: some View {
+        CheckoutLabel(symbol: .folder, text: shortened(folder, home: store.server(serverID)?.home ?? ""))
+    }
+
+    private func shortened(_ path: String, home: String) -> String {
+        guard !home.isEmpty, path.hasPrefix(home) else { return path }
+        let rest = path.dropFirst(home.count)
+        guard rest.isEmpty || rest.hasPrefix("/") else { return path }
+        return "~" + rest
+    }
+}
+
+/// Where a thread works, on the last line of its row.
+private struct CheckoutLabel: View {
+    let symbol: Symbol
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(symbol, size: 11)
+            Text(text)
+                .font(.ui(size: 11))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+}
+
+private extension Project {
+    var checkoutSymbol: Symbol {
+        if let git, git.branch == nil { return .gitCommitHorizontal }
+        return worktree == nil ? .gitBranch : .folderGit2
     }
 }
 

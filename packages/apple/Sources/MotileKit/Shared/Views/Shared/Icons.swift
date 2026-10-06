@@ -231,8 +231,8 @@ struct ServerLabel: View {
     var size: CGFloat = 11
 
     var body: some View {
-        HStack(spacing: size * 0.3) {
-            Image(.server, size: size * 0.82)
+        HStack(spacing: 3) {
+            Image(.server, size: size)
             Text(server.name)
                 .font(.ui(size: size))
                 .lineLimit(1)
