@@ -43,7 +43,6 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     private static let widest: CGFloat = 360
     /// What the side panel leaves of the card in a window too wide to give it all.
     private static let panelPeek: CGFloat = 64
-    private static let cardRadius: CGFloat = 44
     /// The name of the recognizers that slide the sidebar's rows aside.
     static let rowSwipe = "row-swipe"
 
@@ -108,7 +107,6 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         panel.didMove(toParent: self)
 
         card.clipsToBounds = true
-        card.layer.cornerCurve = .continuous
         card.backgroundColor = Theme.background
         cardShadow.isUserInteractionEnabled = false
         cardShadow.layer.shadowColor = UIColor.black.cgColor
@@ -153,7 +151,6 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         panel.view.frame = CGRect(x: bounds.width - panelWidth, y: 0, width: panelWidth, height: bounds.height)
         card.frame = CGRect(x: progress * width(of: progress < 0 ? .panel : .sidebar), y: 0, width: bounds.width, height: bounds.height)
         let lifted = min(1, aside * 6)
-        card.layer.cornerRadius = lifted * Self.cardRadius
         card.layer.borderWidth = lifted
         content.view.frame = card.bounds
         placeShadow()
@@ -174,7 +171,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     /// The shadow goes as the card leaves the screen, so it doesn't fall on the side that opened.
     private func placeShadow() {
         if cardShadow.bounds.size != card.bounds.size {
-            cardShadow.layer.shadowPath = UIBezierPath(roundedRect: card.bounds, cornerRadius: Self.cardRadius).cgPath
+            cardShadow.layer.shadowPath = UIBezierPath(rect: card.bounds).cgPath
         }
         cardShadow.frame = card.frame
         let onScreen = (view.bounds.width - abs(card.frame.minX)) / max(1, view.bounds.width)
