@@ -256,13 +256,26 @@ struct PullRequestLabel: View {
     let pullRequest: PullRequest
     /// In the colour of what became of it, or as quiet as the row it is in.
     var colored = true
+    /// What a click does, when it is a link: its number underlines under the pointer.
+    var action: (() -> Void)? = nil
+    @State private var hovering = false
 
     var body: some View {
+        if let action {
+            label.button(DimButtonStyle(), action: action)
+                .onHover { hovering = $0 }
+        } else {
+            label
+        }
+    }
+
+    private var label: some View {
         HStack(spacing: 2) {
             Image(pullRequest.state.symbol, size: 11)
             Text(verbatim: "\(pullRequest.number)")
                 .font(.ui(size: 11, weight: .medium))
                 .monospacedDigit()
+                .underline(hovering)
         }
         .foregroundStyle(colored ? pullRequest.state.color : Color.themeTertiary)
         .help(pullRequest.title)

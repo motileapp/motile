@@ -213,7 +213,7 @@ function PullRequest({
   return (
     <span
       className={cn(
-        "flex items-center gap-0.5 text-[11px] font-medium tabular-nums",
+        "flex cursor-pointer items-center gap-0.5 text-[11px] font-medium tabular-nums hover:underline",
         quiet ? "text-tertiary" : "text-success"
       )}
     >
