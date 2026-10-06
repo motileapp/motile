@@ -7,7 +7,8 @@ export type Server = { name: string; path: string; ms: number }
 export type Tool = "search" | "read" | "edit" | "run" | "check"
 
 export type Item =
-  | { kind: "user"; text: string }
+  /** A message just sent flies in from where its text was written, in the page's coordinates. */
+  | { kind: "user"; text: string; from?: { x: number; y: number } }
   | { kind: "text"; text: string }
   | { kind: "code"; lang: string; code: string }
   | {

@@ -136,6 +136,9 @@ final class TranscriptView: FlippedView, RowOwner {
     private var lastScrollY: CGFloat = 0
     /// Moves the viewport to the end with every frame while a reply streams.
     private var glide: CADisplayLink?
+    /// A sent message on its way from the composer to its row, which is hidden until it lands.
+    private var flight: Flight?
+    private var flightLink: CADisplayLink?
     /// Whether the thread has turns before the first row. They are asked for when the viewport
     /// comes within `earlierDistance` of the first row, and let go when it rests on the end
     /// with more than `trimDistance` above it.
@@ -206,6 +209,8 @@ final class TranscriptView: FlippedView, RowOwner {
     deinit {
         measuringStopped?.withLock { $0 = true }
         glide?.invalidate()
+        flightLink?.invalidate()
+        flight?.copy?.removeFromSuperview()
     }
 
     // MARK: Geometry
@@ -281,6 +286,8 @@ final class TranscriptView: FlippedView, RowOwner {
         stale.formUnion(views.keys)
         updateVisible(anchor: anchor)
         measureRows()
+        // A message sent before the view had a window sets out as soon as its row is placed.
+        if let flight, flight.copy == nil { advanceFlight() }
     }
 
     private func recomputeOffsets(from start: Int) {
@@ -397,6 +404,12 @@ final class TranscriptView: FlippedView, RowOwner {
         trimming = false
         heldAnchor = nil
         stopGlide()
+        // A new thread's rows arrive while its first message flies: it lands on the server's row.
+        if flight?.rowID == RowModel.pendingID, let sent = new.last(where: \.isSentMessage) {
+            flight?.rowID = sent.id
+        } else if let flight, !new.contains(where: { $0.id == flight.rowID }) {
+            landFlight()
+        }
         pin()
         updateVisible(glides: false)
         measureRows()
@@ -411,7 +424,11 @@ final class TranscriptView: FlippedView, RowOwner {
         // The server has the message now: its row takes the place of the copy shown while it
         // travelled, and as a first guess its height.
         let sentHeight = hasPending && new.contains(where: \.isSentMessage) ? heights.last : nil
-        if sentHeight != nil { removePending() }
+        if sentHeight != nil {
+            // A message that is still on its way lands on the server's row instead.
+            if flight?.rowID == RowModel.pendingID, let sent = new.last(where: \.isSentMessage) { flight?.rowID = sent.id }
+            removePending()
+        }
 
         // A row that is replaced by one with the same id keeps its view and, as a first guess,
         // its height: it is usually the same row with more text.
@@ -488,7 +505,9 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     /// Shows a message at the end before the server has confirmed it, or takes it away again.
-    func setPending(_ row: RowModel?) {
+    /// Given where its text started, in the window's coordinates, the message flies from there
+    /// to its row.
+    func setPending(_ row: RowModel?, from start: CGPoint? = nil) {
         removePending()
         if let row {
             rows.append(row)
@@ -500,10 +519,13 @@ final class TranscriptView: FlippedView, RowOwner {
         offsets = []
         recomputeOffsets(from: 0)
         updateVisible()
+        guard let row, let start, !reducesMotion else { return }
+        fly(row, from: start)
     }
 
     private func removePending() {
         guard hasPending else { return }
+        if flight?.rowID == RowModel.pendingID { landFlight() }
         recycle(rows[rows.count - 1].id)
         rows.removeLast()
         heights.removeLast()
@@ -554,7 +576,7 @@ final class TranscriptView: FlippedView, RowOwner {
         }
         view.configure(row)
         view.showsMeta = !Platform.hoverReveals || row.id == metaRowID
-        view.opacity = 1
+        view.opacity = flight?.rowID == row.id ? 0 : 1
         if fresh.remove(row.id) != nil {
             view.opacity = 0
             view.fade(to: 1, duration: 0.35)
@@ -801,6 +823,85 @@ final class TranscriptView: FlippedView, RowOwner {
         let step = max(2 * sixtieths, remaining * (1 - pow(0.78, sixtieths)))
         scroll(to: y + min(remaining, step))
         updateVisible(follows: false)
+    }
+
+    // MARK: A sent message's flight
+
+    private struct Flight {
+        let row: RowModel
+        /// The row the message lands on: its own until the server's row takes its place.
+        var rowID: String
+        /// Where the message's text started, in the window's coordinates.
+        let start: CGPoint
+        let began = CACurrentMediaTime()
+        /// The copy that flies, over the window, once the row has been laid out.
+        var copy: RowView?
+        /// How far from its row the copy set out, in the window's coordinates, and when.
+        var offset = CGVector.zero
+        var since: CFTimeInterval = 0
+    }
+
+    private static let flightDuration: CFTimeInterval = 0.5
+    /// How long the row has to be laid out, after which the message is simply there.
+    private static let flightPatience: CFTimeInterval = 1
+
+    /// How far along its way the message is after `seconds`: the response of a critically damped
+    /// spring, which comes to rest without overshooting.
+    private static func flown(_ seconds: CFTimeInterval) -> CGFloat {
+        let x = seconds * 20
+        return CGFloat(1 - (1 + x) * exp(-x))
+    }
+
+    /// The row is hidden and its copy placed before the frame is drawn, so that the message is
+    /// never seen at its row before it has flown there.
+    private func fly(_ row: RowModel, from start: CGPoint) {
+        landFlight()
+        flight = Flight(row: row, rowID: row.id, start: start)
+        let link = ticker(target: self, selector: #selector(flightStep))
+        link.add(to: .main, forMode: .common)
+        flightLink = link
+        advanceFlight()
+    }
+
+    @objc private func flightStep(_ link: CADisplayLink) { advanceFlight() }
+
+    /// The copy follows the row wherever the layout takes it, from where the text was written.
+    private func advanceFlight() {
+        guard var flight else { return landFlight() }
+        let now = CACurrentMediaTime()
+        guard let host = Platform.overlay(above: self), let row = views[flight.rowID] as? MessageRowView else {
+            if now - flight.began > Self.flightPatience { landFlight() }
+            return
+        }
+        row.opacity = 0
+        let destination = row.convert(row.bounds, to: host)
+        if flight.copy == nil {
+            let copy = RowView.make(for: flight.row)
+            copy.owner = self
+            copy.configure(flight.row)
+            copy.showsMeta = row.showsMeta
+            _ = copy.layout(width: row.bounds.width)
+            host.addSubview(copy)
+            copy.liftAboveSiblings()
+            let start = host.convert(flight.start, from: nil)
+            let textAt = row.convert(row.messageStart, to: host)
+            flight.copy = copy
+            flight.offset = CGVector(dx: start.x - textAt.x, dy: start.y - textAt.y)
+            flight.since = now
+        }
+        let left = 1 - Self.flown(now - flight.since)
+        flight.copy?.frame = destination.offsetBy(dx: flight.offset.dx * left, dy: flight.offset.dy * left)
+        self.flight = flight
+        if now - flight.since >= Self.flightDuration { landFlight() }
+    }
+
+    private func landFlight() {
+        flightLink?.invalidate()
+        flightLink = nil
+        guard let flight else { return }
+        flight.copy?.removeFromSuperview()
+        views[flight.rowID]?.opacity = 1
+        self.flight = nil
     }
 
     // MARK: RowOwner

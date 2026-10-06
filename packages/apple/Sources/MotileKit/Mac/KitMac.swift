@@ -46,6 +46,12 @@ extension NSView {
     func ticker(target: Any, selector: Selector) -> CADisplayLink {
         displayLink(target: target, selector: selector)
     }
+
+    /// Draws the view over its siblings, whatever order they were added in.
+    func liftAboveSiblings() {
+        wantsLayer = true
+        layer?.zPosition = 1
+    }
 }
 
 /// A view whose origin is its top left corner, like the text inside it. It can take clicks, say

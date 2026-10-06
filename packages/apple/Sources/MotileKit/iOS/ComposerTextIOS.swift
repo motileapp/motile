@@ -18,6 +18,7 @@ struct ComposerTextView: UIViewRepresentable {
         ceil(font.lineHeight) * CGFloat(max(1, lines)) + verticalInset * 2
     }
 
+    @Environment(AppStore.self) private var store
     @Binding var text: String
     @Binding var height: CGFloat
     let placeholder: String
@@ -61,6 +62,8 @@ struct ComposerTextView: UIViewRepresentable {
         view.placeholder = placeholder
         view.text = text
         context.coordinator.textView = view
+        // The view that sends is the composer's: a sent message sets out from its text.
+        if onSubmit != nil { store.composerTextStart = { [weak view] in view?.textStart } }
         DispatchQueue.main.async { context.coordinator.measure() }
         return view
     }
@@ -151,6 +154,13 @@ final class ComposerUITextView: UITextView {
 
     func showPlaceholder() {
         placeholderLabel.isHidden = !text.isEmpty
+    }
+
+    /// The top left corner of the text's first line, in the window's coordinates.
+    var textStart: CGPoint? {
+        guard !text.isEmpty else { return nil }
+        let caret = caretRect(for: beginningOfDocument)
+        return convert(CGPoint(x: caret.minX, y: caret.minY), to: nil)
     }
 
     override func layoutSubviews() {

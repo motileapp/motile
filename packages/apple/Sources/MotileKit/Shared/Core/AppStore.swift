@@ -195,6 +195,9 @@ final class AppStore {
     let linear = Linear()
     @ObservationIgnored let core = CoreBridge()
     @ObservationIgnored let transcript = TranscriptModel()
+    /// Where the composer's text starts, in the window's coordinates: a sent message sets out
+    /// from there. The composer's text view says.
+    @ObservationIgnored var composerTextStart: (() -> CGPoint?)?
     /// What the agent did that the side panel shows.
     @ObservationIgnored let agentTranscript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
@@ -1403,10 +1406,11 @@ final class AppStore {
             transcript.setActivity(activity)
         }
         let serverID = command.string("server_id")
+        let start = composerTextStart?()
         draft = ""
         attachmentsByKey[key] = nil
         // The server queues what is sent while the agent works, unless the message steers it.
-        transcript.setPending(text, attachments: attached.map(\.attached), queued: existing != nil && activity.running && !steers)
+        transcript.setPending(text, attachments: attached.map(\.attached), queued: existing != nil && activity.running && !steers, from: start)
         transcriptIsEmpty = false
 
         core.send("send", command) { [weak self] result in
