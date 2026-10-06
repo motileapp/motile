@@ -138,8 +138,8 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                 "Update", help: "Agents are working on \(server.name). Update it once they finish, or now: they stop and continue once it is back.",
                 variant: .secondary, size: .small
             ) {
-                Button("Update When Agents Finish") { store.update(server, when: .idle) }
-                Button("Update Now and Continue Them After") { store.update(server, when: .now) }
+                Button("Update when agents finish") { store.update(server, when: .idle) }
+                Button("Update now and auto-resume agents") { store.update(server, when: .now) }
             }
         } else if store.isOutdated(server) {
             ActionButton("Update", help: updateHelp, size: .small) {

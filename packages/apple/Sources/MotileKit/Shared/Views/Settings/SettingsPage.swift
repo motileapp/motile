@@ -153,10 +153,7 @@ struct SettingsPage: View {
                     if server.id != servers.last?.id { ThemeDivider() }
                 }
             }
-            SettingsGroup(
-                "continue-restarts", "Continue after restarts",
-                caption: "A thread whose agent was working when your server restarted goes on once it is back. Updating it now while agents work always does."
-            ) {
+            SettingsGroup("continue-restarts", "Continue after restarts", caption: "When your server comes back from a restart, agents that were working carry on.") {
                 ForEach(servers) { server in
                     SettingsRow {
                         serverName(server)
