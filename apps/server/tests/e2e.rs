@@ -2325,8 +2325,12 @@ async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
     let transcript = finished_transcript(&connection, &thread_id).await;
     assert_eq!(transcript.turn_ends().len(), 2);
     send(&connection, Some(thread_id.clone()), None, "Show the screenshot").await;
-    let (_, changes) = last_turns_changes(&connection, &thread_id).await;
+    let (shot_turn, changes) = last_turns_changes(&connection, &thread_id).await;
     assert_eq!(changes.files.iter().map(|file| file.path.as_str()).collect::<Vec<_>>(), ["screenshot.png"]);
+    let shot_patch = diff(DiffScope::Turn { item_id: shot_turn }).await;
+    let blob =
+        shot_patch.lines().find_map(|line| line.strip_prefix("index 0000000000000000000000000000000000000000.."));
+    let shot_blob = blob.map(|blob| blob.split(' ').next().unwrap().to_string()).expect(&shot_patch);
     let transcript = finished_transcript(&connection, &thread_id).await;
     assert_eq!(transcript.turn_ends()[1].changes, None);
     // The first turn's diff is still what it was.
@@ -2356,18 +2360,33 @@ async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
     );
     let Message::Files { entries } = list("docs").await else { panic!("expected the files") };
     assert_eq!(entries.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>(), ["greeting.md"]);
-    let read = async |path: &str| {
-        let request =
-            Request::ReadFile { project_id: project.id.clone(), thread_id: Some(thread_id.clone()), path: path.into() };
-        connection.file(&request).await
+    let shown = harness.dir.path().join("shown.png");
+    let read_blob = async |path: &str, blob: Option<&str>| {
+        let request = Request::ReadFile {
+            project_id: project.id.clone(),
+            thread_id: Some(thread_id.clone()),
+            path: path.into(),
+            blob: blob.map(str::to_string),
+        };
+        connection.file(&request, &shown).await
     };
+    let read = async |path: &str| read_blob(path, None).await;
     let (kind, size, bytes) = read("docs/greeting.md").await.unwrap();
     assert_eq!((kind, size as usize), (FileKind::Text, bytes.len()));
     assert!(String::from_utf8(bytes).unwrap().starts_with("# Greeting"));
-    let (kind, size, bytes) = read("screenshot.png").await.unwrap();
-    assert_eq!((kind, size as usize, &bytes[1..4]), (FileKind::Image, bytes.len(), &b"PNG"[..]));
+    let (kind, size, _) = read("screenshot.png").await.unwrap();
+    let screenshot = std::fs::read(repository.join("screenshot.png")).unwrap();
+    assert_eq!(
+        (kind, size as usize, std::fs::read(&shown).unwrap()),
+        (FileKind::Image, screenshot.len(), screenshot.clone())
+    );
     let (kind, _, bytes) = read("build/out.bin").await.unwrap();
     assert_eq!((kind, bytes.len()), (FileKind::Binary, 0));
+    // An image a diff shows is read as git keeps it.
+    std::fs::remove_file(&shown).unwrap();
+    let (kind, _, _) = read_blob("screenshot.png", Some(&shot_blob)).await.unwrap();
+    assert_eq!((kind, std::fs::read(&shown).unwrap()), (FileKind::Image, screenshot));
+    assert!(read_blob("screenshot.png", Some("--output=x")).await.is_err());
     for refused in ["../motile.sqlite", ".git/config", "/etc/hosts", "docs"] {
         assert!(read(refused).await.is_err(), "{refused}");
         assert!(matches!(list(&format!("{refused}/..")).await, Message::Error { .. }), "{refused}");

@@ -30,6 +30,7 @@ use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
 use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name};
+use crate::files::FileBytes;
 use crate::generate::Writer;
 use crate::linear::Linear;
 use crate::media::MediaStore;
@@ -1204,16 +1205,22 @@ impl Hub {
         files::list_files(&folder, path, &self.environment).await
     }
 
-    /// A file inside the folder the thread works in, or inside the project's: what kind it is,
-    /// its size and how many of its bytes to send.
+    /// A file inside the folder the thread works in, or inside the project's, or the one git
+    /// keeps as `blob` there: its bytes, what kind it is, its size and how many of its bytes to
+    /// send.
     pub async fn open_file(
         &self,
         project_id: &str,
         thread_id: Option<&str>,
         path: &str,
-    ) -> anyhow::Result<(tokio::fs::File, FileKind, u64, u64)> {
-        let folder = self.git_folder(project_id, thread_id).await?;
-        files::open_file(&folder, path).await
+        blob: Option<&str>,
+    ) -> anyhow::Result<(FileBytes, FileKind, u64, u64)> {
+        let Some(blob) = blob else {
+            let folder = self.git_folder(project_id, thread_id).await?;
+            return files::open_file(&folder, path).await;
+        };
+        let folder = self.github_folder(project_id, thread_id).await?;
+        files::open_blob(&folder, &self.environment, path, blob).await
     }
 
     /// Where the thread works: in its worktree, or in the project's folder.

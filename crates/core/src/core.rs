@@ -1590,23 +1590,38 @@ impl Core {
                 let prompt = pull_request::line_prompt(number, &url, &head, &path, line, &code, &note);
                 self.reply(id, Ok(json!({ "prompt": prompt })));
             }
-            Command::File { server_id, project_id, thread_id, path } => {
+            Command::File { server_id, project_id, thread_id, path, blob } => {
+                let shown = shown_file(&self.config.data_dir.join(SHOWN_FILES), &server_id, &path, blob.as_deref());
+                // A blob is the same file whenever it is asked for.
+                if let Some(kind) = blob.as_ref().and_then(|_| FileKind::shown(&path))
+                    && let Ok(kept) = std::fs::metadata(&shown)
+                {
+                    return self.reply(id, Ok(json!({ "kind": kind, "size": kept.len(), "file": shown })));
+                }
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
-                let (sink, folder) = (self.sink.clone(), self.config.data_dir.join(SHOWN_FILES));
+                let sink = self.sink.clone();
                 tokio::spawn(async move {
-                    let request = Request::ReadFile { project_id, thread_id, path: path.clone() };
-                    let (kind, size, bytes) = match link.file(&request).await {
+                    let request = Request::ReadFile { project_id, thread_id, path: path.clone(), blob };
+                    let unfinished = shown.with_added_extension(format!("{id}.part"));
+                    let read = async {
+                        std::fs::create_dir_all(shown.parent().context("Files are kept in a folder.")?)?;
+                        link.file(&request, &unfinished).await
+                    };
+                    let (kind, size, bytes) = match read.await {
                         Ok(file) => file,
-                        Err(error) => return reply(&sink, id, Err(error_text(error))),
+                        Err(error) => {
+                            let _ = std::fs::remove_file(&unfinished);
+                            return reply(&sink, id, Err(error_text(error)));
+                        }
                     };
                     let _ = tokio::task::spawn_blocking(move || match kind {
                         FileKind::Binary => reply(&sink, id, Ok(json!({ "kind": kind, "size": size }))),
-                        FileKind::Image => {
-                            let shown = show_file(&folder, &server_id, &path, &bytes).map_err(error_text);
-                            reply(&sink, id, shown.map(|file| json!({ "kind": kind, "size": size, "file": file })));
+                        FileKind::Image | FileKind::Video => {
+                            let kept = std::fs::rename(&unfinished, &shown).map_err(|error| error.to_string());
+                            reply(&sink, id, kept.map(|_| json!({ "kind": kind, "size": size, "file": shown })));
                         }
                         FileKind::Text => {
                             let truncated = (bytes.len() as u64) < size;
@@ -1821,15 +1836,13 @@ fn activity_changed(thread_id: &str, transcript: &mut Transcript, activity: Acti
 
 /// Writes an image among a server's files where the client can read it, and answers with where
 /// that is. The same file is written to the same place.
-fn show_file(folder: &std::path::Path, server_id: &str, path: &str, bytes: &[u8]) -> anyhow::Result<String> {
+/// Where this device keeps a file it shows of a server's folder, or of one of its blobs.
+fn shown_file(folder: &std::path::Path, server_id: &str, path: &str, blob: Option<&str>) -> PathBuf {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    (server_id, path).hash(&mut hasher);
-    let extension = std::path::Path::new(path).extension().and_then(|extension| extension.to_str()).unwrap_or("png");
-    let file = folder.join(format!("{:016x}.{extension}", hasher.finish()));
-    std::fs::create_dir_all(folder)?;
-    std::fs::write(&file, bytes)?;
-    Ok(file.to_string_lossy().into_owned())
+    (server_id, path, blob).hash(&mut hasher);
+    let extension = std::path::Path::new(path).extension().and_then(|extension| extension.to_str()).unwrap_or("bin");
+    folder.join(format!("{:016x}.{extension}", hasher.finish()))
 }
 
 fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8]) -> anyhow::Result<()> {

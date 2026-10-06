@@ -1,7 +1,7 @@
 //! A patch as git writes it, read into files whose lines a client draws one under the other, and
 //! a file's text as such lines. Highlighting comes separately, a list of spans for each line.
 
-use motile_protocol::wire::Change;
+use motile_protocol::wire::{Change, FileKind};
 use serde::Serialize;
 
 use super::highlight::ByLine;
@@ -25,6 +25,13 @@ pub struct FileDiff {
     pub removed: u32,
     /// Not text, so it has no lines.
     pub binary: bool,
+    /// What a file that isn't text is shown as, when it is an image or a video, and the blob git
+    /// keeps of it: as it is, or as it was when it was deleted.
+    pub media: Option<FileKind>,
+    pub blob: Option<String>,
+    /// The blobs of the file as it was and as it is, as git names them above the hunks.
+    #[serde(skip)]
+    blobs: Option<(String, String)>,
     pub lines: Vec<String>,
     /// What each line is.
     pub kinds: Vec<u8>,
@@ -42,6 +49,9 @@ impl FileDiff {
             added: 0,
             removed: 0,
             binary: false,
+            media: None,
+            blob: None,
+            blobs: None,
             lines: Vec::new(),
             kinds: Vec::new(),
             old: Vec::new(),
@@ -117,6 +127,12 @@ pub fn parse(patch: &str) -> Vec<FileDiff> {
             }
         }
     }
+    for file in files.iter_mut().filter(|file| file.binary) {
+        file.media = FileKind::shown(&file.path);
+        let (before, after) = file.blobs.take().unzip();
+        let blob = if file.change == Change::Deleted { before } else { after };
+        file.blob = blob.filter(|blob| blob.chars().any(|digit| digit != '0'));
+    }
     files
 }
 
@@ -147,6 +163,9 @@ fn describe(file: &mut FileDiff, line: &str) {
         file.path = name(to);
     } else if line.starts_with("Binary files ") || line == "GIT binary patch" {
         file.binary = true;
+    } else if let Some(blobs) = line.strip_prefix("index ") {
+        let blobs = blobs.split(' ').next().and_then(|blobs| blobs.split_once(".."));
+        file.blobs = blobs.map(|(before, after)| (before.to_string(), after.to_string()));
     } else if let Some(path) =
         line.strip_prefix("+++ ").map(name).and_then(|path| path.strip_prefix("b/").map(String::from))
     {
@@ -265,6 +284,10 @@ index 6666666..0000000
 @@ -1,2 +0,0 @@
 -one
 ---- two
+diff --git a/demo.mp4 b/demo.mp4
+deleted file mode 100644
+index 7777777..0000000
+Binary files a/demo.mp4 and /dev/null differ
 ";
 
     #[test]
@@ -280,10 +303,14 @@ index 6666666..0000000
                 ("new name.rs", Change::Renamed, 0, 0),
                 ("logo.png", Change::Modified, 0, 0),
                 ("gone.txt", Change::Deleted, 0, 2),
+                ("demo.mp4", Change::Deleted, 0, 0),
             ]
         );
         assert_eq!(files[2].from.as_deref(), Some("old name.rs"));
         assert!(files[3].binary && files[3].lines.is_empty());
+        assert_eq!((files[3].media, files[3].blob.as_deref()), (Some(FileKind::Image), Some("5555555")));
+        assert_eq!((files[4].media, files[4].blob.as_deref()), (None, None));
+        assert_eq!((files[5].media, files[5].blob.as_deref()), (Some(FileKind::Video), Some("7777777")));
 
         let greet = &files[0];
         assert_eq!(

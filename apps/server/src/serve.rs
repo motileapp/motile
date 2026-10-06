@@ -108,8 +108,8 @@ impl Server {
                 return git_run(send, hub.clone(), project_id, run).await;
             }
             Request::Media { id } => return send_media(send, &hub.media, &id).await,
-            Request::ReadFile { project_id, thread_id, path } => {
-                return send_file(send, hub, &project_id, thread_id.as_deref(), &path).await;
+            Request::ReadFile { project_id, thread_id, path, blob } => {
+                return send_file(send, hub, &project_id, thread_id.as_deref(), &path, blob.as_deref()).await;
             }
             Request::Open { thread_id, since } => match hub.open(&thread_id, since).await {
                 Ok(subscription) => return follow_thread(send, subscription).await,
@@ -332,8 +332,9 @@ async fn send_file(
     project_id: &str,
     thread_id: Option<&str>,
     path: &str,
+    blob: Option<&str>,
 ) -> anyhow::Result<()> {
-    let (file, kind, size, sent) = match hub.open_file(project_id, thread_id, path).await {
+    let (file, kind, size, sent) = match hub.open_file(project_id, thread_id, path, blob).await {
         Ok(opened) => opened,
         Err(error) => {
             write_frame(&mut send, &Message::Error { message: error_text(&error) }).await?;

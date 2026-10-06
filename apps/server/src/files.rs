@@ -6,6 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
+use motile_protocol::media::MAX_SIZE;
 use motile_protocol::wire::{FileEntry, FileKind, Message};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
@@ -18,7 +19,6 @@ const MAX_UPLOAD: u64 = 500 * 1024 * 1024;
 /// A text is sent up to here; nobody reads more of it in a client.
 const MAX_TEXT: u64 = 1024 * 1024;
 const MAX_IMAGE: u64 = 20 * 1024 * 1024;
-const IMAGES: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "ico"];
 /// How much of a file is looked at to tell text from other data.
 const SNIFFED: usize = 8000;
 
@@ -58,26 +58,53 @@ pub async fn list_files(root: &str, path: &str, environment: &Environment) -> an
     Ok(Message::Files { entries })
 }
 
-/// The file at `path` inside `root`, what kind it is, its size and how many of its bytes to send.
-pub async fn open_file(root: &str, path: &str) -> anyhow::Result<(tokio::fs::File, FileKind, u64, u64)> {
+pub type FileBytes = Box<dyn AsyncRead + Unpin + Send>;
+
+/// The file at `path` inside `root`: its bytes, what kind it is, its size and how many of its
+/// bytes to send.
+pub async fn open_file(root: &str, path: &str) -> anyhow::Result<(FileBytes, FileKind, u64, u64)> {
     let found = inside(root, path)?;
     if !found.is_file() {
         bail!("{path} isn't a file.");
     }
     let mut file = tokio::fs::File::open(&found).await.with_context(|| format!("{path} can't be opened."))?;
     let size = file.metadata().await?.len();
-    let extension = found.extension().and_then(|extension| extension.to_str()).unwrap_or_default().to_lowercase();
-    if IMAGES.contains(&extension.as_str()) {
-        let kind = if size <= MAX_IMAGE { FileKind::Image } else { FileKind::Binary };
-        return Ok((file, kind, size, if kind == FileKind::Image { size } else { 0 }));
+    if let Some(kind) = FileKind::shown(path) {
+        let (kind, sent) = shown(kind, size);
+        return Ok((Box::new(file), kind, size, sent));
     }
     let mut start = vec![0; SNIFFED.min(size as usize)];
     file.read_exact(&mut start).await?;
     file.rewind().await?;
     if start.contains(&0) {
-        return Ok((file, FileKind::Binary, size, 0));
+        return Ok((Box::new(file), FileKind::Binary, size, 0));
     }
-    Ok((file, FileKind::Text, size, size.min(MAX_TEXT)))
+    Ok((Box::new(file), FileKind::Text, size, size.min(MAX_TEXT)))
+}
+
+/// The image or the video called `path` that git keeps as `blob`, as `open_file` answers.
+pub async fn open_blob(
+    folder: &str,
+    environment: &Environment,
+    path: &str,
+    blob: &str,
+) -> anyhow::Result<(FileBytes, FileKind, u64, u64)> {
+    let Some(kind) = FileKind::shown(path) else {
+        return Ok((Box::new(tokio::io::empty()), FileKind::Binary, 0, 0));
+    };
+    let (size, bytes) = git::read_blob(folder, environment, blob).await?;
+    let (kind, sent) = shown(kind, size);
+    Ok((Box::new(bytes), kind, size, sent))
+}
+
+/// The kind an image or a video of `size` bytes is shown as, and how many of its bytes are sent:
+/// one too large to show isn't.
+fn shown(kind: FileKind, size: u64) -> (FileKind, u64) {
+    let limit = if kind == FileKind::Video { MAX_SIZE } else { MAX_IMAGE };
+    if size > limit {
+        return (FileKind::Binary, 0);
+    }
+    (kind, size)
 }
 
 pub fn list_dir(path: Option<&str>, home: &str, icons: bool, hidden: bool) -> anyhow::Result<Message> {

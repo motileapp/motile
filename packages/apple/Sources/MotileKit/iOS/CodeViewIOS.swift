@@ -12,6 +12,8 @@ struct CodeViewRepresentable: UIViewRepresentable {
     var onOpenFile: (String) -> Void = { _ in }
     var onViewed: (String) -> Void = { _ in }
     var onComment: (CodeSheet.Place) -> Void = { _ in }
+    var onMedia: (CodeFile) -> Void = { _ in }
+    var onOpenMedia: (CodeFile) -> Void = { _ in }
 
     func makeUIView(context: Context) -> CodeView { CodeView() }
 
@@ -20,6 +22,8 @@ struct CodeViewRepresentable: UIViewRepresentable {
         view.onOpenFile = onOpenFile
         view.onViewed = onViewed
         view.onComment = onComment
+        view.onMedia = onMedia
+        view.onOpenMedia = onOpenMedia
         view.mark(marks)
         view.show(document, collapsed: collapsed)
         if let reveal { view.reveal(reveal.path, count: reveal.count) }
@@ -35,6 +39,8 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
     var onOpenFile: (String) -> Void = { _ in }
     var onViewed: (String) -> Void = { _ in }
     var onComment: (CodeSheet.Place) -> Void = { _ in }
+    var onMedia: (CodeFile) -> Void = { _ in }
+    var onOpenMedia: (CodeFile) -> Void = { _ in }
 
     private let scrollView = UIScrollView()
     private let canvas = Canvas()
@@ -63,6 +69,8 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         scrollView.addGestureRecognizer(hold)
         addInteraction(editMenu)
         NotificationCenter.default.addObserver(self, selector: #selector(coloured(_:)), name: .codeColoured, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(pictured(_:)), name: .codeMedia, object: nil)
+        sheet.wantsMedia = { [weak self] file in self?.onMedia(file) }
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in
             view.sheet.forgetLines()
             view.canvas.setNeedsDisplay()
@@ -81,6 +89,7 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         canvas.frame = bounds
         guard bounds.size != laidOut else { return }
         laidOut = bounds.size
+        _ = sheet.fit(width: bounds.width)
         fit()
         bringWantedIntoView()
         canvas.setNeedsDisplay()
@@ -103,7 +112,7 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         guard sheet.document !== document || sheet.collapsed != collapsed else { return }
         let same = sheet.document?.id == document.id
         let anchor = same ? sheet.anchor(at: scrollView.contentOffset.y) : nil
-        sheet.set(document, collapsed: collapsed)
+        sheet.set(document, collapsed: collapsed, width: bounds.width)
         fit()
         let y = anchor.map { sheet.offset(of: $0) } ?? 0
         scroll(to: CGPoint(x: same ? scrollView.contentOffset.x : 0, y: y))
@@ -141,6 +150,15 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         canvas.setNeedsDisplay()
     }
 
+    /// A picture has arrived and takes the room it needs, while what is at the top stays there.
+    @objc private func pictured(_ notification: Notification) {
+        guard let document = sheet.document, document.files.contains(where: { $0.media === notification.object as AnyObject? }) else { return }
+        let anchor = sheet.anchor(at: scrollView.contentOffset.y)
+        sheet.set(document, collapsed: sheet.collapsed, width: bounds.width)
+        fit()
+        scroll(to: CGPoint(x: scrollView.contentOffset.x, y: anchor.map { sheet.offset(of: $0) } ?? scrollView.contentOffset.y))
+    }
+
     /// Where the pinned heading of the file at the top is, in the document.
     private var pinnedHeading: (file: Int, frame: CGRect)? {
         let offset = scrollView.contentOffset
@@ -172,6 +190,9 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         }
         if sheet.document?.headed == true, let block = sheet.block(at: point.y), point.y < block.linesTop {
             return pressedHeading(of: block.file, at: point.x - left)
+        }
+        if let block = sheet.block(at: point.y), sheet.onMedia(point, of: block), let file = sheet.document?.files[block.file] {
+            return onOpenMedia(file)
         }
         if sheet.marks.commentable, sheet.inGutter(point.x - left), let place = sheet.place(at: point), sheet.commentable(place) != nil {
             return onComment(place)

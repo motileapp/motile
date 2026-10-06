@@ -493,13 +493,15 @@ pub enum Request {
         thread_id: Option<String>,
         path: String,
     },
-    /// The file at `path` in that folder. `File` answers, and the bytes follow on the same
-    /// stream.
+    /// The file at `path` in that folder, or with `blob` the one git keeps under that name, as a
+    /// diff calls it. `File` answers, and the bytes follow on the same stream.
     ReadFile {
         project_id: String,
         #[serde(default)]
         thread_id: Option<String>,
         path: String,
+        #[serde(default)]
+        blob: Option<String>,
     },
     /// Picks the model that writes thread titles, commit messages and pull requests on this
     /// server. `None` goes back to the lightest model of the thread's agent.
@@ -1201,8 +1203,22 @@ pub struct FileEntry {
 pub enum FileKind {
     Text,
     Image,
-    /// Neither: its bytes aren't sent.
+    Video,
+    /// None of them: its bytes aren't sent.
     Binary,
+}
+
+impl FileKind {
+    /// What a file is shown as by its name, when that is an image or a video.
+    pub fn shown(path: &str) -> Option<FileKind> {
+        const IMAGES: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "ico"];
+        let extension = std::path::Path::new(path).extension()?.to_str()?.to_lowercase();
+        match extension.as_str() {
+            image if IMAGES.contains(&image) => Some(FileKind::Image),
+            video if crate::media::VIDEOS.contains(&video) => Some(FileKind::Video),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -1490,8 +1506,8 @@ pub enum Message {
     Files {
         entries: Vec<FileEntry>,
     },
-    /// `sent` bytes of a file of `size` bytes follow: all of an image, and the start of a long
-    /// text.
+    /// `sent` bytes of a file of `size` bytes follow: all of an image or a video, and the start
+    /// of a long text.
     File {
         kind: FileKind,
         size: u64,
