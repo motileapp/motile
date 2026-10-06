@@ -1054,3 +1054,56 @@ struct UsageReport {
         servers = json.objects("servers").map { line($0, nil) }
     }
 }
+
+/// How much of their plans the agents' logins have used: a section for each login, a row for
+/// each of its windows, and what kept a server from saying.
+struct LimitsReport {
+    struct Section: Identifiable {
+        let agent: Agent
+        /// Said when the agent has more than one login.
+        let account: String?
+        let plan: String?
+        let servers: [String]
+        let windows: [Window]
+        /// Why there are no windows.
+        let note: String?
+
+        var id: String { "\(agent.rawValue)/\(account ?? servers.joined(separator: ","))/\(note ?? "")" }
+    }
+
+    struct Window: Identifiable {
+        enum Pace: String {
+            case ahead, on, under
+        }
+
+        let label: String
+        /// Between 0 and 100.
+        let usedPercent: Double
+        let used: String
+        let resetsIn: String?
+        let pace: Pace?
+        let warning: Bool
+        let resetCredits: Int
+
+        var id: String { label }
+    }
+
+    let sections: [Section]
+    let notes: [String]
+
+    init(json: JSON) {
+        sections = json.objects("sections").map { section in
+            Section(
+                agent: Agent(rawValue: section.string("agent")) ?? .claude, account: section.optionalString("account"),
+                plan: section.optionalString("plan"), servers: section.strings("servers"),
+                windows: section.objects("windows").map { window in
+                    Window(
+                        label: window.string("label"), usedPercent: window.double("used_percent"), used: window.string("used"),
+                        resetsIn: window.optionalString("resets_in"), pace: window.optionalString("pace").flatMap(Window.Pace.init),
+                        warning: window.bool("warning"), resetCredits: window.int("reset_credits"))
+                },
+                note: section.optionalString("note"))
+        }
+        notes = json.strings("notes")
+    }
+}

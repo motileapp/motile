@@ -10,6 +10,7 @@ struct Segmented<Value: Hashable>: View {
     private let options: [(title: String, value: Value)]
     @Binding private var selection: Value
     private let size: ControlSize
+    @Environment(\.isEnabled) private var enabled
 
     init(_ options: [(title: String, value: Value)], selection: Binding<Value>, size: ControlSize = .regular) {
         self.options = options
@@ -28,6 +29,7 @@ struct Segmented<Value: Hashable>: View {
         }
         .padding(Self.inset)
         .card(radius: size.radius + Self.inset)
+        .opacity(enabled ? 1 : 0.45)
         .animation(.easeOut(duration: 0.12), value: selection)
     }
 }

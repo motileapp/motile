@@ -104,7 +104,7 @@ extension TranscriptRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> TranscriptView { make(context.coordinator) }
 
     func updateNSView(_ view: TranscriptView, context: Context) {
-        view.isHidden = context.environment.putAway
+        view.putAway(context.environment.putAway)
         update(view)
     }
 

@@ -98,7 +98,7 @@ enum DemoDriver {
             case "threads": store.openPanel(.threads)
             case "add": store.addProject()
             case "settings": store.openSettings()
-            case "usage": store.openSettings(.usage)
+            case "usage": store.openUsage()
             case "server": store.showsAddServer = true
             case "icon": store.iconProject = store.projects.first
             case "thread": store.showsThreadSettings = true
@@ -108,6 +108,7 @@ enum DemoDriver {
             default:
                 store.closePanel()
                 store.closeSettings()
+                store.showsUsage = false
                 store.showsAddServer = false
                 store.showsThreadSettings = false
                 store.committingProject = nil

@@ -166,6 +166,7 @@ impl Server {
             Request::Usage { since, until, bucket_secs, utc_offset_secs } => {
                 hub.usage(since, until, bucket_secs, utc_offset_secs)
             }
+            Request::Limits { refresh } => Ok(hub.limits(refresh).await),
             Request::LinkPullRequest { thread_id, number } => {
                 hub.link_pull_request(&thread_id, number).await.map(|_| Message::Ok)
             }

@@ -249,7 +249,7 @@ struct ZoomableImage: NSViewRepresentable {
     }
 
     func updateNSView(_ view: ZoomingScrollView, context: Context) {
-        view.isHidden = context.environment.putAway
+        view.putAway(context.environment.putAway)
         view.keys = keys
         view.clickedBeside = clickedBeside
         view.show(image, size: size)

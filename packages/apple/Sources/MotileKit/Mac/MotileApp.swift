@@ -60,7 +60,7 @@ struct MotileApp: App {
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Close") {
-                    if store.settings != nil { return store.closeSettings() }
+                    if store.settings != nil || store.showsUsage { return store.closeRoute() }
                     if !store.sidePanel.closeActive() { NSApp.keyWindow?.performClose(nil) }
                 }
                 .keyboardShortcut("w")
@@ -71,6 +71,8 @@ struct MotileApp: App {
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") { store.openSettings() }
                     .keyboardShortcut(",")
+                Button("Usage") { store.openUsage() }
+                    .disabled(!store.account.signedIn)
             }
             CommandGroup(replacing: .newItem) {
                 Button("New Thread…") { store.newThread() }
@@ -132,7 +134,7 @@ struct RootView: View {
                 ConnectServerView(isFirst: true)
             } else {
                 MainView()
-                    .putAway(store.settings != nil)
+                    .putAway(store.settings != nil || store.showsUsage)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -144,13 +146,16 @@ struct RootView: View {
             if let section = store.settings {
                 SettingsRoute(section: section)
                     .appearing()
+            } else if store.showsUsage {
+                UsageRoute()
+                    .appearing()
             }
         }
-        .animation(.easeOut(duration: 0.15), value: store.settings != nil)
+        .animation(.easeOut(duration: 0.15), value: store.settings != nil || store.showsUsage)
         .toolbar {
-            if store.settings != nil {
+            if store.settings != nil || store.showsUsage {
                 ToolbarItem(placement: .navigation) {
-                    ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost) { store.closeSettings() }
+                    ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost) { store.closeRoute() }
                         .keyboardShortcut(.cancelAction)
                 }
                 .withoutSystemGlass()
@@ -281,7 +286,7 @@ struct MainView: View {
                     .padding(.trailing, Self.panelButtonsInset)
             }
             .toolbar {
-                if store.settings == nil {
+                if store.settings == nil && !store.showsUsage {
                     ToolbarItem(placement: .navigation) {
                         HStack(spacing: 0) {
                             ToolbarButton(symbol: .panelLeft, help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {

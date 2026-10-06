@@ -1,41 +1,11 @@
 import Charts
 import SwiftUI
 
-/// What the agents spent on the account's servers, the Usage page of the settings: a line for
-/// each agent over time, and what each model, project, server and kind of token took.
-struct UsageView: View {
-    private enum Period: String, CaseIterable, Identifiable {
-        case day, week, month, quarter
-
-        var id: Self { self }
-
-        var label: String {
-            switch self {
-            case .day: "24 hours"
-            case .week: "7 days"
-            case .month: "30 days"
-            case .quarter: "90 days"
-            }
-        }
-
-        var bucketSeconds: Int { self == .day ? 3600 : 86400 }
-
-        var buckets: Int {
-            switch self {
-            case .day: 24
-            case .week: 7
-            case .month: 30
-            case .quarter: 90
-            }
-        }
-    }
-
-    private enum Measure: String, CaseIterable, Identifiable {
-        case cost, tokens
-
-        var id: Self { self }
-        var label: String { self == .cost ? "Cost" : "Tokens" }
-    }
+/// What the agents spent on the servers counted, the Cost and Tokens tabs of the usage route:
+/// the total and each agent's part beside a line for each agent over time, then what each model,
+/// project, server and kind of token took.
+struct SpendingView: View {
+    enum Measure { case cost, tokens }
 
     private enum Breakdown: String, CaseIterable, Identifiable {
         case models, projects, servers, kinds
@@ -52,12 +22,16 @@ struct UsageView: View {
         }
     }
 
+    /// Narrower than this, the chart goes under the totals.
+    private static let besideWidth: CGFloat = 640
+
     @Environment(AppStore.self) private var store
-    @AppStorage("usage.period") private var period = Period.week
-    @AppStorage("usage.measure") private var measure = Measure.cost
+    let report: UsageReport
+    let measure: Measure
+    let period: UsageModel.Period
     @AppStorage("usage.breakdown") private var breakdown = Breakdown.models
-    @State private var report: Loaded<UsageReport> = .loading
     @State private var pointed: Date?
+    @State private var width: CGFloat = 0
 
     /// The servers from before usage was kept.
     private var outdated: [Server] {
@@ -65,31 +39,21 @@ struct UsageView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    periods
-                    Spacer(minLength: 12)
-                    measures
+        VStack(alignment: .leading, spacing: 24) {
+            if report.tokens == 0 {
+                UsageNote(text: "Nothing was spent in this time. Your servers keep what their agents spend from the version that shows this on.")
+            } else {
+                if width >= Self.besideWidth {
+                    HStack(alignment: .top, spacing: 28) {
+                        summary
+                            .frame(width: 240, alignment: .leading)
+                        chart
+                    }
+                } else {
+                    summary
+                    chart
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    periods
-                    measures
-                }
-            }
-            switch report {
-            case .loading:
-                Spinner()
-                    .foregroundStyle(Color.themeSecondary)
-                    .frame(maxWidth: .infinity, minHeight: 240)
-            case .failed(let message):
-                note(message)
-            case .ready(let report) where report.tokens == 0:
-                note("Nothing was spent in this time. Your servers keep what their agents spend from the version that shows this on.")
-            case .ready(let report):
-                summary(report)
-                chart(report)
-                lines(report)
+                lines
             }
             ForEach(outdated) { server in
                 Text("Update \(server.name) to see what its agents spend.")
@@ -97,45 +61,17 @@ struct UsageView: View {
                     .foregroundStyle(Color.themeSecondary)
             }
         }
-        .onAppear(perform: load)
-        .onChange(of: period) { load() }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onChange(of: period) { pointed = nil }
     }
 
-    private var periods: some View {
-        Segmented(Period.allCases.map { ($0.label, $0) }, selection: $period)
-    }
-
-    private var measures: some View {
-        Segmented(Measure.allCases.map { ($0.label, $0) }, selection: $measure)
-    }
-
-    private func load() {
-        let asked = period
-        report = .loading
-        pointed = nil
-        store.loadUsage(bucketSeconds: asked.bucketSeconds, buckets: asked.buckets) { result in
-            guard asked == period else { return }
-            switch result {
-            case .success(let loaded): report = .ready(loaded)
-            case .failure(let error): report = .failed(error.message)
-            }
-        }
-    }
-
-    private func note(_ text: String) -> some View {
-        Text(text)
-            .font(.ui(size: 12))
-            .foregroundStyle(Color.themeSecondary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity, minHeight: 240)
-    }
-
-    private func summary(_ report: UsageReport) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(measure == .cost ? Self.cost(report.costUSD) : Self.count(report.tokens))
-                    .font(.ui(size: 26, weight: .semibold))
+                    .font(.ui(size: 28, weight: .semibold))
                     .foregroundStyle(Color.themeText)
+                    .monospacedDigit()
                 Text(measure == .cost ? "What the API would have charged" : "Tokens in and out")
                     .font(.caption)
                     .foregroundStyle(Color.themeSecondary)
@@ -147,22 +83,56 @@ struct UsageView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if measure == .cost && report.unpricedTokens > 0 {
-                    Text("Without \(Self.count(report.unpricedTokens)) tokens of models whose price isn't known")
+                    Text("Without \(Self.count(report.unpricedTokens)) tokens of models whose price isn’t known")
                         .font(.caption)
                         .foregroundStyle(Color.themeTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer(minLength: 12)
-            if report.cacheSavingsUSD > 0 {
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text(Self.cost(report.cacheSavingsUSD))
-                        .font(.ui(size: 13, weight: .medium))
-                        .foregroundStyle(Color.themeText)
-                    Text("Saved by the cache")
-                        .font(.caption)
-                        .foregroundStyle(Color.themeSecondary)
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(report.agents) { series in
+                    agentLine(series)
+                }
+                if report.cacheSavingsUSD > 0 {
+                    HStack {
+                        Text("Saved by the cache")
+                            .foregroundStyle(Color.themeSecondary)
+                        Spacer(minLength: 8)
+                        Text(Self.cost(report.cacheSavingsUSD))
+                            .foregroundStyle(Color.themeText)
+                            .monospacedDigit()
+                    }
+                    .font(.ui(size: 12))
                 }
             }
+        }
+    }
+
+    /// An agent's part: what it spent, and its share of the whole with the other measure.
+    private func agentLine(_ series: UsageReport.Series) -> some View {
+        let whole = measure == .cost ? report.costUSD : Double(report.tokens)
+        let part = measure == .cost ? series.costUSD : Double(series.tokens)
+        let share = whole > 0 ? part / whole : 0
+        let other = measure == .cost ? "\(Self.count(series.tokens)) tokens" : Self.cost(series.costUSD)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(Self.color(of: series.agent))
+                    .frame(width: 8, height: 8)
+                AgentIcon(agent: series.agent, size: 14)
+                Text(series.agent.name)
+                    .foregroundStyle(Color.themeText)
+                Spacer(minLength: 8)
+                Text(amount(part))
+                    .foregroundStyle(Color.themeText)
+                    .monospacedDigit()
+            }
+            .font(.ui(size: 12))
+            Text("\(share.formatted(.percent.precision(.fractionLength(0...1)))) of \(measure == .cost ? "the cost" : "the tokens") · \(other)")
+                .font(.ui(size: 11))
+                .foregroundStyle(Color.themeTertiary)
+                .monospacedDigit()
+                .padding(.leading, 15)
         }
     }
 
@@ -176,8 +146,8 @@ struct UsageView: View {
     }
 
     /// The agents with what each spent: in all, or at the time the pointer is over.
-    private func legend(_ report: UsageReport) -> some View {
-        let index = pointedIndex(in: report)
+    private var legend: some View {
+        let index = pointedIndex
         return HStack(spacing: 14) {
             ForEach(report.agents) { series in
                 HStack(spacing: 6) {
@@ -201,9 +171,9 @@ struct UsageView: View {
         .font(.ui(size: 12))
     }
 
-    private func chart(_ report: UsageReport) -> some View {
+    private var chart: some View {
         VStack(alignment: .leading, spacing: 10) {
-            legend(report)
+            legend
             Chart {
                 ForEach(report.agents) { series in
                     ForEach(Array(report.starts.enumerated()), id: \.offset) { index, start in
@@ -217,7 +187,7 @@ struct UsageView: View {
                             .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     }
                 }
-                if let index = pointedIndex(in: report) {
+                if let index = pointedIndex {
                     RuleMark(x: .value("Time", report.starts[index]))
                         .foregroundStyle(Color.themeBorderSecondary)
                         .lineStyle(StrokeStyle(lineWidth: 1))
@@ -248,13 +218,13 @@ struct UsageView: View {
         }
     }
 
-    private func pointedIndex(in report: UsageReport) -> Int? {
+    private var pointedIndex: Int? {
         guard let pointed, !report.starts.isEmpty else { return nil }
         let nearest = report.starts.enumerated().min { abs($0.element.timeIntervalSince(pointed)) < abs($1.element.timeIntervalSince(pointed)) }
         return nearest?.offset
     }
 
-    private func lines(_ report: UsageReport) -> some View {
+    private var lines: some View {
         let shown: [UsageReport.Line] =
             switch breakdown {
             case .models: report.models
@@ -266,7 +236,7 @@ struct UsageView: View {
             Segmented(Breakdown.allCases.map { ($0.label, $0) }, selection: $breakdown)
             VStack(spacing: 0) {
                 ForEach(shown) { line in
-                    UsageLineRow(line: line, measure: measure == .cost ? .cost : .tokens)
+                    UsageLineRow(line: line, measure: measure)
                     if line.id != shown.last?.id {
                         ThemeDivider()
                     }
@@ -294,10 +264,9 @@ struct UsageView: View {
 /// tokens and what they cost.
 private struct UsageLineRow: View {
     @Environment(\.surface) private var surface
-    enum Measure { case cost, tokens }
 
     let line: UsageReport.Line
-    let measure: Measure
+    let measure: SpendingView.Measure
     private static let barWidth: CGFloat = 72
 
     var body: some View {
@@ -316,7 +285,7 @@ private struct UsageLineRow: View {
         HStack(spacing: 10) {
             if let agent = line.agent {
                 Circle()
-                    .fill(UsageView.color(of: agent))
+                    .fill(SpendingView.color(of: agent))
                     .frame(width: 8, height: 8)
             }
             Text(line.name)
@@ -342,10 +311,10 @@ private struct UsageLineRow: View {
                             .frame(width: Self.barWidth * min(max(line.share, 0), 1), height: 4)
                     }
             }
-            Text(UsageView.count(line.tokens))
+            Text(SpendingView.count(line.tokens))
                 .foregroundStyle(measure == .tokens ? Color.themeText : Color.themeSecondary)
                 .frame(width: scaled(64), alignment: .trailing)
-            Text(line.costUSD.map(UsageView.cost) ?? "No price")
+            Text(line.costUSD.map(SpendingView.cost) ?? "No price")
                 .foregroundStyle(measure == .cost && line.costUSD != nil ? Color.themeText : Color.themeSecondary)
                 .frame(width: scaled(72), alignment: .trailing)
         }

@@ -2,7 +2,7 @@ import Foundation
 
 /// A page of the settings, listed in the settings' sidebar.
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case general, servers, projects, textGeneration, pullRequests, usage
+    case general, servers, projects, textGeneration, pullRequests
 
     var id: String { rawValue }
 
@@ -13,7 +13,6 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .projects: "Projects"
         case .textGeneration: "Text generation"
         case .pullRequests: "Pull requests"
-        case .usage: "Usage"
         }
     }
 
@@ -24,7 +23,6 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .projects: .folder
         case .textGeneration: .pencilLine
         case .pullRequests: .gitPullRequest
-        case .usage: .chartColumn
         }
     }
 }
@@ -51,7 +49,6 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "branch-names", title: "Branch names", section: .textGeneration, keywords: "instructions prefix naming"),
         SettingsEntry(id: "merged", title: "Mark the thread done after merge or close", section: .pullRequests, keywords: "merge close finished"),
         SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),
-        SettingsEntry(id: "usage", title: "Tokens and cost", section: .usage, keywords: "spent price models chart"),
     ]
 
     /// The groups every word of the query is found in, by title, section or keywords.

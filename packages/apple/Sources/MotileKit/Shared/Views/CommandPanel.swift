@@ -547,7 +547,10 @@ struct CommandPanel: View {
         let settings = PanelItem(id: "settings", title: "Settings…", detail: "Appearance, servers and projects", icon: .symbol(.settings)) {
             store.openSettings()
         }
-        return serverUpdates + always + appUpdate + [settings]
+        let usage = PanelItem(id: "usage", title: "Usage", detail: "Limits, cost and tokens", icon: .symbol(.chartColumn)) {
+            store.openUsage()
+        }
+        return serverUpdates + always + appUpdate + [settings, usage]
     }
 
     /// The Mac app updates itself; the others are updated by where they came from.

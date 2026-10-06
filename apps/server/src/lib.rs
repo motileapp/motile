@@ -8,6 +8,7 @@ pub mod git;
 pub mod github;
 pub mod hub;
 pub mod icons;
+pub mod limits;
 pub mod linear;
 pub mod media;
 pub mod pacing;

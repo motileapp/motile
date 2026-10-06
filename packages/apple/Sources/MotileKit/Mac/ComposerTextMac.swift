@@ -97,7 +97,7 @@ struct ComposerTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        scroll.isHidden = context.environment.putAway
+        scroll.putAway(context.environment.putAway)
         guard let view = scroll.documentView as? ComposerNSTextView else { return }
         context.coordinator.parent = self
         view.onSubmit = onSubmit

@@ -93,6 +93,9 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   result and Codex what each answer took.
 - `pricing.rs`: what the models cost at the API's prices, fetched from LiteLLM's list once a day,
   to say what the tokens Codex spent would have cost. Claude Code says what its own cost.
+- `limits.rs`: how much of their plans the agents' logins have used, as their CLIs say without
+  spending tokens: `codex app-server` answers `account/rateLimits/read` and Claude Code the
+  `get_usage` control request. `hub.rs` keeps the answer for five minutes.
 - `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),
   snapshots and patches.
 - `pull_requests.rs`: what GitHub says of a pull request (one `gh api graphql` read), the
@@ -140,6 +143,8 @@ for tests.
 - `browse.rs`: browsing a server's folders by typing a path.
 - `usage.rs`: what the agents spent on every server, added up for the usage view: a series for
   each agent, and the models, projects and kinds of token.
+- `limits.rs`: the Limits tab of the usage view: a section for each login, shown once however
+  many servers share it, and a row for each window with when it starts over and its pace.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
 - `api.rs`: the JSON the client and the core exchange.
@@ -169,10 +174,14 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   `InputField`. Their sizes are `ControlSize` and their corners `Radius`, in `Theme.swift`.
 - `Shared/Views/CommandPanel.swift`: the panel behind ⌘K, ⌘N and ⌘P, a sheet on iOS.
 - `Shared/Views/Settings`: the settings, a route over the whole client with a way back: the
-  sections and a search of their groups in a sidebar (`SettingsSidebar.swift`), the open
-  section's page (`SettingsPage.swift`), and `UsageView.swift`, the Usage section: a chart of
-  cost or tokens by agent, and the models, projects and kinds of token under it. The Mac lays
-  them out in `Mac/SettingsRoute.swift`, iOS in `iOS/SettingsSheet.swift`, a sheet.
+  sections and a search of their groups in a sidebar (`SettingsSidebar.swift`) and the open
+  section's page (`SettingsPage.swift`). The Mac lays them out in `Mac/SettingsRoute.swift`, iOS
+  in `iOS/SettingsSheet.swift`, a sheet.
+- `Shared/Views/Usage`: the usage, a route of its own opened from the sidebar's footer, with the
+  servers it counts picked in its title. `UsageView.swift` holds its tabs and what they read,
+  `LimitsView.swift` is the Limits tab, what the agents' plans have used, and `SpendingView.swift`
+  the Cost and Tokens tabs: a chart by agent and the models, projects and kinds of token under it.
+  The Mac lays it out in `Mac/UsageRoute.swift`, iOS in `iOS/UsageSheet.swift`.
 - `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
   requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
   `LineCommentSheet.swift`, `PullRequestParts.swift`) and Linear (`LinearView.swift`).
