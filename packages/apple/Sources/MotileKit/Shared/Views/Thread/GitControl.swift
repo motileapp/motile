@@ -224,10 +224,10 @@ struct GitNoticeView: View {
 
     private static let radius = Radius.sheet
     private static let padding: CGFloat = 14
-    private static let closeSize = ControlSize.small.height
-    /// The close button is this far from the top and the right.
-    private static let closeMargin: CGFloat = 8
+    private static let closeSize = ControlSize.regular.height
     private static let titleHeight: CGFloat = scaled(16)
+    /// Centres the close button on a notice of one line, as far from its right as from its top and bottom.
+    private static let closeMargin = (padding * 2 + titleHeight - closeSize) / 2
 
     var body: some View {
         let url = notice.url.flatMap { URL(string: $0) }
@@ -278,7 +278,7 @@ struct GitNoticeView: View {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
-            ActionButton(icon: .x, help: "Close", size: .small) { store.dismissGitNotice() }
+            ActionButton(icon: .x, help: "Close", symbolSize: ControlSize.regular.smallSymbol) { store.dismissGitNotice() }
                 .padding(Self.closeMargin)
         }
         .environment(\.surface, .popover)
