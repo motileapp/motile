@@ -78,7 +78,7 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(undo.waitForNonExistence(timeout: 3))
     }
 
-    func testSettingsOpenInASheetWhoseSectionsPushAndDoneTakesThemAway() {
+    func testSettingsOpenInASheetWhoseSectionsPushAndCloseTakesThemAway() {
         app.swipeRight()
         XCTAssertTrue(shown(newThread))
         app.buttons["Account"].tap()
@@ -89,7 +89,7 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(shown(app.navigationBars["Usage"]))
         swipeFromTheEdge()
         XCTAssertTrue(shown(title))
-        app.buttons["Done"].tap()
+        app.buttons["Close"].tap()
         XCTAssertTrue(title.waitForNonExistence(timeout: 3))
         XCTAssertTrue(shown(newThread))
     }
