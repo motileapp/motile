@@ -622,7 +622,7 @@ struct ThreadStatus: View {
         } else if thread.running {
             HStack(spacing: 8) {
                 if thread.agents > 0 {
-                    label("\(thread.agents)", Color.themeWorking) {
+                    label("\(thread.agents)", Color.themeAgents) {
                         symbol(.users)
                     }
                     .help(thread.agents == 1 ? "1 agent is working" : "\(thread.agents) agents are working")
