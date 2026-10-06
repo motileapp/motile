@@ -30,7 +30,7 @@ struct Cli {
 enum CliCommand {
     /// Checks for agents, links this machine to your account and starts the service.
     Setup {
-        /// The token from the install command the client shows. Not needed once linked.
+        /// The code from the install command the client shows. Not needed once linked.
         token: Option<String>,
         #[arg(long, env = "MOTILE_AUTH_URL", default_value = DEFAULT_AUTH_URL)]
         auth_url: String,
@@ -123,7 +123,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         None => None,
     };
     if account.is_none() && allow_keys.is_empty() {
-        tracing::warn!("this server isn't linked to an account, so no client may connect; run `motile setup <token>`");
+        tracing::warn!("this server isn't linked to an account, so no client may connect; run `motile setup <code>`");
     }
     let access = Access::new(allow_keys, account);
     access.keep_fresh();

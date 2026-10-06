@@ -71,6 +71,7 @@ pub struct Session {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct EnrollToken {
+    /// The code in the command: 8 characters of A-Z and 0-9, good for 15 minutes.
     pub token: String,
     pub expires_at: f64,
     /// The one command to run on the server.

@@ -94,6 +94,26 @@ pub fn random_token() -> String {
     hex::encode(bytes)
 }
 
+const INSTALL_CODE_ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+pub const INSTALL_CODE_LENGTH: usize = 8;
+
+/// The short code in an install command: 8 characters of A-Z and 0-9, each drawn evenly.
+pub fn random_install_code() -> String {
+    let fair_limit = u8::MAX - u8::MAX % INSTALL_CODE_ALPHABET.len() as u8;
+    let mut code = String::with_capacity(INSTALL_CODE_LENGTH);
+    while code.len() < INSTALL_CODE_LENGTH {
+        let mut bytes = [0u8; INSTALL_CODE_LENGTH];
+        getrandom::fill(&mut bytes).expect("the OS provides randomness");
+        for byte in bytes.into_iter().filter(|byte| *byte < fair_limit) {
+            if code.len() == INSTALL_CODE_LENGTH {
+                break;
+            }
+            code.push(INSTALL_CODE_ALPHABET[byte as usize % INSTALL_CODE_ALPHABET.len()] as char);
+        }
+    }
+    code
+}
+
 pub fn sha256_hex(input: &[u8]) -> String {
     hex::encode(Sha256::digest(input))
 }
@@ -152,6 +172,16 @@ pub fn verify_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_install_code_is_eight_capitals_or_digits() {
+        for _ in 0..100 {
+            let code = random_install_code();
+            assert_eq!(code.len(), INSTALL_CODE_LENGTH);
+            assert!(code.bytes().all(|byte| INSTALL_CODE_ALPHABET.contains(&byte)), "{code}");
+        }
+        assert_ne!(random_install_code(), random_install_code());
+    }
 
     #[test]
     fn signed_request_is_accepted_only_as_sent() {

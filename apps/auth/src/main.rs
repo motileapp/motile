@@ -5,9 +5,11 @@ mod db;
 mod e2e;
 mod error;
 mod google;
+mod limits;
 mod pages;
 mod sign_in;
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -25,6 +27,7 @@ pub struct Inner {
     pub config: Config,
     pub db: sqlx::PgPool,
     pub http: reqwest::Client,
+    pub enroll_failures: limits::EnrollFailures,
 }
 
 pub type AppState = Arc<Inner>;
@@ -78,7 +81,7 @@ async fn main() {
     let db = PgPoolOptions::new().max_connections(10).connect(&config.database_url).await.expect("connect to Postgres");
     sqlx::migrate!().run(&db).await.expect("run migrations");
     let http = reqwest::Client::builder().timeout(Duration::from_secs(15)).build().expect("HTTP client");
-    let state = Arc::new(Inner { config, db, http });
+    let state = Arc::new(Inner { config, db, http, enroll_failures: Default::default() });
 
     let cleanup_state = state.clone();
     tokio::spawn(async move {
@@ -94,5 +97,6 @@ async fn main() {
     let address = format!("0.0.0.0:{}", state.config.port);
     let listener = tokio::net::TcpListener::bind(&address).await.expect("bind port");
     tracing::info!("Motile auth listening on {address} as {}", state.config.public_url);
-    axum::serve(listener, router(state)).with_graceful_shutdown(shutdown_signal()).await.expect("server");
+    let service = router(state).into_make_service_with_connect_info::<SocketAddr>();
+    axum::serve(listener, service).with_graceful_shutdown(shutdown_signal()).await.expect("server");
 }

@@ -2,15 +2,17 @@
 //! key; the requests that link one prove the key with a signature over what they redeem. The web
 //! client sends the token of the session a person signed in to.
 
+use std::net::SocketAddr;
+
 use axum::Json;
 use axum::body::Bytes;
-use axum::extract::{Path, State};
+use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use motile_protocol::auth_api::{
     DevLoginRequest, DevLoginResponse, DeviceKind, EnrollRequest, EnrollResponse, EnrollToken, ExchangeRequest, Me,
     Session, SessionRequest, enroll_message, link_message,
 };
-use motile_protocol::identity::{is_public_key, random_token, sha256_hex, verify, verify_request};
+use motile_protocol::identity::{is_public_key, random_install_code, random_token, sha256_hex, verify, verify_request};
 use motile_protocol::now;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -18,7 +20,7 @@ use uuid::Uuid;
 use crate::db::{NewSignIn, UserRow};
 use crate::error::{AppError, AppResult};
 use crate::google::Identity;
-use crate::{AppState, db};
+use crate::{AppState, db, limits};
 
 const MAX_NAME_CHARS: usize = 100;
 
@@ -167,8 +169,14 @@ pub async fn create_enroll_token(
             user
         }
     };
-    let token = random_token();
-    let expires_at = db::create_enroll_token(&state.db, user.id, &sha256_hex(token.as_bytes())).await?;
+    let (token, expires_at) = loop {
+        let token = random_install_code();
+        match db::create_enroll_token(&state.db, user.id, &sha256_hex(token.as_bytes())).await {
+            Ok(expires_at) => break (token, expires_at),
+            Err(sqlx::Error::Database(error)) if error.is_unique_violation() => continue,
+            Err(error) => return Err(error.into()),
+        }
+    };
     Ok(Json(EnrollToken {
         command: state.config.install_command(&token),
         token,
@@ -178,21 +186,34 @@ pub async fn create_enroll_token(
 
 pub async fn enroll(
     State(state): State<AppState>,
+    ConnectInfo(connection): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(request): Json<EnrollRequest>,
 ) -> AppResult<Json<EnrollResponse>> {
+    let address = limits::caller_address(&headers, connection);
+    if state.enroll_failures.blocked(address) {
+        return Err(AppError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many install commands failed from this address. Try again in 15 minutes.",
+        ));
+    }
     if !is_public_key(&request.public_key) {
         return Err(AppError::bad_request("That isn't a device key."));
     }
     if !verify(&request.public_key, &enroll_message(&request.token), &request.signature) {
         return Err(AppError::unauthorized("The device's signature doesn't match."));
     }
-    let token_hash = sha256_hex(request.token.as_bytes());
+    // The code is shown in capitals but may have been typed in small letters.
+    let token_hash = sha256_hex(request.token.trim().to_ascii_uppercase().as_bytes());
     let expired = || {
         AppError::bad_request(
             "This install command has expired or was used on another machine. Copy a new one from a client.",
         )
     };
-    let user_id = db::use_enroll_token(&state.db, &token_hash, &request.public_key).await?.ok_or_else(expired)?;
+    let Some(user_id) = db::use_enroll_token(&state.db, &token_hash, &request.public_key).await? else {
+        state.enroll_failures.record(address);
+        return Err(expired());
+    };
     let user = db::user_by_id(&state.db, user_id).await?.ok_or_else(expired)?;
 
     let name = clean(&request.name, "Server");

@@ -2,7 +2,7 @@ use std::env;
 
 use motile_protocol::DEFAULT_AUTH_URL;
 
-const DEFAULT_INSTALL_URL: &str = "https://motile.app/install.sh";
+const DEFAULT_INSTALL_URL: &str = "https://motile.app/i";
 
 pub struct Config {
     pub public_url: String,
@@ -14,7 +14,7 @@ pub struct Config {
     pub google_token_url: String,
     /// Lets anyone sign in as any address without Google. For tests and local work only.
     pub dev_login: bool,
-    /// The installer the install command runs (`apps/marketing/public/install.sh`).
+    /// The installer the install command runs (`apps/marketing/public/i`).
     pub install_url: String,
     /// The web app's address. Sign-ins it starts end at its `/auth/callback`; without it there
     /// are none.
@@ -88,12 +88,12 @@ mod tests {
     #[test]
     fn the_install_command_names_the_auth_server_only_when_it_is_not_motiles() {
         assert_eq!(
-            config("https://auth.motile.app").install_command("token"),
-            "curl -fsSL https://motile.app/install.sh | sh -s -- token"
+            config("https://auth.motile.app").install_command("ABCD1234"),
+            "curl -fsSL https://motile.app/i | sh -s -- ABCD1234"
         );
         assert_eq!(
-            config("https://auth.example.com").install_command("token"),
-            "curl -fsSL https://motile.app/install.sh | MOTILE_AUTH_URL=https://auth.example.com sh -s -- token"
+            config("https://auth.example.com").install_command("ABCD1234"),
+            "curl -fsSL https://motile.app/i | MOTILE_AUTH_URL=https://auth.example.com sh -s -- ABCD1234"
         );
     }
 }
