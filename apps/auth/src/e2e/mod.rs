@@ -7,6 +7,7 @@ mod web;
 mod whole;
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use axum::routing::post;
@@ -24,7 +25,7 @@ use crate::{Inner, google, router};
 
 const GOOGLE_CLIENT_ID: &str = "google-client";
 const WEB_URL: &str = "https://app.example.com";
-const INSTALL_URL: &str = "https://example.com/install.sh";
+const INSTALL_URL: &str = "https://example.com/i";
 const MAC: DeviceDescription<'static> = DeviceDescription { name: "Ann's Mac", platform: "macos" };
 const LINUX: DeviceDescription<'static> = DeviceDescription { name: "build-box", platform: "linux" };
 
@@ -76,8 +77,14 @@ impl Auth {
             web_url: Some(WEB_URL.into()),
         };
         configure(&mut config);
-        let state = Arc::new(Inner { config, db: db.clone(), http: reqwest::Client::new() });
-        tokio::spawn(async move { axum::serve(listener, router(state)).await.unwrap() });
+        let state = Arc::new(Inner {
+            config,
+            db: db.clone(),
+            http: reqwest::Client::new(),
+            enroll_failures: Default::default(),
+        });
+        let service = router(state).into_make_service_with_connect_info::<SocketAddr>();
+        tokio::spawn(async move { axum::serve(listener, service).await.unwrap() });
 
         let http = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build().unwrap();
         Self { client: AuthClient::new(&base), base, db, http, google_account, google_nonce }

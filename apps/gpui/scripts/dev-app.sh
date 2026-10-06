@@ -3,7 +3,8 @@
 # with the dev login, and a local server whose agent is scripts/fake-agent, with a project and a
 # few threads. All of it is kept in build/dev and left running, so the next run only builds what
 # changed and restarts what was rebuilt. Its ports are apart from those of the Mac app's dev
-# stack, so both can run at once; set MOTILE_DEV_PORTS="pg auth server" to pick others.
+# stack, so both can run at once; set MOTILE_DEV_PORTS="pg auth server linear" to pick others.
+# GitHub is scripts/fake-gh and Linear scripts/fake-linear, as in the Mac app's dev stack.
 #
 #   scripts/dev-app.sh           build, start what isn't running, open the app
 #   scripts/dev-app.sh --mac     the same, and the Mac app on the same account, to compare
@@ -15,7 +16,7 @@ ROOT="$(cd ../.. && pwd)"
 BIN="$ROOT/target/release"
 DEV="$PWD/build/dev"
 PROJECT="$DEV/api"
-read -r PG_PORT AUTH_PORT SERVER_PORT <<< "${MOTILE_DEV_PORTS:-5483 3159 47683}"
+read -r PG_PORT AUTH_PORT SERVER_PORT LINEAR_PORT <<< "${MOTILE_DEV_PORTS:-5483 3159 47683 3312}"
 AUTH_URL="http://127.0.0.1:$AUTH_PORT"
 mkdir -p "$DEV"
 
@@ -54,6 +55,7 @@ if [ "${1:-}" = "--stop" ]; then
     stop app
     stop mac
     stop server
+    stop linear
     stop auth
     [ -d "$DEV/pg" ] && pg_ctl -D "$DEV/pg" stop -m fast >/dev/null 2>&1 || true
     exit 0
@@ -103,14 +105,28 @@ if [ ! -d "$DEV/server" ]; then
     mv "$DEV/server.new" "$DEV/server"
 fi
 
+if ! current linear "$ROOT/scripts/fake-linear"; then
+    stop linear
+    FAKE_LINEAR_STATE="$DEV/linear.json" nohup "$ROOT/scripts/fake-linear" "$LINEAR_PORT" > "$DEV/linear.log" 2>&1 &
+    started linear $! "$ROOT/scripts/fake-linear"
+fi
+
 if ! current server "$BIN/motile"; then
     echo "▸ Starting the server…"
     stop server
-    MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
-        FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6 \
+    MOTILE_LINEAR_URL="http://127.0.0.1:$LINEAR_PORT" MOTILE_DATA_DIR="$DEV/server" \
+        MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
+        MOTILE_GH_PATH="$ROOT/scripts/fake-gh" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6 \
         nohup "$BIN/motile" run --local --port "$SERVER_PORT" > "$DEV/server.log" 2>&1 &
     started server $! "$BIN/motile"
 fi
+
+# The server starts out connected to the stand-in's workspace.
+grant='[{"access_token":"dev","refresh_token":"dev","expires_at":4102444800,"connection":{"id":"motile","workspace":"Motile","user":"Demo"}}]'
+for _ in $(seq 1 50); do
+    sqlite3 "$DEV/server/motile.sqlite" "INSERT OR IGNORE INTO settings (name, value) VALUES ('linear', '$grant')" 2>/dev/null && break
+    sleep 0.2
+done
 
 if [ ! -d "$DEV/app" ]; then
     echo "▸ Signing in and making the threads…"
@@ -123,6 +139,11 @@ SVG
     git -C "$PROJECT" -c user.name=Dev -c user.email=demo@motile.app add -A
     git -C "$PROJECT" -c user.name=Dev -c user.email=demo@motile.app commit -q -m "Start"
     git -C "$PROJECT" branch release
+    # A remote of its own, so branches can be pushed and opened as pull requests.
+    git init -q --bare -b main "$DEV/origin.git"
+    git -C "$PROJECT" remote add origin "$DEV/origin.git"
+    git -C "$PROJECT" push -q -u origin main release
+    git -C "$PROJECT" remote set-head origin main
     rm -rf "$DEV/app.new"
     (cd "$ROOT" && cargo run --release -q -p motile-core --example seed -- "$DEV/app.new" "$AUTH_URL" "$PROJECT")
     mv "$DEV/app.new" "$DEV/app"

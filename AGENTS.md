@@ -11,7 +11,7 @@ These programs make it up, plus the code the clients share:
 | Program | Where it runs | What it does |
 | --- | --- | --- |
 | Auth server (`apps/auth`) | auth.motile.app | Signs people in with Google, records which devices belong to an account |
-| Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/install.sh` |
+| Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/i` |
 | Web app (`apps/web`) | app.motile.app | Lists an account's servers and clients, adds servers, removes devices |
 | Server (`apps/server`, the `motile` binary) | The user's Linux machines and Macs | Runs the agents, stores threads in SQLite, serves the account's clients |
 | Mac app (`apps/macos`) | The user's Mac | The interface |
@@ -69,7 +69,7 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   Dark is the default; the theme switch keeps the choice in a cookie on motile.app, which both
   read.
 - `apps/marketing` ships no JavaScript but the theme switch and the demo: `src/components/demo`
-  is the Mac app's window in React, with made-up threads. `public/install.sh` is the installer.
+  is the Mac app's window in React, with made-up threads. `public/i` is the installer, and `public/install.sh` its old address.
   `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
   `scripts/preview.mjs` draws the link preview image of both from the `/preview/` page, the
   tagline over the demo: `pnpm --filter motile-marketing preview-image`. Run it when the demo
@@ -200,15 +200,24 @@ a Rust library, and its data folder is `Motile GPUI`, so it is a device of its o
 Mac app.
 
 - `bridge.rs`: runs the core and prepares a transcript's rows off the main thread. `store/` is
-  the state the views show, as `AppStore.swift` is.
-- `root.rs`, `main_view.rs`, `app_menu.rs`, `settings.rs`: the window, its layout, the menu bar
-  and shortcuts, the Settings window.
+  the state the views show, as `AppStore.swift` is, a module per area (`threads.rs`, `git.rs`,
+  `projects.rs`, `pull_requests.rs`, `linear.rs`, `settings.rs`, `sidebar.rs`).
+- `root.rs`, `main_view.rs`, `app_menu.rs`: the window, its layout, the menu bar and shortcuts.
+  `settings/` is the settings route over the window, with `usage.rs` the Usage chart.
+- `theme.rs`: `Theme.swift` in Rust: the colours, the `Surface` ladder, `ControlSize` and
+  `Radius`. The typeface is DM Sans, bundled in `assets/fonts`.
+- `ui/`: the component library of `Shared/Views/UI` (`control.rs`: `ActionButton`,
+  `ActionMenu`, `Spinner`, `Chip`, `Switch`, `Segmented`, `InputField`, cards), the menus the
+  app draws itself (`menu.rs`), alerts and sheets, the Lucide icons by the names of
+  `Symbol.swift` (`icons.rs`). Nothing native is imitated: a menu, an alert or a sheet is drawn
+  in the app's own style.
 - `transcript/`: `model.rs` (the rows and their splices into GPUI's list), `prose.rs`,
   `rows.rs`, `view.rs`.
-- `composer/`, `sidebar.rs`, `thread/`, `panel/`, `git.rs`, `command_panel.rs`, `media/`,
-  `onboarding.rs`: the views of the same names in the Apple kit.
-- `ui/`: the Mac's buttons, alerts and sheets, SF Symbols as Lucide icons (`icons.rs`), the
-  system's menus (`menu.rs`).
+- `composer/`, `sidebar.rs`, `thread/`, `git.rs`, `command_panel.rs`, `media/`,
+  `onboarding.rs`, `folder_picker.rs`: the views of the same names in the Apple kit.
+- `panel/`: the side panel: `state.rs` (the tabs, as `SidePanel.swift`), `view.rs` (the chrome
+  and the changes, files and agents tabs), `code_view.rs`, `pull_request.rs`,
+  `pull_request_list.rs`, `line_comment.rs` and `linear.rs`.
 - `scripts/dev-app.sh` opens its dev app on a stack of its own, with `--mac` the Mac app beside
   it to compare. `scripts/build-app.sh` builds `Motile GPUI.app`.
 

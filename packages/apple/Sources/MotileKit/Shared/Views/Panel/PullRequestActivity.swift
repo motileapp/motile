@@ -171,7 +171,7 @@ struct ThreadCard: View {
         let busy = actions.working != nil
         if replying {
             VStack(alignment: .leading, spacing: 8) {
-                WritingField(text: $reply, placeholder: "Reply", height: 64)
+                TextArea("Reply", text: $reply)
                 HStack(spacing: 8) {
                     Spacer()
                     ActionButton("Cancel") {

@@ -297,7 +297,7 @@ struct CommitSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Commit message (optional)")
                     .font(.ui(size: 12.5, weight: .medium))
-                WritingField(text: $message, placeholder: "Leave empty to have one written")
+                TextArea("Leave empty to have one written", text: $message, lines: 4)
             }
             #if os(macOS)
             HStack(spacing: 8) {

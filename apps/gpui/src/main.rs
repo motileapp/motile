@@ -43,6 +43,10 @@ fn main() {
     });
     app.run(move |cx| {
         gpui_kit::init(cx);
+        let fonts = assets::FONTS.iter().map(|bytes| std::borrow::Cow::Borrowed(*bytes)).collect();
+        if let Err(error) = cx.text_system().add_fonts(fonts) {
+            tracing::error!("the fonts couldn't be loaded: {error:#}");
+        }
         panel::code_view::bind_keys(cx);
 
         let store = cx.new(|cx| {

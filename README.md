@@ -42,17 +42,17 @@ Open the client and sign in with Google. This links the Mac to your account.
 With no server yet, the client shows one command. Run it on the Linux machine or the Mac where the agents should work:
 
 ```sh
-curl -fsSL https://motile.app/install.sh | sh -s -- <token>
+curl -fsSL https://motile.app/i | sh -s -- <code>
 ```
 
 The installer:
 
 1. Downloads the `motile` binary, to `/usr/local/bin` on Linux and to `~/.local/bin` on a Mac.
 2. Checks for Claude Code and Codex. If neither is installed it offers to install them; sign in to the agent once afterwards (`claude` or `codex login`).
-3. Links the machine to your account with the token in the command.
+3. Links the machine to your account with the code in the command.
 4. Installs and starts a service that survives reboots and crashes. On Linux it is `motile.service`, a systemd unit that runs as the user who ran the installer, with that user's sign-ins. On a Mac it is `app.motile.server`, a launchd agent in that user's desktop session, so the agents can use the Keychain, the simulators and code signing.
 
-The server appears in the client a moment later. The token works for one machine, for an hour; **Thread → Add a Server…** gives you a new command for the next machine, and so does [app.motile.app](https://app.motile.app).
+The server appears in the client a moment later. The code works for one machine, for 15 minutes, and the client counts them down; **Thread → Add a Server…** gives you a new command for the next machine, and so does [app.motile.app](https://app.motile.app).
 
 When the server runs as root on Linux, the service sets `IS_SANDBOX=1`. Claude Code refuses full access as root without it.
 
@@ -90,7 +90,7 @@ On the server, `motile status` shows its account, agents and service, `motile lo
 
 - **Devices**: every client and every server has an ed25519 key, which is also its iroh address. Signing in links a client's key to your account; the install command links a server's. A server asks the auth server which clients belong to its account and accepts only those.
 - **A turn** is one run of the agent's CLI: `claude -p --output-format stream-json …` or `codex app-server`, resumed with the agent's own session. The server turns both outputs into the same transcript items.
-- **Follow-ups**: a message sent while the agent works waits in a queue on your server until the turn ends, then starts the next one. Until then it can be taken back, or sent now: the agent takes it at once and carries on in the same turn.
+- **Follow-ups**: a message sent while the agent works steers it: the agent takes it at once and carries on in the same turn. A setting has it wait in a queue on your server instead, until the turn ends, then start the next one. Until then it can be taken back, or sent now.
 - **Sync**: every transcript item carries the revision that last changed it. A client asks for what changed after the revision it has, so opening a thread it already knows costs almost nothing, however long the thread is.
 - **Streaming**: the server holds a reply's text until a block of it is finished, and passes blocks on a few times a second, so text doesn't flicker in word by word.
 - **Rendering**: the core parses Markdown, highlights code, groups tool calls and folds finished turns, and sends the client rows that are ready to draw. While a reply streams, only the rows that changed are sent, and code is highlighted incrementally.

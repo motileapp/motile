@@ -4,7 +4,7 @@
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::colors;
+use crate::theme::{Radius, colors};
 
 #[derive(IntoElement)]
 pub struct Sheet {
@@ -15,7 +15,7 @@ pub struct Sheet {
 }
 
 pub fn sheet(id: impl Into<ElementId>, width: f32, content: impl IntoElement, _cx: &App) -> Sheet {
-    sheet_with(id, width, 18., content)
+    sheet_with(id, width, Radius::SHEET, content)
 }
 
 pub fn sheet_with(id: impl Into<ElementId>, width: f32, radius: f32, content: impl IntoElement) -> Sheet {
@@ -43,11 +43,11 @@ impl RenderOnce for Sheet {
                             .id("sheet-card")
                             .w(px(self.width))
                             .max_h(size.height * 0.9)
-                            .bg(c.background)
+                            .bg(c.popover)
                             .rounded(px(self.radius))
                             .border_1()
-                            .border_color(c.border)
-                            .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.22), 12., 40.))
+                            .border_color(c.border_secondary)
+                            .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.28), 12., 40.))
                             .overflow_hidden()
                             .child(self.content),
                     ),

@@ -6,10 +6,9 @@ use gpui_kit::*;
 
 use crate::models::{Project, RemoteFolder};
 use crate::store::Store;
-use crate::theme::{colors, is_dark};
-use crate::ui::button::Button;
-use crate::ui::icons;
+use crate::theme::{Surface, colors};
 use crate::ui::sheet::sheet;
+use crate::ui::{ActionButton, InputField, Variant, icons};
 
 const ROW_HEIGHT: f32 = 24.;
 
@@ -51,6 +50,10 @@ impl FolderPicker {
         let start = picker.project.path.clone();
         picker.load(Some(start), cx);
         picker
+    }
+
+    pub fn project_id(&self) -> &str {
+        &self.project.id
     }
 
     fn load(&mut self, path: Option<String>, cx: &mut Context<Self>) {
@@ -112,6 +115,8 @@ impl FolderPicker {
         });
     }
 
+    /// A folder or an image in the list. The rows alternate in colour, and the one picked lies
+    /// a layer further.
     fn row(&self, index: usize, name: &str, image: bool, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let selected = self.selected.as_deref() == Some(name);
@@ -120,22 +125,17 @@ impl FolderPicker {
         div()
             .id(SharedString::from(format!("entry-{name}")))
             .h(px(ROW_HEIGHT))
-            .px(px(10.))
+            .px(px(8.))
             .mx(px(10.))
             .rounded(px(5.))
             .flex()
             .items_center()
             .gap(px(7.))
             .text_size(px(13.))
-            .when(striped && !selected, |row| {
-                row.bg(if is_dark(cx) { hsla(0., 0., 1., 0.04) } else { hsla(0., 0., 0., 0.03) })
-            })
-            .when(selected, |row| row.bg(c.accent).text_color(white()))
-            .child(icons::symbol(if image { "photo" } else { "folder" }, 13.).text_color(if selected {
-                white()
-            } else {
-                c.accent
-            }))
+            .when(striped && !selected, |row| row.bg(Surface::Popover.next().color(c).opacity(0.5)))
+            .when(!selected, |row| row.hover(|row| row.bg(Surface::Popover.next().color(c))))
+            .when(selected, |row| row.bg(Surface::Popover.further().color(c)))
+            .child(icons::symbol(if image { "image" } else { "folder" }, 13.).text_color(c.secondary))
             .child(div().truncate().child(name_text))
             .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
                 if event.click_count() >= 2 {
@@ -204,17 +204,17 @@ impl Render for FolderPicker {
                     .items_center()
                     .gap(px(8.))
                     .child(
-                        Button::new("enclosing", "")
-                            .symbol("chevron.up")
-                            .help("Enclosing folder")
+                        ActionButton::icon("enclosing", "chevron-up", "Enclosing folder")
+                            .variant(Variant::Secondary)
+                            .surface(Surface::Popover)
                             .disabled(parent.is_none())
                             .on_click(cx.listener(move |this, _, _, cx| this.load(parent.clone(), cx))),
                     )
                     .child(
                         div()
                             .flex_1()
-                            .font_family(crate::theme::MONO_FONT)
-                            .child(crate::ui::text_field(&self.path, cx)),
+                            .min_w_0()
+                            .child(InputField::new(&self.path).monospaced(true).surface(Surface::Popover)),
                     ),
             )
             .child(
@@ -225,13 +225,12 @@ impl Render for FolderPicker {
                     .h(px(300.))
                     .py(px(6.))
                     .overflow_y_scroll()
-                    .bg(c.raised)
                     .children(rows)
                     .children(overlay.map(|overlay| {
                         div().absolute().inset_0().flex().items_center().justify_center().child(overlay)
                     })),
             )
-            .child(crate::ui::divider(cx))
+            .child(div().h(px(1.)).w_full().flex_shrink_0().bg(c.border))
             .child(
                 div()
                     .p(px(14.))
@@ -251,22 +250,22 @@ impl Render for FolderPicker {
                             .child(self.target(cx)),
                     )
                     .child(
-                        Button::new("picker-cancel", "Cancel").on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
+                        ActionButton::new("picker-cancel", "Cancel")
+                            .surface(Surface::Popover)
+                            .on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
                     )
-                    .child(Button::new("use-as-icon", "Use as Icon").prominent().disabled(image.is_none()).on_click(
-                        cx.listener(move |this, _, _, cx| {
-                            if let Some(image) = image.clone() {
-                                this.use_as_icon(&image, cx);
-                            }
-                        }),
-                    )),
+                    .child(
+                        ActionButton::new("use-as-icon", "Use as Icon")
+                            .primary()
+                            .surface(Surface::Popover)
+                            .disabled(image.is_none())
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if let Some(image) = image.clone() {
+                                    this.use_as_icon(&image, cx);
+                                }
+                            })),
+                    ),
             );
         sheet("folder-picker-sheet", 520., content, cx)
-    }
-}
-
-impl FolderPicker {
-    pub fn project_id(&self) -> &str {
-        &self.project.id
     }
 }

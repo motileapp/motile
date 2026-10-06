@@ -79,6 +79,8 @@ pub fn spacing_after(style: &ParaStyle) -> f32 {
 /// What a paragraph, a list, a quote and a table keep from what follows them.
 pub const BLOCK_GAP: f32 = 12.;
 pub const HEADING_GAP: f32 = 14.;
+/// The room between a paragraph's lines, which the Mac keeps under its last line too.
+pub const LINE_SPACING: f32 = 7.;
 
 /// Turns a stretch of the core's text, in UTF-16 units, into a string of its own, and says
 /// where each of its units is in that string.
@@ -283,6 +285,13 @@ pub fn is_code(bits: u32) -> bool {
 
 pub fn is_strike(bits: u32) -> bool {
     bits & STRIKE != 0
+}
+
+/// The links of a message, from the core's UTF-16 units to bytes of its text.
+pub fn link_ranges(text: &str, links: &[motile_core::render::markdown::Link]) -> Vec<(Range<usize>, String)> {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let piece = Piece::new(&units, false);
+    links.iter().filter_map(|link| piece.range(link.start, link.len).map(|range| (range, link.url.clone()))).collect()
 }
 
 /// Spans of the core, `[start, length, colour]` in UTF-16 units of `code`, as byte ranges.

@@ -197,9 +197,17 @@ struct RootView: View {
 /// The sidebar and the open thread, side by side on the window's one surface.
 struct MainView: View {
     static let sidebarHiddenKey = "sidebar.hidden"
+    static let sidebarWidthKey = "sidebar.width"
     private static let sidebarWidths: ClosedRange<Double> = 240...420
     /// What the sidebar always leaves to the thread, however wide it was dragged.
     private static let threadMinWidth = 500.0
+
+    /// How wide the sidebar may be dragged in a window of the width. The settings' sidebar is
+    /// the same width, so the window doesn't shift between the two.
+    static func sidebarWidths(in windowWidth: Double) -> ClosedRange<Double> {
+        let widest = min(sidebarWidths.upperBound, windowWidth - 1 - threadMinWidth)
+        return sidebarWidths.lowerBound...max(sidebarWidths.lowerBound, widest)
+    }
     /// What the side panel leaves to the thread. Without that much room, it lies over the thread.
     private static let threadBesidePanel = 400.0
     /// How far the top bar's content starts from the window's left edge while the sidebar is
@@ -209,13 +217,12 @@ struct MainView: View {
 
     @Environment(AppStore.self) private var store
     @AppStorage(MainView.sidebarHiddenKey) private var sidebarHidden = false
-    @AppStorage("sidebar.width") private var sidebarWidth = 280.0
+    @AppStorage(MainView.sidebarWidthKey) private var sidebarWidth = 280.0
     @AppStorage("panel.width") private var panelWidth = 460.0
 
     var body: some View {
         GeometryReader { window in
-            let widest = min(Self.sidebarWidths.upperBound, Double(window.size.width) - 1 - Self.threadMinWidth)
-            let widths = Self.sidebarWidths.lowerBound...max(Self.sidebarWidths.lowerBound, widest)
+            let widths = Self.sidebarWidths(in: Double(window.size.width))
             let shownWidth = min(widths.upperBound, max(widths.lowerBound, sidebarWidth))
             let panelOpen = store.sidePanel.isOpen
             let rest = Double(window.size.width) - (sidebarHidden ? 0 : shownWidth + 1)
@@ -333,7 +340,7 @@ struct MainView: View {
 /// The line between the thread and what is beside it. Dragging it makes the sidebar or the side
 /// panel wider or narrower. It is grabbed mostly from the thread's side: the pane's rows light up
 /// close to the line, and the grab must not take their clicks.
-private struct PaneDivider: View {
+struct PaneDivider: View {
     private static let threadReach: CGFloat = 8
     private static let paneReach: CGFloat = 4
 

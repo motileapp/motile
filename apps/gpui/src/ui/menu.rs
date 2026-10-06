@@ -1,16 +1,23 @@
-//! Menus the system draws, for context menus and the buttons that open a menu. Each item runs a
-//! closure once the menu has closed.
+//! Menus, drawn by the app: a popover card of rows under the control that opened it, for context
+//! menus and the buttons that open a menu. Each item runs a closure once the menu has closed.
+//! One menu is open at a time; the window's root draws it over everything else.
 
 use std::rc::Rc;
 
+use gpui_kit::prelude::*;
 use gpui_kit::*;
+
+use crate::theme::{Radius, colors};
+use crate::ui::icons;
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
-/// The image in front of an item: an SF Symbol, or an image file on this device.
+/// The image in front of an item: a symbol, or an image file on this device.
 pub enum MenuIcon {
     Symbol(&'static str),
     File(SharedString),
+    /// An agent's logo, in its colour.
+    Logo(motile_protocol::wire::Agent),
 }
 
 enum Entry {
@@ -18,6 +25,7 @@ enum Entry {
         label: SharedString,
         enabled: bool,
         checked: bool,
+        danger: bool,
         icon: Option<MenuIcon>,
         tooltip: Option<SharedString>,
         run: Run,
@@ -42,7 +50,15 @@ impl Menu {
     }
 
     fn entry(label: impl Into<SharedString>, enabled: bool, run: impl Fn(&mut Window, &mut App) + 'static) -> Entry {
-        Entry::Item { label: label.into(), enabled, checked: false, icon: None, tooltip: None, run: Rc::new(run) }
+        Entry::Item {
+            label: label.into(),
+            enabled,
+            checked: false,
+            danger: false,
+            icon: None,
+            tooltip: None,
+            run: Rc::new(run),
+        }
     }
 
     pub fn item(self, label: impl Into<SharedString>, run: impl Fn(&mut Window, &mut App) + 'static) -> Self {
@@ -67,7 +83,15 @@ impl Menu {
         let Entry::Item { label, enabled, icon, tooltip, run, .. } = Self::entry(label, true, run) else {
             unreachable!()
         };
-        self.push(Entry::Item { label, enabled, checked, icon, tooltip, run })
+        self.push(Entry::Item { label, enabled, checked, danger: false, icon, tooltip, run })
+    }
+
+    /// An item for what can't be taken back, in the danger colour.
+    pub fn danger_item(self, label: impl Into<SharedString>, run: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        let Entry::Item { label, enabled, icon, tooltip, run, .. } = Self::entry(label, true, run) else {
+            unreachable!()
+        };
+        self.push(Entry::Item { label, enabled, checked: false, danger: true, icon, tooltip, run })
     }
 
     /// An item with an image in front, and what the pointer resting on it says.
@@ -83,10 +107,41 @@ impl Menu {
             label: label.into(),
             enabled,
             checked: false,
+            danger: false,
             icon: Some(icon),
             tooltip,
             run: Rc::new(run),
         })
+    }
+
+    /// One of the things to choose from, with a check mark when it is the one in use.
+    pub fn choice(
+        self,
+        checked: bool,
+        label: impl Into<SharedString>,
+        icon: Option<MenuIcon>,
+        tooltip: Option<SharedString>,
+        run: impl Fn(&mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.push(Entry::Item {
+            label: label.into(),
+            enabled: true,
+            checked,
+            danger: false,
+            icon,
+            tooltip,
+            run: Rc::new(run),
+        })
+    }
+
+    /// An item with a symbol in front.
+    pub fn symbol_item(
+        self,
+        label: impl Into<SharedString>,
+        symbol: &'static str,
+        run: impl Fn(&mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.icon_item(label, MenuIcon::Symbol(symbol), true, None, run)
     }
 
     /// A line that only says something.
@@ -123,149 +178,211 @@ impl Menu {
         self.open(position, true, window, cx);
     }
 
-    #[cfg(target_os = "macos")]
     fn open(self, position: Point<Pixels>, right_aligned: bool, window: &mut Window, cx: &mut App) {
-        let Some(view) = macos::content_view(window) else { return };
-        let handle = window.window_handle();
-        // The system's menu loop runs once the window is free, and the item after it.
-        cx.spawn(async move |cx| {
-            let picked = macos::run(view, &self, position, right_aligned);
-            let _ = handle.update(cx, move |_, window, cx| {
-                if let Some(run) = picked {
-                    run(window, cx);
-                }
-                window.refresh();
-            });
-        })
-        .detach();
+        let focus = cx.focus_handle();
+        window.focus(&focus, cx);
+        cx.set_global(Layer(Some(Open { menu: Rc::new(self), position, right_aligned, focus, highlighted: None })));
+        window.refresh();
     }
 
-    #[cfg(not(target_os = "macos"))]
-    fn open(self, _: Point<Pixels>, _: bool, _: &mut Window, _: &mut App) {}
+    fn runnable(&self) -> Vec<usize> {
+        self.entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| matches!(entry, Entry::Item { enabled: true, .. }))
+            .map(|(index, _)| index)
+            .collect()
+    }
 }
 
-#[cfg(target_os = "macos")]
-mod macos {
-    use std::cell::Cell;
+struct Open {
+    menu: Rc<Menu>,
+    position: Point<Pixels>,
+    right_aligned: bool,
+    focus: FocusHandle,
+    highlighted: Option<usize>,
+}
 
-    use gpui_kit::*;
-    use objc2::rc::Retained;
-    use objc2::runtime::{AnyObject, NSObject};
-    use objc2::{AnyThread, DefinedClass, MainThreadMarker, define_class, msg_send, sel};
-    use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSView};
-    use objc2_foundation::{NSPoint, NSSize, NSString};
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+#[derive(Default)]
+struct Layer(Option<Open>);
 
-    use super::{Entry, Menu, MenuIcon, Run};
+impl Global for Layer {}
 
-    struct Picked {
-        tag: Cell<isize>,
+/// Closes the menu that is open, if one is.
+pub fn close(window: &mut Window, cx: &mut App) {
+    if cx.try_global::<Layer>().is_some_and(|layer| layer.0.is_some()) {
+        cx.global_mut::<Layer>().0 = None;
+        window.refresh();
     }
+}
 
-    define_class!(
-        #[unsafe(super(NSObject))]
-        #[name = "MotileMenuTarget"]
-        #[ivars = Picked]
-        struct Target;
+fn pick(index: usize, window: &mut Window, cx: &mut App) {
+    let Some(open) = cx.global_mut::<Layer>().0.take() else { return };
+    window.refresh();
+    let Some(Entry::Item { run, enabled: true, .. }) = open.menu.entries.get(index) else { return };
+    run(window, cx);
+}
 
-        impl Target {
-            #[unsafe(method(picked:))]
-            fn picked(&self, sender: &NSMenuItem) {
-                self.ivars().tag.set(sender.tag());
-            }
-        }
-    );
-
-    impl Target {
-        fn new() -> Retained<Self> {
-            let this = Self::alloc().set_ivars(Picked { tag: Cell::new(-1) });
-            unsafe { msg_send![super(this), init] }
-        }
+fn step(forward: bool, cx: &mut App) {
+    let Some(open) = cx.global_mut::<Layer>().0.as_mut() else { return };
+    let runnable = open.menu.runnable();
+    if runnable.is_empty() {
+        return;
     }
+    let at = open.highlighted.and_then(|index| runnable.iter().position(|&candidate| candidate == index));
+    let next = match (at, forward) {
+        (None, true) => 0,
+        (None, false) => runnable.len() - 1,
+        (Some(at), true) => (at + 1) % runnable.len(),
+        (Some(at), false) => (at + runnable.len() - 1) % runnable.len(),
+    };
+    open.highlighted = Some(runnable[next]);
+}
 
-    pub fn content_view(window: &Window) -> Option<usize> {
-        let handle = HasWindowHandle::window_handle(window).ok()?;
-        let RawWindowHandle::AppKit(handle) = handle.as_raw() else { return None };
-        Some(handle.ns_view.as_ptr() as usize)
+const MENU_WIDTH: (f32, f32) = (180., 340.);
+const ROW_HEIGHT: f32 = 28.;
+
+/// The open menu over the window, for the root to draw last.
+pub fn layer(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+    let (menu, position, right_aligned, focus, highlighted) = {
+        let open = cx.try_global::<Layer>()?.0.as_ref()?;
+        (open.menu.clone(), open.position, open.right_aligned, open.focus.clone(), open.highlighted)
+    };
+    if !focus.is_focused(window) {
+        window.focus(&focus, cx);
     }
-
-    pub fn run(view: usize, menu: &Menu, position: Point<Pixels>, right_aligned: bool) -> Option<Run> {
-        let main = MainThreadMarker::new()?;
-        // The window outlives the menu, which closes before this returns.
-        let view: &NSView = unsafe { &*(view as *const NSView) };
-        let target = Target::new();
-        let mut runs = Vec::new();
-        let menu = build(menu, &target, main, &mut runs);
-        let x = f32::from(position.x) as f64 - if right_aligned { menu.size().width } else { 0. };
-        let location = NSPoint::new(x, view.bounds().size.height - f32::from(position.y) as f64);
-        menu.popUpMenuPositioningItem_atLocation_inView(None, location, Some(view));
-        let tag = target.ivars().tag.get();
-        usize::try_from(tag).ok().and_then(|tag| runs.get(tag).cloned())
-    }
-
-    fn build(menu: &Menu, target: &Target, main: MainThreadMarker, runs: &mut Vec<Run>) -> Retained<NSMenu> {
-        let built = NSMenu::new(main);
-        built.setAutoenablesItems(false);
-        for entry in &menu.entries {
-            match entry {
-                Entry::Separator => built.addItem(&NSMenuItem::separatorItem(main)),
-                Entry::Note(label) => {
-                    let item = NSMenuItem::new(main);
-                    item.setTitle(&NSString::from_str(label));
-                    item.setEnabled(false);
-                    built.addItem(&item);
-                }
-                Entry::Item { label, enabled, checked, icon, tooltip, run } => {
-                    let item = NSMenuItem::new(main);
-                    item.setTitle(&NSString::from_str(label));
-                    item.setEnabled(*enabled);
-                    if *checked {
-                        item.setState(1);
-                    }
-                    if let Some(image) = icon.as_ref().and_then(image) {
-                        item.setImage(Some(&image));
-                        show_image(&item);
-                    }
-                    if let Some(tooltip) = tooltip {
-                        item.setToolTip(Some(&NSString::from_str(tooltip)));
-                    }
-                    if *enabled {
-                        unsafe {
-                            item.setTag(runs.len() as isize);
-                            item.setTarget(Some(target as &AnyObject));
-                            item.setAction(Some(sel!(picked:)));
+    let c = colors(cx);
+    let any_checked = menu.entries.iter().any(|entry| matches!(entry, Entry::Item { checked: true, .. }));
+    let rows = menu.entries.iter().enumerate().map(|(index, entry)| match entry {
+        Entry::Separator => div().h(px(1.)).my(px(4.)).mx(px(-4.)).bg(c.border_secondary).into_any_element(),
+        Entry::Note(label) => div()
+            .h(px(ROW_HEIGHT))
+            .px(px(8.))
+            .flex()
+            .items_center()
+            .text_size(px(12.5))
+            .text_color(c.tertiary)
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .text_ellipsis()
+            .child(label.clone())
+            .into_any_element(),
+        Entry::Item { label, enabled, checked, danger, icon, tooltip, .. } => {
+            let lit = highlighted == Some(index) && *enabled;
+            div()
+                .id(("menu-item", index))
+                .h(px(ROW_HEIGHT))
+                .px(px(8.))
+                .rounded(px(Radius::SMALL))
+                .flex()
+                .items_center()
+                .gap(px(7.))
+                .text_size(px(12.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(if *danger { c.danger } else { c.text })
+                .when(!*enabled, |row| row.opacity(0.45))
+                .when(lit, |row| row.bg(c.popover_secondary))
+                .when(any_checked, |row| {
+                    row.child(
+                        div()
+                            .size(px(14.))
+                            .flex_shrink_0()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .when(*checked, |mark| mark.child(icons::symbol("check", 12.))),
+                    )
+                })
+                .when_some(icon.as_ref(), |row, icon| {
+                    row.child(
+                        div().flex_shrink_0().flex().items_center().text_color(c.secondary).child(match icon {
+                            MenuIcon::Symbol(name) => icons::symbol(*name, 13.).into_any_element(),
+                            MenuIcon::File(path) => img(std::path::PathBuf::from(path.as_ref()))
+                                .size(px(16.))
+                                .rounded(px(3.))
+                                .into_any_element(),
+                            MenuIcon::Logo(agent) => crate::ui::logos::agent_icon(*agent, 16., cx).into_any_element(),
+                        }),
+                    )
+                })
+                .child(
+                    div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(label.clone()),
+                )
+                .when_some(tooltip.clone(), |row, tooltip| row.tooltip(crate::ui::tooltip(tooltip)))
+                .when(*enabled, |row| {
+                    row.on_hover(move |inside, window, cx| {
+                        if let Some(open) = cx.global_mut::<Layer>().0.as_mut() {
+                            if *inside {
+                                open.highlighted = Some(index);
+                            } else if open.highlighted == Some(index) {
+                                open.highlighted = None;
+                            }
+                            window.refresh();
                         }
-                        runs.push(run.clone());
-                    }
-                    built.addItem(&item);
+                    })
+                    .on_click(move |_, window, cx| {
+                        cx.stop_propagation();
+                        pick(index, window, cx)
+                    })
+                })
+                .into_any_element()
+        }
+    });
+    let card = div()
+        .min_w(px(MENU_WIDTH.0))
+        .max_w(px(MENU_WIDTH.1))
+        .p(px(4.))
+        .bg(c.popover)
+        .border_1()
+        .border_color(c.border_secondary)
+        .rounded(px(Radius::CARD))
+        .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.22), 8., 24.))
+        .flex()
+        .flex_col()
+        .children(rows);
+    let anchored = anchored()
+        .position(position)
+        .anchor(if right_aligned { gpui_kit::Anchor::TopRight } else { gpui_kit::Anchor::TopLeft })
+        .snap_to_window_with_margin(px(8.))
+        .child(card);
+    let overlay = div()
+        .id("menu-layer")
+        .absolute()
+        .inset_0()
+        .occlude()
+        .track_focus(&focus)
+        .on_key_down(move |event: &KeyDownEvent, window, cx| {
+            match event.keystroke.key.as_str() {
+                "escape" => close(window, cx),
+                "up" => {
+                    step(false, cx);
+                    window.refresh();
                 }
+                "down" => {
+                    step(true, cx);
+                    window.refresh();
+                }
+                "enter" => {
+                    let picked =
+                        cx.try_global::<Layer>().and_then(|layer| layer.0.as_ref()).and_then(|open| open.highlighted);
+                    if let Some(index) = picked {
+                        pick(index, window, cx);
+                    }
+                }
+                _ => return,
             }
-        }
-        built
-    }
-
-    /// macOS 27 hides the images of menu items unless they ask to be seen.
-    fn show_image(item: &NSMenuItem) {
-        let setter = sel!(setPreferredImageVisibility:);
-        let responds: bool = unsafe { msg_send![item, respondsToSelector: setter] };
-        if responds {
-            let visible: isize = 1;
-            let _: () = unsafe { msg_send![item, setPreferredImageVisibility: visible] };
-        }
-    }
-
-    fn image(icon: &MenuIcon) -> Option<Retained<NSImage>> {
-        match icon {
-            MenuIcon::Symbol(name) => {
-                NSImage::imageWithSystemSymbolName_accessibilityDescription(&NSString::from_str(name), None)
-            }
-            MenuIcon::File(path) => {
-                let image = NSImage::initWithContentsOfFile(NSImage::alloc(), &NSString::from_str(path))?;
-                image.setSize(NSSize::new(16., 16.));
-                Some(image)
-            }
-        }
-    }
+            cx.stop_propagation();
+        })
+        .on_mouse_down(MouseButton::Left, |_, window, cx| {
+            cx.stop_propagation();
+            close(window, cx);
+        })
+        .on_mouse_down(MouseButton::Right, |_, window, cx| {
+            cx.stop_propagation();
+            close(window, cx);
+        })
+        .child(anchored);
+    Some(deferred(overlay).with_priority(2).into_any_element())
 }
 
 /// Where a button that opens a menu was last drawn, so the menu opens under it.
@@ -277,6 +394,10 @@ impl Anchor {
     pub fn track(&self) -> impl IntoElement {
         let cell = self.0.clone();
         canvas(move |bounds, _, _| cell.set(bounds), |_, _, _, _| {}).absolute().size_full()
+    }
+
+    pub fn bounds(&self) -> Bounds<Pixels> {
+        self.0.get()
     }
 
     /// Under the element and centred on it, where a popover `width` wide opens.

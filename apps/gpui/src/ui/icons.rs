@@ -1,11 +1,15 @@
-//! The symbols the app draws. The Mac app names SF Symbols; these are the Lucide icons that
-//! stand for them, by the same names, so a view reads like its Swift counterpart.
+//! The symbols the app draws, from Lucide, by the names the Mac app's `Symbol` has for them in
+//! kebab case: `git-pull-request`, `square-pen`. The SF Symbol names the first views used still
+//! resolve until they are gone.
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 /// The Lucide icon's path for the SF Symbol named.
 pub fn path(symbol: &str) -> SharedString {
+    if symbol.starts_with("icons/") {
+        return SharedString::from(symbol.to_string());
+    }
     let lucide = match symbol {
         "arrow.clockwise" => "rotate-cw",
         "arrow.down" => "arrow-down",
@@ -102,21 +106,17 @@ pub fn path(symbol: &str) -> SharedString {
         "google" => "google",
         "claude" => "claude",
         "openai" => "openai",
-        other => {
-            tracing::warn!("no icon for the symbol {other}");
-            "circle"
-        }
+        other => other,
     };
     SharedString::from(format!("icons/{lucide}.svg"))
 }
 
-/// An SF Symbol of a point size is drawn this much larger than the size: Lucide's icons fill
-/// their box less.
-const SCALE: f32 = 1.15;
+/// A symbol for text of a size is drawn in a square this much larger, as the Mac app draws it.
+const SCALE: f32 = crate::theme::SYMBOL_SCALE;
 
 /// The symbol at `size`, in the colour of the text around it unless it is given one.
-pub fn symbol(name: &str, size: f32) -> Symbol {
-    Symbol { path: path(name), size: size * SCALE, color: None, rotation: 0. }
+pub fn symbol(name: impl AsRef<str>, size: f32) -> Symbol {
+    Symbol { path: path(name.as_ref()), size: size * SCALE, color: None, rotation: 0. }
 }
 
 #[derive(IntoElement)]
@@ -162,16 +162,5 @@ pub fn tool_symbol(icon: &str) -> &'static str {
         "question" => "questionmark.bubble",
         "todo" => "checklist",
         _ => "wrench.and.screwdriver",
-    }
-}
-
-/// Names what a git action or its icon stands for.
-pub fn git_symbol(action: Option<motile_protocol::wire::GitAction>) -> &'static str {
-    use motile_protocol::wire::GitAction;
-    match action {
-        Some(GitAction::Pull) => "icloud.and.arrow.down",
-        Some(GitAction::Push | GitAction::CommitPush | GitAction::CommitPushPr) => "icloud.and.arrow.up",
-        Some(GitAction::CreatePr) | None => "arrow.triangle.merge",
-        Some(GitAction::Commit) => "smallcircle.filled.circle",
     }
 }

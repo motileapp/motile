@@ -106,37 +106,6 @@ struct PullRequestNoticeBar: View {
     }
 }
 
-/// A box to write in, with a word in it while it is empty.
-struct WritingField: View {
-    @Binding var text: String
-    let placeholder: String
-    /// Without one it is as tall as there is room for.
-    var height: CGFloat? = 84
-
-    var body: some View {
-        TextEditor(text: $text)
-            .font(.ui(size: 12.5))
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 6)
-            .frame(minHeight: height, maxHeight: height ?? .infinity)
-            .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
-            }
-            .overlay(alignment: .topLeading) {
-                if text.isEmpty {
-                    Text(placeholder)
-                        .font(.ui(size: 12.5))
-                        .foregroundStyle(Color.themeTertiary)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 6)
-                        .allowsHitTesting(false)
-                }
-            }
-    }
-}
-
 /// Markdown from the pull request, drawn as the transcript draws a reply.
 struct PullRequestTextView: View {
     let blocks: [PullRequestText]
@@ -191,7 +160,7 @@ struct DescriptionEditor: View {
                 .frame(maxHeight: .infinity)
                 .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             } else {
-                WritingField(text: $text, placeholder: "Say what this changes and why", height: nil)
+                TextArea("Say what this changes and why", text: $text, lines: 4, fills: true)
             }
             HStack(spacing: 8) {
                 Spacer()

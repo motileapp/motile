@@ -1,12 +1,14 @@
-//! Where messages are written: the text, and under it the model, the reasoning effort and how
-//! much the agent may do without asking. A strip above says when the agent is monitoring, and
-//! one below says where the thread works: the server, the folder and the branch.
+//! Where messages are written. A strip above says what the agent waits for or that it is
+//! monitoring. The model, the reasoning effort and how much the agent may do without asking are
+//! under the text, and a strip below says where the thread works: the server, the folder and
+//! the branch.
 
 pub mod attachments;
 mod questions;
 mod strips;
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use gpui_kit::component::Sizable;
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
@@ -15,17 +17,23 @@ use gpui_kit::*;
 use motile_protocol::wire::{Access, Agent};
 
 use self::questions::Questions;
-use self::strips::{BranchPicker, context_strip, monitoring_strip};
+use self::strips::{BranchPicker, context_strip, monitoring_strip, waiting_strip};
 use crate::models::{ACCESSES, ThreadInfo, access_detail, access_label, agent_name};
 use crate::store::Store;
-use crate::theme::{self, colors};
-use crate::ui::button::Button;
-use crate::ui::menu::{Anchor, Menu};
-use crate::ui::{IconButton, edges, highlight, icons, logos};
+use crate::theme::{self, ControlSize, Surface, colors};
+use crate::ui::menu::{Anchor, Menu, MenuIcon};
+use crate::ui::{ActionButton, ActionMenu, Variant, edges, icons, logos};
 
 pub const RADIUS: f32 = 22.;
 /// Narrower than this, the model and the access are only their icons.
 const COMPACT_BELOW: f32 = 560.;
+/// The text's font and line, as the Mac sets them: 14 with 3 between lines.
+const TEXT_SIZE: f32 = 14.;
+const LINE_HEIGHT: f32 = 20.;
+const TEXT_INSET: f32 = 4.;
+/// Two lines, so the composer only grows when a third one starts.
+const MIN_TEXT_HEIGHT: f32 = LINE_HEIGHT * 2. + TEXT_INSET * 2.;
+const MAX_TEXT_HEIGHT: f32 = 220.;
 
 pub struct Composer {
     store: Entity<Store>,
@@ -33,14 +41,12 @@ pub struct Composer {
     /// What the text was loaded from: the draft or thread it belongs to, and the counts that
     /// say it changed outside the composer or should take the keyboard.
     loaded: (String, u64, u64, u64),
-    model_menu: Anchor,
-    effort_menu: Anchor,
-    access_menu: Anchor,
-    workspace_menu: Anchor,
     branch_anchor: Anchor,
     branch_picker: Option<Entity<BranchPicker>>,
     questions: HashMap<String, Entity<Questions>>,
     placeholder_shown: String,
+    /// Redraws the monitoring strip's timer every second while the agent monitors.
+    ticker: Option<Task<()>>,
     /// How wide the composer is, as the thread lays it out.
     pub width: f32,
     _subscriptions: Vec<Subscription>,
@@ -76,14 +82,11 @@ impl Composer {
             store,
             text,
             loaded: (String::new(), u64::MAX, u64::MAX, u64::MAX),
-            model_menu: Anchor::default(),
-            effort_menu: Anchor::default(),
-            access_menu: Anchor::default(),
-            workspace_menu: Anchor::default(),
             branch_anchor: Anchor::default(),
             branch_picker: None,
             questions: HashMap::new(),
             placeholder_shown: String::new(),
+            ticker: None,
             width: theme::CONTENT_WIDTH,
             _subscriptions: subscriptions,
         };
@@ -97,6 +100,7 @@ impl Composer {
         let key = (store.draft_key(), store.draft_version, store.composer_focus, store.blur_composer);
         let placeholder = self.placeholder(cx);
         let wants_picker = store.shows_branches;
+        let monitoring = store.selected_thread().is_some() && store.activity.monitoring;
         if self.loaded != key {
             let draft = store.draft();
             let (focus, blur) = (key.0 != self.loaded.0 || key.2 != self.loaded.2, key.3 != self.loaded.3);
@@ -123,6 +127,13 @@ impl Composer {
         } else if !wants_picker {
             self.branch_picker = None;
         }
+        self.follow_approvals(window, cx);
+        self.tick(monitoring, cx);
+        cx.notify();
+    }
+
+    /// Keeps a view for the questions of each tool call that asks some.
+    fn follow_approvals(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let approvals: Vec<_> = self
             .store
             .read(cx)
@@ -134,28 +145,49 @@ impl Composer {
             .collect();
         self.questions.retain(|id, _| approvals.iter().any(|approval| &approval.id == id));
         for approval in approvals {
-            if !self.questions.contains_key(&approval.id) {
-                let store = self.store.clone();
-                let id = approval.id.clone();
-                self.questions.insert(id, cx.new(|cx| Questions::new(store, approval, window, cx)));
+            if self.questions.contains_key(&approval.id) {
+                continue;
             }
+            let store = self.store.clone();
+            let id = approval.id.clone();
+            self.questions.insert(id, cx.new(|cx| Questions::new(store, approval, window, cx)));
         }
-        cx.notify();
+    }
+
+    fn tick(&mut self, monitoring: bool, cx: &mut Context<Self>) {
+        if !monitoring {
+            self.ticker = None;
+            return;
+        }
+        if self.ticker.is_some() {
+            return;
+        }
+        self.ticker = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    return;
+                }
+            }
+        }));
     }
 
     fn placeholder(&self, cx: &App) -> String {
         let store = self.store.read(cx);
         let Some(server) = store.composer_server() else { return "Ask anything".into() };
+        if store.selected_thread().is_some_and(ThreadInfo::is_done) {
+            return "Message to bring it back".into();
+        }
         if !server.connected() {
-            return format!("Waiting for {} to connect…", server.name);
+            return format!("Waiting for {}…", server.name);
         }
         if server.models.is_empty() && server.known {
-            return format!("Install Claude Code or Codex on {} to start", server.name);
+            return "Install Claude Code or Codex".into();
         }
         if store.activity.running {
-            return "Send a follow-up; it waits for the agent's turn to end".into();
+            return "Send a follow-up".into();
         }
-        "Ask anything, or describe what to build".into()
+        "Ask anything".into()
     }
 
     fn done_banner(&self, thread: &ThreadInfo, cx: &mut Context<Self>) -> impl IntoElement {
@@ -163,155 +195,31 @@ impl Composer {
         let (store, id) = (self.store.clone(), thread.id.clone());
         div()
             .pl(px(16.))
-            .pr(px(16. - 9.))
+            .pr(px(16. - ControlSize::Small.padding()))
             .pt(px(12.))
             .flex()
             .items_center()
             .gap(px(8.))
             .text_size(px(12.5))
-            .child(icons::symbol("checkmark.circle", 13.).text_color(c.success))
-            .child(div().font_weight(FontWeight::MEDIUM).child("This thread is done."))
-            .child(div().text_color(c.secondary).child("Send a message to bring it back."))
+            .child(icons::symbol("circle-check", 13.).text_color(c.success))
+            .child(div().font_weight(FontWeight::MEDIUM).child("Done"))
             .child(div().flex_1())
-            .child(
-                div()
-                    .id("mark-undone")
-                    .group("mark-undone")
-                    .relative()
-                    .my(px(-4.))
-                    .h(px(24.))
-                    .px(px(9.))
-                    .flex()
-                    .items_center()
-                    .child(crate::ui::highlight_in(
-                        "mark-undone",
-                        7.,
-                        edges(0., 0., 0., 0.),
-                        false,
-                        c.primary_hover,
-                        cx,
-                    ))
-                    .child(div().relative().font_weight(FontWeight::MEDIUM).text_color(c.primary).child("Mark Undone"))
-                    .on_click(move |_, _, cx| {
+            .child(div().my(px(-4.)).child(
+                ActionButton::new("mark-undone", "Mark Undone").link().small().surface(Surface::Composer).on_click(
+                    move |_, _, cx| {
                         store.update(cx, |store, cx| {
                             store.set_done(std::slice::from_ref(&id), false, false, cx);
                             cx.notify();
                         })
-                    }),
-            )
+                    },
+                ),
+            ))
     }
 
-    /// The tool calls the agent waits with: each is allowed or refused, and one that asks
-    /// questions is answered.
-    fn approvals(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = colors(cx);
-        let approvals = self.store.read(cx).activity.approvals.clone();
-        div()
-            .mx(px(10.))
-            .mt(px(10.))
-            .p(px(12.))
-            .rounded(px(12.))
-            .bg(c.warning_background)
-            .flex()
-            .flex_col()
-            .gap(px(8.))
-            .text_size(px(12.5))
-            .child(
-                div()
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c.warning)
-                    .child("Waiting for you"),
-            )
-            .children(approvals.into_iter().map(|approval| {
-                if let Some(questions) = self.questions.get(&approval.id) {
-                    return questions.clone().into_any_element();
-                }
-                let (refuse, allow) = (self.store.clone(), self.store.clone());
-                let (refuse_id, allow_id) = (approval.id.clone(), approval.id.clone());
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .child(icons::symbol(icons::tool_symbol(approval.icon), 12.).text_color(c.secondary))
-                    .child(div().font_weight(FontWeight::MEDIUM).flex_shrink_0().child(approval.title.clone()))
-                    .child(
-                        div()
-                            .min_w_0()
-                            .font_family(theme::MONO_FONT)
-                            .text_size(px(12.))
-                            .truncate()
-                            .child(approval.target.clone()),
-                    )
-                    .child(div().flex_1().min_w(px(8.)))
-                    .child(
-                        Button::new(SharedString::from(format!("refuse-{}", approval.id)), approval.refuse)
-                            .small()
-                            .on_click(move |_, _, cx| {
-                                refuse.update(cx, |store, cx| {
-                                    store.answer(&refuse_id, false, HashMap::new());
-                                    cx.notify();
-                                })
-                            }),
-                    )
-                    .child(
-                        Button::new(SharedString::from(format!("allow-{}", approval.id)), approval.allow)
-                            .small()
-                            .prominent()
-                            .on_click(move |_, _, cx| {
-                                allow.update(cx, |store, cx| {
-                                    store.answer(&allow_id, true, HashMap::new());
-                                    cx.notify();
-                                })
-                            }),
-                    )
-                    .into_any_element()
-            }))
-    }
-
-    /// A control of the row under the text: a menu's current choice, with a chevron.
-    fn control(
-        &self,
-        id: &'static str,
-        title: Option<String>,
-        icon: Option<AnyElement>,
-        margin: Edges<f32>,
-        anchor: &Anchor,
-        cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
-        let c = colors(cx);
-        div()
-            .id(id)
-            .group(id)
-            .relative()
-            .flex_shrink_0()
-            .pt(px(margin.top))
-            .pb(px(margin.bottom))
-            .pl(px(margin.left))
-            .pr(px(margin.right))
-            .child(highlight(id, 9., margin, false, cx))
-            .child(
-                div()
-                    .relative()
-                    .h(px(30.))
-                    .px(px(9.))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .text_color(c.secondary)
-                    .child(anchor.track())
-                    .children(icon)
-                    .when_some(title, |control, title| {
-                        control.child(
-                            div().text_size(px(12.5)).font_weight(FontWeight::MEDIUM).whitespace_nowrap().child(title),
-                        )
-                    })
-                    .child(icons::symbol("chevron.down", 9.).text_color(c.tertiary)),
-            )
-    }
-
+    /// The row under the text. When it is too narrow for all of it, the model and the access
+    /// are only their icons. The space between its controls and around them is their margins,
+    /// so each takes clicks up to the next one and to the composer's edges.
     fn controls(&self, compact: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = colors(cx);
         let store = self.store.read(cx);
         let models = store.composer_models();
         let current = store.composer_model();
@@ -320,97 +228,82 @@ impl Composer {
         let plan = store.composer_plan();
         let name = current.as_ref().map(|model| model.name.clone()).unwrap_or("No agent".into());
 
-        let margin = |leading: f32, trailing: f32| edges(8., leading, 8., trailing);
-        let model_icon = current.as_ref().map(|model| logos::agent_icon(model.agent, 14., cx).into_any_element());
-        let model_title = if compact && current.is_some() { None } else { Some(name.clone()) };
         let model_menu = {
-            let anchor = self.model_menu.clone();
             let store = self.store.clone();
-            let models = models.clone();
+            let (models, disabled) = (models.clone(), models.is_empty());
             let current_id = current.as_ref().map(|model| model.id.clone());
-            self.control("model", model_title, model_icon, margin(7., 1.), &self.model_menu, cx)
-                .tooltip(crate::ui::tooltip(name))
-                .when(!models.is_empty(), |control| {
-                    control.on_click(move |_, window, cx| {
-                        let mut menu = Menu::new();
-                        for agent in [Agent::Claude, Agent::Codex] {
-                            let of_agent: Vec<_> =
-                                models.iter().filter(|model| model.agent == agent).cloned().collect();
-                            if of_agent.is_empty() {
-                                continue;
-                            }
-                            if menu_has_items(&menu) {
-                                menu = menu.separator();
-                            }
-                            menu = menu.item_if(false, agent_name(agent), |_, _| {});
-                            for model in of_agent {
-                                let store = store.clone();
-                                let chosen = Some(&model.id) == current_id.as_ref();
-                                let logo = if agent == Agent::Claude { "icons/claude.svg" } else { "icons/openai.svg" };
-                                let _ = logo;
-                                menu = menu.checked(chosen, model.name.clone(), move |_, cx| {
-                                    store.update(cx, |store, cx| {
-                                        store.set_model(&model);
-                                        cx.notify();
-                                    })
-                                });
-                            }
-                        }
-                        menu.show(anchor.below(), window, cx);
-                    })
-                })
+            let logo = current.as_ref().map(|model| logos::agent_icon(model.agent, ControlSize::Regular.symbol(), cx));
+            let title = if compact && current.is_some() { String::new() } else { name.clone() };
+            ActionMenu::new("model", title, move |_, _| {
+                let mut menu = Menu::new();
+                for agent in [Agent::Claude, Agent::Codex] {
+                    let of_agent: Vec<_> = models.iter().filter(|model| model.agent == agent).cloned().collect();
+                    if of_agent.is_empty() {
+                        continue;
+                    }
+                    if !menu.is_empty() {
+                        menu = menu.separator();
+                    }
+                    menu = menu.note(agent_name(agent));
+                    for model in of_agent {
+                        let store = store.clone();
+                        let chosen = Some(&model.id) == current_id.as_ref();
+                        menu =
+                            menu.choice(chosen, model.name.clone(), Some(MenuIcon::Logo(agent)), None, move |_, cx| {
+                                store.update(cx, |store, cx| {
+                                    store.set_model(&model);
+                                    cx.notify();
+                                })
+                            });
+                    }
+                }
+                menu
+            })
+            .button(move |button| {
+                button
+                    .when_some(logo, |button, logo| button.picture(logo))
+                    .help(name.clone())
+                    .surface(Surface::Composer)
+                    .margin(margin(8., 1.))
+                    .disabled(disabled)
+            })
         };
 
         let effort_menu = current.as_ref().filter(|model| !model.efforts.is_empty()).map(|model| {
-            let anchor = self.effort_menu.clone();
             let store = self.store.clone();
             let efforts = model.efforts.clone();
             let chosen = effort.clone();
-            self.control(
-                "effort",
-                Some(effort_label(effort.as_deref().unwrap_or(""))),
-                None,
-                margin(1., 1.),
-                &self.effort_menu,
-                cx,
-            )
-            .on_click(move |_, window, cx| {
+            ActionMenu::new("effort", effort_label(effort.as_deref().unwrap_or("")), move |_, _| {
                 let mut menu = Menu::new();
                 for effort in &efforts {
                     let store = store.clone();
                     let value = effort.clone();
-                    menu = menu.checked(Some(effort) == chosen.as_ref(), effort_label(effort), move |_, cx| {
-                        store.update(cx, |store, cx| {
-                            store.set_effort(&value);
-                            cx.notify();
-                        })
-                    });
+                    menu =
+                        menu.choice(Some(effort) == chosen.as_ref(), effort_label(effort), None, None, move |_, cx| {
+                            store.update(cx, |store, cx| {
+                                store.set_effort(&value);
+                                cx.notify();
+                            })
+                        });
                 }
-                menu.show(anchor.below(), window, cx);
+                menu
             })
+            .button(|button| button.surface(Surface::Composer).margin(margin(1., 1.)))
         });
 
         let access_menu = {
-            let anchor = self.access_menu.clone();
             let store = self.store.clone();
             let label = if plan { "Plan".to_string() } else { access_label(access).to_string() };
-            let symbol = if plan { "list.bullet.clipboard" } else { access_symbol(access) };
+            let symbol = if plan { "clipboard-list" } else { access_symbol(access) };
             let help =
                 if plan { "The agent only reads and proposes.".to_string() } else { access_detail(access).to_string() };
-            self.control(
-                "access",
-                (!compact).then_some(label),
-                Some(icons::symbol(symbol, 13.).into_any_element()),
-                margin(1., 1.),
-                &self.access_menu,
-                cx,
-            )
-            .tooltip(crate::ui::tooltip(help))
-            .on_click(move |_, window, cx| {
+            ActionMenu::new("access", if compact { String::new() } else { label }, move |_, _| {
                 let mut menu = Menu::new();
                 for option in ACCESSES {
                     let store = store.clone();
-                    menu = menu.checked(option == access, access_label(option), move |_, cx| {
+                    let icon = Some(MenuIcon::Symbol(access_symbol(option)));
+                    let detail = Some(SharedString::from(access_detail(option)));
+                    menu = menu.choice(option == access, access_label(option), icon, detail, move |_, cx| {
                         store.update(cx, |store, cx| {
                             store.set_access(option);
                             cx.notify();
@@ -418,28 +311,23 @@ impl Composer {
                     });
                 }
                 let toggle = store.clone();
-                menu.separator()
-                    .checked(plan, "Plan mode", move |_, cx| {
-                        toggle.update(cx, |store, cx| {
-                            store.set_plan(!plan);
-                            cx.notify();
-                        })
+                menu.separator().choice(plan, "Plan mode", None, None, move |_, cx| {
+                    toggle.update(cx, |store, cx| {
+                        store.set_plan(!plan);
+                        cx.notify();
                     })
-                    .show(anchor.below(), window, cx);
+                })
             })
+            .button(move |button| button.symbol(symbol).help(help).surface(Surface::Composer).margin(margin(1., 1.)))
         };
 
         let attach = {
             let store = self.store.clone();
-            div().flex().text_color(c.secondary).child(
-                IconButton::new("attach", "paperclip")
-                    .help("Attach files")
-                    .size(30.)
-                    .symbol_size(15.)
-                    .color(c.secondary)
-                    .inset(margin(1., 4.))
-                    .on_click(move |_, _, cx| choose_files(store.clone(), cx)),
-            )
+            ActionButton::icon("attach", "paperclip", "Attach files")
+                .round(true)
+                .surface(Surface::Composer)
+                .margin(margin(1., 4.))
+                .on_click(move |_, _, cx| choose_files(store.clone(), cx))
         };
 
         div()
@@ -450,41 +338,37 @@ impl Composer {
             .child(access_menu)
             .child(div().flex_1().min_w(px(10.)))
             .child(attach)
-            .child(self.primary_buttons(cx))
+            .child(self.send_buttons(cx))
     }
 
-    fn primary_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = colors(cx);
+    /// Stops the turn that runs, and sends what is written or queues it behind that turn.
+    fn send_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let store = self.store.read(cx);
         let running = store.activity.running && store.selected_thread().is_some();
         let can_send = store.can_send();
         let sends = !running || can_send;
-        let help = store
-            .attachments_hold()
-            .map(String::from)
-            .unwrap_or_else(|| if running { "Queue message".into() } else { "Send".into() });
+        let steers = store.prefs.bool(Store::STEERS_KEY);
+        let help = store.attachments_hold().map(String::from).unwrap_or_else(|| {
+            match (running, steers) {
+                (true, true) => "Send now",
+                (true, false) => "Queue message",
+                (false, _) => "Send",
+            }
+            .into()
+        });
         let (stop, send) = (self.store.clone(), self.store.clone());
         div()
             .flex()
             .items_center()
             .when(running, |buttons| {
                 buttons.child(
-                    div()
-                        .id("stop")
-                        .py(px(8.))
-                        .pl(px(4.))
-                        .pr(px(if sends { 4. } else { 8. }))
-                        .tooltip(crate::ui::tooltip("Stop (⌘.)"))
-                        .child(
-                            div()
-                                .size(px(30.))
-                                .rounded_full()
-                                .bg(c.danger.opacity(0.9))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(div().size(px(10.)).rounded(px(2.5)).bg(white())),
-                        )
+                    ActionButton::new("stop", "")
+                        .picture(div().size(px(10.)).rounded(px(2.5)).bg(white()))
+                        .help("Stop (⌘.)")
+                        .danger()
+                        .round(true)
+                        .surface(Surface::Composer)
+                        .margin(margin(4., if sends { 4. } else { 8. }))
                         .on_click(move |_, _, cx| {
                             stop.update(cx, |store, cx| {
                                 store.stop_thread();
@@ -495,41 +379,97 @@ impl Composer {
             })
             .when(sends, |buttons| {
                 buttons.child(
-                    div()
-                        .id("send")
-                        .py(px(8.))
-                        .pl(px(4.))
-                        .pr(px(8.))
-                        .tooltip(crate::ui::tooltip(help))
-                        .child(
-                            div()
-                                .size(px(30.))
-                                .rounded_full()
-                                .bg(if can_send { c.primary } else { c.selected })
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(icons::symbol("arrow.up", 14.).text_color(if can_send {
-                                    white()
-                                } else {
-                                    c.secondary
-                                })),
-                        )
-                        .when(can_send, |button| {
-                            button.on_click(move |_, _, cx| {
-                                send.update(cx, |store, cx| {
-                                    store.send_message(cx);
-                                    cx.notify();
-                                })
+                    ActionButton::icon("send", "arrow-up", help)
+                        .variant(Variant::Primary)
+                        .round(true)
+                        .surface(Surface::Composer)
+                        .margin(margin(4., 8.))
+                        .disabled(!can_send)
+                        .on_click(move |_, _, cx| {
+                            send.update(cx, |store, cx| {
+                                store.send_message(cx);
+                                cx.notify();
                             })
                         }),
                 )
             })
     }
+
+    /// The box: the done banner, the attachments, the text and the controls under it.
+    fn box_(&self, thread: Option<&ThreadInfo>, compact: bool, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = colors(cx);
+        let store = self.store.read(cx);
+        let has_attachments = !store.attachments().is_empty();
+        let drop_targeted = store.drop_targeted;
+        let store_handle = self.store.clone();
+        let text = Textarea::new(&self.text)
+            .appearance(false)
+            .xsmall()
+            .text_size(px(TEXT_SIZE))
+            .px(px(2.))
+            .py(px(TEXT_INSET))
+            .on_paste(move |clipboard, _, cx| {
+                let mut files = Vec::new();
+                let mut images = Vec::new();
+                for entry in clipboard.entries() {
+                    match entry {
+                        ClipboardEntry::ExternalPaths(paths) => files.extend(paths.paths().iter().cloned()),
+                        ClipboardEntry::Image(image) => images.push(image.clone()),
+                        _ => {}
+                    }
+                }
+                // Files copied in Finder and copied images are attached; anything else is
+                // pasted as plain text.
+                let has_text = clipboard.text().is_some();
+                if files.is_empty() && (images.is_empty() || has_text) {
+                    return false;
+                }
+                store_handle.update(cx, |store, cx| {
+                    if !files.is_empty() {
+                        store.attach(files);
+                    } else {
+                        for image in &images {
+                            store.attach_image(image);
+                        }
+                    }
+                    cx.notify();
+                });
+                true
+            });
+        let focus = self.text.clone();
+        div()
+            .id("composer-box")
+            .relative()
+            .flex()
+            .flex_col()
+            .bg(c.composer)
+            .rounded(px(RADIUS))
+            .border_1()
+            .border_color(if drop_targeted { c.primary } else { c.border })
+            .group_drag_over::<ExternalPaths>("main-drop", move |style| style.border_color(c.primary))
+            .cursor_text()
+            .on_click(move |_, window, cx| focus.update(cx, |text, cx| text.focus(window, cx)))
+            .when_some(thread.filter(|thread| thread.is_done()), |composer, thread| {
+                composer.child(self.done_banner(thread, cx))
+            })
+            .when(has_attachments, |composer| composer.child(attachments::attachments(&self.store, cx)))
+            .child(
+                div()
+                    .px(px(14.))
+                    .pt(px(12.))
+                    .min_h(px(MIN_TEXT_HEIGHT))
+                    .max_h(px(MAX_TEXT_HEIGHT))
+                    .text_size(px(TEXT_SIZE))
+                    .line_height(px(LINE_HEIGHT))
+                    .child(text),
+            )
+            .child(self.controls(compact, cx))
+    }
 }
 
-fn menu_has_items(menu: &Menu) -> bool {
-    !menu.is_empty()
+/// The room around a control of the row under the text.
+fn margin(leading: f32, trailing: f32) -> Edges<f32> {
+    edges(8., leading, 8., trailing)
 }
 
 pub fn effort_label(effort: &str) -> String {
@@ -548,10 +488,10 @@ pub fn effort_label(effort: &str) -> String {
 
 pub fn access_symbol(access: Access) -> &'static str {
     match access {
-        Access::Supervised => "lock",
-        Access::AcceptEdits => "pencil.line",
+        Access::Supervised => "shield",
+        Access::AcceptEdits => "pen-line",
         Access::Auto => "sparkles",
-        Access::Full => "lock.open",
+        Access::Full => "lock-open",
     }
 }
 
@@ -571,88 +511,33 @@ pub fn choose_files(store: Entity<Store>, cx: &mut App) {
 
 impl Render for Composer {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = colors(cx);
         let store = self.store.read(cx);
         let thread = store.selected_thread().cloned();
+        let approval = thread.as_ref().and_then(|_| store.activity.approvals.first().cloned());
+        let count = store.activity.approvals.len();
         let monitoring = thread.is_some() && store.activity.monitoring;
-        let has_approvals = thread.is_some() && !store.activity.approvals.is_empty();
-        let has_attachments = !store.attachments().is_empty();
         let project = store.composer_project();
         let server = project.as_ref().and_then(|project| store.server(Some(&project.server_id)).cloned());
         let compact = self.width < COMPACT_BELOW;
-        let drop_targeted = store.drop_targeted;
-        let store_handle = self.store.clone();
-
-        let text = Textarea::new(&self.text).appearance(false).xsmall().text_size(px(14.)).px_0().py_0();
 
         div()
             .w_full()
-            .max_w(px(theme::CONTENT_WIDTH))
+            .max_w(px(theme::COMPOSER_WIDTH))
             .flex()
             .flex_col()
-            .when(monitoring, |composer| composer.child(monitoring_strip(&self.store, cx)))
-            .child(
-                div()
-                    .relative()
-                    .flex()
-                    .flex_col()
-                    .bg(c.composer)
-                    .rounded(px(RADIUS))
-                    .border(px(if drop_targeted { 2. } else { 1. }))
-                    .border_color(if drop_targeted { c.primary } else { c.strong_border })
-                    .group_drag_over::<ExternalPaths>("main-drop", |style| style.border_color(c.primary))
-                    .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.10), 8., 18.))
-                    .when_some(thread.as_ref().filter(|thread| thread.is_done()), |composer, thread| {
-                        composer.child(self.done_banner(thread, cx))
-                    })
-                    .when(has_approvals, |composer| composer.child(self.approvals(cx)))
-                    .when(has_attachments, |composer| composer.child(attachments::attachments(&self.store, cx)))
-                    .child(
-                        div()
-                            .pl(px(12.))
-                            .pr(px(14.))
-                            .pt(px(14.5))
-                            .min_h(px(55.))
-                            .max_h(px(220.))
-                            .text_size(px(14.))
-                            .line_height(px(20.))
-                            .child(text.on_paste(move |clipboard, _, cx| {
-                                let mut files = Vec::new();
-                                let mut images = Vec::new();
-                                for entry in clipboard.entries() {
-                                    match entry {
-                                        ClipboardEntry::ExternalPaths(paths) => {
-                                            files.extend(paths.paths().iter().cloned())
-                                        }
-                                        ClipboardEntry::Image(image) => images.push(image.clone()),
-                                        _ => {}
-                                    }
-                                }
-                                let has_text = clipboard.text().is_some();
-                                if files.is_empty() && (images.is_empty() || has_text) {
-                                    return false;
-                                }
-                                store_handle.update(cx, |store, cx| {
-                                    if !files.is_empty() {
-                                        store.attach(files);
-                                    } else {
-                                        for image in &images {
-                                            store.attach_image(image);
-                                        }
-                                    }
-                                    cx.notify();
-                                });
-                                true
-                            })),
-                    )
-                    .child(self.controls(compact, cx)),
-            )
+            .when_some(approval.as_ref(), |composer, approval| {
+                let questions = self.questions.get(&approval.id).cloned();
+                composer.child(waiting_strip(&self.store, approval, count, questions, cx))
+            })
+            .when_some(thread.as_ref().filter(|_| monitoring && approval.is_none()), |composer, thread| {
+                composer.child(monitoring_strip(&self.store, thread, cx))
+            })
+            .child(self.box_(thread.as_ref(), compact, cx))
             .when_some(project, |composer, project| {
                 composer.child(context_strip(
                     &self.store,
                     &project,
                     server.as_ref(),
-                    &self.workspace_menu,
                     &self.branch_anchor,
                     self.branch_picker.clone(),
                     cx,

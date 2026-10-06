@@ -16,10 +16,10 @@ struct ConnectServerView: View {
                 .frame(width: 56, height: 56)
                 .background(Color.themePrimary.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .padding(.top, isFirst ? 0 : 32)
-            Text(isFirst ? "Connect your first server" : "Add a server")
+            Text(isFirst ? "Connect your first server" : "Run this on your server")
                 .font(.ui(size: 24, weight: .semibold))
                 .padding(.top, 18)
-            Text("Run this on the Linux machine or Mac that will run your agents.")
+            Text("Run the command below on the server that will run your agents")
                 .font(.ui(size: 14))
                 .foregroundStyle(Color.themeSecondary)
                 .multilineTextAlignment(.center)
@@ -31,22 +31,10 @@ struct ConnectServerView: View {
                 .frame(maxWidth: 560)
                 .padding(.top, 26)
 
-            HStack(spacing: 8) {
-                Spinner()
-                    .foregroundStyle(Color.themeSecondary)
-                Text("Waiting for your server")
-                    .font(.ui(size: 13))
-                    .foregroundStyle(Color.themeSecondary)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                status(at: context.date)
             }
             .padding(.top, 22)
-
-            Text("The command works once, for an hour.")
-                .font(.ui(size: 12))
-                .foregroundStyle(Color.themeTertiary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(2)
-                .frame(maxWidth: 440)
-                .padding(.top, 14)
 
             if isFirst {
                 Spacer()
@@ -67,6 +55,33 @@ struct ConnectServerView: View {
         .frame(maxWidth: .infinity, maxHeight: isFirst ? .infinity : nil)
         .onAppear { store.prepareToAddServer() }
         .onDisappear { store.stopAddingServer() }
+    }
+
+    /// The spinner and the time the command has left, or that it has run out and a way to a new one.
+    @ViewBuilder
+    private func status(at date: Date) -> some View {
+        if let token = store.enrollToken, token.isExpired(at: date) {
+            VStack(spacing: 14) {
+                Text("The command has expired")
+                    .font(.ui(size: 13))
+                    .foregroundStyle(Color.themeSecondary)
+                ActionButton("Regenerate", pending: store.enrollTokenPending) { store.regenerateEnrollToken() }
+            }
+        } else {
+            VStack(spacing: 14) {
+                HStack(spacing: 8) {
+                    Spinner()
+                        .foregroundStyle(Color.themeSecondary)
+                    Text("Waiting for your server")
+                        .font(.ui(size: 13))
+                        .foregroundStyle(Color.themeSecondary)
+                }
+                Text(store.enrollToken?.timeLeft(at: date) ?? "15:00")
+                    .font(.ui(size: 12))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.themeTertiary)
+            }
+        }
     }
 
     private var commandBox: some View {

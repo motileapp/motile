@@ -10,7 +10,9 @@ use gpui_kit::*;
 use super::MediaFiles;
 use crate::models::{MediaSource, ViewedMedia};
 use crate::store::Store;
-use crate::ui::icons;
+use crate::theme::ControlSize;
+use crate::ui::control::over;
+use crate::ui::{Spinner, icons};
 
 /// The room the picture leaves around it when it fits the window.
 pub const MARGIN: (f32, f32) = (64., 52.);
@@ -208,12 +210,14 @@ impl MediaViewer {
         cx.stop_propagation();
     }
 
+    /// A round button over the picture: white on a wash of white over black.
     fn round_button(id: &'static str, symbol: &'static str, help: &'static str) -> Stateful<Div> {
         div()
             .id(id)
             .size(px(32.))
             .rounded_full()
-            .bg(hsla(0., 0., 0.2, 0.75))
+            .bg(over(hsla(0., 0., 0., 0.5), hsla(0., 0., 1., 0.14)))
+            .active(|button| button.opacity(0.7))
             .flex()
             .items_center()
             .justify_center()
@@ -292,7 +296,7 @@ impl Render for MediaViewer {
                 } else if let Some(fraction) = progress {
                     div().child(format!("Downloading {} · {}%", item.name, (fraction * 100.) as u32)).into_any_element()
                 } else {
-                    crate::ui::spinner(14., cx).into_any_element()
+                    Spinner::new(ControlSize::Large.symbol()).render(cx).into_any_element()
                 };
                 div()
                     .absolute()
@@ -398,12 +402,12 @@ impl Render for MediaViewer {
                                 .items_center()
                                 .justify_between()
                                 .child(
-                                    Self::round_button("previous", "chevron.left", "Previous (←)")
+                                    Self::round_button("previous", "chevron-left", "Previous (←)")
                                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                                         .on_click(cx.listener(|this, _, _, cx| this.step(-1, cx))),
                                 )
                                 .child(
-                                    Self::round_button("next", "chevron.right", "Next (→)")
+                                    Self::round_button("next", "chevron-right", "Next (→)")
                                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                                         .on_click(cx.listener(|this, _, _, cx| this.step(1, cx))),
                                 ),
@@ -421,7 +425,7 @@ impl Render for MediaViewer {
                     )
                     .child(
                         div().absolute().top(px(crate::theme::TOP_BAR + 10.)).right(px(10.)).child(
-                            Self::round_button("close-viewer", "xmark", "Close (Esc)")
+                            Self::round_button("close-viewer", "x", "Close (Esc)")
                                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                                 .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
                         ),

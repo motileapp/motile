@@ -11,16 +11,20 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_protocol::wire::Change;
 
-use super::state::{ADDED, CodeDocument, CodeFile, NOTE, REMOVED, file_symbol};
+use super::state::{ADDED, CodeDocument, CodeFile, CodeMarks, NOTE, REMOVED, file_symbol};
 use crate::theme::{self, colors, is_dark};
 use crate::transcript::rows::font;
 
 pub const HEADING_HEIGHT: f32 = 34.;
 const LINE_HEIGHT: f32 = 18.;
 const FILE_GAP: f32 = 12.;
-const TEXT_INSET: f32 = 12.;
+const TEXT_INSET: f32 = 8.;
 /// The width of a column of the code font.
 const ADVANCE: f32 = 7.6;
+/// The room the button that opens the file takes at the right of a heading.
+const OPEN_WIDTH: f32 = 38.;
+/// How wide the box that marks a file viewed is, with its word.
+const VIEWED_WIDTH: f32 = 70.;
 
 actions!(code_view, [CopySelection, SelectAllLines, ClearSelection]);
 
@@ -53,10 +57,27 @@ impl Block {
 
 /// A place in the text: a line of a file and a byte in its shown text.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-struct Place {
-    file: usize,
-    line: usize,
-    offset: usize,
+pub struct Place {
+    pub file: usize,
+    pub line: usize,
+    pub offset: usize,
+}
+
+/// The line of a file a comment goes on, as GitHub counts it, and on which side.
+#[derive(Clone, PartialEq, Debug)]
+pub struct CommentedLine {
+    pub path: String,
+    pub line: u32,
+    /// "left" or "right".
+    pub side: &'static str,
+    pub code: String,
+}
+
+/// What a click on a file's heading does.
+enum HeadingPress {
+    Toggle,
+    Open,
+    Viewed,
 }
 
 /// A line as it is drawn: tabs become spaces, so columns keep their place.
@@ -64,19 +85,15 @@ fn shown(line: &str) -> String {
     if line.contains('\t') { line.replace('\t', "    ") } else { line.to_string() }
 }
 
+fn run(len: usize, font: Font, color: Hsla) -> TextRun {
+    TextRun { len, font, color, background_color: None, underline: None, strikethrough: None }
+}
+
 /// The colours of a line, by byte range of its shown text.
 fn line_runs(line: &str, spans: Option<&Vec<u32>>, base: Hsla, c: &theme::Colors) -> Vec<TextRun> {
     let text = shown(line);
     let mono = font(theme::MONO_FONT, FontWeight::NORMAL, false);
-    let plain = |len: usize, color: Hsla| TextRun {
-        len,
-        font: mono.clone(),
-        color,
-        background_color: None,
-        underline: None,
-        strikethrough: None,
-    };
-    let Some(spans) = spans else { return vec![plain(text.len(), base)] };
+    let Some(spans) = spans else { return vec![run(text.len(), mono, base)] };
     // The spans count UTF-16 units of the line as it is, tabs and all.
     let mut map = Vec::with_capacity(line.len() + 1);
     let mut at = 0;
@@ -99,15 +116,77 @@ fn line_runs(line: &str, spans: Option<&Vec<u32>>, base: Hsla, c: &theme::Colors
             continue;
         }
         if from > done {
-            runs.push(plain(from - done, base));
+            runs.push(run(from - done, mono.clone(), base));
         }
-        runs.push(plain(to - from, c.syntax.get(span[2] as usize).copied().unwrap_or(base)));
+        runs.push(run(to - from, mono.clone(), c.syntax.get(span[2] as usize).copied().unwrap_or(base)));
         done = to;
     }
     if done < text.len() {
-        runs.push(plain(text.len() - done, base));
+        runs.push(run(text.len() - done, mono, base));
     }
     runs
+}
+
+/// The line of the file at the place, as GitHub counts it, and on which side, when a comment
+/// can be written on it.
+fn commentable(document: &CodeDocument, marks: &CodeMarks, place: Place) -> Option<CommentedLine> {
+    if !marks.commentable {
+        return None;
+    }
+    let file = document.files.get(place.file)?;
+    let code = file.lines.get(place.line)?.to_string();
+    let (number, side) = match file.kind(place.line) {
+        NOTE => return None,
+        REMOVED => (file.old.get(place.line).copied().unwrap_or(0), "left"),
+        _ => (file.new.get(place.line).copied().unwrap_or(0), "right"),
+    };
+    (number > 0).then(|| CommentedLine { path: file.path.clone(), line: number, side, code })
+}
+
+type OnPath = Rc<dyn Fn(&str, &mut Window, &mut App)>;
+type OnLine = Rc<dyn Fn(CommentedLine, &mut Window, &mut App)>;
+
+/// What the clicks in a document do: on a heading's chevron, its open button and its viewed box,
+/// and on a line's number.
+#[derive(Clone)]
+pub struct CodeActions {
+    pub on_toggle: OnPath,
+    pub on_open: OnPath,
+    pub on_viewed: OnPath,
+    pub on_comment: OnLine,
+}
+
+impl Default for CodeActions {
+    fn default() -> Self {
+        Self {
+            on_toggle: Rc::new(|_, _, _| {}),
+            on_open: Rc::new(|_, _, _| {}),
+            on_viewed: Rc::new(|_, _, _| {}),
+            on_comment: Rc::new(|_, _, _| {}),
+        }
+    }
+}
+
+impl CodeActions {
+    pub fn toggle(mut self, on_toggle: impl Fn(&str, &mut Window, &mut App) + 'static) -> Self {
+        self.on_toggle = Rc::new(on_toggle);
+        self
+    }
+
+    pub fn open(mut self, on_open: impl Fn(&str, &mut Window, &mut App) + 'static) -> Self {
+        self.on_open = Rc::new(on_open);
+        self
+    }
+
+    pub fn viewed(mut self, on_viewed: impl Fn(&str, &mut Window, &mut App) + 'static) -> Self {
+        self.on_viewed = Rc::new(on_viewed);
+        self
+    }
+
+    pub fn comment(mut self, on_comment: impl Fn(CommentedLine, &mut Window, &mut App) + 'static) -> Self {
+        self.on_comment = Rc::new(on_comment);
+        self
+    }
 }
 
 pub struct CodeView {
@@ -116,10 +195,11 @@ pub struct CodeView {
     viewport: Rc<Cell<Bounds<Pixels>>>,
     selection: Option<(Place, Place)>,
     selecting: Option<Place>,
-    /// The document's name and the files that are closed, as last laid out.
+    /// The document's name, as last laid out.
     shown_id: String,
     revealed: u64,
-    hovered_heading: Option<usize>,
+    /// The line under the pointer, which shows that a comment can be written on it.
+    hovered: Option<(usize, usize)>,
 }
 
 /// What the view shows, read from the store each time it is drawn.
@@ -127,6 +207,36 @@ pub struct CodeSnapshot<'a> {
     pub document: &'a CodeDocument,
     pub collapsed: &'a HashSet<String>,
     pub reveal: Option<&'a (String, u64)>,
+    pub marks: &'a CodeMarks,
+}
+
+/// Where everything is in the document, for drawing and for clicks.
+struct Layout {
+    blocks: Vec<Block>,
+    height: f32,
+    width: f32,
+    number_width: f32,
+    gutter: f32,
+}
+
+impl Layout {
+    fn block_at(&self, y: f32) -> Option<Block> {
+        self.blocks.iter().rev().find(|block| block.top <= y).copied()
+    }
+
+    /// The file whose heading has scrolled out while its lines are at the top.
+    fn pinned(&self, scrolled: f32) -> Option<Block> {
+        self.blocks
+            .iter()
+            .rev()
+            .find(|block| block.top < scrolled)
+            .filter(|block| block.rows > 0 && scrolled < block.bottom())
+            .copied()
+    }
+
+    fn line_at(&self, block: &Block, y: f32) -> usize {
+        (((y - block.lines_top()) / LINE_HEIGHT).floor().max(0.) as usize).min(block.rows.saturating_sub(1))
+    }
 }
 
 impl CodeView {
@@ -139,11 +249,11 @@ impl CodeView {
             selecting: None,
             shown_id: String::new(),
             revealed: 0,
-            hovered_heading: None,
+            hovered: None,
         }
     }
 
-    fn layout(document: &CodeDocument, collapsed: &HashSet<String>) -> (Vec<Block>, f32, f32, f32) {
+    fn layout(document: &CodeDocument, collapsed: &HashSet<String>) -> Layout {
         let mut blocks = Vec::with_capacity(document.files.len());
         let mut y = 0.;
         let mut last_number = 1u32;
@@ -163,11 +273,7 @@ impl CodeView {
         let number_width = digits as f32 * 6.8 + 12.;
         let gutter = if document.headed { 2. } else { 1. } * number_width + 4.;
         let width = gutter + TEXT_INSET + columns as f32 * ADVANCE + 24.;
-        (blocks, y + 8., width, number_width)
-    }
-
-    fn block_at(blocks: &[Block], y: f32) -> Option<Block> {
-        blocks.iter().rev().find(|block| block.top <= y).copied()
+        Layout { blocks, height: y + 8., width, number_width, gutter }
     }
 
     fn clamp(&mut self, content: Size<Pixels>) {
@@ -180,7 +286,7 @@ impl CodeView {
 
     /// Follows the document: the same one keeps its place, another starts at the top, and a
     /// file asked for comes into view.
-    pub fn sync(&mut self, snapshot: &CodeSnapshot) {
+    fn sync(&mut self, snapshot: &CodeSnapshot, layout: &Layout) {
         if snapshot.document.id != self.shown_id {
             self.shown_id = snapshot.document.id.clone();
             self.scroll = Point::default();
@@ -191,45 +297,36 @@ impl CodeView {
             return;
         }
         self.revealed = *count;
-        let (blocks, ..) = Self::layout(snapshot.document, snapshot.collapsed);
         if let Some(index) = snapshot.document.files.iter().position(|file| &file.path == path) {
-            self.scroll = point(px(0.), px(blocks[index].top));
+            self.scroll = point(px(0.), px(layout.blocks[index].top));
         }
     }
 
+    /// The place in the text nearest to the point, in the file `within` when one is given.
     fn place_at(
         &self,
         document: &CodeDocument,
-        collapsed: &HashSet<String>,
+        layout: &Layout,
         position: Point<Pixels>,
         within: Option<usize>,
         window: &mut Window,
     ) -> Option<Place> {
-        let (blocks, _, _, number_width) = Self::layout(document, collapsed);
-        let gutter = if document.headed { 2. } else { 1. } * number_width + 4.;
         let origin = self.viewport.get().origin;
         let y = f32::from(position.y - origin.y + self.scroll.y);
         let block = match within {
-            Some(file) => blocks.get(file).copied()?,
-            None => Self::block_at(&blocks, y)?,
+            Some(file) => layout.blocks.get(file).copied()?,
+            None => layout.block_at(y)?,
         };
         if block.rows == 0 {
             return None;
         }
-        let line = (((y - block.lines_top()) / LINE_HEIGHT).floor().max(0.) as usize).min(block.rows - 1);
+        let line = layout.line_at(&block, y);
         let text = shown(&document.files[block.file].lines[line]);
-        let x = position.x - origin.x + self.scroll.x - px(gutter + TEXT_INSET);
+        let x = position.x - origin.x + self.scroll.x - px(layout.gutter + TEXT_INSET);
         let shaped = window.text_system().shape_line(
             text.clone().into(),
             px(theme::CODE_SIZE),
-            &[TextRun {
-                len: text.len(),
-                font: font(theme::MONO_FONT, FontWeight::NORMAL, false),
-                color: black(),
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            }],
+            &[run(text.len(), font(theme::MONO_FONT, FontWeight::NORMAL, false), black())],
             None,
         );
         let offset = shaped.closest_index_for_x(x.max(px(0.)));
@@ -241,7 +338,7 @@ impl CodeView {
         let file = document.files.get(from.file)?;
         let mut parts = Vec::new();
         for line in from.line..=to.line.min(file.lines.len().saturating_sub(1)) {
-            if file.kinds.get(line) == Some(&NOTE) && from.line != to.line {
+            if file.kind(line) == NOTE && from.line != to.line {
                 continue;
             }
             let text = shown(&file.lines[line]);
@@ -271,36 +368,45 @@ impl CodeView {
         (end > start).then_some((Place { offset: start, ..place }, Place { offset: end, ..place }))
     }
 
-    /// The view of a document, its clicks on headings handed to `on_toggle` and `on_open`.
-    pub fn element(
-        &mut self,
-        snapshot: CodeSnapshot,
-        on_toggle: impl Fn(&str, &mut Window, &mut App) + 'static,
-        on_open: impl Fn(&str, &mut Window, &mut App) + 'static,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        self.sync(&snapshot);
-        let document = snapshot.document.clone();
-        let collapsed = snapshot.collapsed.clone();
-        let (blocks, content_height, content_width, number_width) = Self::layout(&document, &collapsed);
-        let content = size(px(content_width), px(content_height));
+    /// What a click in the heading of a file, as wide as `width`, `x` from its left, does.
+    fn heading_press(
+        x: f32,
+        width: f32,
+        file: &CodeFile,
+        marks: &CodeMarks,
+        c: &theme::Colors,
+        window: &mut Window,
+    ) -> HeadingPress {
+        if x > width - OPEN_WIDTH {
+            return HeadingPress::Open;
+        }
+        let Some((left, right)) = viewed_box(file, width, marks, c, window) else { return HeadingPress::Toggle };
+        if left <= x && x <= right {
+            return HeadingPress::Viewed;
+        }
+        HeadingPress::Toggle
+    }
+
+    /// The view of a document, its clicks handed to `actions`.
+    pub fn element(&mut self, snapshot: CodeSnapshot, actions: CodeActions, cx: &mut Context<Self>) -> AnyElement {
+        let layout = Rc::new(Self::layout(snapshot.document, snapshot.collapsed));
+        self.sync(&snapshot, &layout);
+        let content = size(px(layout.width), px(layout.height));
         self.clamp(content);
-        let gutter = if document.headed { 2. } else { 1. } * number_width + 4.;
         let scroll = self.scroll;
         let selection = self.selection;
-        let hovered_heading = self.hovered_heading;
+        let hovered = self.hovered;
         let viewport = self.viewport.clone();
         let c = *colors(cx);
         let dark = is_dark(cx);
-        let document = Rc::new(document);
-        let collapsed = Rc::new(collapsed);
-        let on_toggle = Rc::new(on_toggle);
-        let on_open = Rc::new(on_open);
+        let document = Rc::new(snapshot.document.clone());
+        let collapsed = Rc::new(snapshot.collapsed.clone());
+        let marks = Rc::new(snapshot.marks.clone());
 
-        let paint_document = document.clone();
-        let paint_blocks = blocks.clone();
-        let (down_document, down_blocks, down_collapsed) = (document.clone(), blocks.clone(), collapsed.clone());
-        let (move_document, move_collapsed) = (document.clone(), collapsed.clone());
+        let (paint_document, paint_layout, paint_collapsed, paint_marks) =
+            (document.clone(), layout.clone(), collapsed.clone(), marks.clone());
+        let (down_document, down_layout, down_marks) = (document.clone(), layout.clone(), marks.clone());
+        let (move_document, move_layout, move_marks) = (document.clone(), layout.clone(), marks.clone());
         let (copy_document, all_document) = (document.clone(), document.clone());
         let canvas = canvas(
             move |bounds, _, _| {
@@ -308,14 +414,17 @@ impl CodeView {
             },
             move |bounds, _, window, cx| {
                 let document = &paint_document;
+                let layout = &paint_layout;
                 let visible_top = f32::from(scroll.y);
                 let visible_bottom = visible_top + f32::from(bounds.size.height);
                 let added_fill = if dark { hsla(0.35, 0.49, 0.48, 0.15) } else { hsla(0.37, 0.66, 0.30, 0.11) };
                 let removed_fill = if dark { hsla(0.0, 0.92, 0.63, 0.15) } else { hsla(0.99, 0.70, 0.47, 0.09) };
                 let selection_fill = if dark { hsla(0.62, 1., 0.65, 0.35) } else { hsla(0.62, 0.68, 0.50, 0.22) };
                 let mono = font(theme::MONO_FONT, FontWeight::NORMAL, false);
+                let gutter = layout.gutter;
                 window.with_content_mask(Some(ContentMask { bounds }), |window| {
-                    for block in paint_blocks
+                    for block in layout
+                        .blocks
                         .iter()
                         .filter(|block| block.bottom() + FILE_GAP >= visible_top && block.top <= visible_bottom)
                     {
@@ -325,8 +434,8 @@ impl CodeView {
                             paint_heading(
                                 file,
                                 block.file > 0,
-                                collapsed.contains(&file.path),
-                                hovered_heading == Some(block.file),
+                                paint_collapsed.contains(&file.path),
+                                &paint_marks,
                                 Bounds::new(point(bounds.origin.x, top), size(bounds.size.width, px(HEADING_HEIGHT))),
                                 &c,
                                 window,
@@ -342,14 +451,15 @@ impl CodeView {
                         if first > last {
                             continue;
                         }
+                        let marked = paint_marks.marked.get(&file.path);
                         for line in first..=last {
                             let y = bounds.origin.y + px(block.lines_top() + line as f32 * LINE_HEIGHT) - scroll.y;
                             let row = Bounds::new(point(bounds.origin.x, y), size(bounds.size.width, px(LINE_HEIGHT)));
-                            let kind = file.kinds.get(line).copied().unwrap_or(0);
+                            let kind = file.kind(line);
                             let fill_color = match kind {
                                 ADDED => Some(added_fill),
                                 REMOVED => Some(removed_fill),
-                                NOTE => Some(c.hover),
+                                NOTE => Some(c.background_secondary),
                                 _ => None,
                             };
                             if let Some(color) = fill_color {
@@ -358,19 +468,13 @@ impl CodeView {
                             let text = shown(&file.lines[line]);
                             let note = kind == NOTE;
                             let runs = if note {
-                                vec![TextRun {
-                                    len: text.len(),
-                                    font: mono.clone(),
-                                    color: c.secondary,
-                                    background_color: None,
-                                    underline: None,
-                                    strikethrough: None,
-                                }]
+                                vec![run(text.len(), mono.clone(), c.secondary)]
                             } else {
                                 line_runs(&file.lines[line], file.spans.get(line), c.text, &c)
                             };
                             let shaped =
                                 window.text_system().shape_line(text.clone().into(), px(theme::CODE_SIZE), &runs, None);
+                            // A note stays where it is while the lines move sideways.
                             let text_x = if note {
                                 bounds.origin.x + px(gutter + TEXT_INSET)
                             } else {
@@ -389,6 +493,8 @@ impl CodeView {
                                     } else {
                                         px(0.)
                                     };
+                                    // A line that is selected to its end is lit a little past it,
+                                    // as its line break.
                                     let end = if line == to.line {
                                         shaped.x_for_index(to.offset.min(text.len()))
                                     } else {
@@ -408,7 +514,7 @@ impl CodeView {
                                 continue;
                             }
                             let numbers = [
-                                (document.headed, file.old.get(line).copied().unwrap_or(0), number_width),
+                                (document.headed, file.old.get(line).copied().unwrap_or(0), layout.number_width),
                                 (true, file.new.get(line).copied().unwrap_or(0), gutter - 4.),
                             ];
                             for (shown_number, number, right) in numbers {
@@ -416,25 +522,26 @@ impl CodeView {
                                     continue;
                                 }
                                 let digits = number.to_string();
-                                let runs = vec![TextRun {
-                                    len: digits.len(),
-                                    font: font(theme::MONO_FONT, FontWeight::NORMAL, false),
-                                    color: c.tertiary,
-                                    background_color: None,
-                                    underline: None,
-                                    strikethrough: None,
-                                }];
+                                let runs = vec![run(digits.len(), mono.clone(), c.tertiary)];
                                 let shaped = window.text_system().shape_line(digits.into(), px(11.), &runs, None);
                                 let x = bounds.origin.x + px(right - 6.) - shaped.width;
                                 let _ = shaped.paint(point(x, y), px(LINE_HEIGHT), TextAlign::Left, None, window, cx);
+                            }
+                            if marked.is_some_and(|lines| lines.contains(&line)) {
+                                let bar = Bounds::new(
+                                    point(bounds.origin.x + px(3.), y + px(5.)),
+                                    size(px(3.), px(LINE_HEIGHT - 10.)),
+                                );
+                                window.paint_quad(fill(bar, c.link).corner_radii(Corners::all(px(1.5))));
+                            }
+                            if paint_marks.commentable && hovered == Some((block.file, line)) {
+                                paint_comment_badge(point(bounds.origin.x + px(gutter - 2.), y), &c, window, cx);
                             }
                         }
                     }
                     // The heading of the file whose lines are at the top stays over them.
                     if document.headed
-                        && let Some(block) = paint_blocks.iter().rev().find(|block| block.top < visible_top)
-                        && block.rows > 0
-                        && visible_top < block.bottom()
+                        && let Some(block) = layout.pinned(visible_top)
                     {
                         let offset = (block.bottom() - HEADING_HEIGHT - visible_top).min(0.);
                         let file = &document.files[block.file];
@@ -445,8 +552,8 @@ impl CodeView {
                         paint_heading(
                             file,
                             false,
-                            collapsed.contains(&file.path),
-                            hovered_heading == Some(block.file),
+                            paint_collapsed.contains(&file.path),
+                            &paint_marks,
                             heading,
                             &c,
                             window,
@@ -458,8 +565,8 @@ impl CodeView {
         )
         .size_full();
 
-        let hover_blocks = blocks;
-        let hover_headed = document.headed;
+        let actions = Rc::new(actions);
+        let down_actions = actions.clone();
         div()
             .id("code-view")
             .key_context("CodeView")
@@ -476,19 +583,20 @@ impl CodeView {
                 cx.notify();
             }))
             .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, window, cx| {
-                if hover_headed {
+                // The line under the pointer shows that it can be commented on, while the pointer
+                // is on the numbers.
+                if move_marks.commentable {
                     let origin = this.viewport.get().origin;
-                    let y = f32::from(event.position.y - origin.y);
-                    let at = y + f32::from(this.scroll.y);
-                    let pinned =
-                        hover_blocks.iter().rev().find(|block| block.top < f32::from(this.scroll.y)).filter(|block| {
-                            block.rows > 0 && f32::from(this.scroll.y) < block.bottom() && y < HEADING_HEIGHT
-                        });
-                    let over = pinned.map(|block| block.file).or_else(|| {
-                        Self::block_at(&hover_blocks, at).filter(|block| at < block.lines_top()).map(|block| block.file)
-                    });
-                    if over != this.hovered_heading {
-                        this.hovered_heading = over;
+                    let x = f32::from(event.position.x - origin.x);
+                    let y = f32::from(event.position.y - origin.y + this.scroll.y);
+                    let hovered = move_layout
+                        .block_at(y)
+                        .filter(|block| x < move_layout.gutter && y >= block.lines_top())
+                        .and_then(|_| this.place_at(&move_document, &move_layout, event.position, None, window))
+                        .filter(|place| commentable(&move_document, &move_marks, *place).is_some())
+                        .map(|place| (place.file, place.line));
+                    if hovered != this.hovered {
+                        this.hovered = hovered;
                         cx.notify();
                     }
                 }
@@ -497,8 +605,7 @@ impl CodeView {
                     this.selecting = None;
                     return;
                 }
-                if let Some(end) =
-                    this.place_at(&move_document, &move_collapsed, event.position, Some(start.file), window)
+                if let Some(end) = this.place_at(&move_document, &move_layout, event.position, Some(start.file), window)
                 {
                     this.selection = Some((start.min(end), start.max(end)));
                     cx.notify();
@@ -513,34 +620,38 @@ impl CodeView {
                     let x = f32::from(event.position.x - origin.x);
                     let y = f32::from(event.position.y - origin.y) + f32::from(this.scroll.y);
                     let scrolled = f32::from(this.scroll.y);
-                    // A click on a heading, the pinned one or one in its place, toggles the file or
-                    // opens it.
+                    // A click on a heading, the pinned one or one in its place, toggles the file,
+                    // opens it or marks it viewed.
                     if down_document.headed {
-                        let pinned = down_blocks.iter().rev().find(|block| block.top < scrolled).filter(|block| {
-                            block.rows > 0 && scrolled < block.bottom() && y - scrolled < HEADING_HEIGHT
-                        });
-                        let heading = pinned
-                            .copied()
-                            .or_else(|| Self::block_at(&down_blocks, y).filter(|block| y < block.lines_top()));
+                        let pinned = down_layout.pinned(scrolled).filter(|_| y - scrolled < HEADING_HEIGHT);
+                        let heading = pinned.or_else(|| down_layout.block_at(y).filter(|block| y < block.lines_top()));
                         if let Some(block) = heading {
-                            let path = down_document.files[block.file].path.clone();
-                            if x > width - 38. {
-                                on_open(&path, window, cx);
-                            } else {
-                                if let Some(pinned) = pinned {
-                                    // A file closed from under its pinned heading leaves the view
-                                    // at its heading.
-                                    this.scroll.y = px(pinned.top);
+                            let file = &down_document.files[block.file];
+                            match Self::heading_press(x, width, file, &down_marks, &c, window) {
+                                HeadingPress::Open => (down_actions.on_open)(&file.path, window, cx),
+                                HeadingPress::Viewed => (down_actions.on_viewed)(&file.path, window, cx),
+                                HeadingPress::Toggle => {
+                                    // A file that is closed from under its pinned heading leaves
+                                    // the view at its heading.
+                                    if pinned.is_some() {
+                                        this.scroll.y = px(block.top);
+                                    }
+                                    (down_actions.on_toggle)(&file.path, window, cx);
                                 }
-                                on_toggle(&path, window, cx);
                             }
                             return;
                         }
                     }
-                    let Some(start) = this.place_at(&down_document, &down_collapsed, event.position, None, window)
-                    else {
+                    let Some(start) = this.place_at(&down_document, &down_layout, event.position, None, window) else {
                         return;
                     };
+                    if down_marks.commentable
+                        && x < down_layout.gutter
+                        && let Some(line) = commentable(&down_document, &down_marks, start)
+                    {
+                        (down_actions.on_comment)(line, window, cx);
+                        return;
+                    }
                     if event.click_count == 2 {
                         this.selection = Self::word_at(&down_document, start);
                         this.selecting = None;
@@ -574,23 +685,85 @@ impl CodeView {
     }
 }
 
+fn paint_symbol(name: &str, size: f32, center: Point<Pixels>, color: Hsla, window: &mut Window, cx: &mut App) {
+    let side = px(theme::symbol_side(size));
+    let bounds = Bounds::new(point(center.x - side / 2., center.y - side / 2.), gpui_kit::size(side, side));
+    let _ = window.paint_svg(bounds, crate::ui::icons::path(name), None, TransformationMatrix::unit(), color, cx);
+}
+
+/// The sign that a comment can be written on the line, over the end of its number.
+fn paint_comment_badge(top_right: Point<Pixels>, c: &theme::Colors, window: &mut Window, cx: &mut App) {
+    let side = px(16.);
+    let badge = Bounds::new(point(top_right.x - side, top_right.y + (px(LINE_HEIGHT) - side) / 2.), size(side, side));
+    window.paint_quad(fill(badge, c.primary).corner_radii(Corners::all(px(4.))));
+    paint_symbol("plus", 10., badge.center(), white(), window, cx);
+}
+
+/// Where a file's box to mark it viewed is in its heading, from the heading's left, when it has one.
+fn viewed_box(
+    file: &CodeFile,
+    width: f32,
+    marks: &CodeMarks,
+    c: &theme::Colors,
+    window: &mut Window,
+) -> Option<(f32, f32)> {
+    if !marks.viewable {
+        return None;
+    }
+    let counts_width =
+        if file.added + file.removed > 0 { counts_width(file.added, file.removed, c, window) + 10. } else { 0. };
+    let right = width - OPEN_WIDTH - counts_width;
+    Some((right - VIEWED_WIDTH, right))
+}
+
+fn counts_width(added: u32, removed: u32, c: &theme::Colors, window: &mut Window) -> f32 {
+    let (text, runs) = counts_text(added, removed, c);
+    f32::from(window.text_system().shape_line(text.into(), px(11.5), &runs, None).width)
+}
+
+fn paint_viewed(viewed: bool, left: f32, bounds: Bounds<Pixels>, c: &theme::Colors, window: &mut Window, cx: &mut App) {
+    let box_bounds =
+        Bounds::new(point(bounds.origin.x + px(left + 6.), bounds.center().y - px(7.)), size(px(14.), px(14.)));
+    if viewed {
+        window.paint_quad(fill(box_bounds, c.primary).corner_radii(Corners::all(px(3.5))));
+        paint_symbol("check", 9., box_bounds.center(), white(), window, cx);
+    } else {
+        window.paint_quad(
+            outline(box_bounds, c.border_secondary, BorderStyle::Solid).corner_radii(Corners::all(px(3.5))),
+        );
+    }
+    let label = "Viewed";
+    let runs = vec![run(
+        label.len(),
+        font(theme::UI_FONT, FontWeight::NORMAL, false),
+        if viewed { c.text } else { c.secondary },
+    )];
+    let shaped = window.text_system().shape_line(label.into(), px(11.5), &runs, None);
+    let _ = shaped.paint(
+        point(box_bounds.right() + px(6.), bounds.origin.y),
+        bounds.size.height,
+        TextAlign::Left,
+        None,
+        window,
+        cx,
+    );
+}
+
 /// The name of the file with what happened to it and how many lines changed, and the buttons
-/// that close its lines and open the file.
+/// that close its lines and open the file. A heading under the panel's bar has the bar's line
+/// above it.
 #[allow(clippy::too_many_arguments)]
 fn paint_heading(
     file: &CodeFile,
     line_above: bool,
     closed: bool,
-    hovered: bool,
+    marks: &CodeMarks,
     bounds: Bounds<Pixels>,
     c: &theme::Colors,
     window: &mut Window,
     cx: &mut App,
 ) {
-    window.paint_quad(fill(bounds, c.code_background));
-    if hovered {
-        window.paint_quad(fill(bounds, c.hover.opacity(0.5)));
-    }
+    window.paint_quad(fill(bounds, c.background_secondary));
     if line_above {
         window.paint_quad(fill(Bounds::new(bounds.origin, size(bounds.size.width, px(1.))), c.border));
     }
@@ -598,17 +771,18 @@ fn paint_heading(
         Bounds::new(point(bounds.origin.x, bounds.bottom() - px(1.)), size(bounds.size.width, px(1.))),
         c.border,
     ));
-    let middle = bounds.origin.y + bounds.size.height / 2.;
-    let icon = |name: &str, size: f32, x: Pixels, color: Hsla, window: &mut Window, cx: &mut App| {
-        let side = px(size * 1.15);
-        let icon_bounds = Bounds::new(point(x - side / 2., middle - side / 2.), gpui_kit::size(side, side));
-        let _ =
-            window.paint_svg(icon_bounds, crate::ui::icons::path(name), None, TransformationMatrix::unit(), color, cx);
-    };
-    icon(if closed { "chevron.right" } else { "chevron.down" }, 9., bounds.origin.x + px(16.), c.tertiary, window, cx);
-    icon(file_symbol(&file.path), 11., bounds.origin.x + px(37.), c.secondary, window, cx);
+    let middle = bounds.center().y;
+    paint_symbol(
+        if closed { "chevron-right" } else { "chevron-down" },
+        9.,
+        point(bounds.origin.x + px(16.), middle),
+        c.tertiary,
+        window,
+        cx,
+    );
+    paint_symbol(file_symbol(&file.path), 11., point(bounds.origin.x + px(37.), middle), c.secondary, window, cx);
     let open_x = bounds.right() - px(34.);
-    icon("arrow.up.forward.square", 12., open_x + px(14.), c.secondary, window, cx);
+    paint_symbol("square-arrow-out-up-right", 12., point(open_x + px(14.), middle), c.secondary, window, cx);
 
     let mut counts_x = open_x - px(4.);
     if file.added + file.removed > 0 {
@@ -618,6 +792,10 @@ fn paint_heading(
         let _ = shaped.paint(point(counts_x, bounds.origin.y), bounds.size.height, TextAlign::Left, None, window, cx);
     } else {
         counts_x = open_x;
+    }
+    let viewed = viewed_box(file, f32::from(bounds.size.width), marks, c, window);
+    if let Some((left, _)) = viewed {
+        paint_viewed(marks.viewed.contains(&file.path), left, bounds, c, window, cx);
     }
 
     let folder = std::path::Path::new(&file.path)
@@ -633,42 +811,22 @@ fn paint_heading(
     };
     let mut text = String::new();
     let mut runs = Vec::new();
-    let system = |weight| font(theme::SYSTEM_FONT, weight, false);
+    let ui = |weight| font(theme::UI_FONT, weight, false);
     if !folder.is_empty() {
         let part = format!("{folder}/");
-        runs.push(TextRun {
-            len: part.len(),
-            font: system(FontWeight::NORMAL),
-            color: c.secondary,
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-        });
+        runs.push(run(part.len(), ui(FontWeight::NORMAL), c.secondary));
         text.push_str(&part);
     }
-    runs.push(TextRun {
-        len: name.len(),
-        font: system(FontWeight::MEDIUM),
-        color: c.text,
-        background_color: None,
-        underline: None,
-        strikethrough: None,
-    });
+    runs.push(run(name.len(), ui(FontWeight::MEDIUM), c.text));
     text.push_str(&name);
     if let Some(note) = note {
         let part = format!("   {note}");
-        runs.push(TextRun {
-            len: part.len(),
-            font: system(FontWeight::NORMAL),
-            color: c.tertiary,
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-        });
+        runs.push(run(part.len(), ui(FontWeight::NORMAL), c.tertiary));
         text.push_str(&part);
     }
     let name_x = bounds.origin.x + px(50.);
-    let room = counts_x - px(10.) - name_x;
+    let end = viewed.map(|(left, _)| bounds.origin.x + px(left)).unwrap_or(counts_x);
+    let room = end - px(10.) - name_x;
     let shaped = window.text_system().shape_line(text.into(), px(12.5), &runs, None);
     window.with_content_mask(
         Some(ContentMask {
@@ -684,32 +842,18 @@ fn paint_heading(
 pub fn counts_text(added: u32, removed: u32, c: &theme::Colors) -> (String, Vec<TextRun>) {
     let digits = Font {
         features: FontFeatures(std::sync::Arc::new(vec![("tnum".into(), 1)])),
-        ..font(theme::SYSTEM_FONT, FontWeight::MEDIUM, false)
+        ..font(theme::UI_FONT, FontWeight::MEDIUM, false)
     };
     let mut text = String::new();
     let mut runs = Vec::new();
     if added > 0 || removed == 0 {
         let part = format!("+{added}");
-        runs.push(TextRun {
-            len: part.len(),
-            font: digits.clone(),
-            color: c.success,
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-        });
+        runs.push(run(part.len(), digits.clone(), c.success));
         text.push_str(&part);
     }
     if removed > 0 || added == 0 {
         let part = format!("{}−{removed}", if text.is_empty() { "" } else { " " });
-        runs.push(TextRun {
-            len: part.len(),
-            font: digits,
-            color: c.danger,
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-        });
+        runs.push(run(part.len(), digits, c.danger));
         text.push_str(&part);
     }
     (text, runs)

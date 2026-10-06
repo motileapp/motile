@@ -4,23 +4,32 @@ import UIKit
 import UniformTypeIdentifiers
 
 /// The composer's text: grows with what is typed and takes pasted images and files. Return is a
-/// line break on the screen's keyboard and sends from a keyboard with keys.
+/// line break on the screen's keyboard and sends from a keyboard with keys. A `TextArea` is the
+/// same view with Return always a line break.
 struct ComposerTextView: UIViewRepresentable {
     static let font = UIFont.systemFont(ofSize: 17)
     static let verticalInset: CGFloat = 8
     /// One line: a phone has no room to spare, and the composer grows with what is typed.
-    static let minimumHeight: CGFloat = ceil(font.lineHeight) + verticalInset * 2
+    static let minimumHeight = height(of: 1, in: font)
     static let maximumHeight: CGFloat = 180
+
+    /// How tall the view is with that many lines of the font in it.
+    static func height(of lines: Int, in font: UIFont) -> CGFloat {
+        ceil(font.lineHeight) * CGFloat(max(1, lines)) + verticalInset * 2
+    }
 
     @Environment(AppStore.self) private var store
     @Binding var text: String
     @Binding var height: CGFloat
     let placeholder: String
     /// Changes when another thread's draft is shown. The keyboard only comes when the text is tapped.
-    let focusKey: String
-    let onSubmit: () -> Void
-    let onFiles: ([URL]) -> Void
-    let onFileDrag: (Bool) -> Void
+    var focusKey: String?
+    /// What Return does from a keyboard with keys. Without it, Return is a line break.
+    var onSubmit: (() -> Void)?
+    var onFiles: ([URL]) -> Void = { _ in }
+    var onFileDrag: (Bool) -> Void = { _ in }
+    var font = Self.font
+    var heights = Self.minimumHeight...Self.maximumHeight
     var focused: Binding<Bool>?
     var pressed = 0
 
@@ -41,7 +50,7 @@ struct ComposerTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> ComposerUITextView {
         let view = ComposerUITextView()
         view.delegate = context.coordinator
-        view.font = Self.font
+        view.font = font
         view.textColor = Theme.text
         view.tintColor = Theme.primary
         view.backgroundColor = .clear
@@ -53,7 +62,8 @@ struct ComposerTextView: UIViewRepresentable {
         view.placeholder = placeholder
         view.text = text
         context.coordinator.textView = view
-        store.composerTextStart = { [weak view] in view?.textStart }
+        // The view that sends is the composer's: a sent message sets out from its text.
+        if onSubmit != nil { store.composerTextStart = { [weak view] in view?.textStart } }
         DispatchQueue.main.async { context.coordinator.measure() }
         return view
     }
@@ -109,8 +119,8 @@ struct ComposerTextView: UIViewRepresentable {
         func measure() {
             guard let view = textView, view.bounds.width > 0 else { return }
             let fitted = view.sizeThatFits(CGSize(width: view.bounds.width, height: .greatestFiniteMagnitude)).height
-            let height = min(ComposerTextView.maximumHeight, max(ComposerTextView.minimumHeight, ceil(fitted)))
-            view.isScrollEnabled = fitted > ComposerTextView.maximumHeight
+            let height = min(parent.heights.upperBound, max(parent.heights.lowerBound, ceil(fitted)))
+            view.isScrollEnabled = fitted > parent.heights.upperBound
             guard abs(parent.height - height) > 0.5 else { return }
             DispatchQueue.main.async { self.parent.height = height }
         }
@@ -125,6 +135,10 @@ final class ComposerUITextView: UITextView {
     }
     private let placeholderLabel = UILabel()
     private var laidOutWidth: CGFloat = 0
+
+    override var font: UIFont? {
+        didSet { placeholderLabel.font = font }
+    }
 
     init() {
         super.init(frame: .zero, textContainer: nil)
@@ -153,7 +167,7 @@ final class ComposerUITextView: UITextView {
         super.layoutSubviews()
         let inset = textContainerInset
         let padding = textContainer.lineFragmentPadding
-        placeholderLabel.frame = CGRect(x: padding, y: inset.top, width: max(0, bounds.width - 2 * padding), height: ceil(ComposerTextView.font.lineHeight))
+        placeholderLabel.frame = CGRect(x: padding, y: inset.top, width: max(0, bounds.width - 2 * padding), height: ceil((font ?? ComposerTextView.font).lineHeight))
         showPlaceholder()
         guard bounds.width != laidOutWidth else { return }
         laidOutWidth = bounds.width
@@ -162,6 +176,7 @@ final class ComposerUITextView: UITextView {
 
     // Return sends from a keyboard with keys; with Shift or Option it is a line break.
     override var keyCommands: [UIKeyCommand]? {
+        guard onSubmit != nil else { return nil }
         let send = UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(submit))
         send.wantsPriorityOverSystemBehavior = true
         return [send]

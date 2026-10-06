@@ -19,14 +19,14 @@ pub type Read = Box<dyn Any + Send>;
 type Reader = Box<dyn FnOnce(Value) -> Read + Send>;
 
 pub enum Incoming {
-    Event(Event),
+    Event(Box<Event>),
     /// The answer to a command sent with `send_read`, already read.
     Read {
         id: u64,
         result: Result<Read, String>,
     },
     /// Rows of a transcript, made ready to draw.
-    Rows(Prepared),
+    Rows(Box<Prepared>),
 }
 
 pub struct Bridge {
@@ -49,12 +49,12 @@ impl Bridge {
                     match reader {
                         Some(read) if ok => Incoming::Read { id, result: Ok(read(value)) },
                         Some(_) => Incoming::Read { id, result: Err(error_of(&value)) },
-                        None => Incoming::Event(Event::Reply { id, ok, value }),
+                        None => Incoming::Event(Box::new(Event::Reply { id, ok, value })),
                     }
                 }
                 event => match model::prepare(event) {
-                    Ok(prepared) => Incoming::Rows(prepared),
-                    Err(event) => Incoming::Event(event),
+                    Ok(prepared) => Incoming::Rows(Box::new(prepared)),
+                    Err(event) => Incoming::Event(Box::new(event)),
                 },
             };
             let _ = sender.unbounded_send(incoming);

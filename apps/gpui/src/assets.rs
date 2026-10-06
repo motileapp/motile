@@ -13,6 +13,18 @@ const OWN: &[(&str, &[u8])] = &[
     ("icons/google-green.svg", include_bytes!("../assets/icons/google-green.svg")),
     ("icons/google-yellow.svg", include_bytes!("../assets/icons/google-yellow.svg")),
     ("icons/google-red.svg", include_bytes!("../assets/icons/google-red.svg")),
+    ("icons/smile-plus.svg", include_bytes!("../assets/icons/smile-plus.svg")),
+    ("icons/linear.svg", include_bytes!("../assets/icons/linear.svg")),
+];
+
+/// DM Sans, the app's typeface, in the weights the views use.
+pub const FONTS: &[&[u8]] = &[
+    include_bytes!("../assets/fonts/DMSans-Regular.ttf"),
+    include_bytes!("../assets/fonts/DMSans-Medium.ttf"),
+    include_bytes!("../assets/fonts/DMSans-SemiBold.ttf"),
+    include_bytes!("../assets/fonts/DMSans-Bold.ttf"),
+    include_bytes!("../assets/fonts/DMSans-Italic.ttf"),
+    include_bytes!("../assets/fonts/DMSans-MediumItalic.ttf"),
 ];
 
 pub struct Assets;
@@ -22,14 +34,7 @@ impl AssetSource for Assets {
         if let Some((_, bytes)) = OWN.iter().find(|(name, _)| *name == path) {
             return Ok(Some(Cow::Borrowed(bytes)));
         }
-        // Lucide draws its strokes 2 units wide; SF Symbols, which the Mac app shows, are heavier.
-        let loaded = gpui_kit::assets::AllAssets.load(path)?;
-        Ok(loaded.map(|bytes| match std::str::from_utf8(&bytes) {
-            Ok(svg) if svg.contains("stroke-width=\"2\"") => {
-                Cow::Owned(svg.replace("stroke-width=\"2\"", "stroke-width=\"2.3\"").into_bytes())
-            }
-            _ => bytes,
-        }))
+        gpui_kit::assets::AllAssets.load(path)
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {

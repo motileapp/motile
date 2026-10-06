@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use gpui_kit::*;
 use motile_core::api::Event;
-use motile_core::render::rows::{Row, RowKind};
+use motile_core::render::markdown::ParaKind;
+use motile_core::render::rows::{After, Row, RowKind};
 
 use super::prose::{self, PreparedProse};
 use crate::models::{Activity, AttachedFile};
@@ -34,9 +35,12 @@ impl RowModel {
         Self { row, prose, code_spans }
     }
 
-    /// A user message shown the moment it is sent, before the server has it.
-    pub fn pending(text: String, attachments: Vec<AttachedFile>) -> Self {
-        let attachments = attachments
+    pub const PENDING_ID: &str = "pending";
+
+    /// A message on its way to the server. One sent while the agent works will wait for it, so
+    /// it shows as it will once the server has it.
+    pub fn pending(text: String, attachments: Vec<AttachedFile>, queued: bool) -> Self {
+        let attachments: Vec<motile_core::render::rows::Attached> = attachments
             .into_iter()
             .map(|file| motile_core::render::rows::Attached {
                 name: file.name,
@@ -45,12 +49,44 @@ impl RowModel {
                 poster: file.poster,
             })
             .collect();
-        Self::new(Row {
-            id: "pending".into(),
-            item: "pending".into(),
-            nested: false,
-            kind: RowKind::User { text, attachments, at: crate::models::now() },
-        })
+        let kind = if queued {
+            RowKind::Queued { text, attachments, status: "Queued" }
+        } else {
+            RowKind::User { text, links: Vec::new(), attachments, at: crate::models::now() }
+        };
+        Self::new(Row { id: Self::PENDING_ID.into(), item: Self::PENDING_ID.into(), nested: false, kind, after: None })
+    }
+
+    pub fn is_pending(&self) -> bool {
+        self.row.id == Self::PENDING_ID
+    }
+
+    /// The space the row keeps from the row above it. A reply is cut into rows, and its rows are
+    /// as far apart as its paragraphs: a paragraph after another, and a tool row after a
+    /// paragraph or before one.
+    pub fn above(&self) -> f32 {
+        let Some(after) = self.row.after else { return 0. };
+        match &self.row.kind {
+            RowKind::Prose { prose } => {
+                let first_heading =
+                    prose.paras.first().is_some_and(|para| matches!(para.kind, ParaKind::Heading { .. }));
+                let heading = if first_heading { prose::HEADING_GAP } else { 0. };
+                match after {
+                    After::Prose | After::Media | After::Work => {
+                        prose::LINE_SPACING + prose::BLOCK_GAP - super::rows::PROSE_GAP + heading
+                    }
+                    After::Table => prose::BLOCK_GAP - super::rows::PROSE_GAP + heading,
+                    After::Code => heading,
+                }
+            }
+            RowKind::Tool { .. } | RowKind::Thinking { .. } | RowKind::Group { .. } | RowKind::Fold { .. } => {
+                match after {
+                    After::Prose | After::Media => super::rows::AFTER_PROSE,
+                    _ => 0.,
+                }
+            }
+            _ => 0.,
+        }
     }
 
     pub fn is_user(&self) -> bool {
@@ -361,5 +397,28 @@ impl Transcript {
 
     pub fn row_index(&self, row_id: &str) -> Option<usize> {
         self.rows.iter().position(|model| model.row.id == row_id)
+    }
+
+    /// The row whose time and copy button the pointer over the item reveals: the message under
+    /// it, or the end of the reply under it.
+    pub fn meta_row(&self, item: &Item) -> Option<String> {
+        let index = match item {
+            Item::Row(index) => *index,
+            Item::Pending => return self.pending.as_ref().filter(|row| row.is_user()).map(|row| row.row.id.clone()),
+            Item::Working => return None,
+        };
+        let under = self.rows.get(index)?;
+        if under.is_user() {
+            return Some(under.row.id.clone());
+        }
+        for row in &self.rows[index..] {
+            if row.is_user() {
+                return None;
+            }
+            if matches!(row.row.kind, RowKind::TurnEnd { .. }) {
+                return Some(row.row.id.clone());
+            }
+        }
+        None
     }
 }

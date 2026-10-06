@@ -20,6 +20,7 @@ pub struct Root {
     viewer: Option<Entity<crate::media::viewer::MediaViewer>>,
     panel: Option<Entity<crate::command_panel::CommandPanel>>,
     icon_picker: Option<Entity<crate::folder_picker::FolderPicker>>,
+    settings: Option<Entity<crate::settings::SettingsRoute>>,
     appearance: Appearance,
     _subscriptions: Vec<Subscription>,
 }
@@ -45,6 +46,7 @@ impl Root {
             viewer: None,
             panel: None,
             icon_picker: None,
+            settings: None,
             appearance: Appearance::System,
             _subscriptions: subscriptions,
         };
@@ -94,6 +96,13 @@ impl Root {
         if page != shown {
             let store = self.store.clone();
             self.panel = page.map(|page| cx.new(|cx| crate::command_panel::CommandPanel::new(store, page, window, cx)));
+        }
+        let wants_settings = self.store.read(cx).settings.section.is_some();
+        if wants_settings && self.settings.is_none() {
+            let store = self.store.clone();
+            self.settings = Some(cx.new(|cx| crate::settings::SettingsRoute::new(store, window, cx)));
+        } else if !wants_settings {
+            self.settings = None;
         }
         let wants_viewer = self.store.read(cx).viewing.is_some();
         if wants_viewer && self.viewer.is_none() {
@@ -147,16 +156,18 @@ impl Render for Root {
             .relative()
             .bg(c.background)
             .text_color(c.text)
-            .font_family(theme::SYSTEM_FONT)
+            .font_family(theme::UI_FONT)
             .text_size(px(13.))
             .line_height(relative(1.21))
             .child(page)
+            .children(self.settings.clone())
             .when_some(self.connect.clone().filter(|_| !first_server), |root, connect| {
                 root.child(sheet("add-server", 620., connect, cx))
             })
             .children(self.icon_picker.clone())
             .children(self.panel.clone())
             .children(self.viewer.clone())
+            .children(crate::ui::menu::layer(_window, cx))
             .when_some(error, |root, error| {
                 let ok = AlertButton::new("OK", move |_, cx| {
                     store_handle.update(cx, |store, cx| {

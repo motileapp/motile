@@ -5,6 +5,7 @@ use reqwest::StatusCode;
 use sqlx::PgPool;
 
 use super::{ANN, Auth, BOB, INSTALL_URL, LINUX, emails, names};
+use crate::limits::MAX_ENROLL_FAILURES;
 
 #[sqlx::test]
 async fn the_install_command_links_one_server_to_the_account(db: PgPool) {
@@ -15,8 +16,11 @@ async fn the_install_command_links_one_server_to_the_account(db: PgPool) {
     let token = auth.client.create_enroll_token(&client).await.unwrap();
     let command = format!("curl -fsSL {INSTALL_URL} | MOTILE_AUTH_URL={} sh -s -- {}", auth.base, token.token);
     assert_eq!(token.command, command);
-    assert!(token.expires_at > now());
-    let enrolled = auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
+    assert_eq!(token.token.len(), 8);
+    assert!(token.token.chars().all(|character| character.is_ascii_uppercase() || character.is_ascii_digit()));
+    assert!(token.expires_at > now() + 14.0 * 60.0 && token.expires_at <= now() + 15.0 * 60.0);
+    // Typed by hand, the code may come in small letters.
+    let enrolled = auth.client.enroll(&server, &token.token.to_lowercase(), &LINUX).await.unwrap();
     assert_eq!(enrolled.email, "ann@example.com");
 
     let me = auth.client.me(&client).await.unwrap();
@@ -40,6 +44,21 @@ async fn an_expired_or_made_up_token_links_nothing(db: PgPool) {
 
     assert!(auth.client.enroll(&DeviceKey::generate(), &token.token, &LINUX).await.is_err());
     assert!(auth.client.enroll(&DeviceKey::generate(), "made-up", &LINUX).await.is_err());
+    assert_eq!(auth.client.me(&client).await.unwrap().devices.len(), 1);
+}
+
+#[sqlx::test]
+async fn an_address_that_guesses_wrong_too_often_is_refused(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (client, _) = auth.new_client(&ANN).await;
+    let token = auth.client.create_enroll_token(&client).await.unwrap();
+
+    for _ in 0..MAX_ENROLL_FAILURES {
+        let wrong = auth.client.enroll(&DeviceKey::generate(), "WRONG000", &LINUX).await;
+        assert!(wrong.unwrap_err().to_string().contains("expired or was used on another machine"));
+    }
+    let right = auth.client.enroll(&DeviceKey::generate(), &token.token, &LINUX).await;
+    assert!(right.unwrap_err().to_string().contains("Too many install commands failed"));
     assert_eq!(auth.client.me(&client).await.unwrap().devices.len(), 1);
 }
 

@@ -5,28 +5,33 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_protocol::wire::GitHubState;
+use motile_protocol::wire::{GitHubState, Repo};
 
 use crate::models::{FolderListing, Project, Server, ago, last_component};
 use crate::store::{AddingProject, PanelPage, Selection, Store};
-use crate::theme::colors;
-use crate::ui::{IconButton, icons, logos, spinner};
+use crate::theme::{Colors, ControlSize, Surface, colors};
+use crate::ui::{ActionButton, InputField, InputVariant, Spinner, icons, logos};
 
 const WIDTH: f32 = 620.;
+const RADIUS: f32 = 16.;
 const ROW_HEIGHT: f32 = 46.;
+const ROW_RADIUS: f32 = 9.;
 const SIDE_MARGIN: f32 = 8.;
 const TITLE_HEIGHT: f32 = 17.;
 const DETAIL_HEIGHT: f32 = 15.;
 const NOTICE_HEIGHT: f32 = 36.;
 const MAX_HEIGHT: f32 = 420.;
+/// The layer the card is, which its rows, bars and key caps lie on.
+const SURFACE: Surface = Surface::Popover;
 
 type Action = Rc<dyn Fn(&mut CommandPanel, &mut Window, &mut Context<CommandPanel>)>;
 
 enum ItemIcon {
     Symbol(&'static str),
+    /// A logo, drawn in the colour of the symbols.
     GitHub,
     Project(Box<Option<Project>>),
 }
@@ -35,6 +40,8 @@ struct Item {
     id: String,
     title: String,
     detail: String,
+    /// Shown instead of `detail`, each part after its symbol.
+    detail_parts: Vec<(&'static str, String)>,
     icon: ItemIcon,
     /// The digit that runs it with ⌘.
     shortcut: Option<usize>,
@@ -68,6 +75,7 @@ impl Item {
             id: id.into(),
             title: title.into(),
             detail: detail.into(),
+            detail_parts: Vec::new(),
             icon,
             shortcut: None,
             keeps_open: false,
@@ -196,7 +204,7 @@ impl CommandPanel {
         let sections = match self.page() {
             PanelPage::Projects => {
                 let mut items = self.project_items(cx);
-                items.push(self.add_project(cx));
+                items.push(self.add_project());
                 vec![section("Projects", items)]
             }
             PanelPage::Threads => vec![section("Threads", self.thread_items(cx))],
@@ -223,7 +231,10 @@ impl CommandPanel {
                 narrows = false;
                 vec![section("New project", vec![self.new_project(&id, cx)])]
             }
-            PanelPage::Github(id) => vec![section("Your GitHub", self.repo_items(&id, cx))],
+            PanelPage::Github(id) => {
+                narrows = false;
+                vec![section("Your GitHub", self.repo_items(&id, cx))]
+            }
             PanelPage::GithubSetup(id) => {
                 let name = self.server_name(&id, cx);
                 let title = if self.store.read(cx).github.get(&id) == Some(&GitHubState::Missing) {
@@ -284,36 +295,38 @@ impl CommandPanel {
                     .server(Some(&project.server_id))
                     .map(|server| server.name.clone())
                     .unwrap_or_default();
-                let detail =
-                    if server.is_empty() { project.path.clone() } else { format!("{server} · {}", project.path) };
+                let parts = if server.is_empty() {
+                    vec![("folder", project.path.clone())]
+                } else {
+                    vec![("server", server.clone()), ("folder", project.path.clone())]
+                };
                 let id = project.id.clone();
                 let mut item = Item::new(
                     format!("project-{}", project.id),
                     project.name.clone(),
-                    detail,
+                    format!("{server} {}", project.path),
                     ItemIcon::Project(Box::new(Some(project))),
                     move |this, _, cx| {
                         let id = id.clone();
                         this.store.update(cx, |store, cx| store.start_new_thread(Some(id), cx));
                     },
                 );
+                item.detail_parts = parts;
                 item.shortcut = (position < 9 && on_projects).then_some(position + 1);
                 item
             })
             .collect()
     }
 
-    fn add_project(&self, _: &App) -> Item {
+    fn add_project(&self) -> Item {
         Item::new(
             "add-project",
             "Add a project…",
             "A new one, one of your GitHub's or a folder",
-            ItemIcon::Symbol("folder.badge.plus"),
-            {
-                |this, window, cx| {
-                    let page = this.store.read(cx).add_project_page();
-                    this.open(page, window, cx);
-                }
+            ItemIcon::Symbol("folder-plus"),
+            |this, window, cx| {
+                let page = this.store.read(cx).add_project_page();
+                this.open(page, window, cx);
             },
         )
         .keeps_open()
@@ -348,7 +361,7 @@ impl CommandPanel {
                     format!("server-{}", server.id),
                     server.name.clone(),
                     detail,
-                    ItemIcon::Symbol("server.rack"),
+                    ItemIcon::Symbol("server"),
                     move |this, window, cx| this.open(PanelPage::Sources(id.clone()), window, cx),
                 )
                 .keeps_open();
@@ -379,7 +392,7 @@ impl CommandPanel {
             "source-new",
             "New project",
             "Start a new Git repository from a name",
-            ItemIcon::Symbol("plus.square"),
+            ItemIcon::Symbol("square-plus"),
             move |this, window, cx| this.open(PanelPage::NewProject(new_id.clone()), window, cx),
         )
         .keeps_open();
@@ -411,7 +424,7 @@ impl CommandPanel {
         let detail = format!("A new Git repository in ~/projects on {}", self.server_name(id, cx));
         let server = id.to_string();
         let typed = name.clone();
-        let mut item = Item::new("create", title, detail, ItemIcon::Symbol("plus.square"), move |this, _, cx| {
+        let mut item = Item::new("create", title, detail, ItemIcon::Symbol("square-plus"), move |this, _, cx| {
             let (name, server) = (typed.clone(), server.clone());
             this.store.update(cx, |store, _| store.new_project_named(name, &server));
         })
@@ -441,24 +454,24 @@ impl CommandPanel {
                 store.adding_project == Some(AddingProject { server_id: id.to_string(), name: name.to_string() });
             item
         };
-        let mut items: Vec<Item> = repos
-            .iter()
+        let typed = self.query_text(cx).trim().to_string();
+        let mut items: Vec<Item> = found(repos, &typed.to_lowercase())
+            .into_iter()
             .map(|repo| {
                 let mut item =
-                    clone(&repo.name, repo.name.clone(), repo.description.clone().unwrap_or_default(), "book.closed");
+                    clone(&repo.name, repo.name.clone(), repo.description.clone().unwrap_or_default(), "book-marked");
                 item.note = repo.private.then(|| "Private".to_string());
                 item
             })
             .collect();
         // A repository that isn't listed is cloned by its name.
-        let typed = self.query_text(cx).trim().to_string();
         let listed = repos.iter().any(|repo| repo.name.eq_ignore_ascii_case(&typed));
         if !listed && is_repo_name(&typed) {
             items.push(clone(
                 &typed,
                 format!("Clone {typed}"),
                 "A repository that isn't in your list".into(),
-                "arrow.down.circle",
+                "circle-arrow-down",
             ));
         }
         items
@@ -471,7 +484,7 @@ impl CommandPanel {
             "check-github",
             "Check again",
             "Once that is done",
-            ItemIcon::Symbol("arrow.clockwise"),
+            ItemIcon::Symbol("rotate-cw"),
             move |this, _, cx| {
                 let server = server.clone();
                 this.store.update(cx, |store, _| store.read_github(&server));
@@ -483,7 +496,7 @@ impl CommandPanel {
                 "install-gh",
                 "Open cli.github.com",
                 format!("Install gh on {name}, then run gh auth login there"),
-                ItemIcon::Symbol("arrow.up.right.square"),
+                ItemIcon::Symbol("square-arrow-out-up-right"),
                 |_, _, cx| cx.open_url("https://cli.github.com"),
             )
             .keeps_open();
@@ -493,7 +506,7 @@ impl CommandPanel {
             "copy-login",
             if self.copied { "Copied" } else { "Copy gh auth login" },
             format!("Run it in a terminal on {name}"),
-            ItemIcon::Symbol(if self.copied { "checkmark" } else { "doc.on.doc" }),
+            ItemIcon::Symbol(if self.copied { "check" } else { "copy" }),
             |this, _, cx| {
                 cx.write_to_clipboard(ClipboardItem::new_string("gh auth login".into()));
                 this.copied = true;
@@ -527,17 +540,15 @@ impl CommandPanel {
                 "add-here",
                 "Add this folder",
                 listing.typed.clone(),
-                ItemIcon::Symbol("folder.badge.plus"),
-                {
-                    move |this, _, cx| {
-                        let (server, path) = (server.clone(), path.clone());
-                        this.store.update(cx, |store, _| store.add_project_at(&server, path));
-                    }
+                ItemIcon::Symbol("folder-plus"),
+                move |this, _, cx| {
+                    let (server, path) = (server.clone(), path.clone());
+                    this.store.update(cx, |store, _| store.add_project_at(&server, path));
                 },
             ));
             if let Some(parent) = listing.parent.clone() {
                 items.push(
-                    Item::new("parent", "..", "", ItemIcon::Symbol("arrow.turn.left.up"), move |this, window, cx| {
+                    Item::new("parent", "..", "", ItemIcon::Symbol("corner-left-up"), move |this, window, cx| {
                         this.set_query(parent.clone(), window, cx)
                     })
                     .keeps_open(),
@@ -608,10 +619,8 @@ impl CommandPanel {
                 "stop",
                 "Stop the agent",
                 thread.title.clone(),
-                ItemIcon::Symbol("stop.circle"),
-                |this, _, cx| {
-                    this.store.update(cx, |store, _| store.stop_thread());
-                },
+                ItemIcon::Symbol("circle-stop"),
+                |this, _, cx| this.store.update(cx, |store, _| store.stop_thread()),
             )];
         }
         let done = thread.is_done();
@@ -619,15 +628,16 @@ impl CommandPanel {
             "done",
             if done { "Mark undone" } else { "Mark done" },
             thread.title.clone(),
-            ItemIcon::Symbol(if done { "arrow.uturn.backward.circle" } else { "checkmark.circle" }),
+            ItemIcon::Symbol(if done { "undo-2" } else { "circle-check" }),
             |this, _, cx| this.store.update(cx, |store, cx| store.toggle_done(cx)),
         )]
     }
 
-    fn commands(&self, cx: &App) -> Vec<Item> {
+    /// The servers that run an older version than the newest release.
+    fn server_updates(&self, cx: &App) -> Vec<Item> {
         let store = self.store.read(cx);
         let latest = store.updater.latest.clone().unwrap_or_default();
-        let mut items: Vec<Item> = store
+        store
             .servers
             .iter()
             .filter(|server| store.is_outdated(server) && !store.server_updates.contains_key(&server.id))
@@ -637,17 +647,22 @@ impl CommandPanel {
                     format!("update-{}", server.id),
                     format!("Update {}", server.name),
                     format!("From version {} to {latest}", server.version),
-                    ItemIcon::Symbol("arrow.down.circle"),
+                    ItemIcon::Symbol("circle-arrow-down"),
                     move |this, _, cx| this.store.update(cx, |store, _| store.update_server(&server)),
                 )
             })
-            .collect();
+            .collect()
+    }
+
+    fn commands(&self, cx: &App) -> Vec<Item> {
+        let store = self.store.read(cx);
+        let mut items = self.server_updates(cx);
         items.push(
             Item::new(
                 "new-thread",
                 "New thread…",
                 "Choose a project to start in",
-                ItemIcon::Symbol("square.and.pencil"),
+                ItemIcon::Symbol("square-pen"),
                 |this, window, cx| this.open(PanelPage::Projects, window, cx),
             )
             .keeps_open(),
@@ -657,24 +672,31 @@ impl CommandPanel {
                 "go-to-thread",
                 "Go to thread…",
                 format!("{} threads", store.threads.len()),
-                ItemIcon::Symbol("text.bubble"),
+                ItemIcon::Symbol("message-square-text"),
                 |this, window, cx| this.open(PanelPage::Threads, window, cx),
             )
             .keeps_open(),
         );
-        items.push(self.add_project(cx));
+        items.push(self.add_project());
         items.push(Item::new(
             "add-server",
             "Add a server…",
             "A machine that runs your agents",
-            ItemIcon::Symbol("server.rack"),
+            ItemIcon::Symbol("server"),
             |this, _, cx| this.store.update(cx, |store, _| store.shows_add_server = true),
+        ));
+        items.push(Item::new(
+            "check-updates",
+            "Check for updates",
+            format!("Motile {}", store.updater.current),
+            ItemIcon::Symbol("refresh-cw"),
+            |this, _, cx| this.store.update(cx, |store, cx| store.updater.check(true, cx)),
         ));
         items.push(Item::new(
             "settings",
             "Settings…",
             "Appearance, servers and projects",
-            ItemIcon::Symbol("gearshape"),
+            ItemIcon::Symbol("settings"),
             |_, window, cx| window.dispatch_action(Box::new(crate::OpenSettings), cx),
         ));
         items
@@ -719,8 +741,13 @@ impl CommandPanel {
         self.set_query(query.into(), window, cx);
         let prompt = self.prompt(cx);
         self.query.update(cx, |query, cx| query.set_placeholder(prompt, window, cx));
-        if let PanelPage::Github(id) = self.page() {
-            self.store.update(cx, |store, _| store.load_repos(&id));
+        let lists_repos = match self.page() {
+            PanelPage::Github(id) => Some(id),
+            PanelPage::Sources(id) if self.store.read(cx).github.get(&id) == Some(&GitHubState::Ready) => Some(id),
+            _ => None,
+        };
+        if let Some(id) = lists_repos {
+            self.store.update(cx, |store, _| store.load_repos(&id, false));
         }
         self.browse(window, cx);
         cx.notify();
@@ -808,6 +835,15 @@ impl CommandPanel {
         cx.notify();
     }
 
+    /// Lists the repositories again, to find one made since.
+    fn refresh_repos(&mut self, cx: &mut Context<Self>) {
+        let PanelPage::Github(id) = self.page() else { return };
+        self.store.update(cx, |store, cx| {
+            store.load_repos(&id, true);
+            cx.notify();
+        });
+    }
+
     /// Takes the keys the panel is steered with before the search field does.
     fn key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let command = event.keystroke.modifiers.platform;
@@ -830,6 +866,13 @@ impl CommandPanel {
             }
             "backspace" if self.query_text(cx).is_empty() && self.pages.len() > 1 => {
                 self.back(window, cx);
+                true
+            }
+            "r" if command => {
+                if !matches!(self.page(), PanelPage::Github(_)) {
+                    return;
+                }
+                self.refresh_repos(cx);
                 true
             }
             digit if command => {
@@ -876,98 +919,147 @@ impl CommandPanel {
         }
     }
 
+    /// What a server refused, or why it couldn't list the repositories again.
+    fn notice(&self, cx: &App) -> Option<String> {
+        let store = self.store.read(cx);
+        let PanelPage::Github(id) = self.page() else { return store.panel_notice.clone() };
+        if !store.repos.contains_key(&id) {
+            return store.panel_notice.clone();
+        }
+        store.panel_notice.clone().or_else(|| store.repo_errors.get(&id).cloned())
+    }
+
     /// The pages that fill as the server answers keep one height, so nothing moves when it does.
-    fn height(&self, sections: &[Section], rows: usize, cx: &App) -> f32 {
+    fn height(&self, sections: &[Section], rows: usize, notice: bool) -> f32 {
         if matches!(self.page(), PanelPage::Github(_) | PanelPage::Folder(_)) {
             return MAX_HEIGHT;
         }
-        let notice = if self.store.read(cx).panel_notice.is_some() { NOTICE_HEIGHT } else { 0. };
+        let notice = if notice { NOTICE_HEIGHT } else { 0. };
         (rows as f32 * ROW_HEIGHT + sections.len() as f32 * 32. + 10. + notice).clamp(90., MAX_HEIGHT)
     }
 
     fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
+        let leading: AnyElement = if self.pages.len() > 1 {
+            ActionButton::icon("panel-back", "arrow-left", "Back")
+                .surface(SURFACE)
+                .on_click(cx.listener(|this, _, window, cx| this.back(window, cx)))
+                .into_any_element()
+        } else {
+            div()
+                .size(px(ControlSize::Regular.height()))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icons::symbol("search", 15.).text_color(c.tertiary))
+                .into_any_element()
+        };
+        let field_size = ControlSize::Large;
+        let refresh = match self.page() {
+            PanelPage::Github(id) => Some(self.store.read(cx).repo_listing.listing.contains(&id)),
+            _ => None,
+        };
         div()
             .h(px(52.))
             .px(px(16.))
             .flex()
             .items_center()
             .gap(px(10.))
-            .child(if self.pages.len() > 1 {
-                IconButton::new("panel-back", "arrow.left")
-                    .help("Back")
-                    .size(26.)
-                    .symbol_size(14.)
-                    .color(c.secondary)
-                    .on_click(cx.listener(|this, _, window, cx| this.back(window, cx)))
-                    .into_any_element()
-            } else {
+            .child(leading)
+            .child(
                 div()
-                    .size(px(26.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(icons::symbol("magnifyingglass", 15.).text_color(c.tertiary))
-                    .into_any_element()
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .mx(px(-(field_size.padding() - 2.)))
+                    .child(InputField::new(&self.query).variant(InputVariant::Bare).size(field_size).surface(SURFACE)),
+            )
+            .when_some(refresh, |header, listing| {
+                header.child(
+                    ActionButton::icon("refresh-repos", "rotate-cw", "Refresh (⌘R)")
+                        .surface(SURFACE)
+                        .pending(listing)
+                        .on_click(cx.listener(|this, _, _, cx| this.refresh_repos(cx))),
+                )
             })
-            .child(div().flex_1().child(Input::new(&self.query).appearance(false).px_0().py_0().text_size(px(16.))))
+    }
+
+    fn results(
+        &self,
+        sections: &[Section],
+        rows: usize,
+        notice: Option<String>,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let c = colors(cx);
+        let height = self.height(sections, rows, notice.is_some());
+        let empty = (rows == 0).then(|| self.empty_text(cx));
+        let mut children: Vec<AnyElement> = Vec::new();
+        for section in sections {
+            children.push(
+                div()
+                    .px(px(SIDE_MARGIN + 10.))
+                    .pt(px(10.))
+                    .pb(px(4.))
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c.tertiary)
+                    .child(section.title.clone())
+                    .into_any_element(),
+            );
+            for item in &section.items {
+                children.push(self.row(item, cx));
+            }
+        }
+        div()
+            .id("panel-results")
+            .h(px(height))
+            .overflow_y_scroll()
+            .track_scroll(&self.scroll)
+            .pb(px(8.))
+            .when_some(empty, |results, empty| {
+                results.child(
+                    div()
+                        .w_full()
+                        .px(px(24.))
+                        .py(px(28.))
+                        .text_size(px(13.))
+                        .text_color(c.tertiary)
+                        .text_center()
+                        .child(empty),
+                )
+            })
+            .children(children)
+            .when_some(notice, |results, notice| {
+                results.child(
+                    div()
+                        .h(px(NOTICE_HEIGHT))
+                        .px(px(SIDE_MARGIN + 10.))
+                        .flex()
+                        .items_center()
+                        .text_size(px(12.))
+                        .text_color(c.danger)
+                        .line_clamp(2)
+                        .child(notice),
+                )
+            })
     }
 
     fn row(&self, item: &Item, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
-        let highlighted = item.selectable() && item.index == Some(self.highlighted);
+        let light = SURFACE.next().color(c);
+        let lit = item.selectable() && item.index == Some(self.highlighted);
         let placeholder = item.placeholder_lines > 0;
         let icon: AnyElement = match &item.icon {
-            ItemIcon::Symbol(_) if placeholder => div().size(px(20.)).rounded(px(5.)).bg(c.selected).into_any_element(),
+            ItemIcon::Symbol(_) if placeholder => div().size(px(20.)).rounded(px(5.)).bg(light).into_any_element(),
             ItemIcon::Symbol(name) => icons::symbol(name, 15.).text_color(c.secondary).into_any_element(),
             ItemIcon::GitHub => logos::github_mark(16., cx).text_color(c.secondary).into_any_element(),
             ItemIcon::Project(project) => logos::project_icon(project.as_ref().as_ref(), 20., cx),
         };
-        let text = if placeholder {
-            const TITLES: [f32; 8] = [150., 210., 120., 180., 240., 140., 200., 160.];
-            const DETAILS: [f32; 8] = [280., 190., 320., 230., 150., 300., 210., 260.];
-            let position = item.index.unwrap_or(0) % 8;
-            let bar = |width: f32, height: f32, room: f32| {
-                div()
-                    .h(px(room))
-                    .flex()
-                    .items_center()
-                    .child(div().w(px(width)).h(px(height)).rounded(px(height / 2.)).bg(c.selected))
-            };
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(1.))
-                .child(bar(TITLES[position], 10., TITLE_HEIGHT))
-                .when(item.placeholder_lines > 1, |text| text.child(bar(DETAILS[position], 8., DETAIL_HEIGHT)))
-        } else {
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(1.))
-                .min_w_0()
-                .child(
-                    div()
-                        .h(px(TITLE_HEIGHT))
-                        .text_size(px(14.))
-                        .line_height(px(TITLE_HEIGHT))
-                        .truncate()
-                        .child(item.title.clone()),
-                )
-                .when(!item.detail.is_empty(), |text| {
-                    text.child(
-                        div()
-                            .h(px(DETAIL_HEIGHT))
-                            .text_size(px(12.))
-                            .line_height(px(DETAIL_HEIGHT))
-                            .text_color(c.secondary)
-                            .truncate()
-                            .child(item.detail.clone()),
-                    )
-                })
-        };
+        let text = if placeholder { placeholder_lines(item, light) } else { lines(item, c) };
         let trailing: Option<AnyElement> = if item.busy {
-            Some(spinner(14., cx).into_any_element())
+            Some(div().text_color(c.secondary).child(Spinner::regular().render(cx)).into_any_element())
         } else if let Some(note) = &item.note {
             Some(
                 div()
@@ -1001,8 +1093,8 @@ impl CommandPanel {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .rounded(px(9.))
-                    .when(highlighted, |row| row.bg(c.hover))
+                    .rounded(px(ROW_RADIUS))
+                    .when(lit, |row| row.bg(light))
                     .when(item.off, |row| row.opacity(0.45))
                     .child(div().size(px(22.)).flex_shrink_0().flex().items_center().justify_center().child(icon))
                     .child(div().flex_1().min_w_0().child(text))
@@ -1038,6 +1130,7 @@ impl CommandPanel {
 
     fn hints(&self, cx: &App) -> impl IntoElement {
         let c = colors(cx);
+        let cap = SURFACE.next().color(c);
         let hint = |keys: &[&str], text: &str| {
             div()
                 .flex()
@@ -1053,7 +1146,7 @@ impl CommandPanel {
                         .items_center()
                         .justify_center()
                         .rounded(px(5.))
-                        .bg(c.hover)
+                        .bg(cap)
                         .text_size(px(11.))
                         .font_weight(FontWeight::MEDIUM)
                         .child(key.to_string())
@@ -1061,6 +1154,7 @@ impl CommandPanel {
                 .child(div().text_size(px(12.)).child(text.to_string()))
         };
         let folder = matches!(self.page(), PanelPage::Folder(_));
+        let github = matches!(self.page(), PanelPage::Github(_));
         div()
             .h(px(40.))
             .px(px(16.))
@@ -1070,9 +1164,86 @@ impl CommandPanel {
             .child(hint(&["↑", "↓"], "Navigate"))
             .when(folder, |hints| hints.child(hint(&["↩"], "Open")).child(hint(&["⌘", "↩"], "Add")))
             .when(!folder, |hints| hints.child(hint(&["↩"], "Select")))
+            .when(github, |hints| hints.child(hint(&["⌘", "R"], "Refresh")))
             .when(self.pages.len() > 1, |hints| hints.child(hint(&["⌫"], "Back")))
             .child(hint(&["esc"], "Close"))
     }
+}
+
+/// The title and the detail, or the detail's parts each after its symbol.
+fn lines(item: &Item, c: &Colors) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .min_w_0()
+        .child(
+            div()
+                .h(px(TITLE_HEIGHT))
+                .text_size(px(14.))
+                .line_height(px(TITLE_HEIGHT))
+                .truncate()
+                .child(item.title.clone()),
+        )
+        .when(!item.detail_parts.is_empty(), |text| text.child(detail_parts(&item.detail_parts, c)))
+        .when(item.detail_parts.is_empty() && !item.detail.is_empty(), |text| {
+            text.child(
+                div()
+                    .h(px(DETAIL_HEIGHT))
+                    .text_size(px(12.))
+                    .line_height(px(DETAIL_HEIGHT))
+                    .text_color(c.secondary)
+                    .truncate()
+                    .child(item.detail.clone()),
+            )
+        })
+}
+
+fn detail_parts(parts: &[(&'static str, String)], c: &Colors) -> Div {
+    let mut row = div()
+        .h(px(DETAIL_HEIGHT))
+        .flex()
+        .items_center()
+        .gap(px(4.))
+        .text_size(px(12.))
+        .line_height(px(DETAIL_HEIGHT))
+        .text_color(c.secondary);
+    for (position, (symbol, text)) in parts.iter().enumerate() {
+        if position > 0 {
+            row = row.child("·");
+        }
+        row = row.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(4.))
+                .min_w_0()
+                .when(position == 0, |part| part.flex_shrink_0())
+                .child(icons::symbol(symbol, 11.).text_color(c.tertiary))
+                .child(div().truncate().child(text.clone())),
+        );
+    }
+    row
+}
+
+/// Bars where the text will be, each in the room its line takes.
+fn placeholder_lines(item: &Item, light: Hsla) -> Div {
+    const TITLES: [f32; 8] = [150., 210., 120., 180., 240., 140., 200., 160.];
+    const DETAILS: [f32; 8] = [280., 190., 320., 230., 150., 300., 210., 260.];
+    let position = item.index.unwrap_or(0) % 8;
+    let bar = |width: f32, height: f32, room: f32| {
+        div()
+            .h(px(room))
+            .flex()
+            .items_center()
+            .child(div().w(px(width)).h(px(height)).rounded(px(height / 2.)).bg(light))
+    };
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .child(bar(TITLES[position], 10., TITLE_HEIGHT))
+        .when(item.placeholder_lines > 1, |text| text.child(bar(DETAILS[position], 8., DETAIL_HEIGHT)))
 }
 
 /// Where the selectable item `index` is among the list's children, which are the sections'
@@ -1091,10 +1262,43 @@ fn child_of(sections: &[Section], index: usize) -> Option<usize> {
     None
 }
 
+/// The repositories that answer the search, the best first and the last pushed among equals.
+fn found<'a>(repos: &'a [Repo], search: &str) -> Vec<&'a Repo> {
+    if search.is_empty() {
+        return repos.iter().collect();
+    }
+    let mut ranked: Vec<(u8, usize, &Repo)> =
+        repos.iter().enumerate().filter_map(|(position, repo)| Some((rank(repo, search)?, position, repo))).collect();
+    ranked.sort_by_key(|(rank, position, _)| (*rank, *position));
+    ranked.into_iter().map(|(_, _, repo)| repo).collect()
+}
+
+/// How well a repository answers a lowercased search, the best at 0: the name after the owner
+/// starting with it, then the whole name, then the name holding it, then the description.
+fn rank(repo: &Repo, search: &str) -> Option<u8> {
+    let name = repo.name.to_lowercase();
+    let short = name.split_once('/').map_or(name.as_str(), |(_, short)| short);
+    if short.starts_with(search) {
+        return Some(0);
+    }
+    if name.starts_with(search) {
+        return Some(1);
+    }
+    if name.contains(search) {
+        return Some(2);
+    }
+    let description = repo.description.as_deref().unwrap_or_default().to_lowercase();
+    description.contains(search).then_some(3)
+}
+
 /// An `owner/name` that GitHub could have.
 fn is_repo_name(text: &str) -> bool {
     let allowed = |part: &str| !part.is_empty() && part.chars().all(|ch| ch.is_alphanumeric() || "_.-".contains(ch));
     matches!(text.split_once('/'), Some((owner, name)) if allowed(owner) && allowed(name))
+}
+
+fn divider(c: &Colors) -> Div {
+    div().h(px(1.)).w_full().flex_shrink_0().bg(c.border_secondary)
 }
 
 impl Render for CommandPanel {
@@ -1102,34 +1306,38 @@ impl Render for CommandPanel {
         let c = colors(cx);
         let sections = self.sections(cx);
         let rows: usize = sections.iter().map(|section| section.items.len()).sum();
-        let height = self.height(&sections, rows, cx);
-        let notice = self.store.read(cx).panel_notice.clone();
-        let empty = (rows == 0).then(|| self.empty_text(cx));
-        let mut children: Vec<AnyElement> = Vec::new();
-        for section in &sections {
-            children.push(
-                div()
-                    .px(px(SIDE_MARGIN + 10.))
-                    .pt(px(10.))
-                    .pb(px(4.))
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(c.tertiary)
-                    .child(section.title.clone())
-                    .into_any_element(),
-            );
-            for item in &section.items {
-                children.push(self.row(item, cx));
-            }
-        }
+        let notice = self.notice(cx);
         let size = window.viewport_size();
+        // The scrim fades in over 200ms; the card is there at once.
+        let scrim = div().absolute().inset_0().bg(hsla(0., 0., 0., 0.32)).with_animation(
+            "command-panel-scrim",
+            Animation::new(Duration::from_millis(200)),
+            |scrim, delta| scrim.opacity(delta),
+        );
+        let card = div()
+            .id("command-panel-card")
+            .w(px(WIDTH))
+            .h_auto()
+            .flex()
+            .flex_col()
+            .bg(SURFACE.color(c))
+            .rounded(px(RADIUS))
+            .border_1()
+            .border_color(c.border_secondary)
+            .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.3), 14., 60.))
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(self.header(cx))
+            .child(divider(c))
+            .child(self.results(&sections, rows, notice, cx))
+            .child(divider(c))
+            .child(self.hints(cx));
         deferred(
             anchored().position(point(px(0.), px(0.))).child(
                 div()
                     .id("command-panel")
                     .w(size.width)
                     .h(size.height)
-                    .bg(hsla(0., 0., 0., 0.32))
+                    .relative()
                     .occlude()
                     .flex()
                     .justify_center()
@@ -1137,58 +1345,8 @@ impl Render for CommandPanel {
                     .pt(px(crate::theme::TOP_BAR + 70.))
                     .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| this.key(event, window, cx)))
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close(cx)))
-                    .child(
-                        div()
-                            .id("command-panel-card")
-                            .w(px(WIDTH))
-                            .h_auto()
-                            .flex()
-                            .flex_col()
-                            .bg(c.raised)
-                            .rounded(px(16.))
-                            .border_1()
-                            .border_color(c.strong_border)
-                            .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.3), 14., 60.))
-                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                            .child(self.header(cx))
-                            .child(crate::ui::divider(cx))
-                            .child(
-                                div()
-                                    .id("panel-results")
-                                    .h(px(height))
-                                    .overflow_y_scroll()
-                                    .track_scroll(&self.scroll)
-                                    .pb(px(8.))
-                                    .when_some(empty, |results, empty| {
-                                        results.child(
-                                            div()
-                                                .w_full()
-                                                .px(px(24.))
-                                                .py(px(28.))
-                                                .text_size(px(13.))
-                                                .text_color(c.tertiary)
-                                                .text_center()
-                                                .child(empty),
-                                        )
-                                    })
-                                    .children(children)
-                                    .when_some(notice, |results, notice| {
-                                        results.child(
-                                            div()
-                                                .h(px(NOTICE_HEIGHT))
-                                                .px(px(SIDE_MARGIN + 10.))
-                                                .flex()
-                                                .items_center()
-                                                .text_size(px(12.))
-                                                .text_color(c.danger)
-                                                .line_clamp(2)
-                                                .child(notice),
-                                        )
-                                    }),
-                            )
-                            .child(crate::ui::divider(cx))
-                            .child(self.hints(cx)),
-                    ),
+                    .child(scrim)
+                    .child(card),
             ),
         )
         .with_priority(1)
