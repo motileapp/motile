@@ -576,15 +576,15 @@ enum MediaFiles {
         }
     }
 
+    static func copyFile(_ file: URL) {
+        guard let provider = NSItemProvider(contentsOf: file) else { return }
+        UIPasteboard.general.setItemProviders([provider], localOnly: false, expirationDate: nil)
+    }
+
     /// Opens the share sheet on a copy of the file that has its name, which is where it can be
     /// saved to Photos or Files.
     static func save(_ file: URL, named name: String, from view: UIView) {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("motile-shared", isDirectory: true)
-        let copy = folder.appendingPathComponent(name.isEmpty ? file.lastPathComponent : name)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try? FileManager.default.removeItem(at: copy)
-        let shared = (try? FileManager.default.copyItem(at: file, to: copy)) == nil ? file : copy
-        let sheet = UIActivityViewController(activityItems: [shared], applicationActivities: nil)
+        let sheet = UIActivityViewController(activityItems: [namedCopy(of: file, name: name)], applicationActivities: nil)
         sheet.popoverPresentationController?.sourceView = view
         sheet.popoverPresentationController?.sourceRect = view.bounds
         view.presenter?.present(sheet, animated: true)

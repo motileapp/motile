@@ -59,8 +59,9 @@ struct MediaViewer: View {
     }
 
     private func bar(_ item: ViewedMedia) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             button(.x, label: "Close") { store.closeViewer() }
+            Color.clear.frame(width: 40, height: 40)
             Spacer(minLength: 8)
             VStack(spacing: 1) {
                 Text(item.name)
@@ -76,9 +77,12 @@ struct MediaViewer: View {
             .foregroundStyle(.white)
             Spacer(minLength: 8)
             if let shared {
+                button(.copy, label: item.video ? "Copy Video" : "Copy Image") {
+                    MediaFiles.copy(shared, video: item.video, named: item.name)
+                }
                 ShareLink(item: shared) { symbol(.share) }
             } else {
-                Color.clear.frame(width: 40, height: 40)
+                Color.clear.frame(width: 88, height: 40)
             }
         }
         .padding(.horizontal, 14)
@@ -147,7 +151,7 @@ private struct MediaPage: View {
             ) { store.closeViewer() }
             .ignoresSafeArea()
         case .video(let player):
-            VideoPlayer(player: player)
+            PlayerView(player: player)
                 .padding(.top, 60)
         case .other(let url):
             VStack(spacing: 14) {
@@ -323,6 +327,23 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
     @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
         guard !picture.frame.contains(recognizer.location(in: self)) else { return }
         tappedBeside()
+    }
+}
+
+/// The system's player with its controls and its full-screen button.
+private struct PlayerView: UIViewControllerRepresentable {
+    let player: AVPlayer
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.view.backgroundColor = .clear
+        controller.player = player
+        return controller
+    }
+
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        guard controller.player !== player else { return }
+        controller.player = player
     }
 }
 #endif

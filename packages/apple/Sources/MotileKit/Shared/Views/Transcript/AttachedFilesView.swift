@@ -107,6 +107,15 @@ final class AttachedFilesView: FlippedView {
 
         func show(_ file: AttachedFile, owner: RowOwner?, onClick: @escaping () -> Void) {
             onPress = { _ in onClick() }
+            menuActions = { [weak self, weak owner] in
+                guard let self, let id = file.media else { return [] }
+                return MediaFiles.actions(video: file.video, name: file.name, from: self) { done in
+                    owner?.media(id: id) { url in
+                        guard let url else { return }
+                        done(url)
+                    }
+                }
+            }
             tip = file.name
             describe(file.name)
             playSymbol.isHidden = !file.video
