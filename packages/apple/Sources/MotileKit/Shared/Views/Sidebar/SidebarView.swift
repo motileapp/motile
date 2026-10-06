@@ -726,10 +726,10 @@ private struct SidebarFooter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if store.updater.state != .checking {
+            ForEach(store.servers) { ServerLine(server: $0) }
+            if ![.idle, .checking, .upToDate].contains(store.updater.state) {
                 AppUpdateRow(updater: store.updater)
             }
-            ForEach(store.servers) { ServerLine(server: $0) }
             HStack(spacing: 2 * ToolbarButton.margin) {
                 if store.showsUsage {
                     ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, fills: true, alignment: .leading) {
@@ -742,6 +742,9 @@ private struct SidebarFooter: View {
                     }
                 }
                 Spacer(minLength: 0)
+                if store.updater.state == .upToDate {
+                    UpdateLabel.upToDate(store.updater.current)
+                }
                 ActionButton(icon: .refreshCw, help: "Check for Updates", pending: store.updater.state == .checking) {
                     store.updater.check(asked: true)
                 }

@@ -13,7 +13,11 @@ struct AppUpdateRow: View {
         case .checking:
             line("Checking for updates", symbol: .refreshCw) { spinner }
         case .upToDate:
-            line("Up to date", detail: "(\(updater.current))", symbol: .circleCheck, tint: .themeSuccess)
+            HStack {
+                UpdateLabel.upToDate(updater.current)
+                Spacer(minLength: 4)
+            }
+            .frame(minHeight: ControlSize.small.height)
         case .available(let version):
             line("Motile \(version) is available", symbol: .circleArrowDown) {
                 ActionButton("Update", size: .small) { updater.install() }
@@ -55,27 +59,42 @@ struct AppUpdateRow: View {
             .foregroundStyle(Color.themeSecondary)
     }
 
-    private func line(_ text: String, detail: String? = nil, symbol: Symbol, tint: Color = .themeSecondary) -> some View {
-        line(text, detail: detail, symbol: symbol, tint: tint) { EmptyView() }
+    private func line(_ text: String, symbol: Symbol) -> some View {
+        line(text, symbol: symbol) { EmptyView() }
     }
 
-    private func line<Trailing: View>(
-        _ text: String, detail: String? = nil, symbol: Symbol, tint: Color = .themeSecondary,
-        @ViewBuilder trailing: () -> Trailing
-    ) -> some View {
+    private func line<Trailing: View>(_ text: String, symbol: Symbol, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 7) {
-            Image(symbol, size: 13)
-                .foregroundStyle(tint)
-            label(text, detail: detail)
-                .font(.ui(size: 12, weight: .medium))
-                .lineLimit(1)
+            UpdateLabel(text: text, symbol: symbol)
             Spacer(minLength: 4)
             trailing()
         }
         .frame(minHeight: ControlSize.small.height)
     }
+}
 
-    private func label(_ text: String, detail: String?) -> Text {
+/// What an update is at, after its symbol, with the version muted.
+struct UpdateLabel: View {
+    let text: String
+    var detail: String?
+    let symbol: Symbol
+    var tint = Color.themeSecondary
+
+    static func upToDate(_ version: String) -> UpdateLabel {
+        UpdateLabel(text: "Up to date", detail: "(\(version))", symbol: .circleCheck, tint: .themeSuccess)
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(symbol, size: 13)
+                .foregroundStyle(tint)
+            label
+                .font(.ui(size: 12, weight: .medium))
+                .lineLimit(1)
+        }
+    }
+
+    private var label: Text {
         guard let detail else { return Text(text) }
         return Text("\(text) \(Text(detail).foregroundStyle(Color.themeSecondary))")
     }
