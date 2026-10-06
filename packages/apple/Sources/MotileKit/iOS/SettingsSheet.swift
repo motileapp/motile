@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 
-/// The settings in a sheet, with a Done button. A narrow sheet lists the sections and pushes the
+/// The settings in a sheet, with a close button. A narrow sheet lists the sections and pushes the
 /// open one over the list; a wide one has the list beside it.
 struct SettingsSheet: View {
     /// A sheet at least this wide has the sections beside the open one.
@@ -26,15 +26,17 @@ struct SettingsSheet: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture { Platform.endEditing() }
                 .navigationTitle(wide ? store.settings?.title ?? "Settings" : "Settings")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                    }
+                    ToolbarItem(placement: .confirmationAction) { close }
                 }
                 .navigationDestination(for: SettingsSection.self) { section in
                     SettingsPage(section: section)
+                        .contentShape(Rectangle())
+                        .onTapGesture { Platform.endEditing() }
                         .background(Color.themeBackground.ignoresSafeArea())
                         .navigationTitle(section.title)
                         .navigationBarTitleDisplayMode(.inline)
@@ -47,6 +49,14 @@ struct SettingsSheet: View {
         }
         .presentationSizing(.page)
         .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder private var close: some View {
+        if #available(iOS 26, *) {
+            Button(role: .close) { dismiss() }
+        } else {
+            Button("Done") { dismiss() }
+        }
     }
 
     /// A narrow sheet opens the section the store was pointed at, unless that is only the list's
