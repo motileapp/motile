@@ -22,6 +22,7 @@ struct AccountMenu: View {
                 .contentShape(Circle())
         }
         .menuStyle(.button)
+        .menuOrder(.fixed)
         .buttonStyle(.plain)
         .glassButton(in: Circle())
         .accessibilityLabel("Account")
