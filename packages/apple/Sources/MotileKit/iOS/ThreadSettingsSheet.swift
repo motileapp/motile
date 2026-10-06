@@ -127,19 +127,20 @@ struct ThreadSettingsSheet: View {
             let startsInWorktree = store.draftUsesWorktree
             if let branch = startsInWorktree ? store.draftBase : project.branch {
                 let title = startsInWorktree ? "Starts from" : "Branch"
+                let value = startsInWorktree ? store.draftStart ?? branch : branch
                 if project.worktree == nil, store.canSwitchBranches(of: project) {
                     Button {
                         store.showBranches(of: project)
                     } label: {
                         HStack(spacing: 8) {
-                            LabeledContent(title, value: branch)
+                            LabeledContent(title, value: value)
                             Image(.chevronRight, size: 11)
                                 .foregroundStyle(Color.themeTertiary)
                         }
                         .foregroundStyle(Color.themeText)
                     }
                 } else {
-                    LabeledContent(title, value: branch)
+                    LabeledContent(title, value: value)
                 }
             }
         }

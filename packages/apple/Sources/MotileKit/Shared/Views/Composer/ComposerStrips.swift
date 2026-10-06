@@ -115,8 +115,8 @@ struct ContextStrip: View {
                     .help("The branch of this thread's worktree")
             } else if store.canSwitchBranches(of: project) {
                 ActionButton(
-                    startsInWorktree ? "From \(branch)" : branch, icon: .gitBranch,
-                    help: startsInWorktree ? "The branch the worktree's branch starts from" : "Switch the branch of \(project.name)",
+                    startsInWorktree ? "From \(store.draftStart ?? branch)" : branch, icon: .gitBranch,
+                    help: startsInWorktree ? startHelp(base: branch) : "Switch the branch of \(project.name)",
                     variant: .ghost, size: .small, opens: true, margin: ComposerStrip.margin
                 ) {
                     store.showBranches(of: project)
@@ -131,6 +131,11 @@ struct ContextStrip: View {
                     .help(server?.known == true ? "Update \(server?.name ?? "your server") to switch branches from here" : "The branch checked out there")
             }
         }
+    }
+
+    private func startHelp(base: String) -> String {
+        guard let start = store.draftStart, start != base else { return "The branch the worktree's branch starts from" }
+        return "The worktree starts from \(start), which has commits \(base) doesn't have here yet"
     }
 
     /// Where a new thread starts, to choose, and where a thread that has started works.

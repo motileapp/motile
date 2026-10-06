@@ -1576,7 +1576,7 @@ async fn a_pull_request_is_read_reviewed_and_merged_from_its_folder() {
 
 async fn git_status(connection: &Connection, project_id: &str, fetch: bool) -> (GitStatus, Vec<String>) {
     let request = Request::GitStatus { project_id: project_id.to_string(), thread_id: None, fetch };
-    let Message::GitStatus { status, files } = connection.request(&request).await.unwrap() else {
+    let Message::GitStatus { status, files, .. } = connection.request(&request).await.unwrap() else {
         panic!("expected the status")
     };
     (status.expect("the folder is a repository"), files.into_iter().map(|file| file.path).collect())
@@ -2078,6 +2078,62 @@ fn git_says(folder: &Path, arguments: &[&str]) -> String {
 }
 
 #[tokio::test]
+async fn where_a_new_worktree_starts_is_said_and_so_is_a_remote_that_cannot_be_fetched_from() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let (project, _) = project_with_a_branch(&harness, &connection).await;
+    let root = harness.dir.path();
+    let repository = root.join("repository");
+    let start = async |fetch| {
+        let request = Request::WorktreeStart { project_id: project.id.clone(), base: "main".to_string(), fetch };
+        let Message::WorktreeStart { start, problem } = connection.request(&request).await.unwrap() else {
+            panic!("expected where the worktree starts")
+        };
+        (start, problem)
+    };
+    assert_eq!(start(true).await, ("main".to_string(), None));
+    let status = Request::GitStatus { project_id: project.id.clone(), thread_id: None, fetch: true };
+    assert!(matches!(connection.request(&status).await.unwrap(), Message::GitStatus { problem: None, .. }));
+
+    // A commit on the remote is only known once fetched, and pulling it makes the local base
+    // the start again.
+    git(root, &["clone", "-q", "origin.git", "other"]);
+    std::fs::write(root.join("other/greet.py"), "print('hi')\n").unwrap();
+    git(&root.join("other"), &["commit", "-q", "-am", "Say hi"]);
+    git(&root.join("other"), &["push", "-q"]);
+    assert_eq!(start(false).await, ("main".to_string(), None));
+    assert_eq!(start(true).await, ("origin/main".to_string(), None));
+    git(&repository, &["fetch", "-q", "origin", "main:main"]);
+    assert_eq!(start(false).await, ("main".to_string(), None));
+
+    // A remote that is gone is said, and the thread shows it before it starts from what was
+    // fetched last.
+    std::fs::rename(root.join("origin.git"), root.join("gone.git")).unwrap();
+    let (said, problem) = start(true).await;
+    assert_eq!(said, "main");
+    assert!(problem.is_some_and(|problem| problem.contains("origin.git")));
+    let status = Request::GitStatus { project_id: project.id.clone(), thread_id: None, fetch: true };
+    let Message::GitStatus { problem, .. } = connection.request(&status).await.unwrap() else {
+        panic!("expected the status")
+    };
+    assert!(problem.is_some_and(|problem| problem.contains("origin.git")));
+    let new_thread = NewThread {
+        project_id: project.id.clone(),
+        agent: Agent::Claude,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        plan: false,
+        worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Show the screenshot").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    let ItemKind::Tool { call } = &transcript.items[1].kind else { panic!("the failed fetch is shown first") };
+    assert_eq!(call.input, json!({ "command": "git fetch origin main" }).to_string());
+    assert_eq!(call.status, ToolStatus::Failed);
+}
+
+#[tokio::test]
 async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
@@ -2157,7 +2213,7 @@ async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
     // Git works in the thread's worktree.
     let status =
         Request::GitStatus { project_id: project.id.clone(), thread_id: Some(thread_id.clone()), fetch: false };
-    let Message::GitStatus { status: Some(status), files } = connection.request(&status).await.unwrap() else {
+    let Message::GitStatus { status: Some(status), files, .. } = connection.request(&status).await.unwrap() else {
         panic!("expected the status")
     };
     assert_eq!((status.branch.as_deref(), status.default, status.changed), (Some(branch), false, files.len() as u32));
