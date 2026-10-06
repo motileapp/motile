@@ -142,6 +142,62 @@ final class PictureView: LayerView {
     }
 }
 
+/// Lucide's loader, turning, as `Spinner` is: for the views the transcript draws itself.
+final class SpinnerView: LayerView {
+    /// Drawn smaller in its square, as `Spinner` is, to look as large as the symbols it stands in for.
+    private static let fill: CGFloat = 0.85
+
+    private let loader = CAShapeLayer()
+    private let side: CGFloat
+    var tint: PlatformColor = Theme.secondary { didSet { repaint() } }
+
+    init(size: CGFloat) {
+        side = PlatformImage.symbolSide(size * Self.fill)
+        super.init(frame: .zero)
+        loader.path = PlatformImage.symbolPath(.loader, size: size * Self.fill)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override var isHidden: Bool {
+        didSet { turn() }
+    }
+
+    #if os(macOS)
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        turn()
+    }
+    #else
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        turn()
+    }
+    #endif
+
+    override func layoutNow() {
+        loader.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+        loader.position = CGPoint(x: bounds.midX, y: bounds.midY)
+    }
+
+    override func paint(_ layer: CALayer) {
+        if loader.superlayer !== layer { layer.addSublayer(loader) }
+        loader.fillColor = resolved(tint)
+        turn()
+    }
+
+    private func turn() {
+        guard !isHidden, window != nil else { return loader.removeAnimation(forKey: "turn") }
+        guard loader.animation(forKey: "turn") == nil else { return }
+        let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+        turn.fromValue = 0
+        turn.toValue = CGFloat.pi * 2
+        turn.duration = 1.2
+        turn.repeatCount = .infinity
+        loader.add(turn, forKey: "turn")
+    }
+}
+
 /// Symbols drawn in a colour that follows the appearance.
 enum TintedSymbol {
     private static var cache: [String: PlatformImage] = [:]
