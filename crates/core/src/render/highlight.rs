@@ -146,6 +146,32 @@ pub fn highlight(language: &str, code: &str) -> Spans {
     spans
 }
 
+/// Colours a one-line shell command word by word: its programs and the variables set for them,
+/// operators, flags, addresses and the arguments left, which are what is particular to it.
+pub fn command(line: &str) -> Vec<u32> {
+    let mut spans = Vec::new();
+    let mut start = 0;
+    let mut expects_program = true;
+    for word in line.split(' ') {
+        let len = word.encode_utf16().count() as u32;
+        let is_operator = matches!(word, "|" | "&&" | "||" | ";");
+        let colour = match word {
+            _ if is_operator => Colour::Keyword,
+            _ if expects_program && word.contains('=') => Colour::Variable,
+            _ if expects_program => Colour::Function,
+            _ if word.starts_with('-') => Colour::Constant,
+            _ if word.contains("://") => Colour::String,
+            _ => Colour::Type,
+        };
+        if len > 0 {
+            push_span(&mut spans, start, len, colour as u32);
+            expects_program = is_operator || matches!(colour, Colour::Variable);
+        }
+        start += len + 1;
+    }
+    spans
+}
+
 /// Highlights code that grows as it streams, without starting over each time.
 pub struct Incremental {
     language: String,
@@ -274,6 +300,30 @@ mod tests {
 
     fn colour_of(code: &str, spans: &[u32], text: &str) -> Option<u32> {
         coloured(code, spans).into_iter().find(|(piece, _)| piece.contains(text)).map(|(_, colour)| colour)
+    }
+
+    #[test]
+    fn a_command_colours_programs_flags_addresses_and_arguments() {
+        let code = "curl -fsSL https://motile.app/i | sh -s -- KWG7ULZW";
+        let spans = command(code);
+
+        assert_eq!(colour_of(code, &spans, "curl"), Some(Colour::Function as u32));
+        assert_eq!(colour_of(code, &spans, "-fsSL"), Some(Colour::Constant as u32));
+        assert_eq!(colour_of(code, &spans, "https://"), Some(Colour::String as u32));
+        assert_eq!(colour_of(code, &spans, "|"), Some(Colour::Keyword as u32));
+        assert_eq!(colour_of(code, &spans, "sh"), Some(Colour::Function as u32));
+        assert_eq!(colour_of(code, &spans, "--"), Some(Colour::Constant as u32));
+        assert_eq!(colour_of(code, &spans, "KWG7ULZW"), Some(Colour::Type as u32));
+    }
+
+    #[test]
+    fn a_variable_set_for_a_program_leaves_it_the_program() {
+        let code = "curl -fsSL https://motile.app/i | MOTILE_AUTH_URL=https://auth.example.com sh -s -- ABCD1234";
+        let spans = command(code);
+
+        assert_eq!(colour_of(code, &spans, "MOTILE_AUTH_URL="), Some(Colour::Variable as u32));
+        assert_eq!(colour_of(code, &spans, "sh"), Some(Colour::Function as u32));
+        assert_eq!(colour_of(code, &spans, "ABCD1234"), Some(Colour::Type as u32));
     }
 
     #[test]

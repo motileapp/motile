@@ -89,7 +89,7 @@ struct ConnectServerView: View {
 
     private var commandBox: some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(store.enrollToken.map { Self.breakingAnywhere($0.command) } ?? "Preparing the command…")
+            Text(store.enrollToken.map(Self.highlighted) ?? AttributedString("Preparing the command…"))
                 .font(.ui(size: 12.5, design: .monospaced))
                 .foregroundStyle(store.enrollToken == nil ? Color.themeTertiary : Color.themeText)
                 .lineSpacing(3)
@@ -119,9 +119,24 @@ struct ConnectServerView: View {
         }
     }
 
-    /// Lets the command wrap between any two characters, as CSS's `break-all` does. Not selectable,
-    /// since a copy would carry the zero-width spaces into the shell.
-    private static func breakingAnywhere(_ text: String) -> String {
-        text.map(String.init).joined(separator: "\u{200B}")
+    /// The command in the theme's code colours. It wraps between any two characters, as CSS's
+    /// `break-all` does, so it is not selectable: a copy would carry the zero-width spaces into the shell.
+    private static func highlighted(_ token: EnrollToken) -> AttributedString {
+        var colours = [Int](repeating: 0, count: token.command.utf16.count)
+        for index in stride(from: 0, to: token.spans.count - 2, by: 3) {
+            let start = token.spans[index], end = start + token.spans[index + 1]
+            guard end <= colours.count else { continue }
+            colours.replaceSubrange(start..<end, with: repeatElement(token.spans[index + 2], count: end - start))
+        }
+        var result = AttributedString()
+        var offset = 0
+        for character in token.command {
+            var piece = AttributedString(String(character) + "\u{200B}")
+            let colour = colours[offset]
+            piece.foregroundColor = Color(platform: Theme.syntax[colour < Theme.syntax.count ? colour : 0])
+            result += piece
+            offset += character.utf16.count
+        }
+        return result
     }
 }
