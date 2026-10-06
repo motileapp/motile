@@ -62,8 +62,8 @@ struct MediaViewer: View {
             HStack(spacing: 8) {
                 if let file {
                     CopyButton(
-                        help: item.video ? "Copy Video (⌘C)" : "Copy Image (⌘C)", variant: .overlay, size: .large, round: true,
-                        copies: copies
+                        help: item.video ? "Copy Video (⌘C)" : "Copy Image (⌘C)", variant: .overlay, size: .large,
+                        symbolSize: ControlSize.large.smallSymbol, round: true, copies: copies
                     ) { MediaFiles.copy(file, video: item.video, named: item.name) }
                     roundButton(.download, help: "Save As… (⌘S)") { MediaFiles.save(file, named: item.name) }
                 }
@@ -125,7 +125,10 @@ struct MediaViewer: View {
     }
 
     private func roundButton(_ symbol: Symbol, help: String, action: @escaping () -> Void) -> some View {
-        ActionButton(icon: symbol, help: help, variant: .overlay, size: .large, round: true, action: action)
+        ActionButton(
+            icon: symbol, help: help, variant: .overlay, size: .large, symbolSize: ControlSize.large.smallSymbol, round: true,
+            action: action
+        )
     }
 
     /// The player's own full screen and the save panel take the keys while they are up.
