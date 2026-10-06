@@ -1196,7 +1196,11 @@ impl Core {
                 let (auth, key, sink) = (self.auth.clone(), self.key.clone(), self.sink.clone());
                 tokio::spawn(async move {
                     let token = auth.create_enroll_token(&key).await.map_err(error_text);
-                    reply(&sink, id, token.map(|token| serde_json::to_value(token).unwrap_or_default()));
+                    let token = token.map(|token| {
+                        let spans = highlight::command(&token.command);
+                        json!({ "command": token.command, "expires_at": token.expires_at, "spans": spans })
+                    });
+                    reply(&sink, id, token);
                 });
             }
             Command::RemoveServer { server_id } => {

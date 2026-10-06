@@ -796,10 +796,13 @@ struct Question: Equatable, Identifiable {
 struct EnrollToken {
     let command: String
     let expiresAt: Double
+    /// The command's colours, as the core's `[start, length, palette index]` spans.
+    let spans: [Int]
 
     init(json: JSON) {
         command = json.string("command")
         expiresAt = json.double("expires_at")
+        spans = (json["spans"] as? [NSNumber] ?? []).map(\.intValue)
     }
 
     func isExpired(at date: Date) -> Bool {
