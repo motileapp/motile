@@ -174,7 +174,9 @@ private struct MarkDoneButton: View {
     let action: () -> Void
 
     var body: some View {
-        ActionButton("Mark Done", icon: .circleCheck, variant: .ghost, size: .small, action: action)
+        ActionButton(
+            "Mark Done", icon: .circleCheck, variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol, action: action
+        )
             .fixedSize()
     }
 }
