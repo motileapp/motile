@@ -134,7 +134,7 @@ struct RootView: View {
                 ConnectServerView(isFirst: true)
             } else {
                 MainView()
-                    .putAway(store.settings != nil || store.showsUsage)
+                    .putAway(store.settings != nil)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -146,14 +146,11 @@ struct RootView: View {
             if let section = store.settings {
                 SettingsRoute(section: section)
                     .appearing()
-            } else if store.showsUsage {
-                UsageRoute()
-                    .appearing()
             }
         }
-        .animation(.easeOut(duration: 0.15), value: store.settings != nil || store.showsUsage)
+        .animation(.easeOut(duration: 0.15), value: store.settings != nil)
         .toolbar {
-            if store.settings != nil || store.showsUsage {
+            if store.settings != nil {
                 ToolbarItem(placement: .navigation) {
                     ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost) { store.closeRoute() }
                         .keyboardShortcut(.cancelAction)
@@ -239,12 +236,6 @@ struct MainView: View {
             HStack(spacing: 0) {
                 SidebarView()
                     .frame(width: shownWidth)
-                    .overlay(alignment: .topTrailing) {
-                        projectButtons
-                            .frame(height: window.safeAreaInsets.top)
-                            .offset(y: -window.safeAreaInsets.top)
-                            .padding(.trailing, SidebarView.rowInset - ToolbarButton.margin)
-                    }
                     .frame(width: sidebarHidden ? 0 : shownWidth, alignment: .leading)
                     .putAway(sidebarHidden)
                 if !sidebarHidden {
@@ -277,6 +268,14 @@ struct MainView: View {
                         .environment(\.panelInView, panelOpen)
                         .putAway(!panelOpen)
                     }
+                    .putAway(store.showsUsage)
+                    .overlay {
+                        if store.showsUsage {
+                            UsageRoute(titleInset: sidebarHidden ? Self.pastWindowButtons : 20)
+                                .appearing()
+                        }
+                    }
+                    .animation(.easeOut(duration: 0.15), value: store.showsUsage)
             }
             .frame(width: window.size.width, alignment: .leading)
             .overlay(alignment: .topTrailing) {
@@ -284,16 +283,17 @@ struct MainView: View {
                     .frame(height: window.safeAreaInsets.top)
                     .offset(y: -window.safeAreaInsets.top)
                     .padding(.trailing, Self.panelButtonsInset)
+                    .putAway(store.showsUsage)
             }
             .toolbar {
-                if store.settings == nil && !store.showsUsage {
+                if store.settings == nil {
                     ToolbarItem(placement: .navigation) {
                         HStack(spacing: 0) {
                             ToolbarButton(symbol: .panelLeft, help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
                                 sidebarHidden.toggle()
                             }
                             if sidebarHidden {
-                                projectButtons
+                                ProjectButtons(inTopBar: true)
                             }
                         }
                         // The system places an item by its width, so it is the same shown and hidden.
@@ -322,20 +322,6 @@ struct MainView: View {
             }
             ToolbarButton(symbol: .panelRight, help: open ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
                 store.sidePanel.isOpen.toggle()
-            }
-        }
-    }
-
-    /// Drawn by the sidebar in the top bar while it is shown, so that they end where its rows do
-    /// in the same layout pass. A toolbar item sized to the sidebar follows it a frame late.
-    private var projectButtons: some View {
-        HStack(spacing: 0) {
-            ToolbarButton(symbol: .folderPlus, help: "Add a project") {
-                store.addProject()
-            }
-            ToolbarButton(symbol: .squarePen, help: "New thread (⌘N). ⇧-click starts one in this project") {
-                guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true else { return store.newThread() }
-                store.startNewThread(in: store.composerProject)
             }
         }
     }

@@ -139,23 +139,25 @@ final class UsageModel {
     }
 }
 
-/// The route's title on two lines, as the thread's is: the servers counted, which picks them,
-/// over "Usage".
+/// The route's title as a path: "Usage", then the servers counted, which picks them.
 struct UsageTitle: View {
     @Environment(AppStore.self) private var store
     let model: UsageModel
 
+    private static let size = ControlSize.large
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ActionMenu(model.serversLabel(among: store.servers), help: "The servers counted", size: .small) {
+        HStack(spacing: Self.size.padding) {
+            Text("Usage")
+                .foregroundStyle(Color.themeSecondary)
+            Text("/")
+                .foregroundStyle(Color.themeTertiary)
+            ActionMenu(model.serversLabel(among: store.servers), help: "The servers counted", size: Self.size, tint: .themeText) {
                 UsageServerPicks(model: model)
             }
-            .fixedSize()
-            .padding(.leading, -ControlSize.small.padding)
-            Text("Usage")
-                .font(.ui(size: 13, weight: .semibold))
-                .foregroundStyle(Color.themeText)
+            .padding(.leading, -Self.size.padding)
         }
+        .font(Self.size.font)
         .lineLimit(1)
     }
 }

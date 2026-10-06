@@ -11,17 +11,19 @@ import {
   SettingsIcon,
   type LucideIcon,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { AgentIcon, ProjectIcon } from "./icons"
 import { doneThreads, servers, type Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
 export function Sidebar({
+  actions,
   threads,
   selectedId,
   elapsed,
   onSelect,
 }: {
+  actions: ReactNode
   threads: Thread[]
   selectedId: string
   elapsed: (since: number) => string
@@ -40,15 +42,18 @@ export function Sidebar({
 
   return (
     <div className="flex h-full flex-col">
-      <label className="mx-2.5 mt-0.5 mb-1.5 flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] bg-background-secondary px-[9px]">
-        <SearchIcon className="size-3 text-tertiary" />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search"
-          className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-tertiary pointer-coarse:text-[16px]"
-        />
-      </label>
+      <div className="mx-2.5 mt-0.5 mb-1.5 flex shrink-0 gap-2">
+        <label className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-[7px] bg-background-secondary px-[9px]">
+          <SearchIcon className="size-3 text-tertiary" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search"
+            className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-tertiary pointer-coarse:text-[16px]"
+          />
+        </label>
+        <div className="flex">{actions}</div>
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-[3px]">
         {active.map((thread) => (
           <ThreadRow

@@ -191,6 +191,10 @@ private struct LimitBar: View {
                     Text(resetsIn)
                         .help("Starts over in \(resetsIn)")
                 }
+                if window.resetsIn != nil, window.resetCredits > 0 {
+                    Text("·")
+                        .foregroundStyle(Color.themeTertiary)
+                }
                 if window.resetCredits > 0 {
                     HStack(spacing: 3) {
                         Image(.ticket, size: 11)
