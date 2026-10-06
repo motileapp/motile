@@ -110,6 +110,7 @@ final class MediaRowView: RowView {
 
     private let picture = PictureView()
     private let playSymbol = SymbolView(.circlePlay, size: 40, tint: Theme.secondary)
+    private let spinner = SpinnerView(size: 24)
     private let caption = TextLabel(font: Theme.smallFont, color: Theme.secondary)
     private var content: MediaContent?
     private var file: URL?
@@ -117,6 +118,7 @@ final class MediaRowView: RowView {
     private var progress: NSObjectProtocol?
     #if os(macOS)
     private var player: AVPlayerView?
+    private var playerReady: NSKeyValueObservation?
     #endif
 
     static func height(_ content: MediaContent, width: CGFloat) -> CGFloat {
@@ -127,6 +129,8 @@ final class MediaRowView: RowView {
         super.init(frame: frame)
         addSubview(picture)
         addSubview(playSymbol)
+        spinner.isHidden = true
+        addSubview(spinner)
         caption.breaks = .byTruncatingMiddle
         addSubview(caption)
         onPress = { [weak self] _ in self?.pressed() }
@@ -156,6 +160,7 @@ final class MediaRowView: RowView {
         tip = media.alt.isEmpty ? nil : media.alt
         describe(media.alt.isEmpty ? media.name : media.alt)
         playSymbol.isHidden = !media.video
+        spinner.isHidden = true
         picture.picture = media.video ? nil : Pictures.cached(media.id)
         caption.string = media.video ? Self.described(media) : ""
         guard !media.video, picture.picture == nil else { return }
@@ -205,6 +210,7 @@ final class MediaRowView: RowView {
         player?.frame = frame
         #endif
         playSymbol.frame = CGRect(x: frame.midX - 24, y: frame.midY - 24, width: 48, height: 48)
+        spinner.frame = playSymbol.frame
         caption.frame = CGRect(x: 12, y: frame.maxY - 10 - scaled(16), width: max(0, frame.width - 24), height: scaled(16))
         return box.height + Self.gap * 2
     }
@@ -229,16 +235,19 @@ final class MediaRowView: RowView {
         #if os(macOS)
         guard !downloading else { return }
         downloading = true
-        caption.string = "Downloading \(media.name)…"
+        wait(true)
+        caption.string = "Downloading \(media.name)"
         fetch { [weak self] file in
             guard let self else { return }
             self.downloading = false
             guard let file else {
+                self.wait(false)
                 self.caption.string = "This video couldn't be loaded. Click to try again."
                 return
             }
             self.caption.string = Self.described(media)
             guard media.playsHere else {
+                self.wait(false)
                 Platform.open(file)
                 return
             }
@@ -250,23 +259,38 @@ final class MediaRowView: RowView {
         #endif
     }
 
+    /// While the video downloads and until its first frame is drawn, the spinner stands where the
+    /// play symbol was.
+    private func wait(_ waiting: Bool) {
+        spinner.isHidden = !waiting
+        playSymbol.isHidden = waiting || !(content?.video ?? false)
+    }
+
     #if os(macOS)
     private func play(_ file: URL) {
         let view = AVPlayerView(frame: picture.frame)
         view.controlsStyle = .inline
+        view.showsFullScreenToggleButton = true
         view.videoGravity = .resizeAspect
         view.wantsLayer = true
         view.layer?.cornerRadius = PictureView.radius
         view.layer?.masksToBounds = true
         view.player = AVPlayer(url: file)
-        addSubview(view)
+        addSubview(view, positioned: .below, relativeTo: spinner)
         player = view
-        playSymbol.isHidden = true
+        playerReady = view.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] view, _ in
+            guard view.isReadyForDisplay else { return }
+            DispatchQueue.main.async {
+                guard let self, self.player === view else { return }
+                self.spinner.isHidden = true
+            }
+        }
         caption.isHidden = true
         view.player?.play()
     }
 
     private func removePlayer() {
+        playerReady = nil
         player?.player?.pause()
         player?.removeFromSuperview()
         player = nil

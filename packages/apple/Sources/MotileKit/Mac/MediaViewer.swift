@@ -14,6 +14,8 @@ struct MediaViewer: View {
     @State private var failed = false
     @State private var fraction: Double?
     @State private var keys: Any?
+    @State private var playerReady = false
+    @State private var fullScreen = false
 
     private enum Loaded {
         case image(CGImage, scale: CGFloat)
@@ -86,10 +88,16 @@ struct MediaViewer: View {
             ) { store.closeViewer() }
             .ignoresSafeArea()
         case .video(let player):
-            VideoPlayer(player: player)
+            PlayerView(player: player, ready: $playerReady, fullScreen: $fullScreen)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .padding(.horizontal, ZoomingScrollView.viewerMargin.width)
                 .padding(.vertical, ZoomingScrollView.viewerMargin.height)
+                .overlay {
+                    if !playerReady {
+                        Spinner(size: ControlSize.large.symbol)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                }
         case nil:
             Group {
                 if failed {
@@ -118,7 +126,9 @@ struct MediaViewer: View {
         .help(help)
     }
 
+    /// The player's own full screen takes the keys while it is up.
     private func handle(_ event: NSEvent) -> Bool {
+        guard !fullScreen else { return false }
         switch event.keyCode {
         case 53: store.closeViewer()
         case 123: store.viewNext(-1)
@@ -138,7 +148,7 @@ struct MediaViewer: View {
 
     private func load(_ item: ViewedMedia) {
         pause()
-        (loaded, failed, fraction) = (nil, false, nil)
+        (loaded, failed, fraction, playerReady) = (nil, false, nil, false)
         let show = { (file: URL?) in
             guard viewing.item == item else { return }
             guard let file else { return failed = true }
@@ -163,6 +173,49 @@ struct MediaViewer: View {
         case .file(let file): show(file)
         case .media(let id): store.media(id, done: show)
         }
+    }
+}
+
+/// The Mac's player with its controls and its full-screen button. `ready` is set once it draws
+/// its first frame, `fullScreen` while it fills the screen.
+private struct PlayerView: NSViewRepresentable {
+    let player: AVPlayer
+    @Binding var ready: Bool
+    @Binding var fullScreen: Bool
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        view.controlsStyle = .floating
+        view.showsFullScreenToggleButton = true
+        view.delegate = context.coordinator
+        context.coordinator.watch(view)
+        return view
+    }
+
+    func updateNSView(_ view: AVPlayerView, context: Context) {
+        context.coordinator.parent = self
+        guard view.player !== player else { return }
+        view.player = player
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, AVPlayerViewDelegate {
+        var parent: PlayerView
+        private var ready: NSKeyValueObservation?
+
+        init(_ parent: PlayerView) { self.parent = parent }
+
+        func watch(_ view: AVPlayerView) {
+            ready = view.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] view, _ in
+                let ready = view.isReadyForDisplay
+                DispatchQueue.main.async { self?.parent.ready = ready }
+            }
+        }
+
+        func playerViewWillEnterFullScreen(_ playerView: AVPlayerView) { parent.fullScreen = true }
+
+        func playerViewDidExitFullScreen(_ playerView: AVPlayerView) { parent.fullScreen = false }
     }
 }
 
