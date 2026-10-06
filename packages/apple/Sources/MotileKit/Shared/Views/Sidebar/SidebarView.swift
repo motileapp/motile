@@ -645,7 +645,6 @@ struct ServerLine: View {
 /// The servers and how the client reaches them, and the account.
 private struct SidebarFooter: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.openSettings) private var openSettings
 
     /// The account's line takes clicks up to the sidebar's edges, and halfway to the line above.
     private static let accountMargin = EdgeInsets(top: 4, leading: 10, bottom: 8, trailing: 10)
@@ -655,7 +654,7 @@ private struct SidebarFooter: View {
             AppUpdateRow(updater: store.updater)
             ForEach(store.servers) { ServerLine(server: $0) }
             Menu {
-                Button("Settings…") { openSettings() }
+                Button("Settings…") { store.openSettings() }
                 Button("Add a Project…") { store.addProject() }
                 Button("Add a Server…") { store.showsAddServer = true }
                 Divider()

@@ -60,12 +60,17 @@ struct MotileApp: App {
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Close") {
+                    if store.settings != nil { return store.closeSettings() }
                     if !store.sidePanel.closeActive() { NSApp.keyWindow?.performClose(nil) }
                 }
                 .keyboardShortcut("w")
             }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { store.updater.check(asked: true) }
+            }
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { store.openSettings() }
+                    .keyboardShortcut(",")
             }
             CommandGroup(replacing: .newItem) {
                 Button("New Thread…") { store.newThread() }
@@ -95,11 +100,6 @@ struct MotileApp: App {
             }
         }
 
-        Settings {
-            SettingsView()
-                .environment(store)
-                .foregroundStyle(Color.themeText)
-        }
     }
 }
 
@@ -132,6 +132,7 @@ struct RootView: View {
                 ConnectServerView(isFirst: true)
             } else {
                 MainView()
+                    .putAway(store.settings != nil)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -139,6 +140,22 @@ struct RootView: View {
         .background(WindowReveal(shown: store.ready || store.errorMessage != nil))
         .toolbarBackground(.hidden, for: .windowToolbar)
         .modifier(HiddenWindowTitle())
+        .overlay {
+            if let section = store.settings {
+                SettingsRoute(section: section)
+                    .appearing()
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: store.settings != nil)
+        .toolbar {
+            if store.settings != nil {
+                ToolbarItem(placement: .navigation) {
+                    ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost) { store.closeSettings() }
+                        .keyboardShortcut(.cancelAction)
+                }
+                .withoutSystemGlass()
+            }
+        }
         .overlay {
             ZStack {
                 if store.panel != nil {
@@ -258,19 +275,21 @@ struct MainView: View {
                     .padding(.trailing, Self.panelButtonsInset)
             }
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    HStack(spacing: 0) {
-                        ToolbarButton(symbol: .panelLeft, help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
-                            sidebarHidden.toggle()
+                if store.settings == nil {
+                    ToolbarItem(placement: .navigation) {
+                        HStack(spacing: 0) {
+                            ToolbarButton(symbol: .panelLeft, help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
+                                sidebarHidden.toggle()
+                            }
+                            if sidebarHidden {
+                                projectButtons
+                            }
                         }
-                        if sidebarHidden {
-                            projectButtons
-                        }
+                        // The system places an item by its width, so it is the same shown and hidden.
+                        .frame(width: 3 * ToolbarButton.width, alignment: .leading)
                     }
-                    // The system places an item by its width, so it is the same shown and hidden.
-                    .frame(width: 3 * ToolbarButton.width, alignment: .leading)
+                    .withoutSystemGlass()
                 }
-                .withoutSystemGlass()
             }
         }
     }
@@ -308,16 +327,6 @@ struct MainView: View {
                 store.startNewThread(in: store.composerProject)
             }
         }
-    }
-}
-
-private extension View {
-    /// Out of sight and out of reach, but still there: it comes back as it was left.
-    func putAway(_ away: Bool) -> some View {
-        opacity(away ? 0 : 1)
-            .allowsHitTesting(!away)
-            .accessibilityHidden(away)
-            .disabled(away)
     }
 }
 

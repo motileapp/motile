@@ -167,8 +167,11 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   variant, one of three sizes, an optional symbol, a pending state), `Spinner`, `Chip`,
   `InputField`. Their sizes are `ControlSize` and their corners `Radius`, in `Theme.swift`.
 - `Shared/Views/CommandPanel.swift`: the panel behind ⌘K, ⌘N and ⌘P, a sheet on iOS.
-- `Shared/Views/UsageView.swift`: what the agents spent, opened from Settings: a chart of cost
-  or tokens by agent, and the models, projects and kinds of token under it.
+- `Shared/Views/Settings`: the settings, a route over the whole client with a way back: the
+  sections and a search of their groups in a sidebar (`SettingsSidebar.swift`), the open
+  section's page (`SettingsPage.swift`), and `UsageView.swift`, the Usage section: a chart of
+  cost or tokens by agent, and the models, projects and kinds of token under it. The Mac lays
+  them out in `Mac/SettingsRoute.swift`, iOS in `iOS/SettingsScreen.swift`.
 - `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
   requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
   `LineCommentSheet.swift`, `PullRequestParts.swift`) and Linear (`LinearView.swift`).

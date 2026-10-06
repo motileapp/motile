@@ -173,13 +173,7 @@ struct DescriptionEditor: View {
                 Text("Edit description")
                     .font(.ui(size: 15, weight: .semibold))
                 Spacer()
-                Picker("", selection: $previewing) {
-                    Text("Write").tag(false)
-                    Text("Preview").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                Segmented([("Write", false), ("Preview", true)], selection: $previewing)
             }
             if previewing {
                 ScrollView {

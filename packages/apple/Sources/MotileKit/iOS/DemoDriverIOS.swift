@@ -13,7 +13,8 @@ import UIKit
 ///     panel diff|files|agents|close     opens a tab of the panel, or closes the panel
 ///     file <path>                       opens a file in the panel
 ///     change <path>                     opens what the latest turn changed in a file
-///     sheet commands|projects|settings|server|thread|close
+///     sheet commands|projects|settings|usage|server|thread|close
+///     settings <section>|search <text>|pick <group>|close
 ///     appearance light|dark|system
 ///     answer <allow|refuse>             answers the first approval
 ///     view                              opens the thread's images in the viewer
@@ -96,8 +97,8 @@ enum DemoDriver {
             case "projects": store.openPanel(.projects)
             case "threads": store.openPanel(.threads)
             case "add": store.addProject()
-            case "settings": store.showsSettings = true
-            case "usage": store.showsUsage = true
+            case "settings": store.openSettings()
+            case "usage": store.openSettings(.usage)
             case "server": store.showsAddServer = true
             case "icon": store.iconProject = store.projects.first
             case "thread": store.showsThreadSettings = true
@@ -106,12 +107,24 @@ enum DemoDriver {
                 store.chooseGit(item, in: project)
             default:
                 store.closePanel()
-                store.showsUsage = false
-                store.showsSettings = false
+                store.closeSettings()
                 store.showsAddServer = false
                 store.showsThreadSettings = false
                 store.committingProject = nil
                 store.iconProject = nil
+            }
+        case "settings":
+            let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
+            let (verb, text) = (words.first ?? "", words.count > 1 ? words[1] : "")
+            switch verb {
+            case "close": store.closeSettings()
+            case "search": store.settingsQuery = text
+            case "pick":
+                guard let entry = SettingsEntry.all.first(where: { $0.id == text }) else { return }
+                store.openSettings(entry.section, target: entry.id)
+            default:
+                guard let section = SettingsSection(rawValue: verb) else { return }
+                store.openSettings(section)
             }
         case "appearance":
             UserDefaults.standard.set(rest, forKey: "appearance")

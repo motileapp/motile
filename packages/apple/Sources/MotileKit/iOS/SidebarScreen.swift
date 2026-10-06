@@ -176,7 +176,7 @@ struct SidebarScreen: View {
                 Menu {
                     Section(store.account.email) {
                         Button {
-                            store.showsSettings = true
+                            store.openSettings()
                         } label: {
                             Label("Settings", symbol: .settings, size: 15)
                         }
