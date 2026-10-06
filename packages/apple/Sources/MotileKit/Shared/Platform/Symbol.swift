@@ -139,6 +139,12 @@ extension PlatformImage {
         return made
     }
 
+    /// The symbol's outline for text of `size`, in its square with the origin at the bottom
+    /// left, for a layer that draws it itself.
+    static func symbolPath(_ symbol: Symbol, size: CGFloat) -> CGPath? {
+        glyph(symbol, side: symbolSide(size))
+    }
+
     private static func glyph(_ symbol: Symbol, side: CGFloat) -> CGPath? {
         guard let symbolFont else { return nil }
         let font = CTFontCreateWithFontDescriptor(symbolFont, side, nil)
