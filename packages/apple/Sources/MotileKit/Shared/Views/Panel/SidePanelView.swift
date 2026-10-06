@@ -614,7 +614,6 @@ struct FileSurface: View {
     let target: PanelTarget
     let path: String
     @State private var asked = 0
-    @State private var copied = false
 
     var body: some View {
         let panel = store.sidePanel
@@ -625,11 +624,7 @@ struct FileSurface: View {
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer(minLength: 4)
-                ActionButton(icon: copied ? .check : .copy, help: "Copy the path") {
-                    Platform.copy(path)
-                    copied = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
-                }
+                CopyButton(help: "Copy the path") { Platform.copy(path) }
                 ActionButton(icon: .rotateCw, help: "Read the file again") { asked += 1 }
             }
             switch panel.contents[.file(path)] {

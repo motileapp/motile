@@ -16,6 +16,8 @@ enum ButtonVariant {
     case link
     /// A link's colour on a wash of it: a choice that is on.
     case accent
+    /// White on a dark wash, over a picture or a video.
+    case overlay
 }
 
 /// What a button shows before its words: a symbol, or a picture of its own like a logo.
@@ -49,6 +51,7 @@ struct ControlLook {
         case .warning: return .themeBackground
         case .ghost: return selected || lit ? .themeText : .themeSecondary
         case .link, .accent: return .themeLink
+        case .overlay: return .white
         }
     }
 
@@ -61,6 +64,7 @@ struct ControlLook {
         case .ghost: selected ? surface.further.color : lit ? ghostLit : .clear
         case .link: lit ? .themeLinkHover : .clear
         case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
+        case .overlay: .black.opacity(lit ? 0.62 : 0.5)
         }
     }
 
@@ -87,6 +91,7 @@ struct ControlLook {
             .fill(fill)
             .overlay {
                 if variant == .primary || variant == .danger || variant == .warning, lit { shape.fill(Color.white.opacity(0.12)) }
+                if variant == .overlay { shape.fill(Color.white.opacity(0.14)) }
             }
     }
 }
@@ -222,8 +227,8 @@ private struct ArrowPointer: View {
 extension ButtonStyle where Self == ControlButtonStyle {
     /// The button's look for what the system makes a button of, like a share link. Its label is
     /// a `ControlLabel` of the same size.
-    static func control(_ variant: ButtonVariant = .ghost, size: ControlSize = .regular) -> ControlButtonStyle {
-        ControlButtonStyle(look: ControlLook(variant: variant, size: size))
+    static func control(_ variant: ButtonVariant = .ghost, size: ControlSize = .regular, round: Bool = false) -> ControlButtonStyle {
+        ControlButtonStyle(look: ControlLook(variant: variant, size: size, round: round))
     }
 }
 

@@ -17,6 +17,7 @@ struct MediaViewer: View {
     @State private var playerReady = false
     @State private var fullScreen = false
     @State private var file: URL?
+    @State private var copies = 0
 
     private enum Loaded {
         case image(CGImage, scale: CGFloat)
@@ -60,9 +61,10 @@ struct MediaViewer: View {
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 8) {
                 if let file {
-                    roundButton(.copy, help: item.video ? "Copy Video (⌘C)" : "Copy Image (⌘C)") {
-                        MediaFiles.copy(file, video: item.video, named: item.name)
-                    }
+                    CopyButton(
+                        help: item.video ? "Copy Video (⌘C)" : "Copy Image (⌘C)", variant: .overlay, size: .large, round: true,
+                        copies: copies
+                    ) { MediaFiles.copy(file, video: item.video, named: item.name) }
                     roundButton(.download, help: "Save As… (⌘S)") { MediaFiles.save(file, named: item.name) }
                 }
                 roundButton(.x, help: "Close (Esc)") { store.closeViewer() }
@@ -123,16 +125,7 @@ struct MediaViewer: View {
     }
 
     private func roundButton(_ symbol: Symbol, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(symbol, size: 13)
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(.white.opacity(0.14), in: Circle())
-                .background(.black.opacity(0.5), in: Circle())
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
+        ActionButton(icon: symbol, help: help, variant: .overlay, size: .large, round: true, action: action)
     }
 
     /// The player's own full screen and the save panel take the keys while they are up.
@@ -142,6 +135,7 @@ struct MediaViewer: View {
             switch event.charactersIgnoringModifiers {
             case "c":
                 MediaFiles.copy(file, video: viewing.item.video, named: viewing.item.name)
+                copies += 1
                 return true
             case "s":
                 MediaFiles.save(file, named: viewing.item.name)

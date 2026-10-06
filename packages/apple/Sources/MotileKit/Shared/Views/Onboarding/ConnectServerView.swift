@@ -7,7 +7,6 @@ struct ConnectServerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.surface) private var surface
     let isFirst: Bool
-    @State private var copied = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -105,11 +104,9 @@ struct ConnectServerView: View {
                 .buttonStyle(.control())
                 .accessibilityLabel("Share the command")
                 #endif
-                ActionButton(icon: copied ? .check : .copy, help: "Copy the command", symbolSize: 12) {
+                CopyButton(help: "Copy the command", symbolSize: 12) {
                     guard let command = store.enrollToken?.command else { return }
                     Platform.copy(command)
-                    copied = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                 }
             }
             .disabled(store.enrollToken == nil)

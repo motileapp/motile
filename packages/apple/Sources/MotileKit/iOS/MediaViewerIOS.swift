@@ -60,8 +60,8 @@ struct MediaViewer: View {
 
     private func bar(_ item: ViewedMedia) -> some View {
         HStack(spacing: 8) {
-            button(.x, label: "Close") { store.closeViewer() }
-            Color.clear.frame(width: 40, height: 40)
+            ActionButton(icon: .x, help: "Close", variant: .overlay, size: .large, round: true) { store.closeViewer() }
+            Color.clear.frame(width: side, height: side)
             Spacer(minLength: 8)
             VStack(spacing: 1) {
                 Text(item.name)
@@ -77,12 +77,14 @@ struct MediaViewer: View {
             .foregroundStyle(.white)
             Spacer(minLength: 8)
             if let shared {
-                button(.copy, label: item.video ? "Copy Video" : "Copy Image") {
+                CopyButton(help: item.video ? "Copy Video" : "Copy Image", variant: .overlay, size: .large, round: true) {
                     MediaFiles.copy(shared, video: item.video, named: item.name)
                 }
-                ShareLink(item: shared) { symbol(.share) }
+                ShareLink(item: shared) { ControlLabel(title: nil, icon: .symbol(.share), size: .large) }
+                    .buttonStyle(.control(.overlay, size: .large, round: true))
+                    .accessibilityLabel("Share")
             } else {
-                Color.clear.frame(width: 88, height: 40)
+                Color.clear.frame(width: side * 2 + 8, height: side)
             }
         }
         .padding(.horizontal, 14)
@@ -90,18 +92,7 @@ struct MediaViewer: View {
         .opacity(pulled > 0 ? 0 : 1)
     }
 
-    private func button(_ name: Symbol, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { symbol(name) }
-            .accessibilityLabel(label)
-    }
-
-    private func symbol(_ name: Symbol) -> some View {
-        Image(name, size: 13)
-            .foregroundStyle(.white)
-            .frame(width: 40, height: 40)
-            .background(.white.opacity(0.16), in: Circle())
-            .contentShape(Circle())
-    }
+    private var side: CGFloat { ControlSize.large.height }
 }
 
 /// One image or video of the viewer, fetched when it is the one shown.
