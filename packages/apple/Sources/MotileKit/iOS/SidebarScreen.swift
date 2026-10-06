@@ -20,51 +20,21 @@ struct SidebarScreen: View {
     @State private var showsBusy = false
 
     var body: some View {
-        let active = store.activeThreads.filter { store.matches($0, search: search) }
-        let done = store.doneThreads.filter { store.matches($0, search: search) }
-        let projects = store.projectsByID
-        let selection = store.selection
+        let active = store.searched(store.activeThreads, for: search)
+        let done = store.searched(store.doneThreads, for: search)
+        let expanded = !search.isEmpty || doneExpanded
+        let shown = Shown(projects: store.projectsByID, selection: store.selection, swiped: swiped)
         VStack(spacing: 0) {
             header
-            ScrollViewReader { list in
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        DraftRows(search: search, open: open)
-                        ForEach(active) { thread in
-                            ThreadRow(
-                                thread: thread, project: projects[thread.projectID]?.seen(from: thread),
-                                selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 }, open: open
-                            )
-                            .equatable()
-                            .rowSwipe(
-                                .check, "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
-                                leaves: !thread.busy, isOpen: swipe(thread.id)
-                            ) {
-                                markDone(thread)
-                            }
-                        }
-                        if active.isEmpty {
-                            Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
-                                .font(.ui(size: 13))
-                                .foregroundStyle(Color.themeTertiary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, sidebarRowInset + 8)
-                                .padding(.vertical, 10)
-                        }
-                        if !done.isEmpty {
-                            doneShelf(done, projects: projects, selection: selection)
-                        }
-                    }
-                    .padding(.bottom, 12)
-                }
-                .scrollDismissesKeyboard(.immediately)
-                .onScrollPhaseChange { _, phase in
-                    if phase.isScrolling { swiped = nil }
-                }
-                .onChange(of: store.settledThreadID) { _, settled in
-                    guard let settled else { return }
-                    showDone(settled, in: list)
-                }
+            RecycledList(
+                items: items(active: active, done: done, expanded: expanded), bottomInset: 12,
+                scrollTarget: store.settledThreadID.map(SidebarItem.doneID), scrolled: { self.swiped = nil }
+            ) { item in
+                row(item, done: done, expanded: expanded, shown: shown)
+            }
+            .onChange(of: store.settledThreadID) { _, settled in
+                guard settled != nil else { return }
+                doneExpanded = true
             }
             if let undo = store.undo {
                 UndoRow(notice: undo)
@@ -130,10 +100,67 @@ struct SidebarScreen: View {
         .padding(.bottom, 12)
     }
 
-    /// The threads marked done: a line that opens into their list, under the active ones.
+    /// The drafts, the active threads, and under them the threads marked done: a line that opens
+    /// into their list.
+    private func items(active: [ThreadInfo], done: [ThreadInfo], expanded: Bool) -> [SidebarItem] {
+        var items: [SidebarItem] = [.drafts]
+        items += active.map(SidebarItem.active)
+        if active.isEmpty { items.append(.empty) }
+        guard !done.isEmpty else { return items }
+        items.append(.doneHeader)
+        if expanded { items += done.map(SidebarItem.done) }
+        return items
+    }
+
+    /// What the rows show as the list was last drawn. They are drawn outside this view, so they
+    /// only hear of a change when the list draws them again.
+    private struct Shown {
+        let projects: [String: Project]
+        let selection: Selection
+        let swiped: String?
+    }
+
     @ViewBuilder
-    private func doneShelf(_ done: [ThreadInfo], projects: [String: Project], selection: Selection) -> some View {
-        let expanded = !search.isEmpty || doneExpanded
+    private func row(_ item: SidebarItem, done: [ThreadInfo], expanded: Bool, shown: Shown) -> some View {
+        let (projects, selection) = (shown.projects, shown.selection)
+        switch item {
+        case .drafts:
+            DraftRows(search: search, open: open)
+        case .active(let thread):
+            ThreadRow(
+                thread: thread, project: projects[thread.projectID]?.seen(from: thread),
+                selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 }, open: open
+            )
+            .equatable()
+            .rowSwipe(
+                .check, "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
+                leaves: !thread.busy, isOpen: swipe(item.id, swiped: shown.swiped)
+            ) {
+                markDone(thread)
+            }
+        case .empty:
+            Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
+                .font(.ui(size: 13))
+                .foregroundStyle(Color.themeTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, sidebarRowInset + 8)
+                .padding(.vertical, 10)
+        case .doneHeader:
+            doneHeader(count: done.count, expanded: expanded)
+        case .done(let thread):
+            DoneRow(
+                thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
+                rename: beginRename, delete: { deleting = $0 }, open: open
+            )
+            .equatable()
+            .frame(height: 44)
+            .rowSwipe(.undo2, "Mark Undone", tint: .themeSecondary, size: 28, isOpen: swipe(item.id, swiped: shown.swiped)) {
+                store.setDone([thread.id], done: false)
+            }
+        }
+    }
+
+    private func doneHeader(count: Int, expanded: Bool) -> some View {
         Button {
             doneExpanded.toggle()
         } label: {
@@ -144,7 +171,7 @@ struct SidebarScreen: View {
                 Text("Done")
                     .font(.ui(size: 12, weight: .medium))
                 Spacer()
-                Text("\(done.count)")
+                Text("\(count)")
                     .font(.ui(size: 11))
                     .foregroundStyle(Color.themeTertiary)
                     .monospacedDigit()
@@ -156,19 +183,6 @@ struct SidebarScreen: View {
         }
         .buttonStyle(.plain)
         .padding(.top, 8)
-        if expanded {
-            ForEach(done, id: \.doneRowID) { thread in
-                DoneRow(
-                    thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
-                    rename: beginRename, delete: { deleting = $0 }, open: open
-                )
-                .equatable()
-                .frame(height: 44)
-                .rowSwipe(.undo2, "Mark Undone", tint: .themeSecondary, size: 28, isOpen: swipe(thread.doneRowID)) {
-                    store.setDone([thread.id], done: false)
-                }
-            }
-        }
     }
 
     /// The servers and how the client reaches them, and under them the account, the search and
@@ -264,18 +278,9 @@ struct SidebarScreen: View {
         store.setDone([thread.id], done: true, fromSidebar: true)
     }
 
-    /// Opens the done threads and brings the one that was just marked done into sight.
-    private func showDone(_ threadID: String, in list: ScrollViewProxy) {
-        guard let thread = store.threads[threadID] else { return }
-        doneExpanded = true
-        DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.15)) { list.scrollTo(thread.doneRowID) }
-        }
-    }
-
-    private func swipe(_ row: String) -> Binding<Bool> {
+    private func swipe(_ row: String, swiped: String?) -> Binding<Bool> {
         Binding(get: { swiped == row }, set: { open in
-            if open { swiped = row } else if swiped == row { swiped = nil }
+            if open { self.swiped = row } else if self.swiped == row { self.swiped = nil }
         })
     }
 
@@ -285,8 +290,24 @@ struct SidebarScreen: View {
     }
 }
 
-private extension ThreadInfo {
-    /// Not the id its active row has in the same list, or the list keeps that row for it.
-    var doneRowID: String { "done:\(id)" }
+private enum SidebarItem: Identifiable {
+    case drafts
+    case active(ThreadInfo)
+    case empty
+    case doneHeader
+    case done(ThreadInfo)
+
+    /// A done thread's row has an id of its own, or the list keeps its active row for it.
+    static func doneID(_ threadID: String) -> String { "done:\(threadID)" }
+
+    var id: String {
+        switch self {
+        case .drafts: "drafts"
+        case .active(let thread): thread.id
+        case .empty: "empty"
+        case .doneHeader: "done"
+        case .done(let thread): Self.doneID(thread.id)
+        }
+    }
 }
 #endif

@@ -144,8 +144,14 @@ final class AppStore {
     // What the servers hold
     private(set) var servers: [Server] = []
     private(set) var serverUpdates: [String: ServerUpdate] = [:]
-    private(set) var projects: [Project] = []
+    private(set) var projects: [Project] = [] {
+        didSet { projectsByID = Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
+    }
+    private(set) var projectsByID: [String: Project] = [:]
     private(set) var threads: [String: ThreadInfo] = [:]
+    /// The threads as the sidebar lists them, kept in order as they change so that it never sorts them.
+    private(set) var activeThreads: [ThreadInfo] = []
+    private(set) var doneThreads: [ThreadInfo] = []
 
     // The open thread
     /// Always a draft or a thread; `loadPreferences` opens the first draft.
@@ -404,7 +410,7 @@ final class AppStore {
             projects.removeAll { !known.contains($0.serverID) }
         }
         if threads.values.contains(where: { !known.contains($0.serverID) }) {
-            threads = threads.filter { known.contains($0.value.serverID) }
+            setThreads(threads.filter { known.contains($0.value.serverID) })
         }
         // A server that is back with another version has finished updating.
         for server in servers where server.state == .connected {
@@ -419,8 +425,9 @@ final class AppStore {
     }
 
     private func apply(threads new: [ThreadInfo], serverID: String) {
-        threads = threads.filter { $0.value.serverID != serverID }
-        for thread in new { threads[thread.id] = thread }
+        var kept = threads.filter { $0.value.serverID != serverID }
+        for thread in new { kept[thread.id] = thread }
+        setThreads(kept)
         if case .thread(let id) = selection, threads[id] == nil {
             openEmptyDraft()
         }
@@ -431,7 +438,7 @@ final class AppStore {
     private func upsert(_ thread: ThreadInfo) {
         let before = threads[thread.id]
         guard before != thread else { return }
-        threads[thread.id] = thread
+        setThread(thread, id: thread.id)
         markOpenThreadSeen()
         guard let before else { return }
         if !before.isDone, thread.isDone, before.pullRequest != thread.pullRequest { settledThreadID = thread.id }
@@ -446,7 +453,7 @@ final class AppStore {
     }
 
     private func removeThread(_ id: String) {
-        threads[id] = nil
+        setThread(nil, id: id)
         sidePanel.forget(id)
         if selection == .thread(id) { openEmptyDraft() }
     }
@@ -467,12 +474,36 @@ final class AppStore {
 
     // MARK: Lookups
 
-    var activeThreads: [ThreadInfo] {
-        threads.values.filter { !$0.isDone }.sorted { ($0.activeOrder, $0.id) > ($1.activeOrder, $1.id) }
+    private func setThreads(_ new: [String: ThreadInfo]) {
+        threads = new
+        activeThreads = new.values.filter { !$0.isDone }.sorted(by: ThreadInfo.listed)
+        doneThreads = new.values.filter(\.isDone).sorted(by: ThreadInfo.listed)
     }
 
-    var doneThreads: [ThreadInfo] {
-        threads.values.filter(\.isDone).sorted { ($0.doneAt ?? 0, $0.id) > ($1.doneAt ?? 0, $1.id) }
+    /// Changes one thread, and moves it in its list only when its place there changed.
+    private func setThread(_ thread: ThreadInfo?, id: String) {
+        let before = threads[id]
+        threads[id] = thread
+        if let before, let thread, before.isDone == thread.isDone, before.listedAt == thread.listedAt {
+            changeList(done: thread.isDone) { list in
+                guard let index = list.index(of: before) else { return }
+                list[index] = thread
+            }
+            return
+        }
+        if let before {
+            changeList(done: before.isDone) { list in
+                guard let index = list.index(of: before) else { return }
+                list.remove(at: index)
+            }
+        }
+        if let thread {
+            changeList(done: thread.isDone) { $0.insert(thread, at: $0.place(of: thread)) }
+        }
+    }
+
+    private func changeList(done: Bool, _ change: (inout [ThreadInfo]) -> Void) {
+        if done { change(&doneThreads) } else { change(&activeThreads) }
     }
 
     var selectedThread: ThreadInfo? {
@@ -505,11 +536,7 @@ final class AppStore {
     }
 
     func project(_ id: String?) -> Project? {
-        projects.first { $0.id == id }
-    }
-
-    var projectsByID: [String: Project] {
-        Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        id.flatMap { projectsByID[$0] }
     }
 
     /// The projects, the one a thread was last started in first. A project without threads
@@ -1603,9 +1630,9 @@ final class AppStore {
     private func update(_ thread: ThreadInfo, _ change: JSON, locally: (inout ThreadInfo) -> Void) {
         var changed = thread
         locally(&changed)
-        threads[thread.id] = changed
+        setThread(changed, id: thread.id)
         request(thread.serverID, ["type": "update", "thread_id": thread.id, "change": change], failed: { [weak self] in
-            self?.threads[thread.id] = thread
+            self?.setThread(thread, id: thread.id)
         })
     }
 

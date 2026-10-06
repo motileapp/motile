@@ -3,26 +3,34 @@ import SwiftUI
 /// Lights up what the pointer is over, what is selected and what is `lit`. The light is drawn `inset` from the
 /// view's edges: that margin looks empty but is the view's, so neighbours leave no gap to miss.
 /// What is `faded` is in the secondary color until it lights up. What is inside lies on the light,
-/// so a button in it lights up a layer further.
+/// so a button in it lights up a layer further. A view that follows the pointer itself passes
+/// `hovered`, so that the pointer is followed once.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
     let lit: Bool
     let inset: EdgeInsets
     let faded: Bool
-    @State private var hovering = false
+    let hovered: Bool?
+    @State private var tracked = false
     @Environment(\.surface) private var surface
     @Environment(\.isEnabled) private var enabled
 
-    func body(content: Content) -> some View {
-        tinted(content)
+    private var hovering: Bool { hovered ?? tracked }
+
+    @ViewBuilder func body(content: Content) -> some View {
+        let lighted = tinted(content)
             .environment(\.surface, light ?? surface)
             .background {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(light?.color ?? Color.clear)
                     .padding(inset)
             }
-            .onHover { hovering = $0 }
+        if hovered == nil {
+            lighted.onHover { tracked = $0 }
+        } else {
+            lighted
+        }
     }
 
     @ViewBuilder private func tinted(_ content: Content) -> some View {
@@ -48,9 +56,10 @@ private struct HoverHighlight: ViewModifier {
 
 extension View {
     func hoverHighlight(
-        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false
+        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false,
+        hovered: Bool? = nil
     ) -> some View {
-        modifier(HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded))
+        modifier(HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded, hovered: hovered))
     }
 }
 
@@ -63,11 +72,14 @@ struct HighlightButtonStyle: ButtonStyle {
     var lit = false
     var inset = EdgeInsets()
     var faded = false
+    var hovered: Bool?
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .hoverHighlight(radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, faded: faded)
+            .hoverHighlight(
+                radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, faded: faded, hovered: hovered
+            )
     }
 }
 
@@ -82,9 +94,10 @@ struct DimButtonStyle: ButtonStyle {
 
 extension ButtonStyle where Self == HighlightButtonStyle {
     static func highlight(
-        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false
+        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false,
+        hovered: Bool? = nil
     ) -> HighlightButtonStyle {
-        HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded)
+        HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded, hovered: hovered)
     }
 }
 
