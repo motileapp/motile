@@ -1566,6 +1566,30 @@ async fn pull_request_action(
 }
 
 #[tokio::test]
+async fn a_folder_without_git_is_never_fetched_and_can_be_made_a_repository() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.2").await;
+    let connection = harness.connect().await;
+    let folder = harness.dir.path().join("notes");
+    std::fs::create_dir_all(&folder).unwrap();
+    let path = folder.to_string_lossy().into_owned();
+    assert_eq!(connection.request(&Request::AddProject { path }).await.unwrap(), Message::Ok);
+    let project = projects_now(&connection).await.remove(0);
+    assert_eq!(project.branch, None);
+
+    let status = Request::GitStatus { project_id: project.id.clone(), thread_id: None, fetch: true };
+    assert!(matches!(
+        connection.request(&status).await.unwrap(),
+        Message::GitStatus { status: None, problem: None, .. }
+    ));
+
+    let init = Request::InitRepository { project_id: project.id.clone() };
+    assert_eq!(connection.request(&init).await.unwrap(), Message::Ok);
+    let project = projects_now(&connection).await.remove(0);
+    assert!(project.branch.is_some() && project.git.is_some());
+    assert!(matches!(connection.request(&init).await.unwrap(), Message::Error { .. }));
+}
+
+#[tokio::test]
 async fn a_pull_request_is_read_reviewed_and_merged_from_its_folder() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0.2").await;
     let connection = harness.connect().await;

@@ -148,6 +148,7 @@ impl Server {
             Request::SwitchBranch { project_id, branch, create } => {
                 hub.switch_branch(&project_id, &branch, create).await.map(|_| Message::Ok)
             }
+            Request::InitRepository { project_id } => hub.init_repository(&project_id).await.map(|_| Message::Ok),
             Request::WorktreeStart { project_id, base, fetch } => hub.worktree_start(&project_id, &base, fetch).await,
             Request::GitStatus { project_id, thread_id, fetch } => {
                 hub.git_status(&project_id, thread_id.as_deref(), fetch).await

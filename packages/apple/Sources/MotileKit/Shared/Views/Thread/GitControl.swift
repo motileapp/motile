@@ -184,6 +184,38 @@ private final class ActionMenuItem: NSMenuItem {
 }
 #endif
 
+/// What stands in for the git button in a folder that is no git repository: it makes it one.
+struct InitializeGitButton: View {
+    @Environment(AppStore.self) private var store
+    let project: Project
+
+    var body: some View {
+        let pending = store.initializingGit.contains(project.id)
+        #if os(macOS)
+        ActionButton("Initialize git", icon: .gitBranch, help: "Make \(project.name) a git repository", variant: .ghost, pending: pending) {
+            store.initializeGit(in: project)
+        }
+        .padding(.horizontal, 6)
+        #else
+        Menu {
+            Button {
+                store.initializeGit(in: project)
+            } label: {
+                Label("Initialize git", symbol: .gitBranch, size: 15)
+            }
+            .disabled(pending)
+        } label: {
+            if pending {
+                Spinner(size: 15)
+            } else {
+                Image(.gitBranch, size: 15)
+            }
+        }
+        .accessibilityLabel("Git")
+        #endif
+    }
+}
+
 /// What the last git action did, or what git refused, under the button. What follows is one
 /// click away: the push after a commit, the pull request after a push.
 struct GitNoticeView: View {
