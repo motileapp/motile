@@ -1,12 +1,13 @@
-//! An alert, as macOS 26 draws one: a bold title, what happened, perhaps a field, and capsule
-//! buttons side by side along the bottom, the one that cancels first.
+//! An alert: a card with a title, what happened, perhaps a field, and the buttons along its
+//! bottom, the one that cancels first and the one that goes ahead last.
 
 use std::rc::Rc;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::theme::{colors, is_dark};
+use crate::theme::{Radius, Surface, colors};
+use crate::ui::control::{ActionButton, Variant};
 use crate::ui::sheet::{Sheet, sheet_with};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -30,7 +31,7 @@ impl AlertButton {
         Self { title: title.into(), role: Role::Cancel, on_click: Rc::new(on_click) }
     }
 
-    /// The button that goes ahead, in the accent colour.
+    /// The button that goes ahead, in the primary colour.
     pub fn prominent(mut self) -> Self {
         self.role = Role::Default;
         self
@@ -51,55 +52,39 @@ pub fn alert(
     cx: &App,
 ) -> Sheet {
     let c = colors(cx);
-    let dark = is_dark(cx);
-    let stacked = buttons.len() > 2;
     let id = id.into();
     let cancel = buttons.iter().find(|button| button.role == Role::Cancel).map(|button| button.on_click.clone());
     let default = buttons.iter().rev().find(|button| button.role != Role::Cancel).map(|button| button.on_click.clone());
     let content = div()
-        .pt(px(22.))
-        .px(px(22.))
-        .pb(px(16.))
+        .p(px(20.))
         .flex()
         .flex_col()
-        .gap(px(10.))
-        .child(div().text_size(px(13.)).line_height(px(16.)).font_weight(FontWeight::BOLD).child(title.into()))
+        .gap(px(8.))
+        .child(div().text_size(px(15.)).line_height(px(20.)).font_weight(FontWeight::SEMIBOLD).child(title.into()))
         .when_some(message, |content, message| {
-            content.child(div().text_size(px(12.)).line_height(px(16.)).text_color(c.text).child(message))
+            content.child(div().text_size(px(13.)).line_height(px(18.)).text_color(c.secondary).child(message))
         })
-        .when_some(body, |content, body| content.child(div().w_full().child(body)))
-        // Two buttons sit side by side; more stack, the one that cancels last.
-        .child(div().mt(px(4.)).mx(px(-6.)).flex().when(stacked, |row| row.flex_col()).gap(px(8.)).children(
-            buttons.into_iter().enumerate().map(|(index, button)| {
+        .when_some(body, |content, body| content.child(div().w_full().pt(px(4.)).child(body)))
+        .child(div().mt(px(12.)).flex().justify_end().gap(px(8.)).children(buttons.into_iter().enumerate().map(
+            |(index, button)| {
                 let on_click = button.on_click;
-                let (background, foreground) = match button.role {
-                    Role::Cancel => (if dark { hsla(0., 0., 1., 0.12) } else { hsla(0., 0., 0., 0.08) }, c.text),
-                    Role::Default => (c.accent, white()),
-                    Role::Destructive => (c.danger.opacity(0.22), c.danger),
+                let variant = match button.role {
+                    Role::Cancel => Variant::Secondary,
+                    Role::Default => Variant::Primary,
+                    Role::Destructive => Variant::Danger,
                 };
-                div()
-                    .id(("alert-button", index))
-                    .when(!stacked, |button| button.flex_1())
-                    .h(px(28.))
-                    .rounded_full()
-                    .bg(background)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(13.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(foreground)
-                    .active(|button| button.opacity(0.8))
-                    .child(button.title)
+                ActionButton::new(("alert-button", index), button.title)
+                    .variant(variant)
+                    .surface(Surface::Popover)
                     .on_click(move |_, window, cx| on_click(window, cx))
-            }),
-        ));
+            },
+        )));
     let keys = Keys { id: id.clone(), cancel, default, content: content.into_any_element() };
-    sheet_with(id, 260., 24., keys)
+    sheet_with(id, 400., Radius::SHEET, keys)
 }
 
-/// Escape cancels and Return goes ahead, as in the Mac's alerts. The alert takes the keys from
-/// the start, unless its field already has them.
+/// Escape cancels and Return goes ahead. The alert takes the keys from the start, unless its
+/// field already has them.
 #[derive(IntoElement)]
 struct Keys {
     id: ElementId,

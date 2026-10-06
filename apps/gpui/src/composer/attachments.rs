@@ -6,8 +6,8 @@ use gpui_kit::*;
 
 use crate::models::{Attachment, UploadState};
 use crate::store::Store;
-use crate::theme::colors;
-use crate::ui::{IconButton, icons};
+use crate::theme::{Radius, Surface, colors};
+use crate::ui::{ActionButton, Variant, icons};
 
 pub const TILE: f32 = 64.;
 
@@ -38,6 +38,8 @@ pub fn attachments(store: &Entity<Store>, cx: &App) -> impl IntoElement {
     )
 }
 
+/// An image or a video: its picture, how far it is on its way to the server, and the button that
+/// removes it.
 fn tile(attachment: &Attachment, store: Entity<Store>, cx: &App) -> Stateful<Div> {
     let c = colors(cx);
     let picture: Option<AnyElement> = attachment
@@ -56,11 +58,12 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &App) -> Stateful<Div
         .relative()
         .size(px(TILE))
         .flex_shrink_0()
-        .rounded(px(10.))
+        .rounded(px(Radius::CARD))
         .overflow_hidden()
-        .bg(c.bubble)
+        .bg(c.background_secondary)
         .border_1()
         .border_color(c.border)
+        .active(|tile| tile.opacity(0.7))
         .children(picture)
         .when(attachment.video, |tile| {
             tile.child(
@@ -70,24 +73,18 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &App) -> Stateful<Div
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(icons::symbol("play.fill", 16.).text_color(white())),
+                    .child(icons::symbol("play", 16.).text_color(white())),
             )
         })
         .child(div().absolute().bottom_0().left_0().right_0().child(progress(attachment, &store, true, cx)))
         .child(
-            div().absolute().top(px(4.)).right(px(4.)).child(
-                div()
-                    .id(SharedString::from(format!("remove-{}", attachment.id)))
-                    .size(px(16.))
-                    .rounded_full()
-                    .bg(hsla(0., 0., 0., 0.6))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(icons::symbol("xmark", 8.).text_color(white()))
-                    .tooltip(crate::ui::tooltip("Remove"))
+            // Over a picture the button is as in the dark, on a backdrop that shows on any picture.
+            div().absolute().top(px(2.)).right(px(2.)).rounded_full().bg(hsla(0., 0., 0., 0.6)).child(
+                ActionButton::icon(SharedString::from(format!("remove-{}", attachment.id)), "x", "Remove")
+                    .small()
+                    .round(true)
+                    .tint(Some(white()))
                     .on_click(move |_, _, cx| {
-                        cx.stop_propagation();
                         remove.update(cx, |store, cx| {
                             store.remove_attachment(&id);
                             cx.notify();
@@ -98,6 +95,8 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &App) -> Stateful<Div
         .tooltip(crate::ui::tooltip(attachment.name.clone()))
 }
 
+/// A file that isn't shown as a picture: its name, its size, and how far it is on its way to the
+/// server.
 fn chip(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> impl IntoElement {
     let c = colors(cx);
     let remove = store.clone();
@@ -108,20 +107,20 @@ fn chip(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> impl IntoEl
         .items_center()
         .gap(px(5.))
         .pl(px(9.))
-        .pr(px(5.))
-        .py(px(5.))
+        .pr(px(2.))
+        .py(px(2.))
         .rounded_full()
-        .bg(c.bubble)
+        .bg(Surface::Composer.next().color(c))
         .text_size(px(12.))
-        .child(icons::symbol("doc", 12.))
+        .child(icons::symbol("file", 12.))
         .child(div().whitespace_nowrap().child(attachment.name.clone()))
         .when_some(attachment.bytes, |chip, bytes| chip.child(div().text_color(c.secondary).child(file_size(bytes))))
         .child(progress(attachment, store, false, cx))
         .child(
-            IconButton::new(SharedString::from(format!("remove-chip-{}", attachment.id)), "xmark")
-                .help("Remove")
-                .size(18.)
-                .symbol_size(10.)
+            ActionButton::icon(SharedString::from(format!("remove-chip-{}", attachment.id)), "x", "Remove")
+                .small()
+                .round(true)
+                .surface(Surface::ComposerSecondary)
                 .on_click(move |_, _, cx| {
                     remove.update(cx, |store, cx| {
                         store.remove_attachment(&id);
@@ -157,31 +156,42 @@ fn progress(attachment: &Attachment, store: &Entity<Store>, on_picture: bool, cx
         }
         UploadState::Failed(reason) => {
             let (store, id) = (store.clone(), attachment.id.clone());
+            let help = format!("{reason} Click to try again.");
+            let retry = move |cx: &mut App| {
+                store.update(cx, |store, cx| {
+                    store.retry_attachment(&id);
+                    cx.notify();
+                })
+            };
+            if !on_picture {
+                return ActionButton::new(SharedString::from(format!("retry-{}", attachment.id)), "Retry")
+                    .symbol("rotate-cw")
+                    .help(help)
+                    .variant(Variant::Danger)
+                    .small()
+                    .round(true)
+                    .on_click(move |_, _, cx| retry(cx))
+                    .into_any_element();
+            }
             div()
                 .id(SharedString::from(format!("retry-{}", attachment.id)))
+                .w_full()
+                .py(px(2.))
+                .bg(c.danger.opacity(0.85))
                 .flex()
                 .items_center()
                 .justify_center()
                 .gap(px(3.))
-                .when(on_picture, |retry| {
-                    retry
-                        .w_full()
-                        .py(px(2.))
-                        .bg(c.danger.opacity(0.85))
-                        .text_size(px(10.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(white())
-                })
-                .when(!on_picture, |retry| retry.text_color(c.danger))
-                .child(icons::symbol("arrow.clockwise", 10.))
+                .text_size(px(10.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(white())
+                .active(|retry| retry.opacity(0.7))
+                .child(icons::symbol("rotate-cw", 10.))
                 .child("Retry")
-                .tooltip(crate::ui::tooltip(format!("{reason} Click to try again.")))
+                .tooltip(crate::ui::tooltip(help))
                 .on_click(move |_, _, cx| {
                     cx.stop_propagation();
-                    store.update(cx, |store, cx| {
-                        store.retry_attachment(&id);
-                        cx.notify();
-                    })
+                    retry(cx)
                 })
                 .into_any_element()
         }

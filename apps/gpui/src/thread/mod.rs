@@ -8,16 +8,19 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::composer::Composer;
-use crate::models::last_component;
 use crate::store::Store;
-use crate::theme::{self, colors};
-use crate::ui::button::Button;
+use crate::theme::{self, Surface, colors};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
-use crate::ui::{TOOLBAR_WIDTH, highlight, icons, logos};
+use crate::ui::{ActionButton, TOOLBAR_WIDTH, even, highlight_in, icons, logos};
 
-/// The room above the composer, which the transcript fades out in.
-pub const COMPOSER_GAP: f32 = 24.;
+/// The room between the last row and the composer, which the transcript fades out in.
+pub const COMPOSER_GAP: f32 = 48.;
+const COMPOSER_BOTTOM_GAP: f32 = 16.;
+/// How far above the middle the start is, as a part of the window's height.
+const START_LIFT: f32 = 0.03;
 const HEADLINE_SIZE: f32 = 28.;
+/// The width of a space in the headline's type.
+const HEADLINE_WORD_SPACE: f32 = 8.;
 
 pub struct ThreadPane {
     store: Entity<Store>,
@@ -71,7 +74,7 @@ impl ThreadPane {
 
     /// How wide the pane is, which decides how much the composer's controls say.
     pub fn set_width(&mut self, width: f32, cx: &mut Context<Self>) {
-        let composer = (width - 2. * theme::CONTENT_PADDING).min(theme::CONTENT_WIDTH);
+        let composer = (width - 2. * theme::COMPOSER_PADDING).min(theme::COMPOSER_WIDTH);
         self.composer.update(cx, |view, cx| {
             if (view.width - composer).abs() > 0.5 {
                 view.width = composer;
@@ -80,17 +83,13 @@ impl ThreadPane {
         });
     }
 
-    /// The thread's project and name, and its git button, drawn in the window's top bar.
+    /// The thread's project and name and its git button, drawn in the window's top bar over
+    /// this pane.
     fn top_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let project = store.composer_project();
-        let folder = store.selected_thread().map(|thread| last_component(&thread.cwd));
-        let name = project.as_ref().map(|project| project.name.clone()).or(folder);
-        let project_line = name.map(|name| match project.as_ref().and_then(|project| project.branch.clone()) {
-            Some(branch) => format!("{name} · {branch}"),
-            None => name,
-        });
+        let project_line = store.composer_project_line();
         let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
         div()
             .absolute()
@@ -99,6 +98,7 @@ impl ThreadPane {
             .right_0()
             .h(px(theme::TOP_BAR))
             .pl(px(self.title_inset))
+            // Room for the button that shows the side panel, which is at the window's edge.
             .pr(px(if self.beside_panel { 4. } else { TOOLBAR_WIDTH + 12. }))
             .flex()
             .items_center()
@@ -116,14 +116,7 @@ impl ThreadPane {
                                 .items_center()
                                 .gap(px(6.))
                                 .child(logos::project_icon(project.as_ref(), 14., cx))
-                                .child(
-                                    div()
-                                        .text_size(px(11.))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(c.secondary)
-                                        .truncate()
-                                        .child(line),
-                                ),
+                                .child(div().text_size(px(11.)).text_color(c.secondary).truncate().child(line)),
                         )
                     })
                     .child(
@@ -139,20 +132,25 @@ impl ThreadPane {
             .children(crate::git::git_button(&self.store, &self.git_menu, cx))
     }
 
-    /// The empty state of a new thread: a question, and the composer in the middle of the pane.
-    fn start(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The empty state of a new thread: a question, and the composer a little above the middle
+    /// of the window.
+    fn start(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let lift = f32::from(window.viewport_size().height) * START_LIFT * 2.;
+        div().size_full().pb(px(lift)).flex().flex_col().items_center().justify_center().child(self.start_block(cx))
+    }
+
+    fn start_block(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let no_projects = store.projects.is_empty();
         let connected = store.servers.iter().any(|server| server.connected());
         let add = self.store.clone();
         div()
-            .size_full()
+            .w_full()
             .flex()
             .flex_col()
             .items_center()
             .gap(px(26.))
-            .child(div().flex_1())
             .when(no_projects, |start| {
                 start.child(
                     div()
@@ -169,9 +167,10 @@ impl ThreadPane {
                         )
                         .child(
                             div().pt(px(8.)).child(
-                                Button::new("add-first-project", "Add Project")
+                                ActionButton::new("add-first-project", "Add Project")
+                                    .symbol("folder-plus")
+                                    .primary()
                                     .large()
-                                    .symbol("folder.badge.plus")
                                     .disabled(!connected)
                                     .on_click(move |_, _, cx| {
                                         add.update(cx, |store, cx| {
@@ -185,11 +184,9 @@ impl ThreadPane {
             })
             .when(!no_projects, |start| {
                 start.child(self.headline(cx)).child(
-                    div().w_full().px(px(theme::CONTENT_PADDING)).flex().justify_center().child(self.composer.clone()),
+                    div().w_full().px(px(theme::COMPOSER_PADDING)).flex().justify_center().child(self.composer.clone()),
                 )
             })
-            .child(div().flex_1())
-            .child(div().flex_1())
     }
 
     fn headline(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -216,8 +213,10 @@ impl ThreadPane {
         div()
             .flex()
             .items_center()
+            .gap(px(HEADLINE_WORD_SPACE))
             .text_size(px(HEADLINE_SIZE))
-            .child(div().text_color(c.secondary).child("Let’s build in "))
+            .text_color(c.text)
+            .child("Let’s build in")
             .child(
                 div()
                     .id("headline-project")
@@ -225,8 +224,15 @@ impl ThreadPane {
                     .relative()
                     .rounded(px(10.))
                     .border_1()
-                    .border_color(c.strong_border)
-                    .child(highlight("headline-project", 10., crate::ui::even(0.), false, cx))
+                    .border_color(c.border)
+                    .child(highlight_in(
+                        "headline-project",
+                        10.,
+                        even(0.),
+                        false,
+                        Surface::Background.next().color(c),
+                        cx,
+                    ))
                     .child(
                         div()
                             .relative()
@@ -239,7 +245,7 @@ impl ThreadPane {
                             .child(anchor.track())
                             .child(logos::project_icon(selected.as_ref(), 22., cx))
                             .child(selected.as_ref().map(|project| project.name.clone()).unwrap_or("a project".into()))
-                            .child(icons::symbol("chevron.down", 13.).text_color(c.tertiary)),
+                            .child(icons::symbol("chevron-down", 13.).text_color(c.tertiary)),
                     )
                     .on_click(move |_, window, cx| {
                         let mut menu = Menu::new();
@@ -290,19 +296,48 @@ impl ThreadPane {
                     }),
             )
     }
+
+    /// Covers the thread while files are held over it, to say they can be dropped.
+    fn drop_cover(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = colors(cx);
+        div()
+            .absolute()
+            .top(px(theme::TOP_BAR))
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .invisible()
+            .group_drag_over::<ExternalPaths>("main-drop", |cover| cover.visible())
+            .bg(c.background.opacity(0.9))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div().absolute().inset(px(8.)).rounded(px(16.)).border(px(1.5)).border_dashed().border_color(c.primary),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(px(12.))
+                    .text_color(c.text)
+                    .child(icons::symbol("paperclip", 28.))
+                    .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("Drop files here")),
+            )
+    }
 }
 
 impl Render for ThreadPane {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let store = self.store.read(cx);
         let is_start = store
             .selected_draft()
             .is_some_and(|draft| store.transcript_is_empty && !store.sending_draft_ids.contains(&draft.id));
         let pending_git = store.pending_git.clone();
-        let notice = store
-            .git_notice
-            .clone()
-            .filter(|notice| Some(&notice.project_id) == store.git_project().map(|project| project.id).as_ref());
+        let checkout = store.git_project().map(|project| project.checkout_id());
+        let notice = store.git_notice.clone().filter(|notice| Some(&notice.checkout_id) == checkout.as_ref());
+        let takes_drops = store.composer_server().is_some();
         let measured = self.composer_height.clone();
         let inset = self.composer_height.get();
         self.transcript.update(cx, |transcript, cx| {
@@ -316,7 +351,7 @@ impl Render for ThreadPane {
             .size_full()
             .relative()
             .child(if is_start {
-                div().size_full().pt(px(theme::TOP_BAR)).child(self.start(cx)).into_any_element()
+                self.start(window, cx).into_any_element()
             } else {
                 div()
                     .size_full()
@@ -336,9 +371,9 @@ impl Render for ThreadPane {
                             .left_0()
                             .right_0()
                             .bottom_0()
-                            .px(px(theme::CONTENT_PADDING))
+                            .px(px(theme::COMPOSER_PADDING))
                             .pt(px(COMPOSER_GAP))
-                            .pb(px(16.))
+                            .pb(px(COMPOSER_BOTTOM_GAP))
                             .flex()
                             .justify_center()
                             .child(
@@ -361,6 +396,7 @@ impl Render for ThreadPane {
                     cx,
                 )))
             })
+            .when(takes_drops, |pane| pane.child(self.drop_cover(cx)))
             .children(self.commit_sheet.clone())
             .when_some(pending_git, |pane, pending| pane.child(crate::git::confirm_alert(&self.store, &pending, cx)))
     }

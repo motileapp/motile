@@ -15,7 +15,7 @@ use motile_core::render::rows::RowKind;
 
 use crate::models::{AttachedFile, MediaSource, ViewedMedia};
 use crate::store::Store;
-use crate::theme::colors;
+use crate::theme::{Radius, colors};
 use crate::transcript::model::RowModel;
 use crate::transcript::rows::RowContext;
 use crate::ui::icons;
@@ -133,7 +133,12 @@ impl RenderOnce for MediaImage {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let c = colors(cx);
         let Some(path) = MediaFiles::fetch(&self.store, &self.id, cx) else {
-            return div().w(px(self.width)).h(px(self.height)).rounded(px(self.radius)).bg(c.bubble).into_any_element();
+            return div()
+                .w(px(self.width))
+                .h(px(self.height))
+                .rounded(px(self.radius))
+                .bg(c.background_secondary)
+                .into_any_element();
         };
         img(path)
             .w(px(self.width))
@@ -174,9 +179,9 @@ pub fn attached_files(store: &Entity<Store>, files: &[AttachedFile], cx: &App) -
                         .relative()
                         .w(px(TILE.0))
                         .h(px(TILE.1))
-                        .rounded(px(10.))
+                        .rounded(px(Radius::CARD))
                         .overflow_hidden()
-                        .bg(c.code_background)
+                        .bg(c.background_secondary)
                         .border_1()
                         .border_color(c.border)
                         .cursor_pointer()
@@ -185,13 +190,11 @@ pub fn attached_files(store: &Entity<Store>, files: &[AttachedFile], cx: &App) -
                         })
                         .when(file.video, |tile| {
                             tile.child(
-                                div()
-                                    .absolute()
-                                    .inset_0()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .child(icons::symbol("play.circle.fill", 26.).text_color(white())),
+                                div().absolute().inset_0().flex().items_center().justify_center().child(
+                                    div()
+                                        .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.4), 0., 4.))
+                                        .child(icons::symbol("circle-play", 26.).text_color(white())),
+                                ),
                             )
                         })
                         .tooltip(crate::ui::tooltip(file.name.clone()))
@@ -282,9 +285,9 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 .w_full()
                 .max_w(px(box_width))
                 .aspect_ratio(ratio)
-                .rounded(px(10.))
+                .rounded(px(Radius::CARD))
                 .overflow_hidden()
-                .bg(c.code_background)
+                .bg(c.background_secondary)
                 .border_1()
                 .border_color(c.border)
                 .child(picture)
@@ -306,7 +309,7 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(icons::symbol("play.circle.fill", 40.).text_color(c.secondary)),
+                            .child(icons::symbol("circle-play", 40.).text_color(c.secondary)),
                     )
                 })
                 .when(!caption.is_empty() && player.is_none(), |frame| {
@@ -350,7 +353,7 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                     let (copy_id, save_id, save_name) = (menu_media.clone(), menu_media.clone(), menu_name.clone());
                     Menu::new()
                         .when(!is_video, |menu| {
-                            menu.item("Copy Image", move |_, cx| {
+                            menu.symbol_item("Copy Image", "copy", move |_, cx| {
                                 let copy_id = copy_id.clone();
                                 let path = MediaFiles::fetch_then(&copy_store, &copy_id, cx, |path, cx| {
                                     if let Some(path) = path {
@@ -362,7 +365,7 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                                 }
                             })
                         })
-                        .item("Save As…", move |_, cx| {
+                        .symbol_item("Save As…", "download", move |_, cx| {
                             let name = save_name.clone();
                             let path = MediaFiles::fetch_then(&save_store, &save_id, cx, move |path, cx| {
                                 if let Some(path) = path {

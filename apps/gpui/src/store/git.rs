@@ -13,7 +13,8 @@ use crate::models::Project;
 /// What a git action did, or why it couldn't, shown under the button until it is dismissed.
 #[derive(Clone, PartialEq, Debug)]
 pub struct GitNotice {
-    pub project_id: String,
+    /// The checkout the run was in: the project's folder or a thread's worktree.
+    pub checkout_id: String,
     pub title: String,
     pub description: Option<String>,
     pub failed: bool,
@@ -27,9 +28,9 @@ pub struct GitNotice {
 }
 
 impl GitNotice {
-    fn new(project_id: &str, title: String) -> Self {
+    fn new(checkout_id: &str, title: String) -> Self {
         Self {
-            project_id: project_id.to_string(),
+            checkout_id: checkout_id.to_string(),
             title,
             description: None,
             failed: false,
@@ -60,8 +61,7 @@ pub struct PendingGit {
 
 pub fn stage_label(stage: GitStage) -> &'static str {
     match stage {
-        GitStage::Branch => "Branching",
-        GitStage::Message => "Writing",
+        GitStage::Message => "Writing Commit",
         GitStage::Commit => "Committing",
         GitStage::Push => "Pushing",
         GitStage::PullRequestText => "Writing PR",
@@ -98,6 +98,21 @@ impl Store {
     pub fn draft_base(&self) -> Option<String> {
         let draft = self.selected_draft()?;
         draft.base.clone().or_else(|| self.project(draft.project_id.as_deref())?.branch.clone())
+    }
+
+    /// The line over the thread's title: its project, its branch, and whether it starts in a new
+    /// worktree.
+    pub fn composer_project_line(&self) -> Option<String> {
+        let project = self.composer_project();
+        let folder = self.selected_thread().map(|thread| crate::models::last_component(&thread.cwd));
+        let name = project.as_ref().map(|project| project.name.clone()).or(folder)?;
+        if self.draft_uses_worktree()
+            && let Some(base) = self.draft_base()
+        {
+            return Some(format!("{name} · {base} · New worktree"));
+        }
+        let Some(branch) = project.and_then(|project| project.branch) else { return Some(name) };
+        Some(format!("{name} · {branch}"))
     }
 
     pub fn set_draft_worktree(&mut self, worktree: bool, cx: &mut Context<Self>) {
@@ -170,19 +185,69 @@ impl Store {
         });
     }
 
+    /// What the run in the project's checkout is at, started here or from another client.
+    pub fn git_stage(&self, project: &Project) -> Option<GitStage> {
+        if let Some(stage) = self.git_stages.get(&project.checkout_id()) {
+            return Some(*stage);
+        }
+        let thread = self.selected_thread().filter(|thread| thread.project_id == project.id)?;
+        thread.git_stage
+    }
+
+    /// A server said what stage a run is at, in the checkout the thread works in.
+    pub(super) fn apply_git_progress(&mut self, project_id: &str, thread_id: Option<&str>, stage: GitStage) {
+        let Some(project) = self.project(Some(project_id)).cloned() else { return };
+        let seen = thread_id.and_then(|id| self.threads.get(id)).map(|thread| project.seen(thread)).unwrap_or(project);
+        if let Some(current) = self.git_stages.get_mut(&seen.checkout_id()) {
+            *current = stage;
+        }
+    }
+
+    /// What a run starts with, until the server says what it is at.
+    fn first_stage(action: GitAction, project: &Project, written: bool) -> GitStage {
+        match action {
+            GitAction::Pull => GitStage::Pull,
+            GitAction::Push => GitStage::Push,
+            GitAction::CreatePr => {
+                let pushes = project.git_control.as_ref().is_some_and(|control| {
+                    control.menu.iter().any(|item| item.action == GitAction::Push && item.reason.is_none())
+                });
+                if pushes { GitStage::Push } else { GitStage::PullRequestText }
+            }
+            _ => {
+                if written {
+                    GitStage::Commit
+                } else {
+                    GitStage::Message
+                }
+            }
+        }
+    }
+
+    /// Opens the pull request's tab in the side panel, or the pull request on GitHub when its
+    /// number isn't in the address.
+    pub fn show_pull_request(&mut self, url: &str, cx: &mut Context<Self>) {
+        self.git_notice = None;
+        let number = crate::panel::pull_request::parse_number(url);
+        if self.pull_request_unavailable().is_some() {
+            return cx.open_url(url);
+        }
+        let Some((number, target)) = number.zip(self.panel_target()) else { return cx.open_url(url) };
+        self.show_pull_request_tab(number, &target);
+    }
+
     /// What a click on the git button does: the one action the repository calls for, at once.
     pub fn run_quick_git(&mut self, project: &Project, cx: &mut Context<Self>) {
         let Some(quick) = project.git_control.as_ref().map(|control| control.quick.clone()) else { return };
-        if self.git_stages.contains_key(&project.id) {
+        if self.git_stage(project).is_some() {
             return;
         }
         if let Some(url) = &quick.url {
-            cx.open_url(url);
-            return;
+            return self.show_pull_request(url, cx);
         }
         let Some(action) = quick.action else {
             let title = quick.hint.clone().unwrap_or(quick.label.clone());
-            self.show_git_notice(GitNotice::new(&project.id, title), cx);
+            self.show_git_notice(GitNotice::new(&project.checkout_id(), title), cx);
             return;
         };
         self.start_git(action, project, quick.confirm.clone(), cx);
@@ -190,12 +255,13 @@ impl Store {
 
     /// What a pick from the menu does: a commit opens its sheet, the others happen at once.
     pub fn choose_git(&mut self, item: &Item, project: &Project, cx: &mut Context<Self>) {
-        if item.reason.is_some() || self.git_stages.contains_key(&project.id) {
+        if item.reason.is_some() || self.git_stage(project).is_some() {
             return;
         }
         if item.action != GitAction::Commit {
             return self.start_git(item.action, project, item.confirm.clone(), cx);
         }
+        // A sheet takes its size from what it opens with, so the files come first.
         let project = project.clone();
         self.read_git(
             false,
@@ -232,16 +298,12 @@ impl Store {
         new_branch: bool,
         _cx: &mut Context<Self>,
     ) {
-        if self.git_stages.contains_key(&project.id) {
+        if self.git_stage(project).is_some() {
             return;
         }
-        let stage = match action {
-            GitAction::Pull => GitStage::Pull,
-            GitAction::Push => GitStage::Push,
-            _ if new_branch => GitStage::Branch,
-            _ => GitStage::Message,
-        };
-        self.git_stages.insert(project.id.clone(), stage);
+        let checkout_id = project.checkout_id();
+        let written = message.as_ref().is_some_and(|message| !message.is_empty()) && !new_branch;
+        self.git_stages.insert(checkout_id.clone(), Self::first_stage(action, project, written));
         self.git_notice = None;
         let thread_id =
             self.selected_thread().filter(|thread| thread.project_id == project.id).map(|thread| thread.id.clone());
@@ -254,20 +316,19 @@ impl Store {
             paths,
             new_branch,
         };
-        let project_id = project.id.clone();
         self.ask(command, move |store, result, cx| {
-            store.git_stages.remove(&project_id);
+            store.git_stages.remove(&checkout_id);
             let notice = match result {
                 Ok(done) => {
                     let mut notice =
-                        GitNotice::new(&project_id, done["title"].as_str().unwrap_or_default().to_string());
+                        GitNotice::new(&checkout_id, done["title"].as_str().unwrap_or_default().to_string());
                     notice.description = done["description"].as_str().map(String::from);
                     notice.url = done["url"].as_str().map(String::from);
                     notice.next = serde_json::from_value(done["next"].clone()).ok();
                     notice
                 }
                 Err(error) => {
-                    let mut notice = GitNotice::new(&project_id, "Git stopped".into());
+                    let mut notice = GitNotice::new(&checkout_id, "Git stopped".into());
                     notice.description = Some(error);
                     notice.failed = true;
                     notice
@@ -305,10 +366,13 @@ impl Store {
     pub fn run_next_git(&mut self, cx: &mut Context<Self>) {
         let Some(notice) = self.git_notice.clone() else { return };
         let Some(next) = notice.next else { return };
-        let Some(project) = self.project(Some(&notice.project_id)).cloned() else { return };
+        let Some(project) = self.git_project().filter(|project| project.checkout_id() == notice.checkout_id) else {
+            return;
+        };
         let confirm = project.git_control.as_ref().and_then(|control| {
             control.menu.iter().find(|item| item.action == next).and_then(|item| item.confirm.clone())
         });
+        self.git_notice = None;
         self.start_git(next, &project, confirm, cx);
     }
 }

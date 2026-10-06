@@ -19,6 +19,11 @@ use crate::ui::icons;
 
 /// Room above the first row, which the transcript fades out in.
 pub const TOP_PADDING: f32 = 20.;
+/// The room under the composer, which its box doesn't reach.
+const COMPOSER_BOTTOM_GAP: f32 = 16.;
+/// The jump button floats this far above the composer.
+const JUMP_BUTTON_GAP: f32 = 10.;
+const JUMP_BUTTON_SIDE: f32 = 32.;
 /// How many rows above the first one on screen bring the earlier turns.
 const EARLIER_WITHIN: usize = 30;
 /// How many rows above the end there may be before the ones further up are let go.
@@ -36,6 +41,9 @@ pub struct TranscriptView {
     needs_highlight: Rc<RefCell<Vec<String>>>,
     copied: Option<String>,
     copied_task: Option<Task<()>>,
+    /// The item of the list the pointer is over, whose message or reply shows its time and copy
+    /// button.
+    hovered: Option<Item>,
     loading_earlier: Rc<Cell<bool>>,
     trimming: Rc<Cell<bool>>,
     /// Room left under the last row for what floats over the transcript's end.
@@ -59,6 +67,7 @@ impl TranscriptView {
                 this.players.clear();
                 this.fetching.clear();
                 this.expanded.clear();
+                this.hovered = None;
                 this.requested_highlight.clear();
                 this.loading_earlier.set(false);
                 this.trimming.set(false);
@@ -84,6 +93,7 @@ impl TranscriptView {
             needs_highlight: Rc::default(),
             copied: None,
             copied_task: None,
+            hovered: None,
             loading_earlier: Rc::default(),
             trimming: Rc::default(),
             bottom_inset: 0.,
@@ -186,6 +196,27 @@ impl TranscriptView {
         cx.open_with_system(&path);
     }
 
+    /// The pointer came over an item of the list, or left it. Rows are stacked without room
+    /// between them and are as wide as the column, so the pointer never leaves a message on
+    /// its way to the message's copy button.
+    fn set_hovered(&mut self, item: Item, hovered: bool, cx: &mut Context<Self>) {
+        let before = self.meta_row(cx);
+        if hovered {
+            self.hovered = Some(item);
+        } else if self.hovered.as_ref() == Some(&item) {
+            self.hovered = None;
+        }
+        if self.meta_row(cx) != before {
+            cx.notify();
+        }
+    }
+
+    /// The row whose time and copy button the pointer reveals.
+    fn meta_row(&self, cx: &App) -> Option<String> {
+        let item = self.hovered.as_ref()?;
+        self.model.read(cx).meta_row(item)
+    }
+
     pub fn show_copied(&mut self, key: String, cx: &mut Context<Self>) {
         self.copied = Some(key);
         self.copied_task = Some(cx.spawn(async move |this, cx| {
@@ -274,6 +305,7 @@ impl Render for TranscriptView {
             store: self.store.clone(),
             expanded: Rc::new(self.expanded.clone()),
             copied: self.copied.clone(),
+            meta_row: self.meta_row(cx),
             rows: rows.clone(),
         };
         let needs_highlight = self.needs_highlight.clone();
@@ -282,11 +314,11 @@ impl Render for TranscriptView {
         let bottom = self.bottom_inset;
         // Far enough from the end that it can't be seen, and not on its way there.
         let show_jump = self.away_from_end.get() && !rows.is_empty() && model.list.is_scrolled_to_end() == Some(false);
-        let top_padding = if self.agent { 12. } else { TOP_PADDING };
 
         let list = list(list_state, move |index, _, cx| {
-            let element = match items.get(index) {
-                Some(Item::Row(row)) => match rows.get(*row) {
+            let Some(item) = items.get(index).cloned() else { return div().into_any_element() };
+            let element = match &item {
+                Item::Row(row) => match rows.get(*row) {
                     Some(model) => {
                         if model.needs_highlight() && !requested.contains(&model.row.id) {
                             needs_highlight.borrow_mut().push(model.row.id.clone());
@@ -299,42 +331,49 @@ impl Render for TranscriptView {
                     }
                     None => div().into_any_element(),
                 },
-                Some(Item::Working) => rows::working_line(&activity, cx),
-                Some(Item::Pending) => match &pending {
+                Item::Working => rows::working_line(&activity, cx),
+                Item::Pending => match &pending {
                     Some(model) => rows::render_row(model, &ctx, cx),
                     None => div().into_any_element(),
                 },
-                None => div().into_any_element(),
             };
+            let entity = entity.clone();
             div()
                 .w_full()
                 .px(px(theme::CONTENT_PADDING))
                 .flex()
                 .justify_center()
-                .child(div().w_full().max_w(px(theme::CONTENT_WIDTH)).child(element))
+                .child(
+                    div()
+                        .id(("transcript-item", index))
+                        .w_full()
+                        .max_w(px(theme::CONTENT_WIDTH))
+                        .on_hover(move |hovered, _, cx| {
+                            let (item, hovered) = (item.clone(), *hovered);
+                            let _ = entity.update(cx, |view, cx| view.set_hovered(item, hovered, cx));
+                        })
+                        .child(element),
+                )
                 .into_any_element()
         })
         .size_full()
-        .pt(px(top_padding))
-        .pb(px(bottom + 16.));
+        .pt(px(TOP_PADDING))
+        .pb(px(bottom));
 
-        let fade_top = div().absolute().top_0().left_0().right_0().h(px(top_padding)).bg(linear_gradient(
+        let fade_top = div().absolute().top_0().left_0().right_0().h(px(TOP_PADDING)).bg(linear_gradient(
             180.,
             linear_color_stop(c.background, 0.),
             linear_color_stop(c.background.opacity(0.), 1.),
         ));
-        let fade_bottom = div()
-            .absolute()
-            .left_0()
-            .right_0()
-            .bottom(px((bottom - crate::thread::COMPOSER_GAP).max(0.)))
-            .h(px(crate::thread::COMPOSER_GAP))
-            .bg(linear_gradient(
-                0.,
-                linear_color_stop(c.background, 0.),
-                linear_color_stop(c.background.opacity(0.), 1.),
-            ));
-        let jump_bottom = (bottom - crate::thread::COMPOSER_GAP).max(0.) + crate::thread::COMPOSER_GAP + 12.;
+        // The rows fade out from the middle of the composer's box down to the view's bottom.
+        let composer_box = (bottom - crate::thread::COMPOSER_GAP - COMPOSER_BOTTOM_GAP).max(0.);
+        let bottom_fade = COMPOSER_BOTTOM_GAP + composer_box / 2.;
+        let fade_bottom = div().absolute().left_0().right_0().bottom_0().h(px(bottom_fade)).bg(linear_gradient(
+            0.,
+            linear_color_stop(c.background, 0.),
+            linear_color_stop(c.background.opacity(0.), 1.),
+        ));
+        let jump_bottom = bottom - crate::thread::COMPOSER_GAP + JUMP_BUTTON_GAP;
 
         div()
             .size_full()
@@ -347,16 +386,16 @@ impl Render for TranscriptView {
                     div().absolute().left_0().right_0().bottom(px(jump_bottom)).flex().justify_center().child(
                         div()
                             .id("jump-to-end")
-                            .size(px(32.))
+                            .size(px(JUMP_BUTTON_SIDE))
                             .rounded_full()
-                            .bg(c.raised)
+                            .bg(c.popover)
                             .border_1()
-                            .border_color(c.strong_border)
+                            .border_color(c.border_secondary)
                             .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.18), 2., 8.))
                             .flex()
                             .items_center()
                             .justify_center()
-                            .child(icons::symbol("arrow.down", 12.).text_color(c.secondary))
+                            .child(icons::symbol("arrow-down", 12.).text_color(c.secondary))
                             .tooltip(crate::ui::tooltip("Scroll to end"))
                             .on_click(cx.listener(|this, _, _, cx| this.scroll_to_end(cx))),
                     ),

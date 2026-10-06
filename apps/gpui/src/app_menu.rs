@@ -16,6 +16,7 @@ actions!(
         HideOthers,
         ShowAll,
         OpenSettings,
+        CheckForUpdates,
         NewThread,
         NewThreadInProject,
         GoToThread,
@@ -27,6 +28,11 @@ actions!(
         ShowChanges,
         ShowFiles,
         ShowAgents,
+        ShowPullRequest,
+        ShowAllPullRequests,
+        NewTab,
+        ShowNextTab,
+        ShowPreviousTab,
         ToggleFullScreen,
         ToggleDone,
         Stop,
@@ -54,6 +60,13 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
         KeyBinding::new("cmd-d", ShowChanges, None),
         KeyBinding::new("shift-cmd-e", ShowFiles, None),
         KeyBinding::new("shift-cmd-a", ShowAgents, None),
+        KeyBinding::new("shift-cmd-r", ShowPullRequest, None),
+        KeyBinding::new("shift-alt-cmd-r", ShowAllPullRequests, None),
+        KeyBinding::new("cmd-t", NewTab, None),
+        KeyBinding::new("ctrl-tab", ShowNextTab, None),
+        KeyBinding::new("ctrl-shift-tab", ShowPreviousTab, None),
+        KeyBinding::new("shift-cmd-]", ShowNextTab, None),
+        KeyBinding::new("shift-cmd-[", ShowPreviousTab, None),
         KeyBinding::new("ctrl-cmd-f", ToggleFullScreen, None),
         KeyBinding::new("shift-cmd-d", ToggleDone, None),
         KeyBinding::new("cmd-.", Stop, None),
@@ -69,7 +82,13 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
     on_window(cx, |_: &ToggleFullScreen, window, _| window.toggle_fullscreen());
 
     let settings = store.clone();
-    cx.on_action(move |_: &OpenSettings, cx| crate::settings::open(&settings, cx));
+    cx.on_action(move |_: &OpenSettings, cx| {
+        settings.update(cx, |store, cx| {
+            store.open_settings(Default::default(), None);
+            cx.notify();
+        })
+    });
+    on_store(store, cx, |_: &CheckForUpdates, store, cx| store.updater.check(true, cx));
     on_store(store, cx, |_: &NewThread, store, cx| store.new_thread(cx));
     on_store(store, cx, |_: &NewThreadInProject, store, cx| {
         let Some(project) = store.composer_project() else { return };
@@ -88,6 +107,15 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
                 return;
             }
             // The last window closing ends the app, as on the Mac.
+            let closed_settings = closing.update(cx, |store, cx| {
+                let open = store.settings.section.is_some();
+                store.close_settings();
+                cx.notify();
+                open
+            });
+            if closed_settings {
+                return;
+            }
             let closed_tab = closing.update(cx, |store, cx| {
                 cx.notify();
                 store.close_active_tab()
@@ -119,6 +147,34 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
     on_store(store, cx, |_: &ShowAgents, store, _| {
         if store.panel_unavailable().is_none() {
             store.open_tab(PanelTab::Agents);
+        }
+    });
+    on_store(store, cx, |_: &ShowPullRequest, store, _| {
+        if store.panel_unavailable().is_none() && store.pull_requests_unavailable().is_none() {
+            store.open_tab(PanelTab::PullRequest);
+        }
+    });
+    on_store(store, cx, |_: &ShowAllPullRequests, store, _| {
+        if store.panel_unavailable().is_none()
+            && store.pull_requests_unavailable().is_none()
+            && store.pull_requests_extended()
+        {
+            store.open_tab(PanelTab::PullRequests);
+        }
+    });
+    on_store(store, cx, |_: &NewTab, store, _| {
+        if store.panel_unavailable().is_none() {
+            store.open_blank_tab();
+        }
+    });
+    on_store(store, cx, |_: &ShowNextTab, store, _| {
+        if store.side_panel.is_open {
+            store.activate_tab_offset(1);
+        }
+    });
+    on_store(store, cx, |_: &ShowPreviousTab, store, _| {
+        if store.side_panel.is_open {
+            store.activate_tab_offset(-1);
         }
     });
     on_store(store, cx, |_: &ToggleDone, store, cx| store.toggle_done(cx));
@@ -177,6 +233,9 @@ struct State {
     panel_maximized: bool,
     shows_changes: bool,
     panel_available: bool,
+    shows_pull_request: bool,
+    shows_pull_requests: bool,
+    switchable_tabs: bool,
     project: Option<String>,
     thread: Option<bool>,
     busy: bool,
@@ -193,6 +252,9 @@ fn follow(store: &Entity<Store>, shown: &mut Option<State>, cx: &mut App) {
         panel_maximized: store.panel_maximized(),
         shows_changes: available && store.panel_target().is_some_and(|target| target.repository),
         panel_available: available,
+        shows_pull_request: available && store.pull_requests_unavailable().is_none(),
+        shows_pull_requests: available && store.pull_requests_unavailable().is_none() && store.pull_requests_extended(),
+        switchable_tabs: store.side_panel.is_open && store.panel_tabs().tabs.len() > 1,
         project: store.composer_project().map(|project| project.name),
         thread: store.selected_thread().map(|thread| thread.is_done()),
         busy: store.activity.busy(),
@@ -209,6 +271,8 @@ fn follow(store: &Entity<Store>, shown: &mut Option<State>, cx: &mut App) {
 fn menus(state: &State) -> Vec<Menu> {
     vec![
         Menu::new("Motile").items([
+            MenuItem::action("Check for Updates…", CheckForUpdates),
+            MenuItem::separator(),
             MenuItem::action("Settings…", OpenSettings),
             MenuItem::separator(),
             MenuItem::os_submenu("Services", SystemMenuType::Services),
@@ -254,6 +318,11 @@ fn menus(state: &State) -> Vec<Menu> {
             MenuItem::action("Show Changes", ShowChanges).disabled(!state.shows_changes),
             MenuItem::action("Show Files", ShowFiles).disabled(!state.panel_available),
             MenuItem::action("Show Agents", ShowAgents).disabled(!state.panel_available),
+            MenuItem::action("Show Pull Request", ShowPullRequest).disabled(!state.shows_pull_request),
+            MenuItem::action("Show All Pull Requests", ShowAllPullRequests).disabled(!state.shows_pull_requests),
+            MenuItem::action("New Tab", NewTab).disabled(!state.panel_available),
+            MenuItem::action("Show Next Tab", ShowNextTab).disabled(!state.switchable_tabs),
+            MenuItem::action("Show Previous Tab", ShowPreviousTab).disabled(!state.switchable_tabs),
             MenuItem::separator(),
             MenuItem::action("Enter Full Screen", ToggleFullScreen),
         ]),

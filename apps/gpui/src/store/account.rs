@@ -83,11 +83,6 @@ impl Store {
         });
     }
 
-    /// Stops waiting for the browser, when the user has given up on it.
-    pub fn cancel_sign_in(&mut self) {
-        self.signing_in = false;
-    }
-
     /// Signs in on an auth server that allows it without Google. Used for local work.
     pub fn dev_sign_in(&mut self, email: String) {
         self.signing_in = true;

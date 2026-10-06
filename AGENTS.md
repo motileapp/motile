@@ -200,15 +200,24 @@ a Rust library, and its data folder is `Motile GPUI`, so it is a device of its o
 Mac app.
 
 - `bridge.rs`: runs the core and prepares a transcript's rows off the main thread. `store/` is
-  the state the views show, as `AppStore.swift` is.
-- `root.rs`, `main_view.rs`, `app_menu.rs`, `settings.rs`: the window, its layout, the menu bar
-  and shortcuts, the Settings window.
+  the state the views show, as `AppStore.swift` is, a module per area (`threads.rs`, `git.rs`,
+  `projects.rs`, `pull_requests.rs`, `linear.rs`, `settings.rs`, `sidebar.rs`).
+- `root.rs`, `main_view.rs`, `app_menu.rs`: the window, its layout, the menu bar and shortcuts.
+  `settings/` is the settings route over the window, with `usage.rs` the Usage chart.
+- `theme.rs`: `Theme.swift` in Rust: the colours, the `Surface` ladder, `ControlSize` and
+  `Radius`. The typeface is DM Sans, bundled in `assets/fonts`.
+- `ui/`: the component library of `Shared/Views/UI` (`control.rs`: `ActionButton`,
+  `ActionMenu`, `Spinner`, `Chip`, `Switch`, `Segmented`, `InputField`, cards), the menus the
+  app draws itself (`menu.rs`), alerts and sheets, the Lucide icons by the names of
+  `Symbol.swift` (`icons.rs`). Nothing native is imitated: a menu, an alert or a sheet is drawn
+  in the app's own style.
 - `transcript/`: `model.rs` (the rows and their splices into GPUI's list), `prose.rs`,
   `rows.rs`, `view.rs`.
-- `composer/`, `sidebar.rs`, `thread/`, `panel/`, `git.rs`, `command_panel.rs`, `media/`,
-  `onboarding.rs`: the views of the same names in the Apple kit.
-- `ui/`: the Mac's buttons, alerts and sheets, SF Symbols as Lucide icons (`icons.rs`), the
-  system's menus (`menu.rs`).
+- `composer/`, `sidebar.rs`, `thread/`, `git.rs`, `command_panel.rs`, `media/`,
+  `onboarding.rs`, `folder_picker.rs`: the views of the same names in the Apple kit.
+- `panel/`: the side panel: `state.rs` (the tabs, as `SidePanel.swift`), `view.rs` (the chrome
+  and the changes, files and agents tabs), `code_view.rs`, `pull_request.rs`,
+  `pull_request_list.rs`, `line_comment.rs` and `linear.rs`.
 - `scripts/dev-app.sh` opens its dev app on a stack of its own, with `--mac` the Mac app beside
   it to compare. `scripts/build-app.sh` builds `Motile GPUI.app`.
 

@@ -7,16 +7,20 @@ use std::time::Duration;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::agents::AgentView;
-use motile_protocol::wire::{DiffScope, ToolStatus};
+use motile_protocol::wire::{DiffScope, PullRequestEdit, Side, ToolStatus};
 
-use super::code_view::{CodeSnapshot, CodeView, counts_text};
-use super::state::{FileContent, Loaded, PanelTab, PanelTarget, file_symbol};
+use super::code_view::{CodeActions, CodeSnapshot, CodeView, counts_text};
+use super::state::{CodeDocument, CodeMarks, FileContent, Loaded, PanelTab, PanelTarget, REMOVED, file_symbol};
 use crate::models::{AgentViewExt, duration, elapsed};
+use crate::panel::line_comment::{self, LineCommentSheet};
+use crate::panel::linear::LinearView;
+use crate::panel::pull_request::PullRequestView;
+use crate::panel::pull_request_list::PullRequestListView;
 use crate::store::Store;
-use crate::theme::{self, colors};
+use crate::theme::{self, ControlSize, Radius, Surface, colors};
 use crate::transcript::view::TranscriptView;
-use crate::ui::menu::{Anchor, Menu};
-use crate::ui::{IconButton, TOOLBAR_WIDTH, edges, highlight, icons, spinner};
+use crate::ui::menu::Menu;
+use crate::ui::{ActionButton, ActionMenu, Spinner, TOOLBAR_WIDTH, Variant, edges, icons};
 
 /// What makes a tab ask its server again: another folder or scope, a turn that ended there, or
 /// the button that asks.
@@ -31,20 +35,74 @@ struct Trigger {
 
 pub struct SidePanelView {
     store: Entity<Store>,
+    /// The views of the pull request tabs, by tab, and of the list and the Linear tabs.
+    pull_requests: HashMap<PanelTab, Entity<PullRequestView>>,
+    pull_request_list: Option<Entity<PullRequestListView>>,
+    linear_tabs: HashMap<PanelTab, Entity<LinearView>>,
+    line_comment: Option<Entity<LineCommentSheet>>,
     /// How far the tabs start from the panel's left edge: past the window's buttons when the
     /// panel reaches them.
     pub tab_inset: f32,
     diff: Entity<CodeView>,
-    files: HashMap<String, Entity<CodeView>>,
+    /// The views of the tabs that show one file, by tab.
+    files: HashMap<PanelTab, Entity<CodeView>>,
     agent: Entity<TranscriptView>,
     asked: u64,
     /// What each tab last asked its server with, by tab.
     triggers: HashMap<String, Trigger>,
-    add_menu: Anchor,
-    scope_menu: Anchor,
+    strip: ScrollHandle,
+    /// The tab the strip was last scrolled to.
+    scrolled_to: Option<String>,
     hovered_tab: Option<String>,
     copied: bool,
+    /// A change tab's one file is closed.
+    change_closed: bool,
     _ticks: Task<()>,
+}
+
+/// Runs something on the store from a click.
+fn act(
+    store: &Entity<Store>,
+    run: impl Fn(&mut Store, &mut Context<Store>) + 'static,
+) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
+    let store = store.clone();
+    move |_, _, cx| {
+        store.update(cx, |store, cx| {
+            run(store, cx);
+            cx.notify();
+        })
+    }
+}
+
+/// Runs something on the store from a menu item.
+fn choose(
+    store: &Entity<Store>,
+    run: impl Fn(&mut Store, &mut Context<Store>) + 'static,
+) -> impl Fn(&mut Window, &mut App) + 'static {
+    let store = store.clone();
+    move |_, cx| {
+        store.update(cx, |store, cx| {
+            run(store, cx);
+            cx.notify();
+        })
+    }
+}
+
+/// The light under what the pointer is over and under what is selected, a layer further up the
+/// page than the element `group` names.
+fn light(group: impl Into<SharedString>, radius: f32, inset: Edges<f32>, selected: bool, cx: &App) -> Div {
+    let c = colors(cx);
+    let lit = Surface::Background.next().color(c);
+    let chosen = Surface::Background.further().color(c);
+    div()
+        .absolute()
+        .top(px(inset.top))
+        .left(px(inset.left))
+        .right(px(inset.right))
+        .bottom(px(inset.bottom))
+        .rounded(px(radius))
+        .when(selected, |light| light.bg(chosen))
+        .when(!selected, |light| light.group_hover(group, move |light| light.bg(lit)))
 }
 
 impl SidePanelView {
@@ -68,16 +126,21 @@ impl SidePanelView {
         });
         Self {
             store,
+            pull_requests: HashMap::new(),
+            pull_request_list: None,
+            linear_tabs: HashMap::new(),
+            line_comment: None,
             tab_inset: 0.,
             diff: cx.new(CodeView::new),
             files: HashMap::new(),
             agent,
             asked: 0,
             triggers: HashMap::new(),
-            add_menu: Anchor::default(),
-            scope_menu: Anchor::default(),
+            strip: ScrollHandle::new(),
+            scrolled_to: None,
             hovered_tab: None,
             copied: false,
+            change_closed: false,
             _ticks: ticks,
         }
     }
@@ -102,12 +165,20 @@ impl SidePanelView {
         cx.notify();
     }
 
-    fn tab_strip(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = colors(cx);
-        let tabs = self.store.read(cx).panel_tabs();
-        let repository = self.store.read(cx).panel_target().is_some_and(|target| target.repository);
-        let anchor = self.add_menu.clone();
-        let store = self.store.clone();
+    fn tab_strip(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let store = self.store.read(cx);
+        let tabs = store.panel_tabs();
+        let available = store.panel_unavailable().is_none();
+        let blank = tabs.is_blank();
+        if let Some(active) = tabs.active.as_ref().map(PanelTab::id)
+            && self.scrolled_to.as_ref() != Some(&active)
+            && let Some(index) = tabs.tabs.iter().position(|tab| tab.id() == active)
+        {
+            self.scrolled_to = Some(active);
+            self.strip.scroll_to_item(index);
+        }
+        let chips: Vec<AnyElement> =
+            tabs.tabs.iter().map(|tab| self.tab_chip(tab, tabs.active.as_ref() == Some(tab), cx)).collect();
         div()
             .absolute()
             .top_0()
@@ -119,150 +190,103 @@ impl SidePanelView {
                     .id("panel-tabs")
                     .size_full()
                     .overflow_x_scroll()
+                    .track_scroll(&self.strip)
                     .px(px(8.))
                     .flex()
                     .items_center()
                     .gap(px(2.))
-                    .children(tabs.tabs.iter().map(|tab| {
-                        let active = tabs.active.as_ref() == Some(tab);
-                        let key = tab.id();
-                        let hovering = self.hovered_tab.as_ref() == Some(&key);
-                        let group: SharedString = format!("tab-{key}").into();
-                        let (activate, close, menu) = (self.store.clone(), self.store.clone(), self.store.clone());
-                        let (activate_tab, close_tab, menu_tab) = (tab.clone(), tab.clone(), tab.clone());
-                        let path = match tab {
-                            PanelTab::File(path) => Some(path.clone()),
-                            _ => None,
-                        };
-                        let hover_key = key.clone();
-                        div()
-                            .id(SharedString::from(key.clone()))
-                            .group(group.clone())
-                            .relative()
-                            .flex_shrink_0()
-                            .max_w(px(180.))
-                            .h(px(28.))
-                            .pl(px(9.))
-                            .pr(px(6.))
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .child(highlight(group, 7., edges(0., 0., 0., 0.), active, cx))
-                            .child(div().relative().w(px(14.)).flex().justify_center().child(
-                                icons::symbol(tab.symbol(), 11.).text_color(if active { c.text } else { c.secondary }),
-                            ))
-                            .child(
-                                div()
-                                    .relative()
-                                    .min_w_0()
-                                    .text_size(px(12.))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(if active { c.text } else { c.secondary })
-                                    .truncate()
-                                    .child(tab.title()),
-                            )
-                            .child(
-                                div().relative().when(!(hovering || active), |close| close.invisible()).child(
-                                    IconButton::new(SharedString::from(format!("close-{key}")), "xmark")
-                                        .help("Close (⌘W)")
-                                        .size(16.)
-                                        .symbol_size(8.)
-                                        .radius(4.)
-                                        .color(c.secondary)
-                                        .on_click(move |_, _, cx| {
-                                            let tab = close_tab.clone();
-                                            close.update(cx, |store, cx| {
-                                                store.close_tab(&tab);
-                                                cx.notify();
-                                            })
-                                        }),
-                                ),
-                            )
-                            .tooltip(crate::ui::tooltip(path.clone().unwrap_or(tab.title())))
-                            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                                if *hovered {
-                                    this.hovered_tab = Some(hover_key.clone());
-                                } else if this.hovered_tab.as_ref() == Some(&hover_key) {
-                                    this.hovered_tab = None;
-                                }
-                                cx.notify();
-                            }))
-                            .on_click(move |_, _, cx| {
-                                let tab = activate_tab.clone();
-                                activate.update(cx, |store, cx| {
-                                    store.activate_tab(tab);
-                                    cx.notify();
-                                })
-                            })
-                            .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                                let (close, others, all) = (menu.clone(), menu.clone(), menu.clone());
-                                let (close_tab, other_tab) = (menu_tab.clone(), menu_tab.clone());
-                                let copy = path.clone();
-                                Menu::new()
-                                    .item("Close", move |_, cx| {
-                                        close.update(cx, |store, cx| {
-                                            store.close_tab(&close_tab);
-                                            cx.notify();
-                                        })
-                                    })
-                                    .item("Close Others", move |_, cx| {
-                                        others.update(cx, |store, cx| {
-                                            store.close_other_tabs(&other_tab);
-                                            cx.notify();
-                                        })
-                                    })
-                                    .item("Close All", move |_, cx| {
-                                        all.update(cx, |store, cx| {
-                                            store.close_all_tabs();
-                                            cx.notify();
-                                        })
-                                    })
-                                    .when_some(copy, |menu, path| {
-                                        menu.separator().item("Copy Path", move |_, cx| {
-                                            cx.write_to_clipboard(ClipboardItem::new_string(path.clone()))
-                                        })
-                                    })
-                                    .show(event.position, window, cx);
-                            })
-                    }))
-                    .when(!tabs.tabs.is_empty(), |strip| {
+                    .when(!blank, |strip| strip.children(chips))
+                    .when(available && !blank, |strip| {
                         strip.child(
-                            div().relative().child(anchor.track()).child(
-                                IconButton::new("add-tab", "plus")
-                                    .help("Open a tab")
-                                    .size(28.)
-                                    .symbol_size(12.)
-                                    .radius(7.)
-                                    .color(c.secondary)
-                                    .on_click(move |_, window, cx| {
-                                        let (files, diff, agents) = (store.clone(), store.clone(), store.clone());
-                                        Menu::new()
-                                            .item("Files", move |_, cx| {
-                                                files.update(cx, |store, cx| {
-                                                    store.open_tab(PanelTab::Files);
-                                                    cx.notify();
-                                                })
-                                            })
-                                            .item_if(repository, "Diff", move |_, cx| {
-                                                diff.update(cx, |store, cx| {
-                                                    store.show_diff(None, None);
-                                                    cx.notify();
-                                                })
-                                            })
-                                            .item("Agents", move |_, cx| {
-                                                agents.update(cx, |store, cx| {
-                                                    store.open_tab(PanelTab::Agents);
-                                                    cx.notify();
-                                                })
-                                            })
-                                            .show(anchor.below(), window, cx);
-                                    }),
-                            ),
+                            ActionButton::icon("add-tab", "plus", "New tab")
+                                .on_click(act(&self.store, |store, _| store.open_blank_tab())),
                         )
                     }),
             )
+            .into_any_element()
     }
 
+    fn tab_chip(&self, tab: &PanelTab, active: bool, cx: &mut Context<Self>) -> AnyElement {
+        let c = colors(cx);
+        let height = ControlSize::Regular.height();
+        let close_size = ControlSize::Small.height();
+        // The close button is as far from the tab's side as from its top and bottom.
+        let close_margin = (height - close_size) / 2.;
+        let key = tab.id();
+        let hovering = self.hovered_tab.as_ref() == Some(&key);
+        let lit = hovering || active;
+        let group: SharedString = format!("tab-{key}").into();
+        let path = tab.path().map(str::to_string);
+        let (hover_key, menu_tab, close_tab, activate_tab) = (key.clone(), tab.clone(), tab.clone(), tab.clone());
+        let menu_store = self.store.clone();
+        div()
+            .id(SharedString::from(key.clone()))
+            .group(group.clone())
+            .relative()
+            .flex_shrink_0()
+            .max_w(px(180.))
+            .h(px(height))
+            .pl(px(9.))
+            .pr(px(close_margin))
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .child(light(group, Radius::CONTROL, edges(0., 0., 0., 0.), active, cx))
+            .child(
+                div()
+                    .relative()
+                    .w(px(14.))
+                    .flex()
+                    .justify_center()
+                    .child(icons::symbol(tab.symbol(), 11.).text_color(if lit { c.text } else { c.secondary })),
+            )
+            .child(
+                div()
+                    .relative()
+                    .min_w_0()
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(if lit { c.text } else { c.secondary })
+                    .truncate()
+                    .child(tab.title()),
+            )
+            .child(div().relative().size(px(close_size)).flex_shrink_0().when(lit, |close| {
+                close.child(
+                    ActionButton::icon(SharedString::from(format!("close-{key}")), "x", "Close (⌘W)")
+                        .small()
+                        .symbol_size(ControlSize::Small.small_symbol())
+                        .surface(if active { Surface::Background.further() } else { Surface::Background.next() })
+                        .on_click(act(&self.store, move |store, _| store.close_tab(&close_tab))),
+                )
+            }))
+            .tooltip(crate::ui::tooltip(path.clone().unwrap_or_else(|| tab.title())))
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                if *hovered {
+                    this.hovered_tab = Some(hover_key.clone());
+                } else if this.hovered_tab.as_ref() == Some(&hover_key) {
+                    this.hovered_tab = None;
+                }
+                cx.notify();
+            }))
+            .on_click(act(&self.store, move |store, _| store.activate_tab(activate_tab.clone())))
+            .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                let (close_tab, other_tab) = (menu_tab.clone(), menu_tab.clone());
+                let copy = path.clone();
+                Menu::new()
+                    .item("Close", choose(&menu_store, move |store, _| store.close_tab(&close_tab)))
+                    .item("Close Others", choose(&menu_store, move |store, _| store.close_other_tabs(&other_tab)))
+                    .item("Close All", choose(&menu_store, |store, _| store.close_all_tabs()))
+                    .when_some(copy, |menu, path| {
+                        menu.separator().item("Copy Path", move |_, cx| {
+                            cx.write_to_clipboard(ClipboardItem::new_string(path.clone()))
+                        })
+                    })
+                    .show(event.position, window, cx);
+            })
+            .into_any_element()
+    }
+
+    /// What a tab says in the middle of the panel when it has nothing to show.
     fn message(text: impl Into<SharedString>, failed: bool, cx: &App) -> AnyElement {
         let c = colors(cx);
         div()
@@ -279,7 +303,15 @@ impl SidePanelView {
     }
 
     fn loading(cx: &App) -> AnyElement {
-        div().size_full().flex().items_center().justify_center().child(spinner(14., cx)).into_any_element()
+        let c = colors(cx);
+        div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(c.tertiary)
+            .child(Spinner::new(ControlSize::Large.symbol()).render(cx))
+            .into_any_element()
     }
 
     /// The strip under the tabs with what the open tab is about and its buttons.
@@ -288,10 +320,11 @@ impl SidePanelView {
             .flex_shrink_0()
             .flex()
             .flex_col()
-            .child(div().h(px(36.)).pl(px(12.)).pr(px(6.)).flex().items_center().gap(px(4.)).child(content))
+            .child(div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(4.)).child(content))
             .child(crate::ui::divider(cx))
     }
 
+    /// Said over what a tab shows when that is only a part of it.
     fn note(text: &'static str, cx: &App) -> Div {
         let c = colors(cx);
         div()
@@ -310,23 +343,35 @@ impl SidePanelView {
             .child(crate::ui::divider(cx))
     }
 
-    fn refresh_button(id: &'static str, help: &'static str, cx: &mut Context<Self>) -> IconButton {
-        let c = colors(cx);
+    fn refresh_button(id: &'static str, help: &'static str, cx: &mut Context<Self>) -> ActionButton {
         let this = cx.entity().downgrade();
-        IconButton::new(id, "arrow.clockwise").help(help).color(c.secondary).on_click(move |_, _, cx| {
+        ActionButton::icon(id, "rotate-cw", help).on_click(move |_, _, cx| {
             let _ = this.update(cx, |this, cx| this.refresh(cx));
         })
     }
 
-    fn launcher(&self, target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
+    fn surface(bar: Div, body: AnyElement) -> AnyElement {
+        div().size_full().flex().flex_col().child(bar).child(div().flex_1().min_h_0().child(body)).into_any_element()
+    }
+
+    /// What a blank tab shows: the tabs there are to open.
+    fn launcher(&mut self, target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
+        let trigger = Trigger { target: target.clone(), scope: None, path: None, version: 0, asked: 0 };
+        let server_id = target.server_id.clone();
+        self.follow("linear", trigger, move |store| store.linear_read(&server_id), cx);
+        let store = self.store.read(cx);
+        let pull_requests_unavailable = store.pull_requests_unavailable();
+        let extended = store.pull_requests_extended();
+        let linear_unavailable = store.linear_unavailable();
+        let linear_title =
+            if store.linear.connected(&target.server_id).is_empty() { "Connect Linear" } else { "Linear" };
         let row = |id: &'static str,
                    symbol: &'static str,
                    title: &'static str,
-                   keys: &'static str,
-                   reason: Option<&'static str>,
-                   tab: Option<PanelTab>,
-                   store: Entity<Store>| {
+                   keys: Option<&'static str>,
+                   reason: Option<String>,
+                   open: Box<dyn Fn(&mut Store)>| {
             let enabled = reason.is_none();
             let group: SharedString = format!("launch-{id}").into();
             div()
@@ -339,7 +384,7 @@ impl SidePanelView {
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .when(enabled, |row| row.child(highlight(group, 7., edges(0., 0., 0., 0.), false, cx)))
+                .when(enabled, |row| row.child(light(group, Radius::CONTROL, edges(0., 0., 0., 0.), false, cx)))
                 .when(!enabled, |row| row.opacity(0.45))
                 .child(
                     div()
@@ -350,33 +395,24 @@ impl SidePanelView {
                         .child(icons::symbol(symbol, 13.).text_color(c.text)),
                 )
                 .child(div().relative().flex_1().text_size(px(13.)).text_color(c.text).child(title))
-                .child(
-                    div()
-                        .relative()
-                        .h(px(20.))
-                        .px(px(6.))
-                        .rounded(px(5.))
-                        .bg(c.hover)
-                        .flex()
-                        .items_center()
-                        .text_size(px(11.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.secondary)
-                        .child(keys),
-                )
-                .when_some(reason, |row, reason| row.tooltip(crate::ui::tooltip(reason)))
-                .when(enabled, |row| {
-                    row.on_click(move |_, _, cx| {
-                        let tab = tab.clone();
-                        store.update(cx, |store, cx| {
-                            match tab {
-                                Some(tab) => store.open_tab(tab),
-                                None => store.show_diff(None, None),
-                            }
-                            cx.notify();
-                        })
-                    })
+                .when_some(keys, |row, keys| {
+                    row.child(
+                        div()
+                            .relative()
+                            .h(px(20.))
+                            .px(px(6.))
+                            .rounded(px(5.))
+                            .bg(c.background_tertiary)
+                            .flex()
+                            .items_center()
+                            .text_size(px(11.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c.secondary)
+                            .child(keys),
+                    )
                 })
+                .when_some(reason, |row, reason| row.tooltip(crate::ui::tooltip(reason)))
+                .when(enabled, |row| row.on_click(act(&self.store, move |store, _| open(store))))
         };
         div()
             .size_full()
@@ -385,7 +421,7 @@ impl SidePanelView {
             .items_center()
             .justify_center()
             .gap(px(12.))
-            .child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c.text).child("Open a tab"))
+            .child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c.text).child("Open"))
             .child(
                 div()
                     .w(px(250.))
@@ -396,35 +432,98 @@ impl SidePanelView {
                         "launch-files",
                         "folder",
                         "Files",
-                        "⇧⌘E",
+                        Some("⇧⌘E"),
                         None,
-                        Some(PanelTab::Files),
-                        self.store.clone(),
+                        Box::new(|store| store.open_tab(PanelTab::Files)),
                     ))
                     .child(row(
                         "launch-diff",
-                        "plusminus",
+                        "diff",
                         "Diff",
-                        "⌘D",
-                        (!target.repository).then_some("Available in git repositories."),
-                        None,
-                        self.store.clone(),
+                        Some("⌘D"),
+                        (!target.repository).then(|| "Available in git repositories.".to_string()),
+                        Box::new(|store| store.show_diff(None, None)),
                     ))
                     .child(row(
                         "launch-agents",
-                        "person.2",
+                        "users",
                         "Agents",
-                        "⇧⌘A",
+                        Some("⇧⌘A"),
                         None,
-                        Some(PanelTab::Agents),
-                        self.store.clone(),
+                        Box::new(|store| store.open_tab(PanelTab::Agents)),
+                    ))
+                    .child(row(
+                        "launch-pull-request",
+                        "git-pull-request",
+                        "Pull Request",
+                        Some("⇧⌘R"),
+                        pull_requests_unavailable.clone(),
+                        Box::new(|store| store.open_tab(PanelTab::PullRequest)),
+                    ))
+                    .when(extended, |rows| {
+                        rows.child(row(
+                            "launch-pull-requests",
+                            "list",
+                            "All Pull Requests",
+                            Some("⌥⇧⌘R"),
+                            pull_requests_unavailable,
+                            Box::new(|store| store.open_tab(PanelTab::PullRequests)),
+                        ))
+                    })
+                    .child(row(
+                        "launch-linear",
+                        "linear",
+                        linear_title,
+                        None,
+                        linear_unavailable,
+                        Box::new(|store| store.open_tab(PanelTab::Linear)),
                     )),
             )
             .into_any_element()
     }
 
+    /// What the diff shows of the pull request besides its lines: which files were viewed and
+    /// where its conversations and the comments waiting for a review are.
+    fn marks(&self, document: &CodeDocument, scope: &DiffScope, cx: &App) -> CodeMarks {
+        let store = self.store.read(cx);
+        let DiffScope::PullRequest { number } = scope else { return CodeMarks::default() };
+        let Some(page) = store.pull_requests.page.value().filter(|page| page.number == *number) else {
+            return CodeMarks::default();
+        };
+        if !store.pull_requests_extended() {
+            return CodeMarks::default();
+        }
+        let mut marks = CodeMarks {
+            viewable: true,
+            viewed: page.viewed.iter().filter(|file| file.viewed).map(|file| file.path.clone()).collect(),
+            commentable: page.can_review_lines,
+            marked: HashMap::new(),
+        };
+        let pending = store.pull_requests.pending.get(number).cloned().unwrap_or_default();
+        let places = page
+            .threads
+            .iter()
+            .filter_map(|thread| thread.line.map(|line| (thread.path.clone(), line, thread.side)))
+            .chain(pending.into_iter().map(|comment| (comment.path, comment.line, comment.side)));
+        for (path, line, side) in places {
+            let Some(file) = document.files.iter().find(|file| file.path == path) else { continue };
+            let index = (0..file.lines.len()).find(|&index| {
+                let removed = file.kind(index) == REMOVED;
+                match side {
+                    Side::Left => removed && file.old.get(index).copied() == Some(line),
+                    Side::Right => !removed && file.new.get(index).copied() == Some(line),
+                }
+            });
+            if let Some(index) = index {
+                marks.marked.entry(path).or_default().insert(index);
+            }
+        }
+        marks
+    }
+
+    /// The changes in the thread's folder: what isn't committed, what the branch adds, or what
+    /// one turn did.
     fn diff_surface(&mut self, target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
-        let c = colors(cx);
         let store = self.store.read(cx);
         let scope = store.diff_scope(target);
         let trigger = Trigger {
@@ -434,78 +533,38 @@ impl SidePanelView {
             version: store.workspace_version,
             asked: self.asked,
         };
-        if target.repository {
+        if target.repository && !target.awaits_worktree {
             let (load_target, load_scope) = (target.clone(), scope.clone());
-            self.follow("diff", trigger, move |store| store.load_diff(&load_target, load_scope), cx);
+            self.follow(
+                "diff",
+                trigger,
+                move |store| {
+                    if let DiffScope::PullRequest { number } = load_scope
+                        && store.pull_requests_extended()
+                        && store.pull_requests.page.value().map(|page| page.number) != Some(number)
+                    {
+                        store.load_pull_request(&load_target, number);
+                    }
+                    store.load_diff(&load_target, load_scope)
+                },
+                cx,
+            );
         }
         let store = self.store.read(cx);
         let document = store.side_panel.diff.value().cloned();
-        let turns = store.side_panel.turns.clone();
         let all_closed =
             document.as_ref().is_some_and(|document| store.side_panel.collapsed.len() >= document.files.len());
-        let title = match &scope {
-            DiffScope::Uncommitted => "Uncommitted".to_string(),
-            DiffScope::Branch => "Branch".to_string(),
-            DiffScope::Turn { item_id } => match turns.iter().find(|turn| &turn.id == item_id) {
-                Some(turn) if Some(&turn.id) != turns.last().map(|last| &last.id) => {
-                    format!("Turn at {}", clock(turn.at))
-                }
-                _ => "Latest turn".to_string(),
-            },
-        };
-        let anchor = self.scope_menu.clone();
-        let menu_store = self.store.clone();
-        let chosen = scope.clone();
-        let menu_turns = turns.clone();
-        let scope_menu = div()
-            .id("scope")
-            .group("scope")
-            .relative()
-            .ml(px(-8.))
-            .h(px(26.))
-            .px(px(8.))
-            .flex()
-            .items_center()
-            .gap(px(5.))
-            .child(highlight("scope", 7., edges(0., 0., 0., 0.), false, cx))
-            .child(anchor.track())
-            .child(div().relative().text_size(px(12.5)).font_weight(FontWeight::MEDIUM).text_color(c.text).child(title))
-            .child(div().relative().child(icons::symbol("chevron.down", 8.).text_color(c.tertiary)))
-            .on_click(move |_, window, cx| {
-                let choose = |scope: DiffScope| {
-                    let store = menu_store.clone();
-                    move |_: &mut Window, cx: &mut App| {
-                        store.update(cx, |store, cx| {
-                            store.choose_diff_scope(scope.clone());
-                            cx.notify();
-                        })
-                    }
-                };
-                let mut menu = Menu::new()
-                    .checked(chosen == DiffScope::Uncommitted, "Uncommitted changes", choose(DiffScope::Uncommitted))
-                    .checked(chosen == DiffScope::Branch, "Branch changes", choose(DiffScope::Branch));
-                if !menu_turns.is_empty() {
-                    menu = menu.separator();
-                    let latest = menu_turns.last().map(|turn| turn.id.clone());
-                    for turn in menu_turns.iter().rev() {
-                        let name = if Some(&turn.id) == latest.as_ref() {
-                            "Latest turn".to_string()
-                        } else {
-                            format!("Turn at {}", clock(turn.at))
-                        };
-                        let files =
-                            if turn.files == 1 { "1 file".to_string() } else { format!("{} files", turn.files) };
-                        let scope = DiffScope::Turn { item_id: turn.id.clone() };
-                        menu = menu.checked(chosen == scope, format!("{name} · {files}"), choose(scope.clone()));
-                    }
-                }
-                menu.show(anchor.below(), window, cx);
-            });
         let counts = document.as_ref().filter(|document| !document.files.is_empty()).map(|document| {
             let (text, runs) = counts_text(document.added(), document.removed(), colors(cx));
             div().pl(px(4.)).text_size(px(11.5)).child(StyledText::new(text).with_runs(runs))
         });
-        let store_handle = self.store.clone();
+        let viewed = match (&scope, store.pull_requests.page.value()) {
+            (DiffScope::PullRequest { number }, Some(page)) if page.number == *number && !page.viewed.is_empty() => {
+                let done = page.viewed.iter().filter(|file| file.viewed).count();
+                Some(format!("{done} of {} viewed", page.viewed.len()))
+            }
+            _ => None,
+        };
         let several = document.as_ref().is_some_and(|document| document.files.len() > 1);
         let bar = Self::bar(
             div()
@@ -513,23 +572,22 @@ impl SidePanelView {
                 .items_center()
                 .w_full()
                 .gap(px(4.))
-                .child(scope_menu)
+                .child(div().ml(px(-8.)).child(self.scope_menu(target, &scope, cx)))
+                .when_some(viewed, |bar, viewed| {
+                    bar.child(
+                        div().text_size(px(11.5)).text_color(colors(cx).tertiary).whitespace_nowrap().child(viewed),
+                    )
+                })
                 .children(counts)
-                .child(div().flex_1())
+                .child(div().flex_1().min_w(px(4.)))
                 .when(several, |bar| {
                     bar.child(
-                        IconButton::new(
+                        ActionButton::icon(
                             "collapse-all",
-                            if all_closed { "rectangle.expand.vertical" } else { "rectangle.compress.vertical" },
+                            if all_closed { "unfold-vertical" } else { "fold-vertical" },
+                            if all_closed { "Open every file" } else { "Close every file" },
                         )
-                        .help(if all_closed { "Open every file" } else { "Close every file" })
-                        .color(c.secondary)
-                        .on_click(move |_, _, cx| {
-                            store_handle.update(cx, |store, cx| {
-                                store.set_all_collapsed(!all_closed);
-                                cx.notify();
-                            })
-                        }),
+                        .on_click(act(&self.store, move |store, _| store.set_all_collapsed(!all_closed))),
                     )
                 })
                 .child(Self::refresh_button("refresh-diff", "Read the changes again", cx)),
@@ -537,6 +595,8 @@ impl SidePanelView {
         );
         let body: AnyElement = if !target.repository {
             Self::message("This folder isn't a git repository.", false, cx)
+        } else if target.awaits_worktree {
+            Self::message("Nothing has changed.", false, cx)
         } else {
             match &self.store.read(cx).side_panel.diff {
                 Loaded::Loading => Self::loading(cx),
@@ -548,33 +608,33 @@ impl SidePanelView {
                 ),
                 Loaded::Ready(document) => {
                     let truncated = document.truncated;
-                    let (toggle, open) = (self.store.clone(), self.store.clone());
                     let store = self.store.clone();
+                    let marks = self.marks(document, &scope, cx);
+                    let (viewed_target, viewed_marks) = (target.clone(), marks.clone());
+                    let viewed_scope = scope.clone();
+                    let actions = CodeActions::default()
+                        .toggle(act_path(&self.store, |store, path| store.toggle_collapsed(path)))
+                        .open(act_path(&self.store, |store, path| store.open_tab(PanelTab::File(path.to_string()))))
+                        .viewed(act_path(&self.store, move |store, path| {
+                            let DiffScope::PullRequest { number } = viewed_scope else { return };
+                            let viewed = !viewed_marks.viewed.contains(path);
+                            let edit = PullRequestEdit::Viewed { path: path.to_string(), viewed };
+                            store.pull_request_edit(edit, None, &viewed_target, number);
+                        }))
+                        .comment(act_line(&self.store, |store, line| store.comment_on_line(Some(line.into()))));
                     let code = self.diff.update(cx, |view, cx| {
                         let state = store.read(cx);
                         let Loaded::Ready(document) = &state.side_panel.diff else { return div().into_any_element() };
-                        let snapshot = CodeSnapshot {
-                            document,
-                            collapsed: &state.side_panel.collapsed,
-                            reveal: state.side_panel.reveal.as_ref(),
-                        };
-                        let document = snapshot.document.clone();
-                        let collapsed = snapshot.collapsed.clone();
-                        let reveal = snapshot.reveal.cloned();
+                        let (document, collapsed, reveal) =
+                            (document.clone(), state.side_panel.collapsed.clone(), state.side_panel.reveal.clone());
                         view.element(
-                            CodeSnapshot { document: &document, collapsed: &collapsed, reveal: reveal.as_ref() },
-                            move |path, _, cx| {
-                                toggle.update(cx, |store, cx| {
-                                    store.toggle_collapsed(path);
-                                    cx.notify();
-                                })
+                            CodeSnapshot {
+                                document: &document,
+                                collapsed: &collapsed,
+                                reveal: reveal.as_ref(),
+                                marks: &marks,
                             },
-                            move |path, _, cx| {
-                                open.update(cx, |store, cx| {
-                                    store.open_tab(PanelTab::File(path.to_string()));
-                                    cx.notify();
-                                })
-                            },
+                            actions,
                             cx,
                         )
                     });
@@ -593,9 +653,70 @@ impl SidePanelView {
                 }
             }
         };
-        div().size_full().flex().flex_col().child(bar).child(div().flex_1().min_h_0().child(body)).into_any_element()
+        Self::surface(bar, body)
     }
 
+    /// The menu that picks which changes the diff shows.
+    fn scope_menu(&self, target: &PanelTarget, scope: &DiffScope, cx: &mut Context<Self>) -> ActionMenu {
+        let store = self.store.read(cx);
+        let title = match scope {
+            DiffScope::Uncommitted => "Uncommitted".to_string(),
+            DiffScope::Branch => "Branch".to_string(),
+            DiffScope::PullRequest { number } => format!("PR #{number}"),
+            DiffScope::Commit { sha } => format!("Commit {}", sha.chars().take(7).collect::<String>()),
+            DiffScope::Turn { item_id } => store.turn_name(item_id),
+        };
+        // The pull request the menu offers: the thread's, or the one the scope shows.
+        let pull_request = match scope {
+            DiffScope::PullRequest { number } => Some(*number),
+            _ => target.pull_request,
+        }
+        .filter(|_| store.pull_requests_unavailable().is_none());
+        let commits: Vec<(String, String)> = match (pull_request, store.pull_requests.page.value()) {
+            (Some(number), Some(page)) if page.number == number => page
+                .activity
+                .iter()
+                .flat_map(|entry| entry.commits.iter())
+                .map(|commit| (commit.sha.clone(), commit.headline.clone()))
+                .collect(),
+            _ => Vec::new(),
+        };
+        let turns: Vec<(DiffScope, String)> = store
+            .side_panel
+            .turns
+            .iter()
+            .rev()
+            .map(|turn| {
+                let files = if turn.files == 1 { "1 file".to_string() } else { format!("{} files", turn.files) };
+                (DiffScope::Turn { item_id: turn.id.clone() }, format!("{} · {files}", store.turn_name(&turn.id)))
+            })
+            .collect();
+        let chosen = scope.clone();
+        let handle = self.store.clone();
+        ActionMenu::new("scope", title, move |_, _| {
+            let pick = |scope: DiffScope| choose(&handle, move |store, _| store.choose_diff_scope(scope.clone()));
+            let mut menu = Menu::new()
+                .checked(chosen == DiffScope::Uncommitted, "Uncommitted changes", pick(DiffScope::Uncommitted))
+                .checked(chosen == DiffScope::Branch, "Branch changes", pick(DiffScope::Branch));
+            if let Some(number) = pull_request {
+                let scope = DiffScope::PullRequest { number };
+                menu = menu.checked(chosen == scope, format!("Pull request #{number}"), pick(scope));
+                for (sha, headline) in &commits {
+                    let scope = DiffScope::Commit { sha: sha.clone() };
+                    menu = menu.checked(chosen == scope, headline.clone(), pick(scope));
+                }
+            }
+            if !turns.is_empty() {
+                menu = menu.separator();
+                for (scope, label) in &turns {
+                    menu = menu.checked(&chosen == scope, label.clone(), pick(scope.clone()));
+                }
+            }
+            menu
+        })
+    }
+
+    /// The folder the thread works in: its files under their folders, to open one in a tab.
     fn files_surface(&mut self, target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let store = self.store.read(cx);
@@ -624,7 +745,7 @@ impl SidePanelView {
                         .truncate()
                         .child(target.name.clone()),
                 )
-                .child(div().flex_1())
+                .child(div().flex_1().min_w(px(4.)))
                 .child(Self::refresh_button("refresh-files", "Read the folder again", cx)),
             cx,
         );
@@ -643,8 +764,7 @@ impl SidePanelView {
                     .py(px(6.))
                     .children(nodes.into_iter().map(|node| {
                         let group: SharedString = format!("node-{}", node.path).into();
-                        let (open, menu) = (self.store.clone(), node.path.clone());
-                        let (path, folder) = (node.path.clone(), node.folder);
+                        let (path, folder, copy) = (node.path.clone(), node.folder, node.path.clone());
                         div()
                             .id(SharedString::from(format!("file-{}", node.path)))
                             .group(group.clone())
@@ -655,11 +775,11 @@ impl SidePanelView {
                             .flex()
                             .items_center()
                             .gap(px(6.))
-                            .child(highlight(group, 6., edges(0., 6., 0., 6.), false, cx))
+                            .child(light(group, Radius::SMALL, edges(0., 6., 0., 6.), false, cx))
                             .when(node.ignored, |row| row.opacity(0.5))
                             .child(div().relative().w(px(10.)).flex().justify_center().when(node.folder, |chevron| {
                                 chevron.child(
-                                    icons::symbol(if node.open { "chevron.down" } else { "chevron.right" }, 8.)
+                                    icons::symbol(if node.open { "chevron-down" } else { "chevron-right" }, 8.)
                                         .text_color(c.tertiary),
                                 )
                             }))
@@ -678,19 +798,15 @@ impl SidePanelView {
                                     .truncate()
                                     .child(node.name.clone()),
                             )
-                            .on_click(move |_, _, cx| {
-                                let path = path.clone();
-                                open.update(cx, |store, cx| {
-                                    if folder {
-                                        store.toggle_folder(&path);
-                                    } else {
-                                        store.open_tab(PanelTab::File(path));
-                                    }
-                                    cx.notify();
-                                })
-                            })
+                            .on_click(act(&self.store, move |store, _| {
+                                if folder {
+                                    store.toggle_folder(&path);
+                                } else {
+                                    store.open_tab(PanelTab::File(path.clone()));
+                                }
+                            }))
                             .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                                let path = menu.clone();
+                                let path = copy.clone();
                                 Menu::new()
                                     .item("Copy Path", move |_, cx| {
                                         cx.write_to_clipboard(ClipboardItem::new_string(path.clone()))
@@ -703,9 +819,17 @@ impl SidePanelView {
         } else {
             Self::loading(cx)
         };
-        div().size_full().flex().flex_col().child(bar).child(div().flex_1().min_h_0().child(body)).into_any_element()
+        Self::surface(bar, body)
     }
 
+    /// The code view of a tab that shows one file, kept for as long as the tab is.
+    fn file_view(&mut self, tab: &PanelTab, cx: &mut Context<Self>) -> Entity<CodeView> {
+        let open: Vec<PanelTab> = self.store.read(cx).panel_tabs().tabs;
+        self.files.retain(|kept, _| open.contains(kept));
+        self.files.entry(tab.clone()).or_insert_with(|| cx.new(CodeView::new)).clone()
+    }
+
+    /// One file of the folder the thread works in.
     fn file_surface(&mut self, target: &PanelTarget, path: &str, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let store = self.store.read(cx);
@@ -742,12 +866,10 @@ impl SidePanelView {
                         })
                         .child(div().text_color(c.text).flex_shrink_0().child(name)),
                 )
-                .child(div().flex_1())
+                .child(div().flex_1().min_w(px(4.)))
                 .child(
-                    IconButton::new("copy-path", if copied { "checkmark" } else { "doc.on.doc" })
-                        .help("Copy the path")
-                        .color(c.secondary)
-                        .on_click(move |_, _, cx| {
+                    ActionButton::icon("copy-path", if copied { "check" } else { "copy" }, "Copy the path").on_click(
+                        move |_, _, cx| {
                             cx.write_to_clipboard(ClipboardItem::new_string(copy_path.clone()));
                             let _ = this.update(cx, |this, cx| {
                                 this.copied = true;
@@ -761,12 +883,14 @@ impl SidePanelView {
                                 })
                                 .detach();
                             });
-                        }),
+                        },
+                    ),
                 )
                 .child(Self::refresh_button("refresh-file", "Read the file again", cx)),
             cx,
         );
-        let content = self.store.read(cx).side_panel.contents.get(path).cloned();
+        let tab = PanelTab::File(path.to_string());
+        let content = self.store.read(cx).side_panel.contents.get(&tab).cloned();
         let body: AnyElement = match content {
             None | Some(Loaded::Loading) => Self::loading(cx),
             Some(Loaded::Failed(message)) => Self::message(message, true, cx),
@@ -774,20 +898,12 @@ impl SidePanelView {
                 if document.files.first().is_some_and(|file| file.lines.is_empty()) {
                     Self::message("This file is empty.", false, cx)
                 } else {
-                    let view = match self.files.get(path) {
-                        Some(view) => view.clone(),
-                        None => {
-                            let view = cx.new(CodeView::new);
-                            self.files.insert(path.to_string(), view.clone());
-                            view
-                        }
-                    };
-                    let collapsed = Default::default();
+                    let view = self.file_view(&tab, cx);
+                    let (collapsed, marks) = (Default::default(), CodeMarks::default());
                     let code = view.update(cx, |view, cx| {
                         view.element(
-                            CodeSnapshot { document: &document, collapsed: &collapsed, reveal: None },
-                            |_, _, _| {},
-                            |_, _, _| {},
+                            CodeSnapshot { document: &document, collapsed: &collapsed, reveal: None, marks: &marks },
+                            CodeActions::default(),
                             cx,
                         )
                     });
@@ -819,9 +935,85 @@ impl SidePanelView {
                 cx,
             ),
         };
-        div().size_full().flex().flex_col().child(bar).child(div().flex_1().min_h_0().child(body)).into_any_element()
+        Self::surface(bar, body)
     }
 
+    /// What one turn changed in one file.
+    fn change_surface(&mut self, target: &PanelTarget, turn: &str, path: &str, cx: &mut Context<Self>) -> AnyElement {
+        let c = colors(cx);
+        let tab = PanelTab::Change { turn: turn.to_string(), path: path.to_string() };
+        let trigger = Trigger { target: target.clone(), scope: None, path: Some(tab.id()), version: 0, asked: 0 };
+        let (load_target, load_turn, load_path) = (target.clone(), turn.to_string(), path.to_string());
+        self.follow(&tab.id(), trigger, move |store| store.load_change(&load_turn, &load_path, &load_target), cx);
+        let store = self.store.read(cx);
+        let (turn_scope, reveal) = (DiffScope::Turn { item_id: turn.to_string() }, path.to_string());
+        let bar = Self::bar(
+            div()
+                .flex()
+                .items_center()
+                .w_full()
+                .gap(px(4.))
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_size(px(12.5))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c.text)
+                        .truncate()
+                        .child(store.turn_name(turn)),
+                )
+                .child(div().flex_1().min_w(px(4.)))
+                .child(
+                    ActionButton::icon("turn-diff", "diff", "Show everything this turn changed")
+                        .on_click(act(&self.store, move |store, _| {
+                            store.show_diff(Some(turn_scope.clone()), Some(reveal.clone()))
+                        })),
+                ),
+            cx,
+        );
+        let content = store.side_panel.contents.get(&tab).cloned();
+        let body: AnyElement = match content {
+            None | Some(Loaded::Loading) => Self::loading(cx),
+            Some(Loaded::Failed(message)) => Self::message(message, true, cx),
+            Some(Loaded::Ready(FileContent::Text(document, truncated))) if !document.files.is_empty() => {
+                let view = self.file_view(&tab, cx);
+                let collapsed = if self.change_closed { [path.to_string()].into() } else { Default::default() };
+                let marks = CodeMarks::default();
+                let this = cx.entity().downgrade();
+                let actions = CodeActions::default()
+                    .toggle(move |_, _, cx| {
+                        let _ = this.update(cx, |this, cx| {
+                            this.change_closed = !this.change_closed;
+                            cx.notify();
+                        });
+                    })
+                    .open(act_path(&self.store, |store, path| store.open_tab(PanelTab::File(path.to_string()))));
+                let code = view.update(cx, |view, cx| {
+                    view.element(
+                        CodeSnapshot { document: &document, collapsed: &collapsed, reveal: None, marks: &marks },
+                        actions,
+                        cx,
+                    )
+                });
+                div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    .when(truncated, |body| {
+                        body.child(Self::note(
+                            "The turn's changes are too long to show in full, so this file's may be cut short.",
+                            cx,
+                        ))
+                    })
+                    .child(div().flex_1().min_h_0().child(code))
+                    .into_any_element()
+            }
+            Some(Loaded::Ready(_)) => Self::message("The turn's changes to this file can't be shown.", false, cx),
+        };
+        Self::surface(bar, body)
+    }
+
+    /// The agents the thread's agent has started, and what one of them did once it is opened.
     fn agents_surface(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let store = self.store.read(cx);
@@ -829,23 +1021,18 @@ impl SidePanelView {
         if let Some(agent) =
             agents.iter().find(|agent| Some(&agent.id) == store.side_panel.shown_agent.as_ref()).cloned()
         {
-            let back = self.store.clone();
             let bar = Self::bar(
                 div()
                     .flex()
                     .items_center()
                     .w_full()
                     .gap(px(4.))
-                    .child(div().ml(px(-6.)).child(
-                        IconButton::new("all-agents", "chevron.left").help("All agents").color(c.secondary).on_click(
-                            move |_, _, cx| {
-                                back.update(cx, |store, cx| {
-                                    store.show_agents(cx);
-                                    cx.notify();
-                                })
-                            },
+                    .child(
+                        div().ml(px(-8.)).child(
+                            ActionButton::icon("all-agents", "chevron-left", "All agents")
+                                .on_click(act(&self.store, |store, cx| store.show_agents(cx))),
                         ),
-                    ))
+                    )
                     .child(div().w(px(16.)).flex().justify_center().child(status_icon(agent.status, cx)))
                     .child(
                         div()
@@ -860,132 +1047,252 @@ impl SidePanelView {
                     .child(div().pr(px(6.)).child(agent_time(&agent, cx))),
                 cx,
             );
-            return div()
-                .size_full()
-                .flex()
-                .flex_col()
-                .child(bar)
-                .child(div().flex_1().min_h_0().child(self.agent.clone()))
-                .into_any_element();
+            return Self::surface(bar, div().size_full().child(self.agent.clone()).into_any_element());
         }
         if agents.is_empty() {
             return Self::message("The agents this thread starts show up here.", false, cx);
         }
-        let summary = summary(&agents);
+        let bar = Self::bar(
+            div().flex().w_full().child(
+                div()
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c.secondary)
+                    .child(summary(&agents)),
+            ),
+            cx,
+        );
+        let list = div().id("agents").size_full().overflow_y_scroll().p(px(8.)).flex().flex_col().gap(px(2.)).children(
+            agents.iter().map(|agent| {
+                let group: SharedString = format!("agent-{}", agent.id).into();
+                let id = agent.id.clone();
+                div()
+                    .id(group.clone())
+                    .group(group.clone())
+                    .relative()
+                    .px(px(10.))
+                    .py(px(8.))
+                    // An agent that another agent started stands in from it.
+                    .when(agent.parent.is_some(), |row| row.pl(px(28.)))
+                    .child(light(group, Radius::CONTROL, edges(0., 0., 0., 0.), false, cx))
+                    .child(
+                        div()
+                            .relative()
+                            .flex()
+                            .items_start()
+                            .gap(px(9.))
+                            .child(
+                                div()
+                                    .w(px(16.))
+                                    .h(px(18.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .child(status_icon(agent.status, cx)),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(3.))
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(6.))
+                                            .child(
+                                                div()
+                                                    .min_w_0()
+                                                    .text_size(px(13.))
+                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .text_color(c.text)
+                                                    .truncate()
+                                                    .child(agent.title.clone()),
+                                            )
+                                            .when_some(agent.kind.clone(), |line, kind| {
+                                                line.child(
+                                                    div()
+                                                        .min_w_0()
+                                                        .text_size(px(11.))
+                                                        .text_color(c.secondary)
+                                                        .truncate()
+                                                        .child(kind),
+                                                )
+                                            })
+                                            .child(div().flex_1().min_w(px(6.)))
+                                            .child(agent_time(agent, cx)),
+                                    )
+                                    .when(!agent.detail.is_empty(), |text| {
+                                        text.child(
+                                            div()
+                                                .text_size(px(12.))
+                                                .line_height(px(16.))
+                                                .text_color(c.secondary)
+                                                .line_clamp(2)
+                                                .child(agent.detail.clone()),
+                                        )
+                                    })
+                                    .when_some(agent.usage(), |text, usage| {
+                                        text.child(div().text_size(px(11.)).text_color(c.tertiary).child(usage))
+                                    }),
+                            ),
+                    )
+                    .on_click(act(&self.store, move |store, cx| store.show_agent(id.clone(), cx)))
+            }),
+        );
+        Self::surface(bar, list.into_any_element())
+    }
+
+    /// The issues of a Linear workspace the server is connected to, or how to connect one.
+    fn linear_tab(
+        &mut self,
+        tab: PanelTab,
+        workspace: String,
+        issue: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let store = self.store.clone();
+        let view = self
+            .linear_tabs
+            .entry(tab)
+            .or_insert_with(|| cx.new(|cx| LinearView::new(store, workspace, issue, window, cx)))
+            .clone();
+        div().size_full().child(view).into_any_element()
+    }
+
+    fn pull_request_tab(
+        &mut self,
+        tab: PanelTab,
+        number: Option<u64>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let store = self.store.clone();
+        let view = self
+            .pull_requests
+            .entry(tab)
+            .or_insert_with(|| cx.new(|cx| PullRequestView::new(store, number, window, cx)))
+            .clone();
+        div().size_full().child(view).into_any_element()
+    }
+
+    fn pull_request_list_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let store = self.store.clone();
+        let view = self
+            .pull_request_list
+            .get_or_insert_with(|| cx.new(|cx| PullRequestListView::new(store, window, cx)))
+            .clone();
+        div().size_full().child(view).into_any_element()
+    }
+
+    /// Lets go of the views of tabs that are closed.
+    fn prune_tabs(&mut self, cx: &App) {
+        let tabs = self.store.read(cx).panel_tabs().tabs;
+        self.pull_requests.retain(|tab, _| tabs.contains(tab));
+        self.linear_tabs.retain(|tab, _| tabs.contains(tab));
+        if !tabs.contains(&PanelTab::PullRequests) {
+            self.pull_request_list = None;
+        }
+    }
+
+    fn linear_surface(&mut self, target: &PanelTarget, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let c = colors(cx);
+        let store = self.store.read(cx);
+        if let Some(reason) = store.linear_unavailable() {
+            return Self::message(reason, false, cx);
+        }
+        if !store.linear.connected(&target.server_id).is_empty() {
+            return self.linear_tab(PanelTab::Linear, String::new(), None, window, cx);
+        }
+        let trigger = Trigger { target: target.clone(), scope: None, path: None, version: 0, asked: 0 };
+        let read_id = target.server_id.clone();
+        self.follow("linear", trigger, move |store| store.linear_read(&read_id), cx);
+        let store = self.store.read(cx);
+        let server_id = target.server_id.clone();
+        let connecting = store.linear.connecting.as_deref() == Some(&target.server_id);
+        let error = store.linear.error.clone();
         div()
             .size_full()
             .flex()
-            .flex_col()
-            .child(Self::bar(
-                div().flex().w_full().child(
-                    div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(c.secondary).child(summary),
-                ),
-                cx,
-            ))
+            .items_center()
+            .justify_center()
+            .p(px(24.))
             .child(
                 div()
-                    .id("agents")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .p(px(8.))
+                    .max_w(px(320.))
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
-                    .children(agents.iter().map(|agent| {
-                        let group: SharedString = format!("agent-{}", agent.id).into();
-                        let (store, id) = (self.store.clone(), agent.id.clone());
+                    .items_center()
+                    .gap(px(16.))
+                    .child(icons::symbol("linear", 28.).text_color(c.text))
+                    .child(
                         div()
-                            .id(group.clone())
-                            .group(group.clone())
-                            .relative()
-                            .px(px(10.))
-                            .py(px(8.))
-                            .when(agent.parent.is_some(), |row| row.pl(px(28.)))
-                            .child(highlight(group, 7., edges(0., 0., 0., 0.), false, cx))
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap(px(6.))
                             .child(
                                 div()
-                                    .relative()
-                                    .flex()
-                                    .items_start()
-                                    .gap(px(9.))
-                                    .child(
-                                        div()
-                                            .w(px(16.))
-                                            .h(px(18.))
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .child(status_icon(agent.status, cx)),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .min_w_0()
-                                            .flex()
-                                            .flex_col()
-                                            .gap(px(3.))
-                                            .child(
-                                                div()
-                                                    .flex()
-                                                    .items_center()
-                                                    .gap(px(6.))
-                                                    .child(
-                                                        div()
-                                                            .min_w_0()
-                                                            .text_size(px(13.))
-                                                            .font_weight(FontWeight::MEDIUM)
-                                                            .text_color(c.text)
-                                                            .truncate()
-                                                            .child(agent.title.clone()),
-                                                    )
-                                                    .when_some(agent.kind.clone(), |line, kind| {
-                                                        line.child(
-                                                            div()
-                                                                .min_w_0()
-                                                                .text_size(px(11.))
-                                                                .text_color(c.secondary)
-                                                                .truncate()
-                                                                .child(kind),
-                                                        )
-                                                    })
-                                                    .child(div().flex_1().min_w(px(6.)))
-                                                    .child(agent_time(agent, cx)),
-                                            )
-                                            .when(!agent.detail.is_empty(), |text| {
-                                                text.child(
-                                                    div()
-                                                        .text_size(px(12.))
-                                                        .line_height(px(16.))
-                                                        .text_color(c.secondary)
-                                                        .line_clamp(2)
-                                                        .child(agent.detail.clone()),
-                                                )
-                                            })
-                                            .when_some(agent.usage(), |text, usage| {
-                                                text.child(div().text_size(px(11.)).text_color(c.tertiary).child(usage))
-                                            }),
-                                    ),
+                                    .text_size(px(15.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c.text)
+                                    .child("Connect Linear"),
                             )
-                            .on_click(move |_, _, cx| {
-                                let id = id.clone();
-                                store.update(cx, |store, cx| {
-                                    store.show_agent(id, cx);
-                                    cx.notify();
-                                })
-                            })
-                    })),
+                            .child(div().text_size(px(12.5)).text_color(c.secondary).text_center().child(
+                                "See your issues and hand them to your agents. The connection is kept on your server.",
+                            )),
+                    )
+                    .child(
+                        ActionButton::new("connect-linear", "Connect Linear")
+                            .variant(Variant::Primary)
+                            .pending(connecting)
+                            .on_click(act(&self.store, move |store, _| store.linear_connect(&server_id))),
+                    )
+                    .when_some(error, |prompt, error| {
+                        prompt.child(div().text_size(px(12.5)).text_color(c.danger).text_center().child(error))
+                    }),
             )
             .into_any_element()
+    }
+}
+
+/// Runs something on the store with the line a code view's click was on.
+fn act_line(
+    store: &Entity<Store>,
+    run: impl Fn(&mut Store, crate::panel::code_view::CommentedLine) + 'static,
+) -> impl Fn(crate::panel::code_view::CommentedLine, &mut Window, &mut App) + 'static {
+    let store = store.clone();
+    move |line, _, cx| {
+        store.update(cx, |store, cx| {
+            run(store, line);
+            cx.notify();
+        })
+    }
+}
+
+/// Runs something on the store with the path a code view's click was on.
+fn act_path(
+    store: &Entity<Store>,
+    run: impl Fn(&mut Store, &str) + 'static,
+) -> impl Fn(&str, &mut Window, &mut App) + 'static {
+    let store = store.clone();
+    move |path, _, cx| {
+        store.update(cx, |store, cx| {
+            run(store, path);
+            cx.notify();
+        })
     }
 }
 
 fn status_icon(status: ToolStatus, cx: &App) -> impl IntoElement {
     let c = colors(cx);
     match status {
-        ToolStatus::Running => icons::symbol("circle.dashed", 11.).text_color(c.working),
-        ToolStatus::Succeeded => icons::symbol("checkmark", 11.).text_color(c.secondary),
-        ToolStatus::Failed => icons::symbol("xmark", 11.).text_color(c.danger),
+        ToolStatus::Running => icons::symbol("circle-dashed", 11.).text_color(c.working),
+        ToolStatus::Succeeded => icons::symbol("check", 11.).text_color(c.secondary),
+        ToolStatus::Failed => icons::symbol("x", 11.).text_color(c.danger),
     }
 }
 
@@ -1025,20 +1332,11 @@ fn summary(agents: &[AgentView]) -> String {
     .join(" · ")
 }
 
-/// "14:03", or with the day when it isn't today.
-fn clock(at: f64) -> String {
-    use chrono::{Local, TimeZone};
-    let Some(time) = Local.timestamp_opt(at as i64, 0).single() else { return String::new() };
-    if time.date_naive() == Local::now().date_naive() {
-        time.format("%H:%M").to_string()
-    } else {
-        time.format("%-d %b %Y, %H:%M").to_string()
-    }
-}
-
 impl Render for SidePanelView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
+        self.prune_tabs(cx);
+        let line_comment = line_comment::follow(&mut self.line_comment, &self.store, window, cx);
         let store = self.store.read(cx);
         let unavailable = store.panel_unavailable();
         let target = store.panel_target();
@@ -1050,8 +1348,17 @@ impl Render for SidePanelView {
                 Some(PanelTab::Diff) => self.diff_surface(&target, cx),
                 Some(PanelTab::Files) => self.files_surface(&target, cx),
                 Some(PanelTab::File(path)) => self.file_surface(&target, &path, cx),
+                Some(PanelTab::Change { turn, path }) => self.change_surface(&target, &turn, &path, cx),
                 Some(PanelTab::Agents) => self.agents_surface(cx),
-                None => self.launcher(&target, cx),
+                Some(tab @ PanelTab::PullRequest) => self.pull_request_tab(tab, None, window, cx),
+                Some(tab @ PanelTab::PullRequestNumber(number)) => self.pull_request_tab(tab, Some(number), window, cx),
+                Some(PanelTab::PullRequests) => self.pull_request_list_tab(window, cx),
+                Some(PanelTab::Linear) => self.linear_surface(&target, window, cx),
+                Some(tab @ PanelTab::LinearIssue { .. }) => {
+                    let PanelTab::LinearIssue { workspace, id, .. } = tab.clone() else { unreachable!() };
+                    self.linear_tab(tab, workspace, Some(id), window, cx)
+                }
+                Some(PanelTab::Blank(_)) | None => self.launcher(&target, cx),
             }
         } else {
             div().into_any_element()
@@ -1060,6 +1367,7 @@ impl Render for SidePanelView {
             .size_full()
             .relative()
             .bg(c.background)
+            .children(line_comment)
             .child(
                 div()
                     .size_full()

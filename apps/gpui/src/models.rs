@@ -10,7 +10,7 @@ use motile_core::git::Control;
 use motile_core::link::State;
 use motile_core::render::agents::AgentView;
 use motile_core::render::rows::Waiting;
-use motile_protocol::wire::{Access, Agent, GitStatus, ModelInfo, Queued, Thread};
+use motile_protocol::wire::{Access, Agent, GitStatus, ModelInfo, PullRequestSettings, Queued, Thread};
 use serde::Deserialize;
 
 pub fn agent_name(agent: Agent) -> &'static str {
@@ -40,6 +40,7 @@ pub struct Server {
     /// How the writer there is told to name branches, and what that is until it is changed.
     pub branch_instructions: String,
     pub default_branch_instructions: String,
+    pub pull_request_settings: PullRequestSettings,
     /// The agents installed on the server, with their versions.
     pub agents: HashMap<Agent, String>,
     /// Whether the server has ever told us about itself.
@@ -72,6 +73,7 @@ impl From<ServerView> for Server {
                 .as_ref()
                 .map(|info| info.branch_instructions.default.clone())
                 .unwrap_or_default(),
+            pull_request_settings: info.as_ref().map(|info| info.pull_request_settings).unwrap_or_default(),
             agents: info
                 .map(|info| info.agents.into_iter().filter_map(|agent| Some((agent.agent, agent.version?))).collect())
                 .unwrap_or_default(),
@@ -142,6 +144,11 @@ impl Project {
             icon_path: view.icon_path,
             created_at: project.created_at,
         }
+    }
+
+    /// Names the checkout git runs in from here: the project's folder or the thread's worktree.
+    pub fn checkout_id(&self) -> String {
+        format!("{}:{}", self.id, self.worktree.as_ref().map(|worktree| worktree.path.as_str()).unwrap_or(&self.path))
     }
 
     /// The project as the thread works in it: with the branch and the git state of its worktree,
