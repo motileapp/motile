@@ -81,6 +81,29 @@ struct PanelMessage: View {
     }
 }
 
+/// What the changes tab says of a folder that is no git repository, with the button that makes
+/// it one.
+private struct NoRepositoryMessage: View {
+    @Environment(AppStore.self) private var store
+    let projectID: String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("This folder isn't a git repository.")
+                .font(.ui(size: 12.5))
+                .foregroundStyle(Color.themeSecondary)
+                .multilineTextAlignment(.center)
+            if let project = store.project(projectID), store.canInitializeGit(of: project) {
+                ActionButton("Initialize git", icon: .gitBranch, pending: store.initializingGit.contains(project.id)) {
+                    store.initializeGit(in: project)
+                }
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct PanelLoading: View {
     var body: some View {
         Spinner(size: ControlSize.large.symbol)
@@ -398,7 +421,7 @@ struct DiffSurface: View {
                 ActionButton(icon: .rotateCw, help: "Read the changes again") { asked += 1 }
             }
             if !target.repository {
-                PanelMessage(text: "This folder isn't a git repository.")
+                NoRepositoryMessage(projectID: target.projectID)
             } else if target.awaitsWorktree {
                 PanelMessage(text: "Nothing has changed.")
             } else {

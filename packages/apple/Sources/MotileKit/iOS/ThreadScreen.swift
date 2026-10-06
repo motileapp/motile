@@ -69,6 +69,8 @@ struct ThreadScreen: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if let project = store.gitProject, let control = project.gitControl {
                 GitButton(project: project, control: control)
+            } else if let project = store.gitProject, store.canInitializeGit(of: project) {
+                InitializeGitButton(project: project)
             }
             Button {
                 store.sidePanel.isOpen.toggle()

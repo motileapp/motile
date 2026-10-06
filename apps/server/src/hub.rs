@@ -1095,6 +1095,16 @@ impl Hub {
         Ok(())
     }
 
+    pub async fn init_repository(&self, project_id: &str) -> anyhow::Result<()> {
+        let path = self.project_path(project_id).await?;
+        if git::in_repository(&path) {
+            bail!("This folder is already in a git repository.");
+        }
+        git::init(&path, &self.environment).await?;
+        self.read_git(&path, false).await;
+        Ok(())
+    }
+
     async fn refuse_while_working(&self, folder: &str) -> anyhow::Result<()> {
         let threads = self.threads.lock().await;
         let working = threads.values().any(|live| live.stored.thread.cwd == folder && live.activity.running);
@@ -1108,7 +1118,7 @@ impl Hub {
     /// client is told when it has changed.
     pub async fn git_status(&self, project_id: &str, thread_id: Option<&str>, fetch: bool) -> anyhow::Result<Message> {
         let path = self.git_folder(project_id, thread_id).await?;
-        let problem = match fetch {
+        let problem = match fetch && git::in_repository(&path) {
             true => git::fetch(&path, &self.environment).await,
             false => None,
         };

@@ -405,6 +405,10 @@ pub enum Request {
         #[serde(default)]
         create: bool,
     },
+    /// Makes the project's folder a git repository.
+    InitRepository {
+        project_id: String,
+    },
     /// What a new worktree on a branch made from `base` would start at. With `fetch` the remote
     /// is asked for `base` first. `WorktreeStart` answers.
     WorktreeStart {

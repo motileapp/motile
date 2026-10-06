@@ -130,6 +130,8 @@ final class AppStore {
     var pendingGit: PendingGit?
     /// The stage a git action is at, by the checkout it runs in.
     private(set) var gitStages: [String: GitStage] = [:]
+    /// The projects whose folders their servers are making git repositories.
+    private(set) var initializingGit: Set<String> = []
     private(set) var gitNotice: GitNotice?
     /// What a new worktree starts at, like `origin/main`, by `draftWorktreeKey`.
     private(set) var worktreeStarts: [String: String] = [:]
@@ -1184,6 +1186,21 @@ final class AppStore {
     /// Whether the project's server is new enough to commit, push and open pull requests.
     func canUseGit(of project: Project) -> Bool {
         (server(project.serverID)?.protocolVersion ?? 0) >= 4
+    }
+
+    /// Whether the project's folder is no git repository and its server can make it one.
+    func canInitializeGit(of project: Project) -> Bool {
+        project.branch == nil && project.git == nil && (server(project.serverID)?.protocolVersion ?? 0) >= 16
+    }
+
+    func initializeGit(in project: Project) {
+        guard initializingGit.insert(project.id).inserted else { return }
+        let request: JSON = ["type": "init_repository", "project_id": project.id]
+        core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
+            self?.initializingGit.remove(project.id)
+            guard case .failure(let error) = result else { return }
+            self?.errorMessage = error.message
+        }
     }
 
     /// Has the server read the repository git works in from here again, which the project then
