@@ -3,15 +3,17 @@
 //! of the threads that work in one of their own. Pull requests are GitHub's, through its `gh`
 //! program.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::Duration;
+use std::sync::{Arc, LazyLock};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, bail};
 use motile_protocol::wire::{Branch, Change, ChangedFile, GitStatus, PullRequest};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{ChildStdout, Command};
+use tokio::sync::Mutex;
 
 use crate::agents::environment::Environment;
 
@@ -285,11 +287,51 @@ pub(crate) fn on_path(program: &str, environment: &Environment) -> bool {
     path.split(':').any(|folder| Path::new(folder).join(&program).is_file())
 }
 
+/// The fetches of each repository, which all its worktrees share, so that one runs at a time:
+/// two at once fail to update the same remote branch.
+static FETCHES: LazyLock<std::sync::Mutex<HashMap<PathBuf, Fetches>>> = LazyLock::new(Default::default);
+
+type Fetches = Arc<Mutex<Option<Fetched>>>;
+
+struct Fetched {
+    started: Instant,
+    problem: Option<String>,
+}
+
+async fn fetches_of(folder: &str, environment: &Environment) -> Fetches {
+    let common = git(folder, environment, &["rev-parse", "--git-common-dir"]).await;
+    let repository = common
+        .ok()
+        .and_then(|common| Path::new(folder).join(common.trim()).canonicalize().ok())
+        .unwrap_or_else(|| PathBuf::from(folder));
+    FETCHES.lock().unwrap().entry(repository).or_default().clone()
+}
+
 /// Asks the remote for what is new. A remote that can't be reached leaves what was known, and
-/// what git said is returned.
+/// what git said is returned. A fetch of the repository that started after this was asked for
+/// answers it too.
 pub async fn fetch(folder: &str, environment: &Environment) -> Option<String> {
-    let fetch = command("git", folder, environment, &["fetch", "--quiet", "--no-tags"]);
-    run(fetch, None, FETCH_TIMEOUT).await.err().map(|error| format!("{error:#}"))
+    let asked = Instant::now();
+    let fetches = fetches_of(folder, environment).await;
+    let mut last = fetches.lock().await;
+    if let Some(fetched) = last.as_ref().filter(|fetched| fetched.started >= asked) {
+        return fetched.problem.clone();
+    }
+    let started = Instant::now();
+    let problem = fetch_retrying(folder, environment, &[]).await.err().map(|error| format!("{error:#}"));
+    *last = Some(Fetched { started, problem: problem.clone() });
+    problem
+}
+
+/// Fetches once more when a remote branch moved under the fetch, as one an agent or a terminal
+/// fetched at the same time makes it.
+async fn fetch_retrying(folder: &str, environment: &Environment, what: &[&str]) -> anyhow::Result<String> {
+    let arguments = [&["fetch", "--quiet", "--no-tags"], what].concat();
+    let attempt = || run(command("git", folder, environment, &arguments), None, FETCH_TIMEOUT);
+    match attempt().await {
+        Err(error) if error.to_string().to_lowercase().contains("cannot lock ref") => attempt().await,
+        outcome => outcome,
+    }
 }
 
 /// What GitHub's `gh` says of a pull request, and the commit at its head: the one with that
@@ -806,8 +848,9 @@ pub async fn start(repository: &str, environment: &Environment, base: &str, fetc
     let mut problem = None;
     if fetch {
         let refspec = format!("+refs/heads/{base}:{on_remote}");
-        let fetch = command("git", repository, environment, &["fetch", "--quiet", "--no-tags", &remote, &refspec]);
-        if let Err(error) = run(fetch, None, FETCH_TIMEOUT).await {
+        let fetches = fetches_of(repository, environment).await;
+        let _fetching = fetches.lock().await;
+        if let Err(error) = fetch_retrying(repository, environment, &[&remote, &refspec]).await {
             // A branch the remote never had can't be fetched, and needn't be.
             problem = known().await.then(|| format!("{error:#}"));
         }
@@ -1091,6 +1134,42 @@ mod tests {
         assert_eq!(subjects(&ours).await, "Ours again\nOurs\nTheirs\nStart\n");
         assert!(!rebasing(&ours, &environment).await);
         assert_eq!(status(&ours, &environment).await.unwrap().1, []);
+    }
+
+    #[tokio::test]
+    async fn the_worktrees_of_a_repository_fetch_at_once_without_failing() {
+        let environment = test_environment();
+        let folder = tempfile::tempdir().unwrap();
+        let path = |inside: &str| folder.path().join(inside).to_str().unwrap().to_string();
+        let (origin, ours, theirs) = (path("origin"), path("ours"), path("theirs"));
+        let root = path("");
+
+        git(&root, &environment, &["init", "--quiet", "--bare", "--initial-branch=main", &origin]).await.unwrap();
+        git(&root, &environment, &["clone", "--quiet", &origin, &ours]).await.unwrap();
+        git(&ours, &environment, &["checkout", "--quiet", "-B", "main"]).await.unwrap();
+        git(&ours, &environment, &["commit", "--quiet", "--allow-empty", "-m", "Start"]).await.unwrap();
+        git(&ours, &environment, &["push", "--quiet", "-u", "origin", "main"]).await.unwrap();
+        git(&root, &environment, &["clone", "--quiet", &origin, &theirs]).await.unwrap();
+        let worktrees: Vec<String> = (0..4).map(|index| path(&format!("worktree-{index}"))).collect();
+        for (index, worktree) in worktrees.iter().enumerate() {
+            let branch = format!("thread-{index}");
+            git(&ours, &environment, &["worktree", "add", "--quiet", "-b", &branch, worktree]).await.unwrap();
+        }
+        git(&theirs, &environment, &["commit", "--quiet", "--allow-empty", "-m", "Theirs"]).await.unwrap();
+        git(&theirs, &environment, &["push", "--quiet"]).await.unwrap();
+
+        let (first, second, third, fourth, started) = tokio::join!(
+            fetch(&worktrees[0], &environment),
+            fetch(&worktrees[1], &environment),
+            fetch(&worktrees[2], &environment),
+            fetch(&ours, &environment),
+            start(&worktrees[3], &environment, "main", true),
+        );
+
+        assert_eq!([first, second, third, fourth, started.problem], [None, None, None, None, None]);
+        assert_eq!(started.reference, "refs/remotes/origin/main");
+        let fetched = git(&ours, &environment, &["log", "-1", "--format=%s", "origin/main"]).await.unwrap();
+        assert_eq!(fetched, "Theirs\n");
     }
 
     #[test]
