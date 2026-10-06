@@ -4,6 +4,7 @@ import {
   CircleDashedIcon,
   CircleQuestionMarkIcon,
   EyeIcon,
+  GitBranchIcon,
   GitPullRequestIcon,
   RefreshCwIcon,
   SearchIcon,
@@ -184,11 +185,14 @@ function ThreadRow({
         {thread.title}
       </span>
       <span className="flex h-4 w-full items-center gap-1.5 text-tertiary">
-        <span className="truncate text-[11px]">{thread.branch}</span>
+        <span className="flex min-w-0 items-center gap-[3px] text-[11px]">
+          <GitBranchIcon className="size-[11px] shrink-0" />
+          <span className="truncate">{thread.branch}</span>
+        </span>
         <span className="ml-auto flex items-center gap-1.5">
           {thread.pullRequest && <PullRequest number={thread.pullRequest} />}
           <span className="flex items-center gap-[3px] text-[11px]">
-            <ServerIcon className="size-[9px]" />
+            <ServerIcon className="size-[11px]" />
             {thread.server.name}
           </span>
           <AgentIcon agent={thread.agent} />
