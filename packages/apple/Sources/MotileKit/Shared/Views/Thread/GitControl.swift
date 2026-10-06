@@ -3,7 +3,8 @@ import SwiftUI
 /// The git button in a thread's top bar. On the Mac its left half does the one thing the
 /// repository calls for, at once: commit, push, open a pull request, pull. Its right half opens
 /// the menu of all of them, where an item that can't run now says why. While an action runs, the
-/// button says which stage it is at. On iOS it is one symbol that opens the menu.
+/// button says which stage it is at. On iOS it is one symbol that opens the menu: the one of the
+/// thing the repository calls for, or of its pull request in the colour of its state.
 struct GitButton: View {
     @Environment(AppStore.self) private var store
     let project: Project
@@ -33,6 +34,11 @@ struct GitButton: View {
         return GitSymbol.symbol(for: quick.action)
     }
 
+    private func pullRequestColor(of quick: GitQuick) -> Color? {
+        guard quick.url != nil, let state = project.git?.pullRequest?.state else { return nil }
+        return state == .draft ? .themeText : state.color
+    }
+
     #if os(macOS)
     private var content: some View {
         let stage = store.gitStage(in: project)
@@ -60,7 +66,7 @@ struct GitButton: View {
     /// A pull request is in the colour of its state, and what has nothing to do is quiet.
     private func tint(of quick: GitQuick, at stage: GitStage?) -> Color? {
         if stage != nil { return .themeText }
-        if quick.url != nil, let pullRequest = project.git?.pullRequest { return pullRequest.state.color }
+        if let color = pullRequestColor(of: quick) { return color }
         guard quick.action != nil || quick.url != nil else { return .themeTertiary }
         return .themeText
     }
@@ -129,6 +135,10 @@ struct GitButton: View {
         } label: {
             if running {
                 Spinner(size: 15)
+            } else if let color = pullRequestColor(of: quick) {
+                Image(symbol(of: quick), size: 15).foregroundStyle(color)
+            } else if quick.action != nil || quick.url != nil {
+                Image(symbol(of: quick), size: 15)
             } else {
                 Image(.gitBranch, size: 15)
             }
