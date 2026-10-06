@@ -13,7 +13,7 @@ struct ActivityRow: View {
             Image(symbol, size: 12)
                 .foregroundStyle(entry.tone == .neutral ? Color.themeSecondary : entry.tone.color)
                 .frame(width: 18, height: Self.lineHeight)
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 byline
                 if !entry.commits.isEmpty {
                     commits
