@@ -25,6 +25,7 @@ struct ActivityRow: View {
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                        .padding(.bottom, 2)
                 }
                 if let subject = entry.subject, entry.thread == nil, !entry.reactions.isEmpty {
                     ReactionBar(reactions: entry.reactions) { kind, on in actions.react(subject, kind, on) }
