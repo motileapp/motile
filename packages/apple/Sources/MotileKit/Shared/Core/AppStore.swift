@@ -138,6 +138,8 @@ final class AppStore {
     @ObservationIgnored private var awaitedProjectID: String?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
+    /// Counts up when an empty draft is opened for a new thread.
+    private(set) var newThreadsStarted = 0
 
     // What the servers hold
     private(set) var servers: [Server] = []
@@ -1322,6 +1324,7 @@ final class AppStore {
     func startNewThread(in project: Project? = nil) {
         openEmptyDraft()
         if let project { setNewThreadProject(project.id) }
+        newThreadsStarted += 1
     }
 
     /// Where the client goes when what was open is gone.
