@@ -232,7 +232,7 @@ struct ThreadRow: View, Equatable {
                 }
                 Spacer(minLength: 6)
                 if let pullRequest = project?.pullRequest(of: thread) {
-                    PullRequestLabel(pullRequest: pullRequest)
+                    ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, open: open)
                 }
                 ThreadServerLabel(serverID: thread.serverID)
                 AgentIcon(agent: thread.agent, size: 12)
@@ -248,6 +248,24 @@ struct ThreadRow: View, Equatable {
         .button(.highlight(radius: 8, selected: selected, inset: rowMargin)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
+    }
+}
+
+/// A thread's pull request in its row. A click opens the thread and then the pull request's
+/// tab, as View PR does.
+private struct ThreadPullRequestLabel: View {
+    @Environment(AppStore.self) private var store
+    let thread: ThreadInfo
+    let pullRequest: PullRequest
+    var colored = true
+    let open: (Selection) -> Void
+
+    var body: some View {
+        PullRequestLabel(pullRequest: pullRequest, colored: colored) {
+            open(.thread(thread.id))
+            guard let url = URL(string: pullRequest.url) else { return }
+            store.showPullRequest(url)
+        }
     }
 }
 
@@ -513,7 +531,7 @@ struct DoneRow: View, Equatable {
                 .foregroundStyle(Color.themeSecondary)
             Spacer(minLength: 6)
             if let pullRequest {
-                PullRequestLabel(pullRequest: pullRequest, colored: false)
+                ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, colored: false, open: open)
             }
             if hovering {
                 ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
