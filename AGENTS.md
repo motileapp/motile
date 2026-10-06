@@ -171,7 +171,7 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   sections and a search of their groups in a sidebar (`SettingsSidebar.swift`), the open
   section's page (`SettingsPage.swift`), and `UsageView.swift`, the Usage section: a chart of
   cost or tokens by agent, and the models, projects and kinds of token under it. The Mac lays
-  them out in `Mac/SettingsRoute.swift`, iOS in `iOS/SettingsScreen.swift`.
+  them out in `Mac/SettingsRoute.swift`, iOS in `iOS/SettingsSheet.swift`, a sheet.
 - `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
   requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
   `LineCommentSheet.swift`, `PullRequestParts.swift`) and Linear (`LinearView.swift`).

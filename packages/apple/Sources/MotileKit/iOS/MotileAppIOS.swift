@@ -139,6 +139,7 @@ private enum RootSheet: Identifiable {
     case commit(Project)
     case addServer
     case panel(PanelPage)
+    case settings
     case threadSettings
 
     var id: String {
@@ -147,7 +148,16 @@ private enum RootSheet: Identifiable {
         case .commit(let project): "commit-\(project.id)"
         case .addServer: "add-server"
         case .panel: "panel"
+        case .settings: "settings"
         case .threadSettings: "thread-settings"
+        }
+    }
+
+    /// The settings lie on the client's own background, as on the Mac; the rest on the next one.
+    var surface: Surface {
+        switch self {
+        case .settings: .background
+        default: .secondary
         }
     }
 }
@@ -165,12 +175,6 @@ struct RootView: View {
                 ConnectServerView(isFirst: true)
             } else {
                 MainScreen()
-                    .accessibilityHidden(store.settings != nil)
-                    .overlay {
-                        if store.settings != nil {
-                            SettingsStack()
-                        }
-                    }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -194,12 +198,14 @@ struct RootView: View {
                     CommandPanel(start: page)
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
+                case .settings:
+                    SettingsSheet()
                 case .threadSettings:
                     ThreadSettingsSheet()
                 }
             }
-            .presentationBackground(Color.themeBackgroundSecondary)
-            .environment(\.surface, .secondary)
+            .presentationBackground(sheet.surface == .background ? Color.themeBackground : Color.themeBackgroundSecondary)
+            .environment(\.surface, sheet.surface)
         }
         .fullScreenCover(isPresented: Binding(get: { store.viewing != nil }, set: { if !$0 { store.closeViewer() } })) {
             if let viewing = store.viewing {
@@ -223,6 +229,7 @@ struct RootView: View {
             if let project = store.committingProject { return .commit(project) }
             if store.showsAddServer { return .addServer }
             if let page = store.panel { return .panel(page) }
+            if store.settings != nil { return .settings }
             if store.showsThreadSettings { return .threadSettings }
             return nil
         } set: { new in
@@ -231,6 +238,7 @@ struct RootView: View {
             if store.committingProject != nil { return store.committingProject = nil }
             if store.showsAddServer { return store.showsAddServer = false }
             if store.panel != nil { return store.closePanel() }
+            if store.settings != nil { return store.closeSettings() }
             store.showsThreadSettings = false
             store.showsBranches = false
         }
