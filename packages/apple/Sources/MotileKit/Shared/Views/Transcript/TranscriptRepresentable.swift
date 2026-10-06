@@ -51,7 +51,7 @@ struct TranscriptRepresentable {
         let hooks = TranscriptModel.Hooks(
             reset: { [weak view] rows in view?.reset(rows: rows) },
             splice: { [weak view] start, remove, rows in view?.splice(start: start, remove: remove, rows: rows) },
-            pending: { [weak view] row, start in view?.setPending(row, from: start) },
+            pending: { [weak view] row in view?.setPending(row) },
             activity: { [weak view] activity in view?.setActivity(activity) },
             recolor: { [weak view] rowID, content in view?.recolor(rowID: rowID, content: content) },
             earlier: { [weak view] earlier in view?.setEarlier(earlier) },

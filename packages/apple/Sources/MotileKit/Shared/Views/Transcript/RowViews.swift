@@ -128,12 +128,6 @@ class RowView: FlippedView {
     }
 }
 
-/// A row that shows a message of the user's in a bubble.
-protocol MessageRowView: RowView {
-    /// Where the message's text starts, in the row's coordinates.
-    var messageStart: CGPoint { get }
-}
-
 /// How a message fits its bubble in a column `width` wide. The bubble is as wide as its text, up
 /// to the widest it may be, and the files stand above the text with their own room around them.
 struct BubbleFit {
@@ -156,13 +150,11 @@ struct BubbleFit {
     }
 }
 
-final class UserRowView: RowView, MessageRowView {
+final class UserRowView: RowView {
     private let bubble = SurfaceView()
     private let text = RowTextView.make()
     private let attachments = AttachedFilesView()
     private let meta = MessageMeta(trailing: true, tooltip: "Copy message")
-
-    var messageStart: CGPoint { CGPoint(x: bubble.frame.minX + text.frame.minX, y: bubble.frame.minY + text.frame.minY) }
     private var files: [AttachedFile] = []
     private var pending = false
 
@@ -235,9 +227,7 @@ final class UserRowView: RowView, MessageRowView {
 /// A message that waits for the agent: what it says, how it waits, and the buttons that steer
 /// the turn with it or take it back into the composer. It stands where the user's messages do,
 /// dotted around instead of filled.
-final class QueuedRowView: RowView, MessageRowView {
-    var messageStart: CGPoint { CGPoint(x: bubble.frame.minX + text.frame.minX, y: bubble.frame.minY + text.frame.minY) }
-
+final class QueuedRowView: RowView {
     /// The strip under the message, down to the bubble's edge, that holds the status and the buttons.
     static let footHeight: CGFloat = buttonGap + RowButton.metrics.height + buttonMargin
     private static let radius: CGFloat = 18

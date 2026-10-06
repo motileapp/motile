@@ -112,15 +112,6 @@ enum Platform {
         #endif
     }
 
-    /// The view over everything in the view's window, for what moves across the whole of it.
-    static func overlay(above view: PlatformView) -> PlatformView? {
-        #if os(macOS)
-        view.window?.contentView
-        #else
-        view.window
-        #endif
-    }
-
     /// Takes the keyboard away from whatever has it.
     static func endEditing() {
         #if os(macOS)

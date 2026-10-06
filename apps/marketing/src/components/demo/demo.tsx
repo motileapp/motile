@@ -42,10 +42,10 @@ export function Demo() {
       status: { kind: "idle", ago: "now" },
     }))
 
-  const send = (text: string, from: { x: number; y: number }) => {
+  const send = (text: string) => {
     const id = thread.id
     update(id, (one) => ({
-      items: [...one.items, { kind: "user", text, from }],
+      items: [...one.items, { kind: "user", text }],
       status: { kind: "working", since: -seconds },
     }))
     setTimeout(() => {
