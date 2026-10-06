@@ -140,27 +140,17 @@ extension AppStore {
 }
 
 #if os(macOS)
-/// Adds a project or starts a thread: beside the sidebar's search, or in the top bar while the
-/// sidebar is hidden.
+/// Adds a project or starts a thread, beside the sidebar's search.
 struct ProjectButtons: View {
     @Environment(AppStore.self) private var store
-    var inTopBar = false
 
     var body: some View {
         HStack(spacing: 0) {
-            button(.folderPlus, help: "Add a project") { store.addProject() }
-            button(.squarePen, help: "New thread (⌘N). ⇧-click starts one in this project") {
+            ActionButton(icon: .folderPlus, help: "Add a project") { store.addProject() }
+            ActionButton(icon: .squarePen, help: "New thread (⌘N). ⇧-click starts one in this project") {
                 guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true else { return store.newThread() }
                 store.startNewThread(in: store.composerProject)
             }
-        }
-    }
-
-    @ViewBuilder private func button(_ symbol: Symbol, help: String, action: @escaping () -> Void) -> some View {
-        if inTopBar {
-            ToolbarButton(symbol: symbol, help: help, action: action)
-        } else {
-            ActionButton(icon: symbol, help: help, action: action)
         }
     }
 }

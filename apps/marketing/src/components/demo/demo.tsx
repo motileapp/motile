@@ -81,7 +81,6 @@ export function Demo() {
               label="Show or hide the sidebar"
               onClick={() => setSidebarShown(!sidebarShown)}
             />
-            {!sidebarShown && <ProjectButtons />}
           </div>
           <div className="absolute top-2.5 right-2.5 z-20 flex">
             {panel !== "closed" && (
@@ -105,7 +104,7 @@ export function Demo() {
               <div className="h-[52px] shrink-0" />
               <div className="min-h-0 flex-1">
                 <Sidebar
-                  actions={<ProjectButtons inline />}
+                  actions={<ProjectButtons />}
                   threads={threads}
                   selectedId={thread.id}
                   elapsed={elapsed}
@@ -124,7 +123,7 @@ export function Demo() {
             <div
               className={cn(
                 "flex h-[52px] shrink-0 items-center gap-2",
-                sidebarShown ? "pl-5" : "pl-[200px]",
+                sidebarShown ? "pl-5" : "pl-[116px]",
                 panel === "closed" ? "pr-[54px]" : "pr-2"
               )}
             >
@@ -211,11 +210,11 @@ export function Demo() {
   )
 }
 
-function ProjectButtons({ inline = false }: { inline?: boolean }) {
+function ProjectButtons() {
   return (
     <>
-      <WindowButton icon={FolderPlusIcon} label="Add a project" inline={inline} />
-      <WindowButton icon={SquarePenIcon} label="New thread" inline={inline} />
+      <WindowButton icon={FolderPlusIcon} label="Add a project" inline />
+      <WindowButton icon={SquarePenIcon} label="New thread" inline />
     </>
   )
 }
