@@ -23,8 +23,6 @@ final class AgoClock {
 /// The drafts, then every active thread on every server in one list, with the ones marked done on
 /// a shelf at the bottom.
 struct SidebarView: View {
-    static let rowInset = sidebarRowInset
-
     @Environment(AppStore.self) private var store
     @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
     @State private var renaming: ThreadInfo?
@@ -38,8 +36,11 @@ struct SidebarView: View {
         let projects = store.projectsByID
         let selection = store.selection
         VStack(spacing: 0) {
-            SearchField(text: $search)
-                .padding(.horizontal, 10)
+            HStack(spacing: 8) {
+                SearchField(text: $search)
+                ProjectButtons()
+            }
+            .padding(.horizontal, 10)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
             GeometryReader { list in
@@ -137,6 +138,33 @@ extension AppStore {
         search.isEmpty ? threads : threads.filter { matches($0, search: search) }
     }
 }
+
+#if os(macOS)
+/// Adds a project or starts a thread: beside the sidebar's search, or in the top bar while the
+/// sidebar is hidden.
+struct ProjectButtons: View {
+    @Environment(AppStore.self) private var store
+    var inTopBar = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            button(.folderPlus, help: "Add a project") { store.addProject() }
+            button(.squarePen, help: "New thread (⌘N). ⇧-click starts one in this project") {
+                guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true else { return store.newThread() }
+                store.startNewThread(in: store.composerProject)
+            }
+        }
+    }
+
+    @ViewBuilder private func button(_ symbol: Symbol, help: String, action: @escaping () -> Void) -> some View {
+        if inTopBar {
+            ToolbarButton(symbol: symbol, help: help, action: action)
+        } else {
+            ActionButton(icon: symbol, help: help, action: action)
+        }
+    }
+}
+#endif
 
 struct SearchField: View {
     @Binding var text: String
@@ -691,8 +719,8 @@ struct ServerLine: View {
 }
 
 #if os(macOS)
-/// The servers and how the client reaches them, and the ways to the settings, the usage and a
-/// new version of the client.
+/// The servers and how the client reaches them, and the ways to the settings, the usage (or back
+/// from it) and a new version of the client.
 private struct SidebarFooter: View {
     @Environment(AppStore.self) private var store
 
@@ -703,9 +731,15 @@ private struct SidebarFooter: View {
             }
             ForEach(store.servers) { ServerLine(server: $0) }
             HStack(spacing: 2) {
-                ActionButton("Settings", icon: .settings, help: "Settings (⌘,)", variant: .ghost, size: .small) { store.openSettings() }
-                ActionButton("Usage", icon: .chartColumn, help: "What the agents spent and what is left of their plans", variant: .ghost, size: .small) {
-                    store.openUsage()
+                if store.showsUsage {
+                    ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, size: .small, fills: true, alignment: .leading) {
+                        store.closeRoute()
+                    }
+                } else {
+                    ActionButton("Settings", icon: .settings, help: "Settings (⌘,)", variant: .ghost, size: .small) { store.openSettings() }
+                    ActionButton("Usage", icon: .chartColumn, help: "What the agents spent and what is left of their plans", variant: .ghost, size: .small) {
+                        store.openUsage()
+                    }
                 }
                 Spacer(minLength: 0)
                 ActionButton(icon: .refreshCw, help: "Check for Updates", size: .small, pending: store.updater.state == .checking) {

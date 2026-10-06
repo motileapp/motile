@@ -102,11 +102,10 @@ export function Demo() {
 
           {sidebarShown && (
             <aside className="flex w-[268px] shrink-0 flex-col border-r">
-              <div className="flex h-[52px] shrink-0 justify-end px-2 pt-2.5">
-                <ProjectButtons />
-              </div>
+              <div className="h-[52px] shrink-0" />
               <div className="min-h-0 flex-1">
                 <Sidebar
+                  actions={<ProjectButtons inline />}
                   threads={threads}
                   selectedId={thread.id}
                   elapsed={elapsed}
@@ -212,11 +211,11 @@ export function Demo() {
   )
 }
 
-function ProjectButtons() {
+function ProjectButtons({ inline = false }: { inline?: boolean }) {
   return (
     <>
-      <WindowButton icon={FolderPlusIcon} label="Add a project" />
-      <WindowButton icon={SquarePenIcon} label="New thread" />
+      <WindowButton icon={FolderPlusIcon} label="Add a project" inline={inline} />
+      <WindowButton icon={SquarePenIcon} label="New thread" inline={inline} />
     </>
   )
 }
@@ -224,10 +223,12 @@ function ProjectButtons() {
 function WindowButton({
   icon: Icon,
   label,
+  inline = false,
   onClick,
 }: {
   icon: LucideIcon
   label: string
+  inline?: boolean
   onClick?: () => void
 }) {
   return (
@@ -236,7 +237,10 @@ function WindowButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="m-0.5 flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground"
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground",
+        !inline && "m-0.5"
+      )}
     >
       <Icon className="size-3.5" />
     </button>

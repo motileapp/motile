@@ -107,6 +107,8 @@ struct ControlLabel: View {
     var pending = false
     var pendingTitle: String?
     var fills = false
+    /// Where its words sit when it fills.
+    var alignment = HorizontalAlignment.center
     /// The symbol's size where it isn't the one that goes with `size`.
     var symbolSize: CGFloat?
 
@@ -128,7 +130,7 @@ struct ControlLabel: View {
                     .opacity(0.6)
             }
         }
-        .frame(maxWidth: fills ? .infinity : nil)
+        .frame(maxWidth: fills ? .infinity : nil, alignment: Alignment(horizontal: alignment, vertical: .center))
         .padding(.leading, wordless ? 0 : size.padding - (icon == nil ? 0 : size.symbolOutset))
         .padding(.trailing, wordless ? 0 : size.padding)
         .frame(minWidth: size.height)
@@ -245,6 +247,7 @@ struct ActionButton: View {
     private let pending: Bool
     private let pendingTitle: String?
     private let fills: Bool
+    private var alignment = HorizontalAlignment.center
     private let symbolSize: CGFloat?
     private let margin: EdgeInsets
     private let action: () -> Void
@@ -253,8 +256,8 @@ struct ActionButton: View {
         _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .secondary,
         size: ControlSize = .regular, symbolSize: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
-        fills: Bool = false, opens: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
-        margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
+        fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, joined: HorizontalEdge.Set = [],
+        tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
     ) {
         chevron = opens
         self.title = title
@@ -264,6 +267,7 @@ struct ActionButton: View {
         self.pending = pending
         self.pendingTitle = pendingTitle
         self.fills = fills
+        self.alignment = alignment
         self.symbolSize = symbolSize
         self.margin = margin
         self.action = action
@@ -305,7 +309,7 @@ struct ActionButton: View {
         Button(action: action) {
             ControlLabel(
                 title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, pendingTitle: pendingTitle, fills: fills,
-                symbolSize: symbolSize
+                alignment: alignment, symbolSize: symbolSize
             )
             .padding(reach.around)
         }
@@ -336,12 +340,12 @@ struct ActionMenu<Content: View>: View {
     init(
         _ title: String?, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .ghost,
         size: ControlSize = .regular, symbolSize: CGFloat? = nil, pending: Bool = false, round: Bool = false,
-        joined: HorizontalEdge.Set = [], margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
+        joined: HorizontalEdge.Set = [], tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture)
         self.help = help
-        look = ControlLook(variant: variant, size: size, round: round, joined: joined)
+        look = ControlLook(variant: variant, size: size, round: round, joined: joined, tint: tint)
         chevron = true
         self.pending = pending
         self.symbolSize = symbolSize

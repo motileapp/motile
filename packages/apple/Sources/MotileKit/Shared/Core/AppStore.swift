@@ -1442,6 +1442,7 @@ final class AppStore {
 
     func select(_ new: Selection) {
         lastSelection = nil
+        showsUsage = false
         let reopens = selectedThread != nil && openThreadID == nil
         guard new != selection || reopens else { return }
         if let open = openThreadID {
