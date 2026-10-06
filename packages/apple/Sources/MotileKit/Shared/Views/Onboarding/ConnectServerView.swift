@@ -5,6 +5,7 @@ import SwiftUI
 struct ConnectServerView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.surface) private var surface
     let isFirst: Bool
     @State private var copied = false
 
@@ -84,20 +85,18 @@ struct ConnectServerView: View {
         }
     }
 
+    /// Puts the first line of the command level with the middle of the buttons.
+    private static let textInset = ((ControlSize.regular.height - PlatformFont.uiMono(12.5).textLineHeight) / 2).rounded()
+
     private var commandBox: some View {
-        #if os(macOS)
-        let layout = AnyLayout(HStackLayout(alignment: .top, spacing: 8))
-        #else
-        // A phone has no room for the buttons beside the command, and can send it to the machine.
-        let layout = AnyLayout(VStackLayout(alignment: .trailing, spacing: 8))
-        #endif
-        return layout {
+        HStack(alignment: .top, spacing: 8) {
             Text(store.enrollToken.map { Self.breakingAnywhere($0.command) } ?? "Preparing the command…")
                 .font(.ui(size: 12.5, design: .monospaced))
                 .foregroundStyle(store.enrollToken == nil ? Color.themeTertiary : Color.themeText)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.vertical, .leading], Self.textInset)
             HStack(spacing: 4) {
                 #if os(iOS)
                 ShareLink(item: store.enrollToken?.command ?? "") {
@@ -115,10 +114,12 @@ struct ConnectServerView: View {
             }
             .disabled(store.enrollToken == nil)
         }
-        .padding(.leading, 14)
-        .padding([.vertical, .trailing], 10)
+        .padding(scaled(4))
         .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Color.themeBorder))
+        .overlay {
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(surface == .background ? Color.themeBorder : Color.themeBorderSecondary, lineWidth: 1)
+        }
     }
 
     /// Lets the command wrap between any two characters, as CSS's `break-all` does. Not selectable,

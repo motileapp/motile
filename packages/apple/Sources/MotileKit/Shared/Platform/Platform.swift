@@ -174,6 +174,15 @@ extension PlatformFont {
         ("M" as NSString).size(withAttributes: [.font: self]).width
         #endif
     }
+
+    /// How tall a line of text in it is laid out.
+    var textLineHeight: CGFloat {
+        #if os(macOS)
+        NSLayoutManager().defaultLineHeight(for: self)
+        #else
+        lineHeight
+        #endif
+    }
 }
 
 extension PlatformColor {
