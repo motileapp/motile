@@ -409,10 +409,7 @@ private struct LinearNewIssue: View {
                 .font(.ui(size: 15, weight: .semibold))
             InputField("Title", text: $title)
             TextArea("Add a description", text: $description, lines: 4, fills: true)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) { properties(teams: teams, picked: picked, states: states, state: state, users: users) }
-                VStack(alignment: .leading, spacing: 6) { properties(teams: teams, picked: picked, states: states, state: state, users: users) }
-            }
+            FlowRow { properties(teams: teams, picked: picked, states: states, state: state, users: users) }
             if let error = linear.error {
                 Text(error)
                     .font(.ui(size: 12.5))

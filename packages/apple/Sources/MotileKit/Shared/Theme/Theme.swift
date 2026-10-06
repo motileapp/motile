@@ -246,6 +246,14 @@ enum Surface {
     }
 
     var color: Color { Color(platform: platform) }
+
+    /// The border of what lies on it.
+    var border: Color {
+        switch self {
+        case .background, .sheet: .themeBorder
+        default: .themeBorderSecondary
+        }
+    }
 }
 
 extension EnvironmentValues {
