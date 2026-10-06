@@ -7,5 +7,12 @@ extension View {
             .allowsHitTesting(!away)
             .accessibilityHidden(away)
             .disabled(away)
+            .transformEnvironment(\.putAway) { $0 = $0 || away }
     }
+}
+
+extension EnvironmentValues {
+    /// Whether the view is put away. The AppKit views in it hide, so that they keep no cursor,
+    /// hover or keys of their own under what covers them.
+    @Entry var putAway = false
 }

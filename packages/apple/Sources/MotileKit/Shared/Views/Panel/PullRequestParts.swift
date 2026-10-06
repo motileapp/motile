@@ -231,6 +231,7 @@ extension ProseText: NSViewRepresentable {
     }
 
     func updateNSView(_ view: RowTextView, context: Context) {
+        view.isHidden = context.environment.putAway
         view.content = text
     }
 
