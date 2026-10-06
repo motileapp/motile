@@ -14,7 +14,6 @@ ALLOWED=(
     Shared/Views/UI/
     Shared/Views/Sidebar/SidebarView.swift
     Mac/ThreadPane.swift
-    Mac/MediaViewer.swift
     iOS/ThreadScreen.swift
     iOS/ThreadSettingsSheet.swift
     iOS/SidebarScreen.swift
