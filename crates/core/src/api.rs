@@ -248,10 +248,13 @@ pub enum Command {
         servers: Option<Vec<String>>,
     },
     /// How much of their plans the agents' logins on the connected `servers`, or all of them,
-    /// have used, read anew with `refresh`: `sections`, each a `limits::Section`.
+    /// have used, read anew with `refresh`: `sections`, each a `limits::Section`. `kept` answers
+    /// at once with what was last read, `stale` when some of it is old or missing.
     Limits {
         #[serde(default)]
         refresh: bool,
+        #[serde(default)]
+        kept: bool,
         #[serde(default)]
         servers: Option<Vec<String>>,
     },

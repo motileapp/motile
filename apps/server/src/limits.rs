@@ -22,6 +22,18 @@ pub async fn read(environment: &Environment) -> Vec<AgentLimits> {
     [claude, codex].into_iter().flatten().collect()
 }
 
+/// The new read, with what an agent said last time kept for it where it couldn't be read now.
+pub fn kept(read: Vec<AgentLimits>, before: &[AgentLimits]) -> Vec<AgentLimits> {
+    read.into_iter()
+        .map(|limits| {
+            let Some(error) = limits.error.clone() else { return limits };
+            let last = before.iter().find(|last| last.agent == limits.agent && last.error.is_none());
+            let Some(last) = last else { return limits };
+            AgentLimits { error: Some(error), ..last.clone() }
+        })
+        .collect()
+}
+
 async fn read_agent(environment: &Environment, agent: Agent) -> Option<AgentLimits> {
     environment.executable(agent)?;
     let read = match agent {
@@ -297,6 +309,36 @@ mod tests {
             limits.windows.iter().map(|window| (window.label.as_str(), window.used_percent)).collect();
         assert_eq!(windows, [("Session", 1.0), ("Weekly", 4.0)]);
         assert_eq!(limits.windows[1].window_secs, Some(WEEK_SECS));
+    }
+
+    #[test]
+    fn an_agent_that_cant_be_read_keeps_what_it_said_last_time() {
+        let read = |agent, used_percent, error: Option<&str>| AgentLimits {
+            agent,
+            account: Some("a@b.c".into()),
+            plan: Some("Max".into()),
+            windows: error
+                .is_none()
+                .then(|| LimitWindow {
+                    label: "Session".into(),
+                    used_percent,
+                    resets_at: None,
+                    window_secs: Some(SESSION_SECS),
+                    warning: false,
+                })
+                .into_iter()
+                .collect(),
+            reset_credits: 0,
+            error: error.map(String::from),
+        };
+        let before = [read(Agent::Claude, 10.0, None), read(Agent::Codex, 20.0, None)];
+        let now = [read(Agent::Claude, 0.0, Some("It didn't answer in time.")), read(Agent::Codex, 30.0, None)];
+        let merged = kept(now.to_vec(), &before);
+        assert_eq!(merged[0].windows, before[0].windows);
+        assert_eq!(merged[0].error.as_deref(), Some("It didn't answer in time."));
+        assert_eq!(merged[1], now[1]);
+        let first = kept(vec![read(Agent::Claude, 0.0, Some("no"))], &[]);
+        assert!(first[0].windows.is_empty());
     }
 
     #[test]
