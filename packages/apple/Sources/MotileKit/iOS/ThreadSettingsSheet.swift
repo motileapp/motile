@@ -6,6 +6,7 @@ import SwiftUI
 struct ThreadSettingsSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.surface) private var surface
     /// The agents whose models are listed. The others are only their names until they are tapped.
     @State private var listed: Set<Agent> = []
 
@@ -21,8 +22,6 @@ struct ThreadSettingsSheet: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(Color.themeBackgroundSecondary)
-            .environment(\.surface, .secondary)
             .navigationTitle("Thread settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -77,7 +76,7 @@ struct ThreadSettingsSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .listRowBackground(Color.themeBackgroundTertiary)
+                .listRowBackground(surface.next.color)
             }
         }
     }
@@ -104,7 +103,7 @@ struct ThreadSettingsSheet: View {
         } footer: {
             Text(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail)
         }
-        .listRowBackground(Color.themeBackgroundTertiary)
+        .listRowBackground(surface.next.color)
     }
 
     /// Where the thread works: the server, the folder or a worktree of its own, and the branch
@@ -144,7 +143,7 @@ struct ThreadSettingsSheet: View {
                 }
             }
         }
-        .listRowBackground(Color.themeBackgroundTertiary)
+        .listRowBackground(surface.next.color)
     }
 }
 #endif
