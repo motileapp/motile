@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::{Context, bail};
 use motile_protocol::wire::{
-    Check, CheckStatus, EventKind, FileViewed, Label, MergeMethod, Mergeable, PullRequest, PullRequestAction,
+    Check, CheckStatus, EventKind, FileViewed, GitStage, Label, MergeMethod, Mergeable, PullRequest, PullRequestAction,
     PullRequestDetail, PullRequestEdit, PullRequestEvent, PullRequestState, PullRequestSummary, Reaction, ReactionKind,
     ReviewDecision, ReviewThread, ReviewVerdict, Reviewer, Side, Stack, StackLayer, ThreadComment, Verdict, Viewer,
 };
@@ -397,6 +397,20 @@ pub async fn act(
         return Ok((format!("Opened PR #{opened} to revert PR #{number}"), url));
     }
     Ok((done(number, action, method), None))
+}
+
+/// What the threads that follow the pull request show while `action` runs.
+pub fn stage(action: PullRequestAction) -> Option<GitStage> {
+    use PullRequestAction::*;
+    match action {
+        Merge => Some(GitStage::Merge),
+        EnableAutoMerge | DisableAutoMerge => Some(GitStage::AutoMerge),
+        UpdateBranch => Some(GitStage::UpdateBranch),
+        Close => Some(GitStage::Close),
+        Reopen => Some(GitStage::Reopen),
+        Revert => Some(GitStage::Revert),
+        Ready | Draft | Comment | Approve | RequestChanges => None,
+    }
 }
 
 /// The patch of what the pull request changes, and whether it was cut for being too long.

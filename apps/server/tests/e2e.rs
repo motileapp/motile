@@ -2057,6 +2057,8 @@ async fn a_linked_pull_request_is_watched_for_the_agent_until_it_merges_and_sett
         text: None,
     };
     assert!(matches!(connection.request(&merge).await.unwrap(), Message::PullRequestDone { .. }));
+    let merging = thread_where(&mut list, |thread| thread.git_stage.is_some()).await;
+    assert_eq!(merging.git_stage, Some(GitStage::Merge));
     let settled = thread_where(&mut list, |thread| thread.done_at.is_some()).await;
     assert!(!settled.watching && settled.pull_request.is_some_and(|found| found.merged));
 

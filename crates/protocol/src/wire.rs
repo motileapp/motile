@@ -1307,6 +1307,16 @@ pub enum GitStage {
     PullRequestText,
     PullRequest,
     Pull,
+    Merge,
+    /// Turns GitHub's auto-merge on or off.
+    AutoMerge,
+    UpdateBranch,
+    Close,
+    Reopen,
+    Revert,
+    /// A stage of a newer server.
+    #[serde(other)]
+    Unknown,
 }
 
 /// A model an agent on the server can run, and the choices it offers.
@@ -1660,5 +1670,12 @@ mod tests {
         assert_eq!(update, Request::UpdateServer { when: None });
         assert!(matches!(welcome, Message::Welcome { server, .. } if server.version == "0.1.6"));
         assert_eq!(kind, crate::auth_api::DeviceKind::Server);
+    }
+
+    #[test]
+    fn a_stage_of_a_newer_server_is_read_as_unknown() {
+        let stage: GitStage = serde_json::from_value(serde_json::json!("squashing")).unwrap();
+
+        assert_eq!(stage, GitStage::Unknown);
     }
 }

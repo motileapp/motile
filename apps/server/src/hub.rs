@@ -1199,11 +1199,32 @@ impl Hub {
         text: Option<&str>,
     ) -> anyhow::Result<Message> {
         let folder = self.github_folder(project_id, thread_id).await?;
-        let (title, url) = pull_requests::act(&folder, &self.environment, number, action, method, text).await?;
+        let stage = pull_requests::stage(action);
+        let following = match stage {
+            Some(_) => self.threads_following(project_id, number).await,
+            None => Vec::new(),
+        };
+        for thread_id in &following {
+            self.set_git_stage(Some(thread_id), stage).await;
+        }
+        let acted = pull_requests::act(&folder, &self.environment, number, action, method, text).await;
+        for thread_id in &following {
+            self.set_git_stage(Some(thread_id), None).await;
+        }
+        let (title, url) = acted?;
         let pull_request = pull_requests::detail(&folder, &self.environment, number).await?;
         self.keep_pull_request_of(&folder, &pull_request.pull_request).await;
         self.read_git(&folder, true).await;
         Ok(Message::PullRequestDone { title, url, pull_request: Box::new(pull_request) })
+    }
+
+    /// The project's threads whose pull request has that number.
+    async fn threads_following(&self, project_id: &str, number: u64) -> Vec<String> {
+        let threads = self.threads.lock().await;
+        let following = threads.values().map(|live| &live.stored.thread).filter(|thread| {
+            thread.project_id == project_id && thread.pull_request.as_ref().is_some_and(|found| found.number == number)
+        });
+        following.map(|thread| thread.id.clone()).collect()
     }
 
     /// Changes the pull request as the edit says, then reads it again.
