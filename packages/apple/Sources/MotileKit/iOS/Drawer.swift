@@ -60,6 +60,9 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     private var panelShown = false
 
     private let card = UIView()
+    /// The card's left and right edges, lined while it is aside; its top and bottom reach the
+    /// screen's and are not.
+    private let cardEdges = [UIView(), UIView()]
     /// Behind the card, since the card clips: it casts the card's shadow on the side it uncovers.
     private let cardShadow = UIView()
     /// Over the card while a side shows: it dims the thread and takes the tap that closes.
@@ -112,9 +115,9 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         cardShadow.layer.shadowColor = UIColor.black.cgColor
         cardShadow.layer.shadowOffset = .zero
         cardShadow.layer.shadowRadius = 20
-        paintCardEdges()
+        paintCardShadow()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: Self, _: UITraitCollection) in
-            controller.paintCardEdges()
+            controller.paintCardShadow()
         }
         view.addSubview(cardShadow)
         view.addSubview(card)
@@ -128,14 +131,18 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         shade.isHidden = true
         shade.addAction(UIAction { [weak self] _ in self?.setOpen(nil, animated: true) }, for: .touchUpInside)
         card.addSubview(shade)
+        for edge in cardEdges {
+            edge.backgroundColor = Theme.border
+            edge.isUserInteractionEnabled = false
+            card.addSubview(edge)
+        }
 
         pan.addTarget(self, action: #selector(panned(_:)))
         pan.delegate = self
         view.addGestureRecognizer(pan)
     }
 
-    private func paintCardEdges() {
-        card.layer.borderColor = Theme.border.resolvedColor(with: traitCollection).cgColor
+    private func paintCardShadow() {
         cardShadow.layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.5 : 0.16
     }
 
@@ -151,8 +158,10 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         panel.view.frame = CGRect(x: bounds.width - panelWidth, y: 0, width: panelWidth, height: bounds.height)
         card.frame = CGRect(x: progress * width(of: progress < 0 ? .panel : .sidebar), y: 0, width: bounds.width, height: bounds.height)
         let lifted = min(1, aside * 6)
-        card.layer.borderWidth = lifted
         content.view.frame = card.bounds
+        cardEdges[0].frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
+        cardEdges[1].frame = CGRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height)
+        for edge in cardEdges { edge.alpha = lifted }
         placeShadow()
         shade.frame = card.bounds
         shade.alpha = 0.55 * aside
