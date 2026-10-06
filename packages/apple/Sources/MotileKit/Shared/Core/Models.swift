@@ -306,6 +306,14 @@ enum GitStage: String {
     case pullRequestText = "pull_request_text"
     case pullRequest = "pull_request"
     case pull
+    case merge
+    case autoMerge = "auto_merge"
+    case updateBranch = "update_branch"
+    case close
+    case reopen
+    case revert
+    /// A stage of a newer server.
+    case unknown
 
     var label: String {
         switch self {
@@ -315,6 +323,13 @@ enum GitStage: String {
         case .pullRequestText: "Writing PR"
         case .pullRequest: "Creating PR"
         case .pull: "Pulling"
+        case .merge: "Merging PR"
+        case .autoMerge: "Setting Auto-merge"
+        case .updateBranch: "Updating Branch"
+        case .close: "Closing PR"
+        case .reopen: "Reopening PR"
+        case .revert: "Reverting PR"
+        case .unknown: "Working"
         }
     }
 }
@@ -526,7 +541,7 @@ struct ThreadInfo: Equatable, Identifiable {
         turnEndedAt = json.optionalDouble("turn_ended_at")
         pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
         watching = json.bool("watching")
-        gitStage = json.optionalString("git_stage").flatMap { GitStage(rawValue: $0) }
+        gitStage = json.optionalString("git_stage").map { GitStage(rawValue: $0) ?? .unknown }
         interruption = json.object("interruption").flatMap { Interruption(json: $0) }
         unread = json.bool("unread")
     }

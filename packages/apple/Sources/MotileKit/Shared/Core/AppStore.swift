@@ -324,7 +324,7 @@ final class AppStore {
             }
         case "git_progress":
             let (projectID, threadID) = (event.string("project_id"), event.optionalString("thread_id"))
-            guard let stage = GitStage(rawValue: event.string("stage")) else { return nil }
+            let stage = GitStage(rawValue: event.string("stage")) ?? .unknown
             return { [weak self] in
                 guard let self, let project = self.project(projectID) else { return }
                 let checkoutID = (threadID.flatMap { self.threads[$0] }.map { project.seen(from: $0) } ?? project).checkoutID
