@@ -47,8 +47,8 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "projects", title: "Projects", section: .projects, keywords: "add remove folder icon setup worktree script"),
         SettingsEntry(id: "text-model", title: "Model", section: .textGeneration, keywords: "titles branch names commit messages pull requests writer"),
         SettingsEntry(id: "branch-names", title: "Branch names", section: .textGeneration, keywords: "instructions prefix naming"),
-        SettingsEntry(id: "merged", title: "Mark the thread done", section: .pullRequests, keywords: "merge close finished"),
-        SettingsEntry(id: "worktrees", title: "Remove the thread's worktree", section: .pullRequests, keywords: "merge pushed branch clean up"),
+        SettingsEntry(id: "merged", title: "Mark the thread done after merge or close", section: .pullRequests, keywords: "merge close finished"),
+        SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),
         SettingsEntry(id: "usage", title: "Tokens and cost", section: .usage, keywords: "spent price models chart"),
     ]
 
