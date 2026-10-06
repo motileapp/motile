@@ -133,7 +133,7 @@ struct SidebarScreen: View {
             )
             .equatable()
             .rowSwipe(
-                .check, "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
+                .circleCheck, "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
                 leaves: !thread.busy, isOpen: swipe(item.id, swiped: shown.swiped)
             ) {
                 markDone(thread)

@@ -60,15 +60,7 @@ struct ThreadScreen: View {
                 Button {
                     drawer.isOpen.toggle()
                 } label: {
-                    Image(.menu, size: 16)
-                        .overlay(alignment: .topTrailing) {
-                            if needsAttention {
-                                Circle()
-                                    .fill(Color.themeUnread)
-                                    .frame(width: 8, height: 8)
-                                    .offset(x: 5, y: -3)
-                            }
-                        }
+                    menuIcon
                 }
                 .accessibilityLabel("Threads")
             }
@@ -91,6 +83,24 @@ struct ThreadScreen: View {
     private var needsAttention: Bool {
         store.activeThreads.contains { thread in
             store.selection != .thread(thread.id) && (thread.needsApproval || thread.unread)
+        }
+    }
+
+    /// The menu icon, with a dot on its top right corner, cut out of the icon, when another
+    /// thread needs attention.
+    @ViewBuilder private var menuIcon: some View {
+        let side = PlatformImage.symbolSide(16)
+        let dot = CGPoint(x: side * 20 / 24, y: side * 5 / 24)
+        if needsAttention {
+            Image(.menu, size: 16)
+                .mask {
+                    Rectangle()
+                        .overlay { Circle().frame(width: 11, height: 11).position(dot).blendMode(.destinationOut) }
+                        .compositingGroup()
+                }
+                .overlay { Circle().fill(Color.themeUnread).frame(width: 8, height: 8).position(dot) }
+        } else {
+            Image(.menu, size: 16)
         }
     }
 

@@ -174,7 +174,7 @@ private struct MarkDoneButton: View {
     let action: () -> Void
 
     var body: some View {
-        ActionButton("Mark Done", icon: .check, variant: .ghost, size: .small, action: action)
+        ActionButton("Mark Done", icon: .circleCheck, variant: .ghost, size: .small, action: action)
             .fixedSize()
     }
 }
@@ -593,9 +593,8 @@ struct ThreadStatus: View {
                 }
             }
         } else if thread.unread {
-            label("Unread", Color.themeUnread) {
-                Circle()
-                    .frame(width: 6, height: 6)
+            label("Finished", Color.themeSuccess) {
+                symbol(.flag)
             }
         } else {
             Text(Time.ago(thread.updatedAt, now: AgoClock.shared.now))
