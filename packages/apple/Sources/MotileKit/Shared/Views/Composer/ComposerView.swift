@@ -1,11 +1,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Where messages are written. A strip above says what the agent waits for or that it is
-/// monitoring. On the Mac the model, the reasoning effort and how much the agent may do without
-/// asking are under the text, and a strip below says where the thread works: the server, the
-/// folder and the branch. On iOS all of that is in the thread's settings, which the model's name
-/// opens, and the composer is one line until it is written in.
+/// Where messages are written. A strip above says what the agent waits for, that it is
+/// monitoring, or why it stopped before it finished. On the Mac the model, the reasoning effort
+/// and how much the agent may do without asking are under the text, and a strip below says where
+/// the thread works: the server, the folder and the branch. On iOS all of that is in the thread's
+/// settings, which the model's name opens, and the composer is one line until it is written in.
 struct ComposerView: View {
     @Environment(AppStore.self) private var store
     @State private var textHeight: CGFloat = ComposerTextView.minimumHeight
@@ -22,6 +22,8 @@ struct ComposerView: View {
                     WaitingStrip(approval: approval, count: store.activity.approvals.count)
                 } else if store.selectedThread != nil, store.activity.monitoring {
                     monitoringStrip
+                } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {
+                    InterruptionStrip(interruption: interruption)
                 }
                 box
                     .zIndex(1)

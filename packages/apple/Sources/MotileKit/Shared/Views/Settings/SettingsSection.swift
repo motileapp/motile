@@ -44,6 +44,8 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove machine agents connected"),
+        SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
+        SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
         SettingsEntry(id: "projects", title: "Projects", section: .projects, keywords: "add remove folder icon setup worktree script"),
         SettingsEntry(id: "text-model", title: "Model", section: .textGeneration, keywords: "titles branch names commit messages pull requests writer"),
         SettingsEntry(id: "branch-names", title: "Branch names", section: .textGeneration, keywords: "instructions prefix naming"),

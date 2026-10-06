@@ -18,9 +18,10 @@ use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
-    Activity, Agent, BranchInstructions, ChangedFile, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
-    Item, ItemKind, Media, MergeMethod, Message, NewThread, Project, PullRequest, PullRequestAction, Queued,
-    ServerInfo, Subagent, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    Activity, Agent, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, DiffScope, FileKind,
+    GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, Media, MergeMethod, Message, NewThread,
+    Project, PullRequest, PullRequestAction, Queued, ServerInfo, Subagent, Thread, ThreadChange, ToolCall, ToolStatus,
+    TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -48,10 +49,18 @@ const FLUSH_EVERY: Duration = Duration::from_secs(1);
 pub const PULL_REQUEST_FRESH: Duration = Duration::from_secs(60);
 /// How often a watched pull request is looked at.
 pub const PULL_REQUEST_WATCH: Duration = Duration::from_secs(30);
+/// How often the threads that wait for their usage limit are looked at.
+pub const LIMITS_CHECK: Duration = Duration::from_secs(30);
 const DONE_ON_MERGE: &str = "done_on_merge";
 const REMOVE_MERGED_WORKTREES: &str = "remove_merged_worktrees";
 const TEXT_MODEL: &str = "text_model";
 const BRANCH_INSTRUCTIONS: &str = "branch_instructions";
+const CONTINUE_AFTER_LIMITS: &str = "continue_after_limits";
+const CONTINUE_AFTER_RESTARTS: &str = "continue_after_restarts";
+/// Set while the server restarts after its agents were stopped for it, whatever the settings say.
+const CONTINUE_AFTER_THIS_RESTART: &str = "continue_after_this_restart";
+/// How long a stopped agent has to save its session before it is killed.
+const AGENTS_STOP_WITHIN: Duration = Duration::from_secs(2);
 const PRICES: &str = "prices";
 const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
 const PRICES_RETRY: Duration = Duration::from_secs(3600);
@@ -97,6 +106,11 @@ pub struct Hub {
     /// How the user wants branches named.
     branch_instructions: std::sync::Mutex<Option<String>>,
     pull_request_settings: std::sync::Mutex<PullRequestSettings>,
+    continue_settings: std::sync::Mutex<ContinueSettings>,
+    /// The threads whose agents the last restart cut off that go on once the server serves.
+    to_continue: std::sync::Mutex<Vec<String>>,
+    /// The server is about to stop: its agents are let go, and nothing new starts.
+    closing: AtomicBool,
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
     /// What was last seen of each watched thread's pull request, by thread.
@@ -209,16 +223,30 @@ impl Hub {
         let threads = store.load_threads()?;
         let worktrees = threads.iter().filter_map(thread_worktree).collect();
         let mut queued = store.load_queued()?;
-        let live = |stored: StoredThread| {
-            let mut live = Live::new(stored, media.clone());
-            // No turn survives a restart, so what waited for one goes when the user sends it.
-            live.queued = queued.remove(&live.stored.thread.id).unwrap_or_default();
-            for queued in &mut live.queued {
-                queued.held = true;
-            }
-            (live.stored.thread.id.clone(), live)
+        let continue_settings = ContinueSettings {
+            after_limits: store.setting(CONTINUE_AFTER_LIMITS).is_none_or(|value| value == "true"),
+            after_restarts: store.setting(CONTINUE_AFTER_RESTARTS).is_some_and(|value| value == "true"),
         };
-        let threads = threads.into_iter().map(live).collect();
+        let continues = continue_settings.after_restarts || store.setting(CONTINUE_AFTER_THIS_RESTART).is_some();
+        store.set_setting(CONTINUE_AFTER_THIS_RESTART, None)?;
+        let mut to_continue = Vec::new();
+        let mut live = |stored: StoredThread| -> anyhow::Result<(String, Live)> {
+            let mut live = Live::new(stored, media.clone());
+            live.queued = queued.remove(&live.stored.thread.id).unwrap_or_default();
+            let cut_off = live.recover(&store)?;
+            // No turn survives a restart, so what waited for one goes when the user sends it, unless
+            // the thread goes on by itself. What waits for the usage limit still follows the thread.
+            let goes_on = cut_off && continues && live.stored.session_id.is_some();
+            let waits = goes_on || live.limited();
+            for queued in &mut live.queued {
+                queued.held = !waits;
+            }
+            if goes_on {
+                to_continue.push(live.stored.thread.id.clone());
+            }
+            Ok((live.stored.thread.id.clone(), live))
+        };
+        let threads = threads.into_iter().map(&mut live).collect::<anyhow::Result<_>>()?;
         let mut projects = store.load_projects()?;
         for project in &mut projects {
             refresh_icon(&store, project);
@@ -233,6 +261,9 @@ impl Hub {
                 done_on_merge: store.setting(DONE_ON_MERGE).is_some_and(|value| value == "true"),
                 remove_merged_worktrees: store.setting(REMOVE_MERGED_WORKTREES).is_some_and(|value| value == "true"),
             }),
+            continue_settings: std::sync::Mutex::new(continue_settings),
+            to_continue: std::sync::Mutex::new(to_continue),
+            closing: AtomicBool::new(false),
             prices: std::sync::Mutex::new(
                 store.setting(PRICES).and_then(|prices| serde_json::from_str(&prices).ok()).unwrap_or_default(),
             ),
@@ -267,6 +298,102 @@ impl Hub {
             text_model: self.writer(Agent::Claude).model,
             branch_instructions: self.branch_instructions(),
             pull_request_settings: self.pull_request_settings(),
+            continue_settings: self.continue_settings(),
+        }
+    }
+
+    fn continue_settings(&self) -> ContinueSettings {
+        *self.continue_settings.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub fn set_continue_settings(
+        &self,
+        after_limits: Option<bool>,
+        after_restarts: Option<bool>,
+    ) -> anyhow::Result<()> {
+        let mut settings = self.continue_settings();
+        if let Some(on) = after_limits {
+            self.store.set_setting(CONTINUE_AFTER_LIMITS, Some(if on { "true" } else { "false" }))?;
+            settings.after_limits = on;
+        }
+        if let Some(on) = after_restarts {
+            self.store.set_setting(CONTINUE_AFTER_RESTARTS, Some(if on { "true" } else { "false" }))?;
+            settings.after_restarts = on;
+        }
+        *self.continue_settings.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = settings;
+        Ok(())
+    }
+
+    /// Has the agents the last restart cut off go on, where the settings or the update say so.
+    pub fn continue_interrupted(self: &Arc<Self>) {
+        let threads = std::mem::take(&mut *self.to_continue.lock().unwrap_or_else(|poisoned| poisoned.into_inner()));
+        let hub = self.clone();
+        tokio::spawn(async move {
+            for thread_id in threads {
+                if let Err(error) = hub.continue_thread(&thread_id).await {
+                    tracing::warn!(thread_id, "couldn't continue a thread the restart cut off: {error:#}");
+                }
+            }
+        });
+    }
+
+    /// Has the thread's agent go on with what it was doing.
+    pub async fn continue_thread(self: &Arc<Self>, thread_id: &str) -> anyhow::Result<()> {
+        self.send(Some(thread_id.to_string()), None, CONTINUE_PROMPT.to_string(), Vec::new(), false).await?;
+        Ok(())
+    }
+
+    /// Continues the threads whose usage limit has reset, looking every `every`.
+    pub fn keep_limits_continued(self: &Arc<Self>, every: Duration) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(every).await;
+                for thread_id in hub.limits_reset().await {
+                    if let Err(error) = hub.continue_thread(&thread_id).await {
+                        tracing::warn!(thread_id, "couldn't continue a thread after its usage limit: {error:#}");
+                    }
+                }
+            }
+        });
+    }
+
+    /// The threads that wait to continue once their usage limit resets, and whose limit has.
+    async fn limits_reset(&self) -> Vec<String> {
+        let threads = self.threads.lock().await;
+        let idle = |live: &&Live| live.run.is_none() && live.preparing.is_none();
+        let reset = |live: &&Live| match live.stored.thread.interruption {
+            Some(Interruption::Limit { resets_at: Some(at), continues: true }) => at <= now(),
+            _ => false,
+        };
+        let open = |live: &&Live| live.stored.thread.done_at.is_none();
+        threads.values().filter(idle).filter(reset).filter(open).map(|live| live.stored.thread.id.clone()).collect()
+    }
+
+    /// Lets the agents go before the server stops: nothing new starts, and what runs is stopped
+    /// where it is, as the restart finds it. With `continues` the threads they worked in go on
+    /// once the server is back.
+    pub async fn close(&self, continues: bool) {
+        self.closing.store(true, Ordering::SeqCst);
+        if continues && let Err(error) = self.store.set_setting(CONTINUE_AFTER_THIS_RESTART, Some("true")) {
+            tracing::error!("couldn't note that the threads continue after the restart: {error:#}");
+        }
+        let processes: Vec<u32> = {
+            let threads = self.threads.lock().await;
+            for preparing in threads.values().filter_map(|live| live.preparing.as_ref()) {
+                preparing.task.abort();
+            }
+            threads.values().filter_map(|live| live.run.as_ref().map(|run| run.process_id)).collect()
+        };
+        if processes.is_empty() {
+            return;
+        }
+        for process_id in &processes {
+            signal(*process_id, libc::SIGTERM);
+        }
+        tokio::time::sleep(AGENTS_STOP_WITHIN).await;
+        for process_id in processes {
+            signal(process_id, libc::SIGKILL);
         }
     }
 
@@ -331,6 +458,9 @@ impl Hub {
         if text.is_empty() && attachments.is_empty() {
             bail!("There is nothing to send.");
         }
+        if self.closing.load(Ordering::SeqCst) {
+            bail!("Your server is restarting. Send it again once it is back.");
+        }
         if let Some(gone) = attachments.iter().find(|path| !Path::new(path).is_file()) {
             bail!("{} is no longer on your server. Attach it again.", file_name(gone));
         }
@@ -350,6 +480,8 @@ impl Hub {
             (None, None) => bail!("No thread was given."),
         };
         let live = threads.get_mut(&thread_id).context("That thread no longer exists.")?;
+        // A message goes on with the thread, so it no longer waits to be continued.
+        live.stored.thread.interruption = None;
         let media = self.keep_attached(&thread_id, &attachments)?;
         let prompt = prompt(&text, &attachments);
         if live.preparing.is_some() {
@@ -461,6 +593,7 @@ impl Hub {
             pull_request: None,
             watching: false,
             git_stage: None,
+            interruption: None,
             rev: 0,
         };
         Ok(StoredThread { thread, session_id: None, title_source: TitleSource::Placeholder, next_seq: 0, worktree })
@@ -729,6 +862,12 @@ impl Hub {
         thread.plan = change.plan.unwrap_or(thread.plan);
         if mode_changed {
             told.push(claude::access_line(thread.plan, thread.access));
+        }
+        if let Some(on) = change.continues {
+            let Some(Interruption::Limit { resets_at, continues }) = &mut thread.interruption else {
+                bail!("The thread no longer waits for its usage limit.");
+            };
+            *continues = on && resets_at.is_some_and(|at| at > now());
         }
         match change.done {
             Some(true) if thread.running => {
@@ -1857,6 +1996,7 @@ impl Hub {
         thread.running = true;
         thread.monitoring = false;
         thread.needs_approval = false;
+        thread.interruption = None;
         thread.updated_at = now();
         // New activity brings a done thread back.
         if thread.done_at.take().is_some() {
@@ -1981,6 +2121,10 @@ impl Hub {
     }
 
     async fn apply(self: &Arc<Self>, thread_id: &str, events: Vec<AgentEvent>) {
+        // The restart finds the thread as the agent left it.
+        if self.closing.load(Ordering::SeqCst) {
+            return;
+        }
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
         let was_running = live.stored.thread.running;
@@ -2125,6 +2269,12 @@ impl Hub {
             AgentEvent::Write(lines) => {
                 live.write(lines);
             }
+            AgentEvent::Limited { resets_at } => {
+                let continues = self.continue_settings().after_limits && resets_at.is_some_and(|at| at > now());
+                live.stored.thread.interruption = Some(Interruption::Limit { resets_at, continues });
+                store.save_thread(&live.stored)?;
+                self.announce(&live.stored.thread);
+            }
             // The process can't go on, and would stay if it weren't let go.
             AgentEvent::Failed { message } => {
                 if let Some(run) = &mut live.run {
@@ -2151,6 +2301,9 @@ impl Hub {
     }
 
     async fn finish_turn(self: &Arc<Self>, thread_id: &str, exit_code: Option<i32>, stderr: &str, interrupted: bool) {
+        if self.closing.load(Ordering::SeqCst) {
+            return;
+        }
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
         let run = live.run.take();
@@ -2188,7 +2341,8 @@ impl Hub {
             }
             return;
         }
-        if let Some(index) = live.queued.iter().position(|queued| !queued.held) {
+        // What waits for an agent at its usage limit goes once the thread continues.
+        if let Some(index) = live.queued.iter().position(|queued| !queued.held).filter(|_| !live.limited()) {
             let queued = live.queued.remove(index);
             if let Err(error) = self.start_next_turn(live, queued) {
                 tracing::error!(thread_id, "couldn't start the next turn: {error:#}");
@@ -2279,6 +2433,42 @@ impl Live {
         index.context("That message is no longer waiting.")
     }
 
+    /// The agent reached its usage limit and hasn't worked since.
+    fn limited(&self) -> bool {
+        matches!(self.stored.thread.interruption, Some(Interruption::Limit { .. }))
+    }
+
+    /// Ends what the agent was doing when the server stopped, as the transcript shows it: a turn
+    /// it was in the middle of, or a watch. `true` when the restart cut something off.
+    fn recover(&mut self, store: &Store) -> anyhow::Result<bool> {
+        let thread = &self.stored.thread;
+        let (running, monitoring) = (thread.running, thread.monitoring);
+        if !running && !monitoring {
+            return Ok(false);
+        }
+        if running {
+            let items = store.items_since(&thread.id, 0)?;
+            let working = items.into_iter().filter(|item| matches!(&item.kind, ItemKind::Tool { call } if works(call)));
+            self.open = working.map(|item| (item.id.clone(), item)).collect();
+            self.cut_off_tools(store, true)?;
+            self.open.clear();
+            let message = "Your server restarted before the agent finished.".to_string();
+            self.append(store, ItemKind::Error { message })?;
+            self.end_turn(store, TurnSummary { is_error: true, ..TurnSummary::default() })?;
+            self.ended = None;
+        }
+        let thread = &mut self.stored.thread;
+        thread.running = false;
+        thread.monitoring = false;
+        thread.needs_approval = false;
+        thread.interruption = Some(Interruption::Restart);
+        if running {
+            thread.turn_ended_at = Some(now());
+        }
+        store.save_thread(&self.stored)?;
+        Ok(true)
+    }
+
     /// A message was sent now to the turn that runs, and the agent hasn't taken it yet.
     fn steering(&self) -> bool {
         let stopped = self.run.as_ref().is_some_and(|run| run.interrupted.load(Ordering::Relaxed));
@@ -2288,7 +2478,7 @@ impl Live {
     /// Gives the idle process the first message that waits, unless it still has one to take or
     /// waits for an answer itself. `false` when nothing was given.
     fn hand_over(&mut self, store: &Store) -> anyhow::Result<bool> {
-        if !self.given.is_empty() || !self.activity.approvals.is_empty() {
+        if !self.given.is_empty() || !self.activity.approvals.is_empty() || self.limited() {
             return Ok(false);
         }
         let Some(index) = self.queued.iter().position(|queued| !queued.held) else { return Ok(false) };
@@ -2557,27 +2747,12 @@ impl Live {
         Ok(())
     }
 
-    /// Tidies the transcript once the agent's process has exited.
-    fn settle(
-        &mut self,
-        store: &Store,
-        run: Option<&Run>,
-        exit_code: Option<i32>,
-        stderr: &str,
-        interrupted: bool,
-    ) -> anyhow::Result<()> {
-        self.release_held(store)?;
-        self.flush(store)?;
-
-        // Tools and agents that never reported back were cut off.
-        let working = |call: &ToolCall| {
-            let agent_works = call.agent.as_ref().is_some_and(|agent| agent.status == ToolStatus::Running);
-            call.status == ToolStatus::Running || agent_works
-        };
+    /// Fails the tools and agents that never reported back: they were cut off.
+    fn cut_off_tools(&mut self, store: &Store, interrupted: bool) -> anyhow::Result<()> {
         let cut_off: Vec<Item> = self
             .open
             .values()
-            .filter(|item| matches!(&item.kind, ItemKind::Tool { call } if working(call)))
+            .filter(|item| matches!(&item.kind, ItemKind::Tool { call } if works(call)))
             .cloned()
             .collect();
         for item in cut_off {
@@ -2593,6 +2768,21 @@ impl Live {
             }
             self.upsert(store, item.id, ItemKind::Tool { call })?;
         }
+        Ok(())
+    }
+
+    /// Tidies the transcript once the agent's process has exited.
+    fn settle(
+        &mut self,
+        store: &Store,
+        run: Option<&Run>,
+        exit_code: Option<i32>,
+        stderr: &str,
+        interrupted: bool,
+    ) -> anyhow::Result<()> {
+        self.release_held(store)?;
+        self.flush(store)?;
+        self.cut_off_tools(store, interrupted)?;
 
         let received_result = run.is_some_and(|run| run.received_result);
         if interrupted {
@@ -2665,6 +2855,12 @@ fn thread_worktree(stored: &StoredThread) -> Option<(String, ThreadWorktree)> {
 /// The branch a worktree is made on, named after its folder until the writer names it.
 fn temporary_branch(worktree: &str) -> String {
     format!("{BRANCH_PREFIX}/{}", file_name(worktree))
+}
+
+/// The tool call, or the agent it started, hasn't reported back yet.
+fn works(call: &ToolCall) -> bool {
+    let agent_works = call.agent.as_ref().is_some_and(|agent| agent.status == ToolStatus::Running);
+    call.status == ToolStatus::Running || agent_works
 }
 
 fn new_tool_call(id: String, name: String) -> ToolCall {

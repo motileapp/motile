@@ -26,6 +26,8 @@ made up on the spot instead:
 - "show the screenshot": a turn that writes `screenshot.png` in its folder and shows it in the reply.
 - "greet by name": a turn that really changes its folder: it rewrites `greet.py` and adds
   `docs/greeting.md`.
+- "hit the limit": a turn that reads a file and is stopped by the usage limit, which resets
+  FAKE_AGENT_RESET seconds later.
 - "ask two agents": a turn that starts two agents at once. Each says what it does, a step every
   FAKE_AGENT_STEP seconds, and reports.
 
@@ -33,7 +35,8 @@ Called as `app-server` it is Codex: it answers the requests that start a thread 
 takes a prompt steered into a running turn after the turn's next tool call, and stops a turn when
 asked. There "run greet.py" asks before each of the two under the `untrusted` approval policy,
 "which color" asks its question, "plan the hello" presents a plan and carries it out when told
-to implement it, and "ask an agent" starts an agent, whose work comes as a thread of its own.
+to implement it, "ask an agent" starts an agent, whose work comes as a thread of its own, and "hit
+the limit" is stopped by the usage limit.
 
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
 answers with FAKE_AGENT_TITLE, and asked the same way for a commit message, a pull request's text
@@ -527,6 +530,24 @@ def which_color():
     turn.done()
 
 
+def limit_resets():
+    return int(time.time() + float(os.environ.get("FAKE_AGENT_RESET", "3600")))
+
+
+def hit_the_limit():
+    """A turn the usage limit stops, as Claude Code's does when the subscription's limit runs out."""
+    turn = Turn("00000000-0000-4000-8000-0000000c0105")
+    turn.tool("Read", {"file_path": "/srv/api/greet.py"}, "1\tdef greet(name):\n")
+    resets = limit_resets()
+    emit({"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "rateLimitType": "five_hour",
+                                                          "resetsAt": resets, "overageStatus": "rejected"}})
+    text = "You've hit your limit · resets " + time.strftime("%H:%M", time.localtime(resets))
+    message = {"id": "msg_limit", "model": "<synthetic>", "content": [{"type": "text", "text": text}]}
+    emit({"type": "assistant", "error": "rate_limit", "message": message})
+    emit({"type": "result", "subtype": "success", "is_error": True, "result": text, "duration_ms": 1,
+          "api_error_status": 429, "terminal_reason": "api_error"})
+
+
 def plan_hello():
     turn = Turn("00000000-0000-4000-8000-00000000b1a0")
     turn.tool("Read", {"file_path": "/srv/api/hello.py"}, "1\tdef main():\n2\t    pass\n")
@@ -590,6 +611,10 @@ def greet_by_name():
 
 class Stopped(Exception):
     """The turn was asked to stop."""
+
+
+class Limited(Exception):
+    """The usage limit stopped the turn, with the error Codex says it with."""
 
 
 class Codex:
@@ -766,6 +791,15 @@ class Codex:
     def long_reply(self, params):
         self.text("Here is the whole change.\n\n" + "A line of the change.\n" * 400)
 
+    def hit_the_limit(self, params):
+        self.command("cat greet.py", "def greet(name):\n")
+        window = {"usedPercent": 100, "resetsAt": limit_resets(), "windowDurationMins": 300}
+        self.notify("account/rateLimits/updated", rateLimits={"limitId": "codex", "primary": window})
+        error = {"message": "You've hit your usage limit.", "codexErrorInfo": "usageLimitExceeded"}
+        self.notify("error", threadId=self.thread.get("threadId", self.THREAD), turnId=self.turn_id(), willRetry=False,
+                    error=error)
+        raise Limited(error)
+
     def replay_fixture(self, params):
         with open(os.environ["FAKE_AGENT_FIXTURE"]) as f:
             for line in f:
@@ -793,6 +827,7 @@ class Codex:
         "implement the plan": implement,
         "ask an agent": ask_an_agent,
         "long reply with a lot of code": long_reply,
+        "hit the limit": hit_the_limit,
     }
 
     def turn(self, params):
@@ -803,17 +838,20 @@ class Codex:
         self.notify("turn/started", turn=turn)
         said = self.user_message(params).lower()
         script = next((script for words, script in self.SCRIPTED.items() if words in said), Codex.replay_fixture)
+        error = None
         try:
             script(self, params)
             status = "completed"
         except Stopped:
             status = "interrupted"
+        except Limited as limited:
+            status, error = "failed", limited.args[0]
         last = {"totalTokens": 15040, "inputTokens": 14800, "cachedInputTokens": 12288, "cacheWriteInputTokens": 0,
                 "outputTokens": 240, "reasoningOutputTokens": 64}
         total = {name: count * self.turns for name, count in last.items()}
         self.notify("thread/tokenUsage/updated", threadId=self.thread.get("threadId", self.THREAD), turnId=turn["id"],
                     tokenUsage={"total": total, "last": last, "modelContextWindow": 258400})
-        self.notify("turn/completed", turn=dict(turn, status=status))
+        self.notify("turn/completed", turn=dict(turn, status=status, error=error))
 
     def serve(self):
         threading.Thread(target=self.read, daemon=True).start()
@@ -839,6 +877,7 @@ SCRIPTED = {
     "huge transcript": huge_transcript,
     "long reply with a lot of code": long_reply,
     "rate limiter": rate_limiter,
+    "hit the limit": hit_the_limit,
 }
 
 

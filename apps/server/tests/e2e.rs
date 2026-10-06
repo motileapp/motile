@@ -9,11 +9,11 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, Approval, Change, CheckStatus, DiffScope, EventKind, FileKind, GitAction,
-    GitHubState, GitStage, GitStatus, Item, ItemKind, LineComment, MergeMethod, Mergeable, Message, NewThread,
-    NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState, Queued,
-    ReactionKind, Request, ReviewVerdict, Side, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges,
-    TurnSummary, UsageBucket,
+    Access as AgentAccess, Agent, Approval, CONTINUE_PROMPT, Change, CheckStatus, DiffScope, EventKind, FileKind,
+    GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LineComment, MergeMethod, Mergeable,
+    Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState,
+    Queued, ReactionKind, Request, ReviewVerdict, Side, Thread, ThreadChange, Tokens, ToolCall, ToolStatus,
+    TurnChanges, TurnSummary, UsageBucket,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -49,6 +49,7 @@ impl Harness {
             ("HOME".to_string(), dir.path().to_string_lossy().into_owned()),
             ("FAKE_AGENT_FIXTURE".to_string(), repo_file(fixture).to_string_lossy().into_owned()),
             ("FAKE_AGENT_DELAY".to_string(), delay.to_string()),
+            ("FAKE_AGENT_RESET".to_string(), "2".to_string()),
             ("FAKE_AGENT_ARGUMENTS_FILE".to_string(), arguments_file.to_string_lossy().into_owned()),
         ]);
         let server_key = DeviceKey::generate();
@@ -145,6 +146,8 @@ async fn serve(
     .unwrap();
     hub.keep_pull_requests_current(Duration::from_millis(200));
     hub.watch_pull_requests(Duration::from_millis(300));
+    hub.keep_limits_continued(Duration::from_millis(200));
+    hub.continue_interrupted();
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
@@ -803,6 +806,79 @@ fn messages_and_turn_ends(transcript: &Transcript) -> Vec<&str> {
         _ => None,
     });
     marks.collect()
+}
+
+#[tokio::test]
+async fn a_thread_the_usage_limit_stopped_continues_once_the_limit_resets() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "Hit the limit").await;
+
+    let limited = thread_where(&mut list, |thread| thread.interruption.is_some()).await;
+    assert!(
+        matches!(limited.interruption, Some(Interruption::Limit { resets_at: Some(_), continues: true })),
+        "{:?}",
+        limited.interruption
+    );
+    let continued = thread_where(&mut list, |thread| thread.running && thread.interruption.is_none()).await;
+    assert_eq!(continued.id, thread_id);
+
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.user_texts(), vec!["Hit the limit", CONTINUE_PROMPT]);
+    let errors = transcript.errors();
+    assert!(matches!(&errors[..], [limit] if limit.starts_with("You've hit your limit")), "{errors:?}");
+}
+
+#[tokio::test]
+async fn a_thread_the_usage_limit_stopped_waits_when_it_is_not_to_continue() {
+    let harness = Harness::start(fixture(Agent::Codex), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
+    let new_thread = NewThread { access: AgentAccess::Full, ..new_thread };
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, Some(new_thread), "Hit the limit").await;
+
+    thread_where(&mut list, |thread| thread.interruption.is_some()).await;
+    let change = ThreadChange { continues: Some(false), ..ThreadChange::default() };
+    assert_eq!(update(&connection, &thread_id, change).await, Message::Ok);
+    thread_where(&mut list, |thread| {
+        !thread.running && matches!(thread.interruption, Some(Interruption::Limit { continues: false, .. }))
+    })
+    .await;
+
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.user_texts(), vec!["Hit the limit"], "the limit has reset, and the thread still waits");
+    assert_eq!(transcript.errors(), vec!["You've hit your usage limit."]);
+}
+
+#[tokio::test]
+async fn a_turn_a_restart_cuts_off_says_so_and_continues_once_the_server_is_back() {
+    let mut harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let set = Request::SetContinueSettings { after_limits: None, after_restarts: Some(true) };
+    assert_eq!(connection.request(&set).await.unwrap(), Message::Ok);
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    let mut transcript = Transcript::default();
+    first_approval(&mut transcript, &mut open(&connection, &thread_id, 0).await).await;
+
+    harness.restart().await;
+    let connection = harness.connect().await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    while !transcript.user_texts().contains(&CONTINUE_PROMPT) {
+        transcript.apply(next(&mut follow).await);
+    }
+    transcript.follow_until_idle(&mut follow).await;
+
+    assert_eq!(transcript.errors(), vec!["Your server restarted before the agent finished."]);
+    assert_eq!(transcript.tools()[0], ("Edit", ToolStatus::Failed), "the call the restart cut off failed");
+    assert_eq!(messages_and_turn_ends(&transcript), vec!["Run greet.py", "(turn end)", CONTINUE_PROMPT, "(turn end)"]);
 }
 
 #[tokio::test]
