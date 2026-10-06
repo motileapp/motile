@@ -165,18 +165,16 @@ struct RootView: View {
                 ConnectServerView(isFirst: true)
             } else {
                 MainScreen()
-                    .putAway(store.settings != nil)
+                    .accessibilityHidden(store.settings != nil)
+                    .overlay {
+                        if store.settings != nil {
+                            SettingsStack()
+                        }
+                    }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.themeBackground.ignoresSafeArea())
-        .overlay {
-            if store.settings != nil {
-                SettingsScreen()
-                    .appearing()
-            }
-        }
-        .animation(.easeOut(duration: 0.15), value: store.settings != nil)
         .sheet(item: sheet) { sheet in
             Group {
                 switch sheet {

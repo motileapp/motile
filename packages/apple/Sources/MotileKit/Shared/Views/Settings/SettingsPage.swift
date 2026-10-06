@@ -8,7 +8,7 @@ struct SettingsPage: View {
     @Environment(AppStore.self) private var store
     let section: SettingsSection
     @AppStorage("appearance") private var appearance = Appearance.system
-    @AppStorage(AppStore.steersKey) private var steers = false
+    @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
     @State private var setupProject: Project?
 
     var body: some View {

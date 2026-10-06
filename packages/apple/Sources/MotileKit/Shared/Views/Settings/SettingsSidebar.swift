@@ -15,10 +15,12 @@ struct SettingsSidebar: View {
     var body: some View {
         @Bindable var store = store
         VStack(spacing: 0) {
+            #if os(macOS)
             SearchField(text: $store.settingsQuery)
                 .padding(.horizontal, 10)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
+            #endif
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if store.settingsQuery.isEmpty {
@@ -32,8 +34,30 @@ struct SettingsSidebar: View {
                 .padding(.bottom, 12)
             }
             .scrollDismissesKeyboard(.immediately)
+            #if os(iOS)
+            footer
+            #endif
         }
     }
+
+    #if os(iOS)
+    /// The search at the bottom, on glass as the sidebar's is.
+    private var footer: some View {
+        @Bindable var store = store
+        return SearchField(text: $store.settingsQuery, bare: true)
+            .padding(.horizontal, 6)
+            .frame(height: 46)
+            .glassButton(in: Capsule())
+            .padding(.horizontal, sidebarRowInset + 8)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .background(alignment: .top) {
+                Rectangle()
+                    .fill(Color.themeBorder)
+                    .frame(height: 1)
+            }
+    }
+    #endif
 
     private func row(_ section: SettingsSection) -> some View {
         HStack(spacing: 8) {
