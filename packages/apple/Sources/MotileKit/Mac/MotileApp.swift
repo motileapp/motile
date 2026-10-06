@@ -251,8 +251,7 @@ struct MainView: View {
                     // so the transcript isn't laid out again for a width nobody sees.
                     .frame(width: fits ? rest - 1 - shownPanel : nil)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(maximized ? 0 : 1)
-                    .allowsHitTesting(!maximized)
+                    .putAway(maximized)
                     .overlay(alignment: .trailing) {
                         // One panel for all the places it has, so that it is the same one in each.
                         HStack(spacing: 0) {

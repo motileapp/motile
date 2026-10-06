@@ -103,7 +103,10 @@ extension View {
 extension TranscriptRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> TranscriptView { make(context.coordinator) }
 
-    func updateNSView(_ view: TranscriptView, context: Context) { update(view) }
+    func updateNSView(_ view: TranscriptView, context: Context) {
+        view.isHidden = context.environment.putAway
+        update(view)
+    }
 
     static func dismantleNSView(_ view: TranscriptView, coordinator: Coordinator) {
         coordinator.model?.detach(owner: view)
