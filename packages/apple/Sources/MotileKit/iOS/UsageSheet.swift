@@ -32,6 +32,7 @@ struct UsageSheet: View {
                 .padding(.vertical, 8)
                 UsageContent(model: model, margin: Self.margin)
             }
+            .dropdowns()
             .background(Color.themeBackground.ignoresSafeArea())
             .navigationTitle("Usage")
             .navigationBarTitleDisplayMode(.inline)

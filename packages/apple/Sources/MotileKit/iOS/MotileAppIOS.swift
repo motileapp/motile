@@ -175,6 +175,7 @@ struct RootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.themeBackground.ignoresSafeArea())
+        .dropdowns()
         .sheet(item: sheet) { sheet in
             Group {
                 switch sheet {
