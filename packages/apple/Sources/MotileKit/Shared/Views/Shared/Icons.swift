@@ -196,10 +196,12 @@ final class ImageFiles {
 struct ProjectIcon: View {
     let project: Project?
     var size: CGFloat = 16
-    @State private var loaded: PlatformImage?
+    /// The icon read for a path, which a row that is reused for another project doesn't show.
+    @State private var loaded: (path: String, image: PlatformImage)?
 
     var body: some View {
-        let image = loaded ?? ImageFiles.shared.cached(project?.iconPath)
+        let path = project?.iconPath
+        let image = loaded.flatMap { $0.path == path ? $0.image : nil } ?? ImageFiles.shared.cached(path)
         Group {
             if let image {
                 Image(platform: image)
@@ -218,7 +220,7 @@ struct ProjectIcon: View {
                 loaded = nil
                 return
             }
-            loaded = await ImageFiles.shared.load(path)
+            loaded = await ImageFiles.shared.load(path).map { (path, $0) }
         }
     }
 }

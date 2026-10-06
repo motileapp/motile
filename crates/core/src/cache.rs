@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS threads (
     activity TEXT,
     PRIMARY KEY (server_id, id)
 );
+-- A thread is mostly looked up by its id alone, which the primary key can't find.
+CREATE INDEX IF NOT EXISTS threads_by_id ON threads(id);
 CREATE TABLE IF NOT EXISTS items (
     thread_id TEXT NOT NULL,
     id TEXT NOT NULL,

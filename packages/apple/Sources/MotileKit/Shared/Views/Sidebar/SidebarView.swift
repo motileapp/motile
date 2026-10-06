@@ -7,7 +7,17 @@ let sidebarRowInset: CGFloat = 10
 private let rowMargin = EdgeInsets(top: rowGap / 2, leading: sidebarRowInset, bottom: rowGap / 2, trailing: sidebarRowInset)
 let doneRowHeight = Double(scaled(30))
 /// One clock for every "5m" in the sidebar, so that they all change at once.
-private let agoClock = PeriodicTimelineSchedule(from: .now, by: 30)
+@Observable
+final class AgoClock {
+    static let shared = AgoClock()
+    private(set) var now = Date().timeIntervalSince1970
+
+    private init() {
+        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.now = Date().timeIntervalSince1970
+        }
+    }
+}
 
 #if os(macOS)
 /// The drafts, then every active thread on every server in one list, with the ones marked done on
@@ -23,8 +33,8 @@ struct SidebarView: View {
     @State private var search = ""
 
     var body: some View {
-        let active = store.activeThreads.filter(matches)
-        let done = store.doneThreads.filter(matches)
+        let active = store.searched(store.activeThreads, for: search)
+        let done = store.searched(store.doneThreads, for: search)
         let projects = store.projectsByID
         let selection = store.selection
         VStack(spacing: 0) {
@@ -107,10 +117,6 @@ struct SidebarView: View {
         .animation(.easeOut(duration: 0.15), value: store.undo)
     }
 
-    private func matches(_ thread: ThreadInfo) -> Bool {
-        store.matches(thread, search: search)
-    }
-
     private func beginRename(_ thread: ThreadInfo) {
         newTitle = thread.title
         renaming = thread
@@ -125,6 +131,10 @@ extension AppStore {
         guard !search.isEmpty else { return true }
         let project = project(thread.projectID)?.name ?? ""
         return thread.title.localizedCaseInsensitiveContains(search) || project.localizedCaseInsensitiveContains(search)
+    }
+
+    func searched(_ threads: [ThreadInfo], for search: String) -> [ThreadInfo] {
+        search.isEmpty ? threads : threads.filter { matches($0, search: search) }
     }
 }
 
@@ -246,7 +256,7 @@ struct ThreadRow: View, Equatable {
         .padding(.bottom, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: 8, selected: selected, inset: rowMargin)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
     }
@@ -355,7 +365,9 @@ private struct DraftRow: View {
         .padding(.bottom, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin)) { open(.draft(listed.id)) }
+        .button(.highlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin, hovered: hovering)) {
+            open(.draft(listed.id))
+        }
         .onHover { hovering = $0 }
         .contextMenu {
             Button("Discard Draft", role: .destructive) { store.discard(listed.draft) }
@@ -447,24 +459,14 @@ private struct DoneShelf: View {
             .buttonStyle(.highlight(radius: 0, faded: true))
 
             if expanded {
-                ScrollViewReader { list in
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(threads) { thread in
-                                DoneRow(
-                                    thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
-                                    rename: rename, delete: delete
-                                ) { store.select($0) }
-                                .equatable()
-                                .frame(height: Self.rowHeight + rowGap)
-                            }
-                        }
-                        .padding(.bottom, 4 - rowGap / 2)
-                    }
-                    .onChange(of: store.settledThreadID) { _, settled in
-                        guard let settled else { return }
-                        withAnimation(.easeOut(duration: 0.15)) { list.scrollTo(settled) }
-                    }
+                RecycledList(
+                    items: threads, rowHeight: Self.rowHeight + rowGap, bottomInset: 4 - rowGap / 2, scrollTarget: store.settledThreadID
+                ) { thread in
+                    DoneRow(
+                        thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
+                        rename: rename, delete: delete
+                    ) { store.select($0) }
+                    .equatable()
                 }
                 .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
             }
@@ -515,6 +517,8 @@ struct DoneRow: View, Equatable {
 
     private static let sidePadding = 8.0
     private static let buttonSize = ControlSize.small.height
+    /// The undo button is as far from the row's side as from its top.
+    private static let buttonInset = (doneRowHeight - buttonSize) / 2 - sidePadding
 
     static func == (one: DoneRow, other: DoneRow) -> Bool {
         one.thread == other.thread && one.project?.iconPath == other.project?.iconPath && one.pullRequest == other.pullRequest
@@ -534,21 +538,22 @@ struct DoneRow: View, Equatable {
             if let pullRequest {
                 ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, colored: false, open: open)
             }
-            if hovering {
-                ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
-                .padding(.trailing, (doneRowHeight - Self.buttonSize) / 2 - Self.sidePadding)
-            } else {
-                TimelineView(agoClock) { context in
-                    Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: context.date.timeIntervalSince1970))
-                        .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeTertiary)
+            Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: AgoClock.shared.now))
+                .font(.ui(size: 11))
+                .foregroundStyle(Color.themeTertiary)
+                .opacity(hovering ? 0 : 1)
+                .frame(minWidth: hovering ? Self.buttonSize + Self.buttonInset : nil, alignment: .trailing)
+                .overlay(alignment: .trailing) {
+                    ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
+                        .padding(.trailing, Self.buttonInset)
+                        .opacity(hovering ? 1 : 0)
+                        .allowsHitTesting(hovering)
                 }
-            }
         }
         .padding(.horizontal, Self.sidePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: 8, selected: selected, inset: rowMargin)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
     }
@@ -593,11 +598,9 @@ struct ThreadStatus: View {
                     .frame(width: 6, height: 6)
             }
         } else {
-            TimelineView(agoClock) { context in
-                Text(Time.ago(thread.updatedAt, now: context.date.timeIntervalSince1970))
-                    .font(.ui(size: 11))
-                    .foregroundStyle(Color.themeTertiary)
-            }
+            Text(Time.ago(thread.updatedAt, now: AgoClock.shared.now))
+                .font(.ui(size: 11))
+                .foregroundStyle(Color.themeTertiary)
         }
     }
 

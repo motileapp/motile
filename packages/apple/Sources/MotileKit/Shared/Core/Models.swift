@@ -529,6 +529,30 @@ struct ThreadInfo: Equatable, Identifiable {
     /// Active threads keep their place when something happens in them; only coming back from
     /// done moves one to the top.
     var activeOrder: Double { max(createdAt, undoneAt ?? 0) }
+
+    /// What its list is in order of, the highest first: when it was marked done, or else `activeOrder`.
+    var listedAt: Double { isDone ? doneAt ?? 0 : activeOrder }
+
+    static func listed(_ one: ThreadInfo, before other: ThreadInfo) -> Bool {
+        (one.listedAt, one.id) > (other.listedAt, other.id)
+    }
+}
+
+extension [ThreadInfo] {
+    /// Where the thread is, or would go, in a list in the order of `ThreadInfo.listed`.
+    func place(of thread: ThreadInfo) -> Int {
+        var (low, high) = (0, count)
+        while low < high {
+            let middle = (low + high) / 2
+            if ThreadInfo.listed(self[middle], before: thread) { low = middle + 1 } else { high = middle }
+        }
+        return low
+    }
+
+    func index(of thread: ThreadInfo) -> Int? {
+        let place = place(of: thread)
+        return place < count && self[place].id == thread.id ? place : nil
+    }
 }
 
 struct Activity: Equatable {
