@@ -65,6 +65,23 @@ private struct LinearIssues: View {
     @State private var filing = false
     /// The statuses folded up, by id.
     @State private var collapsed: Set<String> = []
+    /// The panel is under the width the bar and the labels beside the titles need.
+    @State private var tight = false
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    /// Under this the bar is two rows.
+    private static let wraps = 520 * Platform.scale
+
+    /// A phone, or a panel too narrow for the search and the buttons beside the workspace and the
+    /// team, and for the labels beside the titles.
+    private var narrow: Bool {
+        #if os(iOS)
+        if sizeClass == .compact { return true }
+        #endif
+        return tight
+    }
 
     private struct Trigger: Equatable {
         let target: PanelTarget
@@ -77,7 +94,20 @@ private struct LinearIssues: View {
         let linear = store.linear
         let choice = linear.choice(for: target)
         VStack(spacing: 0) {
-            PanelBar { bar(choice) }
+            if narrow {
+                PanelBar {
+                    pickers(choice)
+                    Spacer(minLength: 0)
+                } second: {
+                    tools(choice)
+                }
+            } else {
+                PanelBar {
+                    pickers(choice)
+                    Spacer(minLength: 4)
+                    tools(choice)
+                }
+            }
             if let error = linear.error {
                 PanelNote(text: error)
             }
@@ -89,6 +119,7 @@ private struct LinearIssues: View {
                     linear.load(target, search: search)
                 }
         }
+        .onGeometryChange(for: Bool.self) { $0.size.width < Self.wraps } action: { tight = $0 }
         .sheet(isPresented: $filing) {
             if let workspace = choice.workspace {
                 LinearNewIssue(target: target, workspace: workspace, team: choice.team)
@@ -97,7 +128,7 @@ private struct LinearIssues: View {
     }
 
     @ViewBuilder
-    private func bar(_ choice: LinearChoice) -> some View {
+    private func pickers(_ choice: LinearChoice) -> some View {
         let linear = store.linear
         let connected = linear.connected(target.serverID)
         let workspace = connected.first { $0.id == choice.workspace }
@@ -124,9 +155,13 @@ private struct LinearIssues: View {
                 Toggle(team.name, isOn: Binding { choice.team == team.id } set: { _ in linear.choose(for: target) { $0.team = team.id } })
             }
         }
-        Spacer(minLength: 4)
+    }
+
+    @ViewBuilder
+    private func tools(_ choice: LinearChoice) -> some View {
+        let linear = store.linear
         InputField("Search", text: $search, icon: .search, clearable: true)
-            .frame(maxWidth: 180)
+            .frame(maxWidth: narrow ? .infinity : 180)
         ActionMenu(icon: .listFilter, help: "Which issues to show") {
             Toggle("Assigned to Me", isOn: Binding { choice.mine } set: { mine in linear.choose(for: target) { $0.mine = mine } })
             Divider()
@@ -168,7 +203,7 @@ private struct LinearIssues: View {
                             ForEach(group.rows) { row in
                                 LinearIssueRow(
                                     row: row, state: group.state, states: teams.first { $0.id == row.team }?.states ?? [],
-                                    workspace: workspace, target: target, pending: linear.working.contains(row.id))
+                                    workspace: workspace, target: target, pending: linear.working.contains(row.id), narrow: narrow)
                             }
                         }
                     }
@@ -256,13 +291,15 @@ private struct LinearIssueRow: View, Equatable {
     let target: PanelTarget
     /// Its status, priority or assignee is being changed.
     let pending: Bool
+    /// The panel is too narrow for the labels beside the title.
+    let narrow: Bool
     @State private var offered: [Choice] = []
 
     private static let inset: CGFloat = 6
 
     static func == (one: Self, other: Self) -> Bool {
         one.row == other.row && one.state == other.state && one.states == other.states && one.workspace == other.workspace
-            && one.target == other.target && one.pending == other.pending
+            && one.target == other.target && one.pending == other.pending && one.narrow == other.narrow
     }
 
     var body: some View {
@@ -286,9 +323,11 @@ private struct LinearIssueRow: View, Equatable {
                 .foregroundStyle(Color.themeText)
                 .lineLimit(1)
             Spacer(minLength: 4)
-            ForEach(row.labels.prefix(2), id: \.name) { label in
-                Chip(label.name, dot: label.color)
-                    .fixedSize()
+            if !narrow {
+                ForEach(row.labels.prefix(2), id: \.name) { label in
+                    Chip(label.name, dot: label.color)
+                        .fixedSize()
+                }
             }
             if let initials = row.initials {
                 LinearInitials(initials: initials, name: row.assignee ?? "")

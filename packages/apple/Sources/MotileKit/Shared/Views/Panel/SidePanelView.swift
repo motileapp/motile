@@ -88,18 +88,36 @@ struct PanelLoading: View {
     }
 }
 
-/// The strip under the tabs with what the open tab is about and its buttons.
-struct PanelBar<Content: View>: View {
-    @ViewBuilder let content: Content
+/// The strip under the tabs with what the open tab is about and its buttons, on one row or two.
+struct PanelBar<Content: View, Second: View>: View {
+    private let content: Content
+    private let second: Second?
+
+    init(@ViewBuilder content: () -> Content) where Second == EmptyView {
+        self.content = content()
+        second = nil
+    }
+
+    init(@ViewBuilder content: () -> Content, @ViewBuilder second: () -> Second) {
+        self.content = content()
+        self.second = second()
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 4) { content }
-                .padding(.leading, 12)
-                .padding(.trailing, 4)
-                .frame(height: pressable(36))
+            row { content }
+            if let second {
+                row { second }
+            }
             PanelLine()
         }
+    }
+
+    private func row<Row: View>(@ViewBuilder _ row: () -> Row) -> some View {
+        HStack(spacing: 4) { row() }
+            .padding(.leading, 12)
+            .padding(.trailing, 4)
+            .frame(height: pressable(36))
     }
 }
 
