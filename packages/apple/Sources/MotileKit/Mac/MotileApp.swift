@@ -147,6 +147,7 @@ struct RootView: View {
                 SettingsRoute(section: section)
             }
         }
+        .dropdowns()
         .toolbar {
             if store.settings != nil {
                 ToolbarItem(placement: .navigation) {

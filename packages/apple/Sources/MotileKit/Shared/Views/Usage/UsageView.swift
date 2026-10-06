@@ -88,26 +88,43 @@ final class UsageModel {
         load(refresh: true)
     }
 
-    func counts(_ server: Server) -> Bool {
-        servers?.contains(server.id) ?? true
+    /// The servers counted among these, or nil for all of them, also when none of those picked
+    /// is one of them any more.
+    private func picked(among all: [Server]) -> Set<String>? {
+        guard let servers else { return nil }
+        let picked = servers.intersection(all.map(\.id))
+        guard !picked.isEmpty, picked.count < all.count else { return nil }
+        return picked
     }
 
     /// Counts the server or leaves it out. Counting every server is counting all of them, and the
     /// last one counted stays.
     func set(_ server: Server, counted: Bool, among all: [Server]) {
         let everyone = Set(all.map(\.id))
-        var picked = (servers ?? everyone).intersection(everyone)
-        if counted { picked.insert(server.id) } else { picked.remove(server.id) }
-        guard !picked.isEmpty else { return }
-        servers = picked == everyone ? nil : picked
+        var chosen = picked(among: all) ?? everyone
+        if counted { chosen.insert(server.id) } else { chosen.remove(server.id) }
+        guard !chosen.isEmpty else { return }
+        servers = chosen == everyone ? nil : chosen
     }
 
     /// "All servers", the one server's name, or how many.
     func serversLabel(among all: [Server]) -> String {
-        guard let servers else { return "All servers" }
-        let picked = all.filter { servers.contains($0.id) }
-        guard !picked.isEmpty, picked.count < all.count else { return "All servers" }
-        return picked.count == 1 ? picked[0].name : "\(picked.count) servers"
+        guard let chosen = picked(among: all) else { return "All servers" }
+        let named = all.filter { chosen.contains($0.id) }
+        return named.count == 1 ? named[0].name : "\(named.count) servers"
+    }
+
+    /// All of them, then each on its own.
+    func serverChecks(among all: [Server]) -> [[Check]] {
+        let chosen = picked(among: all)
+        let everyone = Check(id: "all", title: "All servers", checked: chosen == nil) { [weak self] in self?.servers = nil }
+        let each = all.map { server in
+            let counted = chosen?.contains(server.id) ?? true
+            return Check(id: server.id, title: server.name, checked: counted) { [weak self] in
+                self?.set(server, counted: !counted, among: all)
+            }
+        }
+        return [[everyone], each]
     }
 
     private func load(refresh: Bool = false) {
@@ -152,28 +169,14 @@ struct UsageTitle: View {
                 .foregroundStyle(Color.themeSecondary)
             Text("/")
                 .foregroundStyle(Color.themeTertiary)
-            ActionMenu(model.serversLabel(among: store.servers), help: "The servers counted", size: Self.size, tint: .themeText) {
-                UsageServerPicks(model: model)
-            }
+            CheckMenu(
+                model.serversLabel(among: store.servers), help: "The servers counted", size: Self.size, tint: .themeText,
+                groups: model.serverChecks(among: store.servers)
+            )
             .padding(.leading, -Self.size.padding)
         }
         .font(Self.size.font)
         .lineLimit(1)
-    }
-}
-
-/// The choices of the servers counted: all of them, or each on its own.
-struct UsageServerPicks: View {
-    @Environment(AppStore.self) private var store
-    let model: UsageModel
-
-    var body: some View {
-        Toggle("All servers", isOn: Binding(get: { model.servers == nil }, set: { if $0 { model.servers = nil } }))
-        Divider()
-        ForEach(store.servers) { server in
-            Toggle(
-                server.name, isOn: Binding(get: { model.counts(server) }, set: { model.set(server, counted: $0, among: store.servers) }))
-        }
     }
 }
 
@@ -183,9 +186,10 @@ struct UsageServersMenu: View {
     let model: UsageModel
 
     var body: some View {
-        ActionMenu(model.serversLabel(among: store.servers), icon: .server, help: "The servers counted", variant: .secondary) {
-            UsageServerPicks(model: model)
-        }
+        CheckMenu(
+            model.serversLabel(among: store.servers), icon: .server, help: "The servers counted", variant: .secondary,
+            groups: model.serverChecks(among: store.servers)
+        )
     }
 }
 
