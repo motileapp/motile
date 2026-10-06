@@ -60,15 +60,7 @@ struct ThreadScreen: View {
                 Button {
                     drawer.isOpen.toggle()
                 } label: {
-                    Image(.menu, size: 16)
-                        .overlay(alignment: .topTrailing) {
-                            if needsAttention {
-                                Circle()
-                                    .fill(Color.themeUnread)
-                                    .frame(width: 8, height: 8)
-                                    .offset(x: 5, y: -3)
-                            }
-                        }
+                    menuIcon
                 }
                 .accessibilityLabel("Threads")
             }
@@ -87,10 +79,30 @@ struct ThreadScreen: View {
         }
     }
 
-    /// Whether a thread other than the open one waits for the user or has a reply they haven't seen.
-    private var needsAttention: Bool {
-        store.activeThreads.contains { thread in
-            store.selection != .thread(thread.id) && (thread.needsApproval || thread.unread)
+    /// The colour of the first thread, other than the open one, that waits for the user or has a
+    /// reply they haven't seen, or else the working colour while one works.
+    private var attention: Color? {
+        let others = store.activeThreads.filter { store.selection != .thread($0.id) }
+        if let color = others.lazy.compactMap(\.attentionColor).first { return color }
+        guard others.contains(where: { $0.running || $0.gitStage != nil }) else { return nil }
+        return .themeWorking
+    }
+
+    /// The menu icon, with a dot on its top right corner, cut out of the icon, when another
+    /// thread needs attention or works, in the colour of its status.
+    @ViewBuilder private var menuIcon: some View {
+        let side = PlatformImage.symbolSide(16)
+        let dot = CGPoint(x: side * 20 / 24, y: side * 5 / 24)
+        if let attention {
+            Image(.menu, size: 16)
+                .mask {
+                    Rectangle()
+                        .overlay { Circle().frame(width: 11, height: 11).position(dot).blendMode(.destinationOut) }
+                        .compositingGroup()
+                }
+                .overlay { Circle().fill(attention).frame(width: 8, height: 8).position(dot) }
+        } else {
+            Image(.menu, size: 16)
         }
     }
 

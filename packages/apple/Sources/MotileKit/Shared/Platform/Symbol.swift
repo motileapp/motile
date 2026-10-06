@@ -44,6 +44,7 @@ enum Symbol: String {
     case file = "\u{e0c0}"
     case fileText = "\u{e0cc}"
     case foldVertical = "\u{e43c}"
+    case flag = "\u{e0d1}"
     case folder = "\u{e0d7}"
     case folderGit2 = "\u{e40a}"
     case folderPlus = "\u{e0d9}"
