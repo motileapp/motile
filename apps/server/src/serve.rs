@@ -2,8 +2,8 @@
 //! server's account; every stream on it carries one request.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use anyhow::Context;
@@ -11,10 +11,11 @@ use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
 use iroh::{Endpoint, SecretKey};
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::wire::{Message, Request};
+use motile_protocol::wire::{Message, Request, RestartWhen};
 use motile_protocol::{ALPN, error_text};
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::{Notify, watch};
 
 use crate::access::Access;
 use crate::hub::{GitRun, Hub, ListSubscription, ThreadSubscription};
@@ -25,6 +26,8 @@ const NOT_LINKED: u32 = 403;
 const RECHECK_ACCESS_EVERY: Duration = Duration::from_secs(30);
 /// Long enough for the client to hear that the update is installed.
 const RESTART_AFTER: Duration = Duration::from_millis(500);
+/// How often an installed update looks whether the agents have finished.
+const IDLE_CHECK: Duration = Duration::from_secs(2);
 /// A long transcript is sent in pieces so the client can show the first ones while the rest travel.
 const ITEMS_PER_MESSAGE: usize = 200;
 
@@ -102,7 +105,7 @@ impl Server {
         let hub = &self.hub;
         let reply = match request {
             Request::Subscribe => return follow_list(send, hub.subscribe().await).await,
-            Request::UpdateServer => return update_server(send, hub).await,
+            Request::UpdateServer { when } => return update_server(send, hub.clone(), when).await,
             Request::GitRun { project_id, action, thread_id, message, paths, new_branch } => {
                 let run = GitRun { action, thread_id, message, paths, new_branch };
                 return git_run(send, hub.clone(), project_id, run).await;
@@ -128,6 +131,7 @@ impl Server {
             Request::CancelQueued { thread_id, message_id } => {
                 hub.cancel_queued(&thread_id, &message_id).await.map(|_| Message::Ok)
             }
+            Request::Continue { thread_id } => hub.continue_thread(&thread_id).await.map(|_| Message::Ok),
             Request::Stop { thread_id } => {
                 hub.stop(&thread_id).await;
                 Ok(Message::Ok)
@@ -178,6 +182,9 @@ impl Server {
                 hub.list_files(&project_id, thread_id.as_deref(), &path).await
             }
             Request::SetTextModel { model } => hub.set_text_model(model).map(|_| Message::Ok),
+            Request::SetContinueSettings { after_limits, after_restarts } => {
+                hub.set_continue_settings(after_limits, after_restarts).map(|_| Message::Ok)
+            }
             Request::SetBranchInstructions { instructions } => {
                 hub.set_branch_instructions(instructions).map(|_| Message::Ok)
             }
@@ -243,23 +250,60 @@ impl Server {
     }
 }
 
-/// Installs the latest release while telling the client how far the download is, then starts the
-/// new program in this one's place.
-async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
-    static UPDATING: AtomicBool = AtomicBool::new(false);
-    let refusal = if hub.any_running().await {
-        Some("Agents are still working. Update your server when they have finished.")
-    } else if UPDATING.swap(true, Ordering::SeqCst) {
-        Some("This server is already updating.")
-    } else {
-        None
-    };
-    if let Some(refusal) = refusal {
-        write_frame(&mut send, &Message::Error { message: refusal.to_string() }).await?;
-        send.finish()?;
-        return Ok(());
-    }
+/// The update is in place: the server restarts once its agents have finished.
+static INSTALLED: AtomicBool = AtomicBool::new(false);
+/// The installed update is to restart the server at once.
+static RESTART_NOW: Notify = Notify::const_new();
+/// Becomes true just before the server restarts.
+static RESTARTING: LazyLock<watch::Sender<bool>> = LazyLock::new(|| watch::Sender::new(false));
 
+/// Installs the latest release while telling the client how far the download is, then starts the
+/// new program in this one's place: once the agents have finished, or at once when the client says
+/// so. Without `when`, as older clients ask, it refuses while agents work.
+async fn update_server(mut send: SendStream, hub: Arc<Hub>, when: Option<RestartWhen>) -> anyhow::Result<()> {
+    if !INSTALLED.load(Ordering::SeqCst) {
+        static UPDATING: AtomicBool = AtomicBool::new(false);
+        let refusal = if when.is_none() && hub.any_running().await {
+            Some("Agents are still working. Update your server when they have finished.")
+        } else if UPDATING.swap(true, Ordering::SeqCst) {
+            Some("This server is already updating.")
+        } else {
+            None
+        };
+        if let Some(refusal) = refusal {
+            write_frame(&mut send, &Message::Error { message: refusal.to_string() }).await?;
+            send.finish()?;
+            return Ok(());
+        }
+        let installed = install(&mut send).await;
+        UPDATING.store(false, Ordering::SeqCst);
+        let program = match installed {
+            Ok(program) => program,
+            Err(error) => {
+                write_frame(&mut send, &Message::Error { message: error_text(&error) }).await?;
+                send.finish()?;
+                return Ok(());
+            }
+        };
+        INSTALLED.store(true, Ordering::SeqCst);
+        tokio::spawn(restart_when_idle(hub.clone(), program));
+    }
+    if when == Some(RestartWhen::Now) {
+        RESTART_NOW.notify_one();
+    }
+    let mut restarting = RESTARTING.subscribe();
+    if when.is_some() && !*restarting.borrow() && hub.any_running().await {
+        let _ = write_frame(&mut send, &Message::UpdateWaiting).await;
+    }
+    let _ = restarting.wait_for(|restarting| *restarting).await;
+    let _ = write_frame(&mut send, &Message::Ok).await;
+    let _ = send.finish();
+    Ok(())
+}
+
+/// Puts the latest release in place of the program, telling the client how far the download is.
+/// Answers with where the program is.
+async fn install(send: &mut SendStream) -> anyhow::Result<PathBuf> {
     // Where the program is, asked before it is replaced: afterwards the answer is the old file.
     let program = std::env::current_exe()?;
     let download_url = std::env::var("MOTILE_DOWNLOAD_URL").unwrap_or_else(|_| update::DOWNLOAD_URL.to_string());
@@ -275,21 +319,27 @@ async fn update_server(mut send: SendStream, hub: &Hub) -> anyhow::Result<()> {
     });
     while let Some((received, total)) = progress.recv().await {
         // The client may have gone; the update goes on without it.
-        let _ = write_frame(&mut send, &Message::Updating { received, total }).await;
+        let _ = write_frame(send, &Message::Updating { received, total }).await;
     }
-    let installed = installing.await?;
-    UPDATING.store(false, Ordering::SeqCst);
-    if let Err(error) = installed {
-        write_frame(&mut send, &Message::Error { message: error_text(&error) }).await?;
-        send.finish()?;
-        return Ok(());
+    installing.await??;
+    Ok(program)
+}
+
+/// Starts the installed program once no agent works, or at once when asked: the agents are then
+/// stopped, and their threads continue after the restart.
+async fn restart_when_idle(hub: Arc<Hub>, program: PathBuf) {
+    let mut now = false;
+    while !now && hub.any_running().await {
+        tokio::select! {
+            _ = tokio::time::sleep(IDLE_CHECK) => {}
+            _ = RESTART_NOW.notified() => now = true,
+        }
     }
-    let _ = write_frame(&mut send, &Message::Ok).await;
-    let _ = send.finish();
+    hub.close(now).await;
+    RESTARTING.send_replace(true);
     tracing::info!("updated; starting the new server");
     tokio::time::sleep(RESTART_AFTER).await;
     update::request_restart(program);
-    Ok(())
 }
 
 /// Commits, pushes and the like, telling the client each stage as it starts. The run goes on when

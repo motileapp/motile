@@ -16,8 +16,8 @@ use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, FileKind, Item, ItemKind, Message, Project, PullRequestSettings, Request, ServerInfo, Thread, ToolStatus,
-    Worktree,
+    Activity, ContinueSettings, FileKind, Item, ItemKind, Message, Project, PullRequestSettings, Request, ServerInfo,
+    Thread, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -113,6 +113,11 @@ enum Input {
     PullRequestSettingsSet {
         server_id: String,
         settings: PullRequestSettings,
+    },
+    /// The server took what it is to go on with by itself.
+    ContinueSettingsSet {
+        server_id: String,
+        settings: ContinueSettings,
     },
     /// The server took the instructions for naming its branches, or went back to its own.
     BranchInstructionsSet {
@@ -339,6 +344,14 @@ impl Core {
                 let Some(server) = self.server_mut(&server_id) else { return };
                 let Some(info) = &mut server.info else { return };
                 info.pull_request_settings = settings;
+                let info = info.clone();
+                self.cache.set_server_info(&server_id, &info);
+                self.emit_servers();
+            }
+            Input::ContinueSettingsSet { server_id, settings } => {
+                let Some(server) = self.server_mut(&server_id) else { return };
+                let Some(info) = &mut server.info else { return };
+                info.continue_settings = settings;
                 let info = info.clone();
                 self.cache.set_server_info(&server_id, &info);
                 self.emit_servers();
@@ -1198,7 +1211,12 @@ impl Core {
                     let token = auth.create_enroll_token(&key).await.map_err(error_text);
                     let token = token.map(|token| {
                         let spans = highlight::command(&token.command);
-                        json!({ "command": token.command, "expires_at": token.expires_at, "spans": spans })
+                        json!({
+                            "token": token.token,
+                            "command": token.command,
+                            "expires_at": token.expires_at,
+                            "spans": spans,
+                        })
                     });
                     reply(&sink, id, token);
                 });
@@ -1292,18 +1310,24 @@ impl Core {
                     reply(&sink, id, sent.await.map_err(error_text));
                 });
             }
-            Command::UpdateServer { server_id } => {
+            Command::UpdateServer { server_id, when } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
-                    let events = sink.clone();
+                    let (events, waits) = (sink.clone(), sink.clone());
+                    let waiting_id = server_id.clone();
                     let report = move |received, total| {
-                        events(Event::ServerUpdate { server_id: server_id.clone(), received, total });
+                        events(Event::ServerUpdate { server_id: server_id.clone(), received, total, waiting: false });
                     };
-                    reply(&sink, id, link.update(report).await.map(|_| json!({})).map_err(error_text));
+                    let waiting = move || {
+                        let server_id = waiting_id.clone();
+                        waits(Event::ServerUpdate { server_id, received: 0, total: None, waiting: true });
+                    };
+                    let updated = link.update(when, report, waiting).await;
+                    reply(&sink, id, updated.map(|_| json!({})).map_err(error_text));
                 });
             }
             Command::GitRun { server_id, project_id, action, thread_id, message, paths, new_branch } => {
@@ -1365,6 +1389,24 @@ impl Core {
                     let set = link.request(&request).await;
                     if set.is_ok() {
                         let _ = inputs.send(Input::PullRequestSettingsSet { server_id, settings });
+                    }
+                    reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
+                });
+            }
+            Command::SetContinueSettings { server_id, settings } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
+                tokio::spawn(async move {
+                    let request = Request::SetContinueSettings {
+                        after_limits: Some(settings.after_limits),
+                        after_restarts: Some(settings.after_restarts),
+                    };
+                    let set = link.request(&request).await;
+                    if set.is_ok() {
+                        let _ = inputs.send(Input::ContinueSettingsSet { server_id, settings });
                     }
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
@@ -2003,6 +2045,7 @@ mod tests {
             pull_request: None,
             watching: false,
             git_stage: None,
+            interruption: None,
             rev: 3,
         }
     }

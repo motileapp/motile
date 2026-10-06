@@ -485,7 +485,7 @@ struct CommandPanel: View {
         (store.activeThreads + store.doneThreads).map { thread in
             let project = store.project(thread.projectID)
             let name = project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
-            let state = thread.isDone ? "done" : thread.needsApproval ? "needs approval" : thread.running ? "working" : thread.monitoring ? "monitoring" : Time.ago(thread.updatedAt)
+            let state = thread.isDone ? "done" : thread.needsApproval ? "needs approval" : thread.running ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt)
             return PanelItem(id: "thread-\(thread.id)", title: thread.title, detail: "\(name) · \(state)", icon: .project(project)) {
                 store.select(.thread(thread.id))
             }
@@ -499,6 +499,9 @@ struct CommandPanel: View {
         if thread.busy {
             items.append(PanelItem(id: "stop", title: "Stop the agent", detail: thread.title, icon: .symbol(.circleStop)) { store.stop() })
         } else {
+            if thread.interruption != nil {
+                items.append(PanelItem(id: "continue", title: "Continue the agent", detail: thread.title, icon: .symbol(.play)) { store.continueThread() })
+            }
             let done = thread.isDone
             items.append(
                 PanelItem(id: "done", title: done ? "Mark undone" : "Mark done", detail: thread.title, icon: .symbol(done ? .undo2 : .circleCheck)) {
@@ -509,12 +512,22 @@ struct CommandPanel: View {
         return items
     }
 
-    /// The servers that run an older version than the newest release.
+    /// The servers that run an older version than the newest release. One whose agents work is
+    /// updated once they finish, or now, with their threads going on after.
     private var serverUpdates: [PanelItem] {
-        store.servers.filter { store.isOutdated($0) && store.serverUpdates[$0.id] == nil }.map { server in
-            PanelItem(id: "update-\(server.id)", title: "Update \(server.name)", detail: "From version \(server.version) to \(store.updater.latest ?? "")", icon: .symbol(.circleArrowDown)) {
-                store.update(server)
+        store.servers.filter { store.isOutdated($0) && store.serverUpdates[$0.id] == nil }.flatMap { server in
+            let detail = "From version \(server.version) to \(store.updater.latest ?? "")"
+            guard store.isBusy(server), store.canChooseRestart(server) else {
+                return [PanelItem(id: "update-\(server.id)", title: "Update \(server.name)", detail: detail, icon: .symbol(.circleArrowDown)) { store.update(server) }]
             }
+            return [
+                PanelItem(id: "update-\(server.id)", title: "Update \(server.name) when agents finish", detail: detail, icon: .symbol(.circleArrowDown)) {
+                    store.update(server, when: .idle)
+                },
+                PanelItem(id: "update-now-\(server.id)", title: "Update \(server.name) now", detail: "Its agents stop and continue once it is back", icon: .symbol(.circleArrowDown)) {
+                    store.update(server, when: .now)
+                },
+            ]
         }
     }
 

@@ -601,7 +601,7 @@ struct ThreadStatus: View {
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
-                        symbol(.circleDashed)
+                        Image(.circleDashed, size: 10)
                     }
                 }
             }
@@ -615,6 +615,11 @@ struct ThreadStatus: View {
                     symbol(.eye)
                 }
             }
+        } else if let interruption = thread.interruption {
+            label(interruption.word.capitalized, Color.themeWarning) {
+                symbol(interruption.symbol)
+            }
+            .help(interruption.detail())
         } else if thread.unread {
             label("Finished", Color.themeSuccess) {
                 symbol(.flag)

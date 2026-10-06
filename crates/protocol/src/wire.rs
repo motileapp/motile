@@ -67,9 +67,26 @@ pub struct Thread {
     /// What a commit, a push or the like that was started from the thread is at.
     #[serde(default)]
     pub git_stage: Option<GitStage>,
+    /// Why the agent stopped before it finished, until it works again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interruption: Option<Interruption>,
     /// The transcript's revision; a client whose copy is older has catching up to do.
     pub rev: u64,
 }
+
+/// Why a thread's agent stopped before it finished.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Interruption {
+    /// The agent reached its usage limit. `resets_at` is when the limit resets, when the agent
+    /// said; with `continues` the thread goes on by itself then.
+    Limit { resets_at: Option<f64>, continues: bool },
+    /// The server restarted while the agent worked.
+    Restart,
+}
+
+/// What the server tells an agent to have it go on with what it was doing.
+pub const CONTINUE_PROMPT: &str = "Continue where you left off.";
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Item {
@@ -222,6 +239,9 @@ pub struct ThreadChange {
     pub access: Option<Access>,
     pub plan: Option<bool>,
     pub done: Option<bool>,
+    /// Whether a thread that waits for its usage limit continues once the limit resets.
+    #[serde(default)]
+    pub continues: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -533,9 +553,24 @@ pub enum Request {
         id: String,
     },
     /// Replaces the server's program with the latest release and starts it again. The server answers
-    /// with `Updating` while it downloads, then `Ok` just before it restarts.
+    /// with `Updating` while it downloads, `UpdateWaiting` while its agents work, then `Ok` just
+    /// before it restarts. Without `when`, as older clients ask, it refuses while agents work.
     #[serde(alias = "update_host")]
-    UpdateServer,
+    UpdateServer {
+        #[serde(default)]
+        when: Option<RestartWhen>,
+    },
+    /// Has the thread's agent go on with what it was doing.
+    Continue {
+        thread_id: String,
+    },
+    /// What the server goes on with by itself; `None` leaves a setting as it is.
+    SetContinueSettings {
+        #[serde(default)]
+        after_limits: Option<bool>,
+        #[serde(default)]
+        after_restarts: Option<bool>,
+    },
     /// What the agents spent between `since` and `until`, in buckets of `bucket_secs` that start
     /// where the hours and days of a clock `utc_offset_secs` ahead of UTC do. `Usage` answers.
     Usage {
@@ -1013,6 +1048,25 @@ pub struct LineComment {
     pub body: String,
 }
 
+/// When an updated server restarts while its agents work.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum RestartWhen {
+    /// Once no agent works.
+    Idle,
+    /// At once: the agents are stopped and their threads continue after the restart.
+    Now,
+}
+
+/// What the server goes on with by itself after its agents were stopped.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct ContinueSettings {
+    /// A thread that reached its agent's usage limit continues once the limit resets.
+    pub after_limits: bool,
+    /// A thread whose agent worked when the server restarted continues once it is back.
+    pub after_restarts: bool,
+}
+
 /// What the server does with pull requests by itself.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct PullRequestSettings {
@@ -1311,6 +1365,8 @@ pub struct ServerInfo {
     pub branch_instructions: BranchInstructions,
     #[serde(default)]
     pub pull_request_settings: PullRequestSettings,
+    #[serde(default)]
+    pub continue_settings: ContinueSettings,
 }
 
 /// How the writer is told to name the branches it makes.
@@ -1493,6 +1549,8 @@ pub enum Message {
         received: u64,
         total: Option<u64>,
     },
+    /// The update is installed, and the server restarts once its agents have finished.
+    UpdateWaiting,
     /// `size` bytes of an image or a video follow.
     Media {
         size: u64,
@@ -1559,7 +1617,7 @@ mod tests {
         .unwrap();
         let kind: crate::auth_api::DeviceKind = serde_json::from_value(serde_json::json!("host")).unwrap();
 
-        assert_eq!(update, Request::UpdateServer);
+        assert_eq!(update, Request::UpdateServer { when: None });
         assert!(matches!(welcome, Message::Welcome { server, .. } if server.version == "0.1.6"));
         assert_eq!(kind, crate::auth_api::DeviceKind::Server);
     }

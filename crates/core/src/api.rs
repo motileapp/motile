@@ -5,8 +5,9 @@ use std::path::PathBuf;
 
 use motile_protocol::auth_api::User;
 use motile_protocol::wire::{
-    Activity, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread, Project, PullRequestAction,
-    PullRequestEdit, PullRequestSettings, PullRequestState, Request, ServerInfo, Thread,
+    Activity, ContinueSettings, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread, Project,
+    PullRequestAction, PullRequestEdit, PullRequestSettings, PullRequestState, Request, RestartWhen, ServerInfo,
+    Thread,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -125,10 +126,13 @@ pub enum Command {
     CancelUpload {
         key: String,
     },
-    /// Has the server install the latest release and restart. `server_update` events say how far the
-    /// download is; the answer comes when the server is about to restart.
+    /// Has the server install the latest release and restart: `when` its agents work, once they
+    /// have finished or at once. `server_update` events say how far the download is, and that the
+    /// server waits for its agents; the answer comes when the server is about to restart.
     UpdateServer {
         server_id: String,
+        #[serde(default)]
+        when: Option<RestartWhen>,
     },
     /// Commits, pushes, opens a pull request or pulls in the project's folder, or in the worktree
     /// of the thread; the server writes
@@ -283,6 +287,12 @@ pub enum Command {
         server_id: String,
         settings: PullRequestSettings,
     },
+    /// What the server goes on with by itself: threads that reached their usage limit, and
+    /// threads whose agents worked when it restarted.
+    SetContinueSettings {
+        server_id: String,
+        settings: ContinueSettings,
+    },
     /// Says how the server's writer names the branches it makes. Without `instructions` the
     /// server goes back to its own.
     SetBranchInstructions {
@@ -366,11 +376,14 @@ pub enum Event {
         server_id: String,
         projects: Vec<ProjectView>,
     },
-    /// How far a server's download of its update is. `total` is missing when it isn't known.
+    /// How far a server's download of its update is. `total` is missing when it isn't known. With
+    /// `waiting` the update is installed and the server restarts once its agents have finished.
     ServerUpdate {
         server_id: String,
         received: u64,
         total: Option<u64>,
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        waiting: bool,
     },
     /// A stage of a `git_run` has started, in the project's folder or in the worktree of the thread.
     GitProgress {
