@@ -12,7 +12,6 @@ import UniformTypeIdentifiers
 /// before the file is on this device.
 struct MediaContent {
     static let maxHeight: CGFloat = 480
-    private static let playedHere: Set<String> = ["mp4", "mov", "m4v"]
 
     let id: String
     let video: Bool
@@ -31,9 +30,6 @@ struct MediaContent {
         alt = json.string("alt")
         name = json.string("name")
     }
-
-    /// Whether the system's own player plays it. Other videos open in the app the Mac has for them.
-    var playsHere: Bool { Self.playedHere.contains((id as NSString).pathExtension.lowercased()) }
 
     /// The box it is shown in, in a column `width` wide: its own size, or smaller to fit.
     func box(width: CGFloat) -> CGSize {
@@ -105,21 +101,48 @@ enum Pictures {
     }
 }
 
+extension MediaFiles {
+    /// What a right click or a long press on an image or a video offers. `fetch` hands over its file.
+    static func actions(video: Bool, name: String, from view: FlippedView, fetch: @escaping (@escaping (URL) -> Void) -> Void) -> [MenuAction] {
+        [
+            MenuAction(title: video ? "Copy Video" : "Copy Image", symbol: .copy) {
+                fetch { file in copy(file, video: video, named: name) }
+            },
+            MenuAction(title: saveTitle, symbol: .download) { [weak view] in
+                fetch { file in
+                    guard let view else { return }
+                    save(file, named: name, from: view)
+                }
+            },
+        ]
+    }
+
+    static func copy(_ file: URL, video: Bool, named name: String) {
+        guard video else { return copyImage(at: file) }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let named = namedCopy(of: file, name: name)
+            DispatchQueue.main.async { copyFile(named) }
+        }
+    }
+
+    /// A copy of the file under its name, in a temporary folder, for what takes it to know it by it.
+    static func namedCopy(of file: URL, name: String) -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("motile-shared", isDirectory: true)
+        let copy = folder.appendingPathComponent(name.isEmpty ? file.lastPathComponent : name)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: copy)
+        return (try? FileManager.default.copyItem(at: file, to: copy)) == nil ? file : copy
+    }
+}
+
 final class MediaRowView: RowView {
     private static let gap: CGFloat = 6
 
     private let picture = PictureView()
     private let playSymbol = SymbolView(.circlePlay, size: 40, tint: Theme.secondary)
-    private let spinner = SpinnerView(size: 24)
     private let caption = TextLabel(font: Theme.smallFont, color: Theme.secondary)
     private var content: MediaContent?
     private var file: URL?
-    private var downloading = false
-    private var progress: NSObjectProtocol?
-    #if os(macOS)
-    private var player: AVPlayerView?
-    private var playerReady: NSKeyValueObservation?
-    #endif
 
     static func height(_ content: MediaContent, width: CGFloat) -> CGFloat {
         content.box(width: width).height + gap * 2
@@ -129,46 +152,34 @@ final class MediaRowView: RowView {
         super.init(frame: frame)
         addSubview(picture)
         addSubview(playSymbol)
-        spinner.isHidden = true
-        addSubview(spinner)
         caption.breaks = .byTruncatingMiddle
         addSubview(caption)
         onPress = { [weak self] _ in self?.pressed() }
-        menuActions = { [weak self] in self?.actions ?? [] }
-        progress = NotificationCenter.default.addObserver(forName: .mediaProgress, object: nil, queue: .main) { [weak self] note in
-            guard let self, self.downloading, let content = self.content,
-                note.userInfo?["id"] as? String == content.id,
-                let fraction = note.userInfo?["fraction"] as? Double
-            else { return }
-            self.caption.string = "Downloading \(content.name) · \(Int(fraction * 100))%"
+        menuActions = { [weak self] in
+            guard let self, let media = self.content else { return [] }
+            return MediaFiles.actions(video: media.video, name: media.name, from: self) { [weak self] done in
+                self?.fetch { file in
+                    guard let file else { return }
+                    done(file)
+                }
+            }
         }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    deinit {
-        if let progress { NotificationCenter.default.removeObserver(progress) }
-    }
-
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .media(let media) = row.kind, media.id != content?.id else { return }
-        removePlayer()
         content = media
         file = nil
-        downloading = false
         tip = media.alt.isEmpty ? nil : media.alt
         describe(media.alt.isEmpty ? media.name : media.alt)
         playSymbol.isHidden = !media.video
-        spinner.isHidden = true
         picture.picture = media.video ? nil : Pictures.cached(media.id)
-        caption.string = media.video ? Self.described(media) : ""
+        caption.string = media.video ? "\(media.name) · \(ByteCountFormatter.string(fromByteCount: media.bytes, countStyle: .file))" : ""
         guard !media.video, picture.picture == nil else { return }
         loadPicture(media)
-    }
-
-    private static func described(_ media: MediaContent) -> String {
-        "\(media.name) · \(ByteCountFormatter.string(fromByteCount: media.bytes, countStyle: .file))"
     }
 
     private func loadPicture(_ media: MediaContent) {
@@ -206,136 +217,19 @@ final class MediaRowView: RowView {
         let box = content.box(width: width)
         let frame = CGRect(x: 0, y: Self.gap, width: box.width, height: box.height)
         picture.frame = frame
-        #if os(macOS)
-        player?.frame = frame
-        #endif
         playSymbol.frame = CGRect(x: frame.midX - 24, y: frame.midY - 24, width: 48, height: 48)
-        spinner.frame = playSymbol.frame
         caption.frame = CGRect(x: 12, y: frame.maxY - 10 - scaled(16), width: max(0, frame.width - 24), height: scaled(16))
         return box.height + Self.gap * 2
     }
 
-    // MARK: Opening and playing
-
-    /// The box takes the clicks, until a player with controls of its own is in it.
     override func takesPress(at point: CGPoint) -> Bool {
-        #if os(macOS)
-        guard player == nil else { return false }
-        #endif
-        return picture.frame.contains(point)
+        picture.frame.contains(point)
     }
 
+    /// Opens the image or the video in the viewer, which plays a video and fills the screen with it.
     private func pressed() {
         guard let media = content else { return }
-        guard media.video else {
-            guard picture.picture != nil else { return loadPicture(media) }
-            owner?.view([ViewedMedia(name: media.name, video: false, source: .media(media.id))], at: 0)
-            return
-        }
-        #if os(macOS)
-        guard !downloading else { return }
-        downloading = true
-        wait(true)
-        caption.string = "Downloading \(media.name)"
-        fetch { [weak self] file in
-            guard let self else { return }
-            self.downloading = false
-            guard let file else {
-                self.wait(false)
-                self.caption.string = "This video couldn't be loaded. Click to try again."
-                return
-            }
-            self.caption.string = Self.described(media)
-            guard media.playsHere else {
-                self.wait(false)
-                Platform.open(file)
-                return
-            }
-            self.play(file)
-        }
-        #else
-        // A phone plays a video over the whole screen.
-        owner?.view([ViewedMedia(name: media.name, video: true, source: .media(media.id))], at: 0)
-        #endif
-    }
-
-    /// While the video downloads and until its first frame is drawn, the spinner stands where the
-    /// play symbol was.
-    private func wait(_ waiting: Bool) {
-        spinner.isHidden = !waiting
-        playSymbol.isHidden = waiting || !(content?.video ?? false)
-    }
-
-    #if os(macOS)
-    private func play(_ file: URL) {
-        let view = AVPlayerView(frame: picture.frame)
-        view.controlsStyle = .inline
-        view.showsFullScreenToggleButton = true
-        view.videoGravity = .resizeAspect
-        view.wantsLayer = true
-        view.layer?.cornerRadius = PictureView.radius
-        view.layer?.masksToBounds = true
-        view.player = AVPlayer(url: file)
-        addSubview(view, positioned: .below, relativeTo: spinner)
-        player = view
-        playerReady = view.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] view, _ in
-            guard view.isReadyForDisplay else { return }
-            DispatchQueue.main.async {
-                guard let self, self.player === view else { return }
-                self.spinner.isHidden = true
-            }
-        }
-        caption.isHidden = true
-        view.player?.play()
-    }
-
-    private func removePlayer() {
-        playerReady = nil
-        player?.player?.pause()
-        player?.removeFromSuperview()
-        player = nil
-        caption.isHidden = false
-    }
-
-    /// A row that scrolled away stops playing.
-    override func viewDidHide() {
-        super.viewDidHide()
-        player?.player?.pause()
-    }
-
-    override func viewDidMoveToSuperview() {
-        super.viewDidMoveToSuperview()
-        guard superview == nil else { return }
-        player?.player?.pause()
-    }
-    #else
-    private func removePlayer() {}
-    #endif
-
-    // MARK: Menu
-
-    private var actions: [MenuAction] {
-        guard let media = content else { return [] }
-        var actions: [MenuAction] = []
-        if !media.video {
-            actions.append(MenuAction(title: "Copy Image", symbol: .copy) { [weak self] in self?.copyImage() })
-        }
-        actions.append(MenuAction(title: MediaFiles.saveTitle, symbol: .download) { [weak self] in self?.save() })
-        return actions
-    }
-
-    private func copyImage() {
-        fetch { file in
-            guard let file else { return }
-            MediaFiles.copyImage(at: file)
-        }
-    }
-
-    private func save() {
-        guard let media = content else { return }
-        fetch { [weak self] file in
-            guard let self, let file else { return }
-            MediaFiles.save(file, named: media.name, from: self)
-        }
+        guard media.video || picture.picture != nil else { return loadPicture(media) }
+        owner?.view([ViewedMedia(name: media.name, video: media.video, source: .media(media.id))], at: 0)
     }
 }

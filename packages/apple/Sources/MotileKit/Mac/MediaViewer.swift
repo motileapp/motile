@@ -16,6 +16,7 @@ struct MediaViewer: View {
     @State private var keys: Any?
     @State private var playerReady = false
     @State private var fullScreen = false
+    @State private var file: URL?
 
     private enum Loaded {
         case image(CGImage, scale: CGFloat)
@@ -31,9 +32,9 @@ struct MediaViewer: View {
             content(item)
             if viewing.items.count > 1 {
                 HStack {
-                    arrow(.chevronLeft, help: "Previous (←)") { store.viewNext(-1) }
+                    roundButton(.chevronLeft, help: "Previous (←)") { store.viewNext(-1) }
                     Spacer()
-                    arrow(.chevronRight, help: "Next (→)") { store.viewNext(1) }
+                    roundButton(.chevronRight, help: "Next (→)") { store.viewNext(1) }
                 }
                 .padding(.horizontal, 14)
             }
@@ -57,8 +58,16 @@ struct MediaViewer: View {
             .padding(.horizontal, 80)
         }
         .overlay(alignment: .topTrailing) {
-            arrow(.x, help: "Close (Esc)") { store.closeViewer() }
-                .padding(10)
+            HStack(spacing: 8) {
+                if let file {
+                    roundButton(.copy, help: item.video ? "Copy Video (⌘C)" : "Copy Image (⌘C)") {
+                        MediaFiles.copy(file, video: item.video, named: item.name)
+                    }
+                    roundButton(.download, help: "Save As… (⌘S)") { MediaFiles.save(file, named: item.name) }
+                }
+                roundButton(.x, help: "Close (Esc)") { store.closeViewer() }
+            }
+            .padding(10)
         }
         .task(id: item) { load(item) }
         .onReceive(NotificationCenter.default.publisher(for: .mediaProgress)) { note in
@@ -113,7 +122,7 @@ struct MediaViewer: View {
         }
     }
 
-    private func arrow(_ symbol: Symbol, help: String, action: @escaping () -> Void) -> some View {
+    private func roundButton(_ symbol: Symbol, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(symbol, size: 13)
                 .foregroundStyle(.white)
@@ -126,9 +135,20 @@ struct MediaViewer: View {
         .help(help)
     }
 
-    /// The player's own full screen takes the keys while it is up.
+    /// The player's own full screen and the save panel take the keys while they are up.
     private func handle(_ event: NSEvent) -> Bool {
-        guard !fullScreen else { return false }
+        guard !fullScreen, !(event.window is NSPanel) else { return false }
+        if event.modifierFlags.contains(.command), let file {
+            switch event.charactersIgnoringModifiers {
+            case "c":
+                MediaFiles.copy(file, video: viewing.item.video, named: viewing.item.name)
+                return true
+            case "s":
+                MediaFiles.save(file, named: viewing.item.name)
+                return true
+            default: break
+            }
+        }
         switch event.keyCode {
         case 53: store.closeViewer()
         case 123: store.viewNext(-1)
@@ -148,10 +168,11 @@ struct MediaViewer: View {
 
     private func load(_ item: ViewedMedia) {
         pause()
-        (loaded, failed, fraction, playerReady) = (nil, false, nil, false)
+        (loaded, failed, fraction, playerReady, file) = (nil, false, nil, false, nil)
         let show = { (file: URL?) in
             guard viewing.item == item else { return }
             guard let file else { return failed = true }
+            self.file = file
             guard item.video else {
                 let scale = NSScreen.main?.backingScaleFactor ?? 2
                 return Pictures.decode(file, id: "view:\(file.path)", maxPixels: 8192) { image in

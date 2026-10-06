@@ -616,7 +616,13 @@ enum MediaFiles {
         }
     }
 
-    static func save(_ file: URL, named name: String, from view: NSView) {
+    /// Puts the file itself on the pasteboard, as Finder copies one.
+    static func copyFile(_ file: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([file as NSURL])
+    }
+
+    static func save(_ file: URL, named name: String, from view: NSView? = nil) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name
         panel.begin { response in
