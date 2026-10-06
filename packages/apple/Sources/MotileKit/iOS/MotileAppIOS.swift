@@ -193,8 +193,6 @@ struct RootView: View {
                         .presentationDragIndicator(.visible)
                 case .panel(let page):
                     CommandPanel(start: page)
-                        .presentationDetents([.large])
-                        .presentationDragIndicator(.visible)
                 case .settings:
                     SettingsSheet()
                 case .usage:

@@ -94,6 +94,32 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(shown(newThread))
     }
 
+    func testCommandsOpenInASheetWhosePagesPushAndCloseTakesThemAway() {
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        app.buttons["Commands"].tap()
+        let title = app.navigationBars["Commands"]
+        XCTAssertTrue(shown(title))
+        tapRow("Add a project…")
+        XCTAssertTrue(shown(app.navigationBars["Add a project"]))
+        tapRow("New project")
+        XCTAssertTrue(shown(app.navigationBars["New project"]))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        app.navigationBars["New project"].buttons.firstMatch.tap()
+        XCTAssertTrue(shown(app.navigationBars["Add a project"]))
+        swipeFromTheEdge()
+        XCTAssertTrue(shown(title))
+        app.buttons["Close"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(shown(newThread))
+    }
+
+    private func tapRow(_ title: String) {
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+        XCTAssertTrue(shown(row))
+        row.tap()
+    }
+
     private func swipeFromTheEdge() {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)), withVelocity: .slow, thenHoldForDuration: 0)

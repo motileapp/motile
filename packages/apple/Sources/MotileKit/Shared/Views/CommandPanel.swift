@@ -17,7 +17,11 @@ struct CommandPanel: View {
     @State private var browsesAsked = 0
     @State private var browsesAnswered = 0
     @State private var copied = false
+    #if os(macOS)
     @FocusState private var searching: Bool
+    #else
+    @FocusState private var typing: PanelPage?
+    #endif
 
     init(start: PanelPage) {
         _pages = State(initialValue: [start])
@@ -26,9 +30,7 @@ struct CommandPanel: View {
     private var page: PanelPage { pages.last ?? .commands }
 
     var body: some View {
-        let sections = self.sections
-        let items = sections.flatMap(\.items)
-        panel(sections, rows: items.count)
+        panel
             .onChange(of: query) {
                 highlighted = 0
                 if store.panelNotice != nil { store.panelNotice = nil }
@@ -39,11 +41,11 @@ struct CommandPanel: View {
     }
 
     #if os(macOS)
-    private func panel(_ sections: [PanelSection], rows: Int) -> some View {
+    private var panel: some View {
         VStack(spacing: 0) {
             header
             ThemeDivider(color: .themeBorderSecondary)
-            results(sections, rows: rows)
+            results(page)
             ThemeDivider(color: .themeBorderSecondary)
             hints
         }
@@ -69,34 +71,90 @@ struct CommandPanel: View {
         }
     }
     #else
-    /// The panel as a sheet: the same pages, picked by a tap. The keyboard only comes by itself
-    /// where the page is something to type.
-    private func panel(_ sections: [PanelSection], rows: Int) -> some View {
-        VStack(spacing: 0) {
-            header
-                .padding(.top, 10)
-            ThemeDivider()
-            results(sections, rows: rows)
+    /// The panel as a sheet: its pages pushed on a stack, each with the system's search field,
+    /// picked by a tap. The keyboard only comes by itself where the page is something to type.
+    private var panel: some View {
+        NavigationStack(path: pushed) {
+            screen(pages[0])
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                }
+                .navigationDestination(for: PanelPage.self) { screen($0) }
         }
-        .onAppear(perform: focusIfTyped)
-        .onChange(of: pages) { focusIfTyped() }
         .onKeyPress(.downArrow) { steer(1) }
         .onKeyPress(.upArrow) { steer(-1) }
         .onKeyPress(.escape) {
             store.closePanel()
             return .handled
         }
+        .presentationSizing(.page)
+        .presentationDragIndicator(.visible)
     }
 
-    private func focusIfTyped() {
+    /// The pages above the first. Only the stack's own way back changes them from there.
+    private var pushed: Binding<[PanelPage]> {
+        Binding {
+            Array(pages.dropFirst())
+        } set: { path in
+            guard path.count < pages.count - 1 else { return }
+            pages = [pages[0]] + path
+            arrive()
+        }
+    }
+
+    private func screen(_ page: PanelPage) -> some View {
+        results(page)
+            .background(Color.themeSheet.ignoresSafeArea())
+            .navigationTitle(title(page))
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $query, prompt: prompt(page))
+            .searchFocused($typing, equals: page)
+            .searchPresentationToolbarBehavior(.avoidHidingContent)
+            .searchAtBottom()
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .onSubmit(of: .search, runHighlighted)
+            .toolbar {
+                if let id = page.githubID {
+                    ToolbarItem(placement: .topBarTrailing) { refreshButton(id) }
+                }
+            }
+            .task {
+                guard page.isTyped else { return }
+                typing = page
+            }
+    }
+
+    private func refreshButton(_ id: String) -> some View {
+        let pending = store.listingRepos.contains(id)
+        return Button {
+            store.loadRepos(id, fresh: true)
+        } label: {
+            if pending {
+                Spinner(size: 16)
+            } else {
+                Image(.rotateCw, size: 16)
+            }
+        }
+        .disabled(pending)
+        .accessibilityLabel("Refresh")
+    }
+
+    private func title(_ page: PanelPage) -> String {
         switch page {
-        case .newProject, .folder: searching = true
-        default: break
+        case .commands: "Commands"
+        case .projects: "New thread"
+        case .threads: "Threads"
+        case .servers, .sources: "Add a project"
+        case .newProject: "New project"
+        case .github: "Your GitHub"
+        case .githubSetup: "GitHub"
+        case .folder: "Local folder"
         }
     }
 
     private func steer(_ step: Int) -> KeyPress.Result {
-        let count = sections.flatMap(\.items).filter(\.selectable).count
+        let count = sections(page).flatMap(\.items).filter(\.selectable).count
         highlighted = steered ? min(max(highlighted + step, 0), max(0, count - 1)) : 0
         steered = true
         return .handled
@@ -105,6 +163,7 @@ struct CommandPanel: View {
 
     // MARK: Parts
 
+    #if os(macOS)
     private var header: some View {
         HStack(spacing: 10) {
             if pages.count > 1 {
@@ -114,17 +173,11 @@ struct CommandPanel: View {
                     .foregroundStyle(Color.themeTertiary)
                     .frame(width: ControlSize.regular.height, height: ControlSize.regular.height)
             }
-            TextField(prompt, text: $query)
+            TextField(prompt(page), text: $query)
                 .textFieldStyle(.plain)
                 .font(.ui(size: 16))
                 .focused($searching)
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.go)
-                .onSubmit(runHighlighted)
-                #endif
-            if case .github(let id) = page {
+            if let id = page.githubID {
                 refreshRepos(id)
             }
         }
@@ -134,19 +187,18 @@ struct CommandPanel: View {
 
     /// Lists the repositories again, to find one made since. Pending while the server lists them.
     private func refreshRepos(_ id: String) -> some View {
-        ActionButton(icon: .rotateCw, help: Platform.name == "macos" ? "Refresh (⌘R)" : "Refresh", pending: store.listingRepos.contains(id)) {
+        ActionButton(icon: .rotateCw, help: "Refresh (⌘R)", pending: store.listingRepos.contains(id)) {
             store.loadRepos(id, fresh: true)
         }
     }
-
-    #if os(iOS)
+    #else
     private func runHighlighted() {
-        guard let item = sections.flatMap(\.items).first(where: { $0.index == highlighted }) else { return }
+        guard let item = sections(page).flatMap(\.items).first(where: { $0.index == highlighted }) else { return }
         run(item)
     }
     #endif
 
-    private var prompt: String {
+    private func prompt(_ page: PanelPage) -> String {
         switch page {
         case .commands: "Search threads, projects and commands…"
         case .projects: "Start a thread in…"
@@ -160,12 +212,15 @@ struct CommandPanel: View {
         }
     }
 
-    private func results(_ sections: [PanelSection], rows: Int) -> some View {
-        ScrollViewReader { scroller in
+    private func results(_ page: PanelPage) -> some View {
+        let sections = self.sections(page)
+        let rows = sections.flatMap(\.items).count
+        let refused = notice(page)
+        return ScrollViewReader { scroller in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if rows == 0 {
-                        Text(emptyText)
+                        Text(emptyText(page))
                             .font(.ui(size: 13))
                             .foregroundStyle(Color.themeTertiary)
                             .multilineTextAlignment(.center)
@@ -188,8 +243,8 @@ struct CommandPanel: View {
                                 .onHover { if $0, item.index >= 0 { highlighted = item.index } }
                         }
                     }
-                    if let notice {
-                        Text(notice)
+                    if let refused {
+                        Text(refused)
                             .font(.ui(size: 12))
                             .foregroundStyle(Color.themeDanger)
                             .lineLimit(2)
@@ -200,7 +255,7 @@ struct CommandPanel: View {
                 .padding(.bottom, 8)
             }
             #if os(macOS)
-            .frame(height: height(sections, rows: rows))
+            .frame(height: height(page, sections, rows: rows, notice: refused))
             #else
             .frame(maxHeight: .infinity)
             .scrollDismissesKeyboard(.interactively)
@@ -215,22 +270,22 @@ struct CommandPanel: View {
     private static let noticeHeight: CGFloat = 36
 
     /// The pages that fill as the server answers keep one height, so nothing moves when it does.
-    private func height(_ sections: [PanelSection], rows: Int) -> CGFloat {
+    private func height(_ page: PanelPage, _ sections: [PanelSection], rows: Int, notice: String?) -> CGFloat {
         switch page {
         case .github, .folder: return 420
         default:
-            let notice = self.notice == nil ? 0 : Self.noticeHeight
+            let notice = notice == nil ? 0 : Self.noticeHeight
             return min(420, max(90, CGFloat(rows) * PanelRow.height + CGFloat(sections.count) * 32 + 10 + notice))
         }
     }
 
     /// What a server refused, or why it couldn't list the repositories again.
-    private var notice: String? {
+    private func notice(_ page: PanelPage) -> String? {
         guard case .github(let id) = page, store.repos[id] != nil else { return store.panelNotice }
         return store.panelNotice ?? store.repoErrors[id]
     }
 
-    private var emptyText: String {
+    private func emptyText(_ page: PanelPage) -> String {
         switch page {
         case .folder: browseError ?? "No folders found"
         case .github(let id): store.repoErrors[id] ?? "No repository found"
@@ -272,11 +327,11 @@ struct CommandPanel: View {
 
     // MARK: What is offered
 
-    private var sections: [PanelSection] {
+    private func sections(_ page: PanelPage) -> [PanelSection] {
         var sections: [PanelSection]
         var narrows = true
         switch page {
-        case .projects: sections = [PanelSection(title: "Projects", items: projectItems + [addProject])]
+        case .projects: sections = [PanelSection(title: "Projects", items: projectItems(shortcuts: Platform.name == "macos") + [addProject])]
         case .threads: sections = [PanelSection(title: "Threads", items: threadItems)]
         case .commands:
             sections = [
@@ -286,7 +341,7 @@ struct CommandPanel: View {
             // Searching from here looks through everything.
             if !query.isEmpty {
                 sections.append(PanelSection(title: "Threads", items: threadItems))
-                sections.append(PanelSection(title: "Start a thread in", items: projectItems))
+                sections.append(PanelSection(title: "Start a thread in", items: projectItems(shortcuts: false)))
             }
         case .servers: sections = [PanelSection(title: "Servers", items: serverItems)]
         case .sources(let id):
@@ -334,7 +389,8 @@ struct CommandPanel: View {
         return [current] + recent.filter { $0.id != current.id }
     }
 
-    private var projectItems: [PanelItem] {
+    /// `shortcuts` numbers the first nine for ⌘ and a digit.
+    private func projectItems(shortcuts: Bool) -> [PanelItem] {
         projects.enumerated().map { position, project in
             let server = store.server(project.serverID)?.name ?? ""
             var item = PanelItem(
@@ -342,7 +398,7 @@ struct CommandPanel: View {
                 title: project.name,
                 detail: "\(server) \(project.path)",
                 icon: .project(project),
-                shortcut: position < 9 && page == .projects && Platform.name == "macos" ? position + 1 : nil
+                shortcut: shortcuts && position < 9 ? position + 1 : nil
             ) { store.startNewThread(in: project) }
             item.detailParts = server.isEmpty ? [(.folder, project.path)] : [(.server, server), (.folder, project.path)]
             return item
@@ -638,7 +694,7 @@ struct CommandPanel: View {
     #if os(macOS)
     /// Takes the keys the panel is steered with. `false` leaves the key to the search field.
     private func handle(_ event: NSEvent) -> Bool {
-        let items = sections.flatMap(\.items)
+        let items = sections(page).flatMap(\.items)
         let command = event.modifierFlags.contains(.command)
         switch event.keyCode {
         case 53:
@@ -669,6 +725,22 @@ struct CommandPanel: View {
         return true
     }
     #endif
+}
+
+private extension PanelPage {
+    /// The server whose repositories it lists.
+    var githubID: String? {
+        guard case .github(let id) = self else { return nil }
+        return id
+    }
+
+    /// It asks for something to be typed rather than searched.
+    var isTyped: Bool {
+        switch self {
+        case .newProject, .folder: true
+        default: false
+        }
+    }
 }
 
 private struct KeyCap: View {
@@ -758,7 +830,7 @@ private struct PanelRow: View {
     var body: some View {
         HStack(spacing: 12) {
             icon
-                .frame(width: 22, height: 22)
+                .frame(width: scaled(22), height: scaled(22))
             VStack(alignment: .leading, spacing: 2) {
                 if item.placeholderLines > 0 {
                     placeholderLines
@@ -798,10 +870,10 @@ private struct PanelRow: View {
             ForEach(Array(item.detailParts.enumerated()), id: \.offset) { position, part in
                 if position > 0 {
                     Text("·")
-                }
-                HStack(spacing: 4) {
-                    Image(part.symbol, size: 11)
                         .foregroundStyle(Color.themeTertiary)
+                }
+                HStack(spacing: 3) {
+                    Image(part.symbol, size: 12)
                     Text(part.text)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -856,7 +928,7 @@ private struct PanelRow: View {
         case .symbol where item.placeholderLines > 0:
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(surface.next.color)
-                .frame(width: 20, height: 20)
+                .frame(width: scaled(20), height: scaled(20))
         case .symbol(let name):
             Image(name, size: 15)
                 .foregroundStyle(Color.themeSecondary)
@@ -865,10 +937,10 @@ private struct PanelRow: View {
                 .renderingMode(.template)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: 16, height: 16)
+                .frame(width: scaled(16), height: scaled(16))
                 .foregroundStyle(Color.themeSecondary)
         case .project(let project):
-            ProjectIcon(project: project, size: 20)
+            ProjectIcon(project: project, size: scaled(20))
         }
     }
 }
