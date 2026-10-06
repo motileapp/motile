@@ -11,7 +11,7 @@ These programs make it up, plus the code the clients share:
 | Program | Where it runs | What it does |
 | --- | --- | --- |
 | Auth server (`apps/auth`) | auth.motile.app | Signs people in with Google, records which devices belong to an account |
-| Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/install.sh` |
+| Marketing site (`apps/marketing`) | motile.app, as static files | The landing page, privacy and terms, and the installer at `/i` |
 | Web app (`apps/web`) | app.motile.app | Lists an account's servers and clients, adds servers, removes devices |
 | Server (`apps/server`, the `motile` binary) | The user's Linux machines and Macs | Runs the agents, stores threads in SQLite, serves the account's clients |
 | Mac app (`apps/macos`) | The user's Mac | The interface |
@@ -69,7 +69,7 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   Dark is the default; the theme switch keeps the choice in a cookie on motile.app, which both
   read.
 - `apps/marketing` ships no JavaScript but the theme switch and the demo: `src/components/demo`
-  is the Mac app's window in React, with made-up threads. `public/install.sh` is the installer.
+  is the Mac app's window in React, with made-up threads. `public/i` is the installer, and `public/install.sh` its old address.
   `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
   `scripts/preview.mjs` draws the link preview image of both from the `/preview/` page, the
   tagline over the demo: `pnpm --filter motile-marketing preview-image`. Run it when the demo

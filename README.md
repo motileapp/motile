@@ -42,17 +42,17 @@ Open the client and sign in with Google. This links the Mac to your account.
 With no server yet, the client shows one command. Run it on the Linux machine or the Mac where the agents should work:
 
 ```sh
-curl -fsSL https://motile.app/install.sh | sh -s -- <token>
+curl -fsSL https://motile.app/i | sh -s -- <code>
 ```
 
 The installer:
 
 1. Downloads the `motile` binary, to `/usr/local/bin` on Linux and to `~/.local/bin` on a Mac.
 2. Checks for Claude Code and Codex. If neither is installed it offers to install them; sign in to the agent once afterwards (`claude` or `codex login`).
-3. Links the machine to your account with the token in the command.
+3. Links the machine to your account with the code in the command.
 4. Installs and starts a service that survives reboots and crashes. On Linux it is `motile.service`, a systemd unit that runs as the user who ran the installer, with that user's sign-ins. On a Mac it is `app.motile.server`, a launchd agent in that user's desktop session, so the agents can use the Keychain, the simulators and code signing.
 
-The server appears in the client a moment later. The token works for one machine, for an hour; **Thread → Add a Server…** gives you a new command for the next machine, and so does [app.motile.app](https://app.motile.app).
+The server appears in the client a moment later. The code works for one machine, for 15 minutes, and the client counts them down; **Thread → Add a Server…** gives you a new command for the next machine, and so does [app.motile.app](https://app.motile.app).
 
 When the server runs as root on Linux, the service sets `IS_SANDBOX=1`. Claude Code refuses full access as root without it.
 

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::google::Identity;
 
 pub const SIGN_IN_LIFETIME: Duration = Duration::minutes(10);
-pub const ENROLL_TOKEN_LIFETIME: Duration = Duration::hours(1);
+pub const ENROLL_TOKEN_LIFETIME: Duration = Duration::minutes(15);
 pub const SESSION_LIFETIME: Duration = Duration::days(30);
 pub const MAX_DEVICES_PER_USER: i64 = 200;
 

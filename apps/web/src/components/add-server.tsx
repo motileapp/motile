@@ -20,17 +20,27 @@ export function AddServer({ servers }: { servers: Array<Device> }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [install, setInstall] = useState<InstallCommand>()
+  const [pending, setPending] = useState(false)
+  const now = useNow(open)
+  const expired = install !== undefined && install.expires_at * 1000 <= now
 
-  async function start() {
-    setInstall(undefined)
-    setOpen(true)
+  async function generate() {
+    setPending(true)
     try {
       setInstall(await createInstallCommand())
     } catch (error) {
       setOpen(false)
       toast.error(error instanceof Error ? error.message : String(error))
       await router.invalidate()
+    } finally {
+      setPending(false)
     }
+  }
+
+  async function start() {
+    setInstall(undefined)
+    setOpen(true)
+    await generate()
   }
 
   // The dialog closes by itself once the command has linked a machine.
@@ -57,9 +67,9 @@ export function AddServer({ servers }: { servers: Array<Device> }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add a server</DialogTitle>
+            <DialogTitle>Run this on your server</DialogTitle>
             <DialogDescription>
-              Run this on the Linux machine or Mac that will run your agents.
+              Run the command below on the server that will run your agents
             </DialogDescription>
           </DialogHeader>
           {install ? (
@@ -69,14 +79,46 @@ export function AddServer({ servers }: { servers: Array<Device> }) {
               <Spinner />
             </div>
           )}
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-3.5" />
-            Waiting for your server. The command works once, for an hour.
-          </p>
+          {expired ? (
+            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+              The command has expired
+              <Button variant="secondary" size="sm" disabled={pending} onClick={generate}>
+                {pending ? <Spinner data-icon="inline-start" /> : null}
+                Regenerate
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <Spinner className="size-3.5" />
+                Waiting for your server
+              </span>
+              <span className="tabular-nums">
+                {install ? timeLeft(install.expires_at, now) : "15:00"}
+              </span>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
   )
+}
+
+// The time of day, once a second, while something counts on it.
+function useNow(active: boolean) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [active])
+  return now
+}
+
+function timeLeft(expiresAt: number, now: number) {
+  const seconds = Math.max(0, Math.ceil(expiresAt - now / 1000))
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
 }
 
 function Command({ text }: { text: string }) {

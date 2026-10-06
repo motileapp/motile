@@ -777,6 +777,16 @@ struct EnrollToken {
         command = json.string("command")
         expiresAt = json.double("expires_at")
     }
+
+    func isExpired(at date: Date) -> Bool {
+        expiresAt <= date.timeIntervalSince1970
+    }
+
+    /// How long the command still works, as "14:59".
+    func timeLeft(at date: Date) -> String {
+        let seconds = max(0, Int((expiresAt - date.timeIntervalSince1970).rounded(.up)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
 }
 
 enum GitHubState: String {

@@ -94,6 +94,7 @@ final class AppStore {
     private(set) var signingIn = false
     var signInError: String?
     private(set) var enrollToken: EnrollToken?
+    private(set) var enrollTokenPending = false
     var showsAddServer = false
     /// The section of the settings open over the client, while they are.
     var settings: SettingsSection?
@@ -818,8 +819,15 @@ final class AppStore {
     func prepareToAddServer() {
         addServerCount = servers.count
         core.send("watch_servers", ["on": true])
-        if let token = enrollToken, token.expiresAt - Date().timeIntervalSince1970 > 600 { return }
+        if let token = enrollToken, !token.isExpired(at: Date()) { return }
+        regenerateEnrollToken()
+    }
+
+    func regenerateEnrollToken() {
+        guard !enrollTokenPending else { return }
+        enrollTokenPending = true
         core.send("create_enroll_token") { [weak self] result in
+            self?.enrollTokenPending = false
             switch result {
             case .success(let value): self?.enrollToken = EnrollToken(json: value)
             case .failure(let error): self?.errorMessage = error.message
