@@ -97,8 +97,14 @@ jobs:
           echo "$APPLE_API_KEY" > "$RUNNER_TEMP/api-key.p8"
           CREDENTIALS=(--key "$RUNNER_TEMP/api-key.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
           ditto -c -k --keepParent apps/macos/build/Motile.app "$RUNNER_TEMP/notarize.zip"
-          SUBMISSION="$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${CREDENTIALS[@]}" --wait --output-format json | jq -r .id)"
-          xcrun notarytool log "$SUBMISSION" "${CREDENTIALS[@]}"
+          ls -lh "$RUNNER_TEMP/notarize.zip"
+          SUBMISSION="$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${CREDENTIALS[@]}" --output-format json | jq -r .id)"
+          echo "Uploaded as submission $SUBMISSION"
+          STATUS=0
+          xcrun notarytool wait "$SUBMISSION" "${CREDENTIALS[@]}" --timeout 30m || STATUS=$?
+          xcrun notarytool info "$SUBMISSION" "${CREDENTIALS[@]}"
+          xcrun notarytool log "$SUBMISSION" "${CREDENTIALS[@]}" || true
+          [ "$STATUS" -eq 0 ] || exit "$STATUS"
           xcrun stapler staple apps/macos/build/Motile.app
           spctl --assess --type execute --verbose apps/macos/build/Motile.app
 
