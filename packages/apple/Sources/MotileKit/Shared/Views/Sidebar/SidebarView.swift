@@ -731,6 +731,8 @@ private struct SidebarFooter: View {
             }
             ForEach(store.servers) { ServerLine(server: $0) }
             HStack(spacing: 2 * ToolbarButton.margin) {
+                AccountMenu()
+                    .padding(.leading, (AccountMenu.side - ControlSize.regular.symbol) / 2)
                 if store.showsUsage {
                     ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, fills: true, alignment: .leading) {
                         store.closeRoute()

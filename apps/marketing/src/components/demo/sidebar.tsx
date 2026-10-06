@@ -120,6 +120,16 @@ export function Sidebar({
           </div>
         ))}
         <div className="-mx-[7px] flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="you@motile.app"
+            title="you@motile.app"
+            className="ml-[3px] flex size-7 items-center justify-center rounded-[7px] hover:bg-background-secondary"
+          >
+            <span className="flex size-5 items-center justify-center rounded-full bg-border-secondary text-[10px] font-semibold text-foreground">
+              Y
+            </span>
+          </button>
           <FooterButton icon={SettingsIcon} label="Settings" />
           <FooterButton icon={ChartColumnIcon} label="Usage" />
           <span className="ml-auto" />

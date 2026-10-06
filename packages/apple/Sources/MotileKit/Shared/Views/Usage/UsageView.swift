@@ -177,37 +177,66 @@ struct UsageServerPicks: View {
     }
 }
 
-/// The tabs, the period of the cost and the tokens, and the way to read it all again.
+/// The servers counted, as a menu that picks them.
+struct UsageServersMenu: View {
+    @Environment(AppStore.self) private var store
+    let model: UsageModel
+
+    var body: some View {
+        ActionMenu(model.serversLabel(among: store.servers), icon: .server, help: "The servers counted", variant: .secondary) {
+            UsageServerPicks(model: model)
+        }
+    }
+}
+
+/// The tabs, the period of the cost and the tokens, and the way to read it all again, in a row.
 struct UsageControls: View {
     @Bindable var model: UsageModel
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
-                tabs
+                UsageTabs(model: model)
                 Segmented(UsageModel.Period.allCases.map { ($0.label, $0) }, selection: $model.period)
                     .disabled(model.tab == .limits)
-                refresh
+                UsageRefreshButton(model: model)
             }
             HStack(spacing: 8) {
-                tabs
-                ActionMenu(model.period.label, variant: .secondary) {
-                    Picker("Period", selection: $model.period) {
-                        ForEach(UsageModel.Period.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.inline)
-                }
-                .disabled(model.tab == .limits)
-                refresh
+                UsageTabs(model: model)
+                UsagePeriodMenu(model: model)
+                UsageRefreshButton(model: model)
             }
         }
     }
+}
 
-    private var tabs: some View {
-        Segmented(UsageModel.Tab.allCases.map { ($0.label, $0) }, selection: $model.tab)
+struct UsageTabs: View {
+    @Bindable var model: UsageModel
+    var fills = false
+
+    var body: some View {
+        Segmented(UsageModel.Tab.allCases.map { ($0.label, $0) }, selection: $model.tab, fills: fills)
     }
+}
 
-    private var refresh: some View {
+struct UsagePeriodMenu: View {
+    @Bindable var model: UsageModel
+
+    var body: some View {
+        ActionMenu(model.period.label, variant: .secondary) {
+            Picker("Period", selection: $model.period) {
+                ForEach(UsageModel.Period.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.inline)
+        }
+        .disabled(model.tab == .limits)
+    }
+}
+
+struct UsageRefreshButton: View {
+    let model: UsageModel
+
+    var body: some View {
         ActionButton(icon: .refreshCw, help: "Refresh", pending: model.refreshing) { model.refresh() }
     }
 }
@@ -218,6 +247,8 @@ struct UsageContent: View {
 
     @Environment(AppStore.self) private var store
     let model: UsageModel
+    var margin: CGFloat = 24
+    var top: CGFloat = 20
 
     var body: some View {
         ScrollView {
@@ -229,8 +260,9 @@ struct UsageContent: View {
                 }
             }
             .frame(maxWidth: Self.width, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
+            .padding(.horizontal, margin)
+            .padding(.top, top)
+            .padding(.bottom, 20)
             .frame(maxWidth: .infinity)
         }
         .onAppear { model.start(store) }

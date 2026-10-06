@@ -6,7 +6,6 @@ struct LimitsView: View {
     /// Narrower than this, a card puts its bar under its numbers.
     private static let besideWidth: CGFloat = 520
 
-    @Environment(AppStore.self) private var store
     let report: LimitsReport
     @State private var width: CGFloat = 0
 
@@ -56,15 +55,11 @@ struct LimitsView: View {
                     .foregroundStyle(Color.themeSecondary)
                     .truncationMode(.middle)
             }
-            Spacer(minLength: 8)
-            if store.servers.count > 1 {
-                Text(section.servers.joined(separator: ", "))
-                    .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeTertiary)
-                    .truncationMode(.tail)
-            }
+            Spacer(minLength: 0)
         }
         .lineLimit(1)
+        .padding(.horizontal, 4)
+        .padding(.bottom, 4)
     }
 }
 

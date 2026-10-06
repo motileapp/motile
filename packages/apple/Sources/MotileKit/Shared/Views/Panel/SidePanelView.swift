@@ -170,7 +170,7 @@ struct PanelTabStrip: View {
     var body: some View {
         ScrollViewReader { strip in
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) {
+                HStack(spacing: 0) {
                     if !tabs.isBlank {
                         ForEach(tabs.tabs) { tab in
                             PanelTabChip(tab: tab, active: tab == tabs.active)
@@ -180,7 +180,7 @@ struct PanelTabStrip: View {
                         ActionButton(icon: .plus, help: "New tab") { store.sidePanel.openBlank() }
                     }
                 }
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 8 - PanelTabChip.margin)
                 .frame(maxHeight: .infinity)
             }
             .onChange(of: tabs.active, initial: true) {
@@ -216,7 +216,7 @@ struct PanelTabCommands: View {
     }
 }
 
-private struct PanelTabChip: View {
+struct PanelTabChip: View {
     @Environment(AppStore.self) private var store
     let tab: PanelTab
     let active: Bool
@@ -229,6 +229,8 @@ private struct PanelTabChip: View {
     private static let closeMargin = (height - closeSize) / 2
     /// How far above and under the tab a finger still presses it.
     private static let reach = max(0, (Platform.minimumPress - height) / 2)
+    /// The room on each side that looks empty but is the tab's, so no click falls between tabs.
+    static let margin: CGFloat = 1
 
     var body: some View {
         let panel = store.sidePanel
@@ -247,11 +249,16 @@ private struct PanelTabChip: View {
         .frame(height: Self.height)
         .frame(maxWidth: 180)
         .padding(.vertical, Self.reach)
-        .button(.highlight(selected: active, lit: hovering, inset: EdgeInsets(top: Self.reach, leading: 0, bottom: Self.reach, trailing: 0), faded: true)) { panel.activate(tab) }
+        .padding(.horizontal, Self.margin)
+        .button(
+            .highlight(
+                selected: active, lit: hovering,
+                inset: EdgeInsets(top: Self.reach, leading: Self.margin, bottom: Self.reach, trailing: Self.margin), faded: true)
+        ) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
             ActionButton(icon: .x, help: "Close (⌘W)", size: .small, symbolSize: 11) { panel.close(tab) }
                 .environment(\.surface, active ? surface.further : surface.next)
-                .padding(.trailing, Self.closeMargin)
+                .padding(.trailing, Self.closeMargin + Self.margin)
                 .opacity(hovering || active ? 1 : 0)
         }
         .padding(.vertical, -Self.reach)

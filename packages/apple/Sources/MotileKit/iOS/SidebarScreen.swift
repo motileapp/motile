@@ -185,14 +185,13 @@ struct SidebarScreen: View {
         .padding(.top, 8)
     }
 
-    /// The servers and how the client reaches them, and under them the ways to the settings and
-    /// the usage, the search and the way to a new thread.
+    /// The servers and how the client reaches them, and under them the account, which leads to the
+    /// settings and the usage, the search and the way to a new thread.
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(store.servers) { ServerLine(server: $0) }
             HStack(spacing: 8) {
-                circleButton(.settings, label: "Settings") { store.openSettings() }
-                circleButton(.chartColumn, label: "Usage") { store.openUsage() }
+                AccountMenu()
                 SearchField(text: $search, bare: true)
                     .padding(.horizontal, 6)
                     .frame(height: 46)

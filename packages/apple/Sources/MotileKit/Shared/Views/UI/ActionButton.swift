@@ -109,7 +109,7 @@ struct ControlLabel: View {
     var fills = false
     /// Where its words sit when it fills.
     var alignment = HorizontalAlignment.center
-    /// The symbol's size where it isn't the one that goes with `size`.
+    /// The symbol's or the picture's size where it isn't the one that goes with `size`.
     var symbolSize: CGFloat?
 
     private var wordless: Bool { title == nil && !chevron }
@@ -159,7 +159,9 @@ struct ControlLabel: View {
     @ViewBuilder private func mark(_ icon: ControlIcon) -> some View {
         switch icon {
         case .symbol(let symbol): Image(symbol, size: markSize)
-        case .picture(let picture): picture.frame(width: size.symbolSide, height: size.symbolSide)
+        case .picture(let picture):
+            let side = symbolSize ?? size.symbolSide
+            picture.frame(width: side, height: side)
         }
     }
 }
@@ -353,13 +355,14 @@ struct ActionMenu<Content: View>: View {
         self.content = content()
     }
 
+    /// A menu without words shows a symbol or a picture, and no chevron.
     init(
-        icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: CGFloat? = nil,
-        pending: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
+        icon: Symbol? = nil, picture: AnyView? = nil, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular,
+        symbolSize: CGFloat? = nil, pending: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
         margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
     ) {
         title = nil
-        self.icon = .symbol(icon)
+        self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture)
         self.help = help
         look = ControlLook(variant: variant, size: size, round: round, joined: joined, tint: tint, wordless: true)
         chevron = false

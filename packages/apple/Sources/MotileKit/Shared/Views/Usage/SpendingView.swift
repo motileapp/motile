@@ -24,6 +24,8 @@ struct SpendingView: View {
 
     /// Narrower than this, the chart goes under the totals.
     private static let besideWidth: CGFloat = 640
+    /// Narrower than this, a row's bar goes under its name and numbers.
+    private static let stackWidth: CGFloat = 520
 
     @Environment(AppStore.self) private var store
     let report: UsageReport
@@ -232,11 +234,12 @@ struct SpendingView: View {
             case .servers: report.servers
             case .kinds: report.kinds
             }
+        let stacked = width < Self.stackWidth
         return VStack(alignment: .leading, spacing: 8) {
-            Segmented(Breakdown.allCases.map { ($0.label, $0) }, selection: $breakdown)
+            Segmented(Breakdown.allCases.map { ($0.label, $0) }, selection: $breakdown, fills: stacked)
             VStack(spacing: 0) {
                 ForEach(shown) { line in
-                    UsageLineRow(line: line, measure: measure)
+                    UsageLineRow(line: line, measure: measure, stacked: stacked)
                     if line.id != shown.last?.id {
                         ThemeDivider()
                     }
@@ -261,32 +264,46 @@ struct SpendingView: View {
 }
 
 /// A model, a project, a server or a kind of token: its name, its part of the whole as a bar, its
-/// tokens and what they cost.
+/// tokens and what they cost. Stacked, the bar runs under the rest across the row.
 private struct UsageLineRow: View {
     @Environment(\.surface) private var surface
 
     let line: UsageReport.Line
     let measure: SpendingView.Measure
+    let stacked: Bool
     private static let barWidth: CGFloat = 72
+    private static let dotWidth: CGFloat = 8
+    private static let spacing: CGFloat = 10
 
     var body: some View {
-        // A row too narrow for the whole name gives up the bar.
-        ViewThatFits(in: .horizontal) {
-            row(whole: true)
-            row(whole: false)
+        Group {
+            if stacked {
+                VStack(alignment: .leading, spacing: 8) {
+                    row(whole: false, bar: false)
+                    bar(width: nil)
+                        .padding(.leading, line.agent == nil ? 0 : Self.dotWidth + Self.spacing)
+                }
+                .padding(.vertical, 11)
+            } else {
+                // A row too narrow for the whole name gives up the bar.
+                ViewThatFits(in: .horizontal) {
+                    row(whole: true, bar: true)
+                    row(whole: false, bar: false)
+                }
+                .frame(minHeight: scaled(36))
+            }
         }
         .font(.ui(size: 12))
         .monospacedDigit()
         .padding(.horizontal, 12)
-        .frame(minHeight: scaled(36))
     }
 
-    private func row(whole: Bool) -> some View {
-        HStack(spacing: 10) {
+    private func row(whole: Bool, bar shown: Bool) -> some View {
+        HStack(spacing: Self.spacing) {
             if let agent = line.agent {
                 Circle()
                     .fill(SpendingView.color(of: agent))
-                    .frame(width: 8, height: 8)
+                    .frame(width: Self.dotWidth, height: Self.dotWidth)
             }
             Text(line.name)
                 .foregroundStyle(Color.themeText)
@@ -301,15 +318,8 @@ private struct UsageLineRow: View {
                     .fixedSize(horizontal: whole, vertical: false)
             }
             Spacer(minLength: 8)
-            if whole {
-                Capsule()
-                    .fill(surface.next.color)
-                    .frame(width: Self.barWidth, height: 4)
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.themeSecondary)
-                            .frame(width: Self.barWidth * min(max(line.share, 0), 1), height: 4)
-                    }
+            if shown {
+                bar(width: Self.barWidth)
             }
             Text(SpendingView.count(line.tokens))
                 .foregroundStyle(measure == .tokens ? Color.themeText : Color.themeSecondary)
@@ -318,5 +328,19 @@ private struct UsageLineRow: View {
                 .foregroundStyle(measure == .cost && line.costUSD != nil ? Color.themeText : Color.themeSecondary)
                 .frame(width: scaled(72), alignment: .trailing)
         }
+    }
+
+    /// The line's share of the whole, `width` wide or as wide as it is given.
+    private func bar(width: CGFloat?) -> some View {
+        Capsule()
+            .fill(surface.next.color)
+            .frame(width: width, height: 4)
+            .overlay(alignment: .leading) {
+                GeometryReader { track in
+                    Capsule()
+                        .fill(Color.themeSecondary)
+                        .frame(width: track.size.width * min(max(line.share, 0), 1))
+                }
+            }
     }
 }
