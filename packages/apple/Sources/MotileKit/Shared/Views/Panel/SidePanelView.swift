@@ -8,9 +8,9 @@ struct SidePanelView: View {
     @Environment(AppStore.self) private var store
     /// The height of the window's top bar, which the tabs are drawn in.
     let topInset: CGFloat
-    /// How far the tabs start from the panel's left edge: past the window's buttons when the
-    /// panel reaches them.
-    var tabInset: CGFloat = 0
+    /// How far the tabs start from the panel's left edge, when the panel reaches the window's
+    /// buttons.
+    var tabInset: CGFloat?
 
     var body: some View {
         let tabs = store.sidePanel.tabs
@@ -20,10 +20,9 @@ struct SidePanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .top) {
-            PanelTabStrip(tabs: tabs)
+            PanelTabStrip(tabs: tabs, leading: tabInset ?? PanelTabStrip.edge)
                 // The buttons that maximize and hide the panel are at the window's edge.
                 .padding(.trailing, 2 * ToolbarButton.width + 14)
-                .padding(.leading, tabInset)
                 .frame(height: topInset)
                 .offset(y: -topInset)
         }
@@ -164,8 +163,12 @@ struct PanelNote: View {
 }
 
 struct PanelTabStrip: View {
+    static let edge: CGFloat = 8
+
     @Environment(AppStore.self) private var store
     let tabs: PanelTabs
+    /// Where the first tab starts.
+    var leading = edge
 
     var body: some View {
         ScrollViewReader { strip in
@@ -180,7 +183,8 @@ struct PanelTabStrip: View {
                         ActionButton(icon: .plus, help: "New tab") { store.sidePanel.openBlank() }
                     }
                 }
-                .padding(.horizontal, 8 - PanelTabChip.margin)
+                .padding(.leading, leading - PanelTabChip.margin)
+                .padding(.trailing, Self.edge - PanelTabChip.margin)
                 .frame(maxHeight: .infinity)
             }
             .onChange(of: tabs.active, initial: true) {

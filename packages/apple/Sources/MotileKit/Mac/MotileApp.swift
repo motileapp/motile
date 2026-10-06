@@ -213,8 +213,8 @@ struct MainView: View {
     /// What the side panel leaves to the thread. Without that much room, it lies over the thread.
     private static let threadBesidePanel = 400.0
     /// How far the top bar's content starts from the window's left edge while the sidebar is
-    /// hidden: past the window's buttons and the ones beside them.
-    private static let pastWindowButtons = 240.0
+    /// hidden: past the window's buttons and the sidebar's.
+    private static let pastWindowButtons = 136.0
     private static let panelButtonsInset = 10.0
 
     @Environment(AppStore.self) private var store
@@ -255,7 +255,7 @@ struct MainView: View {
                                 PaneDivider(width: $panelWidth, widths: panelWidths, growsLeft: true)
                                     .zIndex(1)
                             }
-                            SidePanelView(topInset: window.safeAreaInsets.top, tabInset: maximized && sidebarHidden ? Self.pastWindowButtons : 0)
+                            SidePanelView(topInset: window.safeAreaInsets.top, tabInset: maximized && sidebarHidden ? Self.pastWindowButtons : nil)
                                 .frame(width: maximized ? rest : shownPanel)
                         }
                         .background {
@@ -288,16 +288,9 @@ struct MainView: View {
             .toolbar {
                 if store.settings == nil {
                     ToolbarItem(placement: .navigation) {
-                        HStack(spacing: 0) {
-                            ToolbarButton(symbol: .panelLeft, help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
-                                sidebarHidden.toggle()
-                            }
-                            if sidebarHidden {
-                                ProjectButtons(inTopBar: true)
-                            }
+                        ToolbarButton(symbol: .panelLeft, help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
+                            sidebarHidden.toggle()
                         }
-                        // The system places an item by its width, so it is the same shown and hidden.
-                        .frame(width: 3 * ToolbarButton.width, alignment: .leading)
                     }
                     .withoutSystemGlass()
                 }
