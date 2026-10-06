@@ -183,7 +183,7 @@ struct SettingsPage: View {
         if servers.isEmpty {
             SettingsNote("What your servers do once a thread's pull request merges is set on each of them, once one is connected.")
         } else {
-            SettingsGroup("merged", "Mark the thread done", caption: "When its pull request merges or closes") {
+            SettingsGroup("merged", "Mark the thread done after merge or close") {
                 ForEach(servers) { server in
                     SettingsRow {
                         serverName(server)
@@ -195,7 +195,7 @@ struct SettingsPage: View {
                     if server.id != servers.last?.id { ThemeDivider() }
                 }
             }
-            SettingsGroup("worktrees", "Remove the thread's worktree", caption: "After its pull request merges, if all of it is pushed. Its branch stays, and the worktree is made again if the thread goes on.") {
+            SettingsGroup("worktrees", "Remove the thread's worktree after merge") {
                 ForEach(servers) { server in
                     SettingsRow {
                         serverName(server)
