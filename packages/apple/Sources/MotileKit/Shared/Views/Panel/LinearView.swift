@@ -329,18 +329,20 @@ struct LinearIssueSurface: View {
                     PullRequestTextView(blocks: page.description)
                 }
                 PanelLine()
-                ForEach(page.comments) { comment in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            LinearInitials(initials: comment.initials, name: comment.author)
-                            (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
-                                + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeTertiary))
-                                .font(.ui(size: 12.5))
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(page.comments) { comment in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 6) {
+                                LinearInitials(initials: comment.initials, name: comment.author)
+                                (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
+                                    + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeTertiary))
+                                    .font(.ui(size: 12.5))
+                            }
+                            PullRequestTextView(blocks: comment.body)
                         }
-                        PullRequestTextView(blocks: comment.body)
                     }
+                    writing
                 }
-                writing
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)

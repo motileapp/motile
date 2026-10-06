@@ -180,12 +180,16 @@ private struct PullRequestPageView: View {
                     StackCard(stack: stack) { panel.showPullRequest($0, of: target) }
                 }
                 MergeBox(page: page, working: panel.pullRequestWorking, run: run)
-                activityTitle
-                ForEach(page.activity) { entry in
-                    ActivityRow(entry: entry, actions: actions)
-                }
-                if page.state != .merged {
-                    commentBox
+                VStack(alignment: .leading, spacing: 16) {
+                    activityTitle
+                    VStack(alignment: .leading, spacing: 20) {
+                        ForEach(page.activity) { entry in
+                            ActivityRow(entry: entry, actions: actions)
+                        }
+                        if page.state != .merged {
+                            commentBox
+                        }
+                    }
                 }
             }
             .padding(14)
