@@ -145,10 +145,8 @@ struct RootView: View {
         .overlay {
             if let section = store.settings {
                 SettingsRoute(section: section)
-                    .appearing()
             }
         }
-        .animation(.easeOut(duration: 0.15), value: store.settings != nil)
         .toolbar {
             if store.settings != nil {
                 ToolbarItem(placement: .navigation) {
@@ -272,10 +270,8 @@ struct MainView: View {
                     .overlay {
                         if store.showsUsage {
                             UsageRoute(titleInset: sidebarHidden ? Self.pastWindowButtons : 20)
-                                .appearing()
                         }
                     }
-                    .animation(.easeOut(duration: 0.15), value: store.showsUsage)
             }
             .frame(width: window.size.width, alignment: .leading)
             .overlay(alignment: .topTrailing) {
