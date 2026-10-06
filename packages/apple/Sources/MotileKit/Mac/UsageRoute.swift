@@ -13,7 +13,7 @@ struct UsageRoute: View {
 
     var body: some View {
         GeometryReader { window in
-            UsageContent(model: model)
+            UsageContent(model: model, top: 36)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.themeBackground.ignoresSafeArea())
                 .overlay(alignment: .topLeading) {

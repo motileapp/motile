@@ -22,6 +22,7 @@ struct Account: Equatable {
     var signedIn = false
     var email = ""
     var name: String?
+    var picture: URL?
     var deviceKey = ""
     var authURL = ""
     var error: String?
@@ -33,6 +34,7 @@ struct Account: Equatable {
         let user = json.object("user")
         email = user?.string("email") ?? ""
         name = user?.optionalString("name")
+        picture = user?.optionalString("picture").flatMap(URL.init(string:))
         deviceKey = json.string("device_key")
         authURL = json.string("auth_url")
         error = json.optionalString("error")
