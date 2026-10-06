@@ -15,6 +15,18 @@ extension View {
     }
 }
 
+extension View {
+    /// The search field in the bottom bar, in glass, where the system has it there.
+    @ViewBuilder
+    func searchAtBottom() -> some View {
+        if #available(iOS 26.0, *) {
+            toolbar { DefaultToolbarItem(kind: .search, placement: .bottomBar) }
+        } else {
+            self
+        }
+    }
+}
+
 /// What closes a sheet: the system's round glass button with an x, or "Done" before iOS 26.
 struct SheetCloseButton: View {
     @Environment(\.dismiss) private var dismiss
