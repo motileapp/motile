@@ -115,7 +115,7 @@ struct ConnectServerView: View {
         .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                .strokeBorder(surface == .background ? Color.themeBorder : Color.themeBorderSecondary, lineWidth: 1)
+                .strokeBorder(surface.border, lineWidth: 1)
         }
     }
 

@@ -85,7 +85,7 @@ extension View {
         background(fill ?? surface.next.color, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
             .overlay {
                 if outlined {
-                    RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(surface == .background ? Color.themeBorder : Color.themeBorderSecondary, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(surface.border, lineWidth: 1)
                 }
             }
     }
