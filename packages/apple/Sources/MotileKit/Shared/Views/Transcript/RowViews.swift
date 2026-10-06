@@ -775,6 +775,7 @@ final class ChangesRowView: RowView {
             title: "Open diff",
             tooltip: "Show what this turn changed",
             radius: Self.radius - Self.buttonMargin,
+            hover: Theme.backgroundTertiary,
             insets: PlatformEdgeInsets(top: Self.buttonMargin, left: 2, bottom: Self.buttonMargin, right: Self.buttonMargin)
         ) { [weak self] in
             guard let self else { return }
