@@ -38,6 +38,7 @@ struct SettingsPage: View {
         .onAppear { store.refreshMediaStorage() }
         .sheet(item: $setupProject) { project in
             SetupSheet(project: project)
+                .sheetSurface()
         }
     }
 
@@ -325,8 +326,6 @@ private struct SetupSheet: View {
         #else
         .frame(maxHeight: .infinity, alignment: .top)
         .presentationDetents([.medium, .large])
-        .presentationBackground(Color.themeBackgroundSecondary)
-        .environment(\.surface, .secondary)
         #endif
         .onAppear { script = project.setup ?? "" }
     }

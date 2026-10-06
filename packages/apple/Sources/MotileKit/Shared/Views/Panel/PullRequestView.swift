@@ -203,6 +203,7 @@ private struct PullRequestPageView: View {
             DescriptionEditor(original: page.body) { body in
                 panel.edit(["kind": "body", "body": body], key: "menu:body", on: target, number: number)
             }
+            .sheetSurface()
         }
     }
 

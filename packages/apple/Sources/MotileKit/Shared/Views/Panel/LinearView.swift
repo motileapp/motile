@@ -124,6 +124,7 @@ private struct LinearIssues: View {
         .sheet(isPresented: $filing) {
             if let workspace = choice.workspace {
                 LinearNewIssue(target: target, workspace: workspace, team: choice.team)
+                    .sheetSurface()
             }
         }
     }

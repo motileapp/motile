@@ -152,14 +152,6 @@ private enum RootSheet: Identifiable {
         case .threadSettings: "thread-settings"
         }
     }
-
-    /// The settings lie on the client's own background, as on the Mac; the rest on the next one.
-    var surface: Surface {
-        switch self {
-        case .settings: .background
-        default: .secondary
-        }
-    }
 }
 
 struct RootView: View {
@@ -204,8 +196,7 @@ struct RootView: View {
                     ThreadSettingsSheet()
                 }
             }
-            .presentationBackground(sheet.surface == .background ? Color.themeBackground : Color.themeBackgroundSecondary)
-            .environment(\.surface, sheet.surface)
+            .sheetSurface()
         }
         .fullScreenCover(isPresented: Binding(get: { store.viewing != nil }, set: { if !$0 { store.closeViewer() } })) {
             if let viewing = store.viewing {

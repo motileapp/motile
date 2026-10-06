@@ -415,6 +415,7 @@ struct DiffSurface: View {
         .sheet(item: $commenting) { line in
             if let page = page(for: scope) {
                 LineCommentSheet(target: target, page: page, commented: line)
+                    .sheetSurface()
             }
         }
     }

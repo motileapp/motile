@@ -78,8 +78,6 @@ struct CommandPanel: View {
             ThemeDivider()
             results(sections, rows: rows)
         }
-        .background(Color.themeBackgroundSecondary)
-        .environment(\.surface, .secondary)
         .onAppear(perform: focusIfTyped)
         .onChange(of: pages) { focusIfTyped() }
         .onKeyPress(.downArrow) { steer(1) }

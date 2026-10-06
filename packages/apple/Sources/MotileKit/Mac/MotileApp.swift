@@ -181,7 +181,7 @@ struct RootView: View {
         .sheet(isPresented: $store.showsAddServer) {
             ConnectServerView(isFirst: false)
                 .frame(width: 620)
-                .background(Color.themeBackground)
+                .sheetSurface()
         }
         .alert(
             store.errorAlert.title,

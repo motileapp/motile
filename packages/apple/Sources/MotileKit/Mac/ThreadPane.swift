@@ -40,6 +40,7 @@ struct ThreadPane: View {
         .navigationTitle(store.selectedThread?.title ?? "New thread")
         .sheet(item: $store.committingProject) { project in
             CommitSheet(project: project)
+                .sheetSurface()
         }
         .overlay(alignment: .topTrailing) {
             if let notice = store.gitNotice, notice.checkoutID == store.gitProject?.checkoutID {
@@ -53,6 +54,7 @@ struct ThreadPane: View {
         .sheet(item: $store.iconProject) { project in
             if let server = store.server(project.serverID) {
                 FolderPicker(server: server, iconFor: project)
+                    .sheetSurface()
             }
         }
     }

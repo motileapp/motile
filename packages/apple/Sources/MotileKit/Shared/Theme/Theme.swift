@@ -28,6 +28,7 @@ enum Theme {
     static let popoverSecondary = dynamic(hex(0xeceef4), hex(0x222226))
     static let composer = dynamic(hex(0xffffff), hex(0x111217))
     static let composerSecondary = dynamic(hex(0xeceef4), hex(0x191a1f))
+    static let sheet = background
     /// Borders are solid, so that where two meet they do not darken.
     static let border = dynamic(hex(0xe2e3e5), hex(0x191a1e))
     static let borderSecondary = dynamic(hex(0xd5d6d9), hex(0x2b2b2f))
@@ -206,11 +207,12 @@ enum Surface {
     case background, secondary, tertiary, quaternary
     case popover, popoverSecondary
     case composer, composerSecondary
+    case sheet
 
     /// What lies on it, and what the pointer is over.
     var next: Surface {
         switch self {
-        case .background: .secondary
+        case .background, .sheet: .secondary
         case .secondary: .tertiary
         case .tertiary: .quaternary
         case .quaternary: .tertiary
@@ -224,7 +226,7 @@ enum Surface {
     /// What is selected, and a filled control under the pointer.
     var further: Surface {
         switch self {
-        case .background: .tertiary
+        case .background, .sheet: .tertiary
         case .secondary, .popover, .popoverSecondary, .composer, .composerSecondary: .background
         case .tertiary, .quaternary: .secondary
         }
@@ -240,6 +242,7 @@ enum Surface {
         case .popoverSecondary: Theme.popoverSecondary
         case .composer: Theme.composer
         case .composerSecondary: Theme.composerSecondary
+        case .sheet: Theme.sheet
         }
     }
 
@@ -267,6 +270,17 @@ extension View {
     func layered(in shape: some Shape) -> some View {
         modifier(Layered(shape: shape))
     }
+
+    /// A sheet's content: on the sheet's colour, with what lies on it filled from there.
+    func sheetSurface() -> some View {
+        self
+            #if os(macOS)
+            .background(Color.themeSheet)
+            #else
+            .presentationBackground(Color.themeSheet)
+            #endif
+            .environment(\.surface, .sheet)
+    }
 }
 
 extension Color {
@@ -275,6 +289,7 @@ extension Color {
     static let themeBackgroundTertiary = Color(platform: Theme.backgroundTertiary)
     static let themeBackgroundQuaternary = Color(platform: Theme.backgroundQuaternary)
     static let themePopover = Color(platform: Theme.popover)
+    static let themeSheet = Color(platform: Theme.sheet)
     static let themeComposer = Color(platform: Theme.composer)
     static let themeBorder = Color(platform: Theme.border)
     static let themeBorderSecondary = Color(platform: Theme.borderSecondary)
