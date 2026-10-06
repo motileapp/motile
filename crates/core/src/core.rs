@@ -1198,7 +1198,12 @@ impl Core {
                     let token = auth.create_enroll_token(&key).await.map_err(error_text);
                     let token = token.map(|token| {
                         let spans = highlight::command(&token.command);
-                        json!({ "command": token.command, "expires_at": token.expires_at, "spans": spans })
+                        json!({
+                            "token": token.token,
+                            "command": token.command,
+                            "expires_at": token.expires_at,
+                            "spans": spans,
+                        })
                     });
                     reply(&sink, id, token);
                 });
