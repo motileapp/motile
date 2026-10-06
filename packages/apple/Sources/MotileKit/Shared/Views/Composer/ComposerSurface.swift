@@ -8,11 +8,32 @@ extension View {
         composerFill(in: shape).environment(\.surface, .composer)
     }
 
+    /// The small shadow the composer's box casts on its strips.
+    func composerBoxShadow() -> some View {
+        #if os(macOS)
+        shadow(color: .themeComposerShadow, radius: 4)
+        #else
+        self
+        #endif
+    }
+
+    /// The wide shadow around the composer and its strips together.
+    func composerOutlineShadow() -> some View {
+        #if os(macOS)
+        shadow(color: .themeComposerOutlineShadow, radius: 16, y: 8)
+        #else
+        self
+        #endif
+    }
+
     @ViewBuilder
     private func composerFill<S: Shape>(in shape: S) -> some View {
         #if os(macOS)
         background(Color.themeComposer, in: shape)
-            .overlay { shape.stroke(Color.themeBorder, lineWidth: 1) }
+            .overlay {
+                shape.stroke(Color.themeBorder, lineWidth: 1)
+                shape.stroke(LinearGradient(colors: [.themeComposerEdge, .clear], startPoint: .top, endPoint: .center), lineWidth: 1)
+            }
         #else
         if #available(iOS 26.0, *) {
             background(Color.themeComposer.opacity(0.8), in: shape)

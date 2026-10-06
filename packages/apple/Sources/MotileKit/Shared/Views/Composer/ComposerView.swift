@@ -34,6 +34,7 @@ struct ComposerView: View {
                 #endif
             }
         }
+        .composerOutlineShadow()
         .frame(maxWidth: Theme.composerWidth)
         .task(id: store.draftWorktreeKey) { store.readWorktreeStart(fetch: true) }
         .onChange(of: store.composerProject?.git) { store.readWorktreeStart(fetch: false) }
@@ -86,6 +87,7 @@ struct ComposerView: View {
                 .textPointer()
         }
         .composerSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+        .composerBoxShadow()
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
     }
 
