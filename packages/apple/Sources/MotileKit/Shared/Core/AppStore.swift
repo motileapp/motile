@@ -1356,6 +1356,8 @@ final class AppStore {
 
     /// Whether a message sent while the agent works steers the turn that runs instead of waiting for it.
     static let steersKey = "send.steers"
+    /// It steers until the setting says otherwise.
+    static let steersByDefault = true
 
     func send() {
         guard canSend else { return }
@@ -1364,7 +1366,7 @@ final class AppStore {
         let key = draftKey
         var command: JSON = ["text": text, "attachments": attached.compactMap(\.path)]
         let existing = selectedThread
-        let steers = existing != nil && defaults.bool(forKey: AppStore.steersKey)
+        let steers = existing != nil && (defaults.object(forKey: AppStore.steersKey) as? Bool ?? AppStore.steersByDefault)
         if let thread = existing {
             command["server_id"] = thread.serverID
             command["thread_id"] = thread.id

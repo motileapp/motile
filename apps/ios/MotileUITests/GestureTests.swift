@@ -78,6 +78,27 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(undo.waitForNonExistence(timeout: 3))
     }
 
+    func testSettingsArePushedAndASwipeFromTheEdgeTakesThemAway() {
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        app.buttons["Account"].tap()
+        app.buttons["Settings"].tap()
+        let title = app.navigationBars["Settings"]
+        XCTAssertTrue(shown(title))
+        app.buttons["Usage"].tap()
+        XCTAssertTrue(shown(app.navigationBars["Usage"]))
+        swipeFromTheEdge()
+        XCTAssertTrue(shown(title))
+        swipeFromTheEdge()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(shown(newThread))
+    }
+
+    private func swipeFromTheEdge() {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)), withVelocity: .slow, thenHoldForDuration: 0)
+    }
+
     func testATapBesideTheSidebarsSearchPutsTheKeyboardAway() {
         app.swipeRight()
         XCTAssertTrue(shown(newThread))
