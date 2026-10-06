@@ -385,6 +385,14 @@ pub enum Request {
         #[serde(default)]
         create: bool,
     },
+    /// What a new worktree on a branch made from `base` would start at. With `fetch` the remote
+    /// is asked for `base` first. `WorktreeStart` answers.
+    WorktreeStart {
+        project_id: String,
+        base: String,
+        #[serde(default)]
+        fetch: bool,
+    },
     /// What git says about the project's folder, or about the worktree of the thread. With
     /// `fetch` the remote is asked first. `GitStatus` answers.
     GitStatus {
@@ -1422,10 +1430,19 @@ pub enum Message {
     Branches {
         branches: Vec<Branch>,
     },
-    /// `status` is missing when the folder is no repository.
+    /// `start` is the base, or the remote's base, like `origin/main`, when the remote has commits
+    /// the local one lacks. `problem` is what git said when the remote couldn't be asked.
+    WorktreeStart {
+        start: String,
+        problem: Option<String>,
+    },
+    /// `status` is missing when the folder is no repository. `problem` is what git said when the
+    /// remote couldn't be fetched from.
     GitStatus {
         status: Option<GitStatus>,
         files: Vec<ChangedFile>,
+        #[serde(default)]
+        problem: Option<String>,
     },
     GitProgress {
         stage: GitStage,

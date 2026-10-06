@@ -121,6 +121,8 @@ final class AppStore {
     /// The stage a git action is at, by the checkout it runs in.
     private(set) var gitStages: [String: GitStage] = [:]
     private(set) var gitNotice: GitNotice?
+    /// What a new worktree starts at, like `origin/main`, by `draftWorktreeKey`.
+    private(set) var worktreeStarts: [String: String] = [:]
     private(set) var panel: PanelPage?
     /// What a server refused while the panel was adding a project.
     var panelNotice: String?
@@ -564,7 +566,7 @@ final class AppStore {
         let project = composerProject
         let folder = selectedThread.map { URL(fileURLWithPath: $0.cwd).lastPathComponent }
         guard let name = project?.name ?? folder else { return nil }
-        if draftUsesWorktree, let base = draftBase { return "\(name) · \(base) · New worktree" }
+        if draftUsesWorktree, let start = draftStart { return "\(name) · \(start) · New worktree" }
         guard let branch = project?.branch else { return name }
         return "\(name) · \(branch)"
     }
@@ -575,12 +577,26 @@ final class AppStore {
         return project(thread.projectID)?.seen(from: thread)
     }
 
-    /// The project git works in from here: the open thread's, or the open draft's when its thread
-    /// would start in the project's folder.
+    /// The project git works in from here: the open thread's, or the open draft's, unless its
+    /// thread starts in a new worktree from another branch than the one checked out there.
     var gitProject: Project? {
-        let project = threadProject ?? (draftUsesWorktree ? nil : project(selectedDraft?.projectID))
-        guard let project, canUseGit(of: project) else { return nil }
+        guard let project = threadProject ?? draftCheckoutProject, canUseGit(of: project) else { return nil }
         return project
+    }
+
+    private var draftCheckoutProject: Project? {
+        guard let project = project(selectedDraft?.projectID) else { return nil }
+        guard draftUsesWorktree else { return project }
+        return draftBase == project.branch ? project : nil
+    }
+
+    /// The git notice of the checkout git works in from here, or of the project the open draft
+    /// starts a worktree in.
+    var openGitNotice: GitNotice? {
+        guard let notice = gitNotice else { return nil }
+        let draftProject = draftUsesWorktree ? project(selectedDraft?.projectID) : nil
+        guard let checkoutID = (gitProject ?? draftProject)?.checkoutID, notice.checkoutID == checkoutID else { return nil }
+        return notice
     }
 
     /// The folder the side panel looks into: the one the open thread works in, or the project's
@@ -1049,6 +1065,34 @@ final class AppStore {
         return draft.base ?? defaults.string(forKey: "new.base-\(project.id)") ?? project.git?.defaultBranch ?? project.branch
     }
 
+    /// The project and the base of the open draft's worktree, when its thread starts in one.
+    var draftWorktreeKey: String? {
+        guard draftUsesWorktree, let projectID = selectedDraft?.projectID, let base = draftBase else { return nil }
+        return "\(projectID) \(base)"
+    }
+
+    /// What the open draft's worktree starts at: its base, or the remote's when that has commits
+    /// the local one lacks.
+    var draftStart: String? {
+        guard let base = draftBase else { return nil }
+        return draftWorktreeKey.flatMap { worktreeStarts[$0] } ?? base
+    }
+
+    /// Asks the project's server what the open draft's worktree would start at. With `fetch` the
+    /// remote is asked first, and a fetch that fails is said.
+    func readWorktreeStart(fetch: Bool) {
+        guard let key = draftWorktreeKey, let base = draftBase, let project = project(selectedDraft?.projectID),
+            (server(project.serverID)?.protocolVersion ?? 0) >= 13
+        else { return }
+        let request: JSON = ["type": "worktree_start", "project_id": project.id, "base": base, "fetch": fetch]
+        core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
+            guard let self, case .success(let answer) = result else { return }
+            worktreeStarts[key] = answer.string("start")
+            guard let problem = answer.optionalString("problem") else { return }
+            show(GitNotice(checkoutID: project.checkoutID, title: "Couldn't fetch \(base)", description: problem, failed: true))
+        }
+    }
+
     func setDraftWorktree(_ worktree: Bool) {
         updateDraft { $0.worktree = worktree }
         readGit(fetch: true)
@@ -1095,14 +1139,19 @@ final class AppStore {
     }
 
     /// Has the server read the repository git works in from here again, which the project then
-    /// arrives with. With `fetch` the remote is asked first.
+    /// arrives with. With `fetch` the remote is asked first, and a fetch that fails is said.
     private func readGit(fetch: Bool = false, done: (([ChangedFile]) -> Void)? = nil) {
         guard let project = gitProject else { return }
         var request: JSON = ["type": "git_status", "project_id": project.id, "fetch": fetch]
         if let thread = selectedThread { request["thread_id"] = thread.id }
         core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
             switch result {
-            case .success(let answer): done?(answer.objects("files").map { ChangedFile(json: $0) })
+            case .success(let answer):
+                if let problem = answer.optionalString("problem") {
+                    let title = "Couldn't fetch from the remote"
+                    self?.show(GitNotice(checkoutID: project.checkoutID, title: title, description: problem, failed: true))
+                }
+                done?(answer.objects("files").map { ChangedFile(json: $0) })
             // Only said when the user is waiting for the answer.
             case .failure(let error): if done != nil { self?.errorMessage = error.message }
             }

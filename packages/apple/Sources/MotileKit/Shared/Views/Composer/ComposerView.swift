@@ -33,6 +33,8 @@ struct ComposerView: View {
             }
         }
         .frame(maxWidth: Theme.composerWidth)
+        .task(id: store.draftWorktreeKey) { store.readWorktreeStart(fetch: true) }
+        .onChange(of: store.composerProject?.git) { store.readWorktreeStart(fetch: false) }
     }
 
     private var box: some View {

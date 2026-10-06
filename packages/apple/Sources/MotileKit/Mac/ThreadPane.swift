@@ -43,7 +43,7 @@ struct ThreadPane: View {
                 .sheetSurface()
         }
         .overlay(alignment: .topTrailing) {
-            if let notice = store.gitNotice, notice.checkoutID == store.gitProject?.checkoutID {
+            if let notice = store.openGitNotice {
                 GitNoticeView(notice: notice)
                     .padding(.top, 6)
                     .padding(.trailing, 14)

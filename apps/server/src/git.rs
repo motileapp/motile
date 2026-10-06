@@ -244,7 +244,7 @@ async fn count(folder: &str, environment: &Environment, range: &[&str]) -> u32 {
 }
 
 /// The remote the repository works with: `origin`, or the first one.
-async fn remote(folder: &str, environment: &Environment) -> Option<String> {
+pub(crate) async fn remote(folder: &str, environment: &Environment) -> Option<String> {
     let remotes = git(folder, environment, &["remote"]).await.ok()?;
     let first = remotes.lines().next()?;
     Some(remotes.lines().find(|remote| *remote == "origin").unwrap_or(first).to_string())
@@ -285,12 +285,11 @@ pub(crate) fn on_path(program: &str, environment: &Environment) -> bool {
     path.split(':').any(|folder| Path::new(folder).join(&program).is_file())
 }
 
-/// Asks the remote for what is new. A remote that can't be reached leaves what was known.
-pub async fn fetch(folder: &str, environment: &Environment) {
+/// Asks the remote for what is new. A remote that can't be reached leaves what was known, and
+/// what git said is returned.
+pub async fn fetch(folder: &str, environment: &Environment) -> Option<String> {
     let fetch = command("git", folder, environment, &["fetch", "--quiet", "--no-tags"]);
-    if let Err(error) = run(fetch, None, FETCH_TIMEOUT).await {
-        tracing::debug!(folder, "couldn't fetch: {error:#}");
-    }
+    run(fetch, None, FETCH_TIMEOUT).await.err().map(|error| format!("{error:#}"))
 }
 
 /// What GitHub's `gh` says of a pull request, and the commit at its head: the one with that
@@ -738,14 +737,15 @@ pub async fn free_branch_name(folder: &str, environment: &Environment, name: &st
     candidate
 }
 
-/// Makes the worktree at `path` on `branch`. A branch that isn't there yet is made from `base`,
-/// which the remote is asked for first. `true` when the branch was made.
+/// Makes the worktree at `path` on `branch`. A branch that isn't there yet is made from `start`.
+/// `true` when the branch was made.
 pub async fn add_worktree(
     repository: &str,
     environment: &Environment,
     path: &str,
     branch: &str,
     base: &str,
+    start: &Start,
 ) -> anyhow::Result<bool> {
     prune_worktrees(repository, environment).await;
     let exists = async |name: &str| {
@@ -756,30 +756,54 @@ pub async fn add_worktree(
         run(add, None, WORKTREE_TIMEOUT).await?;
         return Ok(false);
     }
-    let start = latest(repository, environment, base).await;
-    if !exists(&start).await {
+    if !exists(&start.reference).await {
         bail!("{base} isn't a branch with a commit to start from.");
     }
-    let arguments = ["worktree", "add", "--quiet", "--no-track", "-b", branch, path, &start];
+    let arguments = ["worktree", "add", "--quiet", "--no-track", "-b", branch, path, &start.reference];
     run(command("git", repository, environment, &arguments), None, WORKTREE_TIMEOUT).await?;
     // Where GitHub's gh opens the branch's pull request into.
     let _ = git(repository, environment, &["config", &format!("branch.{branch}.gh-merge-base"), base]).await;
     Ok(true)
 }
 
-/// The branch as the remote has it now, unless the local one has everything the remote has.
-async fn latest(repository: &str, environment: &Environment, branch: &str) -> String {
-    let Some(remote) = remote(repository, environment).await else { return branch.to_string() };
-    let on_remote = format!("refs/remotes/{remote}/{branch}");
-    let refspec = format!("+refs/heads/{branch}:{on_remote}");
-    let fetch = command("git", repository, environment, &["fetch", "--quiet", "--no-tags", &remote, &refspec]);
-    if let Err(error) = run(fetch, None, FETCH_TIMEOUT).await {
-        tracing::debug!(repository, "couldn't fetch {branch}: {error:#}");
+/// What a branch made from a base starts at.
+pub struct Start {
+    /// The local base, or the remote's when it has commits the local one lacks.
+    pub reference: String,
+    /// What git said when the remote couldn't be asked for a base it has.
+    pub problem: Option<String>,
+}
+
+impl Start {
+    /// `main` or `origin/main`.
+    pub fn name(&self) -> &str {
+        self.reference.strip_prefix("refs/remotes/").unwrap_or(&self.reference)
     }
-    let local = format!("refs/heads/{branch}");
-    let ahead = git(repository, environment, &["merge-base", "--is-ancestor", &on_remote, &local]).await.is_ok();
-    let known = git(repository, environment, &["rev-parse", "--verify", "--quiet", &on_remote]).await.is_ok();
-    if ahead || !known { branch.to_string() } else { on_remote }
+}
+
+/// Where a branch made from `base` starts: the remote's `base`, unless the local one has
+/// everything the remote has. With `fetch` the remote is asked for `base` first.
+pub async fn start(repository: &str, environment: &Environment, base: &str, fetch: bool) -> Start {
+    let local = Start { reference: base.to_string(), problem: None };
+    let Some(remote) = remote(repository, environment).await else { return local };
+    let on_remote = format!("refs/remotes/{remote}/{base}");
+    let known = async || git(repository, environment, &["rev-parse", "--verify", "--quiet", &on_remote]).await.is_ok();
+    let mut problem = None;
+    if fetch {
+        let refspec = format!("+refs/heads/{base}:{on_remote}");
+        let fetch = command("git", repository, environment, &["fetch", "--quiet", "--no-tags", &remote, &refspec]);
+        if let Err(error) = run(fetch, None, FETCH_TIMEOUT).await {
+            // A branch the remote never had can't be fetched, and needn't be.
+            problem = known().await.then(|| format!("{error:#}"));
+        }
+    }
+    if !known().await {
+        return local;
+    }
+    let local_ref = format!("refs/heads/{base}");
+    let ahead = git(repository, environment, &["merge-base", "--is-ancestor", &on_remote, &local_ref]).await.is_ok();
+    let reference = if ahead { base.to_string() } else { on_remote };
+    Start { reference, problem }
 }
 
 /// Removes the worktree at `path`, which git refuses while it has changes. Its branch stays.

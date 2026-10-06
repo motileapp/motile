@@ -938,6 +938,13 @@ impl Hub {
         Ok(Message::Branches { branches })
     }
 
+    /// What a new worktree on a branch made from `base` would start at.
+    pub async fn worktree_start(&self, project_id: &str, base: &str, fetch: bool) -> anyhow::Result<Message> {
+        let path = self.project_path(project_id).await?;
+        let start = git::start(&path, &self.environment, base, fetch).await;
+        Ok(Message::WorktreeStart { start: start.name().to_string(), problem: start.problem })
+    }
+
     /// Checks a branch out in the project's folder, where its threads without a worktree work.
     pub async fn switch_branch(&self, project_id: &str, branch: &str, create: bool) -> anyhow::Result<()> {
         let path = self.project_path(project_id).await?;
@@ -961,11 +968,12 @@ impl Hub {
     /// client is told when it has changed.
     pub async fn git_status(&self, project_id: &str, thread_id: Option<&str>, fetch: bool) -> anyhow::Result<Message> {
         let path = self.git_folder(project_id, thread_id).await?;
-        if fetch {
-            git::fetch(&path, &self.environment).await;
-        }
+        let problem = match fetch {
+            true => git::fetch(&path, &self.environment).await,
+            false => None,
+        };
         let (status, files) = self.read_git(&path, fetch).await;
-        Ok(Message::GitStatus { status, files })
+        Ok(Message::GitStatus { status, files, problem })
     }
 
     /// The changes in the folder the thread works in, or in the project's folder, as a patch.
@@ -1644,7 +1652,11 @@ impl Hub {
         if let Some(parent) = Path::new(&path).parent() {
             std::fs::create_dir_all(parent).with_context(|| format!("{} can't be made.", parent.display()))?;
         }
-        git::add_worktree(&repository, &self.environment, &path, &worktree.branch, &worktree.base).await?;
+        let start = git::start(&repository, &self.environment, &worktree.base, true).await;
+        if let Some(problem) = &start.problem {
+            self.show_failed_fetch(thread_id, &repository, &worktree.base, problem).await;
+        }
+        git::add_worktree(&repository, &self.environment, &path, &worktree.branch, &worktree.base, &start).await?;
         if !Path::new(&path).is_dir() {
             bail!("Git didn't make the worktree at {path}.");
         }
@@ -1688,6 +1700,17 @@ impl Hub {
         };
         call.output = Some(tail(said.trim(), SETUP_OUTPUT_CHARS).to_string());
         call.status = if succeeded { ToolStatus::Succeeded } else { ToolStatus::Failed };
+        self.show_setup(thread_id, &call).await;
+    }
+
+    /// Says in the thread that the remote couldn't be asked for the base, so the worktree starts
+    /// from what your server fetched last.
+    async fn show_failed_fetch(&self, thread_id: &str, repository: &str, base: &str, problem: &str) {
+        let remote = git::remote(repository, &self.environment).await.unwrap_or_default();
+        let mut call = new_tool_call(new_id(), "Bash".to_string());
+        call.input = serde_json::json!({ "command": format!("git fetch {remote} {base}") }).to_string();
+        call.output = Some(problem.to_string());
+        call.status = ToolStatus::Failed;
         self.show_setup(thread_id, &call).await;
     }
 
