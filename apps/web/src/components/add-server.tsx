@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import { useRouter } from "@tanstack/react-router"
 import { CheckIcon, CopyIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -133,7 +133,12 @@ function Command({ text }: { text: string }) {
   return (
     <div className="flex items-start gap-2 rounded-2xl bg-background p-3 pl-4">
       <code className="min-w-0 flex-1 py-1.5 font-mono text-xs leading-relaxed break-all">
-        {text}
+        {colouredWords(text).map(({ word, colour }, index) => (
+          <Fragment key={index}>
+            {index > 0 && " "}
+            <span className={colour}>{word}</span>
+          </Fragment>
+        ))}
       </code>
       <Button
         variant="ghost"
@@ -145,4 +150,28 @@ function Command({ text }: { text: string }) {
       </Button>
     </div>
   )
+}
+
+const OPERATORS = new Set(["|", "&&", "||", ";"])
+
+// The command's words in the theme's code colours, as the core colours them for the clients.
+function colouredWords(command: string) {
+  let expectsProgram = true
+  return command.split(" ").map((word) => {
+    const isOperator = OPERATORS.has(word)
+    const isVariable = !isOperator && expectsProgram && word.includes("=")
+    const colour = isOperator
+      ? "text-syntax-keyword"
+      : isVariable
+        ? "text-syntax-type"
+        : expectsProgram
+          ? "text-syntax-function"
+          : word.startsWith("-")
+            ? "text-syntax-constant"
+            : word.includes("://")
+              ? "text-syntax-string"
+              : "text-syntax-type"
+    if (word) expectsProgram = isOperator || isVariable
+    return { word, colour }
+  })
 }
