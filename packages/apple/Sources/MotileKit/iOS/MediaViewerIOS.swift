@@ -60,7 +60,9 @@ struct MediaViewer: View {
 
     private func bar(_ item: ViewedMedia) -> some View {
         HStack(spacing: 8) {
-            ActionButton(icon: .x, help: "Close", variant: .overlay, size: .large, round: true) { store.closeViewer() }
+            ActionButton(
+                icon: .x, help: "Close", variant: .overlay, size: .large, symbolSize: ControlSize.large.smallSymbol, round: true
+            ) { store.closeViewer() }
             Color.clear.frame(width: side, height: side)
             Spacer(minLength: 8)
             VStack(spacing: 1) {
@@ -77,10 +79,13 @@ struct MediaViewer: View {
             .foregroundStyle(.white)
             Spacer(minLength: 8)
             if let shared {
-                CopyButton(help: item.video ? "Copy Video" : "Copy Image", variant: .overlay, size: .large, round: true) {
+                CopyButton(
+                    help: item.video ? "Copy Video" : "Copy Image", variant: .overlay, size: .large,
+                    symbolSize: ControlSize.large.smallSymbol, round: true
+                ) {
                     MediaFiles.copy(shared, video: item.video, named: item.name)
                 }
-                ShareLink(item: shared) { ControlLabel(title: nil, icon: .symbol(.share), size: .large) }
+                ShareLink(item: shared) { ControlLabel(title: nil, icon: .symbol(.share), size: .large, symbolSize: ControlSize.large.smallSymbol) }
                     .buttonStyle(.control(.overlay, size: .large, round: true))
                     .accessibilityLabel("Share")
             } else {
