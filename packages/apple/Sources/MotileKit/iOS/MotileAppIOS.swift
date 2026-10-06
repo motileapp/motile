@@ -242,7 +242,7 @@ struct RootView: View {
 /// The sidebar, the thread and its panel. A narrow window has the sidebar and the panel under
 /// the thread; a wide one has all three side by side.
 struct MainScreen: View {
-    private static let sidebarWidth: CGFloat = 320
+    static let sidebarWidth: CGFloat = 320
     private static let panelWidth: CGFloat = 420
     /// A window at least this wide has the sidebar beside the thread.
     private static let wide: CGFloat = 1000
@@ -294,7 +294,7 @@ struct MainScreen: View {
             SidebarScreen(underThread: false)
                 .frame(width: Self.sidebarWidth)
                 .background(Color.themeBackground.ignoresSafeArea())
-            line
+            Self.line
             if covers {
                 PanelScreen(beside: true)
             } else {
@@ -302,7 +302,7 @@ struct MainScreen: View {
                     ThreadScreen(overSidebar: false)
                 }
                 if open {
-                    line
+                    Self.line
                     PanelScreen(beside: true)
                         .frame(width: Self.panelWidth)
                 }
@@ -311,7 +311,7 @@ struct MainScreen: View {
         .onAppear { drawer.isOpen = false }
     }
 
-    private var line: some View {
+    static var line: some View {
         Rectangle()
             .fill(Color.themeBorder)
             .frame(width: 1)

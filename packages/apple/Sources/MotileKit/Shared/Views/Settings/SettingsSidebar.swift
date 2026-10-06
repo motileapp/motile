@@ -89,20 +89,19 @@ struct SettingsSidebar: View {
     }
 }
 
-/// The sections beside the page of the one that is open, as on a Mac or an iPad.
-struct SettingsSplit: View {
-    static let sidebarWidth: CGFloat = scaled(220)
-
+/// The sections beside the page of the one that is open, as on a Mac or an iPad. The sections
+/// are as wide as the sidebar of the threads, behind the same `divider`, so nothing shifts
+/// between the two.
+struct SettingsSplit<Divider: View>: View {
     @Environment(AppStore.self) private var store
+    let sidebarWidth: CGFloat
+    @ViewBuilder let divider: () -> Divider
 
     var body: some View {
         HStack(spacing: 0) {
             SettingsSidebar(selected: store.settings) { store.openSettings($0, target: store.settingsTarget) }
-                .frame(width: Self.sidebarWidth)
-            Rectangle()
-                .fill(Color.themeBorder)
-                .frame(width: 1)
-                .ignoresSafeArea()
+                .frame(width: sidebarWidth)
+            divider()
             SettingsPage(section: store.settings ?? .general)
                 .frame(maxWidth: .infinity)
         }

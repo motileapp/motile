@@ -15,7 +15,7 @@ struct SettingsScreen: View {
             NavigationStack(path: $path) {
                 Group {
                     if window.size.width >= Self.wide {
-                        SettingsSplit()
+                        SettingsSplit(sidebarWidth: MainScreen.sidebarWidth) { MainScreen.line }
                     } else {
                         SettingsSidebar(pushes: true) { section in
                             store.openSettings(section, target: store.settingsTarget)
