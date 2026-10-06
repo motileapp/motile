@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// What the usage route shows: the tab, the period and the servers picked, which it keeps for
-/// next time, and what was last read for them.
+/// next time, and what was last read for them. The limits show what the core kept at once, and
+/// are read again when that is old.
 @Observable
 final class UsageModel {
     enum Tab: String, CaseIterable, Identifiable {
@@ -134,10 +135,19 @@ final class UsageModel {
         refreshing = true
         let picked = servers.map { $0.intersection(store.servers.map(\.id)) }.flatMap { $0.isEmpty ? nil : $0 }
         if tab == .limits {
-            store.loadLimits(refresh: refresh, servers: picked) { [weak self] result in
+            store.loadLimits(refresh: refresh, kept: !refresh, servers: picked) { [weak self] result in
                 guard let self, number == asked else { return }
-                refreshing = false
-                limits = Self.loaded(result)
+                guard case .success(let report) = result, report.stale else {
+                    refreshing = false
+                    limits = Self.loaded(result)
+                    return
+                }
+                if !report.sections.isEmpty { limits = .ready(report) }
+                store.loadLimits(refresh: false, kept: false, servers: picked) { [weak self] result in
+                    guard let self, number == asked else { return }
+                    refreshing = false
+                    limits = Self.loaded(result)
+                }
             }
         } else {
             store.loadUsage(bucketSeconds: period.bucketSeconds, buckets: period.buckets, servers: picked) { [weak self] result in

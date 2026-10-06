@@ -16,8 +16,8 @@ use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, ContinueSettings, FileKind, Item, ItemKind, Message, Project, PullRequestSettings, Request, ServerInfo,
-    Thread, ToolStatus, Worktree,
+    Activity, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Message, Project, PullRequestSettings, Request,
+    ServerInfo, Thread, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -56,6 +56,8 @@ const ACCOUNT_CHECK_TICKS: u64 = 30;
 const USAGE_PROTOCOL: u32 = 10;
 /// The servers before this one can't say what the agents' logins have used of their plans.
 const LIMITS_PROTOCOL: u32 = 17;
+/// What a server said of its agents' logins is read again once it is this old.
+const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 /// An endpoint that didn't run for this long isn't trusted to reach anything anymore.
 const STALE_AFTER: Duration = Duration::from_secs(10);
 /// An endpoint that reached no server for this long is replaced, in case the fault is its own.
@@ -204,9 +206,12 @@ struct Core {
     /// The folders last listed for `browse`: of which server and directory, and whether with
     /// the hidden ones.
     browsed: Browsed,
+    limits: KeptLimits,
 }
 
 type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool), Vec<String>)>>>;
+/// What each server last said of its agents' logins, and when.
+type KeptLimits = Arc<std::sync::Mutex<HashMap<String, (Instant, Vec<AgentLimits>)>>>;
 
 /// Starts the core on the current tokio runtime.
 pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
@@ -245,6 +250,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         media_waiting: HashMap::new(),
         uploads: HashMap::new(),
         browsed: Browsed::default(),
+        limits: KeptLimits::default(),
         config,
         sink,
         inputs: inputs.clone(),
@@ -913,6 +919,7 @@ impl Core {
                 for thread_id in known {
                     self.refollow(server_id, &thread_id);
                 }
+                self.read_limits(server_id);
             }
             Message::Projects { projects } => {
                 self.cache.set_projects(server_id, &projects);
@@ -938,6 +945,23 @@ impl Core {
             }
             other => tracing::debug!("unexpected message on the thread list: {other:?}"),
         }
+    }
+
+    /// Reads what the server's agents' logins have used, unless that is recent, so that the usage
+    /// view opens with it.
+    fn read_limits(&self, server_id: &str) {
+        let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else { return };
+        let (Some(link), Some(info)) = (server.link.clone(), server.info.as_ref()) else { return };
+        if info.protocol < LIMITS_PROTOCOL || kept_limits(&self.limits, server_id).is_some_and(|(fresh, _)| fresh) {
+            return;
+        }
+        let (known, server_id) = (self.limits.clone(), server_id.to_string());
+        tokio::spawn(async move {
+            let Ok(Message::Limits { agents }) = link.request(&Request::Limits { refresh: false }).await else {
+                return;
+            };
+            known.lock().unwrap().insert(server_id, (Instant::now(), agents));
+        });
     }
 
     /// Follows an active thread that isn't open, until its agent is done.
@@ -1598,18 +1622,23 @@ impl Core {
                     server_names.insert(server_id.clone(), server.device.name.clone());
                     links.push((server_id, link));
                 }
+                let request = Request::Usage {
+                    since: window.since,
+                    until: window.until,
+                    bucket_secs: window.bucket_secs,
+                    utc_offset_secs: window.utc_offset_secs,
+                };
+                let mut asked = tokio::task::JoinSet::new();
+                for (server_id, link) in links {
+                    let request = request.clone();
+                    asked.spawn(async move { (server_id, link.request(&request).await) });
+                }
                 let sink = self.sink.clone();
                 tokio::spawn(async move {
-                    let request = Request::Usage {
-                        since: window.since,
-                        until: window.until,
-                        bucket_secs: window.bucket_secs,
-                        utc_offset_secs: window.utc_offset_secs,
-                    };
                     let mut spent = Vec::new();
                     let mut failure = None;
-                    for (server_id, link) in &links {
-                        match link.request(&request).await {
+                    while let Some(Ok((server_id, answer))) = asked.join_next().await {
+                        match answer {
                             Ok(Message::Usage { buckets }) => {
                                 let of_server = |bucket| usage::Spent { server_id: server_id.clone(), bucket };
                                 spent.extend(buckets.into_iter().map(of_server));
@@ -1626,13 +1655,15 @@ impl Core {
                     reply(&sink, id, answer);
                 });
             }
-            Command::Limits { refresh, servers } => {
+            Command::Limits { refresh, kept, servers } => {
                 let chosen = self
                     .servers
                     .iter()
                     .filter(|server| servers.as_ref().is_none_or(|ids| ids.contains(&server.device.public_key)));
                 let mut asked = tokio::task::JoinSet::new();
                 let mut notes = Vec::new();
+                let mut reads = Vec::new();
+                let mut stale = false;
                 for server in chosen {
                     let (Some(link), Some(info)) = (server.link.clone(), server.info.as_ref()) else { continue };
                     let name = server.device.name.clone();
@@ -1640,12 +1671,20 @@ impl Core {
                         notes.push(format!("Update {name} to see its limits."));
                         continue;
                     }
-                    asked.spawn(async move { (name, link.request(&Request::Limits { refresh }).await) });
+                    let server_id = server.device.public_key.clone();
+                    let last = kept_limits(&self.limits, &server_id);
+                    let fresh = last.as_ref().is_some_and(|(fresh, _)| *fresh);
+                    if kept || (fresh && !refresh) {
+                        stale |= !fresh;
+                        let agents = last.map(|(_, agents)| agents).unwrap_or_default();
+                        reads.extend(agents.into_iter().map(|limits| limits::Read { server: name.clone(), limits }));
+                        continue;
+                    }
+                    asked.spawn(async move { (server_id, name, link.request(&Request::Limits { refresh }).await) });
                 }
-                let sink = self.sink.clone();
+                let (sink, known) = (self.sink.clone(), self.limits.clone());
                 tokio::spawn(async move {
-                    let mut reads = Vec::new();
-                    while let Some(Ok((server, answer))) = asked.join_next().await {
+                    while let Some(Ok((server_id, server, answer))) = asked.join_next().await {
                         let agents = match answer {
                             Ok(Message::Limits { agents }) => agents,
                             Ok(other) => {
@@ -1657,11 +1696,12 @@ impl Core {
                                 continue;
                             }
                         };
+                        known.lock().unwrap().insert(server_id, (Instant::now(), agents.clone()));
                         reads.extend(agents.into_iter().map(|limits| limits::Read { server: server.clone(), limits }));
                     }
                     reads.sort_by(|a, b| a.server.cmp(&b.server));
                     let sections = limits::sections(reads, now());
-                    reply(&sink, id, Ok(json!({ "sections": sections, "notes": notes })));
+                    reply(&sink, id, Ok(json!({ "sections": sections, "notes": notes, "stale": stale })));
                 });
             }
             Command::Markdown { text } => {
@@ -1968,6 +2008,13 @@ fn save_streamed(cache: &Cache, thread_id: &str, open: &mut OpenThread) {
     let items: Vec<&Item> = unsaved.iter().collect();
     cache.save_items(thread_id, &items, open.live.then_some(open.rev));
     open.saved_at = Instant::now();
+}
+
+/// What the server last said of its agents' logins, and whether it is recent.
+fn kept_limits(limits: &KeptLimits, server_id: &str) -> Option<(bool, Vec<AgentLimits>)> {
+    let kept = limits.lock().unwrap();
+    let (at, agents) = kept.get(server_id)?;
+    Some((at.elapsed() < LIMITS_STALE, agents.clone()))
 }
 
 fn reply(sink: &EventSink, id: u64, result: Result<Value, String>) {

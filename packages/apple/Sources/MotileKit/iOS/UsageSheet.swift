@@ -7,7 +7,7 @@ struct UsageSheet: View {
     private static let margin: CGFloat = 16
 
     @Environment(AppStore.self) private var store
-    @State private var model = UsageModel()
+    private var model: UsageModel { store.usage }
 
     private var picksServers: Bool { store.servers.count > 1 }
 

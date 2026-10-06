@@ -110,6 +110,8 @@ final class AppStore {
     var settings: SettingsSection?
     /// What the agents spent and what is left of their plans is open over the client.
     var showsUsage = false
+    /// What the usage shows, kept while it is closed so that it opens with what was last read.
+    private(set) var usage = UsageModel()
     /// The group of settings a search picked, until its page has scrolled to it.
     var settingsTarget: String?
     /// What is typed in the settings' search.
@@ -421,6 +423,7 @@ final class AppStore {
         if wasSignedIn && !account.signedIn {
             openEmptyDraft()
             enrollToken = nil
+            usage = UsageModel()
         }
     }
 
@@ -1343,9 +1346,12 @@ final class AppStore {
     }
 
     /// How much of their plans the agents' logins on the connected `servers`, or all of them,
-    /// have used. `refresh` has the servers read it anew.
-    func loadLimits(refresh: Bool, servers: Set<String>?, reply: @escaping (Result<LimitsReport, CoreBridge.CoreError>) -> Void) {
-        var command: JSON = ["refresh": refresh]
+    /// have used. `refresh` has the servers read it anew, `kept` answers at once with what was
+    /// last read.
+    func loadLimits(
+        refresh: Bool, kept: Bool, servers: Set<String>?, reply: @escaping (Result<LimitsReport, CoreBridge.CoreError>) -> Void
+    ) {
+        var command: JSON = ["refresh": refresh, "kept": kept]
         if let servers { command["servers"] = Array(servers) }
         core.send("limits", command, read: LimitsReport.init, reply: reply)
     }

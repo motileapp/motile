@@ -9,7 +9,7 @@ struct UsageRoute: View {
     /// sidebar is hidden.
     let titleInset: CGFloat
 
-    @State private var model = UsageModel()
+    private var model: UsageModel { store.usage }
 
     var body: some View {
         GeometryReader { window in

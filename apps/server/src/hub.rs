@@ -1329,14 +1329,15 @@ impl Hub {
     }
 
     /// What the agents' logins have used of their plans, read again once it is a few minutes old.
+    /// An agent that can't be read keeps what it said last time, beside why.
     pub async fn limits(&self, refresh: bool) -> Message {
         let mut read = self.limits.lock().await;
         if let Some((_, agents)) = read.as_ref().filter(|(at, _)| !refresh && at.elapsed() < LIMITS_STALE) {
             return Message::Limits { agents: agents.clone() };
         }
-        let agents = limits::read(&self.environment).await;
-        let failed = agents.iter().any(|agent| agent.error.is_some());
-        *read = (!failed).then(|| (Instant::now(), agents.clone()));
+        let before = read.as_ref().map(|(_, agents)| agents.clone()).unwrap_or_default();
+        let agents = limits::kept(limits::read(&self.environment).await, &before);
+        *read = Some((Instant::now(), agents.clone()));
         Message::Limits { agents }
     }
 
