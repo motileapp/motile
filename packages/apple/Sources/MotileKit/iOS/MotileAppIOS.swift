@@ -127,7 +127,7 @@ struct MotileCommands: Commands {
                 .disabled(store.servers.isEmpty)
             Button("Add a Server…") { store.showsAddServer = true }
                 .disabled(!store.account.signedIn)
-            Button("Settings…") { store.showsSettings = true }
+            Button("Settings…") { store.openSettings() }
                 .keyboardShortcut(",")
         }
     }
@@ -139,7 +139,6 @@ private enum RootSheet: Identifiable {
     case commit(Project)
     case addServer
     case panel(PanelPage)
-    case settings
     case threadSettings
 
     var id: String {
@@ -148,7 +147,6 @@ private enum RootSheet: Identifiable {
         case .commit(let project): "commit-\(project.id)"
         case .addServer: "add-server"
         case .panel: "panel"
-        case .settings: "settings"
         case .threadSettings: "thread-settings"
         }
     }
@@ -167,10 +165,18 @@ struct RootView: View {
                 ConnectServerView(isFirst: true)
             } else {
                 MainScreen()
+                    .putAway(store.settings != nil)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.themeBackground.ignoresSafeArea())
+        .overlay {
+            if store.settings != nil {
+                SettingsScreen()
+                    .appearing()
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: store.settings != nil)
         .sheet(item: sheet) { sheet in
             Group {
                 switch sheet {
@@ -190,8 +196,6 @@ struct RootView: View {
                     CommandPanel(start: page)
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
-                case .settings:
-                    SettingsScreen()
                 case .threadSettings:
                     ThreadSettingsSheet()
                 }
@@ -221,7 +225,6 @@ struct RootView: View {
             if let project = store.committingProject { return .commit(project) }
             if store.showsAddServer { return .addServer }
             if let page = store.panel { return .panel(page) }
-            if store.showsSettings { return .settings }
             if store.showsThreadSettings { return .threadSettings }
             return nil
         } set: { new in
@@ -230,29 +233,8 @@ struct RootView: View {
             if store.committingProject != nil { return store.committingProject = nil }
             if store.showsAddServer { return store.showsAddServer = false }
             if store.panel != nil { return store.closePanel() }
-            if store.showsSettings { return store.showsSettings = false }
             store.showsThreadSettings = false
             store.showsBranches = false
-        }
-    }
-}
-
-/// The settings, as a sheet.
-private struct SettingsScreen: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            SettingsView()
-                .background(Color.themeBackgroundSecondary)
-                .environment(\.surface, .secondary)
-                .navigationTitle("Settings")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                }
         }
     }
 }

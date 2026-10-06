@@ -73,19 +73,11 @@ private final class Demo {
         process.waitUntilExit()
     }
 
-    /// The Settings window, opened from the client's menu as a person would.
+    /// The settings, open over the window and closed again.
     private func shootSettings(_ name: String) async {
-        guard let menu = NSApp.mainMenu?.items.first?.submenu,
-            let item = menu.items.firstIndex(where: { $0.keyEquivalent == "," })
-        else { return }
-        menu.performActionForItem(at: item)
-        await wait(1)
-        guard let settings = NSApp.windows.first(where: { $0.isVisible && $0.identifier?.rawValue.contains("Settings") == true }) else {
-            results.append("FAIL the Settings window opens")
-            return
-        }
-        capture(settings, name)
-        settings.close()
+        store.openSettings()
+        await shoot(name)
+        store.closeSettings()
     }
 
     /// The whole screen, to see the window's glass over what is behind it.

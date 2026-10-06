@@ -1,8 +1,8 @@
 import Charts
 import SwiftUI
 
-/// What the agents spent on the account's servers: a line for each agent over time, and what
-/// each model, project and kind of token took.
+/// What the agents spent on the account's servers, the Usage page of the settings: a line for
+/// each agent over time, and what each model, project and kind of token took.
 struct UsageView: View {
     private enum Period: String, CaseIterable, Identifiable {
         case day, week, month, quarter
@@ -52,7 +52,6 @@ struct UsageView: View {
     }
 
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
     @AppStorage("usage.period") private var period = Period.week
     @AppStorage("usage.measure") private var measure = Measure.cost
     @AppStorage("usage.breakdown") private var breakdown = Breakdown.models
@@ -65,84 +64,48 @@ struct UsageView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            ThemeDivider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack {
-                            periods
-                            Spacer(minLength: 12)
-                            measures
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            periods
-                            measures
-                        }
-                    }
-                    switch report {
-                    case .loading:
-                        Spinner()
-                            .foregroundStyle(Color.themeSecondary)
-                            .frame(maxWidth: .infinity, minHeight: 240)
-                    case .failed(let message):
-                        note(message)
-                    case .ready(let report) where report.tokens == 0:
-                        note("Nothing was spent in this time. Your servers keep what their agents spend from the version that shows this on.")
-                    case .ready(let report):
-                        summary(report)
-                        chart(report)
-                        lines(report)
-                    }
-                    ForEach(outdated) { server in
-                        Text("Update \(server.name) to see what its agents spend.")
-                            .font(.caption)
-                            .foregroundStyle(Color.themeSecondary)
-                    }
+        VStack(alignment: .leading, spacing: 18) {
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    periods
+                    Spacer(minLength: 12)
+                    measures
                 }
-                .padding(16)
+                VStack(alignment: .leading, spacing: 8) {
+                    periods
+                    measures
+                }
+            }
+            switch report {
+            case .loading:
+                Spinner()
+                    .foregroundStyle(Color.themeSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 240)
+            case .failed(let message):
+                note(message)
+            case .ready(let report) where report.tokens == 0:
+                note("Nothing was spent in this time. Your servers keep what their agents spend from the version that shows this on.")
+            case .ready(let report):
+                summary(report)
+                chart(report)
+                lines(report)
+            }
+            ForEach(outdated) { server in
+                Text("Update \(server.name) to see what its agents spend.")
+                    .font(.caption)
+                    .foregroundStyle(Color.themeSecondary)
             }
         }
-        #if os(macOS)
-        .frame(width: 620, height: 640)
-        #else
-        .presentationDetents([.large])
-        #endif
-        .presentationBackground(Color.themeBackgroundSecondary)
-        .environment(\.surface, .secondary)
         .onAppear(perform: load)
         .onChange(of: period) { load() }
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            Text("Usage")
-                .font(.ui(size: 13, weight: .semibold))
-            Spacer()
-            ActionButton("Done") { dismiss() }
-                .keyboardShortcut(.cancelAction)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-
     private var periods: some View {
-        Picker("Time", selection: $period) {
-            ForEach(Period.allCases) { Text($0.label).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
+        Segmented(Period.allCases.map { ($0.label, $0) }, selection: $period)
     }
 
     private var measures: some View {
-        Picker("Measure", selection: $measure) {
-            ForEach(Measure.allCases) { Text($0.label).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
+        Segmented(Measure.allCases.map { ($0.label, $0) }, selection: $measure)
     }
 
     private func load() {
@@ -298,21 +261,16 @@ struct UsageView: View {
             case .kinds: report.kinds
             }
         return VStack(alignment: .leading, spacing: 8) {
-            Picker("By", selection: $breakdown) {
-                ForEach(Breakdown.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            Segmented(Breakdown.allCases.map { ($0.label, $0) }, selection: $breakdown)
             VStack(spacing: 0) {
                 ForEach(shown) { line in
                     UsageLineRow(line: line, measure: measure == .cost ? .cost : .tokens)
                     if line.id != shown.last?.id {
-                        ThemeDivider().padding(.horizontal, 12)
+                        ThemeDivider()
                     }
                 }
             }
-            .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+            .card()
         }
     }
 

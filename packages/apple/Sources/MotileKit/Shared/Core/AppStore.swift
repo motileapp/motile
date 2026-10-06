@@ -95,10 +95,12 @@ final class AppStore {
     var signInError: String?
     private(set) var enrollToken: EnrollToken?
     var showsAddServer = false
-    /// The settings are open over the client, where they aren't a window of their own.
-    var showsSettings = false
-    /// What the agents spent is open over the settings.
-    var showsUsage = false
+    /// The section of the settings open over the client, while they are.
+    var settings: SettingsSection?
+    /// The group of settings a search picked, until its page has scrolled to it.
+    var settingsTarget: String?
+    /// What is typed in the settings' search.
+    var settingsQuery = ""
     /// The thread's settings are open over the client, where they aren't around the composer.
     var showsThreadSettings = false
     /// The project an icon is being chosen for.
@@ -799,6 +801,7 @@ final class AppStore {
     }
 
     func signOut() {
+        closeSettings()
         drafts = [:]
         attachmentsByKey = [:]
         threadDrafts = []
@@ -1222,6 +1225,20 @@ final class AppStore {
         core.send("set_project_icon", command) { [weak self] result in
             if case .failure(let error) = result { self?.errorMessage = error.message }
         }
+    }
+
+    // MARK: Settings
+
+    func openSettings(_ section: SettingsSection = .general, target: String? = nil) {
+        guard account.signedIn else { return }
+        settings = section
+        settingsTarget = target
+    }
+
+    func closeSettings() {
+        settings = nil
+        settingsTarget = nil
+        settingsQuery = ""
     }
 
     // MARK: Command panel

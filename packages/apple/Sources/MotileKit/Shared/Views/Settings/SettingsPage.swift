@@ -1,0 +1,462 @@
+import SwiftUI
+
+/// One section of the settings: its groups of rows, and the way to the group a search picked.
+struct SettingsPage: View {
+    /// How wide the groups are at most, however wide the window.
+    static let contentWidth: CGFloat = 640
+
+    @Environment(AppStore.self) private var store
+    let section: SettingsSection
+    @AppStorage("appearance") private var appearance = Appearance.system
+    @AppStorage(AppStore.steersKey) private var steers = false
+    @State private var setupProject: Project?
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    switch section {
+                    case .general: general
+                    case .servers: servers
+                    case .projects: projects
+                    case .textGeneration: textGeneration
+                    case .pullRequests: pullRequests
+                    case .usage: UsageView()
+                    }
+                }
+                .frame(maxWidth: Self.contentWidth)
+                .padding(20)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollDismissesKeyboard(.immediately)
+            .onChange(of: store.settingsTarget, initial: true) {
+                guard let target = store.settingsTarget else { return }
+                withAnimation { proxy.scrollTo(target, anchor: .center) }
+                store.settingsTarget = nil
+            }
+        }
+        .onAppear { store.refreshMediaStorage() }
+        .sheet(item: $setupProject) { project in
+            SetupSheet(project: project)
+        }
+    }
+
+    @ViewBuilder private var general: some View {
+        SettingsGroup("account", "Account") {
+            SettingsRow {
+                SettingsLabel("Signed in as")
+            } trailing: {
+                Text(store.account.signedIn ? store.account.email : "Not signed in")
+                    .foregroundStyle(Color.themeSecondary)
+                if store.account.signedIn {
+                    ActionButton("Sign Out", size: .small) { store.signOut() }
+                }
+            }
+        }
+
+        #if os(macOS)
+        SettingsGroup("updates", "Updates") {
+            SettingsRow {
+                SettingsLabel("Motile \(store.updater.current)")
+            } trailing: {
+                ActionButton("Check for Updates", size: .small, pending: store.updater.state == .checking) { store.updater.check(asked: true) }
+            }
+            if store.updater.state != .idle {
+                ThemeDivider()
+                AppUpdateRow(updater: store.updater)
+                    .padding(.horizontal, settingsInset)
+                    .padding(.vertical, 10)
+            }
+        }
+        #else
+        SettingsGroup("updates", "Version") {
+            SettingsRow {
+                SettingsLabel("Motile \(store.updater.current)")
+            } trailing: {
+                EmptyView()
+            }
+        }
+        #endif
+
+        SettingsGroup("appearance", "Appearance") {
+            SettingsRow {
+                SettingsLabel("Theme")
+            } trailing: {
+                Segmented(Appearance.allCases.map { ($0.label, $0) }, selection: $appearance)
+            }
+        }
+
+        SettingsGroup("messages", "Messages") {
+            SettingsRow {
+                SettingsLabel(
+                    "Sent while the agent works",
+                    description: steers ? "The agent reads it at once, in the turn that runs" : "Waits for the turn to end and starts the next one")
+            } trailing: {
+                Segmented([("Queue", false), ("Steer", true)], selection: $steers)
+            }
+        }
+
+        SettingsGroup("storage", "Storage") {
+            SettingsRow {
+                SettingsLabel("Images and videos", description: storageDescription)
+            } trailing: {
+                ActionButton("Clear", size: .small) { store.clearMedia() }
+                    .disabled((store.mediaStorage?.used ?? 0) == 0)
+            }
+        }
+    }
+
+    /// The servers keep every image and video; the ones kept here only make threads open with them.
+    private var storageDescription: String {
+        guard let storage = store.mediaStorage else { return "Kept on this \(Platform.device) so threads open with them" }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowsNonnumericFormatting = false
+        let (used, limit) = (formatter.string(fromByteCount: storage.used), formatter.string(fromByteCount: storage.limit))
+        return "\(used) of \(limit) on this \(Platform.device). Your servers keep them all."
+    }
+
+    private var servers: some View {
+        SettingsGroup("servers", "Servers") {
+            ForEach(store.servers) { server in
+                SettingsRow {
+                    SettingsLabel(server.name, description: description(of: server))
+                } trailing: {
+                    ServerUpdateStatus(server: server) { EmptyView() }
+                    ActionButton("Remove", size: .small) { store.removeServer(server) }
+                }
+                ThemeDivider()
+            }
+            SettingsRow {
+                ActionButton("Add a Server…", size: .small) { store.showsAddServer = true }
+            } trailing: {
+                EmptyView()
+            }
+        }
+    }
+
+    /// The model that writes thread titles, branch names, commit messages and pull requests, and
+    /// how it names branches, by server.
+    @ViewBuilder private var textGeneration: some View {
+        let servers = store.servers.filter { $0.state == .connected && $0.protocolVersion >= 4 }
+        if servers.isEmpty {
+            SettingsNote("The model that writes thread titles, branch names, commit messages and pull requests is set on each of your servers, once one is connected.")
+        } else {
+            SettingsGroup("text-model", "Model", caption: "The model that writes thread titles, branch names, commit messages and pull requests") {
+                ForEach(servers) { server in
+                    SettingsRow {
+                        serverName(server)
+                    } trailing: {
+                        ActionMenu(textModelName(of: server), variant: .secondary, size: .small) {
+                            Button("Automatic") { store.setTextModel(nil, on: server) }
+                            ForEach(server.models) { model in
+                                Button(model.name) { store.setTextModel(model.id, on: server) }
+                            }
+                        }
+                    }
+                    if server.id != servers.last?.id { ThemeDivider() }
+                }
+            }
+            let naming = servers.filter { $0.protocolVersion >= 6 }
+            if !naming.isEmpty {
+                SettingsGroup("branch-names", "Branch names", caption: "How the writer is told to name the branches it makes") {
+                    ForEach(naming) { server in
+                        if naming.count > 1 {
+                            SettingsRow {
+                                serverName(server)
+                            } trailing: {
+                                EmptyView()
+                            }
+                        }
+                        BranchInstructionsEditor(server: server)
+                        if server.id != naming.last?.id { ThemeDivider() }
+                    }
+                }
+            }
+        }
+    }
+
+    /// What each server does with pull requests by itself.
+    @ViewBuilder private var pullRequests: some View {
+        let servers = store.servers.filter { $0.state == .connected && $0.protocolVersion >= 9 }
+        if servers.isEmpty {
+            SettingsNote("What your servers do once a thread's pull request merges is set on each of them, once one is connected.")
+        } else {
+            SettingsGroup("merged", "Mark the thread done", caption: "When its pull request merges or closes") {
+                ForEach(servers) { server in
+                    SettingsRow {
+                        serverName(server)
+                    } trailing: {
+                        Switch(isOn: Binding { server.doneOnMerge } set: {
+                            store.setPullRequestSettings(doneOnMerge: $0, removeMergedWorktrees: server.removeMergedWorktrees, on: server)
+                        })
+                    }
+                    if server.id != servers.last?.id { ThemeDivider() }
+                }
+            }
+            SettingsGroup("worktrees", "Remove the thread's worktree", caption: "After its pull request merges, if all of it is pushed. Its branch stays, and the worktree is made again if the thread goes on.") {
+                ForEach(servers) { server in
+                    SettingsRow {
+                        serverName(server)
+                    } trailing: {
+                        Switch(isOn: Binding { server.removeMergedWorktrees } set: {
+                            store.setPullRequestSettings(doneOnMerge: server.doneOnMerge, removeMergedWorktrees: $0, on: server)
+                        })
+                    }
+                    if server.id != servers.last?.id { ThemeDivider() }
+                }
+            }
+        }
+    }
+
+    private func serverName(_ server: Server) -> some View {
+        SettingsLabel(server.name, icon: .server)
+    }
+
+    private func textModelName(of server: Server) -> String {
+        server.models.first { $0.id == server.textModel }?.name ?? "Automatic"
+    }
+
+    private var projects: some View {
+        SettingsGroup("projects", "Projects") {
+            ForEach(store.projects) { project in
+                SettingsRow {
+                    ProjectIcon(project: project, size: 26)
+                    SettingsLabel(project.name, description: project.path, truncates: true)
+                } trailing: {
+                    ActionMenu("Icon", variant: .secondary, size: .small) {
+                        Button("Choose an Image…") { store.iconProject = project }
+                        Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
+                    }
+                    if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
+                        ActionButton("Setup…", help: "The script that runs in each new worktree of \(project.name)", size: .small) {
+                            setupProject = project
+                        }
+                    }
+                    ActionButton("Remove", size: .small) { store.removeProject(project) }
+                }
+                ThemeDivider()
+            }
+            SettingsRow {
+                ActionButton("Add a Project…", size: .small) {
+                    store.closeSettings()
+                    store.addProject()
+                }
+                .disabled(store.servers.isEmpty)
+            } trailing: {
+                EmptyView()
+            }
+        }
+    }
+
+    private func description(of server: Server) -> String {
+        let agents = server.agents.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.name) \($0.value)" }
+        let installed = agents.isEmpty ? "no agent installed" : agents.joined(separator: ", ")
+        switch server.state {
+        case .connected: return "Connected · version \(server.version) · \(installed)"
+        case .connecting: return "Connecting…"
+        case .disconnected: return "Offline"
+        case .refused: return "This server no longer accepts this \(Platform.device)"
+        }
+    }
+}
+
+private let settingsInset: CGFloat = 14
+
+/// How a server's writer is told to name the branches it makes, to change and to put back.
+private struct BranchInstructionsEditor: View {
+    @Environment(AppStore.self) private var store
+    let server: Server
+    @State private var text = ""
+
+    private var changed: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines) != server.branchInstructions }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextEditor(text: $text)
+                .font(.ui(size: 12))
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .frame(height: 64)
+                .card(radius: Radius.control)
+            HStack(spacing: 8) {
+                Spacer()
+                ActionButton("Reset", size: .small) {
+                    text = server.defaultBranchInstructions
+                    store.setBranchInstructions(nil, on: server)
+                }
+                .disabled(server.branchInstructions == server.defaultBranchInstructions && !changed)
+                ActionButton("Save", variant: .primary, size: .small) { store.setBranchInstructions(text, on: server) }
+                    .disabled(!changed)
+            }
+        }
+        .padding(.horizontal, settingsInset)
+        .padding(.vertical, 10)
+        .onAppear { text = server.branchInstructions }
+        .onChange(of: server.branchInstructions) { text = server.branchInstructions }
+    }
+}
+
+/// The shell script that runs in each new worktree of a project before the agent starts there.
+private struct SetupSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let project: Project
+    @State private var script = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Worktree setup for \(project.name)")
+                .font(.ui(size: 13, weight: .semibold))
+            Text("A shell script that runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder, as in: cp \"$MOTILE_PROJECT/.env\" . && pnpm install")
+                .font(.caption)
+                .foregroundStyle(Color.themeSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextEditor(text: $script)
+                .font(.ui(size: 12, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .frame(height: 140)
+                .card(radius: Radius.control)
+            HStack {
+                Spacer()
+                ActionButton("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                ActionButton("Save", variant: .primary) {
+                    store.setSetup(of: project, to: script)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        #if os(macOS)
+        .frame(width: 440)
+        #else
+        .frame(maxHeight: .infinity, alignment: .top)
+        .presentationDetents([.medium, .large])
+        .presentationBackground(Color.themeBackgroundSecondary)
+        .environment(\.surface, .secondary)
+        #endif
+        .onAppear { script = project.setup ?? "" }
+    }
+}
+
+/// A quiet title over a bordered card of rows, which a search scrolls to by its `id`.
+private struct SettingsGroup<Content: View>: View {
+    private let id: String
+    private let title: String
+    private let caption: String?
+    private let content: Content
+
+    init(_ id: String, _ title: String, caption: String? = nil, @ViewBuilder content: () -> Content) {
+        self.id = id
+        self.title = title
+        self.caption = caption
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.ui(size: 13))
+                    .foregroundStyle(Color.themeSecondary)
+                if let caption {
+                    Text(caption)
+                        .font(.ui(size: 11.5))
+                        .foregroundStyle(Color.themeTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, settingsInset)
+            VStack(spacing: 0) {
+                content
+            }
+            .card()
+        }
+        .id(id)
+    }
+}
+
+/// What a row is about: its name, and under it what it does.
+private struct SettingsLabel: View {
+    let title: String
+    var description: String?
+    var icon: Symbol?
+    /// A description that is a path is cut at its start, not wrapped.
+    var truncates = false
+
+    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Bool = false) {
+        self.title = title
+        self.description = description
+        self.icon = icon
+        self.truncates = truncates
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let icon {
+                Image(icon, size: 13)
+                    .foregroundStyle(Color.themeSecondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.ui(size: 13, weight: .medium))
+                if let description {
+                    Text(description)
+                        .font(.ui(size: 11.5))
+                        .foregroundStyle(Color.themeSecondary)
+                        .lineLimit(truncates ? 1 : nil)
+                        .truncationMode(.head)
+                        .fixedSize(horizontal: false, vertical: !truncates)
+                }
+            }
+        }
+    }
+}
+
+/// What the row is about on the left, its controls on the right, with the same room above and
+/// below.
+private struct SettingsRow<Leading: View, Trailing: View>: View {
+    @ViewBuilder let leading: Leading
+    @ViewBuilder let trailing: Trailing
+
+    var body: some View {
+        // A row too narrow for both puts its controls under what they are about.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                leading
+                Spacer(minLength: 12)
+                trailing
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) { leading }
+                HStack(spacing: 10) { trailing }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, settingsInset)
+        .padding(.vertical, 10)
+        .frame(minHeight: 46)
+    }
+}
+
+/// Said on a page with nothing to set yet.
+private struct SettingsNote: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.ui(size: 13))
+            .foregroundStyle(Color.themeSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(settingsInset)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .card()
+    }
+}

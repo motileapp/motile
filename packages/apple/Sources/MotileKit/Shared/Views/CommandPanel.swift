@@ -5,9 +5,6 @@ import SwiftUI
 /// there is more than one, ⌘P on the threads and ⌘K on the commands.
 struct CommandPanel: View {
     @Environment(AppStore.self) private var store
-    #if os(macOS)
-    @Environment(\.openSettings) private var openSettings
-    #endif
     @State private var pages: [PanelPage]
     @State private var query = ""
     @State private var highlighted = 0
@@ -537,11 +534,7 @@ struct CommandPanel: View {
             },
         ]
         let settings = PanelItem(id: "settings", title: "Settings…", detail: "Appearance, servers and projects", icon: .symbol(.settings)) {
-            #if os(macOS)
-            openSettings()
-            #else
-            store.showsSettings = true
-            #endif
+            store.openSettings()
         }
         return serverUpdates + always + appUpdate + [settings]
     }
