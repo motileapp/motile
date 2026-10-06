@@ -418,7 +418,7 @@ private struct PullRequestPageView: View {
             if !pending.isEmpty {
                 PendingComments(comments: pending) { panel.removePending($0, from: number) }
             }
-            WritingField(text: $comment, placeholder: pending.isEmpty ? "Leave a comment" : "Say something with your review (optional)")
+            TextArea(pending.isEmpty ? "Leave a comment" : "Say something with your review (optional)", text: $comment, lines: 4)
             HStack(spacing: 8) {
                 if let close = page.withComment, pending.isEmpty {
                     ActionButton(close.label, pending: work?.key == "close") { choose(close, key: "close") }

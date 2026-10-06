@@ -2,7 +2,8 @@
 import AppKit
 import SwiftUI
 
-/// The composer's text: grows with what is typed, sends on Return, and takes dropped files.
+/// The composer's text: grows with what is typed, sends on Return, and takes dropped files. A
+/// `TextArea` is the same view with Return as a line break and no focus of its own.
 struct ComposerTextView: NSViewRepresentable {
     static let font = NSFont.systemFont(ofSize: 14)
     static let paragraphStyle: NSParagraphStyle = {
@@ -12,29 +13,37 @@ struct ComposerTextView: NSViewRepresentable {
     }()
     static let verticalInset: CGFloat = 4
     /// Two lines, so the composer only grows when a third one starts.
-    static let minimumHeight: CGFloat = {
-        let storage = NSTextStorage(string: "1\n2", attributes: [.font: font, .paragraphStyle: paragraphStyle])
+    static let minimumHeight = height(of: 2, in: font)
+    static let maximumHeight: CGFloat = 220
+
+    /// How tall the view is with that many lines of the font in it.
+    static func height(of lines: Int, in font: NSFont) -> CGFloat {
+        let text = (1...max(1, lines)).map(String.init).joined(separator: "\n")
+        let storage = NSTextStorage(string: text, attributes: [.font: font, .paragraphStyle: paragraphStyle])
         let layout = NSLayoutManager()
         storage.addLayoutManager(layout)
         let container = NSTextContainer(size: NSSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
         layout.addTextContainer(container)
         layout.ensureLayout(for: container)
         return ceil(layout.usedRect(for: container).height) + verticalInset * 2
-    }()
-    static let maximumHeight: CGFloat = 220
+    }
 
     @Binding var text: String
     @Binding var height: CGFloat
     let placeholder: String
     /// Changes when another thread's draft is shown, which is when the cursor should come here.
-    let focusKey: String
-    let onSubmit: () -> Void
-    let onFiles: ([URL]) -> Void
+    /// Without one the view never takes the cursor by itself.
+    var focusKey: String?
+    /// What Return does. Without it, Return is a line break.
+    var onSubmit: (() -> Void)?
+    var onFiles: ([URL]) -> Void = { _ in }
     /// Files are being dragged over the text, or no longer are.
-    let onFileDrag: (Bool) -> Void
+    var onFileDrag: (Bool) -> Void = { _ in }
+    var font = Self.font
+    var heights = Self.minimumHeight...Self.maximumHeight
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView()
+        let scroll = ComposerScrollView()
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
@@ -54,7 +63,7 @@ struct ComposerTextView: NSViewRepresentable {
         view.isRichText = false
         view.allowsUndo = true
         view.drawsBackground = false
-        view.font = Self.font
+        view.font = font
         view.textColor = Theme.text
         view.insertionPointColor = Theme.text
         view.textContainerInset = NSSize(width: 0, height: Self.verticalInset)
@@ -69,7 +78,7 @@ struct ComposerTextView: NSViewRepresentable {
         view.isAutomaticSpellingCorrectionEnabled = false
         view.defaultParagraphStyle = Self.paragraphStyle
         view.typingAttributes = [
-            .font: Self.font,
+            .font: font,
             .foregroundColor: Theme.text,
             .paragraphStyle: Self.paragraphStyle,
         ]
@@ -81,7 +90,7 @@ struct ComposerTextView: NSViewRepresentable {
         scroll.documentView = view
         context.coordinator.textView = view
         DispatchQueue.main.async {
-            view.window?.makeFirstResponder(view)
+            if focusKey != nil { view.window?.makeFirstResponder(view) }
             context.coordinator.measure()
         }
         return scroll
@@ -112,7 +121,7 @@ struct ComposerTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ComposerTextView
         weak var textView: ComposerNSTextView?
-        var focusKey: String
+        var focusKey: String?
 
         init(_ parent: ComposerTextView) {
             self.parent = parent
@@ -130,10 +139,19 @@ struct ComposerTextView: NSViewRepresentable {
             guard let view = textView, let container = view.textContainer, let layout = view.layoutManager else { return }
             layout.ensureLayout(for: container)
             let used = layout.usedRect(for: container).height + view.textContainerInset.height * 2
-            let height = min(ComposerTextView.maximumHeight, max(ComposerTextView.minimumHeight, ceil(used)))
+            let height = min(parent.heights.upperBound, max(parent.heights.lowerBound, ceil(used)))
             guard abs(parent.height - height) > 0.5 else { return }
             DispatchQueue.main.async { self.parent.height = height }
         }
+    }
+}
+
+/// A click under the text, where the text view doesn't reach, puts the cursor at its end.
+final class ComposerScrollView: NSScrollView {
+    override func mouseDown(with event: NSEvent) {
+        guard let view = documentView as? NSTextView else { return super.mouseDown(with: event) }
+        window?.makeFirstResponder(view)
+        view.setSelectedRange(NSRange(location: (view.string as NSString).length, length: 0))
     }
 }
 
@@ -148,17 +166,17 @@ final class ComposerNSTextView: NSTextView {
         let modifiers = event.modifierFlags.intersection([.shift, .option, .control])
         // Return sends; with Shift or Option it is a line break. While an input method is
         // composing, Return belongs to it.
-        guard isReturn, modifiers.isEmpty, !hasMarkedText() else {
+        guard isReturn, modifiers.isEmpty, !hasMarkedText(), let onSubmit else {
             super.keyDown(with: event)
             return
         }
-        onSubmit?()
+        onSubmit()
     }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty, !placeholder.isEmpty else { return }
-        let attributes: [NSAttributedString.Key: Any] = [.font: ComposerTextView.font, .foregroundColor: Theme.tertiary]
+        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? ComposerTextView.font, .foregroundColor: Theme.tertiary]
         let origin = NSPoint(x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0), y: textContainerInset.height)
         (placeholder as NSString).draw(at: origin, withAttributes: attributes)
     }

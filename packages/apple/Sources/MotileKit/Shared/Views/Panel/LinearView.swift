@@ -370,7 +370,7 @@ struct LinearIssueSurface: View {
         let linear = store.linear
         let words = comment.trimmingCharacters(in: .whitespacesAndNewlines)
         return VStack(alignment: .trailing, spacing: 8) {
-            WritingField(text: $comment, placeholder: "Leave a comment")
+            TextArea("Leave a comment", text: $comment, lines: 4)
             ActionButton("Comment", variant: .secondary, pending: linear.working.contains("comment:\(id)")) {
                 linear.loadIssue(id, of: workspace, on: target.serverID, comment: words) { comment = "" }
             }
@@ -405,7 +405,7 @@ private struct LinearNewIssue: View {
             Text("New issue")
                 .font(.ui(size: 15, weight: .semibold))
             InputField("Title", text: $title)
-            WritingField(text: $description, placeholder: "Add a description", height: nil)
+            TextArea("Add a description", text: $description, lines: 4, fills: true)
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 6) { properties(teams: teams, picked: picked, states: states, state: state, users: users) }
                 VStack(alignment: .leading, spacing: 6) { properties(teams: teams, picked: picked, states: states, state: state, users: users) }

@@ -72,7 +72,7 @@ struct LineCommentSheet: View {
                 .frame(maxHeight: 220)
                 .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             }
-            WritingField(text: $text, placeholder: threads.isEmpty ? "Comment on this line" : "Reply, or say something new", height: 96)
+            TextArea(threads.isEmpty ? "Comment on this line" : "Reply, or say something new", text: $text, lines: 5)
             #if os(macOS)
             HStack(spacing: 8) {
                 ActionButton("Ask the Agent", help: "Put this line and what you wrote in the composer", action: askAgent)

@@ -273,12 +273,7 @@ private struct BranchInstructionsEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TextEditor(text: $text)
-                .font(.ui(size: 12))
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .frame(height: 64)
-                .card(radius: Radius.control)
+            TextArea("How to name a branch", text: $text, maxLines: 16)
             HStack(spacing: 8) {
                 Spacer()
                 ActionButton("Reset", size: .small) {
@@ -312,12 +307,7 @@ private struct SetupSheet: View {
                 .font(.caption)
                 .foregroundStyle(Color.themeSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            TextEditor(text: $script)
-                .font(.ui(size: 12, design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .frame(height: 140)
-                .card(radius: Radius.control)
+            TextArea("cp \"$MOTILE_PROJECT/.env\" . && pnpm install", text: $script, monospaced: true, lines: 5, maxLines: 14)
             HStack {
                 Spacer()
                 ActionButton("Cancel") { dismiss() }

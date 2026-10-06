@@ -1,32 +1,38 @@
 #if os(macOS)
 import SwiftUI
 
-/// The settings over the whole window: their sections on the left, the open one's page on the
-/// right and its title in the window's top bar. The way back is in the top bar beside the
-/// window's buttons.
+/// The settings over the whole window: their sections on the left, as wide as the sidebar and
+/// dragged with the same line, the open one's page on the right and its title in the window's
+/// top bar. The way back is in the top bar beside the window's buttons.
 struct SettingsRoute: View {
     let section: SettingsSection
+    @AppStorage(MainView.sidebarWidthKey) private var sidebarWidth = 280.0
 
     var body: some View {
-        SettingsSplit()
+        GeometryReader { window in
+            let widths = MainView.sidebarWidths(in: Double(window.size.width))
+            let shownWidth = min(widths.upperBound, max(widths.lowerBound, sidebarWidth))
+            SettingsSplit(sidebarWidth: shownWidth) {
+                PaneDivider(width: $sidebarWidth, widths: widths)
+                    .zIndex(1)
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.themeBackground.ignoresSafeArea())
-            .overlay(alignment: .topLeading) { topBar }
+            .overlay(alignment: .topLeading) { topBar(window, pastSidebar: shownWidth + 1) }
+        }
     }
 
     /// The page's title, in the middle of the top bar over it.
-    private var topBar: some View {
-        GeometryReader { proxy in
-            Text(section.title)
-                .font(.ui(size: 13, weight: .semibold))
-                .lineLimit(1)
-                .padding(.horizontal, 20)
-                .frame(maxWidth: .infinity)
-                .padding(.leading, SettingsSplit.sidebarWidth + 1)
-                .frame(height: proxy.safeAreaInsets.top)
-                .offset(y: -proxy.safeAreaInsets.top)
-                .allowsHitTesting(false)
-        }
+    private func topBar(_ window: GeometryProxy, pastSidebar: CGFloat) -> some View {
+        Text(section.title)
+            .font(.ui(size: 13, weight: .semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity)
+            .padding(.leading, pastSidebar)
+            .frame(height: window.safeAreaInsets.top)
+            .offset(y: -window.safeAreaInsets.top)
+            .allowsHitTesting(false)
     }
 }
 #endif

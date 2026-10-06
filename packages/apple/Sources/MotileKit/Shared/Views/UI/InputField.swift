@@ -75,12 +75,19 @@ struct InputField: View {
                 .onTapGesture { (focus ?? $ownFocus).wrappedValue = true }
                 .textPointer()
         }
-        .background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
-        .overlay {
-            if variant == .outlined {
-                RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(surface == .background ? Color.themeBorder : Color.themeBorderSecondary, lineWidth: 1)
+        .fieldFrame(size, surface: surface, fill: fill, outlined: variant == .outlined)
+    }
+}
+
+extension View {
+    /// The fill and the border of a field of the size, on the surface it lies on.
+    func fieldFrame(_ size: ControlSize, surface: Surface, fill: Color? = nil, outlined: Bool = true) -> some View {
+        background(fill ?? surface.next.color, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
+            .overlay {
+                if outlined {
+                    RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(surface == .background ? Color.themeBorder : Color.themeBorderSecondary, lineWidth: 1)
+                }
             }
-        }
     }
 }
 
