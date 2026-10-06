@@ -59,6 +59,7 @@ enum Theme {
     static let success = dynamic(hex(0x047857), hex(0x55c483))
     static let merged = dynamic(hex(0x8250df), hex(0xba93fb))
     static let working = dynamic(hex(0x0284c7), hex(0x38bdf8))
+    static let agents = dynamic(hex(0xa16207), hex(0xe2c25b))
 
     // Charts: what tells one agent's line from the other's.
     static let claudeSeries = dynamic(hex(0xeb6834), hex(0xd95926))
@@ -313,6 +314,7 @@ extension Color {
     static let themeSuccess = Color(platform: Theme.success)
     static let themeMerged = Color(platform: Theme.merged)
     static let themeWorking = Color(platform: Theme.working)
+    static let themeAgents = Color(platform: Theme.agents)
     static let themeClaudeSeries = Color(platform: Theme.claudeSeries)
     static let themeCodexSeries = Color(platform: Theme.codexSeries)
 }
