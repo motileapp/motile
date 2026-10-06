@@ -12,6 +12,10 @@ use crate::models::*;
 use crate::transcript::model::RowModel;
 
 impl Store {
+    /// Whether a message sent while the agent works steers the turn that runs instead of
+    /// waiting for it.
+    pub const STEERS_KEY: &str = "send.steers";
+
     pub(super) fn apply_threads(&mut self, new: Vec<ThreadInfo>, server_id: &str, cx: &mut Context<Self>) {
         self.threads.retain(|_, thread| thread.server_id != server_id);
         for thread in new {
@@ -30,6 +34,9 @@ impl Store {
         let before = self.threads.insert(thread.id.clone(), thread.clone());
         self.mark_open_thread_seen();
         let Some(before) = before else { return };
+        if !before.is_done() && thread.is_done() && before.pull_request != thread.pull_request {
+            self.sidebar.settled_thread_id = Some(thread.id.clone());
+        }
         if self.selection != Selection::Thread(thread.id.clone()) {
             return;
         }
@@ -206,6 +213,7 @@ impl Store {
         let key = self.draft_key();
         let paths: Vec<String> = attached.iter().filter_map(|attachment| attachment.path.clone()).collect();
         let existing = self.selected_thread().cloned();
+        let steers = existing.is_some() && self.prefs.bool(Self::STEERS_KEY);
         let command = if let Some(thread) = &existing {
             Command::Send {
                 server_id: thread.server_id.clone(),
@@ -213,16 +221,20 @@ impl Store {
                 new_thread: None,
                 text: text.clone(),
                 attachments: paths,
+                now: steers,
             }
         } else {
             let draft = self.selected_draft().cloned();
             let project = draft.as_ref().and_then(|draft| self.project(draft.project_id.as_deref()).cloned());
             let (Some(draft), Some(project), Some(model)) = (draft, project, self.composer_model()) else {
-                self.fail("This server has no agent installed. Install Claude Code or Codex on it and try again.");
+                self.fail("No agent is installed. Install Claude Code or Codex on your server and try again.");
                 return;
             };
-            let worktree =
-                if self.draft_uses_worktree() { self.draft_base().map(|base| NewWorktree { base }) } else { None };
+            let worktree = if self.draft_uses_worktree() {
+                self.draft_base().map(|base| NewWorktree { base, branch: None })
+            } else {
+                None
+            };
             let new_thread = NewThread {
                 project_id: project.id.clone(),
                 agent: model.agent,
@@ -245,6 +257,7 @@ impl Store {
                 new_thread: Some(new_thread),
                 text: text.clone(),
                 attachments: paths,
+                now: false,
             }
         };
         let Command::Send { server_id, .. } = &command else { unreachable!() };
@@ -252,7 +265,9 @@ impl Store {
         self.set_draft(String::new());
         self.draft_version += 1;
         self.attachments_by_key.remove(&key);
-        let pending = RowModel::pending(text.clone(), attached.iter().map(Attachment::attached).collect());
+        // The server queues what is sent while the agent works, unless the message steers it.
+        let queued = existing.is_some() && self.activity.running && !steers;
+        let pending = RowModel::pending(text.clone(), attached.iter().map(Attachment::attached).collect(), queued);
         self.transcript.update(cx, |transcript, cx| {
             transcript.set_pending(Some(pending));
             cx.notify();

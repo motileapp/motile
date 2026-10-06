@@ -4,7 +4,11 @@
 mod account;
 mod attachments;
 mod git;
+pub mod linear;
 mod projects;
+pub mod pull_requests;
+pub mod settings;
+mod sidebar;
 mod threads;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -20,6 +24,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub use self::git::{GitNotice, PendingGit, stage_label};
+pub use self::projects::RepoListing;
+pub use self::pull_requests::PullRequests;
+pub use self::settings::SettingsState;
+pub use self::sidebar::SidebarState;
 use crate::bridge::{Bridge, Incoming, Read, error_of};
 use crate::models::*;
 use crate::panel::state::{PanelTabs, PanelTarget, SidePanel};
@@ -215,6 +223,11 @@ pub struct Store {
 
     pub updater: Updater,
     pub side_panel: SidePanel,
+    pub settings: SettingsState,
+    pub linear: linear::Linear,
+    pub pull_requests: PullRequests,
+    pub repo_listing: RepoListing,
+    pub sidebar: SidebarState,
     pub transcript: Entity<Transcript>,
     /// What the agent did that the side panel shows.
     pub agent_transcript: Entity<Transcript>,
@@ -292,6 +305,11 @@ impl Store {
             draft_version: 0,
             updater: Updater::new(),
             side_panel,
+            settings: SettingsState::default(),
+            linear: linear::Linear::default(),
+            pull_requests: PullRequests::default(),
+            repo_listing: RepoListing::default(),
+            sidebar: SidebarState::default(),
             transcript: cx.new(|_| Transcript::new()),
             agent_transcript: cx.new(|_| Transcript::new()),
             open_thread_id: None,
@@ -436,13 +454,13 @@ impl Store {
 
     fn receive(&mut self, incoming: Incoming, cx: &mut Context<Self>) {
         match incoming {
-            Incoming::Event(event) => self.apply_event(event, cx),
+            Incoming::Event(event) => self.apply_event(*event, cx),
             Incoming::Read { id, result } => {
                 if let Some(answer) = self.read_answers.remove(&id) {
                     answer(self, result, cx);
                 }
             }
-            Incoming::Rows(prepared) => self.apply_rows(prepared, cx),
+            Incoming::Rows(prepared) => self.apply_rows(*prepared, cx),
         }
     }
 
@@ -498,10 +516,8 @@ impl Store {
                     update.fraction = total.filter(|total| *total > 0).map(|total| received as f64 / total as f64);
                 }
             }
-            Event::GitProgress { project_id, stage } => {
-                if let Some(current) = self.git_stages.get_mut(&project_id) {
-                    *current = stage;
-                }
+            Event::GitProgress { project_id, thread_id, stage } => {
+                self.apply_git_progress(&project_id, thread_id.as_deref(), stage)
             }
             Event::UploadProgress { key, sent, size } => {
                 if size > 0 {
@@ -558,7 +574,7 @@ impl Store {
                 let result = if ok { Ok(value) } else { Err(error_of(&value)) };
                 answer(self, result, cx);
             }
-            Event::Rows { .. } | Event::AgentRows { .. } => {}
+            Event::Rows { .. } | Event::AgentRows { .. } | Event::Live { .. } => {}
         }
     }
 
@@ -670,6 +686,15 @@ impl Store {
         let project = self.thread_project().or_else(|| self.draft_folder_project())?;
         let folder =
             project.worktree.as_ref().map(|worktree| worktree.path.clone()).unwrap_or_else(|| project.path.clone());
+        let awaits_worktree = self.selected_thread().is_none() && self.draft_uses_worktree();
+        let pull_request = (!awaits_worktree)
+            .then(|| {
+                self.selected_thread()
+                    .and_then(|thread| thread.pull_request.as_ref())
+                    .or_else(|| project.git.as_ref().and_then(|git| git.pull_request.as_ref()))
+                    .map(|pull_request| pull_request.number)
+            })
+            .flatten();
         Some(PanelTarget {
             key: self.draft_key(),
             server_id: project.server_id.clone(),
@@ -678,6 +703,8 @@ impl Store {
             name: last_component(&folder),
             repository: project.branch.is_some(),
             worktree: project.worktree.is_some(),
+            awaits_worktree,
+            pull_request,
         })
     }
 
@@ -884,6 +911,12 @@ impl Store {
             return;
         }
         self.select(Selection::Thread(wanted), cx);
+    }
+
+    /// Opens the pull request's tab in the side panel.
+    pub fn open_pull_request_tab(&mut self, number: u64, _cx: &mut Context<Self>) {
+        let Some(target) = self.panel_target() else { return };
+        self.show_pull_request_tab(number, &target);
     }
 
     /// Shows an alert that says what went wrong.

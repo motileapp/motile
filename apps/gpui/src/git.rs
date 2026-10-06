@@ -6,23 +6,49 @@ use gpui_kit::component::Sizable;
 use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_protocol::wire::{Change, ChangedFile, GitAction};
+use motile_protocol::wire::{Change, ChangedFile, GitAction, PullRequest};
 
 use crate::models::Project;
 use crate::store::{GitNotice, PendingGit, Store, stage_label};
-use crate::theme::{colors, is_dark};
+use crate::theme::{Colors, ControlSize, Radius, Surface, colors};
 use crate::ui::alert::{AlertButton, alert};
-use crate::ui::button::Button;
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
 use crate::ui::sheet::sheet;
-use crate::ui::{IconButton, TOOLBAR_MARGIN, TOOLBAR_WIDTH, icons, link_button, spinner, tooltip};
+use crate::ui::{ActionButton, Variant, icons};
 
-const HEIGHT: f32 = TOOLBAR_WIDTH - 2. * TOOLBAR_MARGIN;
 /// What leaves the room under the button that the composer's menus leave over theirs.
 const MENU_GAP: f32 = 16.;
 
-fn purple(cx: &App) -> Hsla {
-    if is_dark(cx) { rgb(0xbf5af2).into() } else { rgb(0xaf52de).into() }
+/// The symbol of a git action.
+pub fn git_symbol(action: Option<GitAction>) -> &'static str {
+    match action {
+        Some(GitAction::Pull) => "cloud-download",
+        Some(GitAction::Push | GitAction::CommitPush | GitAction::CommitPushPr) => "cloud-upload",
+        Some(GitAction::CreatePr) => "git-pull-request-create",
+        Some(GitAction::Commit) | None => "git-commit-horizontal",
+    }
+}
+
+/// The symbol of what became of a pull request.
+pub fn pull_request_symbol(pull_request: &PullRequest) -> &'static str {
+    if pull_request.merged {
+        return "git-merge";
+    }
+    if pull_request.closed {
+        return "git-pull-request-closed";
+    }
+    if pull_request.draft { "git-pull-request-draft" } else { "git-pull-request" }
+}
+
+/// The colour of what became of a pull request.
+pub fn pull_request_color(pull_request: &PullRequest, c: &Colors) -> Hsla {
+    if pull_request.merged {
+        return c.merged;
+    }
+    if pull_request.closed {
+        return c.danger;
+    }
+    if pull_request.draft { c.secondary } else { c.success }
 }
 
 /// Its left half does the one thing the repository calls for, at once: commit, push, open a pull
@@ -30,25 +56,29 @@ fn purple(cx: &App) -> Hsla {
 /// says why. While an action runs, the button says which stage it is at.
 pub fn git_button(store: &Entity<Store>, anchor: &Anchor, cx: &App) -> Option<AnyElement> {
     let c = colors(cx);
-    let project = store.read(cx).git_project()?;
+    let state = store.read(cx);
+    let project = state.git_project()?;
     let control = project.git_control.clone()?;
-    let stage = store.read(cx).git_stages.get(&project.id).copied();
+    let stage = state.git_stage(&project);
     let quick = control.quick.clone();
-    let runs = quick.action.is_some() || quick.url.is_some();
-    let merged = quick.url.is_some()
-        && project.git.as_ref().and_then(|git| git.pull_request.as_ref()).is_some_and(|pr| pr.merged);
-    let help = quick
-        .hint
-        .clone()
-        .or_else(|| project.git.as_ref().and_then(|git| git.pull_request.as_ref()).map(|pr| pr.title.clone()))
-        .unwrap_or(quick.label.clone());
-    let label = stage.map(|stage| stage_label(stage).to_string()).unwrap_or(quick.label.clone());
-    let symbol_color = if merged {
-        purple(cx)
-    } else if runs {
-        c.text
-    } else {
-        c.tertiary
+    let pull_request = project.git.as_ref().and_then(|git| git.pull_request.clone());
+    let symbol = match (&quick.url, &pull_request) {
+        (Some(_), Some(pull_request)) => pull_request_symbol(pull_request),
+        (Some(_), None) => "git-pull-request",
+        (None, _) => git_symbol(quick.action),
+    };
+    let title = match &quick.state {
+        Some(state) => format!("{state} {}", quick.label),
+        None => quick.label.clone(),
+    };
+    let label = stage.map(|stage| stage_label(stage).to_string()).unwrap_or(title.clone());
+    let help = quick.hint.clone().or_else(|| pull_request.as_ref().map(|pr| pr.title.clone())).unwrap_or(title);
+    // A pull request is in the colour of its state, and what has nothing to do is quiet.
+    let tint = match (stage, &quick.url, &pull_request) {
+        (Some(_), _, _) => c.text,
+        (None, Some(_), Some(pull_request)) => pull_request_color(pull_request, c),
+        (None, None, _) if quick.action.is_none() => c.tertiary,
+        _ => c.text,
     };
     let quick_store = store.clone();
     let quick_project = project.clone();
@@ -58,68 +88,40 @@ pub fn git_button(store: &Entity<Store>, anchor: &Anchor, cx: &App) -> Option<An
         div()
             .mx(px(6.))
             .flex_shrink_0()
+            .relative()
+            .flex()
+            .items_center()
+            .rounded(px(Radius::CONTROL))
+            .overflow_hidden()
+            .child(anchor.track())
             .child(
-                div()
-                    .relative()
-                    .flex()
-                    .h(px(HEIGHT))
-                    .rounded(px(7.))
-                    .border_1()
-                    .border_color(c.strong_border)
-                    .overflow_hidden()
-                    .child(anchor.track())
-                    .child(
-                        div()
-                            .id("git-quick")
-                            .h_full()
-                            .px(px(9.))
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .text_size(px(12.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(if runs || stage.is_some() { c.text } else { c.tertiary })
-                            .when(stage.is_none(), |half| half.hover(|half| half.bg(c.hover)))
-                            .child(match stage {
-                                Some(_) => spinner(12., cx).into_any_element(),
-                                None => icons::symbol(icons::git_symbol(quick.action), 12.)
-                                    .text_color(symbol_color)
-                                    .into_any_element(),
-                            })
-                            .child(label)
-                            .tooltip(tooltip(help))
-                            .when(stage.is_none(), |half| {
-                                half.on_click(move |_, _, cx| {
-                                    cx.stop_propagation();
-                                    quick_store.update(cx, |store, cx| {
-                                        store.run_quick_git(&quick_project, cx);
-                                        cx.notify();
-                                    });
-                                })
-                            }),
-                    )
-                    .child(div().w(px(1.)).h_full().bg(c.strong_border))
-                    .child(
-                        div()
-                            .id("git-menu")
-                            .w(px(24.))
-                            .h_full()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .hover(|half| half.bg(c.hover))
-                            .child(icons::symbol("chevron.down", 9.).text_color(c.secondary))
-                            .tooltip(tooltip("Commit, push or open a pull request"))
-                            .on_click(move |_, window, cx| {
-                                cx.stop_propagation();
-                                git_menu(&menu_store, &project, cx).show_right_aligned(
-                                    menu_anchor.below_right(MENU_GAP),
-                                    window,
-                                    cx,
-                                );
-                            }),
-                    ),
+                ActionButton::new("git-quick", label)
+                    .symbol(symbol)
+                    .help(help)
+                    .variant(Variant::Ghost)
+                    .pending(stage.is_some())
+                    .joined(true, true)
+                    .tint(Some(tint))
+                    .on_click(move |_, _, cx| {
+                        quick_store.update(cx, |store, cx| {
+                            store.run_quick_git(&quick_project, cx);
+                            cx.notify();
+                        });
+                    }),
             )
+            .child(div().w(px(1.)).h(px(ControlSize::Regular.height())).bg(c.border_secondary))
+            .child(
+                ActionButton::chevron("git-menu", "Commit, push or open a pull request").joined(true, true).on_click(
+                    move |_, window, cx| {
+                        git_menu(&menu_store, &project, cx).show_right_aligned(
+                            menu_anchor.below_right(MENU_GAP),
+                            window,
+                            cx,
+                        );
+                    },
+                ),
+            )
+            .child(div().absolute().inset_0().rounded(px(Radius::CONTROL)).border_1().border_color(c.border_secondary))
             .into_any_element(),
     )
 }
@@ -127,13 +129,13 @@ pub fn git_button(store: &Entity<Store>, anchor: &Anchor, cx: &App) -> Option<An
 /// Every action, greyed with the reason when it can't run now, and the warning under them.
 fn git_menu(store: &Entity<Store>, project: &Project, cx: &App) -> Menu {
     let Some(control) = project.git_control.clone() else { return Menu::new() };
-    let running = store.read(cx).git_stages.contains_key(&project.id);
+    let running = store.read(cx).git_stage(project).is_some();
     let mut menu = Menu::new();
     for item in control.menu {
         let store = store.clone();
         let project = project.clone();
         let enabled = item.reason.is_none() && !running;
-        let symbol = icons::git_symbol(Some(item.action));
+        let symbol = git_symbol(Some(item.action));
         let reason = item.reason.clone().map(SharedString::from);
         menu = menu.icon_item(item.label.clone(), MenuIcon::Symbol(symbol), enabled, reason, move |window, cx| {
             store.update(cx, |store, cx| {
@@ -159,7 +161,7 @@ pub fn confirm_alert(store: &Entity<Store>, pending: &PendingGit, cx: &App) -> i
             })
         }
     };
-    let abort = store.clone();
+    let cancel = store.clone();
     alert(
         "git-confirm",
         pending.confirm.title.clone(),
@@ -168,8 +170,8 @@ pub fn confirm_alert(store: &Entity<Store>, pending: &PendingGit, cx: &App) -> i
         vec![
             AlertButton::new(pending.confirm.proceed.clone(), on(false)).prominent(),
             AlertButton::new(pending.confirm.branch_off.clone(), on(true)),
-            AlertButton::new("Abort", move |_, cx| {
-                abort.update(cx, |store, cx| {
+            AlertButton::new("Cancel", move |_, cx| {
+                cancel.update(cx, |store, cx| {
                     store.pending_git = None;
                     cx.notify();
                 })
@@ -179,82 +181,131 @@ pub fn confirm_alert(store: &Entity<Store>, pending: &PendingGit, cx: &App) -> i
     )
 }
 
-const NOTICE_PADDING: f32 = 12.;
-const CLOSE_SIZE: f32 = 24.;
-/// The close button is this far from the top and the right, and its corners follow the notice's.
-const CLOSE_MARGIN: f32 = 5.;
-const NOTICE_RADIUS: f32 = 10.;
+const NOTICE_RADIUS: f32 = Radius::SHEET;
+const NOTICE_PADDING: f32 = 14.;
+/// The close button is this far from the top and the right.
+const CLOSE_MARGIN: f32 = 8.;
+const TITLE_HEIGHT: f32 = 16.;
 
 /// What the last git action did, or what git refused, under the button. What follows is one click
 /// away: the push after a commit, the pull request after a push.
 pub fn git_notice(store: &Entity<Store>, notice: &GitNotice, cx: &App) -> impl IntoElement {
     let c = colors(cx);
+    let close_size = ControlSize::Small.height();
     let close = store.clone();
     let next = store.clone();
+    let view = store.clone();
+    let url = notice.url.clone();
+    let next_label = notice.next_label();
+    let description = notice.description.clone().map(|description| {
+        if !notice.failed {
+            return div().text_size(px(12.5)).text_color(c.secondary).line_clamp(2).child(description);
+        }
+        // The end is where a hook says what it found.
+        let lines: Vec<&str> = description.lines().collect();
+        let shown = lines[lines.len().saturating_sub(8)..].join("\n");
+        div().text_size(px(11.5)).font_family(crate::theme::MONO_FONT).text_color(c.secondary).child(shown)
+    });
     div()
         .relative()
-        .w(px(300.))
-        .p(px(NOTICE_PADDING))
-        .flex()
-        .flex_col()
-        .gap(px(6.))
-        .bg(c.raised)
+        .max_w(px(320.))
+        .py(px(NOTICE_PADDING - 1.))
+        .pl(px(NOTICE_PADDING - 1.))
+        .pr(px(CLOSE_MARGIN + close_size + 4. - 1.))
+        .bg(c.popover)
         .rounded(px(NOTICE_RADIUS))
         .border_1()
-        .border_color(c.strong_border)
-        .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.12), 4., 24.))
+        .border_color(c.border_secondary)
+        .shadow(vec![
+            BoxShadow {
+                color: hsla(0., 0., 0., 0.05),
+                offset: point(px(0.), px(1.)),
+                blur_radius: px(1.5),
+                spread_radius: px(0.),
+                inset: false,
+            },
+            BoxShadow {
+                color: hsla(0., 0., 0., 0.1),
+                offset: point(px(0.), px(8.)),
+                blur_radius: px(20.),
+                spread_radius: px(0.),
+                inset: false,
+            },
+        ])
+        .flex()
+        .items_start()
+        .gap(px(10.))
         .child(
-            div()
-                .pr(px(CLOSE_MARGIN + CLOSE_SIZE + 4. - NOTICE_PADDING))
-                .text_size(px(12.5))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c.text)
-                .child(notice.title.clone()),
-        )
-        .when_some(notice.description.clone(), |box_, description| {
-            box_.child(if notice.failed {
-                // The end is where a hook says what it found.
-                let shown = description
-                    .lines()
-                    .rev()
-                    .take(8)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                div().text_size(px(12.)).font_family(crate::theme::MONO_FONT).text_color(c.danger).child(shown)
-            } else {
-                div().text_size(px(12.)).text_color(c.secondary).line_clamp(2).child(description)
-            })
-        })
-        .when_some(notice.url.clone(), |box_, url| {
-            box_.child(div().flex().child(link_button("notice-pr", "View PR", cx, move |_, _, cx| cx.open_url(&url))))
-        })
-        .when_some(notice.next_label(), |box_, label| {
-            box_.child(div().flex().child(link_button("notice-next", label, cx, move |_, _, cx| {
-                next.update(cx, |store, cx| {
-                    store.run_next_git(cx);
-                    cx.notify();
-                })
-            })))
-        })
-        .child(
-            div().absolute().top(px(CLOSE_MARGIN)).right(px(CLOSE_MARGIN)).child(
-                IconButton::new("notice-close", "xmark")
-                    .help("Close")
-                    .size(CLOSE_SIZE)
-                    .symbol_size(11.)
-                    .radius(NOTICE_RADIUS - CLOSE_MARGIN)
-                    .color(c.secondary)
-                    .on_click(move |_, _, cx| {
-                        close.update(cx, |store, cx| {
-                            store.dismiss_git_notice();
-                            cx.notify();
-                        })
-                    }),
+            div().h(px(TITLE_HEIGHT)).flex_shrink_0().flex().items_center().child(
+                icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, 15.)
+                    .text_color(if notice.failed { c.danger } else { c.success }),
             ),
         )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .items_start()
+                .gap(px(4.))
+                .child(
+                    div()
+                        .min_h(px(TITLE_HEIGHT))
+                        .flex()
+                        .items_center()
+                        .text_size(px(13.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c.text)
+                        .child(notice.title.clone()),
+                )
+                .children(description)
+                .when(url.is_some() || next_label.is_some(), |column| {
+                    column.child(
+                        div()
+                            .pt(px(6.))
+                            .flex()
+                            .gap(px(8.))
+                            .when_some(url, |row, url| {
+                                let variant = if next_label.is_none() { Variant::Primary } else { Variant::Secondary };
+                                row.child(
+                                    ActionButton::new("notice-pr", "View PR")
+                                        .variant(variant)
+                                        .surface(Surface::Popover)
+                                        .on_click(move |_, _, cx| {
+                                            view.update(cx, |store, cx| {
+                                                store.show_pull_request(&url, cx);
+                                                cx.notify();
+                                            })
+                                        }),
+                                )
+                            })
+                            .when_some(next_label, |row, label| {
+                                row.child(
+                                    ActionButton::new("notice-next", label)
+                                        .primary()
+                                        .surface(Surface::Popover)
+                                        .on_click(move |_, _, cx| {
+                                            next.update(cx, |store, cx| {
+                                                store.run_next_git(cx);
+                                                cx.notify();
+                                            })
+                                        }),
+                                )
+                            }),
+                    )
+                }),
+        )
+        .child(div().absolute().top(px(CLOSE_MARGIN - 1.)).right(px(CLOSE_MARGIN - 1.)).child(
+            ActionButton::icon("notice-close", "x", "Close").small().surface(Surface::Popover).on_click(
+                move |_, _, cx| {
+                    close.update(cx, |store, cx| {
+                        store.dismiss_git_notice();
+                        cx.notify();
+                    })
+                },
+            ),
+        ))
 }
 
 const ROW_HEIGHT: f32 = 24.;
@@ -315,13 +366,15 @@ impl CommitSheet {
         for (index, file) in self.files.iter().enumerate() {
             rows.push(self.row(index, file, cx));
         }
+        let link = |id: &'static str, title: &'static str| {
+            ActionButton::new(id, title).variant(Variant::Link).small().surface(Surface::Popover)
+        };
         div()
             .flex()
             .flex_col()
             .gap(px(6.))
             .child(
                 div()
-                    .h(px(16.))
                     .flex()
                     .items_center()
                     .gap(px(8.))
@@ -331,31 +384,29 @@ impl CommitSheet {
                         header.child(div().text_color(c.secondary).child(format!("{included} of {total}")))
                     })
                     .child(div().flex_1())
-                    .when(self.editing, |header| {
-                        let label = if self.excluded.is_empty() { "Select None" } else { "Select All" };
-                        header.child(div().mr(px(8.)).child(link_button(
-                            "commit-select",
-                            label,
-                            cx,
-                            cx.listener(|this, _, _, cx| {
-                                this.excluded = if this.excluded.is_empty() {
-                                    this.files.iter().map(|file| file.path.clone()).collect()
-                                } else {
-                                    HashSet::new()
-                                };
-                                cx.notify();
-                            }),
-                        )))
-                    })
-                    .child(link_button(
-                        "commit-edit",
-                        if self.editing { "Done" } else { "Edit" },
-                        cx,
-                        cx.listener(|this, _, _, cx| {
-                            this.editing = !this.editing;
-                            cx.notify();
-                        }),
-                    )),
+                    .child(
+                        div()
+                            .my(px(-4.))
+                            .mr(px(-ControlSize::Small.padding()))
+                            .flex()
+                            .when(self.editing, |links| {
+                                let label = if self.excluded.is_empty() { "Select None" } else { "Select All" };
+                                links.child(link("commit-select", label).on_click(cx.listener(|this, _, _, cx| {
+                                    this.excluded = if this.excluded.is_empty() {
+                                        this.files.iter().map(|file| file.path.clone()).collect()
+                                    } else {
+                                        HashSet::new()
+                                    };
+                                    cx.notify();
+                                })))
+                            })
+                            .child(link("commit-edit", if self.editing { "Done" } else { "Edit" }).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.editing = !this.editing;
+                                    cx.notify();
+                                }),
+                            )),
+                    ),
             )
             .child(
                 div()
@@ -364,10 +415,10 @@ impl CommitSheet {
                     .overflow_y_scroll()
                     .px(px(10.))
                     .py(px(4.))
-                    .bg(c.composer)
-                    .rounded(px(7.))
+                    .bg(Surface::Popover.next().color(c))
+                    .rounded(px(Radius::CONTROL))
                     .border_1()
-                    .border_color(c.strong_border)
+                    .border_color(c.border_secondary)
                     .children(rows),
             )
     }
@@ -432,7 +483,7 @@ fn line_counts(added: u32, removed: u32, cx: &App) -> Div {
         .when(removed > 0, |counts| counts.child(div().text_color(c.danger).child(format!("−{removed}"))))
 }
 
-/// A checkbox as the Mac draws one: a small rounded square, filled with the accent when on.
+/// A checkbox: a small rounded square, filled with the primary colour when on.
 fn checkbox(id: impl Into<ElementId>, checked: bool, cx: &App) -> Stateful<Div> {
     let c = colors(cx);
     div()
@@ -443,8 +494,10 @@ fn checkbox(id: impl Into<ElementId>, checked: bool, cx: &App) -> Stateful<Div> 
         .flex()
         .items_center()
         .justify_center()
-        .when(checked, |square| square.bg(c.accent).child(icons::symbol("checkmark", 9.).text_color(white())))
-        .when(!checked, |square| square.bg(c.composer).border_1().border_color(c.strong_border))
+        .when(checked, |square| square.bg(c.primary).child(icons::symbol("check", 9.).text_color(white())))
+        .when(!checked, |square| {
+            square.bg(Surface::Popover.next().color(c)).border_1().border_color(c.border_secondary)
+        })
 }
 
 impl Render for CommitSheet {
@@ -452,6 +505,7 @@ impl Render for CommitSheet {
         let c = colors(cx);
         let git = self.project.git.clone();
         let nothing = self.included().is_empty();
+        let button = |id: &'static str, title: &'static str| ActionButton::new(id, title).surface(Surface::Popover);
         let content = div()
             .id("commit-sheet")
             .track_focus(&self.focus)
@@ -505,10 +559,10 @@ impl Render for CommitSheet {
                             .h(px(84.))
                             .px(px(4.))
                             .py(px(6.))
-                            .bg(c.composer)
-                            .rounded(px(7.))
+                            .bg(Surface::Popover.next().color(c))
+                            .rounded(px(Radius::CONTROL))
                             .border_1()
-                            .border_color(c.strong_border)
+                            .border_color(c.border)
                             .text_size(px(12.5))
                             .child(
                                 Textarea::new(&self.message)
@@ -526,17 +580,15 @@ impl Render for CommitSheet {
                     .flex()
                     .gap(px(8.))
                     .child(div().flex_1())
+                    .child(button("commit-cancel", "Cancel").on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))))
                     .child(
-                        Button::new("commit-cancel", "Cancel").on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
-                    )
-                    .child(
-                        Button::new("commit-new-branch", "Commit on New Branch")
+                        button("commit-new-branch", "Commit on New Branch")
                             .disabled(nothing)
                             .on_click(cx.listener(|this, _, _, cx| this.commit(true, cx))),
                     )
                     .child(
-                        Button::new("commit", "Commit")
-                            .prominent()
+                        button("commit", "Commit")
+                            .primary()
                             .disabled(nothing)
                             .on_click(cx.listener(|this, _, _, cx| this.commit(false, cx))),
                     ),

@@ -1,6 +1,7 @@
 //! Projects, the command panel that adds them, and the settings of the servers they are on.
 
-use std::time::Duration;
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -9,6 +10,22 @@ use motile_protocol::wire::{GitHubState, Repo, Request};
 
 use super::{AddingProject, PanelPage, Store};
 use crate::models::{FolderListing, Project, RemoteFolder, Server};
+
+/// Which servers are listing their GitHub repositories now, and when each last did.
+#[derive(Default)]
+pub struct RepoListing {
+    pub listing: HashSet<String>,
+    listed: HashMap<String, Instant>,
+}
+
+impl RepoListing {
+    /// How long a list stays fresh enough not to be asked for again.
+    const FRESH_FOR: Duration = Duration::from_secs(60);
+
+    fn is_fresh(&self, server_id: &str) -> bool {
+        self.listed.get(server_id).is_some_and(|listed| listed.elapsed() < Self::FRESH_FOR)
+    }
+}
 
 fn github_state(value: &serde_json::Value) -> Option<GitHubState> {
     serde_json::from_value(value["state"].clone()).ok()
@@ -122,21 +139,33 @@ impl Store {
         self.prefs.set(&format!("github-{server_id}"), state);
     }
 
-    /// Asks the server for its GitHub repositories. The ones it listed before stay until then.
-    pub fn load_repos(&mut self, server_id: &str) {
+    /// Asks the server for its GitHub repositories, unless it listed them in the last minute or
+    /// `fresh` asks again anyway. The ones it listed before stay until it answers.
+    pub fn load_repos(&mut self, server_id: &str, fresh: bool) {
+        if self.repo_listing.listing.contains(server_id) {
+            return;
+        }
+        if !fresh && self.repo_listing.is_fresh(server_id) {
+            return;
+        }
+        self.repo_listing.listing.insert(server_id.to_string());
         self.repo_errors.remove(server_id);
         let server = server_id.to_string();
-        self.request_then(server_id, Request::GithubRepos, move |store, result, _| match result {
-            Ok(answer) if answer["type"] == "repos" => {
-                let repos: Vec<Repo> = serde_json::from_value(answer["repos"].clone()).unwrap_or_default();
-                store.repos.insert(server, repos);
-            }
-            Ok(answer) => {
-                store.repos.remove(&server);
-                store.heard_github(&answer, &server);
-            }
-            Err(error) => {
-                store.repo_errors.insert(server, error);
+        self.request_then(server_id, Request::GithubRepos, move |store, result, _| {
+            store.repo_listing.listing.remove(&server);
+            match result {
+                Ok(answer) if answer["type"] == "repos" => {
+                    let repos: Vec<Repo> = serde_json::from_value(answer["repos"].clone()).unwrap_or_default();
+                    store.repos.insert(server.clone(), repos);
+                    store.repo_listing.listed.insert(server, Instant::now());
+                }
+                Ok(answer) => {
+                    store.repos.remove(&server);
+                    store.heard_github(&answer, &server);
+                }
+                Err(error) => {
+                    store.repo_errors.insert(server, error);
+                }
             }
         });
     }

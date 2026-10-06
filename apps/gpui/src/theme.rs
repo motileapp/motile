@@ -1,5 +1,6 @@
-//! Colours and type for the whole app, the same as the Mac app's. Each colour has a light and a
-//! dark value; `colors(cx)` gives the ones of the appearance the window has now.
+//! Colours, type and sizes for the whole app, the same as the Mac app's `Theme.swift`. Each
+//! colour has a light and a dark value; `colors(cx)` gives the ones of the appearance the window
+//! has now.
 
 use gpui_kit::*;
 
@@ -26,41 +27,46 @@ impl Appearance {
 
 #[derive(Clone, Copy)]
 pub struct Colors {
+    // Surfaces
     pub background: Hsla,
-    pub raised: Hsla,
-    /// The composer floats over the transcript, so it is opaque: nothing blurs what is under it.
+    pub background_secondary: Hsla,
+    pub background_tertiary: Hsla,
+    pub background_quaternary: Hsla,
+    pub popover: Hsla,
+    pub popover_secondary: Hsla,
     pub composer: Hsla,
-    pub bubble: Hsla,
-    pub code_background: Hsla,
-    pub hover: Hsla,
-    pub selected: Hsla,
+    pub composer_secondary: Hsla,
+    /// Borders are solid, so that where two meet they do not darken.
     pub border: Hsla,
-    pub strong_border: Hsla,
+    pub border_secondary: Hsla,
 
+    // Text
     pub text: Hsla,
     pub prose: Hsla,
     pub secondary: Hsla,
     pub tertiary: Hsla,
-    /// The system's label colours, which SwiftUI's `.secondary` and `.tertiary` are: the text's
-    /// colour, lighter.
-    pub label_secondary: Hsla,
-    pub label_tertiary: Hsla,
+    pub activity: Hsla,
+    pub shimmer: Hsla,
 
+    // Meaning
     pub primary: Hsla,
     pub primary_hover: Hsla,
-    /// The system's accent colour, which the Mac fills its prominent buttons with.
-    pub accent: Hsla,
     pub link: Hsla,
     pub link_hover: Hsla,
     pub danger: Hsla,
+    pub danger_fill: Hsla,
     pub danger_background: Hsla,
     pub warning: Hsla,
     pub warning_background: Hsla,
     pub success: Hsla,
+    pub merged: Hsla,
     pub working: Hsla,
     pub unread: Hsla,
-    /// The surface of a popover.
-    pub popover: Hsla,
+
+    // Charts: what tells one agent's line from the other's.
+    pub claude_series: Hsla,
+    pub codex_series: Hsla,
+
     /// What lies over the window behind a sheet or the media viewer.
     pub scrim: Hsla,
 
@@ -78,47 +84,45 @@ fn hexa(value: u32, alpha: f32) -> Hsla {
     color
 }
 
-fn white(alpha: f32) -> Hsla {
-    hsla(0., 0., 1., alpha)
-}
-
 fn black(alpha: f32) -> Hsla {
     hsla(0., 0., 0., alpha)
 }
 
-// The dark surfaces stay clear of gray level 16, where some monitors flicker.
 pub static LIGHT: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| {
-    let text = hex(0x27272a);
+    let text = hex(0x22242b);
     Colors {
-        background: hex(0xfcfcfc),
-        raised: hex(0xffffff),
+        background: hex(0xf8f9fc),
+        background_secondary: hex(0xeceef4),
+        background_tertiary: hex(0xe1e4ed),
+        background_quaternary: hex(0xd6dae6),
+        popover: hex(0xffffff),
+        popover_secondary: hex(0xeceef4),
         composer: hex(0xffffff),
-        bubble: hex(0xf1f1f3),
-        code_background: hex(0xf6f6f7),
-        hover: black(0.045),
-        selected: black(0.08),
-        border: black(0.09),
-        strong_border: black(0.14),
+        composer_secondary: hex(0xeceef4),
+        border: hex(0xe2e3e5),
+        border_secondary: hex(0xd5d6d9),
         text,
-        prose: hex(0x3a3a40),
-        secondary: hex(0x71717a),
-        tertiary: hex(0xa1a1aa),
-        label_secondary: black(0.5),
-        label_tertiary: black(0.26),
+        prose: hex(0x383b45),
+        secondary: hex(0x6b6f7c),
+        tertiary: hex(0x9a9eab),
+        activity: hex(0x6b6f7c),
+        shimmer: hex(0x000000),
         primary: hex(0x2a5bd7),
         primary_hover: hexa(0x2a5bd7, 0.1),
-        accent: hex(0x007aff),
-        link: hex(0x0068da),
-        link_hover: hexa(0x0068da, 0.12),
+        link: hex(0x1d4ed8),
+        link_hover: hexa(0x1d4ed8, 0.12),
         danger: hex(0xc62828),
+        danger_fill: hex(0xc62828),
         danger_background: hexa(0xdc2626, 0.07),
         warning: hex(0xb45309),
         warning_background: hexa(0xf59e0b, 0.1),
         success: hex(0x047857),
+        merged: hex(0x8250df),
         working: hex(0x0284c7),
         unread: hex(0xea580c),
-        popover: hex(0xe8e8e8),
-        scrim: black(0.2),
+        claude_series: hex(0xeb6834),
+        codex_series: hex(0x2a78d6),
+        scrim: black(0.32),
         syntax: [
             text,
             hex(0x6e7781),
@@ -141,37 +145,40 @@ pub static LIGHT: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| {
 });
 
 pub static DARK: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| {
-    let text = hex(0xececee);
+    let text = hex(0xdcdee4);
     Colors {
-        background: hex(0x19191a),
-        raised: hex(0x242426),
-        composer: hex(0x222223),
-        bubble: hex(0x2d2d30),
-        code_background: hex(0x222224),
-        hover: white(0.06),
-        selected: white(0.1),
-        border: white(0.09),
-        strong_border: white(0.14),
+        background: hex(0x0a0b0f),
+        background_secondary: hex(0x111217),
+        background_tertiary: hex(0x191a1f),
+        background_quaternary: hex(0x212227),
+        popover: hex(0x191a1f),
+        popover_secondary: hex(0x222226),
+        composer: hex(0x111217),
+        composer_secondary: hex(0x191a1f),
+        border: hex(0x191a1e),
+        border_secondary: hex(0x2b2b2f),
         text,
-        prose: hex(0xc2c2c7),
-        secondary: hex(0x9c9ca6),
-        tertiary: hex(0x6c6c75),
-        label_secondary: white(0.55),
-        label_tertiary: white(0.25),
+        prose: hex(0xa8abb6),
+        secondary: hex(0x9a9eab),
+        tertiary: hex(0x646875),
+        activity: hex(0x7a7e8b),
+        shimmer: hex(0xffffff),
         primary: hex(0x4f7cff),
         primary_hover: hexa(0x4f7cff, 0.18),
-        accent: hex(0x0a84ff),
-        link: hex(0x419cff),
-        link_hover: hexa(0x419cff, 0.12),
+        link: hex(0x7aa2ff),
+        link_hover: hexa(0x7aa2ff, 0.12),
         danger: hex(0xff7b72),
+        danger_fill: hex(0xe5484d),
         danger_background: hexa(0xff5c5c, 0.1),
         warning: hex(0xf5b454),
         warning_background: hexa(0xf59e0b, 0.12),
-        success: hex(0x4ade80),
+        success: hex(0x55c483),
+        merged: hex(0xba93fb),
         working: hex(0x38bdf8),
         unread: hex(0xfb923c),
-        popover: hex(0x2c2c2e),
-        scrim: black(0.45),
+        claude_series: hex(0xd95926),
+        codex_series: hex(0x3987e5),
+        scrim: black(0.5),
         syntax: [
             text,
             hex(0x8b949e),
@@ -192,6 +199,172 @@ pub static DARK: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| {
         ],
     }
 });
+
+/// What a view lies on. The page is a ladder: what lies on one layer is filled with the next, and
+/// so is what the pointer is over. What floats over the page, a popover or the composer, has one
+/// colour of its own for both.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Surface {
+    #[default]
+    Background,
+    Secondary,
+    Tertiary,
+    Quaternary,
+    Popover,
+    PopoverSecondary,
+    Composer,
+    ComposerSecondary,
+}
+
+impl Surface {
+    /// What lies on it, and what the pointer is over.
+    pub fn next(self) -> Surface {
+        match self {
+            Surface::Background => Surface::Secondary,
+            Surface::Secondary => Surface::Tertiary,
+            Surface::Tertiary => Surface::Quaternary,
+            Surface::Quaternary => Surface::Tertiary,
+            Surface::Popover => Surface::PopoverSecondary,
+            Surface::PopoverSecondary => Surface::Popover,
+            Surface::Composer => Surface::ComposerSecondary,
+            Surface::ComposerSecondary => Surface::Composer,
+        }
+    }
+
+    /// What is selected, and a filled control under the pointer.
+    pub fn further(self) -> Surface {
+        match self {
+            Surface::Background => Surface::Tertiary,
+            Surface::Secondary
+            | Surface::Popover
+            | Surface::PopoverSecondary
+            | Surface::Composer
+            | Surface::ComposerSecondary => Surface::Background,
+            Surface::Tertiary | Surface::Quaternary => Surface::Secondary,
+        }
+    }
+
+    pub fn color(self, c: &Colors) -> Hsla {
+        match self {
+            Surface::Background => c.background,
+            Surface::Secondary => c.background_secondary,
+            Surface::Tertiary => c.background_tertiary,
+            Surface::Quaternary => c.background_quaternary,
+            Surface::Popover => c.popover,
+            Surface::PopoverSecondary => c.popover_secondary,
+            Surface::Composer => c.composer,
+            Surface::ComposerSecondary => c.composer_secondary,
+        }
+    }
+
+    /// The border around a card or a field that lies on it.
+    pub fn border(self, c: &Colors) -> Hsla {
+        match self {
+            Surface::Background => c.border,
+            _ => c.border_secondary,
+        }
+    }
+}
+
+/// How large a control is. Its height, symbol, text, padding and corners go together, so that
+/// no view picks them one by one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum ControlSize {
+    /// Inside a row, a tab, a chip or a card.
+    Small,
+    /// Everywhere else.
+    #[default]
+    Regular,
+    /// What a screen is about.
+    Large,
+}
+
+impl ControlSize {
+    pub fn height(self) -> f32 {
+        match self {
+            ControlSize::Small => 24.,
+            ControlSize::Regular => 28.,
+            ControlSize::Large => 36.,
+        }
+    }
+
+    pub fn symbol(self) -> f32 {
+        match self {
+            ControlSize::Small => 13.,
+            ControlSize::Regular => 14.,
+            ControlSize::Large => 16.,
+        }
+    }
+
+    /// A symbol that should weigh less than the others, like the x that closes a tab.
+    pub fn small_symbol(self) -> f32 {
+        self.symbol() - 2.
+    }
+
+    pub fn text_size(self) -> f32 {
+        match self {
+            ControlSize::Small => 11.5,
+            ControlSize::Regular => 12.,
+            ControlSize::Large => 13.,
+        }
+    }
+
+    /// The room between what it says and its sides.
+    pub fn padding(self) -> f32 {
+        match self {
+            ControlSize::Small => 8.,
+            ControlSize::Regular => 11.,
+            ControlSize::Large => 14.,
+        }
+    }
+
+    /// The room between its symbol and its words.
+    pub fn gap(self) -> f32 {
+        match self {
+            ControlSize::Small => 5.,
+            ControlSize::Regular => 6.,
+            ControlSize::Large => 8.,
+        }
+    }
+
+    pub fn radius(self) -> f32 {
+        match self {
+            ControlSize::Small => Radius::SMALL,
+            ControlSize::Regular => Radius::CONTROL,
+            ControlSize::Large => Radius::LARGE,
+        }
+    }
+
+    /// The side of the square its symbol is drawn in.
+    pub fn symbol_side(self) -> f32 {
+        symbol_side(self.symbol())
+    }
+
+    /// How much nearer its side a symbol stands than words do, so that both look as far from it.
+    pub fn symbol_outset(self) -> f32 {
+        (self.symbol_side() / 5. * 2.).round() / 2.
+    }
+}
+
+/// How much larger than the text beside it an icon's square is.
+pub const SYMBOL_SCALE: f32 = 1.2;
+
+/// The side of the square a symbol for text of `size` is drawn in.
+pub fn symbol_side(size: f32) -> f32 {
+    (size * SYMBOL_SCALE).round()
+}
+
+/// How round corners are.
+pub struct Radius;
+
+impl Radius {
+    pub const SMALL: f32 = 6.;
+    pub const CONTROL: f32 = 7.;
+    pub const LARGE: f32 = 9.;
+    /// Boxes that hold text or rows: cards, code, notices.
+    pub const CARD: f32 = 10.;
+    pub const SHEET: f32 = 14.;
+}
 
 /// Whether the app is drawn dark now: the setting, or the system's appearance under "System".
 #[derive(Default)]
@@ -220,30 +393,30 @@ pub fn apply(dark: bool, window: &mut Window, cx: &mut App) {
     component::Theme::change(mode, Some(window), cx);
     let c = colors(cx);
     component::Theme::update(cx, |theme| {
-        theme.font_family = SYSTEM_FONT.into();
+        theme.font_family = UI_FONT.into();
         theme.mono_font_family = MONO_FONT.into();
         theme.font_size = px(13.);
         theme.mono_font_size = px(CODE_SIZE);
         theme.background = c.background;
         theme.foreground = c.text;
         theme.border = c.border;
-        theme.input = c.strong_border;
-        theme.popover = c.raised;
+        theme.input = c.border;
+        theme.popover = c.popover;
         theme.popover_foreground = c.text;
-        theme.muted = c.hover;
-        theme.muted_foreground = c.label_tertiary;
-        theme.accent = c.hover;
+        theme.muted = c.background_secondary;
+        theme.muted_foreground = c.tertiary;
+        theme.accent = c.background_secondary;
         theme.accent_foreground = c.text;
-        theme.list_hover = c.hover;
-        theme.list_active = c.selected;
+        theme.list_hover = c.background_secondary;
+        theme.list_active = c.background_tertiary;
         theme.primary = c.primary;
         theme.ring = c.primary;
         theme.caret = c.text;
         theme.selection = c.primary_hover;
         theme.link = c.link;
         theme.danger = c.danger;
-        theme.radius = px(6.);
-        theme.radius_lg = px(10.);
+        theme.radius = px(Radius::CONTROL);
+        theme.radius_lg = px(Radius::CARD);
         theme.shadow = true;
     });
 }
@@ -264,7 +437,8 @@ pub fn set_app_appearance(appearance: Appearance) {
 #[cfg(not(target_os = "macos"))]
 pub fn set_app_appearance(_: Appearance) {}
 
-pub const SYSTEM_FONT: &str = ".SystemUIFont";
+/// The app's typeface, bundled in `assets/fonts`.
+pub const UI_FONT: &str = "DM Sans";
 #[cfg(target_os = "macos")]
 pub const MONO_FONT: &str = ".AppleSystemUIFontMonospaced";
 #[cfg(not(target_os = "macos"))]
@@ -284,9 +458,13 @@ pub fn heading_size(level: u8) -> f32 {
     }
 }
 
-/// The widest the transcript and the composer get.
+/// The widest the transcript gets.
 pub const CONTENT_WIDTH: f32 = 768.;
-pub const CONTENT_PADDING: f32 = 24.;
+pub const CONTENT_PADDING: f32 = 38.;
+/// How far the composer reaches past the transcript on each side.
+pub const COMPOSER_REACH: f32 = 14.;
+pub const COMPOSER_WIDTH: f32 = CONTENT_WIDTH + COMPOSER_REACH * 2.;
+pub const COMPOSER_PADDING: f32 = CONTENT_PADDING - COMPOSER_REACH;
 /// The invisible area that takes the drag around a line that resizes.
 pub const RESIZE_GRAB: f32 = 17.;
 /// The height of the window's top bar, where the window's buttons are.

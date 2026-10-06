@@ -25,17 +25,60 @@ pub enum PanelTab {
     Files,
     /// One file, by its path in the folder.
     File(String),
+    /// What one turn changed in one file, by the item that ended the turn.
+    Change {
+        turn: String,
+        path: String,
+    },
     /// The agents the thread's agent has started, and what one of them did.
     Agents,
+    /// The pull request of the branch the thread works on.
+    PullRequest,
+    /// Another pull request of the repository, by its number.
+    PullRequestNumber(u64),
+    /// The repository's pull requests.
+    PullRequests,
+    /// The issues of the Linear workspace the server is connected to, or how to connect it.
+    Linear,
+    /// One issue of a workspace, by its id there, titled with its identifier.
+    LinearIssue {
+        workspace: String,
+        id: String,
+        identifier: String,
+    },
+    /// A tab that offers what there is to open. A thread can have several, told apart by number.
+    Blank(u32),
 }
 
 impl PanelTab {
     pub fn id(&self) -> String {
         match self {
+            PanelTab::Blank(number) => format!("blank:{number}"),
             PanelTab::Diff => "diff".into(),
             PanelTab::Files => "files".into(),
             PanelTab::Agents => "agents".into(),
+            PanelTab::PullRequest => "pull_request".into(),
+            PanelTab::PullRequestNumber(number) => format!("pull_request:{number}"),
+            PanelTab::PullRequests => "pull_requests".into(),
+            PanelTab::Linear => "linear".into(),
+            PanelTab::LinearIssue { id, .. } => format!("linear:{id}"),
             PanelTab::File(path) => format!("file:{path}"),
+            PanelTab::Change { path, .. } => format!("change:{path}"),
+        }
+    }
+
+    pub fn blank_number(&self) -> Option<u32> {
+        match self {
+            PanelTab::Blank(number) => Some(*number),
+            _ => None,
+        }
+    }
+
+    /// The file a tab is about.
+    pub fn path(&self) -> Option<&str> {
+        match self {
+            PanelTab::File(path) | PanelTab::Change { path, .. } => Some(path),
+            _ => None,
         }
     }
 
@@ -44,7 +87,25 @@ impl PanelTab {
             PanelTab::Diff => "Diff".into(),
             PanelTab::Files => "Files".into(),
             PanelTab::Agents => "Agents".into(),
-            PanelTab::File(path) => crate::models::last_component(path),
+            PanelTab::PullRequest => "Pull Request".into(),
+            PanelTab::PullRequestNumber(number) => format!("PR #{number}"),
+            PanelTab::PullRequests => "Pull Requests".into(),
+            PanelTab::Linear => "Linear".into(),
+            PanelTab::LinearIssue { identifier, .. } => identifier.clone(),
+            PanelTab::Blank(_) => "New Tab".into(),
+            PanelTab::File(path) | PanelTab::Change { path, .. } => crate::models::last_component(path),
+        }
+    }
+
+    pub fn symbol(&self) -> &'static str {
+        match self {
+            PanelTab::Diff | PanelTab::Change { .. } => "diff",
+            PanelTab::Files => "folder",
+            PanelTab::Agents => "users",
+            PanelTab::PullRequest | PanelTab::PullRequestNumber(_) | PanelTab::PullRequests => "git-pull-request",
+            PanelTab::Linear | PanelTab::LinearIssue { .. } => "linear",
+            PanelTab::Blank(_) => "plus",
+            PanelTab::File(path) => file_symbol(path),
         }
     }
 }
@@ -60,6 +121,13 @@ pub struct PanelTabs {
     pub maximized: Option<bool>,
 }
 
+impl PanelTabs {
+    /// All there is is a blank tab, as before one was opened.
+    pub fn is_blank(&self) -> bool {
+        self.tabs.len() == 1 && self.tabs[0].blank_number().is_some()
+    }
+}
+
 /// The folder the panel looks into: the one the open thread works in, or the project's when a
 /// thread is about to start there.
 #[derive(Clone, PartialEq, Debug)]
@@ -73,6 +141,10 @@ pub struct PanelTarget {
     pub repository: bool,
     /// The thread works in a worktree of its own.
     pub worktree: bool,
+    /// The thread will start in a worktree that isn't made yet, so the folder is still the project's.
+    pub awaits_worktree: bool,
+    /// The number of the pull request of the branch it works on, when there is one.
+    pub pull_request: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -154,10 +226,19 @@ struct DiffFile {
     new: Vec<u32>,
 }
 
+/// Counts what is wider than a letter as two columns, and a tab as four.
 fn widest(lines: &[SharedString]) -> usize {
     lines
         .iter()
-        .map(|line| line.chars().map(|character| if character == '\t' { 4 } else { 1 }).sum::<usize>())
+        .map(|line| {
+            line.chars()
+                .map(|character| match character {
+                    '\t' => 4,
+                    character if (character as u32) < 0x2e80 => 1,
+                    _ => 2,
+                })
+                .sum::<usize>()
+        })
         .max()
         .unwrap_or(0)
 }
@@ -220,6 +301,10 @@ impl CodeFile {
             spans: Vec::new(),
         }
     }
+
+    pub fn kind(&self, line: usize) -> u8 {
+        self.kinds.get(line).copied().unwrap_or(UNCHANGED)
+    }
 }
 
 /// Files to draw one under the other: the files of a diff, or one whole file.
@@ -248,6 +333,19 @@ impl CodeDocument {
     pub fn removed(&self) -> u32 {
         self.files.iter().map(|file| file.removed).sum()
     }
+}
+
+/// What a pull request's diff shows besides its lines: which files the user has viewed, and the
+/// lines that can have comments and those that have some.
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct CodeMarks {
+    /// Each file's heading has a box to mark it viewed.
+    pub viewable: bool,
+    pub viewed: HashSet<String>,
+    /// A line's number can be clicked to comment on it.
+    pub commentable: bool,
+    /// The lines with conversations or comments waiting, by file, by their index in it.
+    pub marked: HashMap<String, HashSet<usize>>,
 }
 
 #[derive(Clone, Debug)]
@@ -297,14 +395,14 @@ pub struct SidePanel {
     pub listings: HashMap<String, Vec<FileEntry>>,
     pub open_folders: HashSet<String>,
     pub files_error: Option<String>,
-    /// The files that are open in tabs, by path.
-    pub contents: HashMap<String, Loaded<FileContent>>,
+    /// What the tabs of one file show: the file, or what a turn changed in it.
+    pub contents: HashMap<PanelTab, Loaded<FileContent>>,
 
     /// The folder all of the above is of.
     shown: Option<PanelTarget>,
     shown_scope: Option<DiffScope>,
     diff_request: u64,
-    file_requests: HashMap<u64, String>,
+    file_requests: HashMap<u64, PanelTab>,
 }
 
 impl SidePanel {
@@ -383,16 +481,25 @@ impl Store {
         self.panel_target().map(|target| target.key)
     }
 
-    /// The tabs the open thread or draft has in the panel.
+    /// The thread's tabs. There is always one: a blank one when none was opened.
     pub fn panel_tabs(&self) -> PanelTabs {
-        self.panel_key().and_then(|key| self.side_panel.tabs_by_key.get(&key).cloned()).unwrap_or_default()
+        let mut tabs =
+            self.panel_key().and_then(|key| self.side_panel.tabs_by_key.get(&key).cloned()).unwrap_or_default();
+        if tabs.tabs.is_empty() {
+            tabs.tabs = vec![PanelTab::Blank(0)];
+        }
+        if tabs.active.is_none() {
+            tabs.active = tabs.tabs.first().cloned();
+        }
+        tabs
     }
 
     fn change_tabs(&mut self, change: impl FnOnce(&mut PanelTabs)) {
         let Some(key) = self.panel_key() else { return };
-        let mut tabs = self.side_panel.tabs_by_key.get(&key).cloned().unwrap_or_default();
+        let mut tabs = self.panel_tabs();
         change(&mut tabs);
-        if tabs.tabs.is_empty() && tabs.scope.is_none() && tabs.maximized.is_none() {
+        let untouched = tabs.is_blank() && tabs.scope.is_none() && tabs.maximized.is_none();
+        if untouched {
             self.side_panel.tabs_by_key.remove(&key);
         } else {
             self.side_panel.tabs_by_key.insert(key, tabs);
@@ -409,10 +516,19 @@ impl Store {
         }
     }
 
-    /// Shows the tab, opening it and the panel when they aren't.
+    /// Shows the tab, opening it and the panel when they aren't. It takes the place of the blank
+    /// tab it is opened from.
     pub fn open_tab(&mut self, tab: PanelTab) {
         self.change_tabs(|tabs| {
-            if !tabs.tabs.contains(&tab) {
+            let blank =
+                tabs.tabs.iter().position(|open| Some(open) == tabs.active.as_ref() && open.blank_number().is_some());
+            if tabs.tabs.contains(&tab) {
+                if let Some(blank) = blank {
+                    tabs.tabs.remove(blank);
+                }
+            } else if let Some(blank) = blank {
+                tabs.tabs[blank] = tab.clone();
+            } else {
                 tabs.tabs.push(tab.clone());
             }
             tabs.active = Some(tab);
@@ -420,8 +536,37 @@ impl Store {
         self.set_panel_open(true);
     }
 
+    /// Adds a blank tab. A hidden panel that only has its blank tab just opens.
+    pub fn open_blank_tab(&mut self) {
+        if !self.side_panel.is_open && self.panel_tabs().is_blank() {
+            self.set_panel_open(true);
+            return;
+        }
+        self.change_tabs(|tabs| {
+            let next = tabs.tabs.iter().filter_map(PanelTab::blank_number).max().map_or(0, |number| number + 1);
+            let tab = PanelTab::Blank(next);
+            tabs.tabs.push(tab.clone());
+            tabs.active = Some(tab);
+        });
+        self.set_panel_open(true);
+    }
+
     pub fn activate_tab(&mut self, tab: PanelTab) {
         self.change_tabs(|tabs| tabs.active = Some(tab));
+    }
+
+    /// Shows the tab `offset` places from the active one, wrapping around the ends.
+    pub fn activate_tab_offset(&mut self, offset: isize) {
+        let tabs = self.panel_tabs();
+        if !self.side_panel.is_open || tabs.tabs.len() < 2 {
+            return;
+        }
+        let Some(index) = tabs.active.as_ref().and_then(|active| tabs.tabs.iter().position(|tab| tab == active)) else {
+            return;
+        };
+        let count = tabs.tabs.len() as isize;
+        let next = ((index as isize + offset) % count + count) % count;
+        self.activate_tab(tabs.tabs[next as usize].clone());
     }
 
     /// Closes the tab. The one beside it is shown in its place.
@@ -435,9 +580,7 @@ impl Store {
             tabs.active =
                 if tabs.tabs.is_empty() { None } else { Some(tabs.tabs[index.min(tabs.tabs.len() - 1)].clone()) };
         });
-        if let PanelTab::File(path) = tab {
-            self.side_panel.contents.remove(path);
-        }
+        self.side_panel.contents.remove(tab);
     }
 
     pub fn close_other_tabs(&mut self, tab: &PanelTab) {
@@ -454,12 +597,17 @@ impl Store {
         });
     }
 
-    /// What ⌘W does while the panel shows a tab. `false` when there is none to close.
+    /// What ⌘W does while the panel is open: closes its tab, or hides it when all it has is a
+    /// blank one. `false` when the panel is hidden.
     pub fn close_active_tab(&mut self) -> bool {
         if !self.side_panel.is_open {
             return false;
         }
-        let Some(active) = self.panel_tabs().active else { return false };
+        let tabs = self.panel_tabs();
+        let Some(active) = tabs.active.clone().filter(|_| !tabs.is_blank()) else {
+            self.set_panel_open(false);
+            return true;
+        };
         self.close_tab(&active);
         true
     }
@@ -469,8 +617,13 @@ impl Store {
         self.side_panel.is_open && self.panel_tabs().maximized == Some(true)
     }
 
+    /// A panel that has no folder to show stays beside the thread.
+    pub fn can_maximize_panel(&self) -> bool {
+        self.side_panel.is_open && self.panel_key().is_some()
+    }
+
     pub fn toggle_panel_maximized(&mut self) {
-        if !self.side_panel.is_open {
+        if !self.can_maximize_panel() {
             return;
         }
         let maximized = !self.panel_maximized();
@@ -492,6 +645,41 @@ impl Store {
 
     pub fn forget_tabs(&mut self, key: &str) {
         self.side_panel.tabs_by_key.remove(key);
+    }
+
+    // What the panel can show here
+
+    /// Why no pull request can be shown here, when none can.
+    pub fn pull_requests_unavailable(&self) -> Option<String> {
+        let target = self.panel_target()?;
+        let server = self.server(Some(&target.server_id))?;
+        if server.protocol_version < 8 {
+            return Some(format!("Update {} to see pull requests here.", server.name));
+        }
+        (!target.repository).then(|| "This folder isn't a git repository.".to_string())
+    }
+
+    /// Why the thread's pull request tab has nothing to show here, when it hasn't.
+    pub fn pull_request_unavailable(&self) -> Option<String> {
+        let target = self.panel_target()?;
+        self.pull_requests_unavailable()
+            .or_else(|| target.pull_request.is_none().then(|| "This branch has no pull request yet.".to_string()))
+    }
+
+    /// The server lists, links, edits and watches pull requests, and reviews their lines.
+    pub fn pull_requests_extended(&self) -> bool {
+        let Some(target) = self.panel_target() else { return false };
+        self.server(Some(&target.server_id)).is_some_and(|server| server.protocol_version >= 9)
+    }
+
+    /// Opens the pull request in a tab: the thread's own tab when it is the thread's.
+    pub fn show_pull_request_tab(&mut self, number: u64, target: &PanelTarget) {
+        let tab = if Some(number) == target.pull_request {
+            PanelTab::PullRequest
+        } else {
+            PanelTab::PullRequestNumber(number)
+        };
+        self.open_tab(tab);
     }
 
     // Agents
@@ -541,13 +729,19 @@ impl Store {
 
     /// What the diff tab shows: what was chosen, or the turn's work as far as it is known.
     pub fn diff_scope(&self, target: &PanelTarget) -> DiffScope {
-        if let Some(chosen) = self.panel_tabs().scope {
-            match &chosen {
-                DiffScope::Turn { item_id } if !self.side_panel.turns.iter().any(|turn| &turn.id == item_id) => {}
-                _ => return chosen,
-            }
+        if let Some(chosen) = self.panel_tabs().scope.filter(|chosen| self.can_show(chosen, target)) {
+            return chosen;
         }
         if target.worktree { DiffScope::Branch } else { DiffScope::Uncommitted }
+    }
+
+    /// A turn that is no longer known, or a pull request the folder no longer has, isn't shown.
+    fn can_show(&self, scope: &DiffScope, target: &PanelTarget) -> bool {
+        match scope {
+            DiffScope::Turn { item_id } => self.side_panel.turns.iter().any(|turn| &turn.id == item_id),
+            DiffScope::PullRequest { number } => Some(*number) == target.pull_request,
+            DiffScope::Commit { .. } | DiffScope::Uncommitted | DiffScope::Branch => true,
+        }
     }
 
     pub fn choose_diff_scope(&mut self, scope: DiffScope) {
@@ -564,6 +758,35 @@ impl Store {
             self.side_panel.reveal = Some((path, count));
         }
         self.open_tab(PanelTab::Diff);
+    }
+
+    /// Opens what the turn changed in the file in a tab of its own. A file has one such tab,
+    /// which shows the turn that was asked for last.
+    pub fn show_change(&mut self, turn: String, path: String) {
+        let tab = PanelTab::Change { turn, path };
+        let mut replaced = None;
+        self.change_tabs(|tabs| {
+            let Some(index) = tabs.tabs.iter().position(|open| open.id() == tab.id()) else { return };
+            if tabs.tabs[index] == tab {
+                return;
+            }
+            replaced = Some(tabs.tabs[index].clone());
+            tabs.tabs[index] = tab.clone();
+        });
+        if let Some(replaced) = replaced {
+            self.side_panel.contents.remove(&replaced);
+        }
+        self.open_tab(tab);
+    }
+
+    /// What the diff's menu and a change's tab call the turn.
+    pub fn turn_name(&self, id: &str) -> String {
+        let turns = &self.side_panel.turns;
+        let Some(turn) = turns.iter().find(|turn| turn.id == id) else { return "Earlier turn".into() };
+        if Some(&turn.id) == turns.last().map(|last| &last.id) {
+            return "Latest turn".into();
+        }
+        format!("Turn at {}", stamp(turn.at))
     }
 
     /// Asks the server for the diff. What is shown stays until the answer is there, unless it
@@ -691,30 +914,57 @@ impl Store {
 
     /// Asks the server for the file. What is shown of it stays until the answer is there.
     pub fn load_file(&mut self, path: &str, target: &PanelTarget) {
-        self.side_panel.look_into(target);
-        self.side_panel.contents.entry(path.to_string()).or_insert(Loaded::Loading);
         let (project_id, thread_id) = target_request(target);
         let id = format!("{}/{path}", target.key);
         let command =
             Command::File { server_id: target.server_id.clone(), project_id, thread_id, path: path.to_string() };
-        let (read_path, answered_path) = (path.to_string(), path.to_string());
+        let read_path = path.to_string();
+        self.load_content(PanelTab::File(path.to_string()), command, target, move |value| {
+            read_file(value, &read_path, id)
+        });
+    }
+
+    /// Asks the server for what the turn changed in the file.
+    pub fn load_change(&mut self, turn: &str, path: &str, target: &PanelTarget) {
+        let (project_id, thread_id) = target_request(target);
+        let id = format!("{}/{turn}/{path}", target.key);
+        let command = Command::Diff {
+            server_id: target.server_id.clone(),
+            project_id,
+            thread_id,
+            scope: DiffScope::Turn { item_id: turn.to_string() },
+            path: Some(path.to_string()),
+        };
+        let tab = PanelTab::Change { turn: turn.to_string(), path: path.to_string() };
+        self.load_content(tab, command, target, move |value| {
+            let truncated = value["truncated"].as_bool().unwrap_or(false);
+            FileContent::Text(CodeDocument::from_diff(value, id), truncated)
+        });
+    }
+
+    fn load_content(
+        &mut self,
+        tab: PanelTab,
+        command: Command,
+        target: &PanelTarget,
+        read: impl FnOnce(Value) -> FileContent + Send + 'static,
+    ) {
+        self.side_panel.look_into(target);
+        self.side_panel.contents.entry(tab.clone()).or_insert(Loaded::Loading);
         let target = target.clone();
-        let request = self.ask_read(
-            command,
-            move |value| read_file(value, &read_path, id),
-            move |store, result: Result<FileContent, String>, _| {
-                if store.side_panel.shown.as_ref() != Some(&target) {
-                    return;
-                }
-                let loaded = match result {
-                    Ok(content) => Loaded::Ready(content),
-                    Err(error) => Loaded::Failed(error),
-                };
-                store.side_panel.contents.insert(answered_path, loaded);
-            },
-        );
-        self.side_panel.file_requests.retain(|_, requested| requested != path);
-        self.side_panel.file_requests.insert(request, path.to_string());
+        let answered = tab.clone();
+        let request = self.ask_read(command, read, move |store, result: Result<FileContent, String>, _| {
+            if store.side_panel.shown.as_ref() != Some(&target) {
+                return;
+            }
+            let loaded = match result {
+                Ok(content) => Loaded::Ready(content),
+                Err(error) => Loaded::Failed(error),
+            };
+            store.side_panel.contents.insert(answered, loaded);
+        });
+        self.side_panel.file_requests.retain(|_, requested| requested != &tab);
+        self.side_panel.file_requests.insert(request, tab);
     }
 
     /// The highlighting of what a request answered with has arrived.
@@ -725,8 +975,8 @@ impl Store {
                 Loaded::Ready(document) => Some(document),
                 _ => None,
             }
-        } else if let Some(path) = panel.file_requests.get(&request) {
-            match panel.contents.get_mut(path) {
+        } else if let Some(tab) = panel.file_requests.get(&request) {
+            match panel.contents.get_mut(tab) {
                 Some(Loaded::Ready(FileContent::Text(document, _))) => Some(document),
                 _ => None,
             }
@@ -742,27 +992,27 @@ impl Store {
     }
 }
 
+/// "14:03", or with the day when it isn't today.
+pub fn stamp(at: f64) -> String {
+    use chrono::{Local, TimeZone};
+    let Some(time) = Local.timestamp_opt(at as i64, 0).single() else { return String::new() };
+    if time.date_naive() == Local::now().date_naive() {
+        time.format("%H:%M").to_string()
+    } else {
+        time.format("%-d %b %Y, %H:%M").to_string()
+    }
+}
+
 /// The symbol a file is shown with, by what its name ends in.
 pub fn file_symbol(path: &str) -> &'static str {
     let extension =
         Path::new(path).extension().and_then(|extension| extension.to_str()).unwrap_or_default().to_lowercase();
     match extension.as_str() {
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "heic" | "bmp" | "tiff" | "ico" | "svg" => "photo",
-        "md" | "markdown" | "txt" | "rst" => "doc.text",
-        "json" | "yaml" | "yml" | "toml" | "xml" | "plist" | "lock" => "curlybraces",
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "heic" | "bmp" | "tiff" | "ico" | "svg" => "image",
+        "md" | "markdown" | "txt" | "rst" => "file-text",
+        "json" | "yaml" | "yml" | "toml" | "xml" | "plist" | "lock" => "braces",
         "sh" | "bash" | "zsh" | "fish" => "terminal",
-        "" => "doc",
-        _ => "chevron.left.forwardslash.chevron.right",
-    }
-}
-
-impl PanelTab {
-    pub fn symbol(&self) -> &'static str {
-        match self {
-            PanelTab::Diff => "plusminus",
-            PanelTab::Files => "folder",
-            PanelTab::Agents => "person.2",
-            PanelTab::File(path) => file_symbol(path),
-        }
+        "" => "file",
+        _ => "code",
     }
 }

@@ -7,9 +7,8 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::store::Store;
-use crate::theme::{self, colors};
-use crate::ui::button::Button;
-use crate::ui::{icons, link_button, logos, spinner};
+use crate::theme::{self, Radius, Surface, colors};
+use crate::ui::{ActionButton, Spinner, Variant, card_default, icons, logos};
 
 pub struct SignIn {
     store: Entity<Store>,
@@ -28,7 +27,8 @@ impl Render for SignIn {
         let store = self.store.read(cx);
         let signing_in = store.signing_in;
         let error = store.sign_in_error.clone();
-        let dev_login = std::env::var("MOTILE_DEV_LOGIN").ok();
+        // An auth server with the dev login lets this client sign in as the address named.
+        let dev_login = std::env::var("MOTILE_DEV_LOGIN").ok().filter(|email| !email.is_empty());
         let store_handle = self.store.clone();
         div()
             .size_full()
@@ -38,8 +38,8 @@ impl Render for SignIn {
             .child(div().flex_1())
             .child(
                 div()
-                    .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.18), 6., 16.))
-                    .rounded(px(16.))
+                    .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.18), 6., 14.))
+                    .rounded(px(72. * 0.225))
                     .child(logos::app_logo(72.)),
             )
             .child(div().mt(px(22.)).text_size(px(30.)).font_weight(FontWeight::SEMIBOLD).child("Motile"))
@@ -51,42 +51,23 @@ impl Render for SignIn {
                     .child("The command center for coding agents."),
             )
             .child(
-                div()
-                    .id("google")
-                    .mt(px(34.))
-                    .w(px(250.))
-                    .h(px(40.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .gap(px(10.))
-                    .bg(c.raised)
-                    .rounded(px(10.))
-                    .border_1()
-                    .border_color(c.strong_border)
-                    .when(!signing_in, |button| button.hover(|button| button.bg(c.raised.blend(c.hover))))
-                    .child(if signing_in {
-                        spinner(16., cx).into_any_element()
-                    } else {
-                        logos::google_mark(16.).into_any_element()
-                    })
-                    .child(div().text_size(px(14.)).font_weight(FontWeight::MEDIUM).child(if signing_in {
-                        "Waiting for the browser…"
-                    } else {
-                        "Continue with Google"
-                    }))
-                    .on_click(move |_, _, cx| {
-                        store_handle.update(cx, |store, cx| {
-                            if store.signing_in {
-                                return store.cancel_sign_in();
-                            }
-                            match &dev_login {
+                div().mt(px(34.)).w(px(250.)).child(
+                    ActionButton::new("google", "Continue with Google")
+                        .picture(logos::google_mark(16.))
+                        .large()
+                        .pending(signing_in)
+                        .fills(true)
+                        .on_click(move |_, _, cx| {
+                            store_handle.update(cx, |store, cx| match &dev_login {
                                 Some(email) => store.dev_sign_in(email.clone()),
                                 None => store.sign_in(cx),
-                            }
-                        });
-                    }),
+                            });
+                        }),
+                ),
             )
+            .when(signing_in, |page| {
+                page.child(div().mt(px(10.)).text_size(px(12.)).text_color(c.tertiary).child("Waiting for the browser"))
+            })
             .when_some(error, |page, error| {
                 page.child(
                     div()
@@ -102,9 +83,11 @@ impl Render for SignIn {
             .child(
                 div()
                     .mb(px(24.))
+                    .px(px(30.))
                     .text_size(px(12.))
                     .text_color(c.tertiary)
-                    .child("Signing in links this computer to your account. Your threads stay on your own machines."),
+                    .text_center()
+                    .child("Signing in links this Mac to your account. Your threads stay on your own machines."),
             )
     }
 }
@@ -156,38 +139,43 @@ impl ConnectServer {
         });
     }
 
+    /// Lets the command wrap between any two characters, as CSS's `break-all` does. Not
+    /// selectable, since a copy would carry the zero-width spaces into the shell.
+    fn breaking_anywhere(text: &str) -> String {
+        text.chars().map(|character| character.to_string()).collect::<Vec<_>>().join("\u{200B}")
+    }
+
     fn command_box(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let command = self.store.read(cx).enroll_token.as_ref().map(|token| token.command.clone());
         let ready = command.is_some();
-        div()
+        let surface = Surface::Background.next();
+        card_default(div(), cx)
             .w_full()
             .max_w(px(560.))
+            .pl(px(14.))
+            .pr(px(10.))
+            .py(px(10.))
             .flex()
             .items_start()
-            .gap(px(12.))
-            .p(px(14.))
-            .bg(c.code_background)
-            .rounded(px(12.))
-            .border_1()
-            .border_color(c.border)
+            .gap(px(8.))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .font_family(theme::MONO_FONT)
                     .text_size(px(12.5))
-                    .line_height(px(19.))
+                    .line_height(px(18.))
                     .text_color(if ready { c.text } else { c.tertiary })
                     .child(match command {
-                        Some(command) => base::SelectableText::new("install-command", command).into_any_element(),
-                        None => "Preparing the command…".into_any_element(),
+                        Some(command) => Self::breaking_anywhere(&command),
+                        None => "Preparing the command…".into(),
                     }),
             )
             .child(
-                Button::new("copy", if self.copied { "Copied" } else { "Copy" })
-                    .small()
-                    .symbol(if self.copied { "checkmark" } else { "doc.on.doc" })
+                ActionButton::icon("copy", if self.copied { "check" } else { "copy" }, "Copy the command")
+                    .symbol_size(12.)
+                    .surface(surface)
                     .disabled(!ready)
                     .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
             )
@@ -219,21 +207,19 @@ impl Render for ConnectServer {
                 div()
                     .when(!is_first, |icon| icon.mt(px(32.)))
                     .size(px(56.))
-                    .rounded(px(14.))
+                    .rounded(px(Radius::SHEET))
                     .bg(c.primary.opacity(0.1))
                     .text_color(c.primary)
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(icons::symbol("server.rack", 24.)),
+                    .child(icons::symbol("server", 24.)),
             )
-            .child(
-                div()
-                    .mt(px(18.))
-                    .text_size(px(24.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(if is_first { "Connect your first server" } else { "Add a server" }),
-            )
+            .child(div().mt(px(18.)).text_size(px(24.)).font_weight(FontWeight::SEMIBOLD).child(if is_first {
+                "Connect your first server"
+            } else {
+                "Add a server"
+            }))
             .child(
                 div()
                     .mt(px(8.))
@@ -242,9 +228,7 @@ impl Render for ConnectServer {
                     .line_height(px(20.))
                     .text_color(c.secondary)
                     .text_center()
-                    .child(
-                        "Run this on the Linux machine or the Mac where your agents should work. It installs Motile, links the machine to your account and keeps it running.",
-                    ),
+                    .child("Run this on the Linux machine or Mac that will run your agents."),
             )
             .child(div().mt(px(26.)).w_full().flex().justify_center().child(self.command_box(cx)))
             .child(
@@ -253,8 +237,9 @@ impl Render for ConnectServer {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(spinner(14., cx))
-                    .child(div().text_size(px(13.)).text_color(c.secondary).child("Waiting for your server to connect…")),
+                    .text_color(c.secondary)
+                    .child(Spinner::regular().render(cx))
+                    .child(div().text_size(px(13.)).child("Waiting for your server")),
             )
             .child(
                 div()
@@ -264,30 +249,31 @@ impl Render for ConnectServer {
                     .line_height(px(17.))
                     .text_color(c.tertiary)
                     .text_center()
-                    .child(
-                        "The command works for one machine, for an hour. If neither Claude Code nor Codex is installed there, the installer offers to install them.",
-                    ),
+                    .child("The command works once, for an hour."),
             )
             .when(is_first, |page| {
                 page.child(div().flex_1()).child(
                     div()
-                        .mb(px(24.))
+                        .mb(px(20.))
                         .flex()
                         .items_center()
-                        .gap(px(6.))
                         .text_size(px(12.))
                         .text_color(c.tertiary)
                         .child(format!("Signed in as {email}"))
-                        .child(link_button("sign-out", "Sign out", cx, move |_, _, cx| {
-                            store.update(cx, |store, cx| store.sign_out(cx));
-                        })),
+                        .child(ActionButton::new("sign-out", "Sign out").variant(Variant::Link).small().on_click(
+                            move |_, _, cx| {
+                                store.update(cx, |store, cx| store.sign_out(cx));
+                            },
+                        )),
                 )
             })
             .when(!is_first, |page| {
                 page.child(
-                    div()
-                        .py(px(26.))
-                        .child(Button::new("done", "Done").on_click(cx.listener(|this, _, _, cx| this.dismiss(cx)))),
+                    div().py(px(26.)).child(
+                        ActionButton::new("done", "Done")
+                            .surface(Surface::Popover)
+                            .on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
+                    ),
                 )
             })
     }
