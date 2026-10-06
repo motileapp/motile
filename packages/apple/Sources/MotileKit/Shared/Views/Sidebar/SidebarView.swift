@@ -601,7 +601,7 @@ struct ThreadStatus: View {
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
-                        symbol(.circleDashed)
+                        Image(.circleDashed, size: 10)
                     }
                 }
             }
