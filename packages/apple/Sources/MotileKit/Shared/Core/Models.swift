@@ -899,15 +899,17 @@ struct UsageReport {
         var id: Agent { agent }
     }
 
-    /// A model, a project or a kind of token, and its part of the whole.
+    /// A model, a project, a server or a kind of token, and its part of the whole.
     struct Line: Identifiable {
         let name: String
         let agent: Agent?
+        /// The project's server, when more than one server spent.
+        let server: String?
         let tokens: Int
         let costUSD: Double?
         let share: Double
 
-        var id: String { "\(agent?.rawValue ?? "")/\(name)" }
+        var id: String { "\(agent?.rawValue ?? "")/\(server ?? "")/\(name)" }
     }
 
     let costUSD: Double
@@ -922,6 +924,7 @@ struct UsageReport {
     let kinds: [Line]
     let models: [Line]
     let projects: [Line]
+    let servers: [Line]
 
     init(json: JSON) {
         costUSD = json.double("cost_usd")
@@ -940,7 +943,8 @@ struct UsageReport {
         let line = { (line: JSON, share: Double?) in
             Line(
                 name: line.string("name"), agent: line.optionalString("agent").flatMap(Agent.init(rawValue:)),
-                tokens: line.int("tokens"), costUSD: line.optionalDouble("cost_usd"), share: share ?? line.double("share"))
+                server: line.optionalString("server"), tokens: line.int("tokens"), costUSD: line.optionalDouble("cost_usd"),
+                share: share ?? line.double("share"))
         }
         let (cost, tokens) = (costUSD, tokens)
         kinds = json.objects("kinds").map { kind in
@@ -949,5 +953,6 @@ struct UsageReport {
         }
         models = json.objects("models").map { line($0, nil) }
         projects = json.objects("projects").map { line($0, nil) }
+        servers = json.objects("servers").map { line($0, nil) }
     }
 }

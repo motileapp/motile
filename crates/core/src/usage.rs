@@ -1,5 +1,5 @@
 //! What the agents spent on the account's servers, added up for the usage view: the totals, a
-//! series for each agent's chart, and what each model and project took.
+//! series for each agent's chart, and what each model, project and server took.
 
 use std::collections::HashMap;
 
@@ -8,6 +8,7 @@ use serde::Serialize;
 
 const REMOVED_PROJECT: &str = "Removed project";
 const UNKNOWN_MODEL: &str = "Unknown model";
+const UNKNOWN_SERVER: &str = "Unknown server";
 
 /// The stretch of time the view shows: `buckets` spans of `bucket_secs`, the last of which holds
 /// `now`, starting where a clock `utc_offset_secs` ahead of UTC starts its hours and days.
@@ -58,7 +59,9 @@ pub struct View {
     /// The kinds of token, with what each cost.
     pub kinds: Vec<Kind>,
     pub models: Vec<Line>,
+    /// Projects name their server when more than one server spent.
     pub projects: Vec<Line>,
+    pub servers: Vec<Line>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -78,11 +81,12 @@ pub struct Kind {
     pub cost_usd: f64,
 }
 
-/// A model or a project and its part of the whole.
+/// A model, a project or a server and its part of the whole.
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Line {
     pub name: String,
     pub agent: Option<Agent>,
+    pub server: Option<String>,
     pub tokens: u64,
     /// Missing when none of it has a known price.
     pub cost_usd: Option<f64>,
@@ -94,8 +98,13 @@ fn total(tokens: &Tokens) -> u64 {
     tokens.input + tokens.cache_read + tokens.cache_write + tokens.output
 }
 
-/// `project_names` are the projects' names by server and project.
-pub fn view(spent: &[Spent], window: Window, project_names: &HashMap<(String, String), String>) -> View {
+/// `project_names` are the projects' names by server and project, `server_names` the servers'.
+pub fn view(
+    spent: &[Spent],
+    window: Window,
+    project_names: &HashMap<(String, String), String>,
+    server_names: &HashMap<String, String>,
+) -> View {
     let starts = window.starts();
     let point = |start: f64| {
         let index = ((start - window.since) / f64::from(window.bucket_secs)).round();
@@ -107,10 +116,13 @@ pub fn view(spent: &[Spent], window: Window, project_names: &HashMap<(String, St
     let mut other_cost = 0.0;
     let mut models: Vec<Line> = Vec::new();
     let mut projects: Vec<Line> = Vec::new();
-    let add = |lines: &mut Vec<Line>, name: &str, agent: Option<Agent>, tokens: u64, cost_usd: Option<f64>| {
-        let found = lines.iter().position(|line| line.name == name && line.agent == agent);
-        let index = found.unwrap_or_else(|| {
-            lines.push(Line { name: name.to_string(), agent, tokens: 0, cost_usd: None, share: 0.0 });
+    let mut servers: Vec<Line> = Vec::new();
+    let add = |lines: &mut Vec<Line>, name: &str, agent: Option<Agent>, server: Option<&str>, spent: &UsageBucket| {
+        let (tokens, cost_usd) = (total(&spent.tokens), spent.cost_usd);
+        let same = |line: &Line| line.name == name && line.agent == agent && line.server.as_deref() == server;
+        let index = lines.iter().position(same).unwrap_or_else(|| {
+            let server = server.map(str::to_string);
+            lines.push(Line { name: name.to_string(), agent, server, tokens: 0, cost_usd: None, share: 0.0 });
             lines.len() - 1
         });
         let line = &mut lines[index];
@@ -157,12 +169,17 @@ pub fn view(spent: &[Spent], window: Window, project_names: &HashMap<(String, St
         }
 
         let model = if bucket.model.is_empty() { UNKNOWN_MODEL } else { &bucket.model };
-        add(&mut models, model, Some(bucket.agent), tokens, bucket.cost_usd);
+        add(&mut models, model, Some(bucket.agent), None, bucket);
+        let server = server_names.get(server_id).map(String::as_str).unwrap_or(UNKNOWN_SERVER);
         let project = project_names.get(&(server_id.clone(), bucket.project_id.clone()));
-        add(&mut projects, project.map(String::as_str).unwrap_or(REMOVED_PROJECT), None, tokens, bucket.cost_usd);
+        add(&mut projects, project.map(String::as_str).unwrap_or(REMOVED_PROJECT), None, Some(server), bucket);
+        add(&mut servers, server, None, None, bucket);
     }
 
-    for lines in [&mut models, &mut projects] {
+    if servers.len() < 2 {
+        projects.iter_mut().for_each(|line| line.server = None);
+    }
+    for lines in [&mut models, &mut projects, &mut servers] {
         for line in lines.iter_mut() {
             line.share = match view.cost_usd > 0.0 {
                 true => line.cost_usd.unwrap_or_default() / view.cost_usd,
@@ -176,7 +193,7 @@ pub fn view(spent: &[Spent], window: Window, project_names: &HashMap<(String, St
     if other_cost > 0.0 {
         view.kinds.push(Kind { name: "Other", tokens: 0, cost_usd: other_cost });
     }
-    View { starts, agents, models, projects, ..view }
+    View { starts, agents, models, projects, servers, ..view }
 }
 
 #[cfg(test)]
@@ -187,6 +204,10 @@ mod tests {
 
     const HOUR: f64 = 3600.0;
     const DAY: f64 = 86400.0;
+
+    fn lines(lines: &[Line]) -> Vec<(&str, Option<&str>, Option<f64>, f64)> {
+        lines.iter().map(|line| (line.name.as_str(), line.server.as_deref(), line.cost_usd, line.share)).collect()
+    }
 
     fn spent(server: &str, project: &str, agent: Agent, model: &str, start: f64, cost_usd: Option<f64>) -> Spent {
         let costs = cost_usd.map(|cost| TokenCosts { input: cost / 2.0, output: cost / 2.0, ..TokenCosts::default() });
@@ -225,8 +246,9 @@ mod tests {
         all[0].bucket.writing = true;
         let name = |server: &str, project: &str, name: &str| ((server.to_string(), project.to_string()), name.into());
         let names = HashMap::from([name("studio", "api", "API"), name("studio", "web", "Web")]);
+        let servers = HashMap::from([("studio".to_string(), "Studio".to_string())]);
 
-        let view = view(&all, window, &names);
+        let view = view(&all, window, &names, &servers);
 
         assert_eq!((view.cost_usd, view.tokens, view.unpriced_tokens, view.cache_savings_usd), (4.0, 4000, 1000, 1.0));
         assert_eq!((view.writing_cost_usd, view.writing_tokens), (1.0, 1000));
@@ -237,12 +259,32 @@ mod tests {
         let kinds: Vec<_> = view.kinds.iter().map(|kind| (kind.name, kind.tokens, kind.cost_usd)).collect();
         let expected = [("Input", 400, 2.0), ("Cache read", 3200, 0.0), ("Cache write", 0, 0.0), ("Output", 400, 2.0)];
         assert_eq!(kinds, expected);
-        let lines = |lines: &[Line]| -> Vec<(String, Option<f64>, f64)> {
-            lines.iter().map(|line| (line.name.clone(), line.cost_usd, line.share)).collect()
-        };
-        let models = [("claude-opus", Some(3.0), 0.75), ("gpt-6", Some(1.0), 0.25), ("gpt-fake", None, 0.0)];
-        assert_eq!(lines(&view.models), models.map(|(name, cost, share)| (name.to_string(), cost, share)));
-        let projects = [("API", Some(3.0), 0.75), ("Web", Some(1.0), 0.25), ("Removed project", None, 0.0)];
-        assert_eq!(lines(&view.projects), projects.map(|(name, cost, share)| (name.to_string(), cost, share)));
+        let models =
+            [("claude-opus", None, Some(3.0), 0.75), ("gpt-6", None, Some(1.0), 0.25), ("gpt-fake", None, None, 0.0)];
+        assert_eq!(lines(&view.models), models);
+        let projects = [
+            ("API", Some("Studio"), Some(3.0), 0.75),
+            ("Web", Some("Studio"), Some(1.0), 0.25),
+            ("Removed project", Some("Unknown server"), None, 0.0),
+        ];
+        assert_eq!(lines(&view.projects), projects);
+        let servers = [("Studio", None, Some(4.0), 1.0), ("Unknown server", None, None, 0.0)];
+        assert_eq!(lines(&view.servers), servers);
+    }
+
+    #[test]
+    fn projects_of_one_server_do_not_name_it() {
+        let window = Window { since: 0.0, until: DAY, bucket_secs: 86400, utc_offset_secs: 0 };
+        let all = [
+            spent("studio", "api", Agent::Claude, "claude-opus", 0.0, Some(2.0)),
+            spent("studio", "web", Agent::Claude, "claude-opus", 0.0, Some(1.0)),
+        ];
+        let servers = HashMap::from([("studio".to_string(), "Studio".to_string())]);
+
+        let view = view(&all, window, &HashMap::new(), &servers);
+
+        assert_eq!(view.projects.len(), 1);
+        assert_eq!((view.projects[0].name.as_str(), view.projects[0].server.as_deref()), ("Removed project", None));
+        assert_eq!(view.servers.len(), 1);
     }
 }

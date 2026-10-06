@@ -2,7 +2,7 @@ import Charts
 import SwiftUI
 
 /// What the agents spent on the account's servers, the Usage page of the settings: a line for
-/// each agent over time, and what each model, project and kind of token took.
+/// each agent over time, and what each model, project, server and kind of token took.
 struct UsageView: View {
     private enum Period: String, CaseIterable, Identifiable {
         case day, week, month, quarter
@@ -38,7 +38,7 @@ struct UsageView: View {
     }
 
     private enum Breakdown: String, CaseIterable, Identifiable {
-        case models, projects, kinds
+        case models, projects, servers, kinds
 
         var id: Self { self }
 
@@ -46,6 +46,7 @@ struct UsageView: View {
             switch self {
             case .models: "Models"
             case .projects: "Projects"
+            case .servers: "Servers"
             case .kinds: "Tokens"
             }
         }
@@ -258,6 +259,7 @@ struct UsageView: View {
             switch breakdown {
             case .models: report.models
             case .projects: report.projects
+            case .servers: report.servers
             case .kinds: report.kinds
             }
         return VStack(alignment: .leading, spacing: 8) {
@@ -288,8 +290,8 @@ struct UsageView: View {
     }
 }
 
-/// A model, a project or a kind of token: its name, its part of the whole as a bar, its tokens
-/// and what they cost.
+/// A model, a project, a server or a kind of token: its name, its part of the whole as a bar, its
+/// tokens and what they cost.
 private struct UsageLineRow: View {
     @Environment(\.surface) private var surface
     enum Measure { case cost, tokens }
@@ -322,6 +324,13 @@ private struct UsageLineRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .fixedSize(horizontal: whole, vertical: false)
+            if let server = line.server {
+                Text(server)
+                    .foregroundStyle(Color.themeSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .fixedSize(horizontal: whole, vertical: false)
+            }
             Spacer(minLength: 8)
             if whole {
                 Capsule()
