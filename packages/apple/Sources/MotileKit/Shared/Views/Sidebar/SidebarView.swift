@@ -516,9 +516,8 @@ struct DoneRow: View, Equatable {
     @State private var hovering = false
 
     private static let sidePadding = 8.0
-    private static let buttonSize = ControlSize.small.height
     /// The undo button is as far from the row's side as from its top.
-    private static let buttonInset = (doneRowHeight - buttonSize) / 2 - sidePadding
+    private static let buttonInset = (doneRowHeight - ControlSize.small.height) / 2
 
     static func == (one: DoneRow, other: DoneRow) -> Bool {
         one.thread == other.thread && one.project?.iconPath == other.project?.iconPath && one.pullRequest == other.pullRequest
@@ -542,20 +541,33 @@ struct DoneRow: View, Equatable {
                 .font(.ui(size: 11))
                 .foregroundStyle(Color.themeTertiary)
                 .opacity(hovering ? 0 : 1)
-                .frame(minWidth: hovering ? Self.buttonSize + Self.buttonInset : nil, alignment: .trailing)
-                .overlay(alignment: .trailing) {
-                    ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
-                        .padding(.trailing, Self.buttonInset)
-                        .opacity(hovering ? 1 : 0)
-                        .allowsHitTesting(hovering)
-                }
         }
         .padding(.horizontal, Self.sidePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .overlay(alignment: .trailing) {
+            OnRowSurface {
+                ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
+            }
+            .padding(.trailing, Self.buttonInset)
+            .opacity(hovering ? 1 : 0)
+            .allowsHitTesting(hovering)
+        }
         .padding(rowMargin)
         .button(.highlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
+    }
+}
+
+/// Covers what lies under it with the colour the row is lit in, hovered or selected.
+private struct OnRowSurface<Content: View>: View {
+    @Environment(\.surface) private var surface
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .padding(.leading, 6)
+            .background(surface.color)
     }
 }
 
