@@ -32,6 +32,10 @@ pub struct Row {
     pub nested: bool,
     #[serde(flatten)]
     pub kind: RowKind,
+    /// What is right above it in the reply, for a prose row and a work row: the space above
+    /// the row depends on it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after: Option<After>,
 }
 
 /// A file attached to a message. An image or a video is shown: the client asks the core for the
@@ -59,9 +63,6 @@ pub enum RowKind {
     Prose {
         #[serde(flatten)]
         prose: Prose,
-        /// What is right above it in the reply; the space above the row depends on it.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        after: Option<After>,
     },
     Code {
         language: String,
@@ -522,6 +523,7 @@ fn queued_rows(queued: &[Queued]) -> Vec<Row> {
             attachments: attached(&message.attachments, &message.media),
             status: status(message),
         },
+        after: None,
     };
     queued.iter().map(row).collect()
 }
@@ -556,16 +558,23 @@ fn present<'a>(
     shown
 }
 
-/// Tells every prose row what is right above it.
+/// Tells every prose row and work row what is right above it.
 fn join(shown: &mut [Cow<Row>]) {
     let mut above = None;
     for row in shown {
         let after = std::mem::replace(&mut above, After::row(&row.kind));
-        if after.is_none() || !matches!(row.kind, RowKind::Prose { .. }) {
+        let spaced = matches!(
+            row.kind,
+            RowKind::Prose { .. }
+                | RowKind::Tool { .. }
+                | RowKind::Thinking { .. }
+                | RowKind::Group { .. }
+                | RowKind::Fold { .. }
+        );
+        if after.is_none() || !spaced || row.after == after {
             continue;
         }
-        let RowKind::Prose { after: slot, .. } = &mut row.to_mut().kind else { continue };
-        *slot = after;
+        row.to_mut().after = after;
     }
 }
 
@@ -617,7 +626,7 @@ fn present_turn<'a>(
         let id = format!("{}/fold", items[work_start].id);
         let open = opened.contains(&id);
         let kind = RowKind::Fold { duration_ms, stopped, open };
-        shown.push(Cow::Owned(Row { id, item: items[work_start].id.clone(), nested: false, kind }));
+        shown.push(Cow::Owned(Row { id, item: items[work_start].id.clone(), nested: false, kind, after: None }));
         if !open {
             index = shown_from;
         }
@@ -645,7 +654,13 @@ fn present_turn<'a>(
         let open = opened.contains(&id);
         // The calls a running turn is making now are named; the ones behind it are summed up.
         let live = ended.is_none() && part.last && run_end == items.len();
-        shown.push(Cow::Owned(Row { id, item: first.item.clone(), nested: false, kind: group(run, live, open) }));
+        shown.push(Cow::Owned(Row {
+            id,
+            item: first.item.clone(),
+            nested: false,
+            kind: group(run, live, open),
+            after: None,
+        }));
         if open {
             shown.extend(run.iter().flatten().map(|row| Cow::Owned(Row { nested: true, ..row.clone() })));
         }
@@ -667,7 +682,7 @@ fn changes_row(item: &Item, opened: &HashSet<String>) -> Option<Row> {
         at: item.created_at,
         entries,
     };
-    Some(Row { id, item: item.id.clone(), nested: false, kind })
+    Some(Row { id, item: item.id.clone(), nested: false, kind, after: None })
 }
 
 /// How the changed files of a turn are listed under their folders.
@@ -850,6 +865,7 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
         item: item.id.clone(),
         nested: false,
         kind,
+        after: None,
     };
     match &item.kind {
         ItemKind::User { text, attachments } => {
@@ -892,7 +908,7 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
                     let ParaKind::Pre { language, code, spans, .. } = &mut para.kind else { continue };
                     *spans = colour(&format!("{id}/{para_index}"), language, code, &mut streaming);
                 }
-                RowKind::Prose { prose, after: None }
+                RowKind::Prose { prose }
             }
             Block::Code { language, code } => {
                 let spans = colour(&id, &language, &code, &mut streaming);
@@ -911,7 +927,7 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
                 }
             }
         };
-        rows.push(Row { id, item: item.id.clone(), nested: false, kind });
+        rows.push(Row { id, item: item.id.clone(), nested: false, kind, after: None });
     }
     rows
 }
@@ -1160,7 +1176,7 @@ mod tests {
     }
 
     #[test]
-    fn prose_knows_what_is_right_above_it() {
+    fn prose_and_tool_rows_know_what_is_right_above_them() {
         let long = "word ".repeat(900);
         let reply = format!(
             "Intro\n\n```rust\nfn a() {{}}\n```\n\n## After code\n\n{long}\n\n## After a cut\n\n| A |\n|---|\n| 1 |"
@@ -1178,7 +1194,7 @@ mod tests {
             .rows()
             .iter()
             .filter_map(|row| match &row.kind {
-                RowKind::Prose { prose, after } => Some((prose.text.split('\n').next().unwrap_or_default(), *after)),
+                RowKind::Prose { prose } => Some((prose.text.split('\n').next().unwrap_or_default(), row.after)),
                 _ => None,
             })
             .collect();
@@ -1194,6 +1210,8 @@ mod tests {
         );
         let cut = transcript.rows().iter().find(|row| row.id == "a/3").unwrap();
         assert_eq!(serde_json::to_value(cut).unwrap()["after"], "prose");
+        let tool = transcript.rows().iter().find(|row| row.id == "t/0").unwrap();
+        assert_eq!(tool.after, Some(After::Prose));
     }
 
     #[test]

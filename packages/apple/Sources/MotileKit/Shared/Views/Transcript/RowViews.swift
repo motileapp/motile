@@ -60,8 +60,8 @@ class RowView: FlippedView {
         case .user(let text, let attachments, _):
             let fit = BubbleFit(text: text, attachments: attachments, width: width)
             return UserRowView.height(fit, textHeight: fit.hasText ? TextMeasure.height(of: text, width: fit.innerWidth) : 0)
-        case .prose(let text, let above, _):
-            return TextMeasure.height(of: text, width: width) + ProseRowView.gap + above
+        case .prose(let text, _):
+            return TextMeasure.height(of: text, width: width) + ProseRowView.gap + row.above
         case .error(let text):
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .code, .tool, .thinking, .group, .fold, .media, .changes, .turnEnd, .queued:
@@ -74,12 +74,12 @@ class RowView: FlippedView {
         switch row.kind {
         case .user(let text, let attachments, _):
             return estimatedTextHeight(text.length, width: width * 0.75) + 34 + UserRowView.footHeight + AttachedFilesView.height(attachments, width: width)
-        case .prose(let text, let above, _):
-            return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + above
+        case .prose(let text, _):
+            return estimatedTextHeight(text.length, width: width) + ProseRowView.gap + row.above
         case .code(let content):
             return CodeRowView.height(lines: content.lineCount)
         case .tool, .thinking, .group, .fold:
-            return ToolRowView.rowHeight
+            return ToolRowView.rowHeight + row.above
         case .media(let content):
             return MediaRowView.height(content, width: width)
         case .error(let text):
@@ -359,9 +359,9 @@ final class ProseRowView: RowView {
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .prose(let content, let above, _) = row.kind else { return }
+        guard case .prose(let content, _) = row.kind else { return }
         text.content = content
-        self.above = above
+        above = row.above
     }
 
     override func layout(width: CGFloat) -> CGFloat {
@@ -521,6 +521,9 @@ final class CodeRowView: RowView {
 /// A tool call or the agent's thinking: one line, which opens to show the detail.
 final class ToolRowView: RowView {
     static let rowHeight: CGFloat = Platform.scale > 1 ? 36 : 28
+    /// What the row keeps from a paragraph above it, so that the two are a paragraph apart.
+    static let afterProse: CGFloat = 8
+    private var above: CGFloat = 0
 
     private let header = SurfaceView()
     private static let titleFont = PlatformFont.ui(13)
@@ -620,6 +623,7 @@ final class ToolRowView: RowView {
         default:
             break
         }
+        above = row.above
         shine.sweeps = running
         keepTime()
     }
@@ -671,7 +675,7 @@ final class ToolRowView: RowView {
         let width = width - inset
         let line = Self.rowHeight - 2
         let middle = { (height: CGFloat) in ((line - height) / 2).rounded() }
-        header.frame = CGRect(x: inset - 6, y: 1, width: width + 12, height: line)
+        header.frame = CGRect(x: inset - 6, y: 1 + above, width: width + 12, height: line)
         icon.frame = CGRect(x: 6, y: middle(16), width: 16, height: 16)
         let timeWidth: CGFloat = startedAt == nil ? 0 : scaled(58)
         let titleWidth = min(title.naturalWidth + 4, width - 60 - timeWidth)
@@ -683,16 +687,16 @@ final class ToolRowView: RowView {
         elapsed.frame = CGRect(x: chevron.frame.maxX + 6, y: middle(scaled(16)), width: timeWidth, height: scaled(16))
 
         detailSurface.isHidden = !expanded
-        guard expanded else { return Self.rowHeight }
+        guard expanded else { return Self.rowHeight + above }
         if !loadedDetail {
             detail.content = detailText?() ?? NSAttributedString()
             loadedDetail = true
         }
         let inner = width - 30 - 24
         let detailHeight = detail.height(forWidth: inner)
-        detailSurface.frame = CGRect(x: inset + 30, y: Self.rowHeight + 2, width: width - 30, height: detailHeight + 20)
+        detailSurface.frame = CGRect(x: inset + 30, y: Self.rowHeight + above + 2, width: width - 30, height: detailHeight + 20)
         detail.frame = CGRect(x: 12, y: 10, width: inner, height: detailHeight)
-        return Self.rowHeight + detailHeight + 20 + 8
+        return Self.rowHeight + above + detailHeight + 20 + 8
     }
 
     override func clearSelection() { detail.clearSelection() }

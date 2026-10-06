@@ -22,9 +22,8 @@ enum TranscriptColumn {
 final class RowModel {
     enum Kind {
         case user(text: NSAttributedString, attachments: [AttachedFile], at: Double)
-        /// `above` is the space it keeps from the row above it. `uncoloured` when code inside it
-        /// still waits for highlighting.
-        case prose(NSAttributedString, above: CGFloat, uncoloured: Bool)
+        /// `uncoloured` when code inside it still waits for highlighting.
+        case prose(NSAttributedString, uncoloured: Bool)
         case code(CodeContent)
         case tool(ToolContent)
         case thinking(NSAttributedString)
@@ -42,6 +41,8 @@ final class RowModel {
     /// The row belongs to the group above it, which is open.
     let nested: Bool
     let kind: Kind
+    /// The space it keeps from the row above it.
+    let above: CGFloat
     /// How tall the row is in a column of that width. It is set while the row is decoded, and
     /// after that only on the main thread.
     var measured: (width: CGFloat, height: CGFloat)?
@@ -51,18 +52,20 @@ final class RowModel {
         self.itemID = itemID
         nested = false
         self.kind = kind
+        above = 0
     }
 
     init?(json: JSON) {
         id = json.string("id")
         itemID = json.string("item")
         nested = json.bool("nested")
+        above = Typesetter.spaceAbove(json)
         switch json.string("kind") {
         case "user":
             kind = .user(text: Typesetter.message(json), attachments: json.objects("attachments").map(AttachedFile.init(json:)), at: json.double("at"))
         case "prose":
             let uncoloured = json.objects("paras").contains { $0.string("kind") == "pre" && $0["spans"] as? [NSNumber] == nil }
-            kind = .prose(Typesetter.prose(json), above: Typesetter.spaceAbove(json), uncoloured: uncoloured)
+            kind = .prose(Typesetter.prose(json), uncoloured: uncoloured)
         case "code":
             kind = .code(CodeContent(language: json.string("language"), code: json.string("code"), spans: json["spans"] as? [NSNumber]))
         case "tool":
@@ -107,7 +110,7 @@ final class RowModel {
     /// The plain text of the row, for copying a whole reply.
     var plainText: String? {
         switch kind {
-        case .prose(let text, _, _): TextSystem.withLineBreaks(Typesetter.words(of: text))
+        case .prose(let text, _): TextSystem.withLineBreaks(Typesetter.words(of: text))
         case .code(let content): "```\(content.language)\n\(content.code)\n```"
         default: nil
         }
@@ -117,7 +120,7 @@ final class RowModel {
     var needsHighlight: Bool {
         switch kind {
         case .code(let content): !content.highlighted
-        case .prose(_, _, let uncoloured): uncoloured
+        case .prose(_, let uncoloured): uncoloured
         default: false
         }
     }
@@ -397,13 +400,17 @@ enum Typesetter {
         return style
     }()
 
-    /// A reply is cut into rows, and its rows are as far apart as its paragraphs.
+    /// A reply is cut into rows, and its rows are as far apart as its paragraphs: a paragraph
+    /// after another, and a tool row after a paragraph or before one.
     static func spaceAbove(_ json: JSON) -> CGFloat {
         let after = json.string("after")
         guard !after.isEmpty else { return 0 }
+        guard json.string("kind") == "prose" else {
+            return after == "prose" || after == "media" ? ToolRowView.afterProse : 0
+        }
         let heading = json.objects("paras").first?.string("kind") == "heading" ? headingGap : 0
         switch after {
-        case "prose", "media": return bodyStyle.lineSpacing + blockGap - ProseRowView.gap + heading
+        case "prose", "media", "work": return bodyStyle.lineSpacing + blockGap - ProseRowView.gap + heading
         case "table": return blockGap - ProseRowView.gap + heading
         default: return heading
         }
