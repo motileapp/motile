@@ -23,6 +23,7 @@ struct ComposerTextView: NSViewRepresentable {
     }()
     static let maximumHeight: CGFloat = 220
 
+    @Environment(AppStore.self) private var store
     @Binding var text: String
     @Binding var height: CGFloat
     let placeholder: String
@@ -80,6 +81,7 @@ struct ComposerTextView: NSViewRepresentable {
         view.string = text
         scroll.documentView = view
         context.coordinator.textView = view
+        store.composerTextStart = { [weak view] in view?.textStart }
         DispatchQueue.main.async {
             view.window?.makeFirstResponder(view)
             context.coordinator.measure()
@@ -142,6 +144,14 @@ final class ComposerNSTextView: NSTextView {
     var onFiles: (([URL]) -> Void)?
     var onFileDrag: ((Bool) -> Void)?
     var placeholder = ""
+
+    /// The top left corner of the text's first line, in the window's coordinates.
+    var textStart: CGPoint? {
+        guard !string.isEmpty, let layoutManager, let textContainer else { return nil }
+        let line = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+        let origin = textContainerOrigin
+        return convert(CGPoint(x: origin.x + line.minX + textContainer.lineFragmentPadding, y: origin.y + line.minY), to: nil)
+    }
 
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76

@@ -23,7 +23,7 @@ export function Composer({
 }: {
   thread: Thread
   elapsed: (since: number) => string
-  onSend: (text: string) => void
+  onSend: (text: string, from: { x: number; y: number }) => void
   onAnswer: (allow: boolean) => void
   onStop: () => void
 }) {
@@ -31,8 +31,10 @@ export function Composer({
   const input = useRef<HTMLTextAreaElement>(null)
   const status = thread.status
   const send = () => {
-    if (!text.trim()) return
-    onSend(text.trim())
+    if (!text.trim() || !input.current) return
+    const box = input.current.getBoundingClientRect()
+    const scale = box.width / input.current.offsetWidth
+    onSend(text.trim(), { x: box.left + 14 * scale, y: box.top + 12 * scale })
     setText("")
   }
 

@@ -7,7 +7,7 @@ import {
   SquareTerminalIcon,
   type LucideIcon,
 } from "lucide-react"
-import type { ReactNode } from "react"
+import { useLayoutEffect, useRef, type ReactNode } from "react"
 import { parseDiff } from "./diff"
 import { highlight } from "./highlight"
 import type { Item, Thread, Tool } from "./threads"
@@ -60,13 +60,7 @@ function Row({
 }) {
   switch (item.kind) {
     case "user":
-      return (
-        <div className="mb-5 flex justify-end pt-1">
-          <p className="max-w-[80%] rounded-[18px] bg-background-secondary px-3.5 py-2.5 text-[14px] leading-6 text-foreground">
-            {item.text}
-          </p>
-        </div>
-      )
+      return <UserMessage text={item.text} from={item.from} />
     case "text":
       return <Prose text={item.text} />
     case "code":
@@ -109,6 +103,44 @@ function Row({
         </div>
       )
   }
+}
+
+/** The user's message in its bubble. One just sent flies in from where it was written, as the
+ * Mac app's does: along the response of a critically damped spring, which settles without
+ * overshooting. */
+function UserMessage({
+  text,
+  from,
+}: {
+  text: string
+  from?: { x: number; y: number }
+}) {
+  const bubble = useRef<HTMLParagraphElement>(null)
+  useLayoutEffect(() => {
+    const element = bubble.current
+    if (!from || !element) return
+    const box = element.getBoundingClientRect()
+    const scale = box.width / element.offsetWidth
+    const dx = (from.x - box.left - 14 * scale) / scale
+    const dy = (from.y - box.top - 10 * scale) / scale
+    const steps = 30
+    const frames = Array.from({ length: steps + 1 }, (_, step) => {
+      const x = (step / steps) * 10
+      const left = (1 + x) * Math.exp(-x)
+      return { transform: `translate(${dx * left}px, ${dy * left}px)` }
+    })
+    element.animate(frames, { duration: 500, easing: "linear" })
+  }, [from])
+  return (
+    <div className="mb-5 flex justify-end pt-1">
+      <p
+        ref={bubble}
+        className="max-w-[80%] rounded-[18px] bg-background-secondary px-3.5 py-2.5 text-[14px] leading-6 text-foreground"
+      >
+        {text}
+      </p>
+    </div>
+  )
 }
 
 export function Shimmer({

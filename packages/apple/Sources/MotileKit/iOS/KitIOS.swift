@@ -44,6 +44,11 @@ extension UIView {
         CADisplayLink(target: target, selector: selector)
     }
 
+    /// Draws the view over its siblings, whatever order they were added in.
+    func liftAboveSiblings() {
+        layer.zPosition = 1
+    }
+
     /// The view controller the view is shown by.
     var presenter: UIViewController? {
         var responder: UIResponder? = self

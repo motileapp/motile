@@ -6,7 +6,9 @@ final class TranscriptModel {
     struct Hooks {
         let reset: ([RowModel]) -> Void
         let splice: (Int, Int, [RowModel]) -> Void
-        let pending: (RowModel?) -> Void
+        /// The message on its way to the server, and where its text started in the window, which
+        /// it sets out from.
+        let pending: (RowModel?, CGPoint?) -> Void
         let activity: (Activity) -> Void
         let recolor: (String, CodeContent) -> Void
         /// Whether the thread has turns before the first row.
@@ -23,6 +25,8 @@ final class TranscriptModel {
     /// The view still shows the rows of the thread that was open before.
     private var keepsRows = false
     private var pending: RowModel?
+    /// Where the pending message's text was written, until a view has shown it setting out.
+    private var pendingStart: CGPoint?
     private var hooks: Hooks?
     private var owner: ObjectIdentifier?
 
@@ -41,9 +45,16 @@ final class TranscriptModel {
         self.owner = ObjectIdentifier(owner)
         hooks.live(live)
         hooks.reset(rows)
-        hooks.pending(pending)
+        showPending()
         hooks.activity(activity)
         hooks.earlier(hasEarlier)
+    }
+
+    /// The start goes to the first view that shows the message, which may attach later.
+    private func showPending() {
+        guard let hooks else { return }
+        hooks.pending(pending, pendingStart)
+        pendingStart = nil
     }
 
     /// Lets go of the view, unless another one has attached since.
@@ -59,6 +70,7 @@ final class TranscriptModel {
         self.threadID = threadID
         rows = []
         pending = nil
+        pendingStart = nil
         activity = Activity()
         hasEarlier = false
         setLive(live)
@@ -94,7 +106,7 @@ final class TranscriptModel {
             if sent { pending = nil }
             rows = new
             hooks?.reset(new)
-            if let pending { hooks?.pending(pending) }
+            if pending != nil { showPending() }
             guard keepsRows else { return }
             keepsRows = false
             hooks?.activity(activity)
@@ -106,9 +118,12 @@ final class TranscriptModel {
         hooks?.splice(start, remove, new)
     }
 
-    func setPending(_ text: String?, attachments: [AttachedFile] = [], queued: Bool = false) {
+    /// Shows a message at the end before the server has it, setting out from where its text was
+    /// written, in the window's coordinates, or takes it away again.
+    func setPending(_ text: String?, attachments: [AttachedFile] = [], queued: Bool = false, from start: CGPoint? = nil) {
         pending = text.map { RowModel.pending(text: $0, attachments: attachments, queued: queued) }
-        hooks?.pending(pending)
+        pendingStart = pending == nil ? nil : start
+        showPending()
     }
 
     func setActivity(_ activity: Activity) {
