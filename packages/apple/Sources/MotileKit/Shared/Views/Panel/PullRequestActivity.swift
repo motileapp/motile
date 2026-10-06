@@ -83,6 +83,7 @@ struct ActivityRow: View {
             }
         }
         .padding(.leading, -6)
+        .padding(.vertical, -3)
     }
 
     private var symbol: Symbol {
