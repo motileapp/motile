@@ -63,7 +63,7 @@ extension LinearList: NSViewRepresentable {
     func makeNSView(context: Context) -> LinearListView { make() }
 
     func updateNSView(_ view: LinearListView, context: Context) {
-        view.isHidden = context.environment.putAway
+        view.putAway(context.environment.putAway)
         update(view)
     }
 }

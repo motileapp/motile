@@ -1,12 +1,15 @@
 import {
+  ChartColumnIcon,
   ChevronRightIcon,
   CircleDashedIcon,
   CircleQuestionMarkIcon,
-  CircleUserIcon,
   EyeIcon,
   GitPullRequestIcon,
+  RefreshCwIcon,
   SearchIcon,
   ServerIcon,
+  SettingsIcon,
+  type LucideIcon,
 } from "lucide-react"
 import { useState } from "react"
 import { AgentIcon, ProjectIcon } from "./icons"
@@ -111,12 +114,31 @@ export function Sidebar({
             </span>
           </div>
         ))}
-        <div className="-mx-2 flex h-[30px] items-center gap-[7px] rounded-lg px-2 hover:bg-background-secondary">
-          <CircleUserIcon className="size-3.5" />
-          <span className="text-[12px]">you@motile.app</span>
+        <div className="-mx-2 flex items-center gap-0.5">
+          <FooterButton icon={SettingsIcon} label="Settings" />
+          <FooterButton icon={ChartColumnIcon} label="Usage" />
+          <button
+            type="button"
+            aria-label="Check for updates"
+            className="ml-auto flex size-6 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
+          >
+            <RefreshCwIcon className="size-[13px]" />
+          </button>
         </div>
       </div>
     </div>
+  )
+}
+
+function FooterButton({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    <button
+      type="button"
+      className="flex h-6 items-center gap-1.5 rounded-[7px] px-2 text-[11.5px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
+    >
+      <Icon className="size-[13px]" />
+      {label}
+    </button>
   )
 }
 

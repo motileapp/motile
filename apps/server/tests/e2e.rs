@@ -9,11 +9,11 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, Approval, CONTINUE_PROMPT, Change, CheckStatus, DiffScope, EventKind, FileKind,
-    GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LineComment, MergeMethod, Mergeable,
-    Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit, PullRequestState,
-    Queued, ReactionKind, Request, ReviewVerdict, Side, Thread, ThreadChange, Tokens, ToolCall, ToolStatus,
-    TurnChanges, TurnSummary, UsageBucket,
+    Access as AgentAccess, Agent, AgentLimits, Approval, CONTINUE_PROMPT, Change, CheckStatus, DiffScope, EventKind,
+    FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LineComment, MergeMethod,
+    Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit,
+    PullRequestState, Queued, ReactionKind, Request, ReviewVerdict, Side, Thread, ThreadChange, Tokens, ToolCall,
+    ToolStatus, TurnChanges, TurnSummary, UsageBucket,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -2701,6 +2701,28 @@ async fn written(connection: &Connection, agent: Agent) -> Vec<UsageBucket> {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     panic!("nothing was written")
+}
+
+#[tokio::test]
+async fn the_agents_say_what_their_logins_have_used_of_their_plans() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let Message::Limits { agents } = connection.request(&Request::Limits { refresh: true }).await.unwrap() else {
+        panic!("no limits came")
+    };
+    let [claude, codex] = &agents[..] else { panic!("both agents answered") };
+    let windows = |limits: &AgentLimits| -> Vec<(String, f64, bool)> {
+        limits.windows.iter().map(|window| (window.label.clone(), window.used_percent, window.warning)).collect()
+    };
+    assert_eq!(
+        (claude.agent, claude.account.as_deref(), claude.plan.as_deref()),
+        (Agent::Claude, Some("demo@motile.app"), Some("Max"))
+    );
+    let expected = [("Session", 34.0, false), ("Weekly", 61.0, false), ("Weekly · Fable", 82.0, true)];
+    assert_eq!(windows(claude), expected.map(|(label, used, warning)| (label.to_string(), used, warning)));
+    assert_eq!((codex.agent, codex.plan.as_deref(), codex.reset_credits), (Agent::Codex, Some("Pro"), 1));
+    assert_eq!(windows(codex), [("Session".to_string(), 12.0, false), ("Weekly".to_string(), 48.0, false)]);
+    assert!(codex.windows.iter().all(|window| window.resets_at.is_some_and(|at| at > motile_protocol::now())));
 }
 
 #[tokio::test]

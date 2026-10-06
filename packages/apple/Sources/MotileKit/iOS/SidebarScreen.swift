@@ -185,61 +185,20 @@ struct SidebarScreen: View {
         .padding(.top, 8)
     }
 
-    /// The servers and how the client reaches them, and under them the account, the search and
-    /// the way to a new thread.
+    /// The servers and how the client reaches them, and under them the ways to the settings and
+    /// the usage, the search and the way to a new thread.
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(store.servers) { ServerLine(server: $0) }
             HStack(spacing: 8) {
-                Menu {
-                    Section(store.account.email) {
-                        Button {
-                            store.openSettings()
-                        } label: {
-                            Label("Settings", symbol: .settings, size: 15)
-                        }
-                        Button {
-                            store.addProject()
-                        } label: {
-                            Label("Add a Project", symbol: .folderPlus, size: 15)
-                        }
-                        Button {
-                            store.showsAddServer = true
-                        } label: {
-                            Label("Add a Server", symbol: .server, size: 15)
-                        }
-                    }
-                    Button(role: .destructive) {
-                        store.signOut()
-                    } label: {
-                        Label("Sign Out", symbol: .logOut, size: 15)
-                    }
-                } label: {
-                    Text(initial)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Color.themeText)
-                        .frame(width: 46, height: 46)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassButton(in: Circle())
-                .accessibilityLabel("Account")
+                circleButton(.settings, label: "Settings") { store.openSettings() }
+                circleButton(.chartColumn, label: "Usage") { store.openUsage() }
                 SearchField(text: $search, bare: true)
                     .padding(.horizontal, 6)
                     .frame(height: 46)
                     .glassButton(in: Capsule())
-                Button {
-                    store.newThread()
-                } label: {
-                    Image(.squarePen, size: 15)
-                        .foregroundStyle(Color.themeText)
-                        .frame(width: 46, height: 46)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glassButton(in: Circle())
-                .disabled(store.projects.isEmpty)
-                .accessibilityLabel("New thread")
+                circleButton(.squarePen, label: "New thread") { store.newThread() }
+                    .disabled(store.projects.isEmpty)
             }
             .padding(.top, 6)
         }
@@ -253,8 +212,16 @@ struct SidebarScreen: View {
         }
     }
 
-    private var initial: String {
-        String(store.account.email.prefix(1)).uppercased()
+    private func circleButton(_ symbol: Symbol, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(symbol, size: 15)
+                .foregroundStyle(Color.themeText)
+                .frame(width: 46, height: 46)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassButton(in: Circle())
+        .accessibilityLabel(label)
     }
 
     /// Opens a thread or a draft, and puts the sidebar away where it lies under the thread.

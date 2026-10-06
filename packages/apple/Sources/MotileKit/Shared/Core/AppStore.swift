@@ -108,6 +108,8 @@ final class AppStore {
     var showsAddServer = false
     /// The section of the settings open over the client, while they are.
     var settings: SettingsSection?
+    /// What the agents spent and what is left of their plans is open over the client.
+    var showsUsage = false
     /// The group of settings a search picked, until its page has scrolled to it.
     var settingsTarget: String?
     /// What is typed in the settings' search.
@@ -1328,13 +1330,24 @@ final class AppStore {
         startGit(next, in: project, confirm: confirm)
     }
 
-    /// What the agents spent on the connected servers in the last `buckets` spans of
-    /// `bucketSeconds`, by this device's clock.
-    func loadUsage(bucketSeconds: Int, buckets: Int, reply: @escaping (Result<UsageReport, CoreBridge.CoreError>) -> Void) {
-        let command: JSON = [
+    /// What the agents spent on the connected `servers`, or all of them, in the last `buckets`
+    /// spans of `bucketSeconds`, by this device's clock.
+    func loadUsage(
+        bucketSeconds: Int, buckets: Int, servers: Set<String>?, reply: @escaping (Result<UsageReport, CoreBridge.CoreError>) -> Void
+    ) {
+        var command: JSON = [
             "bucket_secs": bucketSeconds, "buckets": buckets, "utc_offset_secs": TimeZone.current.secondsFromGMT(),
         ]
+        if let servers { command["servers"] = Array(servers) }
         core.send("usage", command, read: UsageReport.init, reply: reply)
+    }
+
+    /// How much of their plans the agents' logins on the connected `servers`, or all of them,
+    /// have used. `refresh` has the servers read it anew.
+    func loadLimits(refresh: Bool, servers: Set<String>?, reply: @escaping (Result<LimitsReport, CoreBridge.CoreError>) -> Void) {
+        var command: JSON = ["refresh": refresh]
+        if let servers { command["servers"] = Array(servers) }
+        core.send("limits", command, read: LimitsReport.init, reply: reply)
     }
 
     /// Picks the model that writes titles, commit messages and pull requests on the server.
@@ -1382,6 +1395,7 @@ final class AppStore {
 
     func openSettings(_ section: SettingsSection = .general, target: String? = nil) {
         guard account.signedIn else { return }
+        showsUsage = false
         settings = section
         settingsTarget = target
     }
@@ -1390,6 +1404,18 @@ final class AppStore {
         settings = nil
         settingsTarget = nil
         settingsQuery = ""
+    }
+
+    func openUsage() {
+        guard account.signedIn else { return }
+        closeSettings()
+        showsUsage = true
+    }
+
+    /// Leaves the settings or the usage for the threads.
+    func closeRoute() {
+        closeSettings()
+        showsUsage = false
     }
 
     // MARK: Command panel

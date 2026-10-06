@@ -18,10 +18,10 @@ use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
-    Activity, Agent, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, DiffScope, FileKind,
-    GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, Media, MergeMethod, Message, NewThread,
-    Project, PullRequest, PullRequestAction, Queued, ServerInfo, Subagent, Thread, ThreadChange, ToolCall, ToolStatus,
-    TurnChanges, TurnSummary, Worktree,
+    Activity, Agent, AgentLimits, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, DiffScope,
+    FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, Media, MergeMethod, Message,
+    NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo, Subagent, Thread, ThreadChange, ToolCall,
+    ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -37,7 +37,7 @@ use crate::linear::Linear;
 use crate::media::MediaStore;
 use crate::pricing::{self, Prices};
 use crate::store::{Purpose, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
-use crate::{drafts, files, git, github, icons, pacing, pull_requests, title};
+use crate::{drafts, files, git, github, icons, limits, pacing, pull_requests, title};
 use motile_protocol::wire::{
     CheckStatus, EventKind, Mergeable, PullRequestDetail, PullRequestEdit, PullRequestSettings, PullRequestState,
 };
@@ -63,6 +63,8 @@ const CONTINUE_AFTER_THIS_RESTART: &str = "continue_after_this_restart";
 /// How long a stopped agent has to save its session before it is killed.
 const AGENTS_STOP_WITHIN: Duration = Duration::from_secs(2);
 const PRICES: &str = "prices";
+/// How long what the agents' logins had used is answered again before it is read anew.
+const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 const PRICES_STALE: Duration = Duration::from_secs(24 * 3600);
 const PRICES_RETRY: Duration = Duration::from_secs(3600);
 const MAX_INSTRUCTIONS_CHARS: usize = 4000;
@@ -114,6 +116,8 @@ pub struct Hub {
     closing: AtomicBool,
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
+    /// What the agents' logins had used of their plans, and when that was read.
+    limits: Mutex<Option<(Instant, Vec<AgentLimits>)>>,
     /// What was last seen of each watched thread's pull request, by thread.
     watched: std::sync::Mutex<HashMap<String, Seen>>,
     /// Held while a folder is kept as it is, so a thread's snapshots follow one another.
@@ -268,6 +272,7 @@ impl Hub {
             prices: std::sync::Mutex::new(
                 store.setting(PRICES).and_then(|prices| serde_json::from_str(&prices).ok()).unwrap_or_default(),
             ),
+            limits: Mutex::default(),
             watched: std::sync::Mutex::default(),
             worktrees: std::sync::Mutex::new(worktrees),
             snapshotting: Mutex::default(),
@@ -1300,6 +1305,18 @@ impl Hub {
             prices.price(bucket);
         }
         Ok(Message::Usage { buckets })
+    }
+
+    /// What the agents' logins have used of their plans, read again once it is a few minutes old.
+    pub async fn limits(&self, refresh: bool) -> Message {
+        let mut read = self.limits.lock().await;
+        if let Some((_, agents)) = read.as_ref().filter(|(at, _)| !refresh && at.elapsed() < LIMITS_STALE) {
+            return Message::Limits { agents: agents.clone() };
+        }
+        let agents = limits::read(&self.environment).await;
+        let failed = agents.iter().any(|agent| agent.error.is_some());
+        *read = (!failed).then(|| (Instant::now(), agents.clone()));
+        Message::Limits { agents }
     }
 
     /// Looks at the watched pull requests every so often and tells their threads' agents what

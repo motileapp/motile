@@ -29,6 +29,7 @@ use crate::cache::{Cache, Page};
 use crate::connection::{ServerAddr, bind};
 use crate::follow::{self, Followed};
 use crate::git;
+use crate::limits;
 use crate::linear;
 use crate::link::{Link, LinkEvent, State, Status};
 use crate::media::{self, MediaCache};
@@ -53,6 +54,8 @@ const SHOWN_FILES: &str = "files";
 const ACCOUNT_CHECK_TICKS: u64 = 30;
 /// The servers before this one don't keep what their agents spend.
 const USAGE_PROTOCOL: u32 = 10;
+/// The servers before this one can't say what the agents' logins have used of their plans.
+const LIMITS_PROTOCOL: u32 = 17;
 /// An endpoint that didn't run for this long isn't trusted to reach anything anymore.
 const STALE_AFTER: Duration = Duration::from_secs(10);
 /// An endpoint that reached no server for this long is replaced, in case the fault is its own.
@@ -1576,11 +1579,12 @@ impl Core {
                     reply(&sink, id, answer);
                 });
             }
-            Command::Usage { bucket_secs, buckets, utc_offset_secs } => {
+            Command::Usage { bucket_secs, buckets, utc_offset_secs, servers } => {
                 let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
                 let asked = self
                     .servers
                     .iter()
+                    .filter(|server| servers.as_ref().is_none_or(|ids| ids.contains(&server.device.public_key)))
                     .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= USAGE_PROTOCOL));
                 let mut links: Vec<(String, Arc<Link>)> = Vec::new();
                 let mut project_names = HashMap::new();
@@ -1620,6 +1624,44 @@ impl Core {
                             .map_err(|error| error.to_string()),
                     };
                     reply(&sink, id, answer);
+                });
+            }
+            Command::Limits { refresh, servers } => {
+                let chosen = self
+                    .servers
+                    .iter()
+                    .filter(|server| servers.as_ref().is_none_or(|ids| ids.contains(&server.device.public_key)));
+                let mut asked = tokio::task::JoinSet::new();
+                let mut notes = Vec::new();
+                for server in chosen {
+                    let (Some(link), Some(info)) = (server.link.clone(), server.info.as_ref()) else { continue };
+                    let name = server.device.name.clone();
+                    if info.protocol < LIMITS_PROTOCOL {
+                        notes.push(format!("Update {name} to see its limits."));
+                        continue;
+                    }
+                    asked.spawn(async move { (name, link.request(&Request::Limits { refresh }).await) });
+                }
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let mut reads = Vec::new();
+                    while let Some(Ok((server, answer))) = asked.join_next().await {
+                        let agents = match answer {
+                            Ok(Message::Limits { agents }) => agents,
+                            Ok(other) => {
+                                notes.push(format!("Couldn't read the limits on {server}. {}", unexpected(&other)));
+                                continue;
+                            }
+                            Err(error) => {
+                                notes.push(format!("Couldn't read the limits on {server}. {}", error_text(error)));
+                                continue;
+                            }
+                        };
+                        reads.extend(agents.into_iter().map(|limits| limits::Read { server: server.clone(), limits }));
+                    }
+                    reads.sort_by(|a, b| a.server.cmp(&b.server));
+                    let sections = limits::sections(reads, now());
+                    reply(&sink, id, Ok(json!({ "sections": sections, "notes": notes })));
                 });
             }
             Command::Markdown { text } => {

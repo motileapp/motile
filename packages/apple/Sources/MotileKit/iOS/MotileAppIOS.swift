@@ -129,6 +129,8 @@ struct MotileCommands: Commands {
                 .disabled(!store.account.signedIn)
             Button("Settings…") { store.openSettings() }
                 .keyboardShortcut(",")
+            Button("Usage") { store.openUsage() }
+                .disabled(!store.account.signedIn)
         }
     }
 }
@@ -140,6 +142,7 @@ private enum RootSheet: Identifiable {
     case addServer
     case panel(PanelPage)
     case settings
+    case usage
     case threadSettings
 
     var id: String {
@@ -149,6 +152,7 @@ private enum RootSheet: Identifiable {
         case .addServer: "add-server"
         case .panel: "panel"
         case .settings: "settings"
+        case .usage: "usage"
         case .threadSettings: "thread-settings"
         }
     }
@@ -192,6 +196,8 @@ struct RootView: View {
                         .presentationDragIndicator(.visible)
                 case .settings:
                     SettingsSheet()
+                case .usage:
+                    UsageSheet()
                 case .threadSettings:
                     ThreadSettingsSheet()
                 }
@@ -221,6 +227,7 @@ struct RootView: View {
             if store.showsAddServer { return .addServer }
             if let page = store.panel { return .panel(page) }
             if store.settings != nil { return .settings }
+            if store.showsUsage { return .usage }
             if store.showsThreadSettings { return .threadSettings }
             return nil
         } set: { new in
@@ -230,6 +237,7 @@ struct RootView: View {
             if store.showsAddServer { return store.showsAddServer = false }
             if store.panel != nil { return store.closePanel() }
             if store.settings != nil { return store.closeSettings() }
+            if store.showsUsage { return store.showsUsage = false }
             store.showsThreadSettings = false
             store.showsBranches = false
         }

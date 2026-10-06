@@ -16,3 +16,17 @@ extension EnvironmentValues {
     /// hover or keys of their own under what covers them.
     @Entry var putAway = false
 }
+
+#if os(macOS)
+extension NSView {
+    /// Hides the view under a put-away one. What has the keys in it gives them to the window
+    /// first, as hiding it would have AppKit look for the next view to take them while SwiftUI
+    /// updates, which SwiftUI can't answer.
+    func putAway(_ away: Bool) {
+        if away, let responder = window?.firstResponder as? NSView, responder.isDescendant(of: self) {
+            window?.makeFirstResponder(nil)
+        }
+        isHidden = away
+    }
+}
+#endif

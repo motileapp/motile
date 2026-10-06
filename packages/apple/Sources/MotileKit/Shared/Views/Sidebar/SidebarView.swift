@@ -691,48 +691,32 @@ struct ServerLine: View {
 }
 
 #if os(macOS)
-/// The servers and how the client reaches them, and the account.
+/// The servers and how the client reaches them, and the ways to the settings, the usage and a
+/// new version of the client.
 private struct SidebarFooter: View {
     @Environment(AppStore.self) private var store
 
-    /// The account's line takes clicks up to the sidebar's edges, and halfway to the line above.
-    private static let accountMargin = EdgeInsets(top: 4, leading: 10, bottom: 8, trailing: 10)
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            AppUpdateRow(updater: store.updater)
-            ForEach(store.servers) { ServerLine(server: $0) }
-            Menu {
-                Button("Settings…") { store.openSettings() }
-                Button("Add a Project…") { store.addProject() }
-                Button("Add a Server…") { store.showsAddServer = true }
-                Divider()
-                Button("Sign Out") { store.signOut() }
-            } label: {
-                HStack(spacing: 7) {
-                    Image(.circleUser, size: 14)
-                    Text(store.account.email)
-                        .font(.ui(size: 12))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 8)
-                .frame(height: 30)
-                .padding(Self.accountMargin)
-                .contentShape(Rectangle())
+            if store.updater.state != .checking {
+                AppUpdateRow(updater: store.updater)
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .hoverHighlight(radius: 8, inset: Self.accountMargin, faded: true)
-            .padding(.horizontal, -8 - Self.accountMargin.leading)
-            .padding(.top, -Self.accountMargin.top)
-            .padding(.bottom, -Self.accountMargin.bottom)
+            ForEach(store.servers) { ServerLine(server: $0) }
+            HStack(spacing: 2) {
+                ActionButton("Settings", icon: .settings, help: "Settings (⌘,)", variant: .ghost, size: .small) { store.openSettings() }
+                ActionButton("Usage", icon: .chartColumn, help: "What the agents spent and what is left of their plans", variant: .ghost, size: .small) {
+                    store.openUsage()
+                }
+                Spacer(minLength: 0)
+                ActionButton(icon: .refreshCw, help: "Check for Updates", size: .small, pending: store.updater.state == .checking) {
+                    store.updater.check(asked: true)
+                }
+            }
+            .padding(.horizontal, -ControlSize.small.padding)
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
-        .padding(.bottom, 8)
+        .padding(.bottom, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

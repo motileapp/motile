@@ -21,7 +21,6 @@ struct SettingsPage: View {
                     case .projects: projects
                     case .textGeneration: textGeneration
                     case .pullRequests: pullRequests
-                    case .usage: UsageView()
                     }
                 }
                 .frame(maxWidth: Self.contentWidth)

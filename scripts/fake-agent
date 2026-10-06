@@ -38,6 +38,9 @@ asked. There "run greet.py" asks before each of the two under the `untrusted` ap
 to implement it, "ask an agent" starts an agent, whose work comes as a thread of its own, and "hit
 the limit" is stopped by the usage limit.
 
+Asked for its login and the limits of its plan (`initialize` and `get_usage` for Claude Code,
+`account/read` and `account/rateLimits/read` for Codex) it answers with made-up ones.
+
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
 answers with FAKE_AGENT_TITLE, and asked the same way for a commit message, a pull request's text
 or a branch's name it writes one. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
@@ -84,8 +87,32 @@ def read_stdin():
             answers.put(message)
         if message["type"] == "control_request":
             record(message["request"])
+            answer_control(message)
     prompts.put(None)
     answers.put(None)
+
+
+def resets_in(hours):
+    return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(time.time() + hours * 3600))
+
+
+def claude_limit(group, percent, hours, model=None):
+    scope = {"model": {"display_name": model}} if model else None
+    severity = "warning" if percent >= 75 else "normal"
+    return {"group": group, "percent": percent, "resets_at": resets_in(hours), "severity": severity, "scope": scope}
+
+
+def answer_control(message):
+    """Answers what Claude Code is asked about its login and the limits of its plan."""
+    subtype = message["request"].get("subtype")
+    if subtype == "initialize":
+        answer = {"account": {"email": "demo@motile.app", "subscriptionType": "Claude Max"}}
+    elif subtype == "get_usage":
+        limits = [claude_limit("session", 34, 3.5), claude_limit("weekly", 61, 98), claude_limit("weekly", 82, 98, "Fable")]
+        answer = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {"limits": limits}}
+    else:
+        return
+    emit({"type": "control_response", "response": {"subtype": "success", "request_id": message["request_id"], "response": answer}})
 
 
 def emit(event, pause=0.0):
@@ -133,7 +160,9 @@ def read_prompt():
         return sys.stdin.read()
     threading.Thread(target=read_stdin, daemon=True).start()
     message = prompts.get()
-    return take(message) if message else ""
+    if message is None:
+        sys.exit(0)
+    return take(message)
 
 
 APP_SERVER = sys.argv[1:2] == ["app-server"]
@@ -642,6 +671,11 @@ class Codex:
                 self.answers.put(message)
             if method == "initialize":
                 emit({"id": message["id"], "result": {}})
+            if method == "account/read":
+                account = {"type": "chatgpt", "email": "demo@motile.app", "planType": "pro"}
+                emit({"id": message["id"], "result": {"account": account, "requiresOpenaiAuth": True}})
+            if method == "account/rateLimits/read":
+                emit({"id": message["id"], "result": self.limits()})
             if method in ("thread/start", "thread/resume"):
                 record({method: params})
                 self.thread = params
@@ -660,6 +694,13 @@ class Codex:
                 self.stopping.set()
         self.prompts.put(None)
         self.answers.put(None)
+
+    def limits(self):
+        def window(used, minutes, hours):
+            return {"usedPercent": used, "windowDurationMins": minutes, "resetsAt": int(time.time() + hours * 3600)}
+
+        codex = {"limitId": "codex", "primary": window(12, 300, 1.2), "secondary": window(48, 10080, 76)}
+        return {"rateLimits": codex, "rateLimitsByLimitId": {"codex": codex}, "rateLimitResetCredits": {"availableCount": 1}}
 
     def turn_id(self):
         return f"turn-{self.process}-{max(self.turns, 1)}"

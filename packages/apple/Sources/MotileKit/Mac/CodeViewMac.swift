@@ -18,7 +18,7 @@ struct CodeViewRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> CodeView { CodeView() }
 
     func updateNSView(_ view: CodeView, context: Context) {
-        view.isHidden = context.environment.putAway
+        view.putAway(context.environment.putAway)
         view.onToggle = onToggle
         view.onOpenFile = onOpenFile
         view.onViewed = onViewed

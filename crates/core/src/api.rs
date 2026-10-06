@@ -238,12 +238,22 @@ pub enum Command {
         #[serde(default)]
         comment: Option<String>,
     },
-    /// What the agents spent on every connected server in the last `buckets` spans of
-    /// `bucket_secs`, on a clock `utc_offset_secs` ahead of UTC: a `usage::View`.
+    /// What the agents spent on the connected `servers`, or all of them, in the last `buckets`
+    /// spans of `bucket_secs`, on a clock `utc_offset_secs` ahead of UTC: a `usage::View`.
     Usage {
         bucket_secs: u32,
         buckets: u32,
         utc_offset_secs: i32,
+        #[serde(default)]
+        servers: Option<Vec<String>>,
+    },
+    /// How much of their plans the agents' logins on the connected `servers`, or all of them,
+    /// have used, read anew with `refresh`: `sections`, each a `limits::Section`.
+    Limits {
+        #[serde(default)]
+        refresh: bool,
+        #[serde(default)]
+        servers: Option<Vec<String>>,
     },
     /// Markdown set for drawing, as `blocks`: what a description looks like before it is saved.
     Markdown {

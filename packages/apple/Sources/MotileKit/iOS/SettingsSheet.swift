@@ -8,7 +8,6 @@ struct SettingsSheet: View {
     private static let wide: CGFloat = 700
 
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
     @State private var path: [SettingsSection] = []
 
     var body: some View {
@@ -31,7 +30,7 @@ struct SettingsSheet: View {
                 .navigationTitle(wide ? store.settings?.title ?? "Settings" : "Settings")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) { close }
+                    ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
                 }
                 .navigationDestination(for: SettingsSection.self) { section in
                     SettingsPage(section: section)
@@ -49,14 +48,6 @@ struct SettingsSheet: View {
         }
         .presentationSizing(.page)
         .presentationDragIndicator(.visible)
-    }
-
-    @ViewBuilder private var close: some View {
-        if #available(iOS 26, *) {
-            Button(role: .close) { dismiss() }
-        } else {
-            Button("Done") { dismiss() }
-        }
     }
 
     /// A narrow sheet opens the section the store was pointed at, unless that is only the list's

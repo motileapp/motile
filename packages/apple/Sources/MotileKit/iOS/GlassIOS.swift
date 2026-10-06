@@ -14,4 +14,17 @@ extension View {
         }
     }
 }
+
+/// What closes a sheet: the system's round glass button with an x, or "Done" before iOS 26.
+struct SheetCloseButton: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        if #available(iOS 26, *) {
+            Button(role: .close) { dismiss() }
+        } else {
+            Button("Done") { dismiss() }
+        }
+    }
+}
 #endif

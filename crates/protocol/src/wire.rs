@@ -583,6 +583,12 @@ pub enum Request {
         bucket_secs: u32,
         utc_offset_secs: i32,
     },
+    /// How much of their plans the agents' logins have used. What was read in the last minutes
+    /// is answered again unless `refresh`. `Limits` answers.
+    Limits {
+        #[serde(default)]
+        refresh: bool,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -1353,6 +1359,33 @@ pub struct UsageBucket {
     pub writing: bool,
 }
 
+/// What an agent's CLI says its login has used of its plan. No windows and no error: the login
+/// has no plan limits, as with an API key.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct AgentLimits {
+    pub agent: Agent,
+    /// Who is signed in, which tells two servers with the same login apart from two logins.
+    pub account: Option<String>,
+    pub plan: Option<String>,
+    pub windows: Vec<LimitWindow>,
+    /// Resets the login may use to start its windows over.
+    #[serde(default)]
+    pub reset_credits: u32,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LimitWindow {
+    /// "Session", "Weekly", "Weekly · Fable".
+    pub label: String,
+    pub used_percent: f64,
+    pub resets_at: Option<f64>,
+    pub window_secs: Option<u64>,
+    /// The agent warns that the window is running out.
+    #[serde(default)]
+    pub warning: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct ServerInfo {
     pub version: String,
@@ -1581,6 +1614,9 @@ pub enum Message {
     },
     Usage {
         buckets: Vec<UsageBucket>,
+    },
+    Limits {
+        agents: Vec<AgentLimits>,
     },
     Error {
         message: String,
