@@ -36,7 +36,7 @@ struct LinearList {
         view.onChange = change
         view.menuFor = { row in
             var actions = [
-                MenuAction(title: "Assign To…", symbol: .circleUser) {
+                MenuAction(title: "Assign To", symbol: .circleUser) {
                     Choice.offer(Self.assignees(users, of: row, change: change), in: offered)
                 }
             ]

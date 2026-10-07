@@ -100,7 +100,7 @@ final class GestureTests: XCTestCase {
         app.buttons["Commands"].tap()
         let title = app.navigationBars["Commands"]
         XCTAssertTrue(shown(title))
-        tapRow("Add a project…")
+        tapRow("Add a project")
         XCTAssertTrue(shown(app.navigationBars["Add a Project"]))
         tapRow("New project")
         XCTAssertTrue(shown(app.navigationBars["New Project"]))
