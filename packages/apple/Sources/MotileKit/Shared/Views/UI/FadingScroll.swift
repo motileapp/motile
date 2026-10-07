@@ -54,3 +54,25 @@ private struct TracksHiddenEdges: ViewModifier {
         }
     }
 }
+
+extension View {
+    /// Fades a scroll view's content out under the window's top bar, as the transcript does.
+    func fadesUnderTopBar() -> some View {
+        mask {
+            GeometryReader { proxy in
+                ZStack(alignment: .topTrailing) {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: proxy.safeAreaInsets.top)
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 20)
+                        Color.black
+                    }
+                    Color.black
+                        .frame(width: TranscriptScroller.indicatorWidth)
+                        .padding(.top, proxy.safeAreaInsets.top)
+                }
+                .ignoresSafeArea()
+            }
+        }
+    }
+}
