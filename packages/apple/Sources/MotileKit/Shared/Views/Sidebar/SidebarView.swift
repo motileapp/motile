@@ -193,7 +193,7 @@ private struct MarkDoneButton: View {
 
     var body: some View {
         ActionButton(
-            "Mark Done", icon: .circleCheck, variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol, action: action
+            "Mark Done", icon: .check, variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol, action: action
         )
             .fixedSize()
     }
