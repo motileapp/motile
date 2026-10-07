@@ -43,6 +43,8 @@ enum PanelPage: Hashable {
     case commands
     /// The projects, to start a thread in one.
     case projects
+    /// The projects, to choose the one the open draft works in.
+    case draftProject
     /// The threads, to open one.
     case threads
     /// The servers, to add a project on one.

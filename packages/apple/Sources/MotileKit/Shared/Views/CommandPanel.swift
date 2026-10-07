@@ -144,6 +144,7 @@ struct CommandPanel: View {
         switch page {
         case .commands: "Commands"
         case .projects: "New thread"
+        case .draftProject: "Project"
         case .threads: "Threads"
         case .servers, .sources: "Add a project"
         case .newProject: "New project"
@@ -202,6 +203,7 @@ struct CommandPanel: View {
         switch page {
         case .commands: "Search threads, projects and commands…"
         case .projects: "Start a thread in…"
+        case .draftProject: "Search projects…"
         case .threads: "Go to thread…"
         case .servers: "Add a project on…"
         case .sources: "Add a project…"
@@ -331,7 +333,12 @@ struct CommandPanel: View {
         var sections: [PanelSection]
         var narrows = true
         switch page {
-        case .projects: sections = [PanelSection(title: "Projects", items: projectItems(shortcuts: Platform.name == "macos") + [addProject])]
+        case .projects:
+            let items = projectItems(shortcuts: Platform.name == "macos") { store.startNewThread(in: $0) }
+            sections = [PanelSection(title: "Projects", items: items + [addProject])]
+        case .draftProject:
+            let items = projectItems(shortcuts: Platform.name == "macos") { store.setNewThreadProject($0.id) }
+            sections = [PanelSection(title: "Projects", items: items + [addProject])]
         case .threads: sections = [PanelSection(title: "Threads", items: threadItems)]
         case .commands:
             sections = [
@@ -341,7 +348,7 @@ struct CommandPanel: View {
             // Searching from here looks through everything.
             if !query.isEmpty {
                 sections.append(PanelSection(title: "Threads", items: threadItems))
-                sections.append(PanelSection(title: "Start a thread in", items: projectItems(shortcuts: false)))
+                sections.append(PanelSection(title: "Start a thread in", items: projectItems(shortcuts: false) { store.startNewThread(in: $0) }))
             }
         case .servers: sections = [PanelSection(title: "Servers", items: serverItems)]
         case .sources(let id):
@@ -390,7 +397,7 @@ struct CommandPanel: View {
     }
 
     /// `shortcuts` numbers the first nine for ⌘ and a digit.
-    private func projectItems(shortcuts: Bool) -> [PanelItem] {
+    private func projectItems(shortcuts: Bool, pick: @escaping (Project) -> Void) -> [PanelItem] {
         projects.enumerated().map { position, project in
             let server = store.server(project.serverID)?.shortName ?? ""
             var item = PanelItem(
@@ -399,7 +406,7 @@ struct CommandPanel: View {
                 detail: "\(server) \(project.path)",
                 icon: .project(project),
                 shortcut: shortcuts && position < 9 ? position + 1 : nil
-            ) { store.startNewThread(in: project) }
+            ) { pick(project) }
             item.detailParts = server.isEmpty ? [(.folder, project.path)] : [(.server, server), (.folder, project.path)]
             return item
         }

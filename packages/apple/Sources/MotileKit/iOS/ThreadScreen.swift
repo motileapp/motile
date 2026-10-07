@@ -154,26 +154,8 @@ struct ThreadScreen: View {
         return VStack(spacing: 12) {
             Text("Let’s build in")
                 .foregroundStyle(Color.themeText)
-            Menu {
-                ForEach(store.recentProjects) { project in
-                    Button {
-                        store.setNewThreadProject(project.id)
-                    } label: {
-                        let name = store.servers.count > 1 ? "\(project.name) · \(store.server(project.serverID)?.shortName ?? "")" : project.name
-                        Label {
-                            Text(name)
-                        } icon: {
-                            Image(platform: project.menuIcon ?? .symbol(.folder, size: 15))
-                        }
-                    }
-                }
-                Divider()
-                Button("Add Project…") { store.addProject() }
-                if let project = selected {
-                    Button("Choose an Icon for “\(project.name)”…") { store.iconProject = project }
-                    Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
-                    Button("Remove “\(project.name)” from Projects", role: .destructive) { store.removeProject(project) }
-                }
+            Button {
+                store.openPanel(.draftProject)
             } label: {
                 HStack(spacing: 9) {
                     ProjectIcon(project: selected, size: 24)
