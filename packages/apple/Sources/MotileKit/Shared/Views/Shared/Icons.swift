@@ -230,13 +230,14 @@ struct ProjectIcon: View {
 struct ServerLabel: View {
     let server: Server
     var size: CGFloat = 11
+    var weight: Font.Weight = .regular
 
     var body: some View {
         HStack(spacing: 3) {
             // Lucide's server fills more of its square than the icons beside it.
             Image(.server, size: size - 1)
             Text(server.shortName)
-                .font(.ui(size: size))
+                .font(.ui(size: size, weight: weight))
                 .lineLimit(1)
         }
         .foregroundStyle(Color.themeTertiary)
