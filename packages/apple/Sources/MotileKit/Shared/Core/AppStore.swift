@@ -1607,6 +1607,7 @@ final class AppStore {
 
     private func open(_ thread: ThreadInfo) {
         openThreadID = thread.id
+        activity = Activity(thread: thread)
         transcript.begin(threadID: thread.id, keepingRows: true)
         defaults.set(thread.id, forKey: "selection")
         core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id]) { [weak self] result in
