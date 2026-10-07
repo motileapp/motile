@@ -2124,7 +2124,7 @@ fn restored_activity(thread: &Thread, cached: Option<Activity>) -> Activity {
 /// A turn ended after the user last looked. A thread never opened here doesn't nag.
 fn is_unread(thread: &Thread, seen_at: Option<f64>) -> bool {
     match (thread.turn_ended_at, seen_at) {
-        (Some(ended), Some(seen)) => ended > seen && !thread.running,
+        (Some(ended), Some(seen)) => ended > seen && !thread.running && !thread.monitoring,
         _ => false,
     }
 }

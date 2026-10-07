@@ -54,6 +54,7 @@
   --color-warning: var(--warning);
   --color-warning-background: var(--warning-background);
   --color-working: var(--working);
+  --color-monitoring: var(--monitoring);
   --color-merged: var(--merged);
   --color-added: var(--added);
   --color-removed: var(--removed);

@@ -671,7 +671,7 @@ struct ThreadStatus: View {
             }
         } else if thread.monitoring {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeText) {
+                label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeMonitoring) {
                     symbol(.eye)
                 }
             }
