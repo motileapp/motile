@@ -360,12 +360,21 @@ private struct ThreadServerLabel: View {
 struct DraftRows: View {
     @Environment(AppStore.self) private var store
     let search: String
+    /// Whether a draft's row is slid aside to show its discard button, by the draft's id.
+    var swiped: (String) -> Binding<Bool> = { _ in .constant(false) }
     var open: (Selection) -> Void = { _ in }
 
     var body: some View {
         let listed = store.listedDrafts.filter(matches)
         if !listed.isEmpty {
-            ForEach(listed) { DraftRow(listed: $0, open: open) }
+            ForEach(listed) { listed in
+                DraftRow(listed: listed, open: open)
+                    #if os(iOS)
+                    .rowSwipe(.trash2, "Discard Draft", tint: .themeDanger, size: 36, isOpen: swiped(listed.id)) {
+                        store.discard(listed.draft)
+                    }
+                    #endif
+            }
             ThemeDivider()
                 .padding(.horizontal, rowMargin.leading + 8)
                 .padding(.vertical, 4 + rowGap / 2)

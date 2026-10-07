@@ -103,6 +103,7 @@ enum Symbol: String {
     case squarePlus = "\u{e173}"
     case terminal = "\u{e181}"
     case ticket = "\u{e20f}"
+    case trash2 = "\u{e18e}"
     case trendingDown = "\u{e190}"
     case trendingUp = "\u{e191}"
     case triangleAlert = "\u{e193}"
