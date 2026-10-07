@@ -42,33 +42,32 @@ struct ComposerView: View {
 
     private var box: some View {
         @Bindable var store = store
+        let text = ComposerTextView(
+            text: $store.draft,
+            height: $textHeight,
+            placeholder: placeholder,
+            focusKey: "\(store.draftKey)#\(store.composerFocus)#\(pressed)",
+            onSubmit: { store.send() },
+            onFiles: { store.attach($0) },
+            onFileDrag: { store.composerDropTargeted = $0 }
+        )
         return VStack(alignment: .leading, spacing: 0) {
-            if let thread = store.selectedThread, thread.isDone {
-                doneBanner(thread)
-            }
-            if !store.attachments.isEmpty {
-                attachments
-            }
-            let text = ComposerTextView(
-                text: $store.draft,
-                height: $textHeight,
-                placeholder: placeholder,
-                focusKey: "\(store.draftKey)#\(store.composerFocus)#\(pressed)",
-                onSubmit: { store.send() },
-                onFiles: { store.attach($0) },
-                onFileDrag: { store.composerDropTargeted = $0 }
-            )
             #if os(macOS)
-            text
-                .frame(height: textHeight)
-                .padding(.horizontal, 14)
-                .padding(.top, 12)
+            VStack(alignment: .leading, spacing: 0) {
+                aboveText
+                text
+                    .frame(height: textHeight)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
+            }
+            .background { typingArea }
 
             ViewThatFits(in: .horizontal) {
                 controls(compact: false)
                 controls(compact: true)
             }
             #else
+            aboveText
             let collapsed = !focused && store.draft.isEmpty && store.attachments.isEmpty
             ComposerRows(collapsed: collapsed) {
                 text
@@ -84,11 +83,28 @@ struct ComposerView: View {
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture { pressed += 1 }
-                .textPointer()
         }
         .composerSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .composerBoxShadow()
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
+    }
+
+    @ViewBuilder private var aboveText: some View {
+        if let thread = store.selectedThread, thread.isDone {
+            doneBanner(thread)
+        }
+        if !store.attachments.isEmpty {
+            attachments
+        }
+    }
+
+    /// Empty room in the composer: a click there starts typing, under the cursor of text. It is
+    /// never under a control, whose menu would keep that cursor.
+    private var typingArea: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture { pressed += 1 }
+            .textPointer()
     }
 
     static let radius: CGFloat = 22
@@ -182,10 +198,12 @@ struct ComposerView: View {
             modelMenu(compact: compact)
             effortMenu
             accessMenu(compact: compact)
-            Spacer(minLength: 10)
+            typingArea
+                .frame(minWidth: 10, maxWidth: .infinity, maxHeight: .infinity)
             ActionButton(icon: .paperclip, help: "Attach files", round: true, margin: Self.margin(trailing: 4)) { chooseFiles() }
             ComposerSendButtons()
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// A menu item with a check mark when it is the one in use.
