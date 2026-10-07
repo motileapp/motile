@@ -132,16 +132,21 @@ struct ComposerTextView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let view = textView else { return }
             parent.text = view.string
-            measure()
+            measure(deferred: false)
         }
 
-        /// Makes the composer as tall as its text, within limits.
-        func measure() {
+        /// Makes the composer as tall as its text, within limits. Typing grows it in the same
+        /// frame as the new line; during a view update the height can only change after it.
+        func measure(deferred: Bool = true) {
             guard let view = textView, let container = view.textContainer, let layout = view.layoutManager else { return }
             layout.ensureLayout(for: container)
             let used = layout.usedRect(for: container).height + view.textContainerInset.height * 2
             let height = min(parent.heights.upperBound, max(parent.heights.lowerBound, ceil(used)))
             guard abs(parent.height - height) > 0.5 else { return }
+            guard deferred else {
+                parent.height = height
+                return
+            }
             DispatchQueue.main.async { self.parent.height = height }
         }
     }
