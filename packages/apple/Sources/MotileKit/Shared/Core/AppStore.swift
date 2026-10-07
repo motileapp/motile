@@ -169,6 +169,8 @@ final class AppStore {
     /// Counts up when a project has been made or cloned.
     private(set) var projectsAdded = 0
     @ObservationIgnored private var awaitedProjectID: String?
+    /// The folder just added as a project, which the next thread starts in once the server has told about it.
+    @ObservationIgnored private var awaitedFolder: (serverID: String, path: String)?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
     /// Counts up when an empty draft is opened for a new thread.
@@ -520,6 +522,7 @@ final class AppStore {
         ImageFiles.shared.warm(new.compactMap(\.iconPath))
         ensureDraftProject()
         openAwaitedProject()
+        pickAwaitedFolder()
         // A server that has just started hasn't read the repository yet.
         if let project = gitProject, project.serverID == serverID, project.git == nil { readGit() }
     }
@@ -1050,15 +1053,20 @@ final class AppStore {
     // MARK: Projects
 
     func addProject(serverID: String, path: String) {
-        request(serverID, ["type": "add_project", "path": path]) { [weak self] in
+        request(serverID, ["type": "add_project", "path": path], done: { [weak self] in
             guard let self else { return }
-            // The new project is the one the next thread starts in.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
-                guard let project = self.projects.first(where: { $0.serverID == serverID && $0.path == trimmed }) else { return }
-                self.setNewThreadProject(project.id)
-            }
-        }
+            let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+            awaitedFolder = (serverID, trimmed)
+            pickAwaitedFolder()
+        })
+    }
+
+    private func pickAwaitedFolder() {
+        guard let folder = awaitedFolder,
+              let project = projects.first(where: { $0.serverID == folder.serverID && $0.path == folder.path })
+        else { return }
+        awaitedFolder = nil
+        setNewThreadProject(project.id)
     }
 
     /// Opens the panel on the ways to add a project, after the servers when there is a choice.
@@ -1296,7 +1304,7 @@ final class AppStore {
 
     /// Whether the project's folder is no git repository and its server can make it one.
     func canInitializeGit(of project: Project) -> Bool {
-        project.branch == nil && project.git == nil && (server(project.serverID)?.protocolVersion ?? 0) >= 16
+        !project.noProject && project.branch == nil && project.git == nil && (server(project.serverID)?.protocolVersion ?? 0) >= 16
     }
 
     func initializeGit(in project: Project) {

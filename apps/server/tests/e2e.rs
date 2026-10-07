@@ -2943,6 +2943,10 @@ async fn a_thread_without_a_project_works_in_a_folder_of_its_own() {
     let Message::GitStatus { status, .. } = connection.request(&status).await.unwrap() else { panic!("a git status") };
     assert_eq!(status, None);
 
+    let init = Request::InitRepository { project_id: no_project.id.clone() };
+    assert!(matches!(connection.request(&init).await.unwrap(), Message::Error { .. }));
+    assert!(!Path::new(&no_project.path).join(".git").exists());
+
     let remove = Request::RemoveProject { project_id: no_project.id };
     assert!(matches!(connection.request(&remove).await.unwrap(), Message::Error { .. }));
 }

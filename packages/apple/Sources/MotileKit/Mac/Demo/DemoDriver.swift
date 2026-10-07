@@ -146,7 +146,7 @@ private final class Demo {
 
         guard let server = store.servers.first else { return finish() }
         store.addProject(serverID: server.id, path: environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory())
-        await expect("a folder on the server becomes a project") { store.project(store.selectedDraft?.projectID) != nil }
+        await expect("a folder on the server becomes a project") { store.project(store.selectedDraft?.projectID)?.noProject == false }
         await expect("the project's icon is fetched from the server") { store.project(store.selectedDraft?.projectID)?.iconPath != nil }
         store.draft = "Add a rate limiter to the API"
         await shoot("04-new-thread")
