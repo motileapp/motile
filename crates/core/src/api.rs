@@ -499,6 +499,8 @@ pub struct ServerView {
     pub rtt_ms: Option<u64>,
     /// From the server itself; from the cache until it has connected.
     pub info: Option<ServerInfo>,
+    /// The names of its models that have a shorter one, by model id, for the model picker.
+    pub short_model_names: HashMap<String, String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

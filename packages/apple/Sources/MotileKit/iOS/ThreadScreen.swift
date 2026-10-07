@@ -113,10 +113,8 @@ struct ThreadScreen: View {
             Text(store.selectedThread?.title ?? "New thread")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.themeText)
-            if let projectLine = store.composerProjectLine {
-                Text(projectLine)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.themeSecondary)
+            if let parts = store.composerProjectLine {
+                ProjectLine(project: store.composerProject, parts: parts, size: 12)
             }
         }
         .lineLimit(1)

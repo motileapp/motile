@@ -206,10 +206,10 @@ struct ComposerView: View {
     @ViewBuilder private func modelMenu(compact: Bool) -> some View {
         let models = store.composerModels
         let current = store.composerModel
-        let name = current?.name ?? "No agent"
+        let name = current?.shortName ?? "No agent"
         let margin = Self.margin(leading: 8)
         let logo = current.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
-        ActionMenu(compact && current != nil ? nil : name, picture: logo, help: name, margin: margin) {
+        ActionMenu(compact && current != nil ? nil : name, picture: logo, help: current?.name ?? name, margin: margin) {
             ForEach(Agent.allCases, id: \.self) { agent in
                 let ofAgent = models.filter { $0.agent == agent }
                 if !ofAgent.isEmpty {

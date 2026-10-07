@@ -84,13 +84,8 @@ struct ThreadPane: View {
 
     private var title: some View {
         VStack(alignment: .leading, spacing: 2) {
-            if let projectLine = store.composerProjectLine {
-                HStack(spacing: 6) {
-                    ProjectIcon(project: store.composerProject, size: 14)
-                    Text(projectLine)
-                        .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeSecondary)
-                }
+            if let parts = store.composerProjectLine {
+                ProjectLine(project: store.composerProject, parts: parts, size: 11)
             }
             Text(store.selectedThread?.title ?? "New thread")
                 .font(.ui(size: 13, weight: .semibold))

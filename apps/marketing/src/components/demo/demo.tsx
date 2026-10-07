@@ -130,7 +130,10 @@ export function Demo() {
               <div className="min-w-0">
                 <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <ProjectIcon project={thread.project} />
-                  {thread.project.name} · {thread.branch}
+                  <span>
+                    {thread.project.name} <span className="text-tertiary">·</span>{" "}
+                    {thread.branch}
+                  </span>
                 </p>
                 <p className="truncate text-[13px] font-semibold">
                   {thread.title}

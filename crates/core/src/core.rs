@@ -16,8 +16,8 @@ use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Message, Project, PullRequestSettings, Request,
-    ServerInfo, Thread, ToolStatus, Worktree,
+    Activity, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Message, ModelInfo, Project,
+    PullRequestSettings, Request, ServerInfo, Thread, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -736,6 +736,7 @@ impl Core {
             path: server.status.path,
             rtt_ms: server.status.rtt_ms,
             info: server.info.clone(),
+            short_model_names: server.info.iter().flat_map(|info| &info.models).filter_map(short_model_name).collect(),
         };
         self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });
     }
@@ -2011,6 +2012,11 @@ fn short_name(name: &str) -> String {
     short.trim_end().to_string()
 }
 
+fn short_model_name(model: &ModelInfo) -> Option<(String, String)> {
+    let short = model.name.strip_prefix("Claude ").or_else(|| model.name.strip_prefix("GPT-"))?;
+    Some((model.id.clone(), short.to_string()))
+}
+
 fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
     std::fs::create_dir_all(folder)?;
     let unfinished = folder.join(format!("{name}.part"));
@@ -2146,6 +2152,21 @@ mod tests {
         assert_eq!(short_name("build-box1"), "build-box1");
         assert_eq!(short_name("Yektas-MacBook-Pro"), "Yektas-Mac");
         assert_eq!(short_name("my server one"), "my server");
+    }
+
+    #[test]
+    fn a_model_name_drops_its_maker() {
+        let model = |name: &str| ModelInfo {
+            id: "id".into(),
+            name: name.into(),
+            agent: motile_protocol::wire::Agent::Claude,
+            efforts: Vec::new(),
+            default_effort: None,
+        };
+        let short = |name: &str| short_model_name(&model(name)).map(|(_, short)| short);
+        assert_eq!(short("Claude Opus 5.5").as_deref(), Some("Opus 5.5"));
+        assert_eq!(short("GPT-6.1-Sol").as_deref(), Some("6.1-Sol"));
+        assert_eq!(short("Codex Auto Review"), None);
     }
 
     #[test]

@@ -60,7 +60,7 @@ struct ComposerTouchControls: View {
     private var settingsButton: some View {
         let model = store.composerModel
         let logo = model.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
-        return ActionButton(model?.name ?? "No agent", picture: logo, variant: .ghost, opens: true) {
+        return ActionButton(model?.shortName ?? "No agent", picture: logo, variant: .ghost, opens: true) {
             store.showsThreadSettings = true
         }
         .accessibilityLabel("Thread settings")

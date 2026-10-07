@@ -55,13 +55,16 @@ enum Agent: String, CaseIterable {
 struct ModelInfo: Equatable, Identifiable {
     let id: String
     let name: String
+    /// The name without its maker, for the model picker.
+    let shortName: String
     let agent: Agent
     let efforts: [String]
     let defaultEffort: String?
 
-    init(json: JSON) {
+    init(json: JSON, shortNames: JSON?) {
         id = json.string("id")
         name = json.string("name")
+        shortName = shortNames?.optionalString(id) ?? name
         agent = Agent(rawValue: json.string("agent")) ?? .claude
         efforts = json.strings("efforts")
         defaultEffort = json.optionalString("default_effort")
@@ -123,7 +126,7 @@ struct Server: Equatable, Identifiable {
         self.version = version
         update = info?.object("update").map { ServerUpdate(json: $0, from: version) }
         protocolVersion = (info?["protocol"] as? NSNumber)?.intValue ?? 0
-        models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
+        models = (info?.objects("models") ?? []).map { ModelInfo(json: $0, shortNames: json.object("short_model_names")) }
         textModel = info?.optionalString("text_model")
         let settings = info?.object("pull_request_settings")
         doneOnMerge = settings?.bool("done_on_merge") ?? false
