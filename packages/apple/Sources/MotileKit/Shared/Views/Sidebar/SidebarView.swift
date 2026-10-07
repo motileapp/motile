@@ -350,6 +350,7 @@ private struct ThreadServerLabel: View {
     var body: some View {
         if store.servers.count > 1, let server = store.server(serverID) {
             ServerLabel(server: server)
+                .padding(.leading, 1)
         }
     }
 }

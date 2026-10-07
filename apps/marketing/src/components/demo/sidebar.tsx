@@ -191,7 +191,7 @@ function ThreadRow({
         </span>
         <span className="ml-auto flex items-center gap-1.5">
           {thread.pullRequest && <PullRequest number={thread.pullRequest} />}
-          <span className="flex items-center gap-[3px] text-[11px]">
+          <span className="ml-px flex items-center gap-[3px] text-[11px]">
             <ServerIcon className="size-[10px]" />
             {thread.server.name}
           </span>
