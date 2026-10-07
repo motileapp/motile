@@ -125,7 +125,7 @@ struct SidebarScreen: View {
         let (projects, selection) = (shown.projects, shown.selection)
         switch item {
         case .drafts:
-            DraftRows(search: search, open: open)
+            DraftRows(search: search, swiped: { swipe("draft:\($0)", swiped: shown.swiped) }, open: open)
         case .active(let thread):
             ThreadRow(
                 thread: thread, project: projects[thread.projectID]?.seen(from: thread),
