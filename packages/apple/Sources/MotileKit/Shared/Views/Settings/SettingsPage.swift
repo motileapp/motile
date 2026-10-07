@@ -363,7 +363,6 @@ private struct SetupSheet: View {
     }
 }
 
-/// A quiet title over a bordered card of rows, which a search scrolls to by its `id`.
 private struct SettingsGroup<Content: View>: View {
     private let id: String
     private let title: String
@@ -378,11 +377,11 @@ private struct SettingsGroup<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.ui(size: 13))
-                    .foregroundStyle(Color.themeSecondary)
+                    .foregroundStyle(Color.themeText)
                 if let caption {
                     Text(caption)
                         .font(.ui(size: 11.5))
