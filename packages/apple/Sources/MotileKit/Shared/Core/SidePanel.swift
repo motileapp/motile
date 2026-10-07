@@ -210,6 +210,7 @@ final class SidePanel {
         didSet {
             defaults.set(isOpen, forKey: "panel.open")
             if !isOpen { change { $0.maximized = nil } }
+            if isOpen, !oldValue { showPullRequestIfBlank() }
         }
     }
     private(set) var tabsByKey: [String: PanelTabs]
@@ -297,6 +298,13 @@ final class SidePanel {
             tabs.active = tab
         }
         isOpen = true
+    }
+
+    /// A thread with a pull request is most likely looked into for it, so a panel that opens on
+    /// its blank tab shows it.
+    func showPullRequestIfBlank() {
+        guard tabs.isBlank, store?.panelTarget?.pullRequest != nil, store?.pullRequestsUnavailable == nil else { return }
+        open(.pullRequest)
     }
 
     /// Adds a blank tab. A hidden panel that only has its blank tab just opens.
