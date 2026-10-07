@@ -1366,7 +1366,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
         name: "Personal".into(),
         folder: "~/.claude-personal".into(),
         shares_sessions: false,
-        variables: vec![Variable { name: "FAKE_AGENT_ARGUMENTS_FILE".into(), value: recorded }],
+        variables: vec![Variable { name: "FAKE_AGENT_ARGUMENTS_FILE".into(), value: recorded, sensitive: true }],
         email: None,
         plan: None,
     };
@@ -1376,6 +1376,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
     let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
     let ids: Vec<&str> = server.agent_accounts.iter().map(|account| account.id.as_str()).collect();
     assert_eq!(ids, ["claude", "codex", "claude-personal"]);
+    assert_eq!(server.agent_accounts[2].variables[0].value, "", "a sensitive value stays on the server");
 
     let new_thread = NewThread {
         project_id: project.id,

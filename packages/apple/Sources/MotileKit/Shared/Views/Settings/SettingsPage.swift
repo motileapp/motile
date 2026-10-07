@@ -395,13 +395,13 @@ private struct AgentAccountSheet: View {
     @Environment(\.dismiss) private var dismiss
     let server: Server
     @State private var account: AgentAccount
-    @State private var variables: String
+    @State private var variables: [EditedVariable]
     @State private var saving = false
 
     init(server: Server, account: AgentAccount) {
         self.server = server
         _account = State(initialValue: account)
-        _variables = State(initialValue: account.variables.map { "\($0.name)=\($0.value)" }.joined(separator: "\n"))
+        _variables = State(initialValue: account.variables.map { EditedVariable(variable: $0) })
     }
 
     private var installed: [Agent] { Agent.allCases.filter { server.agents[$0] != nil } }
@@ -436,8 +436,15 @@ private struct AgentAccountSheet: View {
                     }
                 }
             }
-            field("Variables", caption: "NAME=value on each line, given to its agent: an API key or a router") {
-                TextArea("ANTHROPIC_API_KEY=…", text: $variables, monospaced: true, lines: 2, maxLines: 8)
+            field("Variables", caption: "Given to its agent: an API key or a router. A sensitive value stays on \(server.name) and is never shown again.") {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach($variables) { $edited in
+                        variableRow($edited)
+                    }
+                    ActionButton("Add a Variable", icon: .plus, size: .small) {
+                        variables.append(EditedVariable(variable: AgentAccount.Variable(name: "", value: "", sensitive: true)))
+                    }
+                }
             }
             signIn
             HStack {
@@ -477,6 +484,26 @@ private struct AgentAccountSheet: View {
         }
     }
 
+    /// A variable's name and value, with whether the value is sensitive and the way to take it out.
+    private func variableRow(_ edited: Binding<EditedVariable>) -> some View {
+        let variable = edited.wrappedValue.variable
+        let kept = variable.sensitive && account.variables.contains { $0.name == variable.name && $0.sensitive }
+        return HStack(spacing: 6) {
+            InputField("NAME", text: edited.variable.name, size: .small, monospaced: true)
+                .frame(width: 150)
+            InputField(kept ? "••••••••" : "value", text: edited.variable.value, size: .small, monospaced: true, secure: variable.sensitive)
+            ActionButton(
+                icon: variable.sensitive ? .eyeOff : .eye, help: variable.sensitive ? "Sensitive: hidden and kept on \(server.name)" : "Shown: mark it sensitive",
+                size: .small, selected: variable.sensitive
+            ) {
+                edited.wrappedValue.variable.sensitive.toggle()
+            }
+            ActionButton(icon: .x, help: "Remove the variable", size: .small) {
+                variables.removeAll { $0.id == edited.wrappedValue.id }
+            }
+        }
+    }
+
     private func field<Content: View>(_ title: String, caption: String? = nil, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
@@ -493,12 +520,7 @@ private struct AgentAccountSheet: View {
 
     private func save() {
         var saved = account
-        saved.variables = variables.split(whereSeparator: \.isNewline).compactMap { line in
-            guard let equals = line.firstIndex(of: "=") else { return nil }
-            let name = line[..<equals].trimmingCharacters(in: .whitespaces)
-            guard !name.isEmpty else { return nil }
-            return AgentAccount.Variable(name: name, value: String(line[line.index(after: equals)...]))
-        }
+        saved.variables = variables.map(\.variable).filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
         if saved.agent != .codex { saved.sharesSessions = false }
         saving = true
         store.saveAgentAccount(saved, on: server) { kept in
@@ -506,6 +528,12 @@ private struct AgentAccountSheet: View {
             if kept { dismiss() }
         }
     }
+}
+
+/// A variable as the account's sheet edits it.
+private struct EditedVariable: Identifiable {
+    let id = UUID()
+    var variable: AgentAccount.Variable
 }
 
 /// The shell script that runs in each new worktree of a project before the agent starts there.

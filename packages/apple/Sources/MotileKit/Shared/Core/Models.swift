@@ -75,7 +75,10 @@ struct ModelInfo: Equatable, Identifiable {
 struct AgentAccount: Equatable, Identifiable {
     struct Variable: Equatable {
         var name: String
+        /// Empty for a sensitive one: its value stays on the server, which keeps it when it is
+        /// saved without one.
         var value: String
+        var sensitive: Bool
     }
 
     var id: String
@@ -101,7 +104,9 @@ struct AgentAccount: Equatable, Identifiable {
         name = json.string("name")
         folder = json.string("folder")
         sharesSessions = json.bool("shares_sessions")
-        variables = json.objects("variables").map { Variable(name: $0.string("name"), value: $0.string("value")) }
+        variables = json.objects("variables").map {
+            Variable(name: $0.string("name"), value: $0.string("value"), sensitive: $0.bool("sensitive"))
+        }
         email = json.optionalString("email")
         plan = json.optionalString("plan")
     }
@@ -121,7 +126,7 @@ struct AgentAccount: Equatable, Identifiable {
     var json: JSON {
         [
             "id": id, "agent": agent.rawValue, "name": name, "folder": folder, "shares_sessions": sharesSessions,
-            "variables": variables.map { ["name": $0.name, "value": $0.value] },
+            "variables": variables.map { ["name": $0.name, "value": $0.value, "sensitive": $0.sensitive] },
         ]
     }
 

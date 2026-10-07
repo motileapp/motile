@@ -66,6 +66,11 @@ pub fn checked(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::
     if !account.id.is_empty() && existing.is_none() {
         bail!("That account is no longer on your server.");
     }
+    for variable in account.variables.iter_mut().filter(|variable| variable.sensitive && variable.value.is_empty()) {
+        let kept = existing.and_then(|existing| existing.variables.iter().find(|kept| kept.name == variable.name));
+        let Some(kept) = kept else { bail!("{} needs a value.", variable.name) };
+        variable.value = kept.value.clone();
+    }
     if existing.is_some_and(|existing| existing.agent != account.agent) {
         bail!("An account stays with its agent. Add a new one for the other agent.");
     }
@@ -144,9 +149,17 @@ fn folder_variable(agent: Agent) -> &'static str {
     }
 }
 
+/// The account as a client sees it, without the values of its sensitive variables.
+pub fn redacted(mut account: AgentAccount) -> AgentAccount {
+    for variable in account.variables.iter_mut().filter(|variable| variable.sensitive) {
+        variable.value.clear();
+    }
+    account
+}
+
 /// The environment to run the account's agent in.
 pub fn environment(base: &Environment, account: &AgentAccount) -> Environment {
-    let variables = account.variables.iter().map(|Variable { name, value }| (name.clone(), value.clone()));
+    let variables = account.variables.iter().map(|Variable { name, value, .. }| (name.clone(), value.clone()));
     let folder = (!account.folder.is_empty()).then(|| {
         (folder_variable(account.agent).to_string(), expanded(&account.folder, base).to_string_lossy().into_owned())
     });
@@ -290,9 +303,30 @@ mod tests {
     }
 
     #[test]
+    fn a_sensitive_value_never_reaches_a_client_and_is_kept_when_saved_without_one() {
+        let key = |value: &str| Variable { name: "ANTHROPIC_API_KEY".into(), value: value.into(), sensitive: true };
+        let mut router = account("claude-router", Agent::Claude, "Router", "~/.claude-router");
+        router.variables = vec![key("sk-secret")];
+        let accounts = with_defaults(vec![router.clone()]);
+
+        let sent = redacted(router.clone());
+        assert_eq!(sent.variables, [key("")]);
+        assert_eq!(checked(sent, &accounts).unwrap().variables, [key("sk-secret")]);
+
+        let mut replaced = router.clone();
+        replaced.variables = vec![key("sk-new")];
+        assert_eq!(checked(replaced, &accounts).unwrap().variables, [key("sk-new")]);
+
+        let mut new = account("", Agent::Claude, "Work", "~/.claude-work");
+        new.variables = vec![key("")];
+        assert!(checked(new, &accounts).unwrap_err().to_string().contains("needs a value"));
+    }
+
+    #[test]
     fn the_environment_points_the_agent_at_the_accounts_folder() {
         let mut personal = account("claude-personal", Agent::Claude, "Personal", "~/.claude-personal");
-        personal.variables = vec![Variable { name: "ANTHROPIC_BASE_URL".into(), value: "https://router".into() }];
+        personal.variables =
+            vec![Variable { name: "ANTHROPIC_BASE_URL".into(), value: "https://router".into(), sensitive: false }];
         let environment = environment(&base("/home/me"), &personal);
         assert_eq!(environment.variables["CLAUDE_CONFIG_DIR"], "/home/me/.claude-personal");
         assert_eq!(environment.variables["ANTHROPIC_BASE_URL"], "https://router");

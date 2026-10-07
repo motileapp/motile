@@ -638,7 +638,11 @@ pub struct AgentAccount {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Variable {
     pub name: String,
+    /// Empty for a sensitive one when the server sends it: its value never leaves the server. A
+    /// sensitive one saved with an empty value keeps the value it had.
     pub value: String,
+    #[serde(default)]
+    pub sensitive: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

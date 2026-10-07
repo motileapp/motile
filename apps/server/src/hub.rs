@@ -308,7 +308,7 @@ impl Hub {
             home: self.environment.variables.get("HOME").cloned().unwrap_or_default(),
             agents: self.environment.agents(),
             models: self.environment.models().to_vec(),
-            agent_accounts: self.agent_accounts(),
+            agent_accounts: self.agent_accounts().into_iter().map(agent_accounts::redacted).collect(),
             text_model: self.text_model(),
             branch_instructions: self.branch_instructions(),
             pull_request_settings: self.pull_request_settings(),
