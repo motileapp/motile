@@ -342,6 +342,14 @@ final class ZoomingScrollView: NSScrollView {
         clickedBeside()
     }
 
+    override func scrollWheel(with event: NSEvent) {
+        guard event.modifierFlags.contains(.command), !event.hasPreciseScrollingDeltas, event.scrollingDeltaY != 0 else {
+            return super.scrollWheel(with: event)
+        }
+        let target = magnification * exp(event.scrollingDeltaY * log(1.12))
+        setMagnification(min(max(target, fit), maxMagnification), centeredAt: contentView.convert(event.locationInWindow, from: nil))
+    }
+
     override func smartMagnify(with event: NSEvent) {
         toggleZoom(at: contentView.convert(event.locationInWindow, from: nil))
     }
