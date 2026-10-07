@@ -178,7 +178,7 @@ struct UsageTitle: View {
     @Environment(AppStore.self) private var store
     let model: UsageModel
 
-    private static let size = ControlSize.large
+    private static let size = ControlSize.regular
 
     var body: some View {
         HStack(spacing: Self.size.padding) {
