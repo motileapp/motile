@@ -16,8 +16,7 @@ pub struct Read {
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Section {
     pub agent: Agent,
-    /// Who is signed in, or the account's name when that isn't known. Said when the agent has
-    /// more than one account among the servers.
+    /// Who is signed in, or the account's name when that isn't known.
     pub account: Option<String>,
     pub plan: Option<String>,
     /// The servers with this login.
@@ -53,32 +52,22 @@ pub enum Pace {
 
 /// The sections, Claude Code's first, an account several servers share once.
 pub fn sections(reads: Vec<Read>, now: f64) -> Vec<Section> {
-    let mut sections: Vec<(Option<String>, Section)> = Vec::new();
+    let mut sections: Vec<Section> = Vec::new();
     let mut reads = reads;
     reads.sort_by_key(|read| (read.limits.agent != Agent::Claude, read.limits.error.is_some()));
     for Read { server, limits } in reads {
         let known = limits.account.as_ref().and_then(|account| {
-            sections.iter_mut().find(|(seen, section)| section.agent == limits.agent && seen.as_ref() == Some(account))
+            sections
+                .iter_mut()
+                .find(|section| section.agent == limits.agent && section.account.as_ref() == Some(account))
         });
-        if let Some((_, section)) = known {
+        if let Some(section) = known {
             section.servers.push(server);
             continue;
         }
-        let label =
-            limits.account.clone().or_else(|| Some(limits.account_name.clone()).filter(|name| !name.is_empty()));
-        sections.push((label, section(server, limits, now)));
+        sections.push(section(server, limits, now));
     }
-    let logins =
-        |agent: Agent| sections.iter().filter(|(account, section)| section.agent == agent && account.is_some()).count();
-    let (claude, codex) = (logins(Agent::Claude), logins(Agent::Codex));
     sections
-        .into_iter()
-        .map(|(account, mut section)| {
-            let several = if section.agent == Agent::Claude { claude } else { codex } > 1;
-            section.account = account.filter(|_| several);
-            section
-        })
-        .collect()
 }
 
 fn section(server: String, limits: AgentLimits, now: f64) -> Section {
@@ -88,7 +77,8 @@ fn section(server: String, limits: AgentLimits, now: f64) -> Section {
         (None, false) => None,
     };
     let windows = limits.windows.iter().map(|window| row(window, limits.reset_credits, now)).collect();
-    Section { agent: limits.agent, account: None, plan: limits.plan, servers: vec![server], windows, note }
+    let account = limits.account.or_else(|| Some(limits.account_name).filter(|name| !name.is_empty()));
+    Section { agent: limits.agent, account, plan: limits.plan, servers: vec![server], windows, note }
 }
 
 fn row(window: &LimitWindow, reset_credits: u32, now: f64) -> Row {
@@ -178,7 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn a_login_on_several_servers_is_shown_once_and_named_when_its_agent_has_another() {
+    fn a_login_on_several_servers_is_shown_once_and_named() {
         let reads = vec![
             read("laptop", Agent::Codex, Some("a"), vec![window("Session", 1.0, 60.0, 18000)]),
             read("studio", Agent::Claude, Some("a"), vec![window("Session", 1.0, 60.0, 18000)]),
@@ -192,7 +182,7 @@ mod tests {
         assert_eq!(
             shown,
             [
-                (Agent::Claude, None, vec!["studio".to_string()]),
+                (Agent::Claude, Some("a".to_string()), vec!["studio".to_string()]),
                 (Agent::Codex, Some("a".to_string()), vec!["laptop".to_string(), "studio".to_string()]),
                 (Agent::Codex, Some("b".to_string()), vec!["box".to_string()]),
             ]
