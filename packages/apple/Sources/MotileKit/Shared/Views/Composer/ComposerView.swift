@@ -209,7 +209,10 @@ struct ComposerView: View {
         let name = current?.shortName ?? "No agent"
         let margin = Self.margin(leading: 8)
         let logo = current.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
-        ActionMenu(compact && current != nil ? nil : name, picture: logo, help: current?.name ?? name, margin: margin) {
+        ActionMenu(
+            compact && current != nil ? nil : name, picture: logo, help: current?.name ?? name, symbolSize: ControlSize.regular.symbol,
+            gap: 4, margin: margin
+        ) {
             ForEach(Agent.allCases, id: \.self) { agent in
                 let ofAgent = models.filter { $0.agent == agent }
                 if !ofAgent.isEmpty {
