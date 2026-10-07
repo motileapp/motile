@@ -85,7 +85,7 @@ struct ThreadPane: View {
     private var title: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let parts = store.composerProjectLine {
-                ProjectLine(project: store.composerProject, parts: parts, size: 11)
+                ProjectLine(project: store.composerProject, parts: parts, size: 11, iconSize: 12)
             }
             Text(store.selectedThread?.title ?? "New thread")
                 .font(.ui(size: 13, weight: .semibold))

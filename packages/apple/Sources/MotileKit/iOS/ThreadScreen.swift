@@ -114,7 +114,7 @@ struct ThreadScreen: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.themeText)
             if let parts = store.composerProjectLine {
-                ProjectLine(project: store.composerProject, parts: parts, size: 12)
+                ProjectLine(project: store.composerProject, parts: parts, size: 12, iconSize: 12)
             }
         }
         .lineLimit(1)

@@ -128,8 +128,8 @@ export function Demo() {
               )}
             >
               <div className="min-w-0">
-                <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <ProjectIcon project={thread.project} />
+                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <ProjectIcon project={thread.project} size={12} />
                   <span>
                     {thread.project.name} <span className="text-tertiary">·</span>{" "}
                     {thread.branch}

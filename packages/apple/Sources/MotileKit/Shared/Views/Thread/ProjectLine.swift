@@ -5,10 +5,11 @@ struct ProjectLine: View {
     let project: Project?
     let parts: [String]
     let size: CGFloat
+    let iconSize: CGFloat
 
     var body: some View {
-        HStack(spacing: 6) {
-            ProjectIcon(project: project, size: (size * 1.25).rounded())
+        HStack(spacing: 4) {
+            ProjectIcon(project: project, size: iconSize)
             parts.dropFirst().reduce(Text(parts.first ?? "")) { line, part in
                 Text("\(line)\(Text(" · ").foregroundStyle(Color.themeTertiary))\(part)")
             }
