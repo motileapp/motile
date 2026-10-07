@@ -1336,6 +1336,9 @@ impl Hub {
 
     pub async fn init_repository(&self, project_id: &str) -> anyhow::Result<()> {
         let path = self.project_path(project_id).await?;
+        if Path::new(&path) == self.no_project_folder {
+            bail!("A thread without a project has no repository.");
+        }
         if git::in_repository(&path) {
             bail!("This folder is already in a git repository.");
         }

@@ -304,6 +304,12 @@ Mac app.
   a time, and when you are done, stop what you started: `scripts/dev-app.sh --stop`, which on iOS
   also shuts its simulator down.
 - After you make code changes, run the checks below and fix what they raise.
+- A change must not break what CI runs on it: the checks, the e2e tests, the iOS UI tests and
+  the Mac app's demo (`DemoDriver.swift`, run by `scripts/ci-demo.sh` in the `Release` and
+  `macOS` workflows), which signs in, adds a project, and drives threads, git and drafts end to
+  end. When a change touches what one of them does or expects, read it, update it in the same
+  change, and run it (`apps/macos/scripts/ci-demo.sh`, then read `screenshots/checks.txt`)
+  before calling the change done. A push to `main` with a red workflow blocks the release.
 
 ## Development
 
