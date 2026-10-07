@@ -139,7 +139,7 @@ struct DescriptionEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Edit description")
+                Text("Edit Description")
                     .font(.ui(size: 15, weight: .semibold))
                 Spacer()
                 Segmented([("Write", false), ("Preview", true)], selection: $previewing)

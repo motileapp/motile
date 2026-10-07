@@ -428,7 +428,7 @@ private struct AgentAccountSheet: View {
 
     private var installed: [Agent] { Agent.allCases.filter { server.agents[$0] != nil } }
     private var isNew: Bool { account.id.isEmpty }
-    private var title: String { isNew ? "New account on \(server.name)" : "\(account.agent.name) account on \(server.name)" }
+    private var title: String { isNew ? "New Account on \(server.name)" : "\(account.agent.name) Account on \(server.name)" }
     private var canSave: Bool { !account.name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
@@ -598,7 +598,7 @@ private struct SetupSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Worktree setup for \(project.name)")
+            Text("Worktree Setup for \(project.name)")
                 .font(.ui(size: 13, weight: .semibold))
             Text("A shell script that runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder, as in: cp \"$MOTILE_PROJECT/.env\" . && pnpm install")
                 .font(.caption)

@@ -143,14 +143,14 @@ struct CommandPanel: View {
     private func title(_ page: PanelPage) -> String {
         switch page {
         case .commands: "Commands"
-        case .projects: "New thread"
+        case .projects: "New Thread"
         case .draftProject: "Project"
         case .threads: "Threads"
-        case .servers, .sources: "Add a project"
-        case .newProject: "New project"
+        case .servers, .sources: "Add a Project"
+        case .newProject: "New Project"
         case .github: "Your GitHub"
         case .githubSetup: "GitHub"
-        case .folder: "Local folder"
+        case .folder: "Local Folder"
         }
     }
 

@@ -403,7 +403,7 @@ struct CommitSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Commit changes")
+                Text("Commit Changes")
                     .font(.ui(size: 15, weight: .semibold))
                 Text("Review and confirm your commit. Leave the message empty to have one written.")
                     .font(.ui(size: 12))

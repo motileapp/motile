@@ -18,7 +18,7 @@ struct FolderPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Choose an icon for \(iconFor.name)")
+            Text("Choose an Icon for \(iconFor.name)")
                 .font(.ui(size: 15, weight: .semibold))
                 .padding([.horizontal, .top], 18)
             HStack(spacing: 8) {

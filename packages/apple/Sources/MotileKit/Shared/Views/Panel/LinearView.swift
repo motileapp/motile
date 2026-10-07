@@ -405,7 +405,7 @@ private struct LinearNewIssue: View {
         let state = states.first { $0.id == stateID } ?? states.first { $0.kind == "unstarted" } ?? states.first
         let users = linear.users[workspace] ?? []
         VStack(alignment: .leading, spacing: 12) {
-            Text("New issue")
+            Text("New Issue")
                 .font(.ui(size: 15, weight: .semibold))
             InputField("Title", text: $title)
             TextArea("Add a description", text: $description, lines: 4, fills: true)
