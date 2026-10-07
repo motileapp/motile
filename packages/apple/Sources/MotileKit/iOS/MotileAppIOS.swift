@@ -188,9 +188,13 @@ struct RootView: View {
                 case .commit(let project):
                     CommitSheet(project: project)
                 case .addServer:
-                    ConnectServerView(isFirst: false)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                        .presentationDragIndicator(.visible)
+                    NavigationStack {
+                        ConnectServerView(isFirst: false)
+                            .navigationTitle("Add a Server")
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar { ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() } }
+                    }
+                    .presentationDragIndicator(.visible)
                 case .panel(let page):
                     CommandPanel(start: page)
                 case .settings:
