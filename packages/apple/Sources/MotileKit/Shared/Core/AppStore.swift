@@ -1808,16 +1808,16 @@ final class AppStore {
             updateDraft {
                 $0.model = model.id
                 $0.agentAccount = account.id
-                $0.effort = nil
             }
             return
         }
-        rememberSettings(model: model.id, effort: nil, access: thread.access, account: account.id)
-        var change: JSON = ["model": model.id, "effort": ""]
+        rememberSettings(model: model.id, effort: thread.effort, access: thread.access, account: account.id)
+        let effort = thread.effort.flatMap { model.efforts.contains($0) ? $0 : nil }
+        var change: JSON = ["model": model.id, "effort": effort ?? ""]
         if account.id != thread.agentAccount { change["agent_account"] = account.id }
         update(thread, change) {
             $0.model = model.id
-            $0.effort = nil
+            $0.effort = effort
             $0.agent = model.agent
             $0.agentAccount = account.id
         }
