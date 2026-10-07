@@ -622,7 +622,7 @@ private struct SettingsGroup<Content: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.horizontal, settingsInset)
+            .padding(.horizontal, 4)
             if carded {
                 VStack(spacing: 0) {
                     content
