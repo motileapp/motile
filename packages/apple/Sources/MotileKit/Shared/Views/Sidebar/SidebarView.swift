@@ -763,6 +763,8 @@ struct ServerLine: View {
 /// The servers and how the client reaches them, and the ways to the settings and the usage (or
 /// back from them) and a new version of the client.
 struct SidebarFooter: View {
+    private static let reach = EdgeInsets(top: 4, leading: ToolbarButton.margin, bottom: 4, trailing: ToolbarButton.margin)
+
     @Environment(AppStore.self) private var store
 
     var body: some View {
@@ -771,15 +773,18 @@ struct SidebarFooter: View {
             if ![.idle, .checking, .upToDate].contains(store.updater.state) {
                 AppUpdateRow(updater: store.updater)
             }
-            HStack(spacing: 2 * ToolbarButton.margin) {
-                AccountMenu()
+            HStack(spacing: 0) {
+                AccountMenu(margin: Self.reach)
                 if store.showsUsage || store.settings != nil {
-                    ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, fills: true, alignment: .leading) {
+                    ActionButton(
+                        "Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, fills: true, alignment: .leading,
+                        margin: Self.reach
+                    ) {
                         store.closeRoute()
                     }
                 } else {
-                    ActionButton(icon: .settings, help: "Settings (⌘,)") { store.openSettings() }
-                    ActionButton(icon: .chartColumn, help: "Usage: what the agents spent and what is left of their plans") {
+                    ActionButton(icon: .settings, help: "Settings (⌘,)", margin: Self.reach) { store.openSettings() }
+                    ActionButton(icon: .chartColumn, help: "Usage: what the agents spent and what is left of their plans", margin: Self.reach) {
                         store.openUsage()
                     }
                 }
@@ -787,11 +792,12 @@ struct SidebarFooter: View {
                 if store.updater.state == .upToDate {
                     UpdateLabel.upToDate(store.updater.current)
                 }
-                ActionButton(icon: .refreshCw, help: "Check for Updates", pending: store.updater.state == .checking) {
+                ActionButton(icon: .refreshCw, help: "Check for Updates", pending: store.updater.state == .checking, margin: Self.reach) {
                     store.updater.check(asked: true)
                 }
             }
-            .padding(.horizontal, -(ControlSize.regular.height - ControlSize.regular.symbol) / 2)
+            .padding(.horizontal, -(ControlSize.regular.height - ControlSize.regular.symbol) / 2 - Self.reach.leading)
+            .padding(.vertical, -Self.reach.top)
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
