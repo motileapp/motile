@@ -12,8 +12,8 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .servers: "Servers"
         case .agents: "Agents"
         case .projects: "Projects"
-        case .textGeneration: "Text generation"
-        case .pullRequests: "Pull requests"
+        case .textGeneration: "Text Generation"
+        case .pullRequests: "Pull Requests"
         }
     }
 

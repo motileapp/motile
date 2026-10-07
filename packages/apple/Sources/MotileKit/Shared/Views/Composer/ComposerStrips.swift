@@ -305,7 +305,7 @@ struct BranchPicker: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.themeBackgroundSecondary)
         .environment(\.surface, .secondary)
-        .navigationTitle(base == nil ? "Branch" : "Start from")
+        .navigationTitle(base == nil ? "Branch" : "Start From")
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .onChange(of: query) { highlighted = 0 }
