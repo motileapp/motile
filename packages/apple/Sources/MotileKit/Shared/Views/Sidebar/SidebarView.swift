@@ -514,8 +514,8 @@ private struct DoneShelf: View {
                 }
                 .padding(.horizontal, 18)
                 .frame(height: Self.rowHeight)
-                .padding(.top, 4)
-                .padding(.bottom, expanded ? 4 - rowGap / 2 : 4)
+                .padding(.top, 3)
+                .padding(.bottom, expanded ? 3 - rowGap / 2 : 3)
             }
             .buttonStyle(.highlight(radius: 0, faded: true))
 
