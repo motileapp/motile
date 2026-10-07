@@ -149,7 +149,7 @@ private struct AgentTranscript: View {
                 AgentTime(agent: agent)
                     .padding(.trailing, 6)
             }
-            TranscriptRepresentable(store: store, ofAgent: true, bottomInset: 0)
+            TranscriptRepresentable(store: store, ofAgent: true, bottomInset: 64)
         }
     }
 }
