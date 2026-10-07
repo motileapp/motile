@@ -99,7 +99,7 @@ struct ThreadScreen: View {
             Image(.menu, size: 16)
                 .mask {
                     Rectangle()
-                        .overlay { Circle().frame(width: 11, height: 11).position(dot).blendMode(.destinationOut) }
+                        .overlay { Circle().frame(width: 12, height: 12).position(dot).blendMode(.destinationOut) }
                         .compositingGroup()
                 }
                 .overlay { Circle().fill(attention).frame(width: 8, height: 8).position(dot) }
