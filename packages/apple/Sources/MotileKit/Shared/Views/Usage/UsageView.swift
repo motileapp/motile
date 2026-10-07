@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// What the usage route shows: the tab, the period and the servers picked, which it keeps for
-/// next time, and what was last read for them. It shows what the core kept at once, reads it
-/// again, and again every few minutes while it is open.
+/// next time, and what was last read for them. It shows what the core kept at once, and reads it
+/// again.
 @Observable
 final class UsageModel {
     enum Tab: String, CaseIterable, Identifiable {
@@ -48,7 +48,6 @@ final class UsageModel {
     private static let tabKey = "usage.tab"
     private static let periodKey = "usage.period"
     private static let serversKey = "usage.servers"
-    private static let every = Duration.seconds(5 * 60)
 
     var tab = Tab(rawValue: UserDefaults.standard.string(forKey: tabKey) ?? "") ?? .limits {
         didSet {
@@ -83,12 +82,6 @@ final class UsageModel {
     func start(_ store: AppStore) {
         self.store = store
         load()
-    }
-
-    func keepCurrent() async {
-        while (try? await Task.sleep(for: Self.every)) != nil {
-            load()
-        }
     }
 
     /// Reads again what the tab shows, the limits from the agents themselves.
@@ -293,10 +286,7 @@ struct UsageContent: View {
             .padding(.bottom, 20)
             .frame(maxWidth: .infinity)
         }
-        .task {
-            model.start(store)
-            await model.keepCurrent()
-        }
+        .onAppear { model.start(store) }
     }
 
     @ViewBuilder private var limits: some View {

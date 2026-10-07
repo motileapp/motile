@@ -54,6 +54,8 @@ const PROGRESS_EVERY: Duration = Duration::from_millis(200);
 const SHOWN_FILES: &str = "files";
 /// How many ticks pass between account checks when nobody is waiting for a server.
 const ACCOUNT_CHECK_TICKS: u64 = 30;
+/// How often the client looks for limits that have grown old, about once a minute.
+const LIMITS_CHECK_TICKS: u64 = 30;
 /// The servers before this one don't keep what their agents spend.
 const USAGE_PROTOCOL: u32 = 10;
 /// The servers before this one can't say what the agents' logins have used of their plans.
@@ -406,6 +408,13 @@ impl Core {
                 }
                 if self.watch_servers || self.ticks.is_multiple_of(ACCOUNT_CHECK_TICKS) {
                     self.check_account();
+                }
+                if self.ticks.is_multiple_of(LIMITS_CHECK_TICKS) {
+                    let servers: Vec<String> =
+                        self.servers.iter().map(|server| server.device.public_key.clone()).collect();
+                    for server_id in servers {
+                        self.read_limits(&server_id);
+                    }
                 }
             }
         }
@@ -987,7 +996,7 @@ impl Core {
     }
 
     /// Reads what the server's agents' logins have used, unless that is recent, so that the usage
-    /// view opens with it.
+    /// view opens with it current.
     fn read_limits(&self, server_id: &str) {
         let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else { return };
         let (Some(link), Some(info)) = (server.link.clone(), server.info.as_ref()) else { return };
