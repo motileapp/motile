@@ -64,7 +64,7 @@ struct ControlLook {
         case .ghost: selected ? surface.further.color : lit ? ghostLit : .clear
         case .link: lit ? .themeLinkHover : .clear
         case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
-        case .overlay: .black.opacity(lit ? 0.62 : 0.5)
+        case .overlay: .black.opacity(0.5)
         }
     }
 
@@ -91,7 +91,7 @@ struct ControlLook {
             .fill(fill)
             .overlay {
                 if variant == .primary || variant == .danger || variant == .warning, lit { shape.fill(Color.white.opacity(0.12)) }
-                if variant == .overlay { shape.fill(Color.white.opacity(0.14)) }
+                if variant == .overlay { shape.fill(Color.white.opacity(lit ? 0.22 : 0.14)) }
             }
     }
 }
