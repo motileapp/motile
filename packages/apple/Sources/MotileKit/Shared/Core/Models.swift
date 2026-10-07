@@ -1070,27 +1070,15 @@ struct FolderListing {
     let typed: String
     let parent: String?
     let folders: [Folder]
+    /// The images that can be a project's icon, when one is being chosen.
+    let images: [(name: String, path: String)]
 
     init(json: JSON) {
         path = json.string("path")
         typed = json.string("typed")
         parent = json.optionalString("parent")
         folders = json.objects("folders").map { Folder(name: $0.string("name"), path: $0.string("path"), typed: $0.string("typed")) }
-    }
-}
-
-struct RemoteFolder {
-    let path: String
-    let parent: String?
-    let folders: [String]
-    /// The images in the folder, when an icon is being chosen.
-    let files: [String]
-
-    init(json: JSON) {
-        path = json.string("path")
-        parent = json.optionalString("parent")
-        folders = json.strings("folders")
-        files = json.strings("files")
+        images = json.objects("images").map { ($0.string("name"), $0.string("path")) }
     }
 }
 

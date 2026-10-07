@@ -333,9 +333,8 @@ struct SettingsPage: View {
                     ProjectIcon(project: project, size: 26)
                     SettingsLabel(project.name, description: project.path, truncates: true)
                 } trailing: {
-                    ActionMenu("Icon", variant: .secondary, size: .small) {
-                        Button("Choose an Image") { store.iconProject = project }
-                        Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
+                    ActionButton("Icon", help: "Choose the icon of \(project.name)", size: .small) {
+                        store.openPanel(.icon(project.id))
                     }
                     if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
                         ActionButton("Setup", help: "The script that runs in each new worktree of \(project.name)", size: .small) {

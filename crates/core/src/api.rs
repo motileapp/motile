@@ -92,11 +92,13 @@ pub enum Command {
         request: Request,
     },
     /// The folders on the server under the path typed in `query`, which starts at `/` or `~/`:
-    /// those of its directory whose names start with what follows the last slash. Answers with
-    /// a `browse::Listing`.
+    /// those of its directory whose names start with what follows the last slash, and with
+    /// `icons` the images there that can be a project's icon. Answers with a `browse::Listing`.
     Browse {
         server_id: String,
         query: String,
+        #[serde(default)]
+        icons: bool,
     },
     /// Sends the message with `attachments`, the paths `upload` answered with. Answers with
     /// `thread_id`. With `now`, a turn that runs takes the message at once instead of the next

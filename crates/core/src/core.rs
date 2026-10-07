@@ -214,12 +214,12 @@ struct Core {
     /// The files on their way to a server, by the key the client gave: the command that waits for
     /// each, and what stops it.
     uploads: HashMap<String, (u64, AbortHandle)>,
-    /// The folders last listed for `browse`: of which server and directory, and whether with
-    /// the hidden ones.
+    /// The folders and images last listed for `browse`: of which server and directory, and
+    /// whether with the hidden ones and the images.
     browsed: Browsed,
 }
 
-type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool), Vec<String>)>>>;
+type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool, bool), (Vec<String>, Vec<String>))>>>;
 
 /// Starts the core on the current tokio runtime.
 pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
@@ -1336,7 +1336,7 @@ impl Core {
                     reply(&sink, id, answer.map(|message| serde_json::to_value(message).unwrap_or_default()));
                 });
             }
-            Command::Browse { server_id, query } => {
+            Command::Browse { server_id, query, icons } => {
                 let link = match self.link(&server_id) {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
@@ -1350,17 +1350,17 @@ impl Core {
                 tokio::spawn(async move {
                     let home = home.unwrap_or_default();
                     // Typing a name narrows the folders that are here already.
-                    let key = (server_id, typed.directory.clone(), typed.leaf.starts_with('.'));
+                    let key = (server_id, typed.directory.clone(), typed.leaf.starts_with('.'), icons);
                     let known =
                         browsed.lock().unwrap().clone().filter(|(known, _)| *known == key && !typed.leaf.is_empty());
-                    let folders = match known {
-                        Some((_, folders)) => Ok(folders),
+                    let entries = match known {
+                        Some((_, entries)) => Ok(entries),
                         None => {
-                            let list = Request::ListDir { path: Some(key.1.clone()), icons: false, hidden: key.2 };
+                            let list = Request::ListDir { path: Some(key.1.clone()), icons, hidden: key.2 };
                             match link.request(&list).await {
-                                Ok(Message::Dir { folders, .. }) => {
-                                    *browsed.lock().unwrap() = Some((key, folders.clone()));
-                                    Ok(folders)
+                                Ok(Message::Dir { folders, files, .. }) => {
+                                    *browsed.lock().unwrap() = Some((key, (folders.clone(), files.clone())));
+                                    Ok((folders, files))
                                 }
                                 Ok(other) => Err(format!(
                                     "Your server gave an unexpected answer. Update it and try again. It said: {other:?}"
@@ -1369,8 +1369,9 @@ impl Core {
                             }
                         }
                     };
-                    let listing =
-                        folders.map(|folders| browse::listing(&typed.directory, &typed.leaf, &folders, &home));
+                    let listing = entries.map(|(folders, images)| {
+                        browse::listing(&typed.directory, &typed.leaf, &folders, &images, &home)
+                    });
                     reply(&sink, id, listing.map(|listing| serde_json::to_value(listing).unwrap_or_default()));
                 });
             }

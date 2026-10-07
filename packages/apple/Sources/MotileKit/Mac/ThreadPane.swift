@@ -51,12 +51,6 @@ struct ThreadPane: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: store.gitNotice)
-        .sheet(item: $store.iconProject) { project in
-            if let server = store.server(project.serverID) {
-                FolderPicker(server: server, iconFor: project)
-                    .sheetSurface()
-            }
-        }
     }
 
     /// The thread's project and name and its git button, drawn in the window's top bar over
@@ -153,8 +147,7 @@ struct ThreadPane: View {
                 Divider()
                 Button("Add Project") { store.addProject() }
                 if let project = selected, !project.noProject {
-                    Button("Choose an Icon for “\(project.name)”") { store.iconProject = project }
-                    Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
+                    Button("Choose an Icon for “\(project.name)”") { store.openPanel(.icon(project.id)) }
                     Button("Remove “\(project.name)” from Projects") { store.removeProject(project) }
                 }
             } label: {

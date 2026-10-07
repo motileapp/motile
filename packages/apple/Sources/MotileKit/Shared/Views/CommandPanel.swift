@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The panel that opens over the window to start a thread, open one, add a project or run a
-/// command, all from the keyboard. ⌘N and the new-thread button open it on the projects when
+/// The panel that opens over the window to start a thread, open one, add a project, choose a
+/// project's icon or run a command, all from the keyboard. ⌘N and the new-thread button open it on the projects when
 /// there is more than one, ⌘P on the threads and ⌘K on the commands.
 struct CommandPanel: View {
     @Environment(AppStore.self) private var store
@@ -38,6 +38,10 @@ struct CommandPanel: View {
             }
             .onChange(of: store.github) { followGitHub() }
             .onChange(of: store.projectsAdded) { store.closePanel() }
+            .onAppear {
+                guard browsed(page) != nil else { return }
+                arrive()
+            }
     }
 
     #if os(macOS)
@@ -147,6 +151,7 @@ struct CommandPanel: View {
         case .github: "Your GitHub"
         case .githubSetup: "GitHub"
         case .folder: "Local Folder"
+        case .icon: "Project Icon"
         }
     }
 
@@ -207,6 +212,7 @@ struct CommandPanel: View {
         case .github: "Search your repositories"
         case .githubSetup: "Set up GitHub"
         case .folder(let id): "Path on \(serverName(id))"
+        case .icon(let id): "Path to an image on \(serverName(store.project(id)?.serverID ?? ""))"
         }
     }
 
@@ -270,7 +276,7 @@ struct CommandPanel: View {
     /// The pages that fill as the server answers keep one height, so nothing moves when it does.
     private func height(_ page: PanelPage, _ sections: [PanelSection], rows: Int, notice: String?) -> CGFloat {
         switch page {
-        case .github, .folder: return 420
+        case .github, .folder, .icon: return 420
         default:
             let notice = notice == nil ? 0 : Self.noticeHeight
             return min(420, max(90, CGFloat(rows) * PanelRow.height + CGFloat(sections.count) * 32 + 10 + notice))
@@ -286,6 +292,7 @@ struct CommandPanel: View {
     private func emptyText(_ page: PanelPage) -> String {
         switch page {
         case .folder: browseError ?? "No folders found"
+        case .icon: browseError ?? "No folders or images found"
         case .github(let id): store.repoErrors[id] ?? "No repository found"
         default: "Nothing found"
         }
@@ -298,6 +305,8 @@ struct CommandPanel: View {
             if case .folder = page {
                 hint(["↩"], "Open")
                 hint(["⌘", "↩"], "Add")
+            } else if case .icon = page {
+                hint(["↩"], "Open")
             } else {
                 hint(["↩"], "Select")
             }
@@ -362,6 +371,9 @@ struct CommandPanel: View {
             sections = [PanelSection(title: title, items: setupItems(id))]
         case .folder(let id):
             sections = [PanelSection(title: "Folders on \(serverName(id))", items: folderItems(id))]
+            narrows = false
+        case .icon(let id):
+            sections = [PanelSection(title: "Icon for \(store.project(id)?.name ?? "the project")", items: iconItems(id))]
             narrows = false
         }
         var index = 0
@@ -542,6 +554,37 @@ struct CommandPanel: View {
         return items
     }
 
+    /// The icon in the project's folder, the folder above the typed one, and the folders and
+    /// images in it.
+    private func iconItems(_ id: String) -> [PanelItem] {
+        guard let project = store.project(id) else { return [] }
+        guard let listing else {
+            return browseError == nil ? (0..<8).map { .placeholder($0, lines: 1) } : []
+        }
+        var items: [PanelItem] = []
+        if query.hasSuffix("/") || query == "~" {
+            items.append(PanelItem(id: "folder-icon", title: "Use the icon in its folder", detail: project.path, icon: .symbol(.undo2)) {
+                store.setIcon(of: project, to: nil)
+            })
+            if let parent = listing.parent {
+                items.append(PanelItem(id: "parent", title: "..", detail: "", icon: .symbol(.cornerLeftUp), keepsOpen: true) {
+                    query = parent
+                })
+            }
+        }
+        items += listing.folders.map { folder in
+            PanelItem(id: folder.path, title: folder.name, detail: "", icon: .symbol(.folder), keepsOpen: true) {
+                query = folder.typed
+            }
+        }
+        items += listing.images.map { image in
+            PanelItem(id: image.path, title: image.name, detail: "", icon: .symbol(.image)) {
+                store.setIcon(of: project, to: image.path)
+            }
+        }
+        return items
+    }
+
     private var threadItems: [PanelItem] {
         (store.activeThreads + store.doneThreads).map { thread in
             let project = store.project(thread.projectID)
@@ -659,6 +702,7 @@ struct CommandPanel: View {
         query = ""
         switch page {
         case .folder: query = "~/"
+        case .icon(let id): query = (store.project(id)?.path ?? "~") + "/"
         case .github(let id): store.loadRepos(id)
         case .sources(let id) where store.github[id] == .ready: store.loadRepos(id)
         default: break
@@ -668,10 +712,10 @@ struct CommandPanel: View {
     /// Asks for the folders under the typed path. Placeholders take the place of the folders
     /// that are shown when the answer takes a while.
     private func browse() {
-        guard case .folder(let id) = page else { return }
+        guard let (id, icons) = browsed(page) else { return }
         browsesAsked += 1
         let asked = browsesAsked
-        store.browse(serverID: id, query: query) { result in
+        store.browse(serverID: id, query: query, icons: icons) { result in
             guard asked == browsesAsked else { return }
             browsesAnswered = asked
             switch result {
@@ -687,6 +731,15 @@ struct CommandPanel: View {
             guard asked == browsesAsked, browsesAnswered < asked else { return }
             listing = nil
             browseError = nil
+        }
+    }
+
+    /// The server whose folders the page lists, and whether with the images that can be an icon.
+    private func browsed(_ page: PanelPage) -> (String, Bool)? {
+        switch page {
+        case .folder(let id): (id, false)
+        case .icon(let id): store.project(id).map { ($0.serverID, true) }
+        default: nil
         }
     }
 
@@ -742,7 +795,7 @@ private extension PanelPage {
     /// It asks for something to be typed rather than searched.
     var isTyped: Bool {
         switch self {
-        case .newProject, .folder: true
+        case .newProject, .folder, .icon: true
         default: false
         }
     }
