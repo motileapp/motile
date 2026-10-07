@@ -268,8 +268,8 @@ Mac app.
   `packages/apple/Sources/MotileKit/Shared/Views/UI`. Its size is a `ControlSize`, never a
   number, and nothing is smaller than `.small`. A view does not style a control by hand; what is
   missing is added to the component. A button inside something is as far from its top and bottom
-  as from its side. A button that waits is `pending`: it shows the spinner, and a spinner is
-  never followed by "…".
+  as from its side. A button that waits is `pending`: it shows the spinner, or turns its arrow
+  if its symbol `turns`, and a spinner is never followed by "…".
 - Ignore `apps/gpui` for now. We are not working on it currently: do not read it, change it or
   keep it in step with the Mac app unless we ask for it.
 - Do not leave paragraphs of comments on top of the code. You should try to avoid them as much

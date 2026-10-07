@@ -114,6 +114,9 @@ enum Symbol: String {
     case users = "\u{e1a4}"
     case wrench = "\u{e1b1}"
     case x = "\u{e1b2}"
+
+    /// An arrow that goes round, which turns in place of the spinner while it waits.
+    var turns: Bool { self == .refreshCw || self == .rotateCw }
 }
 
 extension PlatformImage {
