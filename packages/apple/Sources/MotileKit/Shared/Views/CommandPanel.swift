@@ -392,7 +392,7 @@ struct CommandPanel: View {
     /// `shortcuts` numbers the first nine for ⌘ and a digit.
     private func projectItems(shortcuts: Bool) -> [PanelItem] {
         projects.enumerated().map { position, project in
-            let server = store.server(project.serverID)?.name ?? ""
+            let server = store.server(project.serverID)?.shortName ?? ""
             var item = PanelItem(
                 id: "project-\(project.id)",
                 title: project.name,

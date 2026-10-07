@@ -723,6 +723,7 @@ impl Core {
         let view = |server: &Server| ServerView {
             id: server.device.public_key.clone(),
             name: server.device.name.clone(),
+            short_name: short_name(&server.device.name),
             platform: server.device.platform.clone(),
             state: server.status.state,
             error: server.status.error.clone(),
@@ -1969,6 +1970,11 @@ fn shown_file(folder: &std::path::Path, server_id: &str, path: &str, blob: Optio
     folder.join(format!("{:016x}.{extension}", hasher.finish()))
 }
 
+fn short_name(name: &str) -> String {
+    let short: String = name.chars().take(10).collect();
+    short.trim_end().to_string()
+}
+
 fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8]) -> anyhow::Result<()> {
     std::fs::create_dir_all(folder)?;
     let unfinished = folder.join(format!("{name}.part"));
@@ -2097,6 +2103,14 @@ fn percent_decode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_long_server_name_is_cut_to_ten_characters() {
+        assert_eq!(short_name("studio"), "studio");
+        assert_eq!(short_name("build-box1"), "build-box1");
+        assert_eq!(short_name("Yektas-MacBook-Pro"), "Yektas-Mac");
+        assert_eq!(short_name("my server one"), "my server");
+    }
 
     #[test]
     fn a_fragment_on_the_sign_in_callback_is_no_part_of_its_answer() {

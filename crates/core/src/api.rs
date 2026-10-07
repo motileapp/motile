@@ -490,6 +490,8 @@ pub struct AccountView {
 pub struct ServerView {
     pub id: String,
     pub name: String,
+    /// The name cut short, for the places a long name crowds.
+    pub short_name: String,
     pub platform: String,
     pub state: State,
     pub error: Option<String>,
