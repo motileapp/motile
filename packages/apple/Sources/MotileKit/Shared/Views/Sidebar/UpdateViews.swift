@@ -19,12 +19,12 @@ struct AppUpdateRow: View {
             }
             .frame(minHeight: ControlSize.small.height)
         case .available(let version):
-            line("Motile \(version) is available", symbol: .circleArrowDown) {
+            line("v\(version) is available", symbol: .circleArrowDown, tint: .themeSuccess) {
                 ActionButton("Update", size: .small) { updater.install() }
             }
         case .downloading(let version, let fraction):
             VStack(alignment: .leading, spacing: 5) {
-                line("Downloading Motile \(version)", symbol: .circleArrowDown) {
+                line("Downloading v\(version)", symbol: .circleArrowDown, tint: .themeText) {
                     Text("\(Int(fraction * 100))%")
                         .font(.ui(size: 11))
                         .foregroundStyle(Color.themeTertiary)
@@ -36,9 +36,9 @@ struct AppUpdateRow: View {
                     .tint(Color.themeSecondary)
             }
         case .installing(let version):
-            line("Installing Motile \(version)", symbol: .circleArrowDown) { spinner }
+            line("Installing v\(version)", symbol: .circleArrowDown, tint: .themeText) { spinner }
         case .ready(let version):
-            line("Motile \(version) is installed", symbol: .circleCheck) {
+            line("v\(version) is installed", symbol: .circleCheck, tint: .themeSuccess) {
                 ActionButton("Restart", size: .small) { updater.relaunch() }
             }
         case .failed(let message):
@@ -63,9 +63,11 @@ struct AppUpdateRow: View {
         line(text, symbol: symbol) { EmptyView() }
     }
 
-    private func line<Trailing: View>(_ text: String, symbol: Symbol, @ViewBuilder trailing: () -> Trailing) -> some View {
+    private func line<Trailing: View>(
+        _ text: String, symbol: Symbol, tint: Color = .themeSecondary, @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
         HStack(spacing: 7) {
-            UpdateLabel(text: text, symbol: symbol)
+            UpdateLabel(text: text, symbol: symbol, tint: tint)
             Spacer(minLength: 4)
             trailing()
         }
