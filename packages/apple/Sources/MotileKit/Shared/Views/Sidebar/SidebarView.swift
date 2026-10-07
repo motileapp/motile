@@ -652,7 +652,7 @@ struct ThreadStatus: View {
                 symbol(.circleQuestionMark)
             }
         } else if thread.running {
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 if thread.agents > 0 {
                     label("\(thread.agents)", Color.themeAgents) {
                         symbol(.users)
