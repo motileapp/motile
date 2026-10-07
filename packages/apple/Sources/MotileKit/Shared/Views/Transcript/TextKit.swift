@@ -67,8 +67,9 @@ final class DecoratingLayoutManager: NSLayoutManager {
         super.fillBackgroundRectArray(rectArray, count: rectCount, forCharacterRange: charRange, color: color)
     }
 
+    // The selection is drawn by `super`, so it goes over the boxes.
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: CGPoint) {
-        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+        defer { super.drawBackground(forGlyphRange: glyphsToShow, at: origin) }
         guard let storage = textStorage, glyphsToShow.length > 0 else { return }
         let characters = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
         drawCodeBoxes(in: characters, storage: storage, at: origin)
