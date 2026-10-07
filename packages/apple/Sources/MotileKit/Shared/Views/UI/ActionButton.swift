@@ -418,7 +418,6 @@ struct ActionMenu<Content: View>: View {
         .background { look.background.padding(reach.around) }
         .opacity(enabled || pending ? 1 : 0.45)
         .onHover { hovering = $0 }
-        .background { ArrowPointer() }
         .padding(reach.outset)
         .allowsHitTesting(!pending)
         .help(help ?? "")
