@@ -35,7 +35,7 @@ struct AttachMenu: View {
             }
         } label: {
             Image(.plus, size: 15)
-                .foregroundStyle(Color.themeSecondary)
+                .foregroundStyle(Color.themeText)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }

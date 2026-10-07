@@ -50,6 +50,7 @@ struct ComposerTouchControls: View {
                 .padding(.leading, 4)
             if !collapsed, let server = store.composerServer {
                 ServerLabel(server: server, weight: .medium)
+                    .padding(.leading, 1)
                     .appearing()
             }
             Spacer(minLength: 8)
