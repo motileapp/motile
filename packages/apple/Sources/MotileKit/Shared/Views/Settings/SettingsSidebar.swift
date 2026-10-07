@@ -66,15 +66,15 @@ struct SettingsSidebar: View {
         HStack(spacing: 8) {
             Image(section.symbol, size: 14)
             Text(section.title)
-                .font(.ui(size: 13, weight: .medium))
+                .font(.ui(size: 13))
             Spacer(minLength: 0)
             if pushes {
                 Image(.chevronRight, size: 13)
                     .foregroundStyle(Color.themeTertiary)
             }
         }
-        .padding(.horizontal, 8)
-        .frame(height: pressable(30))
+        .padding(.horizontal, 9)
+        .frame(height: pressable(32))
         .padding(Self.rowMargin)
         .contentShape(Rectangle())
         .button(.highlight(radius: 8, selected: selected == section, inset: Self.rowMargin, faded: true)) { choose(section) }
