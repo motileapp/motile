@@ -113,7 +113,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
     @ViewBuilder let otherwise: () -> Otherwise
 
     var body: some View {
-        if let update = store.serverUpdates[server.id], update.waiting, !update.restarting {
+        if let update = store.serverUpdate(of: server), update.waiting, !update.restarting {
             HStack(spacing: 6) {
                 Text("Waiting")
                     .font(.ui(size: 11))
@@ -126,7 +126,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                 }
             }
             .help("\(server.name) restarts once its agents have finished")
-        } else if let update = store.serverUpdates[server.id] {
+        } else if let update = store.serverUpdate(of: server) {
             HStack(spacing: 6) {
                 Text(progress(of: update))
                     .font(.ui(size: 11))

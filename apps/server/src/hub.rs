@@ -20,8 +20,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
     Activity, Agent, AgentLimits, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, DiffScope,
     FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, Media, MergeMethod, Message,
-    NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo, Subagent, Thread, ThreadChange, ToolCall,
-    ToolStatus, TurnChanges, TurnSummary, Worktree,
+    NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo, ServerUpdate, Subagent, Thread,
+    ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -114,6 +114,7 @@ pub struct Hub {
     to_continue: std::sync::Mutex<Vec<String>>,
     /// The server is about to stop: its agents are let go, and nothing new starts.
     closing: AtomicBool,
+    update: std::sync::Mutex<Option<ServerUpdate>>,
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
     /// What the agents' logins had used of their plans, and when that was read.
@@ -269,6 +270,7 @@ impl Hub {
             continue_settings: std::sync::Mutex::new(continue_settings),
             to_continue: std::sync::Mutex::new(to_continue),
             closing: AtomicBool::new(false),
+            update: std::sync::Mutex::default(),
             prices: std::sync::Mutex::new(
                 store.setting(PRICES).and_then(|prices| serde_json::from_str(&prices).ok()).unwrap_or_default(),
             ),
@@ -305,7 +307,14 @@ impl Hub {
             branch_instructions: self.branch_instructions(),
             pull_request_settings: self.pull_request_settings(),
             continue_settings: self.continue_settings(),
+            update: *self.update.lock().unwrap_or_else(|poisoned| poisoned.into_inner()),
         }
+    }
+
+    /// Tells every client where the server's update is.
+    pub fn set_update(&self, update: Option<ServerUpdate>) {
+        *self.update.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = update;
+        let _ = self.list_updates.send(Message::Server { server: self.server_info() });
     }
 
     fn continue_settings(&self) -> ContinueSettings {

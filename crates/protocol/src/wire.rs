@@ -1414,6 +1414,21 @@ pub struct ServerInfo {
     pub pull_request_settings: PullRequestSettings,
     #[serde(default)]
     pub continue_settings: ContinueSettings,
+    /// The update the server is putting in place, until it restarts.
+    #[serde(default)]
+    pub update: Option<ServerUpdate>,
+}
+
+/// Where an update of the server is.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum ServerUpdate {
+    /// Downloading the latest release. `percent` is missing when its size isn't known.
+    Installing { percent: Option<u8> },
+    /// Installed: the server restarts once its agents have finished.
+    Waiting,
+    /// Starting the new version.
+    Restarting,
 }
 
 /// How the writer is told to name the branches it makes.
@@ -1470,6 +1485,10 @@ pub enum Message {
         server: ServerInfo,
         threads: Vec<Thread>,
         projects: Vec<Project>,
+    },
+    /// The server's details, whenever its update moves on.
+    Server {
+        server: ServerInfo,
     },
     /// The projects, whenever one is added or removed or a branch changes.
     Projects {

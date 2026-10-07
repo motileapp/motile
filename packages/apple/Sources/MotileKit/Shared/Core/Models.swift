@@ -104,6 +104,8 @@ struct Server: Equatable, Identifiable {
     let agents: [Agent: String]
     /// Whether the server has ever told us about itself.
     let known: Bool
+    /// The update the server is putting in place, as it last said.
+    let update: ServerUpdate?
 
     init(json: JSON) {
         id = json.string("id")
@@ -117,7 +119,9 @@ struct Server: Equatable, Identifiable {
         let info = json.object("info")
         known = info != nil
         home = info?.string("home") ?? ""
-        version = info?.string("version") ?? ""
+        let version = info?.string("version") ?? ""
+        self.version = version
+        update = info?.object("update").map { ServerUpdate(json: $0, from: version) }
         protocolVersion = (info?["protocol"] as? NSNumber)?.intValue ?? 0
         models = (info?.objects("models") ?? []).map { ModelInfo(json: $0) }
         textModel = info?.optionalString("text_model")

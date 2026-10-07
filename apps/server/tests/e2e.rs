@@ -12,8 +12,8 @@ use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentLimits, Approval, CONTINUE_PROMPT, Change, CheckStatus, DiffScope, EventKind,
     FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LineComment, MergeMethod,
     Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit,
-    PullRequestState, Queued, ReactionKind, Request, ReviewVerdict, Side, Thread, ThreadChange, Tokens, ToolCall,
-    ToolStatus, TurnChanges, TurnSummary, UsageBucket,
+    PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerUpdate, Side, Thread,
+    ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary, UsageBucket,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -879,6 +879,26 @@ async fn a_turn_a_restart_cuts_off_says_so_and_continues_once_the_server_is_back
     assert_eq!(transcript.errors(), vec!["Your server restarted before the agent finished."]);
     assert_eq!(transcript.tools()[0], ("Edit", ToolStatus::Failed), "the call the restart cut off failed");
     assert_eq!(messages_and_turn_ends(&transcript), vec!["Run greet.py", "(turn end)", CONTINUE_PROMPT, "(turn end)"]);
+}
+
+#[tokio::test]
+async fn every_client_hears_where_the_update_of_the_server_is() {
+    // Nothing listens there, so the download fails at once and the test's program stays as it is.
+    unsafe { std::env::set_var("MOTILE_DOWNLOAD_URL", "http://127.0.0.1:9") };
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    assert_eq!(server.update, None);
+
+    let other = harness.connect().await;
+    let reply = other.request(&Request::UpdateServer { when: Some(RestartWhen::Idle) }).await.unwrap();
+    assert!(matches!(reply, Message::Error { .. }), "the download failed: {reply:?}");
+
+    let Message::Server { server } = next(&mut list).await else { panic!("the list says the update began") };
+    assert_eq!(server.update, Some(ServerUpdate::Installing { percent: None }));
+    let Message::Server { server } = next(&mut list).await else { panic!("the list says the update ended") };
+    assert_eq!(server.update, None);
 }
 
 #[tokio::test]
