@@ -248,47 +248,68 @@ struct SettingsPage: View {
         }
     }
 
-    /// The accounts each server's agents work with.
+    /// The accounts each server's agents work with, a card for each server.
     @ViewBuilder private var agentAccounts: some View {
-        let servers = store.servers.filter { $0.state == .connected && $0.switchesAccounts }
-        if servers.isEmpty {
-            SettingsNote("The accounts your agents work with are set on each of your servers, once one is connected and up to date.")
+        if store.servers.isEmpty {
+            SettingsNote("The accounts your agents work with are set on each of your servers, once you have one.")
         } else {
-            SettingsGroup("agent-accounts", "Accounts", caption: "Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.") {
-                ForEach(servers) { server in
-                    let installed = Agent.allCases.filter { server.agents[$0] != nil }
-                    if servers.count > 1 {
-                        SettingsRow {
-                            serverName(server)
-                        } trailing: {
-                            EmptyView()
-                        }
-                        ThemeDivider()
+            SettingsGroup("agent-accounts", "Accounts", caption: "Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.", carded: false) {
+                ForEach(store.servers) { server in
+                    VStack(spacing: 0) {
+                        agentAccounts(of: server)
                     }
-                    ForEach(server.agentAccounts.filter { installed.contains($0.agent) }) { account in
-                        SettingsRow {
-                            AgentIcon(agent: account.agent, size: 16)
-                            SettingsLabel("\(account.agent.name) · \(account.name)", description: description(of: account))
-                        } trailing: {
-                            ActionButton("Edit…", size: .small) { editedAccount = EditedAccount(server: server, account: account) }
-                            if !account.isDefault {
-                                ActionButton("Remove", size: .small) { store.removeAgentAccount(account, on: server) }
-                            }
-                        }
-                        ThemeDivider()
-                    }
-                    SettingsRow {
-                        ActionButton("Add an Account…", size: .small) {
-                            editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
-                        }
-                        .disabled(installed.isEmpty)
-                    } trailing: {
-                        EmptyView()
-                    }
-                    if server.id != servers.last?.id { ThemeDivider() }
+                    .card()
                 }
             }
         }
+    }
+
+    @ViewBuilder private func agentAccounts(of server: Server) -> some View {
+        SettingsRow {
+            HStack(spacing: 8) {
+                Image(.server, size: 13)
+                Text(server.name)
+                    .font(.ui(size: 13, weight: .medium))
+            }
+            .foregroundStyle(Color.themeText)
+        } trailing: {
+            if let reason = accountsUnavailable(on: server) {
+                Text(reason)
+                    .font(.ui(size: 12))
+                    .foregroundStyle(Color.themeSecondary)
+            }
+        }
+        if accountsUnavailable(on: server) == nil {
+            let installed = Agent.allCases.filter { server.agents[$0] != nil }
+            ThemeDivider()
+            ForEach(server.agentAccounts.filter { installed.contains($0.agent) }) { account in
+                SettingsRow {
+                    AgentIcon(agent: account.agent, size: 16)
+                    SettingsLabel("\(account.agent.name) · \(account.name)", description: description(of: account))
+                } trailing: {
+                    ActionButton("Edit…", size: .small) { editedAccount = EditedAccount(server: server, account: account) }
+                    if !account.isDefault {
+                        ActionButton("Remove", size: .small) { store.removeAgentAccount(account, on: server) }
+                    }
+                }
+                ThemeDivider()
+            }
+            SettingsRow {
+                ActionButton("Add an Account…", size: .small) {
+                    editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
+                }
+                .disabled(installed.isEmpty)
+            } trailing: {
+                EmptyView()
+            }
+        }
+    }
+
+    /// Why a server's accounts can't be shown or changed, if they can't.
+    private func accountsUnavailable(on server: Server) -> String? {
+        guard server.state == .connected else { return description(of: server) }
+        guard server.switchesAccounts else { return "Update it to give its agents more accounts" }
+        return nil
     }
 
     private func description(of account: AgentAccount) -> String {
@@ -467,20 +488,8 @@ private struct AgentAccountSheet: View {
 
     /// How the account is signed in: on its server, with its folder.
     private var signIn: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Sign it in on \(server.name). Who is signed in shows here once the agent says.")
-                .font(.ui(size: 11.5))
-                .foregroundStyle(Color.themeSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 6) {
-                Text(account.signInCommand)
-                    .font(.system(size: 12, design: .monospaced))
-                    .textSelection(.enabled)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                Spacer(minLength: 0)
-                CopyButton(help: "Copy the command", size: .small) { Platform.copy(account.signInCommand) }
-            }
+        field("Sign In", caption: "Run it in a terminal on \(server.name). Who is signed in shows in the list once the agent says.") {
+            CommandBox(command: account.signInCommand)
         }
     }
 
@@ -578,12 +587,15 @@ private struct SettingsGroup<Content: View>: View {
     private let id: String
     private let title: String
     private let caption: String?
+    /// Whether its rows share one card, or bring cards of their own.
+    private let carded: Bool
     private let content: Content
 
-    init(_ id: String, _ title: String, caption: String? = nil, @ViewBuilder content: () -> Content) {
+    init(_ id: String, _ title: String, caption: String? = nil, carded: Bool = true, @ViewBuilder content: () -> Content) {
         self.id = id
         self.title = title
         self.caption = caption
+        self.carded = carded
         self.content = content()
     }
 
@@ -601,10 +613,16 @@ private struct SettingsGroup<Content: View>: View {
                 }
             }
             .padding(.horizontal, settingsInset)
-            VStack(spacing: 0) {
-                content
+            if carded {
+                VStack(spacing: 0) {
+                    content
+                }
+                .card()
+            } else {
+                VStack(spacing: 12) {
+                    content
+                }
             }
-            .card()
         }
         .id(id)
     }
