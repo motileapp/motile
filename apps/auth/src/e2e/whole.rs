@@ -89,7 +89,9 @@ impl Client {
             Event::ThreadDeleted { thread_id } => {
                 self.threads.remove(&thread_id);
             }
-            Event::Projects { projects, .. } => self.projects = projects,
+            Event::Projects { projects, .. } => {
+                self.projects = projects.into_iter().filter(|view| !view.project.no_project).collect();
+            }
             Event::Rows { reset, start, remove, rows, .. } => {
                 if reset {
                     self.rows.clear();
