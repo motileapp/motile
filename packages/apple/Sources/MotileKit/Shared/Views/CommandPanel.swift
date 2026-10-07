@@ -817,7 +817,7 @@ private struct PanelItem: Identifiable {
 
 private struct PanelRow: View {
     @Environment(\.surface) private var surface
-    static let height: CGFloat = scaled(46)
+    static let height: CGFloat = scaled(52)
     static let sideMargin: CGFloat = 8
     static let radius: CGFloat = 9
     static let margin = EdgeInsets(top: 0, leading: sideMargin, bottom: 0, trailing: sideMargin)
@@ -873,7 +873,8 @@ private struct PanelRow: View {
                         .foregroundStyle(Color.themeTertiary)
                 }
                 HStack(spacing: 3) {
-                    Image(part.symbol, size: 12)
+                    // Lucide's server fills more of its square than the icons beside it.
+                    Image(part.symbol, size: part.symbol == .server ? 11 : 12)
                     Text(part.text)
                         .lineLimit(1)
                         .truncationMode(.middle)
