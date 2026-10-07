@@ -15,7 +15,9 @@ struct AttachMenu: View {
     @State private var photos: [PhotosPickerItem] = []
 
     var body: some View {
-        Menu {
+        ActionMenu(
+            icon: .plus, help: "Attach files", symbolSize: 17, round: true, tint: .themeText, margin: ComposerView.margin(leading: 8)
+        ) {
             Button {
                 picksPhotos = true
             } label: {
@@ -33,13 +35,7 @@ struct AttachMenu: View {
             } label: {
                 Label("Choose Files", symbol: .folder, size: 15)
             }
-        } label: {
-            Image(.plus, size: 15)
-                .foregroundStyle(Color.themeText)
-                .frame(width: 36, height: 36)
-                .contentShape(Rectangle())
         }
-        .accessibilityLabel("Attach files")
         .photosPicker(isPresented: $picksPhotos, selection: $photos, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
         .onChange(of: photos) { attachPhotos() }
         .fileImporter(isPresented: $picksFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
