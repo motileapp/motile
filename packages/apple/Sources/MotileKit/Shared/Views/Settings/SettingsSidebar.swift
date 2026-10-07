@@ -31,7 +31,7 @@ struct SettingsSidebar: View {
                         results
                     }
                 }
-                .padding(.bottom, 12)
+                .padding(.bottom, Platform.scale > 1 ? 36 : 12)
             }
             .scrollDismissesKeyboard(.immediately)
             #if os(iOS)

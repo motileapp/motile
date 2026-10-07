@@ -254,7 +254,7 @@ struct CommandPanel: View {
                             .frame(height: Self.noticeHeight, alignment: .leading)
                     }
                 }
-                .padding(.bottom, 8)
+                .padding(.bottom, Platform.scale > 1 ? 32 : 8)
             }
             #if os(macOS)
             .frame(height: height(page, sections, rows: rows, notice: refused))
