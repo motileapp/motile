@@ -1,23 +1,33 @@
 import SwiftUI
 
 /// The one command that turns a machine into a server. Shown when the account has no server yet,
-/// and as a sheet when adding another.
+/// and as a sheet when adding another, centred in it on iOS.
 struct ConnectServerView: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.surface) private var surface
     let isFirst: Bool
 
+    private var centred: Bool {
+        #if os(iOS)
+        true
+        #else
+        isFirst
+        #endif
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            if isFirst { Spacer() }
+            if centred { Spacer() }
             Image(.server, size: 24)
                 .foregroundStyle(Color.themePrimary)
                 .frame(width: 56, height: 56)
                 .background(Color.themePrimary.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .padding(.top, isFirst ? 0 : 32)
+                .padding(.top, centred ? 0 : 32)
             Text(isFirst ? "Connect your first server" : "Run this on your server")
                 .font(.ui(size: 24, weight: .semibold))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
                 .padding(.top, 18)
             Text("Run the command below on the server that will run your agents")
                 .font(.ui(size: 14))
@@ -25,6 +35,7 @@ struct ConnectServerView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
                 .frame(maxWidth: 480)
+                .padding(.horizontal, 24)
                 .padding(.top, 8)
 
             commandBox
@@ -45,14 +56,16 @@ struct ConnectServerView: View {
                 .font(.ui(size: 12))
                 .foregroundStyle(Color.themeTertiary)
                 .padding(.bottom, 20)
+            } else if centred {
+                Spacer()
             } else {
                 ActionButton("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .padding(.vertical, 26)
             }
         }
-        .padding(.horizontal, 30)
-        .frame(maxWidth: .infinity, maxHeight: isFirst ? .infinity : nil)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: centred ? .infinity : nil)
         .onAppear { store.prepareToAddServer() }
         .onDisappear { store.stopAddingServer() }
     }
