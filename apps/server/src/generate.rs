@@ -6,7 +6,7 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use motile_protocol::wire::{Agent, Tokens};
+use motile_protocol::wire::{Agent, AgentAccount, Tokens};
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -17,18 +17,22 @@ use crate::agents::{ModelUsage, claude};
 const TIMEOUT: Duration = Duration::from_secs(180);
 const CLAUDE_MODEL: &str = "claude-haiku-4-5";
 
-/// Who writes: an agent's CLI, with the model the user picked or its lightest one.
-#[derive(Clone, Debug)]
+/// Who writes: an agent's CLI under one of its accounts, with the model the user picked or its
+/// lightest one.
+#[derive(Clone)]
 pub struct Writer {
     pub agent: Agent,
+    pub agent_account: String,
     pub model: Option<String>,
+    /// The account's environment.
+    environment: Environment,
     /// What its answers took, until whoever asked takes it to keep.
     spent: Arc<Mutex<Vec<ModelUsage>>>,
 }
 
 impl Writer {
-    pub fn new(agent: Agent, model: Option<String>) -> Self {
-        Self { agent, model, spent: Arc::default() }
+    pub fn new(account: &AgentAccount, model: Option<String>, environment: Environment) -> Self {
+        Self { agent: account.agent, agent_account: account.id.clone(), model, environment, spent: Arc::default() }
     }
 
     pub fn take_spent(&self) -> Vec<ModelUsage> {
@@ -41,14 +45,15 @@ impl Writer {
 }
 
 /// The writer's answer to the prompt, in the shape of the JSON schema.
-pub async fn ask(environment: &Environment, writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
+pub async fn ask(writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
     match writer.agent {
-        Agent::Claude => ask_claude(environment, writer, prompt, schema).await,
-        Agent::Codex => ask_codex(environment, writer, prompt, schema).await,
+        Agent::Claude => ask_claude(writer, prompt, schema).await,
+        Agent::Codex => ask_codex(writer, prompt, schema).await,
     }
 }
 
-async fn ask_claude(environment: &Environment, writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
+async fn ask_claude(writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
+    let environment = &writer.environment;
     let executable = environment.executable(Agent::Claude).ok_or_else(|| anyhow::anyhow!("claude isn't installed"))?;
     let folder = TempFolder::new("motile-ask-")?;
     let mut command = Command::new(executable);
@@ -79,7 +84,8 @@ async fn ask_claude(environment: &Environment, writer: &Writer, prompt: &str, sc
         .ok_or_else(|| anyhow::anyhow!("claude answered without JSON"))
 }
 
-async fn ask_codex(environment: &Environment, writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
+async fn ask_codex(writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Result<Value> {
+    let environment = &writer.environment;
     let executable = environment.executable(Agent::Codex).ok_or_else(|| anyhow::anyhow!("codex isn't installed"))?;
     let folder = TempFolder::new("motile-ask-")?;
     let schema_file = folder.path().join("schema.json");

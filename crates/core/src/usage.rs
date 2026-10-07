@@ -1,5 +1,5 @@
 //! What the agents spent on the account's servers, added up for the usage view: the totals, a
-//! series for each agent's chart, and what each model, project and server took.
+//! series for each agent's chart, and what each model, project, server and account took.
 
 use std::collections::HashMap;
 
@@ -9,6 +9,8 @@ use serde::Serialize;
 const REMOVED_PROJECT: &str = "Removed project";
 const UNKNOWN_MODEL: &str = "Unknown model";
 const UNKNOWN_SERVER: &str = "Unknown server";
+/// What a server from before accounts spent with: its agents' only ones.
+const DEFAULT_ACCOUNT: &str = "Default";
 
 /// The stretch of time the view shows: `buckets` spans of `bucket_secs`, the last of which holds
 /// `now`, starting where a clock `utc_offset_secs` ahead of UTC starts its hours and days.
@@ -62,6 +64,9 @@ pub struct View {
     /// Projects name their server when more than one server spent.
     pub projects: Vec<Line>,
     pub servers: Vec<Line>,
+    /// The agents' accounts, only when an agent has more than one on a server. They name their
+    /// server when more than one server spent.
+    pub accounts: Vec<Line>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -81,7 +86,7 @@ pub struct Kind {
     pub cost_usd: f64,
 }
 
-/// A model, a project or a server and its part of the whole.
+/// A model, a project, a server or an account and its part of the whole.
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Line {
     pub name: String,
@@ -117,6 +122,7 @@ pub fn view(
     let mut models: Vec<Line> = Vec::new();
     let mut projects: Vec<Line> = Vec::new();
     let mut servers: Vec<Line> = Vec::new();
+    let mut accounts: Vec<Line> = Vec::new();
     let add = |lines: &mut Vec<Line>, name: &str, agent: Option<Agent>, server: Option<&str>, spent: &UsageBucket| {
         let (tokens, cost_usd) = (total(&spent.tokens), spent.cost_usd);
         let same = |line: &Line| line.name == name && line.agent == agent && line.server.as_deref() == server;
@@ -174,12 +180,21 @@ pub fn view(
         let project = project_names.get(&(server_id.clone(), bucket.project_id.clone()));
         add(&mut projects, project.map(String::as_str).unwrap_or(REMOVED_PROJECT), None, Some(server), bucket);
         add(&mut servers, server, None, None, bucket);
+        let account = if bucket.account_name.is_empty() { DEFAULT_ACCOUNT } else { &bucket.account_name };
+        add(&mut accounts, account, Some(bucket.agent), Some(server), bucket);
     }
 
+    let several = |line: &Line| {
+        accounts.iter().filter(|other| other.agent == line.agent && other.server == line.server).count() > 1
+    };
+    if !accounts.iter().any(several) {
+        accounts.clear();
+    }
     if servers.len() < 2 {
         projects.iter_mut().for_each(|line| line.server = None);
+        accounts.iter_mut().for_each(|line| line.server = None);
     }
-    for lines in [&mut models, &mut projects, &mut servers] {
+    for lines in [&mut models, &mut projects, &mut servers, &mut accounts] {
         for line in lines.iter_mut() {
             line.share = match view.cost_usd > 0.0 {
                 true => line.cost_usd.unwrap_or_default() / view.cost_usd,
@@ -193,7 +208,7 @@ pub fn view(
     if other_cost > 0.0 {
         view.kinds.push(Kind { name: "Other", tokens: 0, cost_usd: other_cost });
     }
-    View { starts, agents, models, projects, servers, ..view }
+    View { starts, agents, models, projects, servers, accounts, ..view }
 }
 
 #[cfg(test)]
@@ -214,6 +229,7 @@ mod tests {
         let bucket = UsageBucket {
             start,
             agent,
+            account_name: String::new(),
             model: model.to_string(),
             project_id: project.to_string(),
             tokens: Tokens { input: 100, cache_read: 800, cache_write: 0, output: 100 },
@@ -270,6 +286,29 @@ mod tests {
         assert_eq!(lines(&view.projects), projects);
         let servers = [("Studio", None, Some(4.0), 1.0), ("Unknown server", None, None, 0.0)];
         assert_eq!(lines(&view.servers), servers);
+    }
+
+    #[test]
+    fn accounts_are_listed_once_an_agent_has_several_on_a_server() {
+        let window = Window { since: 0.0, until: DAY, bucket_secs: 86400, utc_offset_secs: 0 };
+        let servers = HashMap::from([("studio".to_string(), "Studio".to_string())]);
+        let mut all = [
+            spent("studio", "api", Agent::Claude, "claude-opus", 0.0, Some(3.0)),
+            spent("studio", "api", Agent::Claude, "claude-opus", 0.0, Some(1.0)),
+            spent("studio", "api", Agent::Codex, "gpt-6", 0.0, None),
+        ];
+        assert!(view(&all, window, &HashMap::new(), &servers).accounts.is_empty());
+        all[1].bucket.account_name = "Personal".into();
+        let accounts = view(&all, window, &HashMap::new(), &servers).accounts;
+        let named: Vec<_> = accounts.iter().map(|line| (line.name.as_str(), line.agent, line.cost_usd)).collect();
+        assert_eq!(
+            named,
+            [
+                ("Default", Some(Agent::Claude), Some(3.0)),
+                ("Personal", Some(Agent::Claude), Some(1.0)),
+                ("Default", Some(Agent::Codex), None)
+            ]
+        );
     }
 
     #[test]

@@ -19,6 +19,8 @@ struct ThreadDraft: Identifiable, Equatable, Codable {
     var id = UUID().uuidString
     var projectID: String?
     var model: String?
+    /// The id of the account of the model's agent the thread starts with.
+    var agentAccount: String?
     var effort: String?
     var access: Access = .full
     var plan = false
@@ -710,16 +712,49 @@ final class AppStore {
         return server(project(selectedDraft?.projectID)?.serverID) ?? servers.first
     }
 
-    /// The models the composer offers: an open thread stays with its agent.
+    /// The models the composer offers. An open thread on a server from before accounts stays
+    /// with its agent.
     var composerModels: [ModelInfo] {
         let models = composerServer?.models ?? []
-        guard let thread = selectedThread else { return models }
+        guard let thread = selectedThread, composerServer?.switchesAccounts != true else { return models }
         return models.filter { $0.agent == thread.agent }
     }
 
     var composerModel: ModelInfo? {
         let id = selectedThread.map { $0.model } ?? selectedDraft?.model
-        return composerModels.first { $0.id == id } ?? composerModels.first
+        let agent = selectedThread?.agent
+        return composerModels.first { $0.id == id && (agent == nil || $0.agent == agent) }
+            ?? composerModels.first { agent == nil || $0.agent == agent }
+    }
+
+    /// The accounts the composer offers the models of, an agent's default one first.
+    var composerAccounts: [AgentAccount] {
+        let agents = Set(composerModels.map(\.agent))
+        return Agent.allCases.filter(agents.contains).flatMap { composerServer?.accounts(of: $0) ?? [] }
+    }
+
+    /// The account of the composer's model's agent the thread works with.
+    var composerAccount: AgentAccount? {
+        guard let model = composerModel else { return nil }
+        let id = selectedThread.map { $0.agentAccount } ?? selectedDraft?.agentAccount
+        return composerServer?.account(id, of: model.agent)
+    }
+
+    /// The model the composer shows, with the account when its agent has more than one.
+    var composerModelLabel: String {
+        guard let model = composerModel else { return "No agent" }
+        guard let account = composerAccount, (composerServer?.accounts(of: account.agent).count ?? 0) > 1 else { return model.shortName }
+        return "\(model.shortName) · \(account.name)"
+    }
+
+    /// What the composer's model menu lists: each account with its agent's models, titled with
+    /// the account's name when its agent has more than one.
+    var composerChoices: [(title: String, account: AgentAccount, models: [ModelInfo])] {
+        composerAccounts.map { account in
+            let several = (composerServer?.accounts(of: account.agent).count ?? 0) > 1
+            let title = several ? "\(account.agent.name) · \(account.name)" : account.agent.name
+            return (title, account, composerModels.filter { $0.agent == account.agent })
+        }
     }
 
     var composerEffort: String? {
@@ -780,13 +815,15 @@ final class AppStore {
 
     private func applyLastSettings(to draft: inout ThreadDraft) {
         draft.model = defaults.string(forKey: "new.model")
+        draft.agentAccount = defaults.string(forKey: "new.agentAccount")
         draft.effort = defaults.string(forKey: "new.effort")
         draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
         draft.base = nil
     }
 
-    private func rememberSettings(model: String?, effort: String?, access: Access) {
+    private func rememberSettings(model: String?, effort: String?, access: Access, account: String? = nil) {
         defaults.set(model, forKey: "new.model")
+        if let account { defaults.set(account, forKey: "new.agentAccount") }
         defaults.set(effort, forKey: "new.effort")
         defaults.set(access.rawValue, forKey: "new.access")
     }
@@ -810,7 +847,7 @@ final class AppStore {
         let draft = threadDrafts[index]
         defaults.set(draft.projectID, forKey: "new.project")
         defaults.set(draft.worktree == true, forKey: "new.worktree")
-        rememberSettings(model: draft.model, effort: draft.effort, access: draft.access)
+        rememberSettings(model: draft.model, effort: draft.effort, access: draft.access, account: draft.agentAccount)
         saveThreadDrafts()
     }
 
@@ -1583,6 +1620,7 @@ final class AppStore {
                 "project_id": project.id,
                 "agent": model.agent.rawValue,
                 "model": model.id,
+                "agent_account": composerAccount?.id ?? model.agent.rawValue,
                 "access": draft.access.rawValue,
                 "plan": draft.plan,
             ]
@@ -1709,19 +1747,36 @@ final class AppStore {
         request(thread.serverID, ["type": "delete", "thread_id": thread.id])
     }
 
-    func setModel(_ model: ModelInfo) {
+    /// Has the thread or the draft work with `model` under `account`. A thread that moves to an
+    /// account without its session goes on in a new one, which is told what was said.
+    func setModel(_ model: ModelInfo, account: AgentAccount) {
         guard let thread = selectedThread else {
             updateDraft {
                 $0.model = model.id
+                $0.agentAccount = account.id
                 $0.effort = nil
             }
             return
         }
-        rememberSettings(model: model.id, effort: nil, access: thread.access)
-        update(thread, ["model": model.id, "effort": ""]) {
+        rememberSettings(model: model.id, effort: nil, access: thread.access, account: account.id)
+        var change: JSON = ["model": model.id, "effort": ""]
+        if account.id != thread.agentAccount { change["agent_account"] = account.id }
+        update(thread, change) {
             $0.model = model.id
             $0.effort = nil
+            $0.agent = model.agent
+            $0.agentAccount = account.id
         }
+    }
+
+    /// Adds an account of an agent on the server, or changes one. `done` says whether it was kept.
+    func saveAgentAccount(_ account: AgentAccount, on server: Server, done: @escaping (Bool) -> Void) {
+        request(server.id, ["type": "save_agent_account", "account": account.json], done: { done(true) }, failed: { done(false) })
+    }
+
+    /// Removes an account. Its threads go on with the agent's default account.
+    func removeAgentAccount(_ account: AgentAccount, on server: Server) {
+        request(server.id, ["type": "remove_agent_account", "id": account.id])
     }
 
     func setEffort(_ effort: String) {

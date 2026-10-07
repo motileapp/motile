@@ -22,6 +22,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0010_usage.sql"),
     include_str!("../migrations/0011_usage_purpose.sql"),
     include_str!("../migrations/0012_interruptions.sql"),
+    include_str!("../migrations/0013_agent_accounts.sql"),
 ];
 
 pub struct Store {
@@ -137,7 +138,7 @@ impl Store {
             "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access, t.plan,
                     t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.undone_at,
                     COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
-                    t.pull_request, t.watching, t.running, t.monitoring, t.interruption
+                    t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account
              FROM threads t LEFT JOIN items i ON i.thread_id = t.id
              GROUP BY t.id",
         )?;
@@ -154,6 +155,7 @@ impl Store {
                     project_id: row.get(3)?,
                     cwd: row.get(4)?,
                     agent: from_text(&row.get::<_, String>(5)?).unwrap_or(Agent::Claude),
+                    agent_account: row.get(26)?,
                     model: row.get(6)?,
                     effort: row.get(7)?,
                     access: from_text(&row.get::<_, String>(8)?).unwrap_or(Access::Full),
@@ -191,12 +193,14 @@ impl Store {
             "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access, plan,
                                   session_id, created_at, updated_at, done_at, needs_approval, turn_ended_at, undone_at,
                                   worktree_branch, worktree_base, pull_request, watching, running, monitoring,
-                                  interruption)
+                                  interruption, agent_account)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-                     ?23, ?24)
+                     ?23, ?24, ?25)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
+                 agent = excluded.agent,
+                 agent_account = excluded.agent_account,
                  model = excluded.model,
                  effort = excluded.effort,
                  access = excluded.access,
@@ -238,6 +242,7 @@ impl Store {
                 thread.running,
                 thread.monitoring,
                 thread.interruption.as_ref().and_then(|interruption| serde_json::to_string(interruption).ok()),
+                thread.agent_account,
             ],
         )?;
         Ok(())
@@ -403,7 +408,8 @@ impl Store {
                 continue;
             }
             let usage = ModelUsage { model: usage.model.clone(), tokens, cost_usd };
-            insert_usage(&transaction, at, &thread.id, &thread.project_id, thread.agent, Purpose::Turn, &usage)?;
+            let spender = (thread.agent, thread.agent_account.as_str());
+            insert_usage(&transaction, at, &thread.id, &thread.project_id, spender, Purpose::Turn, &usage)?;
             if let Some(cost_usd) = cost_usd {
                 cost = Some(cost.unwrap_or(0.0) + cost_usd);
             }
@@ -422,19 +428,20 @@ impl Store {
         at: f64,
         project_id: &str,
         thread_id: Option<&str>,
-        agent: Agent,
+        spender: (Agent, &str),
         purpose: Purpose,
         spent: &[ModelUsage],
     ) -> rusqlite::Result<()> {
         let connection = self.connection();
         for usage in spent.iter().filter(|usage| usage.tokens != Tokens::default()) {
-            insert_usage(&connection, at, thread_id.unwrap_or_default(), project_id, agent, purpose, usage)?;
+            insert_usage(&connection, at, thread_id.unwrap_or_default(), project_id, spender, purpose, usage)?;
         }
         Ok(())
     }
 
-    /// What was spent from `since` until `until`, by model and project, in buckets of
-    /// `bucket_secs` that start where a clock `utc_offset_secs` ahead of UTC starts them.
+    /// What was spent from `since` until `until`, by account, model and project, in buckets of
+    /// `bucket_secs` that start where a clock `utc_offset_secs` ahead of UTC starts them. Each
+    /// bucket's `account_name` is the account's id.
     pub fn usage(
         &self,
         since: f64,
@@ -446,15 +453,16 @@ impl Store {
         let mut statement = connection.prepare(
             "SELECT CAST((at + ?3) / ?4 AS INTEGER) AS bucket, agent, model, project_id,
                     SUM(input), SUM(cache_read), SUM(cache_write), SUM(output), SUM(cost_usd),
-                    purpose != 'turn' AS writing
+                    purpose != 'turn' AS writing, agent_account
              FROM usage WHERE at >= ?1 AND at < ?2
-             GROUP BY bucket, agent, model, project_id, writing ORDER BY bucket",
+             GROUP BY bucket, agent, agent_account, model, project_id, writing ORDER BY bucket",
         )?;
         let (size, offset) = (f64::from(bucket_secs.max(60)), f64::from(utc_offset_secs));
         let buckets = statement.query_map(params![since, until, offset, size], |row| {
             Ok(UsageBucket {
                 start: row.get::<_, i64>(0)? as f64 * size - offset,
                 agent: from_text(&row.get::<_, String>(1)?).unwrap_or(Agent::Claude),
+                account_name: row.get(10)?,
                 model: row.get(2)?,
                 project_id: row.get(3)?,
                 tokens: tokens_at(row, 4)?,
@@ -541,15 +549,15 @@ fn insert_usage(
     at: f64,
     thread_id: &str,
     project_id: &str,
-    agent: Agent,
+    (agent, account): (Agent, &str),
     purpose: Purpose,
     usage: &ModelUsage,
 ) -> rusqlite::Result<()> {
     let tokens = usage.tokens;
     connection.execute(
         "INSERT INTO usage (at, thread_id, project_id, agent, model, input, cache_read, cache_write, output, cost_usd,
-                            purpose)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                            purpose, agent_account)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             at,
             thread_id,
@@ -562,6 +570,7 @@ fn insert_usage(
             tokens.output as i64,
             usage.cost_usd,
             purpose.as_str(),
+            account,
         ],
     )?;
     Ok(())
@@ -586,4 +595,33 @@ fn migrate(connection: &Connection) -> anyhow::Result<()> {
         connection.execute_batch(&format!("BEGIN; {migration} PRAGMA user_version = {}; COMMIT;", index + 1))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn threads_and_usage_from_before_accounts_belong_to_their_agents_default_account() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("motile.db");
+        {
+            let connection = Connection::open(&path).unwrap();
+            for (index, migration) in MIGRATIONS.iter().take(12).enumerate() {
+                connection.execute_batch(&format!("{migration} PRAGMA user_version = {};", index + 1)).unwrap();
+            }
+            connection
+                .execute_batch(
+                    "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, access, created_at, updated_at)
+                     VALUES ('t', 'Title', 'user', 'p', '/tmp', 'codex', 'full', 0, 0);
+                     INSERT INTO usage (at, thread_id, project_id, agent, model, input, cache_read, cache_write, output)
+                     VALUES (0, 't', 'p', 'codex', 'gpt-6', 1, 0, 0, 1);",
+                )
+                .unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.load_threads().unwrap()[0].thread.agent_account, "codex");
+        let buckets = store.usage(0.0, 1.0, 3600, 0).unwrap();
+        assert_eq!(buckets[0].account_name, "codex");
+    }
 }

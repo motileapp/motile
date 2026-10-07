@@ -10,6 +10,7 @@ struct SettingsPage: View {
     @AppStorage("appearance") private var appearance = Appearance.system
     @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
     @State private var setupProject: Project?
+    @State private var editedAccount: EditedAccount?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -18,6 +19,7 @@ struct SettingsPage: View {
                     switch section {
                     case .general: general
                     case .servers: servers
+                    case .agents: agentAccounts
                     case .projects: projects
                     case .textGeneration: textGeneration
                     case .pullRequests: pullRequests
@@ -37,6 +39,10 @@ struct SettingsPage: View {
         .onAppear { store.refreshMediaStorage() }
         .sheet(item: $setupProject) { project in
             SetupSheet(project: project)
+                .sheetSurface()
+        }
+        .sheet(item: $editedAccount) { edited in
+            AgentAccountSheet(server: edited.server, account: edited.account)
                 .sheetSurface()
         }
     }
@@ -242,6 +248,55 @@ struct SettingsPage: View {
         }
     }
 
+    /// The accounts each server's agents work with.
+    @ViewBuilder private var agentAccounts: some View {
+        let servers = store.servers.filter { $0.state == .connected && $0.switchesAccounts }
+        if servers.isEmpty {
+            SettingsNote("The accounts your agents work with are set on each of your servers, once one is connected and up to date.")
+        } else {
+            SettingsGroup("agent-accounts", "Accounts", caption: "Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.") {
+                ForEach(servers) { server in
+                    let installed = Agent.allCases.filter { server.agents[$0] != nil }
+                    if servers.count > 1 {
+                        SettingsRow {
+                            serverName(server)
+                        } trailing: {
+                            EmptyView()
+                        }
+                        ThemeDivider()
+                    }
+                    ForEach(server.agentAccounts.filter { installed.contains($0.agent) }) { account in
+                        SettingsRow {
+                            AgentIcon(agent: account.agent, size: 16)
+                            SettingsLabel("\(account.agent.name) · \(account.name)", description: description(of: account))
+                        } trailing: {
+                            ActionButton("Edit…", size: .small) { editedAccount = EditedAccount(server: server, account: account) }
+                            if !account.isDefault {
+                                ActionButton("Remove", size: .small) { store.removeAgentAccount(account, on: server) }
+                            }
+                        }
+                        ThemeDivider()
+                    }
+                    SettingsRow {
+                        ActionButton("Add an Account…", size: .small) {
+                            editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
+                        }
+                        .disabled(installed.isEmpty)
+                    } trailing: {
+                        EmptyView()
+                    }
+                    if server.id != servers.last?.id { ThemeDivider() }
+                }
+            }
+        }
+    }
+
+    private func description(of account: AgentAccount) -> String {
+        let signedIn = account.email.map { [$0, account.plan].compactMap { $0 }.joined(separator: " · ") }
+        let who = signedIn ?? (account.variables.isEmpty ? "Not signed in" : "Signs in with its variables")
+        return account.folder.isEmpty ? who : "\(who) · \(account.folder)"
+    }
+
     private func serverName(_ server: Server) -> some View {
         SettingsLabel(server.name, icon: .server)
     }
@@ -323,6 +378,162 @@ private struct BranchInstructionsEditor: View {
         .onAppear { text = server.branchInstructions }
         .onChange(of: server.branchInstructions) { text = server.branchInstructions }
     }
+}
+
+/// An account the settings add or change, on its server.
+private struct EditedAccount: Identifiable {
+    let server: Server
+    let account: AgentAccount
+
+    var id: String { "\(server.id)/\(account.id)" }
+}
+
+/// An account of an agent to add or change: its name, the folder its sign-in is kept in, and the
+/// variables its agent is given, with the command that signs it in.
+private struct AgentAccountSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let server: Server
+    @State private var account: AgentAccount
+    @State private var variables: [EditedVariable]
+    @State private var saving = false
+
+    init(server: Server, account: AgentAccount) {
+        self.server = server
+        _account = State(initialValue: account)
+        _variables = State(initialValue: account.variables.map { EditedVariable(variable: $0) })
+    }
+
+    private var installed: [Agent] { Agent.allCases.filter { server.agents[$0] != nil } }
+    private var isNew: Bool { account.id.isEmpty }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(isNew ? "New account on \(server.name)" : "\(account.agent.name) account on \(server.name)")
+                .font(.ui(size: 13, weight: .semibold))
+            if isNew && installed.count > 1 {
+                Segmented(installed.map { ($0.name, $0) }, selection: $account.agent)
+            }
+            field("Name") {
+                InputField("Personal", text: $account.name)
+            }
+            if !account.isDefault {
+                field("Folder", caption: "Where its sign-in is kept, as \(account.folderVariable)") {
+                    InputField(account.agent == .claude ? "~/.claude-personal" : "~/.codex-personal", text: $account.folder, monospaced: true)
+                }
+                if account.agent == .codex {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Share sessions with the default account")
+                                .font(.ui(size: 13, weight: .medium))
+                            Text("The folder keeps only the sign-in. Threads move between the two and go on where they were.")
+                                .font(.ui(size: 11.5))
+                                .foregroundStyle(Color.themeSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 12)
+                        Switch(isOn: $account.sharesSessions)
+                    }
+                }
+            }
+            field("Variables", caption: "Given to its agent: an API key or a router. A sensitive value stays on \(server.name) and is never shown again.") {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach($variables) { $edited in
+                        variableRow($edited)
+                    }
+                    ActionButton("Add a Variable", icon: .plus, size: .small) {
+                        variables.append(EditedVariable(variable: AgentAccount.Variable(name: "", value: "", sensitive: true)))
+                    }
+                }
+            }
+            signIn
+            HStack {
+                Spacer()
+                ActionButton("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                ActionButton("Save", variant: .primary, pending: saving) { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(account.name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(16)
+        #if os(macOS)
+        .frame(width: 460)
+        #else
+        .frame(maxHeight: .infinity, alignment: .top)
+        .presentationDetents([.large])
+        #endif
+    }
+
+    /// How the account is signed in: on its server, with its folder.
+    private var signIn: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Sign it in on \(server.name). Who is signed in shows here once the agent says.")
+                .font(.ui(size: 11.5))
+                .foregroundStyle(Color.themeSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Text(account.signInCommand)
+                    .font(.system(size: 12, design: .monospaced))
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                Spacer(minLength: 0)
+                CopyButton(help: "Copy the command", size: .small) { Platform.copy(account.signInCommand) }
+            }
+        }
+    }
+
+    /// A variable's name and value, with whether the value is sensitive and the way to take it out.
+    private func variableRow(_ edited: Binding<EditedVariable>) -> some View {
+        let variable = edited.wrappedValue.variable
+        let kept = variable.sensitive && account.variables.contains { $0.name == variable.name && $0.sensitive }
+        return HStack(spacing: 6) {
+            InputField("NAME", text: edited.variable.name, size: .small, monospaced: true)
+                .frame(width: 150)
+            InputField(kept ? "••••••••" : "value", text: edited.variable.value, size: .small, monospaced: true, secure: variable.sensitive)
+            ActionButton(
+                icon: variable.sensitive ? .eyeOff : .eye, help: variable.sensitive ? "Sensitive: hidden and kept on \(server.name)" : "Shown: mark it sensitive",
+                size: .small, selected: variable.sensitive
+            ) {
+                edited.wrappedValue.variable.sensitive.toggle()
+            }
+            ActionButton(icon: .x, help: "Remove the variable", size: .small) {
+                variables.removeAll { $0.id == edited.wrappedValue.id }
+            }
+        }
+    }
+
+    private func field<Content: View>(_ title: String, caption: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.ui(size: 12, weight: .medium))
+            content()
+            if let caption {
+                Text(caption)
+                    .font(.ui(size: 11.5))
+                    .foregroundStyle(Color.themeTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func save() {
+        var saved = account
+        saved.variables = variables.map(\.variable).filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+        if saved.agent != .codex { saved.sharesSessions = false }
+        saving = true
+        store.saveAgentAccount(saved, on: server) { kept in
+            saving = false
+            if kept { dismiss() }
+        }
+    }
+}
+
+/// A variable as the account's sheet edits it.
+private struct EditedVariable: Identifiable {
+    let id = UUID()
+    var variable: AgentAccount.Variable
 }
 
 /// The shell script that runs in each new worktree of a project before the agent starts there.

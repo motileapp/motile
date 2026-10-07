@@ -18,9 +18,9 @@ use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
-    Activity, Agent, AgentLimits, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, DiffScope,
-    FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, Media, MergeMethod, Message,
-    NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo, ServerUpdate, Subagent, Thread,
+    Activity, Agent, AgentAccount, AgentLimits, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings,
+    DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, Media, MergeMethod,
+    Message, NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo, ServerUpdate, Subagent, Thread,
     ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
@@ -37,7 +37,7 @@ use crate::linear::Linear;
 use crate::media::MediaStore;
 use crate::pricing::{self, Prices};
 use crate::store::{Purpose, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
-use crate::{drafts, files, git, github, icons, limits, pacing, pull_requests, title};
+use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, pull_requests, title};
 use motile_protocol::wire::{
     CheckStatus, EventKind, Mergeable, PullRequestDetail, PullRequestEdit, PullRequestSettings, PullRequestState,
 };
@@ -55,6 +55,7 @@ pub const LIMITS_CHECK: Duration = Duration::from_secs(30);
 const DONE_ON_MERGE: &str = "done_on_merge";
 const REMOVE_MERGED_WORKTREES: &str = "remove_merged_worktrees";
 const TEXT_MODEL: &str = "text_model";
+const AGENT_ACCOUNTS: &str = "agent_accounts";
 const BRANCH_INSTRUCTIONS: &str = "branch_instructions";
 const CONTINUE_AFTER_LIMITS: &str = "continue_after_limits";
 const CONTINUE_AFTER_RESTARTS: &str = "continue_after_restarts";
@@ -104,6 +105,8 @@ pub struct Hub {
     worktrees_folder: PathBuf,
     /// The worktrees of the threads that work in one of their own, by thread.
     worktrees: std::sync::Mutex<HashMap<String, ThreadWorktree>>,
+    /// The agents' accounts, the default ones first.
+    agent_accounts: std::sync::Mutex<Vec<AgentAccount>>,
     /// The model the user picked to write titles, commit messages and pull requests.
     text_model: std::sync::Mutex<Option<String>>,
     /// How the user wants branches named.
@@ -260,7 +263,9 @@ impl Hub {
         let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
         let git = std::sync::Mutex::default();
+        let agent_accounts = store.setting(AGENT_ACCOUNTS).and_then(|kept| serde_json::from_str(&kept).ok());
         Ok(Arc::new(Self {
+            agent_accounts: std::sync::Mutex::new(agent_accounts::with_defaults(agent_accounts.unwrap_or_default())),
             text_model: std::sync::Mutex::new(store.setting(TEXT_MODEL)),
             branch_instructions: std::sync::Mutex::new(store.setting(BRANCH_INSTRUCTIONS)),
             pull_request_settings: std::sync::Mutex::new(PullRequestSettings {
@@ -303,7 +308,8 @@ impl Hub {
             home: self.environment.variables.get("HOME").cloned().unwrap_or_default(),
             agents: self.environment.agents(),
             models: self.environment.models().to_vec(),
-            text_model: self.writer(Agent::Claude).model,
+            agent_accounts: self.agent_accounts().into_iter().map(agent_accounts::redacted).collect(),
+            text_model: self.text_model(),
             branch_instructions: self.branch_instructions(),
             pull_request_settings: self.pull_request_settings(),
             continue_settings: self.continue_settings(),
@@ -314,7 +320,156 @@ impl Hub {
     /// Tells every client where the server's update is.
     pub fn set_update(&self, update: Option<ServerUpdate>) {
         *self.update.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = update;
+        self.announce_server();
+    }
+
+    fn announce_server(&self) {
         let _ = self.list_updates.send(Message::Server { server: self.server_info() });
+    }
+
+    fn lock_agent_accounts(&self) -> std::sync::MutexGuard<'_, Vec<AgentAccount>> {
+        self.agent_accounts.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn agent_accounts(&self) -> Vec<AgentAccount> {
+        self.lock_agent_accounts().clone()
+    }
+
+    fn default_account(&self, agent: Agent) -> AgentAccount {
+        let accounts = self.agent_accounts();
+        let found = accounts.into_iter().find(|account| account.id == agent_accounts::default_id(agent));
+        found.unwrap_or_else(|| agent_accounts::default_account(agent))
+    }
+
+    /// The account the thread works with, or its agent's default one when that has gone.
+    fn account_of(&self, thread: &Thread) -> AgentAccount {
+        let accounts = self.agent_accounts();
+        let found =
+            accounts.into_iter().find(|account| account.id == thread.agent_account && account.agent == thread.agent);
+        found.unwrap_or_else(|| self.default_account(thread.agent))
+    }
+
+    fn account_environment(&self, account: &AgentAccount) -> Environment {
+        agent_accounts::environment(&self.environment, account)
+    }
+
+    fn shares_sessions(&self, one: &AgentAccount, other: &AgentAccount) -> bool {
+        one.agent == other.agent
+            && agent_accounts::sessions_folder(one, &self.environment)
+                == agent_accounts::sessions_folder(other, &self.environment)
+    }
+
+    fn keep_agent_accounts(&self, accounts: Vec<AgentAccount>) -> anyhow::Result<()> {
+        self.store.set_setting(AGENT_ACCOUNTS, Some(&serde_json::to_string(&accounts)?))?;
+        *self.lock_agent_accounts() = accounts;
+        self.announce_server();
+        Ok(())
+    }
+
+    /// Adds an account of an agent or changes one. Threads whose sessions it no longer has start
+    /// new ones, told what was said.
+    pub async fn save_agent_account(self: &Arc<Self>, account: AgentAccount) -> anyhow::Result<()> {
+        let mut threads = self.threads.lock().await;
+        let accounts = self.agent_accounts();
+        let mut account = agent_accounts::checked(account, &accounts)?;
+        agent_accounts::prepare(&account, &self.environment)?;
+        let before = accounts.iter().find(|kept| kept.id == account.id);
+        // Who is signed in is known again once the agent has said, unless it signs in as before.
+        (account.email, account.plan) = match before {
+            Some(before) if before.folder == account.folder && before.variables == account.variables => {
+                (before.email.clone(), before.plan.clone())
+            }
+            _ => (None, None),
+        };
+        if let Some(before) = before
+            && !self.shares_sessions(before, &account)
+        {
+            self.restart_sessions(&mut threads, &account.id, None)?;
+        }
+        let mut accounts = accounts;
+        match accounts.iter_mut().find(|kept| kept.id == account.id) {
+            Some(kept) => *kept = account,
+            None => accounts.push(account),
+        }
+        self.keep_agent_accounts(accounts)?;
+        drop(threads);
+        self.refresh_limits();
+        Ok(())
+    }
+
+    /// Removes an account. Its threads go on with the agent's default account.
+    pub async fn remove_agent_account(self: &Arc<Self>, id: &str) -> anyhow::Result<()> {
+        let mut threads = self.threads.lock().await;
+        let mut accounts = self.agent_accounts();
+        let account =
+            accounts.iter().find(|account| account.id == id).context("That account is no longer on your server.")?;
+        if agent_accounts::is_default(account) {
+            bail!("The default account stays. Sign it in to another account instead.");
+        }
+        let default = self.default_account(account.agent);
+        let moves_sessions = !self.shares_sessions(account, &default);
+        self.restart_sessions(&mut threads, id, Some((&default, moves_sessions)))?;
+        accounts.retain(|account| account.id != id);
+        self.keep_agent_accounts(accounts)?;
+        Ok(())
+    }
+
+    /// Has the account's threads start new sessions, or with `moving` go to another account, and
+    /// start new sessions when it doesn't have theirs.
+    fn restart_sessions(
+        &self,
+        threads: &mut HashMap<String, Live>,
+        id: &str,
+        moving: Option<(&AgentAccount, bool)>,
+    ) -> anyhow::Result<()> {
+        let of_account = |live: &&mut Live| live.stored.thread.agent_account == id;
+        let mut affected: Vec<&mut Live> = threads.values_mut().filter(of_account).collect();
+        if affected.iter().any(|live| live.run.is_some() || live.preparing.is_some()) {
+            bail!("An agent still works with this account. Change it once the agent has finished.");
+        }
+        for live in &mut affected {
+            let restarts = moving.is_none_or(|(_, moves_sessions)| moves_sessions);
+            if restarts {
+                live.stored.session_id = None;
+            }
+            if let Some((to, _)) = moving {
+                live.stored.thread.agent_account = to.id.clone();
+            }
+            self.store.save_thread(&live.stored)?;
+            self.announce(&live.stored.thread);
+        }
+        Ok(())
+    }
+
+    /// Reads what the accounts have used in the background, which also says who they are.
+    pub fn refresh_limits(self: &Arc<Self>) {
+        let hub = self.clone();
+        tokio::spawn(async move { hub.limits(true).await });
+    }
+
+    /// Notes who is signed in to each account, as its read said, and tells the clients when that
+    /// changed.
+    fn note_signed_in(&self, read: &[AgentLimits]) {
+        let kept = {
+            let mut accounts = self.lock_agent_accounts();
+            let mut changed = false;
+            for account in accounts.iter_mut() {
+                let found =
+                    read.iter().find(|limits| limits.agent == account.agent && limits.account_name == account.name);
+                let Some(limits) = found else { continue };
+                let (email, plan) = (limits.account.clone(), limits.plan.clone());
+                if (&account.email, &account.plan) != (&email, &plan) {
+                    (account.email, account.plan) = (email, plan);
+                    changed = true;
+                }
+            }
+            changed.then(|| serde_json::to_string(&*accounts))
+        };
+        let Some(Ok(kept)) = kept else { return };
+        if let Err(error) = self.store.set_setting(AGENT_ACCOUNTS, Some(&kept)) {
+            tracing::warn!("couldn't keep who is signed in to the agents' accounts: {error:#}");
+        }
+        self.announce_server();
     }
 
     fn continue_settings(&self) -> ContinueSettings {
@@ -566,6 +721,13 @@ impl Hub {
             .iter()
             .find(|project| project.id == new_thread.project_id)
             .context("That project is no longer on your server.")?;
+        let account = match &new_thread.agent_account {
+            Some(id) => {
+                self.agent_accounts().into_iter().find(|account| &account.id == id && account.agent == new_thread.agent)
+            }
+            None => Some(self.default_account(new_thread.agent)),
+        };
+        let account = account.context("That account is no longer on your server.")?;
         let created_at = now();
         let worktree = match new_thread.worktree {
             Some(new) if new.base.is_empty() || new.base.starts_with('-') => {
@@ -592,6 +754,7 @@ impl Hub {
             project_id: project.id.clone(),
             cwd,
             agent: new_thread.agent,
+            agent_account: account.id,
             model: checked("model", new_thread.model)?,
             effort: checked("effort", new_thread.effort)?,
             access: new_thread.access,
@@ -615,8 +778,8 @@ impl Hub {
     }
 
     async fn title_from_first_message(self: Arc<Self>, thread_id: String, text: String) {
-        let Some(agent) = self.agent_of(&thread_id).await else { return };
-        let writer = self.writer(agent);
+        let Some(account) = self.account_of_thread(&thread_id).await else { return };
+        let writer = self.writer(&account);
         let generated = title::from_first_message(&self.environment, &writer, &text).await;
         self.keep_written_in(&thread_id, &writer, Purpose::Title).await;
         match generated {
@@ -639,15 +802,15 @@ impl Hub {
     }
 
     async fn title_from_transcript(self: Arc<Self>, thread_id: String) {
-        let Some(agent) = self.agent_of(&thread_id).await else { return };
+        let Some(account) = self.account_of_thread(&thread_id).await else { return };
         let (previous_title, items) = {
             let threads = self.threads.lock().await;
             let Some(live) = threads.get(&thread_id) else { return };
             let Ok(items) = self.store.items_since(&thread_id, 0) else { return };
             (live.stored.thread.title.clone(), items)
         };
-        let writer = self.writer(agent);
-        let generated = title::from_transcript(&self.environment, &writer, &previous_title, &items).await;
+        let writer = self.writer(&account);
+        let generated = title::from_transcript(&writer, &previous_title, &items).await;
         self.keep_written_in(&thread_id, &writer, Purpose::Title).await;
         let Some(generated) = generated else { return };
         self.set_generated_title(&thread_id, generated.title).await;
@@ -656,7 +819,8 @@ impl Hub {
     /// Keeps what the writer's answers took, with what the tokens of the turns took.
     fn keep_written(&self, writer: &Writer, purpose: Purpose, project_id: &str, thread_id: Option<&str>) {
         let spent = writer.take_spent();
-        if let Err(error) = self.store.save_written(now(), project_id, thread_id, writer.agent, purpose, &spent) {
+        let spender = (writer.agent, writer.agent_account.as_str());
+        if let Err(error) = self.store.save_written(now(), project_id, thread_id, spender, purpose, &spent) {
             tracing::warn!("couldn't keep what writing took: {error:#}");
         }
     }
@@ -668,14 +832,22 @@ impl Hub {
     }
 
     /// Who writes titles, commit messages and pull requests: the model the user picked, or the
-    /// lightest one of `agent`.
-    fn writer(&self, agent: Agent) -> Writer {
+    /// lightest one of the account's agent. The account writes when it is of the writer's agent,
+    /// that agent's default account otherwise.
+    fn writer(&self, account: &AgentAccount) -> Writer {
+        let model = self.text_model();
+        let agent = model
+            .as_ref()
+            .and_then(|id| self.environment.models().iter().find(|model| &model.id == id))
+            .map_or(account.agent, |model| model.agent);
+        let account = if agent == account.agent { account.clone() } else { self.default_account(agent) };
+        Writer::new(&account, model, self.account_environment(&account))
+    }
+
+    /// The model the user picked to write, while the server still has it.
+    fn text_model(&self) -> Option<String> {
         let picked = self.text_model.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
-        let model = picked.and_then(|id| self.environment.models().iter().find(|model| model.id == id));
-        match model {
-            Some(model) => Writer::new(model.agent, Some(model.id.clone())),
-            None => Writer::new(agent, None),
-        }
+        picked.filter(|id| self.environment.models().iter().any(|model| &model.id == id))
     }
 
     pub fn set_text_model(&self, model: Option<String>) -> anyhow::Result<()> {
@@ -706,8 +878,9 @@ impl Hub {
         Ok(())
     }
 
-    async fn agent_of(&self, thread_id: &str) -> Option<Agent> {
-        self.threads.lock().await.get(thread_id).map(|live| live.stored.thread.agent)
+    async fn account_of_thread(&self, thread_id: &str) -> Option<AgentAccount> {
+        let threads = self.threads.lock().await;
+        threads.get(thread_id).map(|live| self.account_of(&live.stored.thread))
     }
 
     async fn set_generated_title(&self, thread_id: &str, title: String) {
@@ -853,6 +1026,9 @@ impl Hub {
     pub async fn update(&self, thread_id: &str, change: ThreadChange) -> anyhow::Result<()> {
         let mut threads = self.threads.lock().await;
         let live = threads.get_mut(thread_id).context("That thread no longer exists.")?;
+        if let Some(id) = change.agent_account.as_ref().filter(|id| **id != live.stored.thread.agent_account) {
+            self.move_to_account(live, id)?;
+        }
         let thread = &mut live.stored.thread;
         if let Some(title) = change.title {
             let title = title.trim().to_string();
@@ -906,6 +1082,26 @@ impl Hub {
         }
         self.store.save_thread(&live.stored)?;
         self.announce(&live.stored.thread);
+        Ok(())
+    }
+
+    /// Has the thread go on with another account. One without the thread's session starts a new
+    /// one, which is told what was said.
+    fn move_to_account(&self, live: &mut Live, id: &str) -> anyhow::Result<()> {
+        if live.run.is_some() || live.preparing.is_some() {
+            bail!("The agent is still working. Switch accounts once it has finished.");
+        }
+        let account = self.agent_accounts().into_iter().find(|account| account.id == id);
+        let account = account.context("That account is no longer on your server.")?;
+        let thread = &mut live.stored.thread;
+        if !self.shares_sessions(&self.account_of(thread), &account) {
+            live.stored.session_id = None;
+        }
+        if account.agent != thread.agent {
+            (thread.model, thread.effort) = (None, None);
+        }
+        thread.agent = account.agent;
+        thread.agent_account = account.id;
         Ok(())
     }
 
@@ -1330,22 +1526,31 @@ impl Hub {
     /// What the agents spent from `since` until `until` and what the API would have charged.
     pub fn usage(&self, since: f64, until: f64, bucket_secs: u32, utc_offset_secs: i32) -> anyhow::Result<Message> {
         let mut buckets = self.store.usage(since, until, bucket_secs, utc_offset_secs)?;
+        let accounts = self.agent_accounts();
         let prices = self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         for bucket in &mut buckets {
             prices.price(bucket);
+            if let Some(account) = accounts.iter().find(|account| account.id == bucket.account_name) {
+                bucket.account_name = account.name.clone();
+            }
         }
         Ok(Message::Usage { buckets })
     }
 
-    /// What the agents' logins have used of their plans, read again once it is a few minutes old.
-    /// An agent that can't be read keeps what it said last time, beside why.
+    /// What the agents' accounts have used of their plans, read again once it is a few minutes
+    /// old. An account that can't be read keeps what it said last time, beside why.
     pub async fn limits(&self, refresh: bool) -> Message {
         let mut read = self.limits.lock().await;
         if let Some((_, agents)) = read.as_ref().filter(|(at, _)| !refresh && at.elapsed() < LIMITS_STALE) {
             return Message::Limits { agents: agents.clone() };
         }
         let before = read.as_ref().map(|(_, agents)| agents.clone()).unwrap_or_default();
-        let agents = limits::kept(limits::read(&self.environment).await, &before);
+        let accounts = self.agent_accounts().into_iter().map(|account| {
+            let environment = self.account_environment(&account);
+            (account, environment)
+        });
+        let agents = limits::kept(limits::read(accounts.collect()).await, &before);
+        self.note_signed_in(&agents);
         *read = Some((Instant::now(), agents.clone()));
         Message::Limits { agents }
     }
@@ -1478,7 +1683,7 @@ impl Hub {
             let installed =
                 [Agent::Claude, Agent::Codex].into_iter().find(|agent| self.environment.executable(*agent).is_some());
             let agent = installed.context("No agent is installed on your server to write this.")?;
-            return Ok((self.writer(agent), drafts::Thread::default()));
+            return Ok((self.writer(&self.default_account(agent)), drafts::Thread::default()));
         };
         let thread = &live.stored.thread;
         let items = self.store.items_since(&thread.id, 0).unwrap_or_default();
@@ -1487,7 +1692,7 @@ impl Hub {
             _ => None,
         });
         let messages = said.collect::<Vec<_>>().join("\n\n");
-        Ok((self.writer(thread.agent), drafts::Thread { title: thread.title.clone(), messages }))
+        Ok((self.writer(&self.account_of(thread)), drafts::Thread { title: thread.title.clone(), messages }))
     }
 
     /// Makes the pull request the thread's own, or keeps what GitHub now says of it.
@@ -1928,10 +2133,10 @@ impl Hub {
 
     /// Renames the branch made for the thread's worktree to what the writer calls the work.
     async fn name_branch(self: Arc<Self>, thread_id: String, message: String) {
-        let Some(agent) = self.agent_of(&thread_id).await else { return };
+        let Some(account) = self.account_of_thread(&thread_id).await else { return };
         let instructions = self.branch_instructions().text;
-        let writer = self.writer(agent);
-        let name = drafts::branch_for(&self.environment, &writer, &instructions, &message).await;
+        let writer = self.writer(&account);
+        let name = drafts::branch_for(&writer, &instructions, &message).await;
         self.keep_written_in(&thread_id, &writer, Purpose::Branch).await;
         let name = match name {
             Ok(name) => name,
@@ -2021,8 +2226,17 @@ impl Hub {
     }
 
     fn start_agent(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
+        let prompt = match live.stored.session_id {
+            Some(_) => prompt,
+            None => {
+                live.flush(&self.store)?;
+                let items = self.store.items_since(&live.stored.thread.id, 0)?;
+                agents::with_earlier_conversation(&items, prompt)
+            }
+        };
         let thread = &live.stored.thread;
         let agent = thread.agent;
+        let account = self.account_of(thread);
         let turn = Turn {
             agent,
             model: thread.model.as_deref(),
@@ -2031,7 +2245,7 @@ impl Hub {
             plan: thread.plan,
             session_id: live.stored.session_id.as_deref(),
         };
-        let child = match self.spawn(&turn, &thread.cwd) {
+        let child = match self.spawn(&turn, &thread.cwd, &account) {
             Ok(child) => child,
             Err(error) => return self.end_without_agent(live, Some(error.to_string())),
         };
@@ -2118,7 +2332,7 @@ impl Hub {
         Ok(())
     }
 
-    fn spawn(&self, turn: &Turn, cwd: &str) -> anyhow::Result<Child> {
+    fn spawn(&self, turn: &Turn, cwd: &str, account: &AgentAccount) -> anyhow::Result<Child> {
         let name = executable_name(turn.agent);
         let executable = self
             .environment
@@ -2127,12 +2341,13 @@ impl Hub {
         if !Path::new(cwd).is_dir() {
             bail!("The folder {cwd} no longer exists.");
         }
+        agent_accounts::prepare(account, &self.environment)?;
         let mut command = Command::new(executable);
         command
             .args(turn.arguments())
             .current_dir(cwd)
             .env_clear()
-            .envs(&self.environment.variables)
+            .envs(&self.account_environment(account).variables)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

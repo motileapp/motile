@@ -1,5 +1,5 @@
-//! How much of their plans the agents' logins have used, from every server, for the Limits tab
-//! of the usage view: a section for each login, with a row for each of its windows.
+//! How much of their plans the agents' accounts have used, from every server, for the Limits tab
+//! of the usage view: a section for each account, with a row for each of its windows.
 
 use motile_protocol::wire::{Agent, AgentLimits, LimitWindow};
 use serde::Serialize;
@@ -16,7 +16,8 @@ pub struct Read {
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Section {
     pub agent: Agent,
-    /// Said when the agent has more than one login among the servers.
+    /// Who is signed in, or the account's name when that isn't known. Said when the agent has
+    /// more than one account among the servers.
     pub account: Option<String>,
     pub plan: Option<String>,
     /// The servers with this login.
@@ -50,7 +51,7 @@ pub enum Pace {
     Under,
 }
 
-/// The sections, Claude Code's first, a login several servers share once.
+/// The sections, Claude Code's first, an account several servers share once.
 pub fn sections(reads: Vec<Read>, now: f64) -> Vec<Section> {
     let mut sections: Vec<(Option<String>, Section)> = Vec::new();
     let mut reads = reads;
@@ -63,7 +64,9 @@ pub fn sections(reads: Vec<Read>, now: f64) -> Vec<Section> {
             section.servers.push(server);
             continue;
         }
-        sections.push((limits.account.clone(), section(server, limits, now)));
+        let label =
+            limits.account.clone().or_else(|| Some(limits.account_name.clone()).filter(|name| !name.is_empty()));
+        sections.push((label, section(server, limits, now)));
     }
     let logins =
         |agent: Agent| sections.iter().filter(|(account, section)| section.agent == agent && account.is_some()).count();
@@ -141,6 +144,7 @@ mod tests {
     fn read(server: &str, agent: Agent, account: Option<&str>, windows: Vec<LimitWindow>) -> Read {
         let limits = AgentLimits {
             agent,
+            account_name: String::new(),
             account: account.map(String::from),
             plan: Some("Max".into()),
             windows,
@@ -193,6 +197,15 @@ mod tests {
                 (Agent::Codex, Some("b".to_string()), vec!["box".to_string()]),
             ]
         );
+    }
+
+    #[test]
+    fn an_account_nobody_is_known_to_be_signed_in_to_goes_by_its_name() {
+        let mut router = read("studio", Agent::Claude, None, vec![]);
+        router.limits.account_name = "Router".into();
+        let reads = vec![read("studio", Agent::Claude, Some("a@b.c"), vec![]), router];
+        let accounts: Vec<_> = sections(reads, 1000.0).into_iter().map(|section| section.account).collect();
+        assert_eq!(accounts, [Some("a@b.c".to_string()), Some("Router".to_string())]);
     }
 
     #[test]

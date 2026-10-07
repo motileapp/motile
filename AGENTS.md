@@ -80,6 +80,10 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
 
 ### apps/server
 
+- `agent_accounts.rs`: the agents' accounts. Each is the folder its CLI keeps the sign-in in
+  (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`) and the variables its agent is given; every agent has a
+  default one. A Codex account can share the default one's folder but for its sign-in. A thread works with one account and can move to another; one without its
+  session starts a new one that is told what was said.
 - `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
   worktrees, snapshots and the agents an agent starts. It continues a thread once its usage limit
   resets, and after a restart that cut its agent off, where the server's settings say so.
@@ -93,7 +97,7 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   result and Codex what each answer took.
 - `pricing.rs`: what the models cost at the API's prices, fetched from LiteLLM's list once a day,
   to say what the tokens Codex spent would have cost. Claude Code says what its own cost.
-- `limits.rs`: how much of their plans the agents' logins have used, as their CLIs say without
+- `limits.rs`: how much of their plans the agents' accounts have used, as their CLIs say without
   spending tokens: `codex app-server` answers `account/rateLimits/read` and Claude Code the
   `get_usage` control request. `hub.rs` keeps the answer for five minutes.
 - `git.rs`: branches, worktrees, status, commit, pull, push, pull requests (through `gh`),

@@ -1,11 +1,11 @@
-//! How much of their plans the agents' logins have used, as their CLIs say: `codex app-server`
+//! How much of their plans the agents' accounts have used, as their CLIs say: `codex app-server`
 //! answers `account/read` and `account/rateLimits/read`, and Claude Code answers the `initialize`
 //! and `get_usage` control requests. Neither spends tokens.
 
 use std::process::Stdio;
 use std::time::Duration;
 
-use motile_protocol::wire::{Agent, AgentLimits, LimitWindow};
+use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
@@ -16,32 +16,43 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const SESSION_SECS: u64 = 5 * 3600;
 const WEEK_SECS: u64 = 7 * 86400;
 
-/// What each installed agent's login has used.
-pub async fn read(environment: &Environment) -> Vec<AgentLimits> {
-    let (claude, codex) = tokio::join!(read_agent(environment, Agent::Claude), read_agent(environment, Agent::Codex));
-    [claude, codex].into_iter().flatten().collect()
+/// What each account of the installed agents has used, each read in its own environment.
+pub async fn read(accounts: Vec<(AgentAccount, Environment)>) -> Vec<AgentLimits> {
+    let reads: Vec<_> = accounts
+        .into_iter()
+        .map(|(account, environment)| tokio::spawn(async move { read_account(&account, &environment).await }))
+        .collect();
+    let mut read = Vec::new();
+    for task in reads {
+        read.extend(task.await.ok().flatten());
+    }
+    read
 }
 
-/// The new read, with what an agent said last time kept for it where it couldn't be read now.
+/// The new read, with what an account said last time kept for it where it couldn't be read now.
 pub fn kept(read: Vec<AgentLimits>, before: &[AgentLimits]) -> Vec<AgentLimits> {
     read.into_iter()
         .map(|limits| {
             let Some(error) = limits.error.clone() else { return limits };
-            let last = before.iter().find(|last| last.agent == limits.agent && last.error.is_none());
+            let same = |last: &&AgentLimits| last.agent == limits.agent && last.account_name == limits.account_name;
+            let last = before.iter().filter(same).find(|last| last.error.is_none());
             let Some(last) = last else { return limits };
             AgentLimits { error: Some(error), ..last.clone() }
         })
         .collect()
 }
 
-async fn read_agent(environment: &Environment, agent: Agent) -> Option<AgentLimits> {
+async fn read_account(account: &AgentAccount, environment: &Environment) -> Option<AgentLimits> {
+    let agent = account.agent;
     environment.executable(agent)?;
     let read = match agent {
         Agent::Claude => read_claude(environment).await,
         Agent::Codex => read_codex(environment).await,
     };
+    let read = read.map(|limits| AgentLimits { account_name: account.name.clone(), ..limits });
     Some(read.unwrap_or_else(|error| AgentLimits {
         agent,
+        account_name: account.name.clone(),
         account: None,
         plan: None,
         windows: vec![],
@@ -84,6 +95,7 @@ fn claude_limits(account: &Value, usage: &Value) -> AgentLimits {
     let windows = if usage["rate_limits_available"] == false { vec![] } else { claude_windows(&usage["rate_limits"]) };
     AgentLimits {
         agent: Agent::Claude,
+        account_name: String::new(),
         account: account["email"].as_str().map(String::from),
         plan: plan.or_else(|| usage["subscription_type"].as_str().map(capitalized)),
         windows,
@@ -157,6 +169,7 @@ fn codex_limits(account: &Value, limits: Result<Value, String>) -> anyhow::Resul
     let plan = account["planType"].as_str().map(codex_plan);
     let mut read = AgentLimits {
         agent: Agent::Codex,
+        account_name: String::new(),
         account: account["email"].as_str().map(String::from),
         plan,
         windows: vec![],
@@ -315,6 +328,7 @@ mod tests {
     fn an_agent_that_cant_be_read_keeps_what_it_said_last_time() {
         let read = |agent, used_percent, error: Option<&str>| AgentLimits {
             agent,
+            account_name: "Default".into(),
             account: Some("a@b.c".into()),
             plan: Some("Max".into()),
             windows: error

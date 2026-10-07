@@ -11,7 +11,7 @@ enum InputVariant {
 }
 
 /// A line to type in, as tall as a button of its size, with a symbol before it when it has one
-/// and a button that empties it when it is `clearable`.
+/// and a button that empties it when it is `clearable`. A `secure` one shows dots for what is typed.
 struct InputField: View {
     private let placeholder: String
     @Binding private var text: String
@@ -19,6 +19,7 @@ struct InputField: View {
     private let size: ControlSize
     private let clearable: Bool
     private let monospaced: Bool
+    private let secure: Bool
     private let variant: InputVariant
     private let focus: FocusState<Bool>.Binding?
     @FocusState private var ownFocus: Bool
@@ -26,7 +27,7 @@ struct InputField: View {
 
     init(
         _ placeholder: String, text: Binding<String>, icon: Symbol? = nil, variant: InputVariant = .outlined, size: ControlSize = .regular,
-        clearable: Bool = false, monospaced: Bool = false, focus: FocusState<Bool>.Binding? = nil
+        clearable: Bool = false, monospaced: Bool = false, secure: Bool = false, focus: FocusState<Bool>.Binding? = nil
     ) {
         self.placeholder = placeholder
         _text = text
@@ -35,6 +36,7 @@ struct InputField: View {
         self.size = size
         self.clearable = clearable
         self.monospaced = monospaced
+        self.secure = secure
         self.focus = focus
     }
 
@@ -57,7 +59,7 @@ struct InputField: View {
                     .foregroundStyle(Color.themeTertiary)
                     .allowsHitTesting(false)
             }
-            TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.themeTertiary))
+            field
                 .textFieldStyle(.plain)
                 .font(.ui(size: size.textSize + 0.5, design: monospaced ? .monospaced : .default))
                 .focused(focus ?? $ownFocus)
@@ -76,6 +78,17 @@ struct InputField: View {
                 .textPointer()
         }
         .fieldFrame(size, surface: surface, fill: fill, outlined: variant == .outlined)
+    }
+}
+
+extension InputField {
+    @ViewBuilder fileprivate var field: some View {
+        let prompt = Text(placeholder).foregroundStyle(Color.themeTertiary)
+        if secure {
+            SecureField("", text: $text, prompt: prompt)
+        } else {
+            TextField("", text: $text, prompt: prompt)
+        }
     }
 }
 

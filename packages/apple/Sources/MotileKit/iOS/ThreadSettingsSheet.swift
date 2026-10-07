@@ -7,8 +7,8 @@ struct ThreadSettingsSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.surface) private var surface
-    /// The agents whose models are listed. The others are only their names until they are tapped.
-    @State private var listed: Set<Agent> = []
+    /// The accounts whose models are listed. The others are only their names until they are tapped.
+    @State private var listed: Set<String> = []
 
     var body: some View {
         @Bindable var store = store
@@ -36,24 +36,25 @@ struct ThreadSettingsSheet: View {
             }
         }
         .presentationDragIndicator(.visible)
-        .onAppear { listed = Set([store.composerModel?.agent].compactMap { $0 }) }
+        .onAppear { listed = Set([store.composerAccount?.id].compactMap { $0 }) }
     }
 
     @ViewBuilder private var models: some View {
         let current = store.composerModel
-        ForEach(Agent.allCases, id: \.self) { agent in
-            let ofAgent = store.composerModels.filter { $0.agent == agent }
-            if !ofAgent.isEmpty {
+        let account = store.composerAccount
+        ForEach(store.composerChoices, id: \.account.id) { choices in
+            let id = choices.account.id
+            if !choices.models.isEmpty {
                 Section {
-                    ForEach(listed.contains(agent) ? ofAgent : []) { model in
+                    ForEach(listed.contains(id) ? choices.models : []) { model in
                         Button {
-                            store.setModel(model)
+                            store.setModel(model, account: choices.account)
                         } label: {
                             HStack {
                                 Text(model.name)
                                     .foregroundStyle(Color.themeText)
                                 Spacer()
-                                if model.id == current?.id {
+                                if model.id == current?.id && id == account?.id {
                                     Image(.check, size: 13)
                                         .foregroundStyle(Color.themeText)
                                 }
@@ -62,14 +63,14 @@ struct ThreadSettingsSheet: View {
                     }
                 } header: {
                     Button {
-                        withAnimation { _ = listed.remove(agent) ?? listed.insert(agent).memberAfterInsert }
+                        withAnimation { _ = listed.remove(id) ?? listed.insert(id).memberAfterInsert }
                     } label: {
                         HStack(spacing: 6) {
-                            AgentIcon(agent: agent, size: 14)
-                            Text(agent.name)
+                            AgentIcon(agent: choices.account.agent, size: 14)
+                            Text(choices.title)
                             Spacer()
                             Image(.chevronDown, size: 10.5)
-                                .rotationEffect(.degrees(listed.contains(agent) ? 180 : 0))
+                                .rotationEffect(.degrees(listed.contains(id) ? 180 : 0))
                         }
                         .frame(minHeight: 32)
                         .contentShape(Rectangle())

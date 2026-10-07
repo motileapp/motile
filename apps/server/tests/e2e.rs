@@ -9,11 +9,11 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, AgentLimits, Approval, CONTINUE_PROMPT, Change, CheckStatus, DiffScope, EventKind,
-    FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LineComment, MergeMethod,
-    Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit,
-    PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerUpdate, Side, Thread,
-    ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary, UsageBucket,
+    Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, CONTINUE_PROMPT, Change, CheckStatus, DiffScope,
+    EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LineComment,
+    MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail,
+    PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerUpdate, Side,
+    Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary, UsageBucket, Variable,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -98,6 +98,7 @@ impl Harness {
         Some(NewThread {
             project_id: project.id,
             agent,
+            agent_account: None,
             model: None,
             effort: None,
             access: AgentAccess::Supervised,
@@ -109,7 +110,11 @@ impl Harness {
     /// The arguments the agent got for each turn, one per line, leaving out the calls that only
     /// asked for a title.
     fn recorded_turns(&self) -> Vec<String> {
-        let recorded = std::fs::read_to_string(self.dir.path().join("arguments.txt")).unwrap_or_default();
+        self.recorded_turns_in("arguments.txt")
+    }
+
+    fn recorded_turns_in(&self, file: &str) -> Vec<String> {
+        let recorded = std::fs::read_to_string(self.dir.path().join(file)).unwrap_or_default();
         let calls = recorded.lines().filter_map(|line| serde_json::from_str::<Vec<String>>(line).ok());
         let is_title = |arguments: &Vec<String>| {
             arguments.iter().any(|argument| argument == "--json-schema" || argument == "--output-last-message")
@@ -1316,6 +1321,7 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
     let new_thread = NewThread {
         project_id: project.id,
         agent: Agent::Claude,
+        agent_account: None,
         model: Some(opus.id.clone()),
         effort: Some("xhigh".to_string()),
         access: AgentAccess::Full,
@@ -1346,6 +1352,68 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
 
     let odd = ThreadChange { effort: Some("low\" sandbox".to_string()), ..Default::default() };
     assert!(matches!(update(&connection, &thread_id, odd).await, Message::Error { .. }));
+}
+
+#[tokio::test]
+async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_another() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let project = harness.project(&connection).await;
+    let recorded = harness.dir.path().join("personal.txt").to_string_lossy().into_owned();
+    let personal = AgentAccount {
+        id: String::new(),
+        agent: Agent::Claude,
+        name: "Personal".into(),
+        folder: "~/.claude-personal".into(),
+        shares_sessions: false,
+        variables: vec![Variable { name: "FAKE_AGENT_ARGUMENTS_FILE".into(), value: recorded, sensitive: true }],
+        email: None,
+        plan: None,
+    };
+    let saved = connection.request(&Request::SaveAgentAccount { account: personal }).await.unwrap();
+    assert_eq!(saved, Message::Ok);
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    let ids: Vec<&str> = server.agent_accounts.iter().map(|account| account.id.as_str()).collect();
+    assert_eq!(ids, ["claude", "codex", "claude-personal"]);
+    assert_eq!(server.agent_accounts[2].variables[0].value, "", "a sensitive value stays on the server");
+
+    let new_thread = NewThread {
+        project_id: project.id,
+        agent: Agent::Claude,
+        agent_account: Some("claude-personal".into()),
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        plan: false,
+        worktree: None,
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "What is in README.md?").await;
+    finished_transcript(&connection, &thread_id).await;
+    send(&connection, Some(thread_id.clone()), None, "And in LICENSE?").await;
+    finished_transcript(&connection, &thread_id).await;
+    // Reading what the accounts have used, which saving one does, starts their agents too.
+    let turns_in = |file: &str| -> Vec<String> {
+        let turns = harness.recorded_turns_in(file).into_iter();
+        turns.filter(|arguments| arguments.contains("--append-system-prompt")).collect()
+    };
+    let turns = turns_in("personal.txt");
+    assert_eq!(turns.len(), 2, "{turns:?}");
+    assert!(!turns[0].contains("--resume") && turns[1].contains("--resume"), "{turns:?}");
+    assert!(turns_in("arguments.txt").is_empty());
+
+    let change = ThreadChange { agent_account: Some("claude".into()), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, change).await, Message::Ok);
+    send(&connection, Some(thread_id.clone()), None, "And in Cargo.toml?").await;
+    finished_transcript(&connection, &thread_id).await;
+    let moved = turns_in("arguments.txt");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert!(!moved[0].contains("--resume"), "a new session starts where the old one isn't: {moved:?}");
+
+    let removed = connection.request(&Request::RemoveAgentAccount { id: "claude".into() }).await.unwrap();
+    assert!(matches!(removed, Message::Error { .. }), "the default account stays");
+    let removed = connection.request(&Request::RemoveAgentAccount { id: "claude-personal".into() }).await.unwrap();
+    assert_eq!(removed, Message::Ok);
 }
 
 #[tokio::test]
@@ -1543,6 +1611,7 @@ async fn a_projects_branches_are_listed_switched_and_created() {
     let new_thread = NewThread {
         project_id: project.id.clone(),
         agent: Agent::Claude,
+        agent_account: None,
         model: None,
         effort: None,
         access: AgentAccess::Supervised,
@@ -2101,6 +2170,7 @@ async fn a_worktree_asked_for_with_a_branch_is_made_on_it() {
     let new_thread = NewThread {
         project_id: project.id.clone(),
         agent: Agent::Claude,
+        agent_account: None,
         model: None,
         effort: None,
         access: AgentAccess::Full,
@@ -2132,6 +2202,7 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
     let new_thread = NewThread {
         project_id: project.id.clone(),
         agent: Agent::Claude,
+        agent_account: None,
         model: None,
         effort: None,
         access: AgentAccess::Full,
@@ -2242,6 +2313,7 @@ async fn where_a_new_worktree_starts_is_said_and_so_is_a_remote_that_cannot_be_f
     let new_thread = NewThread {
         project_id: project.id.clone(),
         agent: Agent::Claude,
+        agent_account: None,
         model: None,
         effort: None,
         access: AgentAccess::Full,
@@ -2289,6 +2361,7 @@ async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
     let new_thread = NewThread {
         project_id: project.id.clone(),
         agent: Agent::Claude,
+        agent_account: None,
         model: None,
         effort: None,
         access: AgentAccess::Full,
@@ -2410,6 +2483,7 @@ async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
     let new_thread = NewThread {
         project_id: project.id.clone(),
         agent: Agent::Claude,
+        agent_account: None,
         model: None,
         effort: None,
         access: AgentAccess::Full,

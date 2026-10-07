@@ -45,6 +45,13 @@ impl Environment {
         Self { variables, executables, versions, models, gh: None }
     }
 
+    /// The same, with these variables set besides.
+    pub fn with(&self, variables: impl IntoIterator<Item = (String, String)>) -> Self {
+        let mut environment = self.clone();
+        environment.variables.extend(variables);
+        environment
+    }
+
     /// The program to run for `name`: the stand-in for `gh` when there is one.
     pub fn program(&self, name: &str) -> PathBuf {
         match &self.gh {

@@ -84,7 +84,7 @@ impl Client {
                 self.threads.extend(threads.into_iter().map(|thread| (thread.thread.id.clone(), thread)));
             }
             Event::ThreadUpsert { thread } => {
-                self.threads.insert(thread.thread.id.clone(), thread);
+                self.threads.insert(thread.thread.id.clone(), *thread);
             }
             Event::ThreadDeleted { thread_id } => {
                 self.threads.remove(&thread_id);
@@ -262,6 +262,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
     let new_thread = NewThread {
         project_id: client.projects[0].project.id.clone(),
         agent: Agent::Claude,
+        agent_account: None,
         model: None,
         effort: None,
         access: AgentAccess::Full,

@@ -94,27 +94,22 @@ pub fn placeholder(text: &str, attachments: &[String]) -> String {
 pub async fn from_first_message(environment: &Environment, writer: &Writer, message: &str) -> Option<Generated> {
     let linked = linked_context(environment, message).await;
     let prompt = format!("{INITIAL_PROMPT}\n\nUser message:\n{}{linked}", keep_ends(message, MAX_PROMPT_CHARS));
-    generate(environment, writer, &prompt).await
+    generate(writer, &prompt).await
 }
 
-pub async fn from_transcript(
-    environment: &Environment,
-    writer: &Writer,
-    previous_title: &str,
-    items: &[Item],
-) -> Option<Generated> {
+pub async fn from_transcript(writer: &Writer, previous_title: &str, items: &[Item]) -> Option<Generated> {
     let previous = serde_json::to_string(previous_title).unwrap_or_default();
     let prompt = format!(
         "Regenerate the title for an existing Motile thread so the user can recognize it weeks later.\n\
          The previous title was {previous}.\n{REGENERATE_RULES}\n\nThread contents:\n{}",
         thread_contents(items)
     );
-    generate(environment, writer, &prompt).await
+    generate(writer, &prompt).await
 }
 
-async fn generate(environment: &Environment, writer: &Writer, prompt: &str) -> Option<Generated> {
+async fn generate(writer: &Writer, prompt: &str) -> Option<Generated> {
     for attempt in 0..=RETRY_DELAYS.len() {
-        let answer = generate::ask(environment, writer, prompt, &schema()).await;
+        let answer = generate::ask(writer, prompt, &schema()).await;
         match answer.and_then(|answer| parse(&answer).ok_or_else(|| anyhow::anyhow!("answered without a title"))) {
             Ok(generated) => return Some(generated),
             Err(error) => tracing::warn!("couldn't generate a thread title: {error:#}"),
