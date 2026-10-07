@@ -11,7 +11,7 @@ extension View {
     /// The small shadow the composer's box casts on its strips.
     func composerBoxShadow() -> some View {
         #if os(macOS)
-        shadow(color: .themeComposerShadow, radius: 4)
+        shadow(color: .themeComposerShadow, radius: 3)
         #else
         self
         #endif

@@ -30,10 +30,10 @@ enum Theme {
     static let composerSecondary = dynamic(hex(0xeceef4), hex(0x191a1f))
     static let sheet = background
     /// The composer's shadows: a small one under its box and a wide one around it and its strips.
-    static let composerShadow = dynamic(hex(0x1a1f36, alpha: 0.1), hex(0x030407, alpha: 0.6))
-    static let composerOutlineShadow = dynamic(hex(0x1a1f36, alpha: 0.1), hex(0x030407, alpha: 0.6))
+    static let composerShadow = dynamic(hex(0x1a1f36, alpha: 0.06), hex(0x030407, alpha: 0.3))
+    static let composerOutlineShadow = dynamic(hex(0x1a1f36, alpha: 0.06), hex(0x030407, alpha: 0.3))
     /// Light caught by the composer's top edge, which shows its height where a shadow can't.
-    static let composerEdge = dynamic(hex(0xffffff, alpha: 0), hex(0xffffff, alpha: 0.04))
+    static let composerEdge = dynamic(hex(0xffffff, alpha: 0), hex(0xffffff, alpha: 0.03))
     /// Borders are solid, so that where two meet they do not darken.
     static let border = dynamic(hex(0xe2e3e5), hex(0x191a1e))
     static let borderSecondary = dynamic(hex(0xd5d6d9), hex(0x2b2b2f))
