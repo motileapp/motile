@@ -4,7 +4,7 @@ import SwiftUI
 struct Spinner: View {
     /// The loader reaches every side of its square, so it is drawn smaller in it to look as
     /// large as the symbols it stands in for.
-    private static let fill: CGFloat = 0.85
+    static let fill: CGFloat = 0.85
 
     var size: CGFloat = ControlSize.regular.symbol
     @State private var turned = false
