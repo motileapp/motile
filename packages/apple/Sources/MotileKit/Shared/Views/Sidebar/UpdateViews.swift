@@ -11,7 +11,7 @@ struct AppUpdateRow: View {
         case .idle:
             EmptyView()
         case .checking:
-            line("Checking for updates", symbol: .refreshCw) { spinner }
+            line("Checking for updates", symbol: .refreshCw, turning: true)
         case .upToDate:
             HStack {
                 UpdateLabel.upToDate(updater.current)
@@ -59,15 +59,15 @@ struct AppUpdateRow: View {
             .foregroundStyle(Color.themeSecondary)
     }
 
-    private func line(_ text: String, symbol: Symbol) -> some View {
-        line(text, symbol: symbol) { EmptyView() }
+    private func line(_ text: String, symbol: Symbol, turning: Bool = false) -> some View {
+        line(text, symbol: symbol, turning: turning) { EmptyView() }
     }
 
     private func line<Trailing: View>(
-        _ text: String, symbol: Symbol, tint: Color = .themeSecondary, @ViewBuilder trailing: () -> Trailing
+        _ text: String, symbol: Symbol, tint: Color = .themeSecondary, turning: Bool = false, @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         HStack(spacing: 7) {
-            UpdateLabel(text: text, symbol: symbol, tint: tint)
+            UpdateLabel(text: text, symbol: symbol, tint: tint, turning: turning)
             Spacer(minLength: 4)
             trailing()
         }
@@ -81,6 +81,7 @@ struct UpdateLabel: View {
     var detail: String?
     let symbol: Symbol
     var tint = Color.themeSecondary
+    var turning = false
 
     static func upToDate(_ version: String) -> UpdateLabel {
         UpdateLabel(text: "Up to date", detail: "(\(version))", symbol: .circleCheck, tint: .themeSuccess)
@@ -88,7 +89,7 @@ struct UpdateLabel: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            Image(symbol, size: 13)
+            TurningSymbol(symbol: symbol, size: 13, turning: turning)
                 .foregroundStyle(tint)
             label
                 .font(.ui(size: 12, weight: .medium))

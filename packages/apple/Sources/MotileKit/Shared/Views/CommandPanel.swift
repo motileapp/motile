@@ -130,11 +130,7 @@ struct CommandPanel: View {
         return Button {
             store.loadRepos(id, fresh: true)
         } label: {
-            if pending {
-                Spinner(size: 16)
-            } else {
-                Image(.rotateCw, size: 16)
-            }
+            TurningSymbol(symbol: .rotateCw, size: 16, turning: pending)
         }
         .disabled(pending)
         .accessibilityLabel("Refresh")

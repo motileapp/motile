@@ -97,8 +97,8 @@ struct ControlLook {
 }
 
 /// What a button or a menu says: a symbol, words, or both. While `pending` the spinner stands
-/// where the symbol is, or over the words when there is none, and the width stays. With a
-/// `pendingTitle` it says that beside the spinner instead.
+/// where the symbol is, or over the words when there is none, and the width stays. A symbol that
+/// `turns` turns itself instead. With a `pendingTitle` it says that beside the spinner instead.
 struct ControlLabel: View {
     let title: String?
     let icon: ControlIcon?
@@ -153,7 +153,9 @@ struct ControlLabel: View {
 
     private func words(_ title: String?, spins: Bool) -> some View {
         HStack(spacing: gap ?? size.gap) {
-            if spins {
+            if case .symbol(let symbol) = icon, symbol.turns {
+                TurningSymbol(symbol: symbol, size: markSize, turning: pending)
+            } else if spins {
                 Spinner(size: markSize)
             } else if let icon {
                 mark(icon)

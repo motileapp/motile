@@ -41,11 +41,7 @@ struct UsageSheet: View {
                     Button {
                         model.refresh()
                     } label: {
-                        if model.refreshing {
-                            Spinner(size: 16)
-                        } else {
-                            Image(.refreshCw, size: 16)
-                        }
+                        TurningSymbol(symbol: .refreshCw, size: 16, turning: model.refreshing)
                     }
                     .disabled(model.refreshing)
                     .accessibilityLabel("Refresh")
