@@ -37,9 +37,9 @@ struct ComposerRows: Layout {
     }
 }
 
-/// The row of the composer's buttons: the one that attaches, the model's name, which opens the
-/// thread's settings, and the ones that stop and send. Collapsed, the text is in the middle of
-/// the row instead of the model's name.
+/// The row of the composer's buttons: the one that attaches, the server's name, the model's
+/// name, which opens the thread's settings, and the ones that stop and send. Collapsed, the text
+/// is in the middle of the row instead of the names.
 struct ComposerTouchControls: View {
     @Environment(AppStore.self) private var store
     let collapsed: Bool
@@ -48,6 +48,10 @@ struct ComposerTouchControls: View {
         HStack(spacing: 0) {
             AttachMenu()
                 .padding(.leading, 4)
+            if !collapsed, let server = store.composerServer {
+                ServerLabel(server: server)
+                    .appearing()
+            }
             Spacer(minLength: 8)
             if !collapsed {
                 settingsButton
