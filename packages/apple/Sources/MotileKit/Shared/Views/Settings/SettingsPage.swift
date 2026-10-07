@@ -428,11 +428,59 @@ private struct AgentAccountSheet: View {
 
     private var installed: [Agent] { Agent.allCases.filter { server.agents[$0] != nil } }
     private var isNew: Bool { account.id.isEmpty }
+    private var title: String { isNew ? "New account on \(server.name)" : "\(account.agent.name) account on \(server.name)" }
+    private var canSave: Bool { !account.name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
+        content
+            .onChange(of: account.name) { suggestFolder() }
+            .onChange(of: account.agent) { suggestFolder() }
+    }
+
+    @ViewBuilder private var content: some View {
+        #if os(macOS)
         VStack(alignment: .leading, spacing: 14) {
-            Text(isNew ? "New account on \(server.name)" : "\(account.agent.name) account on \(server.name)")
+            Text(title)
                 .font(.ui(size: 13, weight: .semibold))
+            form
+            HStack {
+                Spacer()
+                ActionButton("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                ActionButton("Save", variant: .primary, pending: saving) { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSave)
+            }
+        }
+        .padding(16)
+        .frame(width: 460)
+        #else
+        NavigationStack {
+            ScrollView {
+                form
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom) {
+                SheetButton("Save", pending: saving) { save() }
+                    .disabled(!canSave)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+            }
+        }
+        .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(saving)
+        #endif
+    }
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: Platform.scale > 1 ? 28 : 14) {
             if isNew && installed.count > 1 {
                 Segmented(installed.map { ($0.name, $0) }, selection: $account.agent)
             }
@@ -453,6 +501,7 @@ private struct AgentAccountSheet: View {
                                 .foregroundStyle(Color.themeSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
+                        .padding(.horizontal, 4)
                         Spacer(minLength: 12)
                         Switch(isOn: $account.sharesSessions)
                     }
@@ -469,24 +518,7 @@ private struct AgentAccountSheet: View {
                 }
             }
             signIn
-            HStack {
-                Spacer()
-                ActionButton("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                ActionButton("Save", variant: .primary, pending: saving) { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(account.name.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
         }
-        .padding(16)
-        .onChange(of: account.name) { suggestFolder() }
-        .onChange(of: account.agent) { suggestFolder() }
-        #if os(macOS)
-        .frame(width: 460)
-        #else
-        .frame(maxHeight: .infinity, alignment: .top)
-        .presentationDetents([.large])
-        #endif
     }
 
     /// How the account is signed in: on its server, with its folder.
@@ -520,12 +552,14 @@ private struct AgentAccountSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.ui(size: 12, weight: .medium))
+                .padding(.horizontal, 4)
             content()
             if let caption {
                 Text(caption)
                     .font(.ui(size: 11.5))
                     .foregroundStyle(Color.themeTertiary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
             }
         }
     }
