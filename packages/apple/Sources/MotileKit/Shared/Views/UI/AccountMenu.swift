@@ -6,13 +6,14 @@ struct AccountMenu: View {
     /// The picture's side on the Mac, which fills its button but for a margin.
     static let side = ControlSize.regular.height - 8
 
+    var margin = EdgeInsets()
     @Environment(AppStore.self) private var store
 
     var body: some View {
         #if os(macOS)
         ActionMenu(
             picture: AnyView(AccountPicture(account: store.account)), help: store.account.email,
-            symbolSize: Self.side
+            symbolSize: Self.side, margin: margin
         ) { items }
         #else
         Menu { items } label: {
