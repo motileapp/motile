@@ -37,6 +37,8 @@ enum Theme {
     /// Borders are solid, so that where two meet they do not darken.
     static let border = dynamic(hex(0xe2e3e5), hex(0x191a1e))
     static let borderSecondary = dynamic(hex(0xd5d6d9), hex(0x2b2b2f))
+    /// A line on the system's glass, see-through so that it takes the glass's colour.
+    static let glassBorder = dynamic(hex(0x000000, alpha: 0.08), hex(0xffffff, alpha: 0.08))
 
     #if os(macOS)
     static let systemLink = NSColor.linkColor
@@ -310,6 +312,7 @@ extension Color {
     static let themeComposerEdge = Color(platform: Theme.composerEdge)
     static let themeBorder = Color(platform: Theme.border)
     static let themeBorderSecondary = Color(platform: Theme.borderSecondary)
+    static let themeGlassBorder = Color(platform: Theme.glassBorder)
     static let themeText = Color(platform: Theme.text)
     static let themeSecondary = Color(platform: Theme.secondary)
     static let themeTertiary = Color(platform: Theme.tertiary)

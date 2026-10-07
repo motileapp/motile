@@ -137,9 +137,12 @@ final class AppStore {
     var dropTargeted = false
     /// Files are being dragged over the composer's text, which takes drops itself.
     var composerDropTargeted = false
-    /// The branch picker is open, on the branches it was opened with.
+    /// The branch picker is open. Its branches are `nil` until your server has listed them.
     var showsBranches = false
-    private(set) var listedBranches: Result<[Branch], CoreBridge.CoreError> = .success([])
+    private(set) var listedBranches: Result<[Branch], CoreBridge.CoreError>?
+    private var branchesProjectID: String?
+    /// Each project's branches as last listed, which the picker opens on while it lists them again.
+    private var knownBranches: [String: [Branch]] = [:]
     /// The project whose changes the commit sheet is open on, with the files it was opened with.
     var committingProject: Project?
     private(set) var gitFiles: [ChangedFile] = []
@@ -1273,13 +1276,29 @@ final class AppStore {
         project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 3
     }
 
-    /// Opens the branch picker once the branches are known: a popover finds its place by the
-    /// size it opens with.
+    /// Opens the branch picker at once, on the branches last listed or on placeholders, and
+    /// lists them again.
     func showBranches(of project: Project) {
+        listedBranches = knownBranches[project.id].map { .success($0) }
+        branchesProjectID = project.id
+        showsBranches = true
+        listBranches(of: project)
+    }
+
+    /// Lists the branches of the project the composer is on before the picker is opened.
+    private func listComposerBranches() {
+        guard let project = composerProject, canSwitchBranches(of: project) else { return }
+        listBranches(of: project)
+    }
+
+    private func listBranches(of project: Project) {
         let request: JSON = ["type": "branches", "project_id": project.id]
         core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
-            self?.listedBranches = result.map { $0.objects("branches").map { Branch(json: $0) } }
-            self?.showsBranches = true
+            guard let self else { return }
+            let listed = result.map { $0.objects("branches").map { Branch(json: $0) } }
+            if case .success(let branches) = listed { knownBranches[project.id] = branches }
+            guard branchesProjectID == project.id, showsBranches else { return }
+            listedBranches = listed
         }
     }
 
@@ -1320,6 +1339,7 @@ final class AppStore {
     /// Has the server read the repository git works in from here again, which the project then
     /// arrives with. With `fetch` the remote is asked first, and a fetch that fails is said.
     private func readGit(fetch: Bool = false, done: (([ChangedFile]) -> Void)? = nil) {
+        if fetch { listComposerBranches() }
         guard let project = gitProject else { return }
         var request: JSON = ["type": "git_status", "project_id": project.id, "fetch": fetch]
         if let thread = selectedThread { request["thread_id"] = thread.id }

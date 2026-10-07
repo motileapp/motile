@@ -216,6 +216,12 @@ struct BranchPicker: View {
     private static let rowHeight: CGFloat = Platform.scale > 1 ? 44 : 30
     private static let listPadding: CGFloat = 8
     private static let maxListHeight: CGFloat = Platform.scale > 1 ? 420 : 300
+    private static let placeholderCount = 5
+    #if os(macOS)
+    private static let dividerColor = Color.themeGlassBorder
+    #else
+    private static let dividerColor = Color.themeBorder
+    #endif
 
     private enum Choice: Identifiable {
         case branch(Branch)
@@ -231,12 +237,15 @@ struct BranchPicker: View {
 
     private var working: Bool { base == nil && store.isWorking(in: project) }
 
-    private var branches: [Branch]? { try? store.listedBranches.get() }
+    private var prompt: String { base == nil ? "Switch or create a branch" : "Start from a branch" }
+
+    private var branches: [Branch]? { try? store.listedBranches?.get() }
 
     /// The height of all the branches, also while fewer match: a popover that shrinks leaves
     /// the button it opened from.
     private var listHeight: CGFloat {
-        min(Self.maxListHeight, CGFloat(branches?.count ?? 0) * Self.rowHeight + 2 * Self.listPadding)
+        let rows = store.listedBranches == nil ? Self.placeholderCount : branches?.count ?? 0
+        return min(Self.maxListHeight, CGFloat(rows) * Self.rowHeight + 2 * Self.listPadding)
     }
 
     private var listProblem: String? {
@@ -258,10 +267,11 @@ struct BranchPicker: View {
     var body: some View {
         let choices = self.choices
         VStack(spacing: 0) {
+            #if os(macOS)
             HStack(spacing: 8) {
                 Image(.search, size: 12)
                     .foregroundStyle(Color.themeTertiary)
-                TextField(base == nil ? "Switch or create a branch…" : "Start from a branch…", text: $query)
+                TextField("", text: $query, prompt: Text(prompt).foregroundStyle(Color.themeTertiary))
                     .textFieldStyle(.plain)
                     .font(.ui(size: 13))
                     .focused($searching)
@@ -280,12 +290,13 @@ struct BranchPicker: View {
                     }
             }
             .padding(.horizontal, 16)
-            .frame(height: Platform.scale > 1 ? 52 : 38)
-            ThemeDivider()
+            .frame(height: 38)
+            ThemeDivider(color: Self.dividerColor)
+            #endif
             list(choices)
             let note: String? = working ? "An agent is working in this project. Switch when it has finished." : problem
             if let note {
-                ThemeDivider()
+                ThemeDivider(color: Self.dividerColor)
                 Text(note)
                     .font(.ui(size: 11.5))
                     .foregroundStyle(working ? Color.themeSecondary : Color.themeDanger)
@@ -307,12 +318,28 @@ struct BranchPicker: View {
         .environment(\.surface, .secondary)
         .navigationTitle(base == nil ? "Branch" : "Start From")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $query, prompt: prompt)
+        .searchPresentationToolbarBehavior(.avoidHidingContent)
+        .searchAtBottom()
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .onSubmit(of: .search) { choose(choices, at: highlighted) }
         #endif
         .onChange(of: query) { highlighted = 0 }
     }
 
     @ViewBuilder private func list(_ choices: [Choice]) -> some View {
-        if let listProblem {
+        if store.listedBranches == nil {
+            VStack(spacing: 0) {
+                ForEach(0..<Self.placeholderCount, id: \.self) { index in
+                    BranchPlaceholder(index: index, height: Self.rowHeight)
+                }
+            }
+            .padding(Self.listPadding)
+            #if os(macOS)
+            .frame(height: listHeight, alignment: .top)
+            #endif
+        } else if let listProblem {
             Text(listProblem)
                 .font(.ui(size: 12.5))
                 .foregroundStyle(Color.themeDanger)
@@ -337,6 +364,7 @@ struct BranchPicker: View {
                         }
                     }
                     .padding(Self.listPadding)
+                    .padding(.bottom, Platform.scale > 1 ? 24 : 0)
                 }
                 #if os(macOS)
                 .frame(height: listHeight)
@@ -410,5 +438,33 @@ struct BranchPicker: View {
             }
             problem = failure
         }
+    }
+}
+
+/// A branch's row before the branches are listed: bars where its icon and name will be.
+private struct BranchPlaceholder: View {
+    @Environment(\.surface) private var surface
+    let index: Int
+    let height: CGFloat
+    @State private var faded = false
+
+    private static let widths: [CGFloat] = [90, 150, 120, 170, 105]
+
+    var body: some View {
+        HStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(surface.next.color)
+                .frame(width: 11, height: 11)
+                .frame(width: 14)
+            Capsule()
+                .fill(surface.next.color)
+                .frame(width: Self.widths[index % Self.widths.count], height: 8)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: height)
+        .opacity(faded ? 0.45 : 1)
+        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: faded)
+        .onAppear { faded = true }
     }
 }
