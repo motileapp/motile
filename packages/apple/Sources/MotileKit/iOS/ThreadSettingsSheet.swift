@@ -100,8 +100,6 @@ struct ThreadSettingsSheet: View {
             Toggle("Plan mode", isOn: Binding(get: { store.composerPlan }, set: { store.setPlan($0) }))
         } header: {
             Text("Options")
-        } footer: {
-            Text(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail)
         }
         .listRowBackground(surface.next.color)
     }
