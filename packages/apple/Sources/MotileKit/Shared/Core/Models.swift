@@ -75,6 +75,8 @@ struct Server: Equatable, Identifiable {
 
     let id: String
     let name: String
+    /// The name cut short, for the places a long name crowds.
+    let shortName: String
     let platform: String
     let state: State
     let error: String?
@@ -106,6 +108,7 @@ struct Server: Equatable, Identifiable {
     init(json: JSON) {
         id = json.string("id")
         name = json.string("name")
+        shortName = json.string("short_name")
         platform = json.string("platform")
         state = State(rawValue: json.string("state")) ?? .connecting
         error = json.optionalString("error")

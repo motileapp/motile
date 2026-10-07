@@ -74,7 +74,7 @@ struct ContextStrip: View {
     private var parts: some View {
         HStack(spacing: 0) {
             if let server {
-                part(server.name) {
+                part(server.shortName) {
                     Image(.server, size: 11)
                 }
                 .padding(.leading, 14)

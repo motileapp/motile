@@ -144,7 +144,7 @@ struct ThreadPane: View {
                     Button {
                         store.setNewThreadProject(project.id)
                     } label: {
-                        let name = store.servers.count > 1 ? "\(project.name) · \(store.server(project.serverID)?.name ?? "")" : project.name
+                        let name = store.servers.count > 1 ? "\(project.name) · \(store.server(project.serverID)?.shortName ?? "")" : project.name
                         Label {
                             Text(name)
                         } icon: {
