@@ -204,29 +204,27 @@ struct ComposerView: View {
     }
 
     @ViewBuilder private func modelMenu(compact: Bool) -> some View {
-        let models = store.composerModels
         let current = store.composerModel
-        let name = current?.shortName ?? "No agent"
+        let account = store.composerAccount
+        let name = store.composerModelLabel
         let margin = Self.margin(leading: 8)
         let logo = current.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         ActionMenu(
             compact && current != nil ? nil : name, picture: logo, help: current?.name ?? name, symbolSize: ControlSize.regular.symbol,
             gap: 4, margin: margin
         ) {
-            ForEach(Agent.allCases, id: \.self) { agent in
-                let ofAgent = models.filter { $0.agent == agent }
-                if !ofAgent.isEmpty {
-                    Section(agent.name) {
-                        ForEach(ofAgent) { model in
-                            choice(model.name, image: agent.menuLogo, chosen: model.id == current?.id) {
-                                store.setModel(model)
-                            }
+            ForEach(store.composerChoices, id: \.account.id) { choices in
+                Section(choices.title) {
+                    ForEach(choices.models) { model in
+                        let chosen = model.id == current?.id && choices.account.id == account?.id
+                        choice(model.name, image: model.agent.menuLogo, chosen: chosen) {
+                            store.setModel(model, account: choices.account)
                         }
                     }
                 }
             }
         }
-        .disabled(models.isEmpty)
+        .disabled(store.composerModels.isEmpty)
     }
 
     @ViewBuilder private var effortMenu: some View {

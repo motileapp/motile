@@ -167,6 +167,8 @@ impl Server {
                 hub.usage(since, until, bucket_secs, utc_offset_secs)
             }
             Request::Limits { refresh } => Ok(hub.limits(refresh).await),
+            Request::SaveAgentAccount { account } => hub.save_agent_account(account).await.map(|_| Message::Ok),
+            Request::RemoveAgentAccount { id } => hub.remove_agent_account(&id).await.map(|_| Message::Ok),
             Request::LinkPullRequest { thread_id, number } => {
                 hub.link_pull_request(&thread_id, number).await.map(|_| Message::Ok)
             }

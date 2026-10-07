@@ -142,6 +142,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     hub.watch_pull_requests(PULL_REQUEST_WATCH);
     hub.keep_limits_continued(LIMITS_CHECK);
     hub.continue_interrupted();
+    hub.refresh_limits();
     hub.keep_prices_current(std::env::var("MOTILE_PRICES_URL").unwrap_or_else(|_| pricing::LIST_URL.to_string()));
     let endpoint = bind(&key, &options).await?;
     tracing::info!(version = env!("CARGO_PKG_VERSION"), key = key.public(), "serving");

@@ -2,7 +2,7 @@ import Foundation
 
 /// A page of the settings, listed in the settings' sidebar.
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case general, servers, projects, textGeneration, pullRequests
+    case general, servers, agents, projects, textGeneration, pullRequests
 
     var id: String { rawValue }
 
@@ -10,6 +10,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .general: "General"
         case .servers: "Servers"
+        case .agents: "Agents"
         case .projects: "Projects"
         case .textGeneration: "Text generation"
         case .pullRequests: "Pull requests"
@@ -20,6 +21,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .general: .slidersHorizontal
         case .servers: .server
+        case .agents: .circleUser
         case .projects: .folder
         case .textGeneration: .pencilLine
         case .pullRequests: .gitPullRequest
@@ -44,6 +46,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove machine agents connected"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
+        SettingsEntry(id: "agent-accounts", title: "Accounts", section: .agents, keywords: "claude codex sign in login folder subscription plan api key router"),
         SettingsEntry(id: "projects", title: "Projects", section: .projects, keywords: "add remove folder icon setup worktree script"),
         SettingsEntry(id: "text-model", title: "Model", section: .textGeneration, keywords: "titles branch names commit messages pull requests writer"),
         SettingsEntry(id: "branch-names", title: "Branch names", section: .textGeneration, keywords: "instructions prefix naming"),

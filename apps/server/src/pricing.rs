@@ -106,6 +106,7 @@ mod tests {
         UsageBucket {
             start: 0.0,
             agent: Agent::Codex,
+            account_name: String::new(),
             model: model.to_string(),
             project_id: "p".to_string(),
             tokens,

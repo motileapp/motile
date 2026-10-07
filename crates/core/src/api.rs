@@ -383,7 +383,7 @@ pub enum Event {
         threads: Vec<ThreadView>,
     },
     ThreadUpsert {
-        thread: ThreadView,
+        thread: Box<ThreadView>,
     },
     ThreadDeleted {
         thread_id: String,
@@ -562,7 +562,8 @@ mod tests {
             "done_at": null, "undone_at": null, "running": true, "needs_approval": false, "turn_ended_at": null, "rev": 3,
         }))
         .unwrap();
-        let event = Event::ThreadUpsert { thread: ThreadView { thread, server_id: "h".into(), unread: false } };
+        let event =
+            Event::ThreadUpsert { thread: Box::new(ThreadView { thread, server_id: "h".into(), unread: false }) };
         let json = serde_json::to_value(event).unwrap();
 
         assert_eq!(json["type"], "thread_upsert");

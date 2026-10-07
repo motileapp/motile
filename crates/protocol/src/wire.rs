@@ -32,6 +32,9 @@ pub struct Thread {
     pub project_id: String,
     pub cwd: String,
     pub agent: Agent,
+    /// The id of the agent's account on the server that the thread works with.
+    #[serde(default)]
+    pub agent_account: String,
     /// `None` uses the agent's own default.
     pub model: Option<String>,
     /// Reasoning effort; `None` uses the model's default.
@@ -208,6 +211,9 @@ pub struct Approval {
 pub struct NewThread {
     pub project_id: String,
     pub agent: Agent,
+    /// The id of one of the agent's accounts; `None` is the agent's default account.
+    #[serde(default)]
+    pub agent_account: Option<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
     pub access: Access,
@@ -242,6 +248,11 @@ pub struct ThreadChange {
     /// Whether a thread that waits for its usage limit continues once the limit resets.
     #[serde(default)]
     pub continues: Option<bool>,
+    /// Moves the thread to another account, of its agent or of the other one, with `model` one
+    /// of that agent's. One that keeps its sessions elsewhere starts a new session that is told
+    /// the conversation so far.
+    #[serde(default)]
+    pub agent_account: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -583,12 +594,51 @@ pub enum Request {
         bucket_secs: u32,
         utc_offset_secs: i32,
     },
-    /// How much of their plans the agents' logins have used. What was read in the last minutes
+    /// How much of their plans the agents' accounts have used. What was read in the last minutes
     /// is answered again unless `refresh`. `Limits` answers.
     Limits {
         #[serde(default)]
         refresh: bool,
     },
+    /// Adds an account of an agent, or changes the one with the same id. A new account's id is
+    /// empty; the server picks it.
+    SaveAgentAccount {
+        account: AgentAccount,
+    },
+    /// Removes an account of an agent. Its threads go on with the agent's default account.
+    RemoveAgentAccount {
+        id: String,
+    },
+}
+
+/// One of an agent's accounts on a server: the folder its CLI keeps the sign-in in.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct AgentAccount {
+    /// The agent's own name for its default account, which every server has.
+    pub id: String,
+    pub agent: Agent,
+    pub name: String,
+    /// `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Empty for the default account, which uses the
+    /// agent's usual folder.
+    pub folder: String,
+    /// A Codex account that keeps only its sign-in in `folder` and shares the rest of the default
+    /// account's folder, its sessions too, so that a thread can move between them.
+    #[serde(default)]
+    pub shares_sessions: bool,
+    /// Set for the agent besides the server's environment, for an API key or a router.
+    #[serde(default)]
+    pub variables: Vec<Variable>,
+    /// Who is signed in, as the agent's CLI last said.
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub plan: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Variable {
+    pub name: String,
+    pub value: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -1354,6 +1404,9 @@ pub struct TokenCosts {
 pub struct UsageBucket {
     pub start: f64,
     pub agent: Agent,
+    /// The name of the agent's account that spent it.
+    #[serde(default)]
+    pub account_name: String,
     pub model: String,
     pub project_id: String,
     pub tokens: Tokens,
@@ -1374,6 +1427,9 @@ pub struct UsageBucket {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct AgentLimits {
     pub agent: Agent,
+    /// The name of the agent's account on the server.
+    #[serde(default)]
+    pub account_name: String,
     /// Who is signed in, which tells two servers with the same login apart from two logins.
     pub account: Option<String>,
     pub plan: Option<String>,
@@ -1405,6 +1461,9 @@ pub struct ServerInfo {
     pub agents: Vec<AgentInfo>,
     /// The models of the installed agents, in the order to offer them.
     pub models: Vec<ModelInfo>,
+    /// The agents' accounts, the default ones first.
+    #[serde(default)]
+    pub agent_accounts: Vec<AgentAccount>,
     /// The model that writes titles, commit messages and pull requests, when one was picked.
     #[serde(default)]
     pub text_model: Option<String>,

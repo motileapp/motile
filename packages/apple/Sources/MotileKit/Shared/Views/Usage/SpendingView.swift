@@ -3,12 +3,12 @@ import SwiftUI
 
 /// What the agents spent on the servers counted, the Cost and Tokens tabs of the usage route:
 /// the total and each agent's part beside a line for each agent over time, then what each model,
-/// project, server and kind of token took.
+/// project, server, account and kind of token took.
 struct SpendingView: View {
     enum Measure { case cost, tokens }
 
     private enum Breakdown: String, CaseIterable, Identifiable {
-        case models, projects, servers, kinds
+        case models, projects, servers, accounts, kinds
 
         var id: Self { self }
 
@@ -17,6 +17,7 @@ struct SpendingView: View {
             case .models: "Models"
             case .projects: "Projects"
             case .servers: "Servers"
+            case .accounts: "Accounts"
             case .kinds: "Tokens"
             }
         }
@@ -227,16 +228,20 @@ struct SpendingView: View {
     }
 
     private var lines: some View {
+        // Accounts are offered once an agent has more than one.
+        let offered = Breakdown.allCases.filter { $0 != .accounts || !report.accounts.isEmpty }
+        let current = offered.contains(breakdown) ? breakdown : .models
         let shown: [UsageReport.Line] =
-            switch breakdown {
+            switch current {
             case .models: report.models
             case .projects: report.projects
             case .servers: report.servers
+            case .accounts: report.accounts
             case .kinds: report.kinds
             }
         let stacked = width < Self.stackWidth
         return VStack(alignment: .leading, spacing: 8) {
-            Segmented(Breakdown.allCases.map { ($0.label, $0) }, selection: $breakdown, fills: stacked)
+            Segmented(offered.map { ($0.label, $0) }, selection: Binding { current } set: { breakdown = $0 }, fills: stacked)
             VStack(spacing: 0) {
                 ForEach(shown) { line in
                     UsageLineRow(line: line, measure: measure, stacked: stacked)
@@ -263,7 +268,7 @@ struct SpendingView: View {
     }
 }
 
-/// A model, a project, a server or a kind of token: its name, its part of the whole as a bar, its
+/// A model, a project, a server, an account or a kind of token: its name, its part of the whole as a bar, its
 /// tokens and what they cost. Stacked, the bar runs under the rest across the row.
 private struct UsageLineRow: View {
     @Environment(\.surface) private var surface

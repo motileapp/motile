@@ -88,8 +88,7 @@ pub async fn commit_message(
         capped(&patch, MAX_PATCH_CHARS)
     );
     let schema = schema(&["subject", "body", "branch"]);
-    let answer =
-        generate::ask(environment, writer, &prompt, &schema).await.context("Couldn't write the commit message.")?;
+    let answer = generate::ask(writer, &prompt, &schema).await.context("Couldn't write the commit message.")?;
     let subject = first_line(answer["subject"].as_str().unwrap_or_default());
     if subject.is_empty() {
         anyhow::bail!("The commit message came back empty.");
@@ -99,14 +98,9 @@ pub async fn commit_message(
 }
 
 /// A name for the branch of the work the thread's first message asks for.
-pub async fn branch_for(
-    environment: &Environment,
-    writer: &Writer,
-    instructions: &str,
-    message: &str,
-) -> anyhow::Result<String> {
+pub async fn branch_for(writer: &Writer, instructions: &str, message: &str) -> anyhow::Result<String> {
     let prompt = format!("{BRANCH_PROMPT}\n\n{instructions}\n\nUser message:\n{}", capped(message, MAX_MESSAGE_CHARS));
-    let answer = generate::ask(environment, writer, &prompt, &schema(&["branch"])).await?;
+    let answer = generate::ask(writer, &prompt, &schema(&["branch"])).await?;
     branch_name(answer["branch"].as_str().unwrap_or_default()).context("The branch's name came back empty.")
 }
 
@@ -131,7 +125,7 @@ pub async fn pull_request(
         capped(&files, MAX_LIST_CHARS),
         capped(&patch, MAX_PATCH_CHARS)
     );
-    let answer = generate::ask(environment, writer, &prompt, &schema(&["title", "body"])).await;
+    let answer = generate::ask(writer, &prompt, &schema(&["title", "body"])).await;
     let answer = answer.context("Couldn't write the pull request.")?;
     let title = first_line(answer["title"].as_str().unwrap_or_default());
     if title.is_empty() {

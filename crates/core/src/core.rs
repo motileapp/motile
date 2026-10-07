@@ -980,7 +980,7 @@ impl Core {
                 let Some(server) = self.server_mut(server_id) else { return };
                 let thread_id = thread.id.clone();
                 server.threads.insert(thread_id.clone(), thread);
-                self.emit(Event::ThreadUpsert { thread: view });
+                self.emit(Event::ThreadUpsert { thread: Box::new(view) });
                 self.refollow(server_id, &thread_id);
             }
             Message::ThreadDeleted { thread_id } => {
@@ -1997,7 +1997,7 @@ impl Core {
             server.threads.get(thread_id).map(|thread| (server.device.public_key.clone(), thread.clone()))
         });
         let Some((server_id, thread)) = found else { return };
-        self.emit(Event::ThreadUpsert { thread: ThreadView { thread, server_id, unread: false } });
+        self.emit(Event::ThreadUpsert { thread: Box::new(ThreadView { thread, server_id, unread: false }) });
     }
 
     fn highlight(&self, thread_id: &str, row_ids: &[String]) {
@@ -2222,6 +2222,7 @@ mod tests {
             project_id: "p".into(),
             cwd: "/srv".into(),
             agent: motile_protocol::wire::Agent::Claude,
+            agent_account: "claude".into(),
             model: None,
             effort: None,
             access: motile_protocol::wire::Access::Full,

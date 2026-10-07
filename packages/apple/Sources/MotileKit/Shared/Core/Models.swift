@@ -71,6 +71,70 @@ struct ModelInfo: Equatable, Identifiable {
     }
 }
 
+/// One of an agent's accounts on a server: the folder its CLI keeps the sign-in in.
+struct AgentAccount: Equatable, Identifiable {
+    struct Variable: Equatable {
+        var name: String
+        var value: String
+    }
+
+    var id: String
+    var agent: Agent
+    var name: String
+    /// `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Empty for the default account, which uses the agent's
+    /// usual folder.
+    var folder: String
+    /// A Codex account that keeps only its sign-in in `folder` and shares the rest, its sessions
+    /// too, with the default account.
+    var sharesSessions: Bool
+    var variables: [Variable]
+    /// Who is signed in, as the agent's CLI last said.
+    let email: String?
+    let plan: String?
+
+    /// The account every agent has, which uses the agent's usual folder.
+    var isDefault: Bool { id == agent.rawValue }
+
+    init(json: JSON) {
+        id = json.string("id")
+        agent = Agent(rawValue: json.string("agent")) ?? .claude
+        name = json.string("name")
+        folder = json.string("folder")
+        sharesSessions = json.bool("shares_sessions")
+        variables = json.objects("variables").map { Variable(name: $0.string("name"), value: $0.string("value")) }
+        email = json.optionalString("email")
+        plan = json.optionalString("plan")
+    }
+
+    /// A new account of `agent`, until the server keeps it.
+    init(agent: Agent) {
+        id = ""
+        self.agent = agent
+        name = ""
+        folder = ""
+        sharesSessions = false
+        variables = []
+        email = nil
+        plan = nil
+    }
+
+    var json: JSON {
+        [
+            "id": id, "agent": agent.rawValue, "name": name, "folder": folder, "shares_sessions": sharesSessions,
+            "variables": variables.map { ["name": $0.name, "value": $0.value] },
+        ]
+    }
+
+    /// The variable the account's folder is given to its agent as.
+    var folderVariable: String { agent == .claude ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME" }
+
+    /// What signs the account in, run on its server.
+    var signInCommand: String {
+        let folder = folder.isEmpty ? "" : "\(folderVariable)=\(folder) "
+        return folder + (agent == .claude ? "claude auth login" : "codex login")
+    }
+}
+
 struct Server: Equatable, Identifiable {
     enum State: String {
         case connecting, connected, disconnected, refused
@@ -105,6 +169,8 @@ struct Server: Equatable, Identifiable {
     let defaultBranchInstructions: String
     /// The agents installed on the server, with their versions.
     let agents: [Agent: String]
+    /// The agents' accounts, the default ones first.
+    let agentAccounts: [AgentAccount]
     /// Whether the server has ever told us about itself.
     let known: Bool
     /// The update the server is putting in place, as it last said.
@@ -143,6 +209,29 @@ struct Server: Equatable, Identifiable {
             installed[kind] = version
         }
         agents = installed
+        let accounts = (info?.objects("agent_accounts") ?? []).map(AgentAccount.init(json:))
+        agentAccounts = accounts.isEmpty ? Agent.allCases.map(Server.defaultAccount(of:)) : accounts
+    }
+
+    /// The account a server from before accounts has for each agent.
+    private static func defaultAccount(of agent: Agent) -> AgentAccount {
+        var account = AgentAccount(agent: agent)
+        account.id = agent.rawValue
+        account.name = "Default"
+        return account
+    }
+
+    /// Whether threads there can move between accounts and agents.
+    var switchesAccounts: Bool { protocolVersion >= 19 }
+
+    func accounts(of agent: Agent) -> [AgentAccount] {
+        agentAccounts.filter { $0.agent == agent }
+    }
+
+    /// The account with that id, or the agent's default one.
+    func account(_ id: String?, of agent: Agent) -> AgentAccount? {
+        let accounts = accounts(of: agent)
+        return accounts.first { $0.id == id } ?? accounts.first { $0.isDefault } ?? accounts.first
     }
 }
 
@@ -503,7 +592,9 @@ struct ThreadInfo: Equatable, Identifiable {
     var title: String
     let projectID: String
     let cwd: String
-    let agent: Agent
+    var agent: Agent
+    /// The id of the agent's account the thread works with.
+    var agentAccount: String
     var model: String?
     var effort: String?
     var access: Access
@@ -536,6 +627,7 @@ struct ThreadInfo: Equatable, Identifiable {
         projectID = json.string("project_id")
         cwd = json.string("cwd")
         agent = Agent(rawValue: json.string("agent")) ?? .claude
+        agentAccount = json.optionalString("agent_account").flatMap { $0.isEmpty ? nil : $0 } ?? agent.rawValue
         model = json.optionalString("model")
         effort = json.optionalString("effort")
         access = Access(rawValue: json.string("access")) ?? .full
@@ -1024,7 +1116,7 @@ struct UsageReport {
         var id: Agent { agent }
     }
 
-    /// A model, a project, a server or a kind of token, and its part of the whole.
+    /// A model, a project, a server, an account or a kind of token, and its part of the whole.
     struct Line: Identifiable {
         let name: String
         let agent: Agent?
@@ -1050,6 +1142,8 @@ struct UsageReport {
     let models: [Line]
     let projects: [Line]
     let servers: [Line]
+    /// The agents' accounts, only when an agent has more than one on a server.
+    let accounts: [Line]
 
     init(json: JSON) {
         costUSD = json.double("cost_usd")
@@ -1079,6 +1173,7 @@ struct UsageReport {
         models = json.objects("models").map { line($0, nil) }
         projects = json.objects("projects").map { line($0, nil) }
         servers = json.objects("servers").map { line($0, nil) }
+        accounts = json.objects("accounts").map { line($0, nil) }
     }
 }
 

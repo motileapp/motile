@@ -110,6 +110,7 @@ async fn main() -> anyhow::Result<()> {
         let new_thread = NewThread {
             project_id: project_id.clone(),
             agent: Agent::Claude,
+            agent_account: None,
             model: None,
             effort: None,
             access: Access::Full,

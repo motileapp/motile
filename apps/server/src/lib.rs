@@ -1,4 +1,5 @@
 pub mod access;
+pub mod agent_accounts;
 pub mod agents;
 pub mod config;
 pub mod drafts;
