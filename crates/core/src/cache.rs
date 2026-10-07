@@ -7,6 +7,8 @@ use std::sync::Mutex;
 use motile_protocol::auth_api::Me;
 use motile_protocol::wire::{Activity, Item, ItemKind, Project, ServerInfo, Thread};
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -103,6 +105,24 @@ impl Cache {
         let _ = self.connection().execute(
             "INSERT INTO kv (key, value) VALUES ('account', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             [text],
+        );
+    }
+
+    /// What the client last showed under `key`, like the usage, to show again at once.
+    pub fn kept<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
+        let text: Option<String> = self
+            .connection()
+            .query_row("SELECT value FROM kv WHERE key = ?1", [key], |row| row.get(0))
+            .optional()
+            .ok()?;
+        serde_json::from_str(&text?).ok()
+    }
+
+    pub fn keep<T: Serialize>(&self, key: &str, value: &T) {
+        let text = serde_json::to_string(value).unwrap_or_default();
+        let _ = self.connection().execute(
+            "INSERT INTO kv (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [key, &text],
         );
     }
 
@@ -403,6 +423,19 @@ mod tests {
             [("t", Some(5.0))]
         );
         assert_eq!(cache.activity("t"), None);
+    }
+
+    #[test]
+    fn what_is_kept_is_there_after_reopening_until_signing_out() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cache.sqlite");
+        Cache::open(&path).unwrap().keep("limits:h", &(5.0, vec!["claude"]));
+
+        let cache = Cache::open(&path).unwrap();
+
+        assert_eq!(cache.kept::<(f64, Vec<String>)>("limits:h"), Some((5.0, vec!["claude".to_string()])));
+        cache.clear();
+        assert_eq!(cache.kept::<(f64, Vec<String>)>("limits:h"), None);
     }
 
     #[test]

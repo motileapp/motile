@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// What the usage route shows: the tab, the period and the servers picked, which it keeps for
-/// next time, and what was last read for them. The limits show what the core kept at once, and
-/// are read again when that is old.
+/// next time, and what was last read for them. It shows what the core kept at once, reads it
+/// again, and again every few minutes while it is open.
 @Observable
 final class UsageModel {
     enum Tab: String, CaseIterable, Identifiable {
@@ -48,6 +48,7 @@ final class UsageModel {
     private static let tabKey = "usage.tab"
     private static let periodKey = "usage.period"
     private static let serversKey = "usage.servers"
+    private static let every = Duration.seconds(5 * 60)
 
     var tab = Tab(rawValue: UserDefaults.standard.string(forKey: tabKey) ?? "") ?? .limits {
         didSet {
@@ -82,6 +83,12 @@ final class UsageModel {
     func start(_ store: AppStore) {
         self.store = store
         load()
+    }
+
+    func keepCurrent() async {
+        while (try? await Task.sleep(for: Self.every)) != nil {
+            load()
+        }
     }
 
     /// Reads again what the tab shows, the limits from the agents themselves.
@@ -139,28 +146,35 @@ final class UsageModel {
                 guard let self, number == asked else { return }
                 guard case .success(let report) = result, report.stale else {
                     refreshing = false
-                    limits = Self.loaded(result)
+                    limits = Self.loaded(result, over: limits)
                     return
                 }
                 if !report.sections.isEmpty { limits = .ready(report) }
                 store.loadLimits(refresh: false, kept: false, servers: picked) { [weak self] result in
                     guard let self, number == asked else { return }
                     refreshing = false
-                    limits = Self.loaded(result)
+                    limits = Self.loaded(result, over: limits)
                 }
             }
         } else {
-            store.loadUsage(bucketSeconds: period.bucketSeconds, buckets: period.buckets, servers: picked) { [weak self] result in
+            let (seconds, buckets) = (period.bucketSeconds, period.buckets)
+            store.loadUsage(bucketSeconds: seconds, buckets: buckets, kept: true, servers: picked) { [weak self] kept in
                 guard let self, number == asked else { return }
-                refreshing = false
-                spending = Self.loaded(result)
+                if case .success(let report) = kept { spending = .ready(report) }
+                store.loadUsage(bucketSeconds: seconds, buckets: buckets, kept: false, servers: picked) { [weak self] result in
+                    guard let self, number == asked else { return }
+                    refreshing = false
+                    spending = Self.loaded(result, over: spending)
+                }
             }
         }
     }
 
-    private static func loaded<Value>(_ result: Result<Value, CoreBridge.CoreError>) -> Loaded<Value> {
+    /// What was read, or what is shown when reading it failed.
+    private static func loaded<Value>(_ result: Result<Value, CoreBridge.CoreError>, over shown: Loaded<Value>) -> Loaded<Value> {
         switch result {
         case .success(let value): .ready(value)
+        case .failure where shown.value != nil: shown
         case .failure(let error): .failed(error.message)
         }
     }
@@ -279,7 +293,10 @@ struct UsageContent: View {
             .padding(.bottom, 20)
             .frame(maxWidth: .infinity)
         }
-        .onAppear { model.start(store) }
+        .task {
+            model.start(store)
+            await model.keepCurrent()
+        }
     }
 
     @ViewBuilder private var limits: some View {
