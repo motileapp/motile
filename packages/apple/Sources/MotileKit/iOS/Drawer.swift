@@ -26,6 +26,7 @@ struct DrawerView<Sidebar: View, Content: View, Panel: View>: UIViewControllerRe
             if drawer.isOpen != (side == .sidebar) { drawer.isOpen = side == .sidebar }
             if sidePanel.isOpen != (side == .panel) { sidePanel.isOpen = side == .panel }
         }
+        controller.onPanelShown = { [sidePanel] in sidePanel.showPullRequestIfBlank() }
         return controller
     }
 
@@ -55,6 +56,8 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         didSet { showPanelContent() }
     }
     var onChange: ((Side?) -> Void)?
+    /// The panel comes into view, as a swipe starts to uncover it.
+    var onPanelShown: (() -> Void)?
 
     private let panel = UIHostingController(rootView: AnyView(EmptyView()))
     private var panelShown = false
@@ -170,6 +173,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         panel.view.isHidden = progress >= 0
         guard panelShown != (progress < 0) else { return }
         panelShown = progress < 0
+        if panelShown { onPanelShown?() }
         showPanelContent()
     }
 
