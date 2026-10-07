@@ -73,6 +73,7 @@ enum Symbol: String {
     case maximize2 = "\u{e113}"
     case menu = "\u{e115}"
     case messageCircleQuestionMark = "\u{e568}"
+    case messageSquareDashed = "\u{e40b}"
     case messageSquareText = "\u{e575}"
     case minimize2 = "\u{e11b}"
     case panelLeft = "\u{e12a}"

@@ -146,6 +146,7 @@ async fn serve(
         dir.path().join("media"),
         dir.path().join("attachments"),
         dir.path().join("worktrees"),
+        dir.path().join("no-project"),
         environment,
     )
     .unwrap();
@@ -1422,7 +1423,7 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
     let connection = harness.connect().await;
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     let Message::Welcome { projects, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
-    assert!(projects.is_empty());
+    assert!(own(projects).is_empty());
 
     let repository = harness.dir.path().join("repository");
     std::fs::create_dir_all(repository.join(".git")).unwrap();
@@ -1430,6 +1431,7 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
     let path = repository.to_string_lossy().into_owned();
     assert_eq!(connection.request(&Request::AddProject { path: format!("{path}/") }).await.unwrap(), Message::Ok);
     let Message::Projects { projects } = next(&mut list).await else { panic!("expected the projects") };
+    let projects = own(projects);
     assert_eq!(projects.len(), 1);
     assert_eq!((projects[0].name.as_str(), projects[0].branch.as_deref()), ("repository", Some("feature/login")));
 
@@ -1448,13 +1450,14 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
         else {
             panic!("expected the folder's contents")
         };
-        assert_eq!(folders, vec!["repository"]);
+        assert_eq!(folders, vec!["no-project", "repository"]);
         assert_eq!(files, images);
     }
 
     let remove = Request::RemoveProject { project_id: projects[0].id.clone() };
     assert_eq!(connection.request(&remove).await.unwrap(), Message::Ok);
-    assert_eq!(next(&mut list).await, Message::Projects { projects: Vec::new() });
+    let Message::Projects { projects } = next(&mut list).await else { panic!("expected the projects") };
+    assert!(own(projects).is_empty());
 }
 
 /// Stands in for a GitHub login with two repositories, once `signed-in` is next to it.
@@ -1587,7 +1590,7 @@ async fn a_projects_branches_are_listed_switched_and_created() {
     next(&mut list).await;
     assert_eq!(switch(&connection, &project.id, "main", false).await, Message::Ok);
     let Message::Projects { projects } = next(&mut list).await else { panic!("expected the projects") };
-    assert_eq!(projects[0].branch.as_deref(), Some("main"));
+    assert_eq!(own(projects)[0].branch.as_deref(), Some("main"));
 
     // Switching to a remote's branch makes the local one.
     assert_eq!(switch(&connection, &project.id, "fix/typo", false).await, Message::Ok);
@@ -1869,7 +1872,7 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
         Some((7, "Greet with an f-string".to_string()))
     );
     let Message::Projects { projects } = next(&mut list).await else { panic!("expected the projects") };
-    assert_eq!(projects[0].git.as_ref().map(|git| git.ahead_of_default), Some(1));
+    assert_eq!(own(projects)[0].git.as_ref().map(|git| git.ahead_of_default), Some(1));
 
     // A message that is given is used as it is, and a commit says that a push follows.
     let (stages, end) =
@@ -2398,10 +2401,10 @@ async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
 
     // The writer named the branch the way the instructions say.
     let branch = "team/greet-f-string";
-    let mut worktrees = projects[0].worktrees.clone();
+    let mut worktrees = own(projects)[0].worktrees.clone();
     while worktrees[0].branch.as_deref() != Some(branch) {
         let Message::Projects { projects } = next(&mut list).await else { continue };
-        worktrees = projects[0].worktrees.clone();
+        worktrees = own(projects)[0].worktrees.clone();
     }
     assert_eq!((worktrees.len(), worktrees[0].path.as_str()), (1, threads[0].cwd.as_str()));
     assert_eq!(git_says(&worktree, &["rev-parse", "--abbrev-ref", "HEAD"]), branch);
@@ -2617,7 +2620,12 @@ async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
 async fn projects_now(connection: &Connection) -> Vec<Project> {
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     let Message::Welcome { projects, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
-    projects
+    own(projects)
+}
+
+/// The projects the user added, without the server's "No project".
+fn own(projects: Vec<Project>) -> Vec<Project> {
+    projects.into_iter().filter(|project| !project.no_project).collect()
 }
 
 async fn icon_bytes(connection: &Connection, project_id: &str) -> Vec<u8> {
@@ -2895,4 +2903,46 @@ async fn a_thread_about_a_linked_pull_request_is_titled_after_what_that_is_about
     send(&connection, None, new_thread, message).await;
 
     thread_where(&mut list, |thread| thread.title == "Stream Replies in Finished Blocks").await;
+}
+
+#[tokio::test]
+async fn a_thread_without_a_project_works_in_a_folder_of_its_own() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let in_git = std::process::Command::new("git").arg("init").arg("-q").arg(harness.dir.path()).status().unwrap();
+    assert!(in_git.success());
+    let connection = harness.connect().await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { projects, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    let no_project = projects.into_iter().find(|project| project.no_project).expect("every server has No project");
+    assert_eq!(no_project.name, "No project");
+
+    let new_thread = NewThread {
+        project_id: no_project.id.clone(),
+        agent: Agent::Claude,
+        agent_account: None,
+        model: None,
+        effort: None,
+        access: AgentAccess::Supervised,
+        plan: false,
+        worktree: None,
+    };
+    let first_id = send(&connection, None, Some(new_thread.clone()), "Sketch a parser, for JSON").await;
+    let first = thread_where(&mut list, |thread| thread.id == first_id).await;
+    let second_id = send(&connection, None, Some(new_thread), "Sketch a parser, for JSON").await;
+    let second = thread_where(&mut list, |thread| thread.id == second_id).await;
+    assert_ne!(first.cwd, second.cwd);
+    for thread in [&first, &second] {
+        assert_eq!(Path::new(&thread.cwd).parent().unwrap(), Path::new(&no_project.path));
+        assert!(Path::new(&thread.cwd).is_dir());
+        let name = Path::new(&thread.cwd).file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.ends_with(&format!("-sketch-a-parser-for-json-{}", &thread.id[..8])), "{name}");
+    }
+
+    // The repository the server's folder happens to be in isn't the thread's.
+    let status = Request::GitStatus { project_id: no_project.id.clone(), thread_id: Some(first_id), fetch: false };
+    let Message::GitStatus { status, .. } = connection.request(&status).await.unwrap() else { panic!("a git status") };
+    assert_eq!(status, None);
+
+    let remove = Request::RemoveProject { project_id: no_project.id };
+    assert!(matches!(connection.request(&remove).await.unwrap(), Message::Error { .. }));
 }

@@ -389,25 +389,27 @@ struct CommandPanel: View {
         store.server(id)?.name ?? "your server"
     }
 
-    /// The projects, the one the open thread works in first, then by when a thread last started.
+    /// The projects, the one the open thread works in first, then by when a thread last started,
+    /// and "No project" of each server last.
     private var projects: [Project] {
         let recent = store.recentProjects
-        guard let current = store.composerProject else { return recent }
-        return [current] + recent.filter { $0.id != current.id }
+        guard let current = store.composerProject, !current.noProject else { return recent + store.noProjects }
+        return [current] + recent.filter { $0.id != current.id } + store.noProjects
     }
 
     /// `shortcuts` numbers the first nine for ⌘ and a digit.
     private func projectItems(shortcuts: Bool, pick: @escaping (Project) -> Void) -> [PanelItem] {
         projects.enumerated().map { position, project in
             let server = store.server(project.serverID)?.shortName ?? ""
+            let location = project.noProject ? "A folder of its own for each thread" : project.path
             var item = PanelItem(
                 id: "project-\(project.id)",
                 title: project.name,
-                detail: "\(server) \(project.path)",
+                detail: "\(server) \(location)",
                 icon: .project(project),
                 shortcut: shortcuts && position < 9 ? position + 1 : nil
             ) { pick(project) }
-            item.detailParts = server.isEmpty ? [(.folder, project.path)] : [(.server, server), (.folder, project.path)]
+            item.detailParts = server.isEmpty ? [(.folder, location)] : [(.server, server), (.folder, location)]
             return item
         }
     }

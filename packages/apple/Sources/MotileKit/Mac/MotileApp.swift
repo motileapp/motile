@@ -77,7 +77,7 @@ struct MotileApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Thread…") { store.newThread() }
                     .keyboardShortcut("n")
-                Button(store.composerProject.map { "New Thread in “\($0.name)”" } ?? "New Thread in This Project") {
+                Button(store.composerProject.map { $0.noProject ? "New Thread Without a Project" : "New Thread in “\($0.name)”" } ?? "New Thread in This Project") {
                     store.startNewThread(in: store.composerProject)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])

@@ -43,6 +43,11 @@ impl DataDir {
         self.0.join("worktrees")
     }
 
+    /// The folders of the threads started without a project, one each.
+    pub fn no_project(&self) -> PathBuf {
+        self.0.join("no-project")
+    }
+
     /// The copies of the images and videos that threads show.
     pub fn media(&self) -> PathBuf {
         self.0.join("media")

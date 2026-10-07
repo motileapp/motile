@@ -112,7 +112,7 @@ struct ThreadPane: View {
 
     private var startBlock: some View {
         VStack(spacing: 26) {
-            if store.projects.isEmpty {
+            if store.projects.isEmpty && store.noProjects.isEmpty {
                 VStack(spacing: 10) {
                     Text("Add a project to start")
                         .font(.ui(size: 28, weight: .regular))
@@ -133,11 +133,12 @@ struct ThreadPane: View {
 
     private var headline: some View {
         let selected = store.project(store.selectedDraft?.projectID)
+        let headline = Project.headline(selected)
         return HStack(spacing: Self.headlineWordSpace) {
-            Text("Let’s build in")
+            Text(headline.lead)
                 .foregroundStyle(Color.themeText)
             Menu {
-                ForEach(store.recentProjects) { project in
+                ForEach(store.recentProjects + store.noProjects) { project in
                     Button {
                         store.setNewThreadProject(project.id)
                     } label: {
@@ -145,13 +146,13 @@ struct ThreadPane: View {
                         Label {
                             Text(name)
                         } icon: {
-                            Image(platform: project.menuIcon ?? .symbol(.folder, size: 13))
+                            Image(platform: project.menuIcon ?? .symbol(project.menuSymbol, size: 13))
                         }
                     }
                 }
                 Divider()
                 Button("Add Project…") { store.addProject() }
-                if let project = selected {
+                if let project = selected, !project.noProject {
                     Button("Choose an Icon for “\(project.name)”…") { store.iconProject = project }
                     Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
                     Button("Remove “\(project.name)” from Projects") { store.removeProject(project) }
@@ -159,7 +160,7 @@ struct ThreadPane: View {
             } label: {
                 HStack(spacing: 8) {
                     ProjectIcon(project: selected, size: 22)
-                    Text(selected?.name ?? "a project")
+                    Text(headline.name)
                     Image(.chevronDown, size: 13)
                         .foregroundStyle(Color.themeTertiary)
                 }

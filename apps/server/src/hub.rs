@@ -103,6 +103,8 @@ pub struct Hub {
     attachments_folder: PathBuf,
     /// Where the worktrees are made, each in a folder named after its project.
     worktrees_folder: PathBuf,
+    /// The folder of the "No project" project, which has a folder for each of its threads.
+    no_project_folder: PathBuf,
     /// The worktrees of the threads that work in one of their own, by thread.
     worktrees: std::sync::Mutex<HashMap<String, ThreadWorktree>>,
     /// The agents' accounts, the default ones first.
@@ -218,15 +220,18 @@ pub struct ThreadSubscription {
 
 impl Hub {
     /// `media_folder` is where the images and videos that threads show are kept,
-    /// `attachments_folder` where the files that clients upload are, and `worktrees_folder` where
-    /// the worktrees of threads are made.
+    /// `attachments_folder` where the files that clients upload are, `worktrees_folder` where
+    /// the worktrees of threads are made, and `no_project_folder` where the threads started
+    /// without a project work.
     pub fn new(
         store: Store,
         media_folder: PathBuf,
         attachments_folder: PathBuf,
         worktrees_folder: PathBuf,
+        no_project_folder: PathBuf,
         environment: Environment,
     ) -> anyhow::Result<Arc<Self>> {
+        let environment = stop_git_above(environment, &no_project_folder);
         let home = environment.variables.get("HOME").map(String::as_str).unwrap_or_default();
         let media = MediaStore::new(media_folder, home);
         let threads = store.load_threads()?;
@@ -260,6 +265,7 @@ impl Hub {
         for project in &mut projects {
             refresh_icon(&store, project);
         }
+        ensure_no_project(&store, &mut projects, &no_project_folder)?;
         let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
         let git = std::sync::Mutex::default();
@@ -292,6 +298,7 @@ impl Hub {
             git,
             attachments_folder,
             worktrees_folder,
+            no_project_folder,
             list_updates,
         }))
     }
@@ -729,7 +736,10 @@ impl Hub {
         };
         let account = account.context("That account is no longer on your server.")?;
         let created_at = now();
+        let id = new_id();
+        let no_project = self.is_no_project(project);
         let worktree = match new_thread.worktree {
+            Some(_) if no_project => bail!("A thread without a project can't have a worktree."),
             Some(new) if new.base.is_empty() || new.base.starts_with('-') => {
                 bail!("{} isn't a branch to start from.", new.base)
             }
@@ -746,10 +756,11 @@ impl Hub {
         };
         let (cwd, worktree) = match worktree {
             Some((folder, worktree)) => (folder, Some(worktree)),
+            None if no_project => (self.make_no_project_folder(&id, text, created_at)?, None),
             None => (project.path.clone(), None),
         };
         let thread = Thread {
-            id: new_id(),
+            id,
             title: title::placeholder(text, attachments),
             project_id: project.id.clone(),
             cwd,
@@ -1224,6 +1235,9 @@ impl Hub {
 
     pub async fn remove_project(&self, project_id: &str) -> anyhow::Result<()> {
         let mut projects = self.projects.lock().await;
+        if projects.iter().any(|project| project.id == project_id && self.is_no_project(project)) {
+            bail!("No project stays on your server.");
+        }
         self.store.remove_project(project_id)?;
         projects.retain(|project| project.id != project_id);
         self.announce_projects(&projects);
@@ -1640,13 +1654,18 @@ impl Hub {
         files::open_blob(&folder, &self.environment, path, blob).await
     }
 
-    /// Where the thread works: in its worktree, or in the project's folder.
+    /// Where the thread works: in its worktree, in its own folder in "No project", or in the
+    /// project's folder.
     async fn git_folder(&self, project_id: &str, thread_id: Option<&str>) -> anyhow::Result<String> {
         let worktree = thread_id.and_then(|thread_id| self.lock_worktrees().get(thread_id).map(|own| own.path.clone()));
-        match worktree {
-            Some(path) => Ok(path),
-            None => self.project_path(project_id).await,
+        if let Some(path) = worktree {
+            return Ok(path);
         }
+        let path = self.project_path(project_id).await?;
+        let Some(thread_id) = thread_id.filter(|_| Path::new(&path) == self.no_project_folder) else { return Ok(path) };
+        let threads = self.threads.lock().await;
+        let thread = threads.get(thread_id).context("That thread is no longer on your server.")?;
+        Ok(thread.stored.thread.cwd.clone())
     }
 
     /// Reads the folder's status. GitHub is asked for the branch's pull request when it was last
@@ -1945,6 +1964,22 @@ impl Hub {
         git::switch(path, &self.environment, &name, true).await
     }
 
+    fn is_no_project(&self, project: &StoredProject) -> bool {
+        Path::new(&project.path) == self.no_project_folder
+    }
+
+    /// Makes the folder a thread without a project works in: named after the day and its first
+    /// words, so that it can be found among the others.
+    fn make_no_project_folder(&self, thread_id: &str, text: &str, created_at: f64) -> anyhow::Result<String> {
+        let day = chrono::DateTime::from_timestamp(created_at as i64, 0).unwrap_or_default().format("%Y-%m-%d");
+        let words = folder_name(&text.split_whitespace().take(5).collect::<Vec<_>>().join(" "));
+        let short_id: String = thread_id.chars().take(8).collect();
+        let name = [Some(day.to_string()), words, Some(short_id)].into_iter().flatten().collect::<Vec<_>>().join("-");
+        let folder = self.no_project_folder.join(name);
+        std::fs::create_dir_all(&folder).with_context(|| format!("{} can't be made.", folder.display()))?;
+        Ok(folder.to_string_lossy().into_owned())
+    }
+
     async fn project_path(&self, project_id: &str) -> anyhow::Result<String> {
         let projects = self.projects.lock().await;
         let project = projects.iter().find(|project| project.id == project_id);
@@ -1975,12 +2010,16 @@ impl Hub {
         let project = |stored: &StoredProject| Project {
             id: stored.id.clone(),
             path: stored.path.clone(),
-            name: file_name(&stored.path).to_string(),
+            name: match self.is_no_project(stored) {
+                true => "No project".to_string(),
+                false => file_name(&stored.path).to_string(),
+            },
             branch: git::current_branch(&stored.path),
             git: status(&stored.path),
             icon: stored.icon.as_deref().and_then(icons::version),
             worktrees: worktrees_of(&stored.id),
             setup: stored.setup.clone(),
+            no_project: self.is_no_project(stored),
             created_at: stored.created_at,
         };
         stored.iter().map(project).collect()
@@ -3116,6 +3155,31 @@ fn checked(what: &str, value: Option<String>) -> anyhow::Result<Option<String>> 
         bail!("{value} isn't a valid {what}.");
     }
     Ok(Some(value))
+}
+
+/// Adds the "No project" project when the server doesn't have it yet, and makes its folder.
+fn ensure_no_project(store: &Store, projects: &mut Vec<StoredProject>, folder: &Path) -> anyhow::Result<()> {
+    std::fs::create_dir_all(folder).with_context(|| format!("{} can't be made.", folder.display()))?;
+    let path = folder.to_string_lossy().into_owned();
+    if projects.iter().any(|project| project.path == path) {
+        return Ok(());
+    }
+    let project = StoredProject { id: new_id(), path, created_at: now(), icon: None, icon_chosen: false, setup: None };
+    store.add_project(&project)?;
+    projects.push(project);
+    Ok(())
+}
+
+/// Has git stop looking for a repository at the server's own folder, so that a thread without a
+/// project never works in one its folder happens to be inside, like a home folder kept in git.
+fn stop_git_above(environment: Environment, no_project_folder: &Path) -> Environment {
+    let Some(data_folder) = no_project_folder.parent() else { return environment };
+    let data_folder = data_folder.to_string_lossy();
+    let ceilings = match environment.variables.get("GIT_CEILING_DIRECTORIES") {
+        Some(others) if !others.is_empty() => format!("{others}:{data_folder}"),
+        _ => data_folder.into_owned(),
+    };
+    environment.with([("GIT_CEILING_DIRECTORIES".to_string(), ceilings)])
 }
 
 /// Looks for the project's icon in its folder again, unless the user picked one that is still

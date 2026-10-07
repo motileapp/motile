@@ -22,7 +22,7 @@ struct ThreadScreen: View {
             if isStart {
                 start
             }
-            if !isStart || !store.projects.isEmpty {
+            if !isStart || !store.projects.isEmpty || !store.noProjects.isEmpty {
                 ComposerView()
                     .padding(.horizontal, Theme.composerPadding)
                     .padding(.top, TranscriptView.composerGap)
@@ -128,7 +128,7 @@ struct ThreadScreen: View {
     /// The empty state of a new thread: a question, over the composer.
     private var start: some View {
         VStack(spacing: 10) {
-            if store.projects.isEmpty {
+            if store.projects.isEmpty && store.noProjects.isEmpty {
                 Text("Add a project to start")
                     .font(.system(size: 26, weight: .regular))
                 Text("A project is a folder on your server that threads work in.")
@@ -151,15 +151,16 @@ struct ThreadScreen: View {
 
     private var headline: some View {
         let selected = store.project(store.selectedDraft?.projectID)
+        let headline = Project.headline(selected)
         return VStack(spacing: 12) {
-            Text("Let’s build in")
+            Text(headline.lead)
                 .foregroundStyle(Color.themeText)
             Button {
                 store.openPanel(.draftProject)
             } label: {
                 HStack(spacing: 9) {
                     ProjectIcon(project: selected, size: 24)
-                    Text(selected?.name ?? "a project")
+                    Text(headline.name)
                         .foregroundStyle(Color.themeText)
                         .lineLimit(1)
                     Image(.chevronDown, size: 11)

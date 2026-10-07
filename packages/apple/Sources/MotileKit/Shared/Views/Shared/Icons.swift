@@ -211,7 +211,7 @@ struct ProjectIcon: View {
                     .aspectRatio(contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
             } else {
-                Image(.folder, size: size * 0.78)
+                Image(project?.noProject == true ? .messageSquareDashed : .folder, size: size * 0.78)
                     .foregroundStyle(Color.themeSecondary)
             }
         }
@@ -294,4 +294,7 @@ extension Project {
     var menuIcon: PlatformImage? {
         ImageFiles.shared.cached(iconPath).map { ImageFiles.sized($0, 16) }
     }
+
+    /// The symbol a menu shows for it when it has no icon.
+    var menuSymbol: Symbol { noProject ? .messageSquareDashed : .folder }
 }

@@ -197,7 +197,7 @@ struct SidebarScreen: View {
                     .frame(height: 46)
                     .glassButton(in: Capsule())
                 circleButton(.squarePen, label: "New thread") { store.newThread() }
-                    .disabled(store.projects.isEmpty)
+                    .disabled(store.projects.isEmpty && store.noProjects.isEmpty)
             }
             .padding(.top, 6)
         }

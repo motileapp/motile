@@ -219,7 +219,7 @@ pub struct NewThread {
     pub access: Access,
     pub plan: bool,
     /// The thread works in a git worktree of its own, on a branch of its own. Without it, it
-    /// works in the project's folder.
+    /// works in the project's folder, or in a folder of its own in the server's "No project".
     #[serde(default)]
     pub worktree: Option<NewWorktree>,
 }
@@ -679,6 +679,9 @@ pub struct Project {
     /// The shell script that runs in every new worktree.
     #[serde(default)]
     pub setup: Option<String>,
+    /// The server's "No project": each of its threads works in a folder of its own inside it.
+    #[serde(default)]
+    pub no_project: bool,
     pub created_at: f64,
 }
 
