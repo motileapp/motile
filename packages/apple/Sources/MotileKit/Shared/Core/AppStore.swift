@@ -58,6 +58,8 @@ enum PanelPage: Hashable {
     case githubSetup(String)
     /// The server's folders, to add one.
     case folder(String)
+    /// The folders and images of the project's server, to make one its icon.
+    case icon(String)
 }
 
 /// A project that a server is making or cloning.
@@ -131,8 +133,6 @@ final class AppStore {
     var settingsQuery = ""
     /// The thread's settings are open over the client, where they aren't around the composer.
     var showsThreadSettings = false
-    /// The project an icon is being chosen for.
-    var iconProject: Project?
     /// Files are being dragged over the window.
     var dropTargeted = false
     /// Files are being dragged over the composer's text, which takes drops itself.
@@ -1049,14 +1049,6 @@ final class AppStore {
 
     // MARK: Projects
 
-    func listFolder(serverID: String, path: String?, icons: Bool, done: @escaping (Result<RemoteFolder, CoreBridge.CoreError>) -> Void) {
-        var request: JSON = ["type": "list_dir", "icons": icons]
-        if let path { request["path"] = path }
-        core.send("request", ["server_id": serverID, "request": request]) { result in
-            done(result.map { RemoteFolder(json: $0) })
-        }
-    }
-
     func addProject(serverID: String, path: String) {
         request(serverID, ["type": "add_project", "path": path]) { [weak self] in
             guard let self else { return }
@@ -1085,8 +1077,9 @@ final class AppStore {
         (server?.protocolVersion ?? 0) >= 5
     }
 
-    func browse(serverID: String, query: String, done: @escaping (Result<FolderListing, CoreBridge.CoreError>) -> Void) {
-        core.send("browse", ["server_id": serverID, "query": query]) { result in
+    /// With `icons`, the images that can be a project's icon are listed too.
+    func browse(serverID: String, query: String, icons: Bool, done: @escaping (Result<FolderListing, CoreBridge.CoreError>) -> Void) {
+        core.send("browse", ["server_id": serverID, "query": query, "icons": icons]) { result in
             done(result.map { FolderListing(json: $0) })
         }
     }

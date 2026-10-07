@@ -137,7 +137,6 @@ struct MotileCommands: Commands {
 
 /// What is shown over the client, one at a time. What is asked for last comes over what was there.
 private enum RootSheet: Identifiable {
-    case icon(Project)
     case commit(Project)
     case addServer
     case panel(PanelPage)
@@ -147,7 +146,6 @@ private enum RootSheet: Identifiable {
 
     var id: String {
         switch self {
-        case .icon(let project): "icon-\(project.id)"
         case .commit(let project): "commit-\(project.id)"
         case .addServer: "add-server"
         case .panel: "panel"
@@ -179,12 +177,6 @@ struct RootView: View {
         .sheet(item: sheet) { sheet in
             Group {
                 switch sheet {
-                case .icon(let project):
-                    if let server = store.server(project.serverID) {
-                        FolderPicker(server: server, iconFor: project)
-                            .frame(maxHeight: .infinity, alignment: .top)
-                            .presentationDragIndicator(.visible)
-                    }
                 case .commit(let project):
                     CommitSheet(project: project)
                 case .addServer:
@@ -225,7 +217,6 @@ struct RootView: View {
 
     private var sheet: Binding<RootSheet?> {
         Binding {
-            if let project = store.iconProject { return .icon(project) }
             if let project = store.committingProject { return .commit(project) }
             if store.showsAddServer { return .addServer }
             if let page = store.panel { return .panel(page) }
@@ -235,7 +226,6 @@ struct RootView: View {
             return nil
         } set: { new in
             guard new == nil else { return }
-            if store.iconProject != nil { return store.iconProject = nil }
             if store.committingProject != nil { return store.committingProject = nil }
             if store.showsAddServer { return store.showsAddServer = false }
             if store.panel != nil { return store.closePanel() }

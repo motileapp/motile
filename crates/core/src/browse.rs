@@ -1,5 +1,6 @@
 //! Browsing a server's folders by typing a path, the way a shell completes one: the folders of
-//! the directory typed so far, narrowed by what follows its last slash. Every client shows the same.
+//! the directory typed so far, narrowed by what follows its last slash, and the images that can
+//! be a project's icon when one is being chosen. Every client shows the same.
 
 use serde::Serialize;
 
@@ -18,6 +19,7 @@ pub struct Listing {
     /// What to type for the directory above. Missing at the root.
     pub parent: Option<String>,
     pub folders: Vec<Folder>,
+    pub images: Vec<Image>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -26,6 +28,12 @@ pub struct Folder {
     pub path: String,
     /// What to type to look inside it.
     pub typed: String,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Image {
+    pub name: String,
+    pub path: String,
 }
 
 /// `None` when the path doesn't start at the root or at the home folder.
@@ -54,20 +62,23 @@ fn as_typed(path: &str, home: &str) -> String {
     }
 }
 
-/// The folders of `directory` whose names start with `leaf`, whatever the case.
-pub fn listing(directory: &str, leaf: &str, folders: &[String], home: &str) -> Listing {
+/// The folders and images of `directory` whose names start with `leaf`, whatever the case.
+pub fn listing(directory: &str, leaf: &str, folders: &[String], images: &[String], home: &str) -> Listing {
     let leaf = leaf.to_lowercase();
     let base = directory.trim_end_matches('/');
+    let named = |name: &&String| name.to_lowercase().starts_with(&leaf);
     let folder = |name: &String| {
         let path = format!("{base}/{name}");
         Folder { name: name.clone(), typed: as_typed(&path, home), path }
     };
+    let image = |name: &String| Image { name: name.clone(), path: format!("{base}/{name}") };
     let parent = (directory != "/").then(|| as_typed(base.rsplit_once('/').map_or("", |(parent, _)| parent), home));
     Listing {
         path: directory.to_string(),
         typed: as_typed(directory, home),
         parent,
-        folders: folders.iter().filter(|name| name.to_lowercase().starts_with(&leaf)).map(folder).collect(),
+        folders: folders.iter().filter(named).map(folder).collect(),
+        images: images.iter().filter(named).map(image).collect(),
     }
 }
 
@@ -96,7 +107,7 @@ mod tests {
     #[test]
     fn folders_are_narrowed_by_the_name_and_say_what_to_type() {
         let folders = ["Motile".to_string(), "notes".to_string(), "more".to_string()];
-        let listed = listing("/home/ada/code", "mo", &folders, HOME);
+        let listed = listing("/home/ada/code", "mo", &folders, &[], HOME);
 
         assert_eq!(listed.typed, "~/code/");
         assert_eq!(listed.parent.as_deref(), Some("~/"));
@@ -105,11 +116,19 @@ mod tests {
     }
 
     #[test]
+    fn images_are_narrowed_by_the_name_too() {
+        let images = ["Logo.png".to_string(), "icon.svg".to_string()];
+        let listed = listing("/home/ada/code/", "lo", &[], &images, HOME);
+
+        assert_eq!(listed.images, vec![Image { name: "Logo.png".into(), path: "/home/ada/code/Logo.png".into() }]);
+    }
+
+    #[test]
     fn the_folders_above_home_are_typed_from_the_root() {
-        assert_eq!(listing(HOME, "", &[], HOME).parent.as_deref(), Some("/home/"));
-        assert_eq!(listing("/home", "", &[], HOME).parent.as_deref(), Some("/"));
-        assert_eq!(listing("/", "", &["etc".to_string()], HOME).parent, None);
-        assert_eq!(listing("/", "", &["etc".to_string()], HOME).folders[0].typed, "/etc/");
-        assert_eq!(listing("/home/adam", "", &[], HOME).typed, "/home/adam/");
+        assert_eq!(listing(HOME, "", &[], &[], HOME).parent.as_deref(), Some("/home/"));
+        assert_eq!(listing("/home", "", &[], &[], HOME).parent.as_deref(), Some("/"));
+        assert_eq!(listing("/", "", &["etc".to_string()], &[], HOME).parent, None);
+        assert_eq!(listing("/", "", &["etc".to_string()], &[], HOME).folders[0].typed, "/etc/");
+        assert_eq!(listing("/home/adam", "", &[], &[], HOME).typed, "/home/adam/");
     }
 }

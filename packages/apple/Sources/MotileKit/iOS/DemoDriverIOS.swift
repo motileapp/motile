@@ -100,7 +100,9 @@ enum DemoDriver {
             case "settings": store.openSettings()
             case "usage": store.openUsage()
             case "server": store.showsAddServer = true
-            case "icon": store.iconProject = store.projects.first
+            case "icon":
+                guard let project = store.projects.first(where: { !$0.noProject }) else { return }
+                store.openPanel(.icon(project.id))
             case "thread": store.showsThreadSettings = true
             case "commit":
                 guard let project = store.gitProject, let item = project.gitControl?.menu.first(where: { $0.action == "commit" }) else { return }
@@ -112,7 +114,6 @@ enum DemoDriver {
                 store.showsAddServer = false
                 store.showsThreadSettings = false
                 store.committingProject = nil
-                store.iconProject = nil
             }
         case "settings":
             let words = rest.split(separator: " ", maxSplits: 1).map(String.init)
