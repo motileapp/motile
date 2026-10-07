@@ -750,9 +750,9 @@ struct ServerLine: View {
 }
 
 #if os(macOS)
-/// The servers and how the client reaches them, and the ways to the settings, the usage (or back
-/// from it) and a new version of the client.
-private struct SidebarFooter: View {
+/// The servers and how the client reaches them, and the ways to the settings and the usage (or
+/// back from them) and a new version of the client.
+struct SidebarFooter: View {
     @Environment(AppStore.self) private var store
 
     var body: some View {
@@ -764,7 +764,7 @@ private struct SidebarFooter: View {
             HStack(spacing: 2 * ToolbarButton.margin) {
                 AccountMenu()
                     .padding(.leading, (AccountMenu.side - ControlSize.regular.symbol) / 2)
-                if store.showsUsage {
+                if store.showsUsage || store.settings != nil {
                     ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, fills: true, alignment: .leading) {
                         store.closeRoute()
                     }

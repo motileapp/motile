@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The settings over the whole window: their sections on the left, as wide as the sidebar and
 /// dragged with the same line, the open one's page on the right and its title in the window's
-/// top bar. The way back is in the top bar beside the window's buttons.
+/// top bar. The way back is in the top bar beside the window's buttons and under the sections.
 struct SettingsRoute: View {
     let section: SettingsSection
     @AppStorage(MainView.sidebarWidthKey) private var sidebarWidth = 280.0

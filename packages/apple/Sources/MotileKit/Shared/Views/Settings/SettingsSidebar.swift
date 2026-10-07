@@ -36,6 +36,9 @@ struct SettingsSidebar: View {
             .scrollDismissesKeyboard(.immediately)
             #if os(iOS)
             footer
+            #else
+            ThemeDivider()
+            SidebarFooter()
             #endif
         }
     }
