@@ -147,6 +147,8 @@ final class AppStore {
     private(set) var gitStages: [String: GitStage] = [:]
     /// The projects whose folders their servers are making git repositories.
     private(set) var initializingGit: Set<String> = []
+    /// The `draftWorktreeKey`s whose base is being pulled.
+    private(set) var pullingBases: Set<String> = []
     private(set) var gitNotice: GitNotice?
     /// What a new worktree starts at, like `origin/main`, by `draftWorktreeKey`.
     private(set) var worktreeStarts: [String: String] = [:]
@@ -276,6 +278,7 @@ final class AppStore {
         NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { [weak self] _ in
             self?.markOpenThreadSeen()
             self?.readGit(fetch: true)
+            self?.readWorktreeStart(fetch: true)
         }
     }
 
@@ -611,16 +614,11 @@ final class AppStore {
     }
 
     /// The project git works in from here: the open thread's, or the open draft's, unless its
-    /// thread starts in a new worktree from another branch than the one checked out there.
+    /// thread starts in a new worktree, where only its base can be pulled.
     var gitProject: Project? {
-        guard let project = threadProject ?? draftCheckoutProject, canUseGit(of: project) else { return nil }
+        let project = threadProject ?? (draftUsesWorktree ? nil : project(selectedDraft?.projectID))
+        guard let project, canUseGit(of: project) else { return nil }
         return project
-    }
-
-    private var draftCheckoutProject: Project? {
-        guard let project = project(selectedDraft?.projectID) else { return nil }
-        guard draftUsesWorktree else { return project }
-        return draftBase == project.branch ? project : nil
     }
 
     /// The git notice of the checkout git works in from here, or of the project the open draft
@@ -1198,6 +1196,39 @@ final class AppStore {
             worktreeStarts[key] = answer.string("start")
             guard let problem = answer.optionalString("problem") else { return }
             show(GitNotice(checkoutID: project.checkoutID, title: "Couldn't fetch \(base)", description: problem, failed: true))
+        }
+    }
+
+    /// The open draft's base, when its worktree would start from the remote's instead, which has
+    /// commits the local one lacks.
+    var draftBaseToPull: String? {
+        guard let base = draftBase, let start = draftStart, start != base, let project = project(selectedDraft?.projectID),
+            (server(project.serverID)?.protocolVersion ?? 0) >= 20
+        else { return nil }
+        return base
+    }
+
+    var pullingDraftBase: Bool {
+        draftWorktreeKey.map(pullingBases.contains) ?? false
+    }
+
+    /// Brings the open draft's local base up to the remote's, for its worktree to start from it.
+    func pullDraftBase() {
+        guard let key = draftWorktreeKey, let base = draftBaseToPull, let project = project(selectedDraft?.projectID),
+            pullingBases.insert(key).inserted
+        else { return }
+        gitNotice = nil
+        let request: JSON = ["type": "update_base", "project_id": project.id, "base": base]
+        core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
+            guard let self else { return }
+            pullingBases.remove(key)
+            switch result {
+            case .success(let answer):
+                worktreeStarts[key] = answer.string("start")
+                show(GitNotice(checkoutID: project.checkoutID, title: "Pulled \(base)"))
+            case .failure(let error):
+                show(GitNotice(checkoutID: project.checkoutID, title: "Couldn't pull \(base)", description: error.message, failed: true))
+            }
         }
     }
 

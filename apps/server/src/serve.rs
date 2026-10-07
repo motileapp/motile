@@ -150,6 +150,7 @@ impl Server {
             }
             Request::InitRepository { project_id } => hub.init_repository(&project_id).await.map(|_| Message::Ok),
             Request::WorktreeStart { project_id, base, fetch } => hub.worktree_start(&project_id, &base, fetch).await,
+            Request::UpdateBase { project_id, base } => hub.update_base(&project_id, &base).await,
             Request::GitStatus { project_id, thread_id, fetch } => {
                 hub.git_status(&project_id, thread_id.as_deref(), fetch).await
             }

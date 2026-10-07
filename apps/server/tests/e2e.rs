@@ -2296,7 +2296,12 @@ async fn where_a_new_worktree_starts_is_said_and_so_is_a_remote_that_cannot_be_f
     git(&root.join("other"), &["push", "-q"]);
     assert_eq!(start(false).await, ("main".to_string(), None));
     assert_eq!(start(true).await, ("origin/main".to_string(), None));
-    git(&repository, &["fetch", "-q", "origin", "main:main"]);
+    let update = Request::UpdateBase { project_id: project.id.clone(), base: "main".to_string() };
+    let Message::WorktreeStart { start: updated, .. } = connection.request(&update).await.unwrap() else {
+        panic!("expected where the worktree starts")
+    };
+    assert_eq!(updated, "main");
+    assert_eq!(git_says(&repository, &["log", "-1", "--format=%s", "main"]), "Say hi");
     assert_eq!(start(false).await, ("main".to_string(), None));
 
     // A remote that is gone is said, and the thread shows it before it starts from what was

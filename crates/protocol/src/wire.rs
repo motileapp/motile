@@ -428,6 +428,12 @@ pub enum Request {
         #[serde(default)]
         fetch: bool,
     },
+    /// Fast-forwards the local `base` to the remote's, for a new worktree to start from it.
+    /// `WorktreeStart` answers.
+    UpdateBase {
+        project_id: String,
+        base: String,
+    },
     /// What git says about the project's folder, or about the worktree of the thread. With
     /// `fetch` the remote is asked first. `GitStatus` answers.
     GitStatus {

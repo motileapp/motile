@@ -71,6 +71,8 @@ struct ThreadPane: View {
                     GitButton(project: project, control: control)
                 } else if let project = store.gitProject, store.canInitializeGit(of: project) {
                     InitializeGitButton(project: project)
+                } else if let base = store.draftBaseToPull {
+                    PullBaseButton(base: base)
                 }
             }
             .padding(.leading, titleInset)

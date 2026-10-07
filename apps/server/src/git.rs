@@ -691,13 +691,17 @@ pub async fn commit(folder: &str, environment: &Environment, message: &str, path
     Ok(())
 }
 
-/// Puts the branch's own commits on top of the remote's. A rebase that stops is undone.
+/// Puts the branch's own commits on top of the remote's. A rebase that stops is undone. The
+/// fetch is the repository's own, so a fetch that runs beside it can't confuse the rebase.
 pub async fn pull(folder: &str, environment: &Environment) -> anyhow::Result<()> {
     if rebasing(folder, environment).await {
         bail!("A rebase is under way in this folder. Finish or abort it before pulling.");
     }
-    let pulled =
-        run(command("git", folder, environment, &["pull", "--rebase", "--quiet"]), None, NETWORK_TIMEOUT).await;
+    if let Some(problem) = fetch(folder, environment).await {
+        bail!(problem);
+    }
+    let rebase = command("git", folder, environment, &["rebase", "--quiet", "@{upstream}"]);
+    let pulled = run(rebase, None, COMMIT_TIMEOUT).await;
     if !rebasing(folder, environment).await {
         return pulled.map(|_| ());
     }
@@ -862,6 +866,24 @@ pub async fn start(repository: &str, environment: &Environment, base: &str, fetc
     let ahead = git(repository, environment, &["merge-base", "--is-ancestor", &on_remote, &local_ref]).await.is_ok();
     let reference = if ahead { base.to_string() } else { on_remote };
     Start { reference, problem }
+}
+
+/// Fast-forwards the local `base` to the remote's, as `start` fetched it: in `repository` when it
+/// is checked out there, or else without checking it out.
+pub async fn update_base(repository: &str, environment: &Environment, base: &str) -> anyhow::Result<()> {
+    let remote = remote(repository, environment).await.context("Add a remote to pull from.")?;
+    let theirs = format!("refs/remotes/{remote}/{base}");
+    let ours = format!("refs/heads/{base}");
+    let local = git(repository, environment, &["rev-parse", "--verify", "--quiet", &ours]).await.is_ok();
+    if local && git(repository, environment, &["merge-base", "--is-ancestor", &ours, &theirs]).await.is_err() {
+        bail!("{base} has commits {remote}/{base} doesn't. Push them or rebase {base} first.");
+    }
+    let refspec = format!("{theirs}:{ours}");
+    let arguments = match current_branch(repository).as_deref() == Some(base) {
+        true => ["merge", "--ff-only", "--quiet", theirs.as_str()].to_vec(),
+        false => ["fetch", "--quiet", ".", refspec.as_str()].to_vec(),
+    };
+    git(repository, environment, &arguments).await.map(|_| ())
 }
 
 /// Removes the worktree at `path`, which git refuses while it has changes. Its branch stays.
@@ -1134,6 +1156,43 @@ mod tests {
         assert_eq!(subjects(&ours).await, "Ours again\nOurs\nTheirs\nStart\n");
         assert!(!rebasing(&ours, &environment).await);
         assert_eq!(status(&ours, &environment).await.unwrap().1, []);
+    }
+
+    #[tokio::test]
+    async fn a_base_is_fast_forwarded_checked_out_or_not_and_never_loses_its_own_commits() {
+        let environment = test_environment();
+        let folder = tempfile::tempdir().unwrap();
+        let path = |inside: &str| folder.path().join(inside).to_str().unwrap().to_string();
+        let (origin, ours, theirs) = (path("origin"), path("ours"), path("theirs"));
+        let root = path("");
+        let subject =
+            async |reference: &str| git(&ours, &environment, &["log", "-1", "--format=%s", reference]).await.unwrap();
+        let push_theirs = async |message: &str| {
+            git(&theirs, &environment, &["commit", "--quiet", "--allow-empty", "-m", message]).await.unwrap();
+            git(&theirs, &environment, &["push", "--quiet", "origin", "HEAD:main", "HEAD:release"]).await.unwrap();
+            start(&ours, &environment, "main", true).await;
+            start(&ours, &environment, "release", true).await;
+        };
+
+        git(&root, &environment, &["init", "--quiet", "--bare", "--initial-branch=main", &origin]).await.unwrap();
+        git(&root, &environment, &["clone", "--quiet", &origin, &ours]).await.unwrap();
+        git(&ours, &environment, &["checkout", "--quiet", "-B", "main"]).await.unwrap();
+        git(&ours, &environment, &["commit", "--quiet", "--allow-empty", "-m", "Start"]).await.unwrap();
+        git(&ours, &environment, &["push", "--quiet", "-u", "origin", "main", "main:release"]).await.unwrap();
+        git(&ours, &environment, &["branch", "--quiet", "release", "origin/release"]).await.unwrap();
+        git(&root, &environment, &["clone", "--quiet", &origin, &theirs]).await.unwrap();
+
+        push_theirs("Theirs").await;
+        update_base(&ours, &environment, "main").await.unwrap();
+        update_base(&ours, &environment, "release").await.unwrap();
+        assert_eq!((subject("main").await, subject("release").await), ("Theirs\n".into(), "Theirs\n".into()));
+        assert_eq!(status(&ours, &environment).await.unwrap().0.behind, 0);
+
+        git(&ours, &environment, &["commit", "--quiet", "--allow-empty", "-m", "Ours"]).await.unwrap();
+        push_theirs("Theirs again").await;
+        let refused = update_base(&ours, &environment, "main").await.unwrap_err().to_string();
+        assert_eq!(refused, "main has commits origin/main doesn't. Push them or rebase main first.");
+        assert_eq!(subject("main").await, "Ours\n");
     }
 
     #[tokio::test]

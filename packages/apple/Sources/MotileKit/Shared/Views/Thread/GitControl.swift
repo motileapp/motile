@@ -247,6 +247,43 @@ struct InitializeGitButton: View {
     }
 }
 
+/// What stands in for the git button in a draft that starts a new worktree, while the remote's
+/// base has commits the local one lacks: it brings the local one up to date.
+struct PullBaseButton: View {
+    @Environment(AppStore.self) private var store
+    let base: String
+
+    var body: some View {
+        let pending = store.pullingDraftBase
+        let symbol = GitSymbol.symbol(for: "pull")
+        #if os(macOS)
+        ActionButton(
+            "Pull \(base)", icon: symbol, help: "Bring \(base) up to date with \(store.draftStart ?? base)", variant: .ghost,
+            pending: pending
+        ) {
+            store.pullDraftBase()
+        }
+        .padding(.horizontal, 6)
+        #else
+        Menu {
+            Button {
+                store.pullDraftBase()
+            } label: {
+                Label("Pull \(base)", symbol: symbol, size: 15)
+            }
+            .disabled(pending)
+        } label: {
+            if pending {
+                Spinner(size: 15)
+            } else {
+                Image(symbol, size: 15)
+            }
+        }
+        .accessibilityLabel("Git")
+        #endif
+    }
+}
+
 /// What the last git action did, or what git refused, under the button. What follows is one
 /// click away: the push after a commit, the pull request after a push.
 struct GitNoticeView: View {
