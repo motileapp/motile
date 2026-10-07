@@ -521,6 +521,8 @@ struct Project: Equatable, Identifiable {
     let setup: String?
     /// The icon as a file on this Mac, once the core has fetched it.
     let iconPath: String?
+    /// Its server's "No project": each of its threads works in a folder of its own.
+    let noProject: Bool
     let createdAt: Double
 
     init(json: JSON, serverID: String) {
@@ -540,7 +542,15 @@ struct Project: Equatable, Identifiable {
         }
         setup = json.optionalString("setup")
         iconPath = json.optionalString("icon_path")
+        noProject = json.bool("no_project")
         createdAt = json.double("created_at")
+    }
+
+    /// How a new thread's headline reads with the project picked: "Let’s build in motile", or
+    /// "Let’s build without a project".
+    static func headline(_ project: Project?) -> (lead: String, name: String) {
+        guard let project else { return ("Let’s build in", "a project") }
+        return project.noProject ? ("Let’s build", "without a project") : ("Let’s build in", project.name)
     }
 
     /// Names the folder git works in for it: its worktree, or the project's folder.

@@ -164,7 +164,8 @@ async fn run_server(data: &DataDir, endpoint: iroh::Endpoint, key: DeviceKey) {
     let executables = HashMap::from([(Agent::Claude, fake_agent.clone()), (Agent::Codex, fake_agent)]);
     let environment = Environment::fixed(variables, executables);
     let store = Store::open(&data.database()).unwrap();
-    let hub = Hub::new(store, data.media(), data.attachments(), data.worktrees(), environment).unwrap();
+    let hub =
+        Hub::new(store, data.media(), data.attachments(), data.worktrees(), data.no_project(), environment).unwrap();
 
     let account = data.account().expect("setup linked the server");
     let access =

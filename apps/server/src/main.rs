@@ -136,7 +136,14 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         }
     }
     let store = Store::open(&data_dir.database()).context("The thread database can't be opened.")?;
-    let hub = Hub::new(store, data_dir.media(), data_dir.attachments(), data_dir.worktrees(), environment)?;
+    let hub = Hub::new(
+        store,
+        data_dir.media(),
+        data_dir.attachments(),
+        data_dir.worktrees(),
+        data_dir.no_project(),
+        environment,
+    )?;
     hub.keep_uploads_swept();
     hub.keep_pull_requests_current(PULL_REQUEST_FRESH);
     hub.watch_pull_requests(PULL_REQUEST_WATCH);

@@ -177,8 +177,13 @@ final class AppStore {
     // What the servers hold
     private(set) var servers: [Server] = []
     private var serverUpdates: [String: ServerUpdate] = [:]
+    /// The folders the user added. "No project" of each server is in `noProjects`.
     private(set) var projects: [Project] = [] {
-        didSet { projectsByID = Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
+        didSet { indexProjects() }
+    }
+    /// The project of each server that threads start in without one.
+    private(set) var noProjects: [Project] = [] {
+        didSet { indexProjects() }
     }
     private(set) var projectsByID: [String: Project] = [:]
     private(set) var threads: [String: ThreadInfo] = [:]
@@ -449,6 +454,9 @@ final class AppStore {
         if projects.contains(where: { !known.contains($0.serverID) }) {
             projects.removeAll { !known.contains($0.serverID) }
         }
+        if noProjects.contains(where: { !known.contains($0.serverID) }) {
+            noProjects.removeAll { !known.contains($0.serverID) }
+        }
         if threads.values.contains(where: { !known.contains($0.serverID) }) {
             setThreads(threads.filter { known.contains($0.value.serverID) })
         }
@@ -501,15 +509,23 @@ final class AppStore {
     private func apply(projects new: [Project], serverID: String) {
         let git = gitProject?.git
         defer { if gitProject?.git != git { workspaceVersion += 1 } }
-        var updated = projects.filter { $0.serverID != serverID } + new
+        var updated = projects.filter { $0.serverID != serverID } + new.filter { !$0.noProject }
         updated.sort { $0.createdAt < $1.createdAt }
         // Every row of the sidebar looks at the projects, so they only change when they did.
         if updated != projects { projects = updated }
+        let order = servers.map(\.id)
+        var none = noProjects.filter { $0.serverID != serverID } + new.filter(\.noProject)
+        none.sort { (order.firstIndex(of: $0.serverID) ?? order.count) < (order.firstIndex(of: $1.serverID) ?? order.count) }
+        if none != noProjects { noProjects = none }
         ImageFiles.shared.warm(new.compactMap(\.iconPath))
         ensureDraftProject()
         openAwaitedProject()
         // A server that has just started hasn't read the repository yet.
         if let project = gitProject, project.serverID == serverID, project.git == nil { readGit() }
+    }
+
+    private func indexProjects() {
+        projectsByID = Dictionary((projects + noProjects).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     // MARK: Lookups
@@ -636,10 +652,13 @@ final class AppStore {
     /// for the open draft.
     var panelTarget: PanelTarget? {
         guard let project = threadProject ?? project(selectedDraft?.projectID) else { return nil }
+        // A thread without a project has no folder until it starts.
+        guard !project.noProject || selectedThread != nil else { return nil }
+        let folder = project.noProject ? selectedThread?.cwd : project.worktree?.path
         let awaitsWorktree = selectedThread == nil && draftUsesWorktree
         return PanelTarget(
             key: draftKey, serverID: project.serverID, projectID: project.id, threadID: selectedThread?.id,
-            name: URL(fileURLWithPath: project.worktree?.path ?? project.path).lastPathComponent,
+            name: URL(fileURLWithPath: folder ?? project.path).lastPathComponent,
             repository: project.branch != nil, worktree: project.worktree != nil, awaitsWorktree: awaitsWorktree,
             pullRequest: awaitsWorktree ? nil : (selectedThread?.pullRequest ?? project.git?.pullRequest)?.number)
     }
@@ -860,7 +879,9 @@ final class AppStore {
 
     /// Keeps the open draft pointing at a project that exists, once the projects are known.
     private func ensureDraftProject() {
-        guard ready, let draft = selectedDraft, project(draft.projectID) == nil, let first = projects.first else { return }
+        guard ready, let draft = selectedDraft, project(draft.projectID) == nil, let first = projects.first ?? noProjects.first else {
+            return
+        }
         updateDraft { $0.projectID = first.id }
     }
 
@@ -1575,9 +1596,9 @@ final class AppStore {
     }
 
     /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft
-    /// opens at once, with more the panel asks which.
+    /// opens at once, without one it starts without a project, and with more the panel asks which.
     func newThread() {
-        guard projects.count > 1 else { return startNewThread(in: projects.first) }
+        guard projects.count > 1 else { return startNewThread(in: projects.first ?? noProjects.first) }
         openPanel(.projects)
     }
 

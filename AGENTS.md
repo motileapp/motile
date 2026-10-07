@@ -86,7 +86,9 @@ One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
   session starts a new one that is told what was said.
 - `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
   worktrees, snapshots and the agents an agent starts. It continues a thread once its usage limit
-  resets, and after a restart that cut its agent off, where the server's settings say so.
+  resets, and after a restart that cut its agent off, where the server's settings say so. Every
+  server has a "No project" project, whose threads each work in a folder of their own under
+  `no-project` in its data folder, out of reach of any git repository above it.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `models.rs` lists Claude's models by hand.
