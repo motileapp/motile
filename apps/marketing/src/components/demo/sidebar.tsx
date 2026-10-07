@@ -76,7 +76,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setDoneOpen(!doneOpen)}
-            className="flex h-[38px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-secondary"
+            className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-secondary"
           >
             <ChevronRightIcon
               className={cn(
