@@ -181,9 +181,9 @@ struct ThreadMenu: View {
             Button("Mark Done") { store.setDone([thread.id], done: true, fromSidebar: true) }
                 .disabled(thread.busy)
         }
-        Button("Rename…") { rename(thread) }
+        Button("Rename") { rename(thread) }
         Divider()
-        Button("Delete…", role: .destructive) { delete(thread) }
+        Button("Delete", role: .destructive) { delete(thread) }
     }
 }
 

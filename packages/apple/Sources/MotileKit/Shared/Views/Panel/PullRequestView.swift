@@ -375,7 +375,7 @@ private struct PullRequestPageView: View {
                 Divider()
                 if page.canEdit {
                     Button("Edit Title") { title = page.title }
-                    Button("Edit Description…") { describing = true }
+                    Button("Edit Description") { describing = true }
                 }
                 if let thread {
                     if ownPullRequest {

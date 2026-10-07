@@ -66,25 +66,25 @@ struct MotileApp: App {
                 .keyboardShortcut("w")
             }
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") { store.updater.check(asked: true) }
+                Button("Check for Updates") { store.updater.check(asked: true) }
             }
             CommandGroup(replacing: .appSettings) {
-                Button("Settings…") { store.openSettings() }
+                Button("Settings") { store.openSettings() }
                     .keyboardShortcut(",")
                 Button("Usage") { store.openUsage() }
                     .disabled(!store.account.signedIn)
             }
             CommandGroup(replacing: .newItem) {
-                Button("New Thread…") { store.newThread() }
+                Button("New Thread") { store.newThread() }
                     .keyboardShortcut("n")
                 Button(store.composerProject.map { $0.noProject ? "New Thread Without a Project" : "New Thread in “\($0.name)”" } ?? "New Thread in This Project") {
                     store.startNewThread(in: store.composerProject)
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(store.composerProject == nil)
-                Button("Go to Thread…") { store.openPanel(.threads) }
+                Button("Go to Thread") { store.openPanel(.threads) }
                     .keyboardShortcut("p")
-                Button("Commands…") { store.openPanel(.commands) }
+                Button("Commands") { store.openPanel(.commands) }
                     .keyboardShortcut("k")
             }
             CommandMenu("Thread") {
@@ -95,9 +95,9 @@ struct MotileApp: App {
                     .keyboardShortcut(".")
                     .disabled(!store.activity.busy)
                 Divider()
-                Button("Add a Project…") { store.addProject() }
+                Button("Add a Project") { store.addProject() }
                     .disabled(store.servers.isEmpty)
-                Button("Add a Server…") { store.showsAddServer = true }
+                Button("Add a Server") { store.showsAddServer = true }
                     .disabled(!store.account.signedIn)
             }
         }

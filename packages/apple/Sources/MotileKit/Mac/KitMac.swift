@@ -604,7 +604,7 @@ final class TranscriptScroller: NSView {
 #if os(macOS)
 /// What is done with the file of an image or a video outside the client.
 enum MediaFiles {
-    static let saveTitle = "Save As…"
+    static let saveTitle = "Save As"
 
     static func copyImage(at file: URL) {
         DispatchQueue.global(qos: .userInitiated).async {

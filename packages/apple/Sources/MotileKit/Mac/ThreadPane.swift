@@ -151,9 +151,9 @@ struct ThreadPane: View {
                     }
                 }
                 Divider()
-                Button("Add Project…") { store.addProject() }
+                Button("Add Project") { store.addProject() }
                 if let project = selected, !project.noProject {
-                    Button("Choose an Icon for “\(project.name)”…") { store.iconProject = project }
+                    Button("Choose an Icon for “\(project.name)”") { store.iconProject = project }
                     Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
                     Button("Remove “\(project.name)” from Projects") { store.removeProject(project) }
                 }

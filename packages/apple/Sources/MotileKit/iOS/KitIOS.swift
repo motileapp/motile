@@ -567,7 +567,7 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
 
 /// What is done with the file of an image or a video outside the client.
 enum MediaFiles {
-    static let saveTitle = "Share…"
+    static let saveTitle = "Share"
 
     static func copyImage(at file: URL) {
         DispatchQueue.global(qos: .userInitiated).async {

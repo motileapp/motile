@@ -134,7 +134,7 @@ struct SettingsPage: View {
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add a Server…", size: .small) { store.showsAddServer = true }
+                ActionButton("Add a Server", size: .small) { store.showsAddServer = true }
             } trailing: {
                 EmptyView()
             }
@@ -287,7 +287,7 @@ struct SettingsPage: View {
                     AgentIcon(agent: account.agent, size: 16)
                     SettingsLabel("\(account.agent.name) · \(account.name)", description: description(of: account))
                 } trailing: {
-                    ActionButton("Edit…", size: .small) { editedAccount = EditedAccount(server: server, account: account) }
+                    ActionButton("Edit", size: .small) { editedAccount = EditedAccount(server: server, account: account) }
                     if !account.isDefault {
                         ActionButton("Remove", size: .small) { store.removeAgentAccount(account, on: server) }
                     }
@@ -295,7 +295,7 @@ struct SettingsPage: View {
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add an Account…", size: .small) {
+                ActionButton("Add an Account", size: .small) {
                     editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
                 }
                 .disabled(installed.isEmpty)
@@ -334,11 +334,11 @@ struct SettingsPage: View {
                     SettingsLabel(project.name, description: project.path, truncates: true)
                 } trailing: {
                     ActionMenu("Icon", variant: .secondary, size: .small) {
-                        Button("Choose an Image…") { store.iconProject = project }
+                        Button("Choose an Image") { store.iconProject = project }
                         Button("Use the Icon in Its Folder") { store.setIcon(of: project, to: nil) }
                     }
                     if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
-                        ActionButton("Setup…", help: "The script that runs in each new worktree of \(project.name)", size: .small) {
+                        ActionButton("Setup", help: "The script that runs in each new worktree of \(project.name)", size: .small) {
                             setupProject = project
                         }
                     }
@@ -347,7 +347,7 @@ struct SettingsPage: View {
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add a Project…", size: .small) {
+                ActionButton("Add a Project", size: .small) {
                     store.closeSettings()
                     store.addProject()
                 }

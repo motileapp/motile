@@ -197,15 +197,15 @@ struct CommandPanel: View {
 
     private func prompt(_ page: PanelPage) -> String {
         switch page {
-        case .commands: "Search threads, projects and commands…"
-        case .projects: "Start a thread in…"
-        case .draftProject: "Search projects…"
-        case .threads: "Go to thread…"
-        case .servers: "Add a project on…"
-        case .sources: "Add a project…"
+        case .commands: "Search threads, projects and commands"
+        case .projects: "Start a thread in"
+        case .draftProject: "Search projects"
+        case .threads: "Go to thread"
+        case .servers: "Add a project on"
+        case .sources: "Add a project"
         case .newProject: "Project name"
-        case .github: "Search your repositories…"
-        case .githubSetup: "Set up GitHub…"
+        case .github: "Search your repositories"
+        case .githubSetup: "Set up GitHub"
         case .folder(let id): "Path on \(serverName(id))"
         }
     }
@@ -411,7 +411,7 @@ struct CommandPanel: View {
     }
 
     private var addProject: PanelItem {
-        PanelItem(id: "add-project", title: "Add a project…", detail: "A new one, one of your GitHub's or a folder", icon: .symbol(.folderPlus), keepsOpen: true) {
+        PanelItem(id: "add-project", title: "Add a project", detail: "A new one, one of your GitHub's or a folder", icon: .symbol(.folderPlus), keepsOpen: true) {
             open(store.addProjectPage)
         }
     }
@@ -594,18 +594,18 @@ struct CommandPanel: View {
 
     private var commands: [PanelItem] {
         let always: [PanelItem] = [
-            PanelItem(id: "new-thread", title: "New thread…", detail: "Choose a project to start in", icon: .symbol(.squarePen), keepsOpen: true) {
+            PanelItem(id: "new-thread", title: "New thread", detail: "Choose a project to start in", icon: .symbol(.squarePen), keepsOpen: true) {
                 open(.projects)
             },
-            PanelItem(id: "go-to-thread", title: "Go to thread…", detail: "\(store.threads.count) threads", icon: .symbol(.messageSquareText), keepsOpen: true) {
+            PanelItem(id: "go-to-thread", title: "Go to thread", detail: "\(store.threads.count) threads", icon: .symbol(.messageSquareText), keepsOpen: true) {
                 open(.threads)
             },
             addProject,
-            PanelItem(id: "add-server", title: "Add a server…", detail: "A machine that runs your agents", icon: .symbol(.server)) {
+            PanelItem(id: "add-server", title: "Add a server", detail: "A machine that runs your agents", icon: .symbol(.server)) {
                 store.showsAddServer = true
             },
         ]
-        let settings = PanelItem(id: "settings", title: "Settings…", detail: "Appearance, servers and projects", icon: .symbol(.settings)) {
+        let settings = PanelItem(id: "settings", title: "Settings", detail: "Appearance, servers and projects", icon: .symbol(.settings)) {
             store.openSettings()
         }
         let usage = PanelItem(id: "usage", title: "Usage", detail: "Limits, cost and tokens", icon: .symbol(.chartColumn)) {

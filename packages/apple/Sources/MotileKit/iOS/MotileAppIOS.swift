@@ -77,14 +77,14 @@ struct MotileCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Thread…") { store.newThread() }
+            Button("New Thread") { store.newThread() }
                 .keyboardShortcut("n")
             Button("New Thread in This Project") { store.startNewThread(in: store.composerProject) }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(store.composerProject == nil)
-            Button("Go to Thread…") { store.openPanel(.threads) }
+            Button("Go to Thread") { store.openPanel(.threads) }
                 .keyboardShortcut("p")
-            Button("Commands…") { store.openPanel(.commands) }
+            Button("Commands") { store.openPanel(.commands) }
                 .keyboardShortcut("k")
         }
         CommandGroup(replacing: .sidebar) {
@@ -123,11 +123,11 @@ struct MotileCommands: Commands {
                 .keyboardShortcut("w")
                 .disabled(!store.sidePanel.isOpen)
             Divider()
-            Button("Add a Project…") { store.addProject() }
+            Button("Add a Project") { store.addProject() }
                 .disabled(store.servers.isEmpty)
-            Button("Add a Server…") { store.showsAddServer = true }
+            Button("Add a Server") { store.showsAddServer = true }
                 .disabled(!store.account.signedIn)
-            Button("Settings…") { store.openSettings() }
+            Button("Settings") { store.openSettings() }
                 .keyboardShortcut(",")
             Button("Usage") { store.openUsage() }
                 .disabled(!store.account.signedIn)
