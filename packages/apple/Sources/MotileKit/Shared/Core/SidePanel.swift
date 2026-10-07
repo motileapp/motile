@@ -232,8 +232,8 @@ final class SidePanel {
     private(set) var contents: [PanelTab: Loaded<FileContent>] = [:]
 
     private(set) var pullRequest: Loaded<PullRequestPage> = .loading
-    /// The action on the pull request that runs.
-    private(set) var pullRequestWorking: PullRequestWork?
+    /// The actions that run, by the pull request they run on.
+    private var pullRequestWork: [String: PullRequestWork] = [:]
     /// The repository's pull requests, as the list tab shows them.
     private(set) var pullRequestList: Loaded<[PullRequestRow]> = .loading
     /// Comments on lines waiting to be sent with a review, by pull request.
@@ -644,6 +644,16 @@ final class SidePanel {
 
     // MARK: Pull request
 
+    /// The action that runs on the pull request shown.
+    var pullRequestWorking: PullRequestWork? {
+        guard let shown, let shownPullRequest else { return nil }
+        return pullRequestWork[workKey(shown, shownPullRequest)]
+    }
+
+    private func workKey(_ target: PanelTarget, _ number: Int) -> String {
+        "\(target.serverID)/\(target.projectID)/\(number)"
+    }
+
     /// Asks the server for the pull request. What is shown of it stays until the answer is there,
     /// unless it is another one.
     func loadPullRequest(of target: PanelTarget, number: Int) {
@@ -677,8 +687,9 @@ final class SidePanel {
         _ action: String, method: String? = nil, text: String? = nil, key: String, on target: PanelTarget,
         number: Int, done: (() -> Void)? = nil
     ) {
-        guard pullRequestWorking == nil else { return }
-        pullRequestWorking = PullRequestWork(key: key)
+        let work = workKey(target, number)
+        guard pullRequestWork[work] == nil else { return }
+        pullRequestWork[work] = PullRequestWork(key: key)
         pullRequestNotice = nil
         if action == "merge" || action == "enable_auto_merge", let method { remember(method, for: target.projectID) }
         var command = target.request
@@ -691,7 +702,7 @@ final class SidePanel {
             (answer.string("title"), answer.optionalString("url"), PullRequestPage(json: answer.object("view") ?? [:]))
         }) { [weak self] result in
             guard let self else { return }
-            self.pullRequestWorking = nil
+            self.pullRequestWork[work] = nil
             guard self.shown == target, self.shownPullRequest == number else { return }
             switch result {
             case .success(let (title, url, page)):
@@ -711,9 +722,10 @@ final class SidePanel {
         _ edit: JSON, key: String? = nil, on target: PanelTarget, number: Int,
         done: (() -> Void)? = nil
     ) {
+        let work = workKey(target, number)
         if let key {
-            guard pullRequestWorking == nil else { return }
-            pullRequestWorking = PullRequestWork(key: key)
+            guard pullRequestWork[work] == nil else { return }
+            pullRequestWork[work] = PullRequestWork(key: key)
             pullRequestNotice = nil
         }
         var command = target.request
@@ -723,7 +735,7 @@ final class SidePanel {
         if let method = mergeMethods[target.projectID] { command["method"] = method }
         store?.core.send("pull_request_edit", command, read: { PullRequestPage(json: $0.object("view") ?? [:]) }) { [weak self] result in
             guard let self else { return }
-            if key != nil { self.pullRequestWorking = nil }
+            if key != nil { self.pullRequestWork[work] = nil }
             guard self.shown == target, self.shownPullRequest == number else { return }
             switch result {
             case .success(let page):
