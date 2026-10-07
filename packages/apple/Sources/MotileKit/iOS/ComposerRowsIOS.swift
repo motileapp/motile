@@ -49,7 +49,7 @@ struct ComposerTouchControls: View {
             AttachMenu()
             if !collapsed, let server = store.composerServer {
                 ServerLabel(server: server, weight: .medium)
-                    .padding(.leading, 1)
+                    .padding(.leading, 2)
                     .appearing()
             }
             Spacer(minLength: 8)
@@ -65,7 +65,7 @@ struct ComposerTouchControls: View {
         let model = store.composerModel
         let logo = model.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         return ActionButton(
-            store.composerModelLabel, picture: logo, variant: .ghost, symbolSize: ControlSize.regular.symbol, gap: 4, opens: true
+            store.composerModelLabel, picture: logo, variant: .ghost, symbolSize: ControlSize.regular.symbol, gap: 5, opens: true
         ) {
             store.showsThreadSettings = true
         }
