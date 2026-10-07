@@ -625,13 +625,16 @@ enum MediaFiles {
     static func save(_ file: URL, named name: String, from view: NSView? = nil) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name
-        panel.begin { response in
+        let write = { (response: NSApplication.ModalResponse) in
             guard response == .OK, let destination = panel.url else { return }
             DispatchQueue.global(qos: .userInitiated).async {
                 try? FileManager.default.removeItem(at: destination)
                 try? FileManager.default.copyItem(at: file, to: destination)
             }
         }
+        // A panel of its own can open behind the window or on another Space, out of sight.
+        guard let window = view?.window ?? NSApp.keyWindow ?? NSApp.mainWindow else { return write(panel.runModal()) }
+        panel.beginSheetModal(for: window, completionHandler: write)
     }
 }
 #endif
