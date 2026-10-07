@@ -4,8 +4,9 @@ import SwiftUI
 /// around it. The choices touch each other and the track's edge, so no click falls between them;
 /// their light is drawn `inset` from their edges, as the sidebar's rows are.
 struct Segmented<Value: Hashable>: View {
-    /// How far a choice's light stands from the track's edge, and twice how far from the next one.
+    /// How far a choice's light stands from the track's border, and from the next one's.
     static var inset: CGFloat { 4 }
+    static var border: CGFloat { 1 }
 
     private let options: [(title: String, value: Value)]
     @Binding private var selection: Value
@@ -22,7 +23,7 @@ struct Segmented<Value: Hashable>: View {
     }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: size.radius + Self.inset, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: size.radius + Self.inset + Self.border, style: .continuous)
         HStack(spacing: 0) {
             ForEach(options.indices, id: \.self) { index in
                 let option = options[index]
@@ -36,16 +37,17 @@ struct Segmented<Value: Hashable>: View {
         }
         .environment(\.surface, .background)
         .background(Color.themeBackground, in: shape)
-        .overlay { shape.strokeBorder(Color.themeBorder, lineWidth: 1) }
+        .overlay { shape.strokeBorder(Color.themeBorder, lineWidth: Self.border) }
         .opacity(enabled ? 1 : 0.45)
         .animation(.easeOut(duration: 0.12), value: selection)
     }
 
     private func margin(at index: Int) -> EdgeInsets {
         let half = Self.inset / 2
+        let edge = Self.inset + Self.border
         return EdgeInsets(
-            top: Self.inset, leading: index == 0 ? Self.inset : half, bottom: Self.inset,
-            trailing: index == options.count - 1 ? Self.inset : half)
+            top: edge, leading: index == 0 ? edge : half, bottom: edge,
+            trailing: index == options.count - 1 ? edge : half)
     }
 }
 
