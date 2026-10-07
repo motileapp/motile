@@ -418,6 +418,7 @@ private struct AgentAccountSheet: View {
     @State private var account: AgentAccount
     @State private var variables: [EditedVariable]
     @State private var saving = false
+    @State private var suggestedFolder = ""
 
     init(server: Server, account: AgentAccount) {
         self.server = server
@@ -478,6 +479,8 @@ private struct AgentAccountSheet: View {
             }
         }
         .padding(16)
+        .onChange(of: account.name) { suggestFolder() }
+        .onChange(of: account.agent) { suggestFolder() }
         #if os(macOS)
         .frame(width: 460)
         #else
@@ -525,6 +528,13 @@ private struct AgentAccountSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    /// Fills a new account's folder from its name until the folder is typed by hand.
+    private func suggestFolder() {
+        guard isNew, account.folder.isEmpty || account.folder == suggestedFolder else { return }
+        suggestedFolder = account.suggestedFolder(besides: server.agentAccounts)
+        account.folder = suggestedFolder
     }
 
     private func save() {
