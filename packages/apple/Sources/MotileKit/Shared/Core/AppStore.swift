@@ -840,11 +840,14 @@ final class AppStore {
         draft.base = nil
     }
 
-    private func rememberSettings(model: String?, effort: String?, access: Access, account: String? = nil) {
-        defaults.set(model, forKey: "new.model")
-        if let account { defaults.set(account, forKey: "new.agentAccount") }
-        defaults.set(effort, forKey: "new.effort")
-        defaults.set(access.rawValue, forKey: "new.access")
+    /// Has the next draft start with what was just chosen, and only that.
+    private func rememberChoices(of draft: ThreadDraft, changedFrom before: ThreadDraft) {
+        if draft.projectID != before.projectID { defaults.set(draft.projectID, forKey: "new.project") }
+        if draft.worktree != before.worktree { defaults.set(draft.worktree == true, forKey: "new.worktree") }
+        if draft.model != before.model { defaults.set(draft.model, forKey: "new.model") }
+        if draft.agentAccount != before.agentAccount { defaults.set(draft.agentAccount, forKey: "new.agentAccount") }
+        if draft.effort != before.effort { defaults.set(draft.effort, forKey: "new.effort") }
+        if draft.access != before.access { defaults.set(draft.access.rawValue, forKey: "new.access") }
     }
 
     /// A draft with nothing in it: the one that is already there, or a new one.
@@ -859,14 +862,12 @@ final class AppStore {
         return addDraft()
     }
 
-    /// Changes the open draft, and has the next draft start with the same choices.
+    /// Changes the open draft, and has the next draft start with what changed.
     private func updateDraft(_ change: (inout ThreadDraft) -> Void) {
         guard let index = threadDrafts.firstIndex(where: { selection == .draft($0.id) }) else { return }
+        let before = threadDrafts[index]
         change(&threadDrafts[index])
-        let draft = threadDrafts[index]
-        defaults.set(draft.projectID, forKey: "new.project")
-        defaults.set(draft.worktree == true, forKey: "new.worktree")
-        rememberSettings(model: draft.model, effort: draft.effort, access: draft.access, account: draft.agentAccount)
+        rememberChoices(of: threadDrafts[index], changedFrom: before)
         saveThreadDrafts()
     }
 
@@ -1811,7 +1812,6 @@ final class AppStore {
             }
             return
         }
-        rememberSettings(model: model.id, effort: thread.effort, access: thread.access, account: account.id)
         let effort = thread.effort.flatMap { model.efforts.contains($0) ? $0 : nil }
         var change: JSON = ["model": model.id, "effort": effort ?? ""]
         if account.id != thread.agentAccount { change["agent_account"] = account.id }
@@ -1838,7 +1838,6 @@ final class AppStore {
             updateDraft { $0.effort = effort }
             return
         }
-        rememberSettings(model: thread.model ?? composerModel?.id, effort: effort, access: thread.access)
         update(thread, ["effort": effort]) { $0.effort = effort }
     }
 
@@ -1847,7 +1846,6 @@ final class AppStore {
             updateDraft { $0.access = access }
             return
         }
-        rememberSettings(model: thread.model ?? composerModel?.id, effort: thread.effort, access: access)
         update(thread, ["access": access.rawValue]) { $0.access = access }
     }
 
