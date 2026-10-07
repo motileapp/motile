@@ -296,6 +296,7 @@ struct GitNoticeView: View {
     private static let titleHeight: CGFloat = scaled(16)
     /// Centres the close button on a notice of one line, as far from its right as from its top and bottom.
     private static let closeMargin = (padding * 2 + titleHeight - closeSize) / 2
+    private static let trailing = closeMargin + closeSize + 4
 
     var body: some View {
         let url = notice.url.flatMap { URL(string: $0) }
@@ -309,14 +310,16 @@ struct GitNoticeView: View {
                     .foregroundStyle(Color.themeText)
                     .frame(minHeight: Self.titleHeight)
                 if let description = notice.description {
-                    // The end is where a hook says what it found.
-                    Text(description)
-                        .font(notice.failed ? .ui(size: 11.5, design: .monospaced) : .ui(size: 12.5))
-                        .foregroundStyle(Color.themeSecondary)
-                        .lineLimit(notice.failed ? 8 : 2)
-                        .truncationMode(notice.failed ? .head : .tail)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if notice.failed {
+                        output(description)
+                    } else {
+                        Text(description)
+                            .font(.ui(size: 12.5))
+                            .foregroundStyle(Color.themeSecondary)
+                            .lineLimit(2)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if url != nil || notice.nextLabel != nil {
                     HStack(spacing: 8) {
@@ -334,7 +337,7 @@ struct GitNoticeView: View {
         }
         .padding(.vertical, Self.padding)
         .padding(.leading, Self.padding)
-        .padding(.trailing, Self.closeMargin + Self.closeSize + 4)
+        .padding(.trailing, Self.trailing)
         .frame(maxWidth: Platform.scale > 1 ? 440 : 320)
         .background {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
@@ -354,6 +357,31 @@ struct GitNoticeView: View {
 
     private func action(_ title: String, prominent: Bool, run: @escaping () -> Void) -> some View {
         ActionButton(title, variant: prominent ? .primary : .secondary, action: run)
+    }
+
+    private static let outputFont = PlatformFont.uiMono(11.5)
+    private static let outputPadding: CGFloat = scaled(8)
+    private static let outputHeight = (outputFont.textLineHeight + 2) * 10 + outputPadding * 2
+
+    /// What git printed, scrolled to its end, where a hook says what it found.
+    private func output(_ text: String) -> some View {
+        FadingScroll(maxHeight: Self.outputHeight, anchor: .bottom) {
+            Text(text)
+                .font(.ui(size: 11.5, design: .monospaced))
+                .foregroundStyle(Color.themeSecondary)
+                .lineSpacing(2)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Self.outputPadding)
+        }
+        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(Color.themeBorderSecondary, lineWidth: 1)
+        }
+        .padding(.top, 4)
+        .padding(.trailing, Self.padding - Self.trailing)
     }
 }
 
