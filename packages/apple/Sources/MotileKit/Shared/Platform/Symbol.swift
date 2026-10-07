@@ -57,6 +57,7 @@ enum Symbol: String {
     case gitPullRequestCreate = "\u{e556}"
     case gitPullRequestDraft = "\u{e35b}"
     case globe = "\u{e0e8}"
+    case hourglass = "\u{e296}"
     case image = "\u{e0f6}"
     case images = "\u{e5c4}"
     case layers = "\u{e529}"

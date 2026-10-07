@@ -150,11 +150,7 @@ struct GitButton: View {
     @ViewBuilder
     private func quickLabel(_ quick: GitQuick, at stage: GitStage?) -> some View {
         if let stage {
-            Label {
-                Text(stage.label)
-            } icon: {
-                Image(uiImage: TurningLoader.image(size: 15))
-            }
+            Label(stage.label, symbol: .hourglass, size: 15)
         } else if let color = pullRequestColor(of: quick) {
             Label {
                 Text(quick.title)
@@ -178,42 +174,6 @@ struct GitButton: View {
         }
     }
 }
-
-#if os(iOS)
-/// The spinner as the frames of an image, which is all a menu row can show. Each size is drawn once.
-private enum TurningLoader {
-    private static let frames = 24
-    private static var made: [CGFloat: UIImage] = [:]
-
-    static func image(size: CGFloat) -> UIImage {
-        if let image = made[size] { return image }
-        let image = drawn(size: size)
-        made[size] = image
-        return image
-    }
-
-    private static func drawn(size: CGFloat) -> UIImage {
-        let side = UIImage.symbolSide(size)
-        guard let path = UIImage.symbolPath(.loader, size: size * Spinner.fill) else { return UIImage.symbol(.loader, size: size) }
-        let inset = (side - UIImage.symbolSide(size * Spinner.fill)) / 2
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side))
-        let images = (0..<frames).map { frame in
-            renderer.image { renderer in
-                let context = renderer.cgContext
-                context.translateBy(x: side / 2, y: side / 2)
-                context.rotate(by: CGFloat(frame) / CGFloat(frames) * 2 * .pi)
-                context.scaleBy(x: 1, y: -1)
-                context.translateBy(x: inset - side / 2, y: inset - side / 2)
-                context.setFillColor(UIColor.black.cgColor)
-                context.addPath(path)
-                context.fillPath()
-            }
-        }
-        guard let turning = UIImage.animatedImage(with: images, duration: 1.2) else { return images[0] }
-        return turning.withRenderingMode(.alwaysTemplate)
-    }
-}
-#endif
 
 #if os(macOS)
 /// Where the git button is in its window, for its menu to open against.
