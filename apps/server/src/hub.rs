@@ -1295,6 +1295,21 @@ impl Hub {
         Ok(Message::WorktreeStart { start: start.name().to_string(), problem: start.problem })
     }
 
+    /// Brings the base a new worktree starts from up to the remote's, and says where it starts now.
+    pub async fn update_base(&self, project_id: &str, base: &str) -> anyhow::Result<Message> {
+        let path = self.project_path(project_id).await?;
+        if let Some(problem) = git::start(&path, &self.environment, base, true).await.problem {
+            bail!(problem);
+        }
+        if git::current_branch(&path).as_deref() == Some(base) {
+            self.refuse_while_working(&path).await?;
+        }
+        git::update_base(&path, &self.environment, base).await?;
+        self.read_git(&path, false).await;
+        let start = git::start(&path, &self.environment, base, false).await;
+        Ok(Message::WorktreeStart { start: start.name().to_string(), problem: None })
+    }
+
     /// Checks a branch out in the project's folder, where its threads without a worktree work.
     pub async fn switch_branch(&self, project_id: &str, branch: &str, create: bool) -> anyhow::Result<()> {
         let path = self.project_path(project_id).await?;
