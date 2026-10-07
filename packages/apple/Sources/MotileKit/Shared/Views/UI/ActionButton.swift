@@ -114,6 +114,9 @@ struct ControlLabel: View {
     /// The room between its symbol and its words where it isn't the one that goes with `size`.
     var gap: CGFloat?
 
+    /// How much the chevron and the dots between a title's parts let through.
+    private static let muted = 0.6
+
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: CGFloat { symbolSize ?? size.symbol }
     private var waitingTitle: String? { pending ? pendingTitle : nil }
@@ -129,7 +132,7 @@ struct ControlLabel: View {
             }
             if chevron {
                 Image(.chevronDown, size: size.textSize, trimmed: true)
-                    .opacity(0.6)
+                    .opacity(Self.muted)
             }
         }
         .frame(maxWidth: fills ? .infinity : nil, alignment: Alignment(horizontal: alignment, vertical: .center))
@@ -168,7 +171,7 @@ struct ControlLabel: View {
     private static func text(_ title: String) -> Text {
         let parts = title.components(separatedBy: " · ")
         return parts.dropFirst().reduce(Text(verbatim: parts[0])) { line, part in
-            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(.tertiary))\(Text(verbatim: part))")
+            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(.foreground.opacity(muted)))\(Text(verbatim: part))")
         }
     }
 
