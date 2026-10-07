@@ -82,16 +82,18 @@ struct ThreadScreen: View {
     }
 
     /// The colour of the first thread, other than the open one, that waits for the user or has a
-    /// reply they haven't seen, or else the working colour while one works.
+    /// reply they haven't seen, or else the working colour while one works, or else the
+    /// monitoring colour while one monitors.
     private var attention: Color? {
         let others = store.activeThreads.filter { store.selection != .thread($0.id) }
         if let color = others.lazy.compactMap(\.attentionColor).first { return color }
-        guard others.contains(where: { $0.running || $0.gitStage != nil }) else { return nil }
-        return .themeWorking
+        if others.contains(where: { $0.running || $0.gitStage != nil }) { return .themeWorking }
+        guard others.contains(where: \.monitoring) else { return nil }
+        return .themeMonitoring
     }
 
     /// The menu icon, with a dot on its top right corner, cut out of the icon, when another
-    /// thread needs attention or works, in the colour of its status.
+    /// thread needs attention, works or monitors, in the colour of its status.
     @ViewBuilder private var menuIcon: some View {
         let side = PlatformImage.symbolSide(16)
         let dot = CGPoint(x: side * 20 / 24, y: side * 5 / 24)

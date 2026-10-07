@@ -228,7 +228,7 @@ function ThreadStatus({
       )
     case "monitoring":
       return (
-        <span className={cn(label, "text-foreground")}>
+        <span className={cn(label, "text-monitoring")}>
           <EyeIcon className="size-[11px]" />
           {elapsed(thread.status.since)}
         </span>

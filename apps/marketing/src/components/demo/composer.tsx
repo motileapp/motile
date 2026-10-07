@@ -40,8 +40,8 @@ export function Composer({
     <div className="mx-auto w-full max-w-[796px]">
       {status.kind === "monitoring" && (
         <Strip edge="top">
-          <span className="mr-2 ml-3.5 size-1.5 rounded-full bg-foreground" />
-          <span className="text-[12.5px] font-medium tabular-nums">
+          <span className="mr-2 ml-3.5 size-1.5 rounded-full bg-monitoring" />
+          <span className="text-[12.5px] font-medium tabular-nums text-monitoring">
             Monitoring for {elapsed(status.since)}
           </span>
           <button
