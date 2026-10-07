@@ -778,6 +778,12 @@ struct Activity: Equatable {
 
     init() {}
 
+    /// What the thread list says the agent does, until the thread's server says more.
+    init(thread: ThreadInfo) {
+        running = thread.running
+        monitoring = thread.monitoring
+    }
+
     init(json: JSON, waiting: [JSON]) {
         running = json.bool("running")
         monitoring = json.bool("monitoring")
