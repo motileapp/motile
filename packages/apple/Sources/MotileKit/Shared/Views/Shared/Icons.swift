@@ -46,6 +46,7 @@ struct AgentIcon: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: size, height: size)
+                .foregroundStyle(Color.themeText)
         } else {
             Image(.sparkle, size: size * 0.85)
                 .frame(width: size, height: size)

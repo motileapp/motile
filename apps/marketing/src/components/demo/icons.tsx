@@ -31,7 +31,13 @@ export function AgentIcon({
   size?: number
 }) {
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      className="text-foreground"
+      aria-hidden="true"
+    >
       {agent === "claude" ? (
         <path fill="#D97757" d={CLAUDE} />
       ) : (
