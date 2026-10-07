@@ -130,6 +130,7 @@ struct SettingsSplit<Divider: View>: View {
                 .frame(width: sidebarWidth)
             divider()
             SettingsPage(section: store.settings ?? .general)
+                .fadesUnderTopBar()
                 .frame(maxWidth: .infinity)
         }
     }
