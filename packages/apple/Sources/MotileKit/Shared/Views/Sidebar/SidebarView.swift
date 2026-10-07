@@ -763,7 +763,6 @@ struct SidebarFooter: View {
             }
             HStack(spacing: 2 * ToolbarButton.margin) {
                 AccountMenu()
-                    .padding(.leading, (AccountMenu.side - ControlSize.regular.symbol) / 2)
                 if store.showsUsage || store.settings != nil {
                     ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost, fills: true, alignment: .leading) {
                         store.closeRoute()
