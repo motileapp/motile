@@ -244,14 +244,16 @@ struct ServerLabel: View {
 }
 
 extension PullRequest.State {
-    var color: Color {
+    var platformColor: PlatformColor {
         switch self {
-        case .open: .themeSuccess
-        case .draft: .themeSecondary
-        case .merged: .themeMerged
-        case .closed: .themeDanger
+        case .open: Theme.success
+        case .draft: Theme.secondary
+        case .merged: Theme.merged
+        case .closed: Theme.danger
         }
     }
+
+    var color: Color { Color(platform: platformColor) }
 }
 
 /// A thread's pull request: what became of it, and its number.

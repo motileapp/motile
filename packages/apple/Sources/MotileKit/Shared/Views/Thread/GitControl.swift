@@ -34,9 +34,9 @@ struct GitButton: View {
         return GitSymbol.symbol(for: quick.action)
     }
 
-    private func pullRequestColor(of quick: GitQuick) -> Color? {
+    private func pullRequestColor(of quick: GitQuick) -> PlatformColor? {
         guard quick.url != nil, let state = project.git?.pullRequest?.state else { return nil }
-        return state == .draft ? .themeText : state.color
+        return state == .draft ? Theme.text : state.platformColor
     }
 
     #if os(macOS)
@@ -66,7 +66,7 @@ struct GitButton: View {
     /// A pull request is in the colour of its state, and what has nothing to do is quiet.
     private func tint(of quick: GitQuick, at stage: GitStage?) -> Color? {
         if stage != nil { return .themeText }
-        if let color = pullRequestColor(of: quick) { return color }
+        if let color = pullRequestColor(of: quick) { return Color(platform: color) }
         guard quick.action != nil || quick.url != nil else { return .themeTertiary }
         return .themeText
     }
@@ -105,19 +105,13 @@ struct GitButton: View {
         let stage = store.gitStage(in: project)
         let running = stage != nil
         let quick = control.quick
-        let showsQuick = (quick.action != nil || quick.url != nil) && !control.menu.contains { $0.label == quick.label }
+        let showsQuick = running || ((quick.action != nil || quick.url != nil) && !control.menu.contains { $0.label == quick.label })
         return Menu {
-            if let stage {
-                Section(stage.label) {}
-            }
             if showsQuick {
                 Section {
-                    Button {
-                        store.runQuickGit(in: project)
-                    } label: {
-                        Label(quick.title, symbol: symbol(of: quick), size: 15)
+                    Button(action: runQuick) {
+                        quickLabel(quick, at: stage)
                     }
-                    .disabled(running)
                 }
             }
             ForEach(control.menu) { item in
@@ -130,13 +124,13 @@ struct GitButton: View {
                 .disabled(item.reason != nil || running)
             }
             if let warning = control.warning {
-                Section(warning) {}
+                Section { note(warning) }
             }
         } label: {
             if running {
                 Spinner(size: 15)
             } else if let color = pullRequestColor(of: quick) {
-                Image(symbol(of: quick), size: 15).foregroundStyle(color)
+                Image(symbol(of: quick), size: 15).foregroundStyle(Color(platform: color))
             } else if quick.action != nil || quick.url != nil {
                 Image(symbol(of: quick), size: 15)
             } else {
@@ -144,6 +138,33 @@ struct GitButton: View {
             }
         }
         .accessibilityLabel("Git")
+    }
+
+    /// A line that only says something. A menu leaves out a section with nothing in it.
+    private func note(_ text: String) -> some View {
+        Button(text) {}.disabled(true)
+    }
+
+    /// What the left half of the Mac's button says: the stage of a run, or the action, or the pull
+    /// request with its symbol in the colour of its state, which a menu only keeps drawn into the image.
+    @ViewBuilder
+    private func quickLabel(_ quick: GitQuick, at stage: GitStage?) -> some View {
+        if let stage {
+            Label(stage.label, symbol: .loader, size: 15)
+        } else if let color = pullRequestColor(of: quick) {
+            Label {
+                Text(quick.title)
+            } icon: {
+                Image(uiImage: TintedSymbol.image(symbol(of: quick), size: 15, color: color))
+            }
+        } else {
+            Label(quick.title, symbol: symbol(of: quick), size: 15)
+        }
+    }
+
+    private func runQuick() {
+        guard store.gitStage(in: project) == nil else { return }
+        store.runQuickGit(in: project)
     }
     #endif
 
