@@ -46,6 +46,8 @@ const FIRST_ITEMS: usize = 30;
 const RENDER_EVERY: Duration = Duration::from_millis(33);
 const SAVE_EVERY: Duration = Duration::from_secs(1);
 const TICK: Duration = Duration::from_secs(2);
+/// How long a server's update is still shown while the server can't be reached to confirm it.
+const UNCONFIRMED_UPDATE: Duration = Duration::from_secs(60);
 /// How often the client is told how far a download is.
 const PROGRESS_EVERY: Duration = Duration::from_millis(200);
 /// Where the images among a server's files are kept while they are shown, in the data folder.
@@ -146,6 +148,8 @@ struct Server {
     device: Device,
     link: Option<Arc<Link>>,
     status: Status,
+    /// Since when the server hasn't been reached, while it isn't.
+    away_since: Option<Instant>,
     info: Option<ServerInfo>,
     threads: HashMap<String, Thread>,
 }
@@ -394,6 +398,7 @@ impl Core {
                 self.ticks += 1;
                 self.replace_stale_endpoint();
                 self.replace_wedged_endpoint();
+                self.forget_unconfirmed_updates();
                 for (thread_id, followed) in &mut self.followed {
                     followed.save(&self.cache, thread_id);
                 }
@@ -686,6 +691,7 @@ impl Core {
                 device,
                 link: None,
                 status: Status::default(),
+                away_since: Some(Instant::now()),
                 info: self.cache.server_info(&server_id),
                 threads,
             });
@@ -732,6 +738,26 @@ impl Core {
             info: server.info.clone(),
         };
         self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });
+    }
+
+    /// Forgets the update of a server that has been away too long for it to still be under way.
+    fn forget_unconfirmed_updates(&mut self) {
+        let mut forgotten = Vec::new();
+        for server in &mut self.servers {
+            let away_too_long = server.away_since.is_some_and(|since| since.elapsed() > UNCONFIRMED_UPDATE);
+            let Some(info) = server.info.as_mut().filter(|info| away_too_long && info.update.is_some()) else {
+                continue;
+            };
+            info.update = None;
+            forgotten.push((server.device.public_key.clone(), info.clone()));
+        }
+        if forgotten.is_empty() {
+            return;
+        }
+        for (server_id, info) in &forgotten {
+            self.cache.set_server_info(server_id, info);
+        }
+        self.emit_servers();
     }
 
     fn server_mut(&mut self, server_id: &str) -> Option<&mut Server> {
@@ -884,6 +910,10 @@ impl Core {
             LinkEvent::Status(status) => {
                 let refused = status.state == State::Refused;
                 let Some(server) = self.server_mut(server_id) else { return };
+                server.away_since = match status.state {
+                    State::Connected => None,
+                    _ => server.away_since.or_else(|| Some(Instant::now())),
+                };
                 server.status = status;
                 self.emit_servers();
                 // The server may have been removed from the account, or this device.
@@ -921,6 +951,12 @@ impl Core {
                     self.refollow(server_id, &thread_id);
                 }
                 self.read_limits(server_id);
+            }
+            Message::Server { server: info } => {
+                self.cache.set_server_info(server_id, &info);
+                let Some(server) = self.server_mut(server_id) else { return };
+                server.info = Some(info);
+                self.emit_servers();
             }
             Message::Projects { projects } => {
                 self.cache.set_projects(server_id, &projects);

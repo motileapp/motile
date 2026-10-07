@@ -11,7 +11,7 @@ use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
 use iroh::{Endpoint, SecretKey};
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::wire::{Message, Request, RestartWhen};
+use motile_protocol::wire::{Message, Request, RestartWhen, ServerUpdate};
 use motile_protocol::{ALPN, error_text};
 use tokio::io::AsyncReadExt;
 use tokio::sync::broadcast::error::RecvError;
@@ -277,11 +277,13 @@ async fn update_server(mut send: SendStream, hub: Arc<Hub>, when: Option<Restart
             send.finish()?;
             return Ok(());
         }
-        let installed = install(&mut send).await;
+        hub.set_update(Some(ServerUpdate::Installing { percent: None }));
+        let installed = install(&mut send, &hub).await;
         UPDATING.store(false, Ordering::SeqCst);
         let program = match installed {
             Ok(program) => program,
             Err(error) => {
+                hub.set_update(None);
                 write_frame(&mut send, &Message::Error { message: error_text(&error) }).await?;
                 send.finish()?;
                 return Ok(());
@@ -303,9 +305,9 @@ async fn update_server(mut send: SendStream, hub: Arc<Hub>, when: Option<Restart
     Ok(())
 }
 
-/// Puts the latest release in place of the program, telling the client how far the download is.
-/// Answers with where the program is.
-async fn install(send: &mut SendStream) -> anyhow::Result<PathBuf> {
+/// Puts the latest release in place of the program, telling the client how far the download is,
+/// and every client each percent. Answers with where the program is.
+async fn install(send: &mut SendStream, hub: &Hub) -> anyhow::Result<PathBuf> {
     // Where the program is, asked before it is replaced: afterwards the answer is the old file.
     let program = std::env::current_exe()?;
     let download_url = std::env::var("MOTILE_DOWNLOAD_URL").unwrap_or_else(|_| update::DOWNLOAD_URL.to_string());
@@ -319,7 +321,13 @@ async fn install(send: &mut SendStream) -> anyhow::Result<PathBuf> {
             update::install_latest(&download_url, &program, report).await
         }
     });
+    let mut shown = None;
     while let Some((received, total)) = progress.recv().await {
+        let percent = total.filter(|total| *total > 0).map(|total| (received * 100 / total).min(100) as u8);
+        if percent != shown {
+            shown = percent;
+            hub.set_update(Some(ServerUpdate::Installing { percent }));
+        }
         // The client may have gone; the update goes on without it.
         let _ = write_frame(send, &Message::Updating { received, total }).await;
     }
@@ -331,12 +339,16 @@ async fn install(send: &mut SendStream) -> anyhow::Result<PathBuf> {
 /// stopped, and their threads continue after the restart.
 async fn restart_when_idle(hub: Arc<Hub>, program: PathBuf) {
     let mut now = false;
+    if hub.any_running().await {
+        hub.set_update(Some(ServerUpdate::Waiting));
+    }
     while !now && hub.any_running().await {
         tokio::select! {
             _ = tokio::time::sleep(IDLE_CHECK) => {}
             _ = RESTART_NOW.notified() => now = true,
         }
     }
+    hub.set_update(Some(ServerUpdate::Restarting));
     hub.close(now).await;
     RESTARTING.send_replace(true);
     tracing::info!("updated; starting the new server");

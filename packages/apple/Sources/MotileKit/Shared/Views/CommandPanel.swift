@@ -571,7 +571,7 @@ struct CommandPanel: View {
     /// The servers that run an older version than the newest release. One whose agents work is
     /// updated once they finish, or now, with their threads going on after.
     private var serverUpdates: [PanelItem] {
-        store.servers.filter { store.isOutdated($0) && store.serverUpdates[$0.id] == nil }.flatMap { server in
+        store.servers.filter { store.isOutdated($0) && store.serverUpdate(of: $0) == nil }.flatMap { server in
             let detail = "From version \(server.version) to \(store.updater.latest ?? "")"
             guard store.isBusy(server), store.canChooseRestart(server) else {
                 return [PanelItem(id: "update-\(server.id)", title: "Update \(server.name)", detail: detail, icon: .symbol(.circleArrowDown)) { store.update(server) }]

@@ -74,6 +74,15 @@ struct ServerUpdate: Equatable {
     var restarting = false
 }
 
+extension ServerUpdate {
+    init(json: JSON, from: String) {
+        self.from = from
+        fraction = json.optionalDouble("percent").map { $0 / 100 }
+        waiting = json.string("state") == "waiting"
+        restarting = json.string("state") == "restarting"
+    }
+}
+
 /// When an updated server restarts while its agents work.
 enum RestartWhen: String {
     /// Once no agent works.
@@ -161,7 +170,7 @@ final class AppStore {
 
     // What the servers hold
     private(set) var servers: [Server] = []
-    private(set) var serverUpdates: [String: ServerUpdate] = [:]
+    private var serverUpdates: [String: ServerUpdate] = [:]
     private(set) var projects: [Project] = [] {
         didSet { projectsByID = Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }) }
     }
@@ -927,10 +936,11 @@ final class AppStore {
     /// Has the server install the newest release and start it: `when` its agents work, once they
     /// have finished or at once. A server that can't choose refuses while they work.
     func update(_ server: Server, when: RestartWhen = .idle) {
-        if serverUpdates[server.id]?.waiting == true, when == .now {
+        let current = serverUpdate(of: server)
+        if current?.waiting == true, when == .now {
             return restartNow(server)
         }
-        guard serverUpdates[server.id] == nil else { return }
+        guard current == nil else { return }
         serverUpdates[server.id] = ServerUpdate(from: server.version)
         var command: JSON = ["server_id": server.id]
         if canChooseRestart(server) { command["when"] = when.rawValue }
@@ -949,6 +959,12 @@ final class AppStore {
                 self.errorMessage = error.message
             }
         }
+    }
+
+    /// The update a server is putting in place: as it says, or, from a server too old to say, as
+    /// the request that began it goes.
+    func serverUpdate(of server: Server) -> ServerUpdate? {
+        server.update ?? serverUpdates[server.id]
     }
 
     /// Has a server that waits for its agents to update stop them and restart now. The request
