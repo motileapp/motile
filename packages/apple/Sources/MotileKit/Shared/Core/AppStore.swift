@@ -1350,12 +1350,14 @@ final class AppStore {
     }
 
     /// What the agents spent on the connected `servers`, or all of them, in the last `buckets`
-    /// spans of `bucketSeconds`, by this device's clock.
+    /// spans of `bucketSeconds`, by this device's clock. `kept` answers at once with what was last
+    /// read.
     func loadUsage(
-        bucketSeconds: Int, buckets: Int, servers: Set<String>?, reply: @escaping (Result<UsageReport, CoreBridge.CoreError>) -> Void
+        bucketSeconds: Int, buckets: Int, kept: Bool, servers: Set<String>?,
+        reply: @escaping (Result<UsageReport, CoreBridge.CoreError>) -> Void
     ) {
         var command: JSON = [
-            "bucket_secs": bucketSeconds, "buckets": buckets, "utc_offset_secs": TimeZone.current.secondsFromGMT(),
+            "bucket_secs": bucketSeconds, "buckets": buckets, "utc_offset_secs": TimeZone.current.secondsFromGMT(), "kept": kept,
         ]
         if let servers { command["servers"] = Array(servers) }
         core.send("usage", command, read: UsageReport.init, reply: reply)

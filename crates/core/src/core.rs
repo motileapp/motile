@@ -54,6 +54,8 @@ const PROGRESS_EVERY: Duration = Duration::from_millis(200);
 const SHOWN_FILES: &str = "files";
 /// How many ticks pass between account checks when nobody is waiting for a server.
 const ACCOUNT_CHECK_TICKS: u64 = 30;
+/// How often the client looks for limits that have grown old, about once a minute.
+const LIMITS_CHECK_TICKS: u64 = 30;
 /// The servers before this one don't keep what their agents spend.
 const USAGE_PROTOCOL: u32 = 10;
 /// The servers before this one can't say what the agents' logins have used of their plans.
@@ -139,6 +141,11 @@ enum Input {
         key: String,
         result: Result<Value, String>,
     },
+    /// What to show again at once next time, kept in the cache.
+    Keep {
+        key: String,
+        value: Value,
+    },
     Render,
     Tick,
     Stop,
@@ -210,12 +217,9 @@ struct Core {
     /// The folders last listed for `browse`: of which server and directory, and whether with
     /// the hidden ones.
     browsed: Browsed,
-    limits: KeptLimits,
 }
 
 type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool), Vec<String>)>>>;
-/// What each server last said of its agents' logins, and when.
-type KeptLimits = Arc<std::sync::Mutex<HashMap<String, (Instant, Vec<AgentLimits>)>>>;
 
 /// Starts the core on the current tokio runtime.
 pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
@@ -254,7 +258,6 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         media_waiting: HashMap::new(),
         uploads: HashMap::new(),
         browsed: Browsed::default(),
-        limits: KeptLimits::default(),
         config,
         sink,
         inputs: inputs.clone(),
@@ -392,6 +395,7 @@ impl Core {
                 let Some((id, _)) = self.uploads.remove(&key) else { return };
                 self.reply(id, result);
             }
+            Input::Keep { key, value } => self.cache.keep(&key, &value),
             Input::Render => self.render(),
             Input::Stop => {}
             Input::Tick => {
@@ -404,6 +408,13 @@ impl Core {
                 }
                 if self.watch_servers || self.ticks.is_multiple_of(ACCOUNT_CHECK_TICKS) {
                     self.check_account();
+                }
+                if self.ticks.is_multiple_of(LIMITS_CHECK_TICKS) {
+                    let servers: Vec<String> =
+                        self.servers.iter().map(|server| server.device.public_key.clone()).collect();
+                    for server_id in servers {
+                        self.read_limits(&server_id);
+                    }
                 }
             }
         }
@@ -986,20 +997,26 @@ impl Core {
     }
 
     /// Reads what the server's agents' logins have used, unless that is recent, so that the usage
-    /// view opens with it.
+    /// view opens with it current.
     fn read_limits(&self, server_id: &str) {
         let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else { return };
         let (Some(link), Some(info)) = (server.link.clone(), server.info.as_ref()) else { return };
-        if info.protocol < LIMITS_PROTOCOL || kept_limits(&self.limits, server_id).is_some_and(|(fresh, _)| fresh) {
+        if info.protocol < LIMITS_PROTOCOL || self.kept_limits(server_id).is_some_and(|(fresh, _)| fresh) {
             return;
         }
-        let (known, server_id) = (self.limits.clone(), server_id.to_string());
+        let (inputs, server_id) = (self.inputs.clone(), server_id.to_string());
         tokio::spawn(async move {
             let Ok(Message::Limits { agents }) = link.request(&Request::Limits { refresh: false }).await else {
                 return;
             };
-            known.lock().unwrap().insert(server_id, (Instant::now(), agents));
+            let _ = inputs.send(keep_limits(&server_id, &agents));
         });
+    }
+
+    /// What the server last said of its agents' logins, and whether it is recent.
+    fn kept_limits(&self, server_id: &str) -> Option<(bool, Vec<AgentLimits>)> {
+        let (at, agents): (f64, Vec<AgentLimits>) = self.cache.kept(&format!("limits:{server_id}"))?;
+        Some((now() - at < LIMITS_STALE.as_secs_f64(), agents))
     }
 
     /// Follows an active thread that isn't open, until its agent is done.
@@ -1641,7 +1658,12 @@ impl Core {
                     reply(&sink, id, answer);
                 });
             }
-            Command::Usage { bucket_secs, buckets, utc_offset_secs, servers } => {
+            Command::Usage { bucket_secs, buckets, utc_offset_secs, servers, kept } => {
+                let key = usage_key(bucket_secs, buckets, servers.as_ref());
+                if kept {
+                    let last: Option<Value> = self.cache.kept(&key);
+                    return self.reply(id, last.ok_or_else(|| "Nothing was kept.".to_string()));
+                }
                 let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
                 let asked = self
                     .servers
@@ -1660,6 +1682,9 @@ impl Core {
                     server_names.insert(server_id.clone(), server.device.name.clone());
                     links.push((server_id, link));
                 }
+                if links.is_empty() {
+                    return self.reply(id, Err("None of the servers is connected.".to_string()));
+                }
                 let request = Request::Usage {
                     since: window.since,
                     until: window.until,
@@ -1671,7 +1696,7 @@ impl Core {
                     let request = request.clone();
                     asked.spawn(async move { (server_id, link.request(&request).await) });
                 }
-                let sink = self.sink.clone();
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
                 tokio::spawn(async move {
                     let mut spent = Vec::new();
                     let mut failure = None;
@@ -1690,6 +1715,9 @@ impl Core {
                         _ => serde_json::to_value(usage::view(&spent, window, &project_names, &server_names))
                             .map_err(|error| error.to_string()),
                     };
+                    if let Ok(view) = &answer {
+                        let _ = inputs.send(Input::Keep { key, value: view.clone() });
+                    }
                     reply(&sink, id, answer);
                 });
             }
@@ -1703,24 +1731,25 @@ impl Core {
                 let mut reads = Vec::new();
                 let mut stale = false;
                 for server in chosen {
-                    let (Some(link), Some(info)) = (server.link.clone(), server.info.as_ref()) else { continue };
+                    let Some(info) = server.info.as_ref() else { continue };
                     let name = server.device.name.clone();
                     if info.protocol < LIMITS_PROTOCOL {
                         notes.push(format!("Update {name} to see its limits."));
                         continue;
                     }
                     let server_id = server.device.public_key.clone();
-                    let last = kept_limits(&self.limits, &server_id);
+                    let last = self.kept_limits(&server_id);
                     let fresh = last.as_ref().is_some_and(|(fresh, _)| *fresh);
-                    if kept || (fresh && !refresh) {
+                    let link = server.link.clone().filter(|_| !kept && (refresh || !fresh));
+                    let Some(link) = link else {
                         stale |= !fresh;
                         let agents = last.map(|(_, agents)| agents).unwrap_or_default();
                         reads.extend(agents.into_iter().map(|limits| limits::Read { server: name.clone(), limits }));
                         continue;
-                    }
+                    };
                     asked.spawn(async move { (server_id, name, link.request(&Request::Limits { refresh }).await) });
                 }
-                let (sink, known) = (self.sink.clone(), self.limits.clone());
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
                 tokio::spawn(async move {
                     while let Some(Ok((server_id, server, answer))) = asked.join_next().await {
                         let agents = match answer {
@@ -1734,7 +1763,7 @@ impl Core {
                                 continue;
                             }
                         };
-                        known.lock().unwrap().insert(server_id, (Instant::now(), agents.clone()));
+                        let _ = inputs.send(keep_limits(&server_id, &agents));
                         reads.extend(agents.into_iter().map(|limits| limits::Read { server: server.clone(), limits }));
                     }
                     reads.sort_by(|a, b| a.server.cmp(&b.server));
@@ -2058,11 +2087,15 @@ fn save_streamed(cache: &Cache, thread_id: &str, open: &mut OpenThread) {
     open.saved_at = Instant::now();
 }
 
-/// What the server last said of its agents' logins, and whether it is recent.
-fn kept_limits(limits: &KeptLimits, server_id: &str) -> Option<(bool, Vec<AgentLimits>)> {
-    let kept = limits.lock().unwrap();
-    let (at, agents) = kept.get(server_id)?;
-    Some((at.elapsed() < LIMITS_STALE, agents.clone()))
+fn keep_limits(server_id: &str, agents: &[AgentLimits]) -> Input {
+    Input::Keep { key: format!("limits:{server_id}"), value: json!([now(), agents]) }
+}
+
+/// Where the usage of a period and of some servers, or all of them, is kept.
+fn usage_key(bucket_secs: u32, buckets: u32, servers: Option<&Vec<String>>) -> String {
+    let mut servers = servers.cloned().unwrap_or_default();
+    servers.sort();
+    format!("usage:{bucket_secs}:{buckets}:{}", servers.join(","))
 }
 
 fn reply(sink: &EventSink, id: u64, result: Result<Value, String>) {
