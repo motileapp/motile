@@ -232,7 +232,8 @@ struct ServerLabel: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(.server, size: size)
+            // Lucide's server fills more of its square than the icons beside it.
+            Image(.server, size: size - 1)
             Text(server.name)
                 .font(.ui(size: size))
                 .lineLimit(1)
