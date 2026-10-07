@@ -133,6 +133,16 @@ struct AgentAccount: Equatable, Identifiable {
     /// The variable the account's folder is given to its agent as.
     var folderVariable: String { agent == .claude ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME" }
 
+    /// The folder the name suggests, as `~/.claude-personal`, with a number when another account
+    /// keeps that one.
+    func suggestedFolder(besides accounts: [AgentAccount]) -> String {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return "" }
+        let words = name.lowercased().split { !($0.isASCII && ($0.isLetter || $0.isNumber)) }
+        let base = "~/.\(agent.rawValue)-\(words.isEmpty ? "account" : words.joined(separator: "-"))"
+        let taken = Set(accounts.map(\.folder))
+        return (1...).lazy.map { $0 == 1 ? base : "\(base)-\($0)" }.first { !taken.contains($0) } ?? base
+    }
+
     /// What signs the account in, run on its server.
     var signInCommand: String {
         let folder = folder.isEmpty ? "" : "\(folderVariable)=\(folder) "
