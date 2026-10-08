@@ -398,7 +398,8 @@ struct BranchPicker: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 8)
-                let tag: String? = branch.isDefault ? "default" : branch.remote ? "remote" : nil
+                let tag: String? = base != nil && branch.current ? "current"
+                    : branch.isDefault ? "default" : branch.remote ? "remote" : nil
                 if let tag {
                     Text(tag)
                         .font(.ui(size: 11))

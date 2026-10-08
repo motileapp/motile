@@ -103,6 +103,30 @@ fn listed(refs: &str) -> Vec<Branch> {
     branches
 }
 
+/// The other worktree of the repository that has `branch` checked out, which keeps the repository
+/// from checking it out too.
+pub async fn worktree_holding(repository: &str, environment: &Environment, branch: &str) -> Option<String> {
+    let listing = git(repository, environment, &["worktree", "list", "--porcelain"]).await.ok()?;
+    let wanted = format!("branch refs/heads/{branch}");
+    // The repository's own folder is listed first.
+    listing.split("\n\n").skip(1).find_map(|entry| {
+        let mut lines = entry.lines();
+        let path = lines.next()?.strip_prefix("worktree ")?;
+        lines.any(|line| line == wanted).then(|| path.to_string())
+    })
+}
+
+/// Puts the worktree back on `own`, its thread's branch, or leaves it on no branch, so that the
+/// branch it held can be checked out elsewhere.
+pub async fn release_branch(worktree: &str, environment: &Environment, own: Option<&str>) -> anyhow::Result<()> {
+    if let Some(own) = own
+        && git(worktree, environment, &["switch", "--quiet", own]).await.is_ok()
+    {
+        return Ok(());
+    }
+    git(worktree, environment, &["switch", "--quiet", "--detach"]).await.map(|_| ())
+}
+
 /// Checks the branch out. With `create` it is made first, from what is checked out, and changes
 /// that aren't committed come along.
 pub async fn switch(folder: &str, environment: &Environment, branch: &str, create: bool) -> anyhow::Result<()> {
