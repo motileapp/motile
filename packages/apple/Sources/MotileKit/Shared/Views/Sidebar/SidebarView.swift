@@ -4,7 +4,7 @@ import SwiftUI
 private let rowGap = 2.0
 /// How far the rows' highlights stay from the sidebar's edges.
 let sidebarRowInset: CGFloat = 10
-private let rowMargin = EdgeInsets(top: rowGap / 2, leading: sidebarRowInset, bottom: rowGap / 2, trailing: sidebarRowInset)
+let rowMargin = EdgeInsets(top: rowGap / 2, leading: sidebarRowInset, bottom: rowGap / 2, trailing: sidebarRowInset)
 let doneRowHeight = Double(scaled(30))
 /// One clock for every "5m" in the sidebar, so that they all change at once.
 @Observable
@@ -75,27 +75,45 @@ struct SidebarView: View {
     private func threads(
         active: [ThreadInfo], done: [ThreadInfo], projects: [String: Project], selection: Selection, maxDoneHeight: Double
     ) -> some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    DraftRows(search: search) { store.select($0) }
-                    ForEach(active) { thread in
-                        ThreadRow(
-                            thread: thread, project: projects[thread.projectID]?.seen(from: thread),
-                            selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 }
-                        ) { store.select($0) }
-                        .equatable()
-                    }
-                    if active.isEmpty {
-                        Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
-                            .font(.ui(size: 12))
-                            .foregroundStyle(Color.themeTertiary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, rowMargin.leading + 8)
-                            .padding(.vertical, 6 + rowGap / 2)
-                    }
+        let drafts = store.searched(store.listedDrafts, for: search)
+        let items = items(drafts: drafts, active: active)
+        return VStack(spacing: 0) {
+            // A table, so that the rows are dragged into their order the way the system does it.
+            RecycledList(
+                items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2, bottomInset: 4 - rowGap / 2,
+                clicked: { item in
+                    guard case .active(let thread) = item else { return }
+                    store.select(.thread(thread.id))
+                },
+                movable: { item in
+                    guard search.isEmpty, active.count > 1, case .active(let thread) = item else { return false }
+                    return store.moves(thread)
+                },
+                moved: { item, index in
+                    guard case .active(let thread) = item else { return }
+                    store.move(thread, to: index, among: items.map(\.activeThread))
                 }
-                .padding(.vertical, 4 - rowGap / 2)
+            ) { item in
+                switch item {
+                case .drafts:
+                    VStack(spacing: 0) {
+                        DraftRows(search: search) { store.select($0) }
+                    }
+                case .active(let thread):
+                    ThreadRow(
+                        thread: thread, project: projects[thread.projectID]?.seen(from: thread),
+                        selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 }
+                    ) { store.select($0) }
+                    .equatable()
+                case .empty:
+                    Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
+                        .font(.ui(size: 12))
+                        .foregroundStyle(Color.themeTertiary)
+                        .frame(height: Self.emptyLineHeight)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, rowMargin.leading + 8)
+                        .padding(.vertical, 6 + rowGap / 2)
+                }
             }
             if let undo = store.undo {
                 UndoRow(notice: undo)
@@ -118,12 +136,48 @@ struct SidebarView: View {
         .animation(.easeOut(duration: 0.15), value: store.undo)
     }
 
+    private static let emptyLineHeight = scaled(15)
+
+    /// The drafts as one row, then the active threads.
+    private func items(drafts: [ListedDraft], active: [ThreadInfo]) -> [SidebarItem] {
+        var items: [SidebarItem] = drafts.isEmpty ? [] : [.drafts]
+        items += active.map(SidebarItem.active)
+        if active.isEmpty { items.append(.empty) }
+        return items
+    }
+
+    private func height(of item: SidebarItem, drafts: Int) -> CGFloat {
+        switch item {
+        case .drafts: CGFloat(drafts) * (DraftRow.height + rowGap) + DraftRows.dividerHeight
+        case .active: ThreadRow.height + rowGap
+        case .empty: Self.emptyLineHeight + 2 * (6 + rowGap / 2)
+        }
+    }
+
     private func beginRename(_ thread: ThreadInfo) {
         newTitle = thread.title
         renaming = thread
     }
 }
 
+private enum SidebarItem: Identifiable {
+    case drafts
+    case active(ThreadInfo)
+    case empty
+
+    var id: String {
+        switch self {
+        case .drafts: "drafts"
+        case .active(let thread): thread.id
+        case .empty: "empty"
+        }
+    }
+
+    var activeThread: ThreadInfo? {
+        guard case .active(let thread) = self else { return nil }
+        return thread
+    }
+}
 #endif
 
 /// Whether a thread's title or project matches what is being searched for.
@@ -136,6 +190,15 @@ extension AppStore {
 
     func searched(_ threads: [ThreadInfo], for search: String) -> [ThreadInfo] {
         search.isEmpty ? threads : threads.filter { matches($0, search: search) }
+    }
+
+    /// The drafts whose text or project matches what is being searched for.
+    func searched(_ drafts: [ListedDraft], for search: String) -> [ListedDraft] {
+        guard !search.isEmpty else { return drafts }
+        return drafts.filter { listed in
+            let project = project(listed.draft.projectID)?.name ?? ""
+            return listed.preview.localizedCaseInsensitiveContains(search) || project.localizedCaseInsensitiveContains(search)
+        }
     }
 }
 
@@ -168,6 +231,25 @@ struct SearchField: View {
     }
 }
 
+/// Something a row's menu offers.
+struct RowAction {
+    let title: String
+    var destructive = false
+    var disabled = false
+    let perform: () -> Void
+}
+
+extension AppStore {
+    /// What a thread's menu offers, in groups a line divides.
+    func rowActions(for thread: ThreadInfo, rename: @escaping (ThreadInfo) -> Void, delete: @escaping (ThreadInfo) -> Void) -> [[RowAction]] {
+        let done = thread.isDone
+            ? RowAction(title: "Mark Undone") { self.setDone([thread.id], done: false) }
+            : RowAction(title: "Mark Done", disabled: thread.busy) { self.setDone([thread.id], done: true, fromSidebar: true) }
+        return [[done, RowAction(title: "Rename") { rename(thread) }], [RowAction(title: "Delete", destructive: true) { delete(thread) }]]
+    }
+}
+
+/// A thread's menu, as `rowActions` says.
 struct ThreadMenu: View {
     @Environment(AppStore.self) private var store
     let thread: ThreadInfo
@@ -175,15 +257,14 @@ struct ThreadMenu: View {
     let delete: (ThreadInfo) -> Void
 
     var body: some View {
-        if thread.isDone {
-            Button("Mark Undone") { store.setDone([thread.id], done: false) }
-        } else {
-            Button("Mark Done") { store.setDone([thread.id], done: true, fromSidebar: true) }
-                .disabled(thread.busy)
+        let groups = store.rowActions(for: thread, rename: rename, delete: delete)
+        ForEach(groups.indices, id: \.self) { index in
+            if index > 0 { Divider() }
+            ForEach(groups[index], id: \.title) { action in
+                Button(action.title, role: action.destructive ? .destructive : nil, action: action.perform)
+                    .disabled(action.disabled)
+            }
         }
-        Button("Rename") { rename(thread) }
-        Divider()
-        Button("Delete", role: .destructive) { delete(thread) }
     }
 }
 
@@ -218,8 +299,12 @@ struct ThreadRow: View, Equatable {
 
     private static let sidePadding: CGFloat = 8
     private static let topPadding: CGFloat = 5
+    private static let bottomPadding: CGFloat = 7
+    private static let titleHeight = scaled(16)
     /// A button on the first line is as far from the row's side as from its top.
     private static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
+    /// How tall the row is, without the gap around it.
+    static let height = topPadding + scaled(22) + 1 + titleHeight + 5 + scaled(16) + bottomPadding
 
     static func == (one: ThreadRow, other: ThreadRow) -> Bool {
         one.thread == other.thread && one.project == other.project && one.selected == other.selected
@@ -251,6 +336,7 @@ struct ThreadRow: View, Equatable {
             Text(thread.title)
                 .font(.ui(size: 13, weight: .medium))
                 .lineLimit(1)
+                .frame(height: Self.titleHeight)
                 .padding(.top, 1)
                 .padding(.bottom, 5)
 
@@ -272,12 +358,22 @@ struct ThreadRow: View, Equatable {
         }
         .padding(.horizontal, Self.sidePadding)
         .padding(.top, Self.topPadding)
-        .padding(.bottom, 7)
+        .padding(.bottom, Self.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
+        #if os(macOS)
+        // The table the row is in takes the click, so that it can drag the row as well. The menu
+        // still comes up anywhere on the row.
+        .contentShape(Rectangle())
+        .hoverHighlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)
+        #else
+        // The list the row is in brings up its menu, so that a hold can drag the row as well.
         .button(.highlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
+        #endif
         .onHover { hovering = $0 }
+        #if os(macOS)
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
+        #endif
     }
 }
 
@@ -364,8 +460,11 @@ struct DraftRows: View {
     var swiped: (String) -> Binding<Bool> = { _ in .constant(false) }
     var open: (Selection) -> Void = { _ in }
 
+    /// What the line under the drafts takes, with the room around it.
+    static let dividerHeight = 1 + 2 * (4 + rowGap / 2)
+
     var body: some View {
-        let listed = store.listedDrafts.filter(matches)
+        let listed = store.searched(store.listedDrafts, for: search)
         if !listed.isEmpty {
             ForEach(listed) { listed in
                 DraftRow(listed: listed, open: open)
@@ -380,12 +479,6 @@ struct DraftRows: View {
                 .padding(.vertical, 4 + rowGap / 2)
         }
     }
-
-    private func matches(_ listed: ListedDraft) -> Bool {
-        guard !search.isEmpty else { return true }
-        let project = store.project(listed.draft.projectID)?.name ?? ""
-        return listed.preview.localizedCaseInsensitiveContains(search) || project.localizedCaseInsensitiveContains(search)
-    }
 }
 
 /// A draft: its project on the first line, what was written in it on the second, if anything.
@@ -397,7 +490,11 @@ private struct DraftRow: View {
 
     private static let sidePadding: CGFloat = 8
     private static let topPadding: CGFloat = 5
+    private static let bottomPadding: CGFloat = 7
+    private static let previewHeight = scaled(16)
     private static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
+    /// How tall the row is, without the gap around it.
+    static let height = topPadding + scaled(22) + 2 + previewHeight + bottomPadding
 
     var body: some View {
         let project = store.project(listed.draft.projectID)
@@ -430,10 +527,11 @@ private struct DraftRow: View {
             Text(listed.preview)
                 .font(.ui(size: 13, weight: .medium))
                 .lineLimit(1)
+                .frame(height: Self.previewHeight)
         }
         .padding(.horizontal, Self.sidePadding)
         .padding(.top, Self.topPadding)
-        .padding(.bottom, 7)
+        .padding(.bottom, Self.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
         .button(.highlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin, hovered: hovering)) {
@@ -531,7 +629,7 @@ private struct DoneShelf: View {
 
             if expanded {
                 RecycledList(
-                    items: threads, rowHeight: Self.rowHeight + rowGap, bottomInset: 4 - rowGap / 2, scrollTarget: store.settledThreadID
+                    items: threads, height: { _ in Self.rowHeight + rowGap }, bottomInset: 4 - rowGap / 2, scrollTarget: store.settledThreadID
                 ) { thread in
                     DoneRow(
                         thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
@@ -626,7 +724,9 @@ struct DoneRow: View, Equatable {
         .padding(rowMargin)
         .button(.highlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
+        #if os(macOS)
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
+        #endif
     }
 }
 

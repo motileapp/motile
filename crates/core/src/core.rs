@@ -2231,7 +2231,7 @@ mod tests {
             created_at: 1.0,
             updated_at: 2.0,
             done_at: None,
-            undone_at: None,
+            position: 1.0,
             running,
             monitoring,
             needs_approval,

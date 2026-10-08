@@ -239,6 +239,9 @@ struct Server: Equatable, Identifiable {
     /// Whether threads there can move between accounts and agents.
     var switchesAccounts: Bool { protocolVersion >= 19 }
 
+    /// Whether the server keeps where the user moves its threads in the sidebar.
+    var movesThreads: Bool { protocolVersion >= 21 }
+
     func accounts(of agent: Agent) -> [AgentAccount] {
         agentAccounts.filter { $0.agent == agent }
     }
@@ -627,7 +630,9 @@ struct ThreadInfo: Equatable, Identifiable {
     let createdAt: Double
     let updatedAt: Double
     var doneAt: Double?
-    let undoneAt: Double?
+    /// Where the sidebar lists it among the active threads, the highest first: when it was
+    /// created or last came back from done, until the user moves it.
+    var position: Double
     let running: Bool
     /// The turn is over, but the agent still watches something it left running.
     let monitoring: Bool
@@ -660,7 +665,9 @@ struct ThreadInfo: Equatable, Identifiable {
         createdAt = json.double("created_at")
         updatedAt = json.double("updated_at")
         doneAt = json.optionalDouble("done_at")
-        undoneAt = json.optionalDouble("undone_at")
+        // A server from before positions lists its threads by when they were created.
+        let position = json.double("position")
+        self.position = position > 0 ? position : createdAt
         running = json.bool("running")
         monitoring = json.bool("monitoring")
         needsApproval = json.bool("needs_approval")
@@ -680,12 +687,9 @@ struct ThreadInfo: Equatable, Identifiable {
 
     var monitoringSince: Double { turnEndedAt ?? updatedAt }
 
-    /// Active threads keep their place when something happens in them; only coming back from
-    /// done moves one to the top.
-    var activeOrder: Double { max(createdAt, undoneAt ?? 0) }
-
-    /// What its list is in order of, the highest first: when it was marked done, or else `activeOrder`.
-    var listedAt: Double { isDone ? doneAt ?? 0 : activeOrder }
+    /// What its list is in order of, the highest first: when it was marked done, or else its
+    /// position. Active threads keep their place when something happens in them.
+    var listedAt: Double { isDone ? doneAt ?? 0 : position }
 
     static func listed(_ one: ThreadInfo, before other: ThreadInfo) -> Bool {
         (one.listedAt, one.id) > (other.listedAt, other.id)

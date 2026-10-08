@@ -773,7 +773,7 @@ impl Hub {
             created_at,
             updated_at: created_at,
             done_at: None,
-            undone_at: None,
+            position: created_at,
             running: false,
             monitoring: false,
             needs_approval: false,
@@ -1081,9 +1081,15 @@ impl Hub {
             Some(true) => thread.done_at = thread.done_at.or_else(|| Some(now())),
             Some(false) if thread.done_at.is_some() => {
                 thread.done_at = None;
-                thread.undone_at = Some(now());
+                thread.position = now();
             }
             _ => {}
+        }
+        if let Some(position) = change.position {
+            if !position.is_finite() {
+                bail!("A thread's position must be a number.");
+            }
+            thread.position = position;
         }
         // Codex takes its settings when its next process starts.
         if thread.agent == Agent::Claude {
@@ -2334,9 +2340,9 @@ impl Hub {
         thread.needs_approval = false;
         thread.interruption = None;
         thread.updated_at = now();
-        // New activity brings a done thread back.
+        // New activity brings a done thread back, to the top of the list.
         if thread.done_at.take().is_some() {
-            thread.undone_at = Some(now());
+            thread.position = now();
         }
         let agents = live.stored.thread.agents;
         live.activity = Activity { running: true, started_at: Some(now()), agents, ..Activity::default() };

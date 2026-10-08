@@ -43,12 +43,14 @@ pub struct Thread {
     /// The agent only reads and proposes; it changes nothing.
     pub plan: bool,
     pub created_at: f64,
-    /// When something last happened in the thread; the sidebar sorts by it.
+    /// When something last happened in the thread.
     pub updated_at: f64,
     /// Set while the thread is marked done.
     pub done_at: Option<f64>,
-    /// When it last came back from being done; active threads sort by this and `created_at`.
-    pub undone_at: Option<f64>,
+    /// Where the sidebar lists the thread among the active ones, the highest first: when it was
+    /// created or last came back from done, until the user moves it between two others.
+    #[serde(default)]
+    pub position: f64,
     pub running: bool,
     /// The turn is over, but the agent still watches something it left running.
     #[serde(default)]
@@ -245,6 +247,9 @@ pub struct ThreadChange {
     pub access: Option<Access>,
     pub plan: Option<bool>,
     pub done: Option<bool>,
+    /// Where the sidebar lists the thread among the active ones, as the user moved it.
+    #[serde(default)]
+    pub position: Option<f64>,
     /// Whether a thread that waits for its usage limit continues once the limit resets.
     #[serde(default)]
     pub continues: Option<bool>,

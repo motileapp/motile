@@ -569,6 +569,12 @@ async fn the_thread_list_follows_new_retitled_and_deleted_threads() {
     assert_eq!(update(&connection, &thread_id, renamed).await, Message::Ok);
     assert_eq!(next_thread(&mut list).await.title, "Readme");
 
+    // A thread starts out listed by when it was created, until the user moves it.
+    assert_eq!(ended.position, ended.created_at);
+    let moved = ThreadChange { position: Some(1234.5), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, moved).await, Message::Ok);
+    assert_eq!(next_thread(&mut list).await.position, 1234.5);
+
     connection.request(&Request::Delete { thread_id: thread_id.clone() }).await.unwrap();
     let mut deleted = next(&mut list).await;
     while matches!(deleted, Message::Projects { .. }) {
@@ -1283,12 +1289,13 @@ async fn a_thread_is_marked_done_and_comes_back_with_new_activity() {
     finished_transcript(&connection, &thread_id).await;
     assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
     let marked = thread_where(&mut list, |thread| thread.done_at.is_some()).await;
-    assert_eq!(marked.undone_at, None);
+    assert_eq!(marked.position, marked.created_at);
 
+    // Coming back from done puts the thread at the top of the active ones.
     let undone = ThreadChange { done: Some(false), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, undone).await, Message::Ok);
     let back = thread_where(&mut list, |thread| thread.done_at.is_none()).await;
-    assert!(back.undone_at.is_some());
+    assert!(back.position > back.created_at);
 
     let done = ThreadChange { done: Some(true), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
@@ -1296,6 +1303,7 @@ async fn a_thread_is_marked_done_and_comes_back_with_new_activity() {
     send(&connection, Some(thread_id.clone()), None, "One more thing").await;
     let reopened = thread_where(&mut list, |thread| thread.running).await;
     assert_eq!(reopened.done_at, None);
+    assert!(reopened.position > back.position);
 }
 
 #[tokio::test]
