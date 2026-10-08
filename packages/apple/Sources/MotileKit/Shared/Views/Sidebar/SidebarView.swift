@@ -78,7 +78,7 @@ struct SidebarView: View {
         let drafts = store.searched(store.listedDrafts, for: search)
         let items = items(drafts: drafts, active: active)
         return VStack(spacing: 0) {
-            // A table, so that the rows are dragged into their order the way the system does it.
+            // A table, which picks its rows up and moves them itself.
             RecycledList(
                 items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2, bottomInset: 4 - rowGap / 2,
                 clicked: { item in
