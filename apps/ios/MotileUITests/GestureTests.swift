@@ -78,6 +78,63 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(undo.waitForNonExistence(timeout: 3))
     }
 
+    /// A hold lifts the row and a move drags it, before its menu comes up or out of the menu.
+    func testAHoldAndAMoveOnAThreadDragsItAboveAnotherAndTheOrderStays() {
+        dragOneThreadAboveTheOther(holding: 0.5)
+    }
+
+    func testAThreadDragsOutOfItsMenuAboveAnotherAndTheOrderStays() {
+        dragOneThreadAboveTheOther(holding: 1.5)
+    }
+
+    private func dragOneThreadAboveTheOther(holding: TimeInterval) {
+        openSidebar()
+        guard let one = row("Use an F-String in Greet"), let other = row("Add API Rate Limiting") else { return XCTFail("no rows") }
+        let (upper, lower) = one.frame.minY < other.frame.minY ? (one, other) : (other, one)
+        let (upperTitle, lowerTitle) = upper == one ? ("Use an F-String in Greet", "Add API Rate Limiting") : ("Add API Rate Limiting", "Use an F-String in Greet")
+        lower.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
+            forDuration: holding, thenDragTo: upper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)), withVelocity: .slow,
+            thenHoldForDuration: 0.4
+        )
+        XCTAssertTrue(ordered(lowerTitle, above: upperTitle))
+        // The drag was the row's, so the sidebar is where it was.
+        XCTAssertTrue(newThread.isHittable)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["Threads"].waitForExistence(timeout: 30))
+        app.swipeRight()
+        XCTAssertTrue(ordered(lowerTitle, above: upperTitle))
+    }
+
+    func testAHoldOnAThreadBringsUpItsMenu() {
+        openSidebar()
+        guard let thread = row("Screenshot of the Landing Page") else { return XCTFail("no row") }
+        thread.press(forDuration: 1.2)
+        let rename = app.buttons["Rename"]
+        XCTAssertTrue(shown(rename))
+        rename.tap()
+        XCTAssertTrue(app.alerts["Rename thread"].waitForExistence(timeout: 3))
+        app.alerts["Rename thread"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForNonExistence(timeout: 3))
+    }
+
+    /// Swipes the sidebar in, again if the client was still loading its threads.
+    private func openSidebar() {
+        for _ in 0..<3 {
+            app.swipeRight()
+            if shown(newThread) { return }
+        }
+    }
+
+    /// Whether the sidebar lists the one thread's row over the other's, once both are drawn.
+    private func ordered(_ title: String, above other: String) -> Bool {
+        for _ in 0..<10 {
+            if let one = row(title), let two = row(other), one.frame.minY < two.frame.minY { return true }
+            sleep(1)
+        }
+        return false
+    }
+
     func testSettingsOpenInASheetWhoseSectionsPushAndCloseTakesThemAway() {
         app.swipeRight()
         XCTAssertTrue(shown(newThread))

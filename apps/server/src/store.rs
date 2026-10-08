@@ -23,6 +23,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0011_usage_purpose.sql"),
     include_str!("../migrations/0012_interruptions.sql"),
     include_str!("../migrations/0013_agent_accounts.sql"),
+    include_str!("../migrations/0014_thread_positions.sql"),
 ];
 
 pub struct Store {
@@ -136,7 +137,7 @@ impl Store {
         let connection = self.connection();
         let mut statement = connection.prepare(
             "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access, t.plan,
-                    t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.undone_at,
+                    t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.position,
                     COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
                     t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account
              FROM threads t LEFT JOIN items i ON i.thread_id = t.id
@@ -163,7 +164,7 @@ impl Store {
                     created_at: row.get(11)?,
                     updated_at: row.get(12)?,
                     done_at: row.get(13)?,
-                    undone_at: row.get(16)?,
+                    position: row.get(16)?,
                     running: row.get(23)?,
                     monitoring: row.get(24)?,
                     needs_approval: row.get(14)?,
@@ -191,7 +192,7 @@ impl Store {
         let thread = &stored.thread;
         self.connection().execute(
             "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access, plan,
-                                  session_id, created_at, updated_at, done_at, needs_approval, turn_ended_at, undone_at,
+                                  session_id, created_at, updated_at, done_at, needs_approval, turn_ended_at, position,
                                   worktree_branch, worktree_base, pull_request, watching, running, monitoring,
                                   interruption, agent_account)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
@@ -210,7 +211,7 @@ impl Store {
                  done_at = excluded.done_at,
                  needs_approval = excluded.needs_approval,
                  turn_ended_at = excluded.turn_ended_at,
-                 undone_at = excluded.undone_at,
+                 position = excluded.position,
                  worktree_branch = excluded.worktree_branch,
                  pull_request = excluded.pull_request,
                  watching = excluded.watching,
@@ -234,7 +235,7 @@ impl Store {
                 thread.done_at,
                 thread.needs_approval,
                 thread.turn_ended_at,
-                thread.undone_at,
+                thread.position,
                 stored.worktree.as_ref().map(|worktree| &worktree.branch),
                 stored.worktree.as_ref().map(|worktree| &worktree.base),
                 thread.pull_request.as_ref().and_then(|found| serde_json::to_string(found).ok()),

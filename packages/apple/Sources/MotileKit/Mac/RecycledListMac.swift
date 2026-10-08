@@ -3,13 +3,20 @@ import AppKit
 import SwiftUI
 
 /// A list that only has views for the rows on screen and reuses them as it scrolls, so that it
-/// goes through thousands of rows as fast as through ten. Its rows are all as tall.
+/// goes through thousands of rows as fast as through ten. Each row is as tall as `height` says.
 struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     let items: [Item]
-    let rowHeight: CGFloat
+    let height: (Item) -> CGFloat
+    var topInset: CGFloat = 0
     var bottomInset: CGFloat = 0
     /// When it changes, the list scrolls to its row.
     var scrollTarget: Item.ID?
+    /// A click on a row that doesn't take it itself.
+    var clicked: (Item) -> Void = { _ in }
+    /// Whether the row can be dragged into another place among the rows that can.
+    var movable: (Item) -> Bool = { _ in false }
+    /// The row was dropped where `index` is in `items` without it.
+    var moved: (Item, Int) -> Void = { _, _ in }
     @ViewBuilder let row: (Item) -> Row
     @Environment(AppStore.self) private var store
 
@@ -29,6 +36,11 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
+        table.target = context.coordinator
+        table.action = #selector(Coordinator.clicked(_:))
+        table.registerForDraggedTypes([Coordinator.rowType])
+        table.setDraggingSourceOperationMask(.move, forLocal: true)
+        table.draggingDestinationFeedbackStyle = .gap
 
         let scroll = NSScrollView()
         scroll.documentView = table
@@ -46,8 +58,9 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         coordinator.list = self
         coordinator.store = store
         coordinator.surface = context.environment.surface
+        scroll.contentInsets.top = topInset
         scroll.contentInsets.bottom = bottomInset
-        table.rowHeight = rowHeight
+        if let first = items.first { table.rowHeight = height(first) }
         coordinator.show(in: table)
         coordinator.scroll(scroll, table: table, to: scrollTarget)
     }
@@ -60,6 +73,8 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         typealias Cell = RecycledCell<RecycledRow<Row>>
 
+        static var rowType: NSPasteboard.PasteboardType { NSPasteboard.PasteboardType("app.motile.row") }
+
         var list: RecycledList?
         var store: AppStore?
         var surface = Surface.background
@@ -68,6 +83,11 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         private let cellID = NSUserInterfaceItemIdentifier("row")
 
         func numberOfRows(in table: NSTableView) -> Int { ids.count }
+
+        func tableView(_ table: NSTableView, heightOfRow row: Int) -> CGFloat {
+            guard let list, let item = list.items[safe: row] else { return table.rowHeight }
+            return list.height(item)
+        }
 
         func tableView(_ table: NSTableView, viewFor column: NSTableColumn?, row: Int) -> NSView? {
             guard let content = content(row) else { return nil }
@@ -81,6 +101,11 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         }
 
         func tableView(_ table: NSTableView, shouldSelectRow row: Int) -> Bool { false }
+
+        @objc func clicked(_ table: NSTableView) {
+            guard let list, let item = list.items[safe: table.clickedRow] else { return }
+            list.clicked(item)
+        }
 
         /// Reloads the table when its rows are others, or else only redraws the rows it has.
         func show(in table: NSTableView) {
@@ -122,14 +147,64 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             }
         }
 
+        // MARK: Moving a row
+
+        func tableView(_ table: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+            guard let list, let item = list.items[safe: row], list.movable(item) else { return nil }
+            let written = NSPasteboardItem()
+            written.setString(String(row), forType: Self.rowType)
+            return written
+        }
+
+        /// The other rows part where the dragged one can land: among the rows that move, or
+        /// right after the last of them.
+        func tableView(
+            _ table: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation: NSTableView.DropOperation
+        ) -> NSDragOperation {
+            guard info.draggingSource as? NSTableView === table, let from = draggedRow(info), let to = place(of: from, above: row) else {
+                return []
+            }
+            table.setDropRow(to.row, dropOperation: .above)
+            return .move
+        }
+
+        func tableView(_ table: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+            guard let list, let from = draggedRow(info), let item = list.items[safe: from], let to = place(of: from, above: row),
+                  to.index != from
+            else { return false }
+            ids.remove(at: from)
+            ids.insert(item.id, at: to.index)
+            table.moveRow(at: from, to: to.index)
+            list.moved(item, to.index)
+            return true
+        }
+
+        private func draggedRow(_ info: NSDraggingInfo) -> Int? {
+            guard let written = info.draggingPasteboard.string(forType: Self.rowType), let row = Int(written) else { return nil }
+            return list?.items.indices.contains(row) == true ? row : nil
+        }
+
+        /// Where the dragged row would land when dropped above `row`: in the list as it is, and in
+        /// the list without it. Nowhere outside the rows that move.
+        private func place(of from: Int, above row: Int) -> (row: Int, index: Int)? {
+            guard let list else { return nil }
+            let index = row > from ? row - 1 : row
+            var others = list.items
+            others.remove(at: from)
+            guard let first = others.firstIndex(where: list.movable), let last = others.lastIndex(where: list.movable),
+                  index >= first, index <= last + 1
+            else { return nil }
+            return (index >= from ? index + 1 : index, index)
+        }
+
         private func content(_ row: Int) -> RecycledRow<Row>? {
-            guard let list, let store, list.items.indices.contains(row) else { return nil }
-            return RecycledRow(row: list.row(list.items[row]), store: store, surface: surface)
+            guard let list, let store, let item = list.items[safe: row] else { return nil }
+            return RecycledRow(row: list.row(item), store: store, surface: surface)
         }
     }
 }
 
-/// The rows take their own clicks, and clicking them never takes the keyboard from the composer.
+/// Clicking a row never takes the keyboard from the composer.
 private final class RecycledTable: NSTableView {
     override var acceptsFirstResponder: Bool { false }
 
@@ -152,6 +227,12 @@ final class RecycledCell<Content: View>: NSView {
     override func layout() {
         super.layout()
         host.frame = bounds
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 #endif

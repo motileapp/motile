@@ -1920,6 +1920,34 @@ final class AppStore {
         setDone([thread.id], done: !thread.isDone)
     }
 
+    /// Whether the user can move the thread among the active ones.
+    func moves(_ thread: ThreadInfo) -> Bool {
+        !thread.isDone && server(thread.serverID)?.movesThreads == true
+    }
+
+    /// Puts the thread where `index` is among the sidebar's rows without it: `rows` is the
+    /// active thread of each, or `nil` for a row that isn't one.
+    func move(_ thread: ThreadInfo, to index: Int, among rows: [ThreadInfo?]) {
+        let others = rows.filter { $0?.id != thread.id }
+        let neighbour = { (at: Int) -> ThreadInfo? in others.indices.contains(at) ? others[at] : nil }
+        move(thread, under: neighbour(index - 1), over: neighbour(index))
+    }
+
+    /// Puts the thread between two active ones in the sidebar, or at the top or the bottom when
+    /// one of them is missing. Its position is kept on its server.
+    private func move(_ thread: ThreadInfo, under above: ThreadInfo?, over below: ThreadInfo?) {
+        guard moves(thread) else { return }
+        let position: Double
+        switch (above, below) {
+        case (nil, nil): return
+        case (nil, let below?): position = max(Date().timeIntervalSince1970, below.position + 1)
+        case (let above?, nil): position = above.position - 1
+        case (let above?, let below?): position = (above.position + below.position) / 2
+        }
+        guard position != thread.position else { return }
+        update(thread, ["position": position]) { $0.position = position }
+    }
+
     private func showUndo(_ notice: UndoNotice) {
         undo = notice
         undoTimer?.invalidate()

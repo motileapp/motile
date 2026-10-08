@@ -24,11 +24,25 @@ struct SidebarScreen: View {
         let done = store.searched(store.doneThreads, for: search)
         let expanded = !search.isEmpty || doneExpanded
         let shown = Shown(projects: store.projectsByID, selection: store.selection, swiped: swiped)
+        let items = items(active: active, done: done, expanded: expanded)
         VStack(spacing: 0) {
             header
             RecycledList(
-                items: items(active: active, done: done, expanded: expanded), bottomInset: 12,
-                scrollTarget: store.settledThreadID.map(SidebarItem.doneID), scrolled: { self.swiped = nil }
+                items: items, bottomInset: 12, scrollTarget: store.settledThreadID.map(SidebarItem.doneID), scrolled: { self.swiped = nil },
+                rowInset: UIEdgeInsets(top: rowMargin.top, left: rowMargin.leading, bottom: rowMargin.bottom, right: rowMargin.trailing),
+                rowRadius: 8,
+                movable: { item in
+                    guard search.isEmpty, active.count > 1, let thread = item.activeThread else { return false }
+                    return store.moves(thread)
+                },
+                moved: { item, index in
+                    guard let thread = item.activeThread else { return }
+                    store.move(thread, to: index, among: items.map(\.activeThread))
+                },
+                menu: { item in
+                    guard let thread = item.thread else { return [] }
+                    return store.rowActions(for: thread, rename: beginRename, delete: { deleting = $0 })
+                }
             ) { item in
                 row(item, done: done, expanded: expanded, shown: shown)
             }
@@ -273,6 +287,18 @@ private enum SidebarItem: Identifiable {
         case .empty: "empty"
         case .doneHeader: "done"
         case .done(let thread): Self.doneID(thread.id)
+        }
+    }
+
+    var activeThread: ThreadInfo? {
+        guard case .active(let thread) = self else { return nil }
+        return thread
+    }
+
+    var thread: ThreadInfo? {
+        switch self {
+        case .active(let thread), .done(let thread): thread
+        default: nil
         }
     }
 }
