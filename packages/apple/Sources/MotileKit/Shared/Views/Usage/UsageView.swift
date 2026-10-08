@@ -283,7 +283,7 @@ struct UsageContent: View {
             .frame(maxWidth: Self.width, alignment: .leading)
             .padding(.horizontal, margin)
             .padding(.top, top)
-            .padding(.bottom, 20)
+            .padding(.bottom, 80)
             .frame(maxWidth: .infinity)
         }
         .onAppear { model.start(store) }
