@@ -311,9 +311,7 @@ private struct PullRequestPageView: View {
             InputField("Title", text: binding, size: .large, focus: $titleFocused)
                 .onSubmit(saveTitle)
                 .onAppear { titleFocused = true }
-                #if os(macOS)
-                .onExitCommand { title = nil }
-                #endif
+                .onEscape { title = nil }
             HStack(spacing: 8) {
                 Spacer()
                 ActionButton("Cancel") { title = nil }

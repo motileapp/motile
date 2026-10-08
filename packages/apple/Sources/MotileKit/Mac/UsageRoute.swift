@@ -21,7 +21,6 @@ struct UsageRoute: View {
                     HStack(spacing: 12) {
                         HStack(spacing: ControlSize.regular.padding) {
                             ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost) { store.closeRoute() }
-                                .keyboardShortcut(.cancelAction)
                                 .padding(.horizontal, -ControlSize.regular.padding)
                                 .padding(.leading, ControlSize.regular.symbolOutset)
                             Rectangle()

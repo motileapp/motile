@@ -11,7 +11,8 @@ enum InputVariant {
 }
 
 /// A line to type in, as tall as a button of its size, with a symbol before it when it has one
-/// and a button that empties it when it is `clearable`. A `secure` one shows dots for what is typed.
+/// and a button that empties it when it is `clearable`, as Esc does while it has text. A `secure`
+/// one shows dots for what is typed.
 struct InputField: View {
     private let placeholder: String
     @Binding private var text: String
@@ -63,6 +64,7 @@ struct InputField: View {
                 .textFieldStyle(.plain)
                 .font(.ui(size: size.textSize + 0.5, design: monospaced ? .monospaced : .default))
                 .focused(focus ?? $ownFocus)
+                .onEscape(clearable && !text.isEmpty ? { text = "" } : nil)
             if clearable, !text.isEmpty {
                 ActionButton(icon: .x, help: "Clear", size: .small) { text = "" }
                     .padding(.trailing, clearInset - size.padding + 2)

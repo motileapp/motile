@@ -147,12 +147,12 @@ struct RootView: View {
                 SettingsRoute(section: section)
             }
         }
+        .overlay { EscapeKey() }
         .dropdowns()
         .toolbar {
             if store.settings != nil {
                 ToolbarItem(placement: .navigation) {
                     ActionButton("Back", icon: .arrowLeft, help: "Back to the threads (Esc)", variant: .ghost) { store.closeRoute() }
-                        .keyboardShortcut(.cancelAction)
                 }
                 .withoutSystemGlass()
             }
@@ -304,7 +304,7 @@ struct MainView: View {
             if open {
                 ToolbarButton(
                     symbol: maximized ? .minimize2 : .maximize2,
-                    help: maximized ? "Restore the side panel (⇧⌥⌘B)" : "Maximize the side panel (⇧⌥⌘B)"
+                    help: maximized ? "Restore the side panel (Esc)" : "Maximize the side panel (⇧⌥⌘B)"
                 ) {
                     store.sidePanel.toggleMaximized()
                 }
