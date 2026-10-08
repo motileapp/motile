@@ -39,9 +39,11 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         table.target = context.coordinator
         table.action = #selector(Coordinator.clicked(_:))
         table.canDrag = { [weak coordinator = context.coordinator] in coordinator?.movable($0) ?? false }
-        table.registerForDraggedTypes([Coordinator.rowType])
-        table.setDraggingSourceOperationMask(.move, forLocal: true)
-        table.draggingDestinationFeedbackStyle = .gap
+        table.clicked = { [weak coordinator = context.coordinator] in coordinator?.clicked(row: $0) }
+        table.dropped = { [weak coordinator = context.coordinator, weak table] from, index in
+            guard let table else { return }
+            coordinator?.dropped(from, at: index, in: table)
+        }
 
         let scroll = NSScrollView()
         scroll.documentView = table
@@ -74,8 +76,6 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         typealias Cell = RecycledCell<RecycledRow<Row>>
 
-        static var rowType: NSPasteboard.PasteboardType { NSPasteboard.PasteboardType("app.motile.row") }
-
         var list: RecycledList?
         var store: AppStore?
         var surface = Surface.background
@@ -104,8 +104,10 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
 
         func tableView(_ table: NSTableView, shouldSelectRow row: Int) -> Bool { false }
 
-        @objc func clicked(_ table: NSTableView) {
-            guard let list, let item = list.items[safe: table.clickedRow] else { return }
+        @objc func clicked(_ table: NSTableView) { clicked(row: table.clickedRow) }
+
+        func clicked(row: Int) {
+            guard let list, let item = list.items[safe: row] else { return }
             list.clicked(item)
         }
 
@@ -117,6 +119,7 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             guard ids == self.ids else {
                 self.ids = ids
                 self.heights = heights
+                (table as? RecycledTable)?.cancelLift()
                 table.reloadData()
                 return
             }
@@ -164,54 +167,19 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             return list.movable(item)
         }
 
-        func tableView(_ table: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
-            guard movable(row) else { return nil }
-            let written = NSPasteboardItem()
-            written.setString(String(row), forType: Self.rowType)
-            return written
-        }
-
-        /// The other rows part where the dragged one can land: among the rows that move, or
-        /// right after the last of them.
-        func tableView(
-            _ table: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation: NSTableView.DropOperation
-        ) -> NSDragOperation {
-            guard info.draggingSource as? NSTableView === table, let from = draggedRow(info), let to = place(of: from, above: row) else {
-                return []
+        /// The row at `from` landed where `index` is in the list without it. The rows are already
+        /// drawn there, so the table's move must not animate.
+        func dropped(_ from: Int, at index: Int, in table: NSTableView) {
+            guard let list, let item = list.items[safe: from], index != from else { return }
+            ids.insert(ids.remove(at: from), at: index)
+            heights.insert(heights.remove(at: from), at: index)
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                table.beginUpdates()
+                table.moveRow(at: from, to: index)
+                table.endUpdates()
             }
-            table.setDropRow(to.row, dropOperation: .above)
-            return .move
-        }
-
-        func tableView(_ table: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-            guard let list, let from = draggedRow(info), let item = list.items[safe: from], let to = place(of: from, above: row),
-                  to.index != from
-            else { return false }
-            ids.remove(at: from)
-            ids.insert(item.id, at: to.index)
-            table.beginUpdates()
-            table.moveRow(at: from, to: to.index)
-            table.endUpdates()
-            list.moved(item, to.index)
-            return true
-        }
-
-        private func draggedRow(_ info: NSDraggingInfo) -> Int? {
-            guard let written = info.draggingPasteboard.string(forType: Self.rowType), let row = Int(written) else { return nil }
-            return list?.items.indices.contains(row) == true ? row : nil
-        }
-
-        /// Where the dragged row would land when dropped above `row`: in the list as it is, and in
-        /// the list without it. Nowhere outside the rows that move.
-        private func place(of from: Int, above row: Int) -> (row: Int, index: Int)? {
-            guard let list else { return nil }
-            let index = row > from ? row - 1 : row
-            var others = list.items
-            others.remove(at: from)
-            guard let first = others.firstIndex(where: list.movable), let last = others.lastIndex(where: list.movable),
-                  index >= first, index <= last + 1
-            else { return nil }
-            return (index >= from ? index + 1 : index, index)
+            list.moved(item, index)
         }
 
         private func content(_ row: Int) -> RecycledRow<Row>? {
@@ -221,18 +189,180 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     }
 }
 
-/// Clicking a row never takes the keyboard from the composer. A row that can't move refuses the
-/// drag before it starts: once a drag has begun, the table hides the row until the drag ends.
+/// Clicking a row never takes the keyboard from the composer. A row that moves is picked up by
+/// the table itself, not by a dragging session: it shrinks a little and follows the pointer, the
+/// rows it passes slide out of its way, and let go it slides into its place and grows back.
+/// Nothing is hidden or faded on the way.
 private final class RecycledTable: NSTableView {
     var canDrag: (Int) -> Bool = { _ in false }
+    var clicked: (Int) -> Void = { _ in }
+    /// The row at `from` was let go where `index` is in the list without it.
+    var dropped: (_ from: Int, _ index: Int) -> Void = { _, _ in }
+    private var press: (row: Int, point: NSPoint)?
+    private var lift: RowLift?
 
     override var acceptsFirstResponder: Bool { false }
 
-    override func canDragRows(with rows: IndexSet, at point: NSPoint) -> Bool {
-        rows.allSatisfy(canDrag)
+    override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        guard lift == nil else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let row = row(at: point)
+        guard row >= 0, canDrag(row) else {
+            super.mouseDown(with: event)
+            return
+        }
+        press = (row, point)
     }
 
-    override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool { true }
+    override func mouseDragged(with event: NSEvent) {
+        guard let press else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let point = convert(event.locationInWindow, from: nil)
+        if lift == nil {
+            guard hypot(point.x - press.point.x, point.y - press.point.y) >= 3 else { return }
+            lift = RowLift(table: self, row: press.row, grip: press.point.y, movable: canDrag)
+        }
+        lift?.follow(point.y)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let press else {
+            super.mouseUp(with: event)
+            return
+        }
+        self.press = nil
+        guard let lift else {
+            clicked(press.row)
+            return
+        }
+        lift.drop { [weak self] from, index in
+            self?.lift = nil
+            self?.dropped(from, index)
+        }
+    }
+
+    /// Puts the rows back where they are laid out, for when the list changes under a lift.
+    func cancelLift() {
+        press = nil
+        lift?.cancel()
+        lift = nil
+    }
+}
+
+/// A row on its way: where it was picked up, where it hangs, and where it would land. It is
+/// moved with transforms only, so the table's layout stays as it was until it lands.
+private final class RowLift {
+    private static let scale: CGFloat = 0.96
+    private let table: NSTableView
+    private let from: Int
+    /// How far below the row's top it was picked up.
+    private let grip: CGFloat
+    /// Every row as it is laid out.
+    private let rects: [CGRect]
+    /// Where its top can hang: over the rows that move.
+    private let tops: ClosedRange<CGFloat>
+    /// Where it can land, in the list without it.
+    private let landings: ClosedRange<Int>
+    private var index: Int
+
+    init(table: NSTableView, row: Int, grip: CGFloat, movable: (Int) -> Bool) {
+        self.table = table
+        from = row
+        index = row
+        rects = (0..<table.numberOfRows).map(table.rect(ofRow:))
+        self.grip = grip - rects[row].minY
+        let movers = rects.indices.filter(movable)
+        tops = rects[movers.first ?? row].minY...rects[movers.last ?? row].maxY - rects[row].height
+        let others = movers.filter { $0 != row }.map { $0 > row ? $0 - 1 : $0 }
+        landings = (others.first ?? row)...(others.last.map { $0 + 1 } ?? row)
+        rowView?.layer?.zPosition = 1
+        guard let cell, let layer = cell.layer else { return }
+        animate(layer, to: Self.scaled(Self.scale, in: cell.bounds.size), duration: 0.15)
+    }
+
+    private var rowView: NSTableRowView? { table.rowView(atRow: from, makeIfNecessary: false) }
+    private var cell: NSView? { rowView?.view(atColumn: 0) as? NSView }
+
+    func follow(_ y: CGFloat) {
+        let top = min(max(y - grip, tops.lowerBound), tops.upperBound)
+        rowView?.layer?.transform = CATransform3DMakeTranslation(0, top - rects[from].minY, 0)
+        let center = top + rects[from].height / 2
+        let landing = index
+        while index < landings.upperBound, center >= middle(ofRowBelow: index) { index += 1 }
+        while index > landings.lowerBound, center <= middle(ofRowAbove: index) { index -= 1 }
+        guard landing != index else { return }
+        table.enumerateAvailableRowViews { [self] rowView, row in
+            guard row != from, let layer = rowView.layer else { return }
+            animate(layer, to: CATransform3DMakeTranslation(0, shift(row), 0), duration: 0.2)
+        }
+    }
+
+    /// How far the row is slid out of the way, with the gap where it is.
+    private func shift(_ row: Int) -> CGFloat {
+        let height = rects[from].height
+        return row > from && row <= index ? -height : row < from && row >= index ? height : 0
+    }
+
+    /// The middle of the row right below the gap at `landing`, as it is drawn.
+    private func middle(ofRowBelow landing: Int) -> CGFloat {
+        let row = landing < from ? landing : landing + 1
+        return rects[row].midY + shift(row)
+    }
+
+    /// The middle of the row right above the gap at `landing`, as it is drawn.
+    private func middle(ofRowAbove landing: Int) -> CGFloat {
+        let row = landing <= from ? landing - 1 : landing
+        return rects[row].midY + shift(row)
+    }
+
+    /// Slides the row into its place and grows it back, then says where it landed.
+    func drop(_ landed: @escaping (_ from: Int, _ index: Int) -> Void) {
+        let top = index <= from ? rects[index].minY : rects[index].maxY - rects[from].height
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [self] in
+            cancel()
+            landed(from, index)
+        }
+        if let layer = rowView?.layer {
+            animate(layer, to: CATransform3DMakeTranslation(0, top - rects[from].minY, 0), duration: 0.25)
+        }
+        if let layer = cell?.layer {
+            animate(layer, to: CATransform3DIdentity, duration: 0.25)
+        }
+        CATransaction.commit()
+    }
+
+    /// Puts every row back where it is laid out.
+    func cancel() {
+        table.enumerateAvailableRowViews { rowView, _ in
+            for layer in [rowView.layer, (rowView.view(atColumn: 0) as? NSView)?.layer] {
+                guard let layer else { continue }
+                layer.removeAllAnimations()
+                layer.transform = CATransform3DIdentity
+                layer.zPosition = 0
+            }
+        }
+    }
+
+    private func animate(_ layer: CALayer, to transform: CATransform3D, duration: CFTimeInterval) {
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = layer.presentation()?.transform ?? layer.transform
+        animation.toValue = transform
+        animation.duration = duration
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.transform = transform
+        layer.add(animation, forKey: "transform")
+    }
+
+    private static func scaled(_ scale: CGFloat, in size: CGSize) -> CATransform3D {
+        var transform = CATransform3DMakeTranslation(size.width / 2, size.height / 2, 0)
+        transform = CATransform3DScale(transform, scale, scale, 1)
+        return CATransform3DTranslate(transform, -size.width / 2, -size.height / 2, 0)
+    }
 }
 
 final class RecycledCell<Content: View>: NSView {
