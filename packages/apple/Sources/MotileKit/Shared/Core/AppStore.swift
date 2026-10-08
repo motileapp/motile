@@ -752,6 +752,12 @@ final class AppStore {
             ?? composerModels.first { agent == nil || $0.agent == agent }
     }
 
+    /// The agent a draft starts with: its model's, or its server's first model's.
+    func agent(of draft: ThreadDraft) -> Agent? {
+        guard let server = server(project(draft.projectID)?.serverID) ?? servers.first else { return nil }
+        return (server.models.first { $0.id == draft.model } ?? server.models.first)?.agent
+    }
+
     /// The accounts the composer offers the models of, an agent's default one first.
     var composerAccounts: [AgentAccount] {
         let agents = Set(composerModels.map(\.agent))

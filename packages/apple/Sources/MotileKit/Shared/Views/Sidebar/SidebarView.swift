@@ -297,12 +297,12 @@ struct ThreadRow: View, Equatable {
     var open: (Selection) -> Void = { _ in }
     @State private var hovering = false
 
-    private static let sidePadding: CGFloat = 8
-    private static let topPadding: CGFloat = 5
-    private static let bottomPadding: CGFloat = 7
-    private static let titleHeight = scaled(16)
+    static let sidePadding: CGFloat = 8
+    static let topPadding: CGFloat = 5
+    static let bottomPadding: CGFloat = 7
+    static let titleHeight = scaled(16)
     /// A button on the first line is as far from the row's side as from its top.
-    private static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
+    static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
     /// How tall the row is, without the gap around it.
     static let height = topPadding + scaled(22) + 1 + titleHeight + 5 + scaled(16) + bottomPadding
 
@@ -481,44 +481,35 @@ struct DraftRows: View {
     }
 }
 
-/// A draft: its project on the first line, what was written in it on the second, if anything.
+/// A draft, laid out like a thread's row: its project and "Draft" on the first line, what was
+/// written in it on the second, where it will work, its server and its agent on the third.
 private struct DraftRow: View {
     @Environment(AppStore.self) private var store
     let listed: ListedDraft
     var open: (Selection) -> Void = { _ in }
     @State private var hovering = false
 
-    private static let sidePadding: CGFloat = 8
-    private static let topPadding: CGFloat = 5
-    private static let bottomPadding: CGFloat = 7
-    private static let previewHeight = scaled(16)
-    private static let buttonInset = topPadding + (scaled(22) - ControlSize.small.height) / 2
-    /// How tall the row is, without the gap around it.
-    static let height = topPadding + scaled(22) + 2 + previewHeight + bottomPadding
+    static let height = ThreadRow.height
 
     var body: some View {
         let project = store.project(listed.draft.projectID)
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: 14)
                 Text(project?.name ?? "No project")
                     .font(.ui(size: 11, weight: .medium))
                     .lineLimit(1)
                     .layoutPriority(1)
-                if store.servers.count > 1, let server = store.server(project?.serverID) {
-                    ServerLabel(server: server)
-                }
                 Spacer(minLength: 6)
                 if hovering {
                     ActionButton(icon: .x, help: "Discard draft", size: .small) { store.discard(listed.draft) }
-                        .padding(.trailing, Self.buttonInset - Self.sidePadding)
+                        .padding(.trailing, ThreadRow.buttonInset - ThreadRow.sidePadding)
                 } else {
                     HStack(spacing: 3) {
                         Image(.file, size: 11)
                         Text("Draft")
                             .font(.ui(size: 11, weight: .medium))
                     }
-                    .foregroundStyle(Color.themeSecondary)
                 }
             }
             .foregroundStyle(Color.themeSecondary)
@@ -527,11 +518,30 @@ private struct DraftRow: View {
             Text(listed.preview)
                 .font(.ui(size: 13, weight: .medium))
                 .lineLimit(1)
-                .frame(height: Self.previewHeight)
+                .frame(height: ThreadRow.titleHeight)
+                .padding(.top, 1)
+                .padding(.bottom, 5)
+
+            HStack(spacing: 6) {
+                if let project, let branch = project.branch {
+                    CheckoutLabel(symbol: project.checkoutSymbol, text: branch)
+                } else if let project {
+                    ThreadFolderLabel(serverID: project.serverID, folder: project.path)
+                }
+                Spacer(minLength: 6)
+                if let project {
+                    ThreadServerLabel(serverID: project.serverID)
+                }
+                if let agent = store.agent(of: listed.draft) {
+                    AgentIcon(agent: agent, size: 12)
+                }
+            }
+            .foregroundStyle(Color.themeTertiary)
+            .frame(height: scaled(16))
         }
-        .padding(.horizontal, Self.sidePadding)
-        .padding(.top, Self.topPadding)
-        .padding(.bottom, Self.bottomPadding)
+        .padding(.horizontal, ThreadRow.sidePadding)
+        .padding(.top, ThreadRow.topPadding)
+        .padding(.bottom, ThreadRow.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
         .button(.highlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin, hovered: hovering)) {
