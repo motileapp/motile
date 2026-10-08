@@ -80,6 +80,7 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         var surface = Surface.background
         var scrollTarget: Item.ID?
         private var ids: [Item.ID] = []
+        private var heights: [CGFloat] = []
         private let cellID = NSUserInterfaceItemIdentifier("row")
 
         func numberOfRows(in table: NSTableView) -> Int { ids.count }
@@ -107,13 +108,21 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             list.clicked(item)
         }
 
-        /// Reloads the table when its rows are others, or else only redraws the rows it has.
+        /// Reloads the table when its rows are others, or else only redraws the rows it has,
+        /// resized where their heights changed.
         func show(in table: NSTableView) {
             let ids = list?.items.map(\.id) ?? []
+            let heights = list?.items.map { list?.height($0) ?? 0 } ?? []
             guard ids == self.ids else {
                 self.ids = ids
+                self.heights = heights
                 table.reloadData()
                 return
+            }
+            if heights != self.heights {
+                let changed = IndexSet(heights.indices.filter { heights[$0] != self.heights[safe: $0] })
+                self.heights = heights
+                table.noteHeightOfRows(withIndexesChanged: changed)
             }
             table.enumerateAvailableRowViews { rowView, row in
                 guard let cell = rowView.view(atColumn: 0) as? Cell, let content = content(row) else { return }
