@@ -10,7 +10,7 @@ struct LimitsView: View {
     @State private var width: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: 32) {
             if report.sections.isEmpty && report.notes.isEmpty {
                 UsageNote(text: "No agent is installed on these servers.")
             }
@@ -57,7 +57,7 @@ struct LimitsView: View {
         }
         .lineLimit(1)
         .padding(.horizontal, 4)
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 
     /// "Work · a@b.c", or whichever of the two is known.
