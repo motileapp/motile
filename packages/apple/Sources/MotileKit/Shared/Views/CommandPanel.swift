@@ -346,10 +346,11 @@ struct CommandPanel: View {
             sections = [PanelSection(title: "Projects", items: items + [addProject])]
         case .threads: sections = [PanelSection(title: "Threads", items: threadItems)]
         case .commands:
-            sections = [
-                PanelSection(title: "This thread", items: threadCommands),
-                PanelSection(title: "Commands", items: commands),
-            ]
+            sections = [PanelSection(title: "Commands", items: commands)]
+            // On iOS the sheet hides the thread, so its actions stay on the thread's screen.
+            if Platform.name == "macos" {
+                sections.insert(PanelSection(title: "This thread", items: threadCommands), at: 0)
+            }
             // Searching from here looks through everything.
             if !query.isEmpty {
                 sections.append(PanelSection(title: "Threads", items: threadItems))
