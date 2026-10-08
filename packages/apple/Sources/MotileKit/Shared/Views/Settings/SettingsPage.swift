@@ -26,7 +26,9 @@ struct SettingsPage: View {
                     }
                 }
                 .frame(maxWidth: Self.contentWidth)
-                .padding(20)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 80)
                 .frame(maxWidth: .infinity)
             }
             .scrollDismissesKeyboard(.immediately)
