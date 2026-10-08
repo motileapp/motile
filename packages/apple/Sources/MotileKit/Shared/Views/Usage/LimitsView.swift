@@ -10,7 +10,7 @@ struct LimitsView: View {
     @State private var width: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 36) {
+        VStack(alignment: .leading, spacing: 40) {
             if report.sections.isEmpty && report.notes.isEmpty {
                 UsageNote(text: "No agent is installed on these servers.")
             }
