@@ -173,6 +173,7 @@ struct RootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.themeBackground.ignoresSafeArea())
+        .overlay { EscapeKey() }
         .dropdowns()
         .sheet(item: sheet) { sheet in
             Group {

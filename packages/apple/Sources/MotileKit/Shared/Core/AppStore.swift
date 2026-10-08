@@ -1549,6 +1549,15 @@ final class AppStore {
         showsUsage = true
     }
 
+    /// What Esc does when the focused view claims nothing: leaves a route, or restores the
+    /// maximized side panel. Nothing while the command panel, the viewer or the branches have it.
+    var escapes: (() -> Void)? {
+        guard panel == nil, viewing == nil, !showsBranches else { return nil }
+        if settings != nil || showsUsage { return { [self] in closeRoute() } }
+        if sidePanel.isMaximized { return { [self] in sidePanel.toggleMaximized() } }
+        return nil
+    }
+
     /// Leaves the settings or the usage for the threads.
     func closeRoute() {
         closeSettings()
