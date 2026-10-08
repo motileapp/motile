@@ -1697,7 +1697,7 @@ impl Hub {
             _ => (None, Instant::now()),
         };
         if let Some(found) = &pull_request {
-            self.keep_pull_request_of(path, found).await;
+            self.follow_pull_request_of(path, found).await;
         }
         status.pull_request = pull_request;
         let read = GitRead { status: status.clone(), head, pull_request_read };
@@ -1782,14 +1782,31 @@ impl Hub {
 
     /// Keeps what GitHub now says of a pull request on the threads in that folder that opened it.
     async fn keep_pull_request_of(&self, folder: &str, found: &PullRequest) {
-        let opened: Vec<String> = {
+        self.set_pull_request_where(folder, found, |own, _| own.number == found.number).await;
+    }
+
+    /// The branch's pull request: kept on the threads in that folder that opened it, and given to
+    /// those still at work whose own is merged or closed, which went on in the branch.
+    async fn follow_pull_request_of(&self, folder: &str, found: &PullRequest) {
+        let follows = |own: &PullRequest, thread: &Thread| {
+            own.number == found.number || (!own.is_open() && thread.done_at.is_none())
+        };
+        self.set_pull_request_where(folder, found, follows).await;
+    }
+
+    async fn set_pull_request_where(
+        &self,
+        folder: &str,
+        found: &PullRequest,
+        wanted: impl Fn(&PullRequest, &Thread) -> bool,
+    ) {
+        let chosen: Vec<String> = {
             let threads = self.threads.lock().await;
             let in_folder = threads.values().map(|live| &live.stored.thread).filter(|thread| thread.cwd == folder);
-            let opened =
-                in_folder.filter(|thread| thread.pull_request.as_ref().map(|own| own.number) == Some(found.number));
-            opened.map(|thread| thread.id.clone()).collect()
+            let chosen = in_folder.filter(|thread| thread.pull_request.as_ref().is_some_and(|own| wanted(own, thread)));
+            chosen.map(|thread| thread.id.clone()).collect()
         };
-        for thread_id in opened {
+        for thread_id in chosen {
             self.set_pull_request(Some(&thread_id), found.clone()).await;
         }
     }

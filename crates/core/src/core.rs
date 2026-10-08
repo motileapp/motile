@@ -787,11 +787,21 @@ impl Core {
     /// Icons it doesn't have yet are fetched, and the projects are told again when they arrive.
     fn emit_projects(&mut self, server_id: &str, projects: Vec<Project>) {
         let folder = self.config.data_dir.join("icons");
+        let threads =
+            self.servers.iter().find(|server| server.device.public_key == server_id).map(|server| &server.threads);
         let view = |project: Project| {
             let file = project.icon.as_ref().map(|icon| folder.join(format!("{}-{icon}", project.id)));
             let icon_path = file.filter(|file| file.is_file()).map(|file| file.to_string_lossy().into_owned());
-            let git_control = project.git.as_ref().map(git::control);
-            let controlled = |worktree: &Worktree| Some((worktree.path.clone(), git::control(worktree.git.as_ref()?)));
+            let git_control = project.git.as_ref().map(|git| git::control(git, None));
+            // A worktree's button names the pull request of the thread that works in it.
+            let own = |worktree: &Worktree| {
+                let thread =
+                    threads?.values().find(|thread| thread.project_id == project.id && thread.cwd == worktree.path);
+                thread?.pull_request.as_ref()
+            };
+            let controlled = |worktree: &Worktree| {
+                Some((worktree.path.clone(), git::control(worktree.git.as_ref()?, own(worktree))))
+            };
             let worktree_controls = project.worktrees.iter().filter_map(controlled).collect();
             ProjectView { project, icon_path, git_control, worktree_controls }
         };
@@ -979,8 +989,13 @@ impl Core {
                 let view = self.thread_view(server_id, &thread);
                 let Some(server) = self.server_mut(server_id) else { return };
                 let thread_id = thread.id.clone();
-                server.threads.insert(thread_id.clone(), thread);
+                let pull_request = thread.pull_request.clone();
+                let before = server.threads.insert(thread_id.clone(), thread);
                 self.emit(Event::ThreadUpsert { thread: Box::new(view) });
+                if before.and_then(|before| before.pull_request) != pull_request {
+                    let projects = self.cache.projects(server_id);
+                    self.emit_projects(server_id, projects);
+                }
                 self.refollow(server_id, &thread_id);
             }
             Message::ThreadDeleted { thread_id } => {

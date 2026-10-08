@@ -1942,10 +1942,32 @@ async fn changes_are_committed_pushed_and_opened_as_a_pull_request() {
     assert_eq!(linked.pull_request.map(|opened| (opened.number, opened.is_open())), Some((7, true)));
     let done = ThreadChange { done: Some(true), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, done).await, Message::Ok);
+    let branch = git_says(&repository, &["rev-parse", "--abbrev-ref", "HEAD"]);
     git(&repository, &["checkout", "-q", "main"]);
     change_pull_request(&bin, json!({"state": "CLOSED"}));
     let closed = thread_where(&mut list, |thread| thread.pull_request.as_ref().is_some_and(|found| found.closed)).await;
     assert_eq!(closed.id, thread_id);
+
+    // A thread at work whose pull request is over goes on with the one its branch gets, however
+    // it was opened; a done thread keeps its own.
+    git(&repository, &["checkout", "-q", &branch]);
+    std::fs::write(repository.join("notes.txt"), "again\n").unwrap();
+    git(&repository, &["commit", "-q", "-am", "Note it again"]);
+    let created = std::process::Command::new(bin.join("gh"))
+        .args(["pr", "create", "--title", "Note it again", "--body", "Again"])
+        .current_dir(&repository)
+        .output()
+        .unwrap();
+    assert!(created.status.success(), "{}", String::from_utf8_lossy(&created.stderr));
+    let (status, _) = git_status(&connection, &project.id, false).await;
+    assert_eq!(status.pull_request.as_ref().map(|found| found.number), Some(8));
+    assert_eq!(thread_now(&connection, &thread_id).await.pull_request.map(|found| found.number), Some(7));
+    let undone = ThreadChange { done: Some(false), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, undone).await, Message::Ok);
+    git_status(&connection, &project.id, false).await;
+    let moved_on =
+        thread_where(&mut list, |thread| thread.pull_request.as_ref().is_some_and(|found| found.number == 8)).await;
+    assert_eq!((moved_on.id, moved_on.pull_request.map(|found| found.is_open())), (thread_id, Some(true)));
 }
 
 /// Edits the pull request with the number 7 through the server, as the tab does.
@@ -2615,6 +2637,12 @@ async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
     assert_eq!(transcript.turn_ends()[0].changes, None);
     let request = Request::Diff { project_id, thread_id: Some(thread_id), scope: DiffScope::Uncommitted };
     assert!(matches!(connection.request(&request).await.unwrap(), Message::Error { .. }));
+}
+
+async fn thread_now(connection: &Connection, thread_id: &str) -> Thread {
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { threads, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    threads.into_iter().find(|thread| thread.id == thread_id).expect("the thread is listed")
 }
 
 async fn projects_now(connection: &Connection) -> Vec<Project> {
