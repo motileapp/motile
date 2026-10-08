@@ -2221,6 +2221,43 @@ async fn a_worktree_asked_for_with_a_branch_is_made_on_it() {
 }
 
 #[tokio::test]
+async fn a_branch_a_threads_worktree_took_is_given_back_when_the_project_switches_to_it() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let (project, _) = project_with_a_branch(&harness, &connection).await;
+    let repository = harness.dir.path().join("repository");
+    let new_thread = NewThread {
+        project_id: project.id.clone(),
+        agent: Agent::Claude,
+        agent_account: None,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        plan: false,
+        worktree: Some(NewWorktree { base: "main".to_string(), branch: Some("ada/checkout-main".to_string()) }),
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
+    finished_transcript(&connection, &thread_id).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { threads, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    let worktree = PathBuf::from(&threads.iter().find(|thread| thread.id == thread_id).unwrap().cwd);
+
+    // The agent, asked to switch to main, did so in its worktree, which now keeps the project from it.
+    git(&worktree, &["switch", "-q", "main"]);
+    assert_eq!(switch(&connection, &project.id, "main", false).await, Message::Ok);
+    assert_eq!(git_says(&repository, &["branch", "--show-current"]), "main");
+    assert_eq!(git_says(&worktree, &["branch", "--show-current"]), "ada/checkout-main");
+
+    // A worktree that is no thread's is left alone, and named.
+    let other = harness.dir.path().join("other");
+    git(&repository, &["worktree", "add", "-q", other.to_str().unwrap(), "greet"]);
+    let Message::Error { message } = switch(&connection, &project.id, "greet", false).await else {
+        panic!("a branch another worktree holds can't be switched to")
+    };
+    assert!(message.contains("greet") && message.contains("other"), "{message}");
+}
+
+#[tokio::test]
 async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_lost() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;

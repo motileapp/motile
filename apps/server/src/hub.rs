@@ -1334,9 +1334,35 @@ impl Hub {
     pub async fn switch_branch(&self, project_id: &str, branch: &str, create: bool) -> anyhow::Result<()> {
         let path = self.project_path(project_id).await?;
         self.refuse_while_working(&path).await?;
+        if !create {
+            self.take_back_branch(&path, branch).await?;
+        }
         git::switch(&path, &self.environment, branch, create).await?;
         self.read_git(&path, false).await;
         self.announce_projects(&self.projects.lock().await);
+        Ok(())
+    }
+
+    /// A thread's worktree whose agent switched onto `branch` gives it back, so that the project's
+    /// folder can check it out. A worktree that isn't a thread's, or whose agent still works, keeps it.
+    async fn take_back_branch(&self, path: &str, branch: &str) -> anyhow::Result<()> {
+        let Some(holder) = git::worktree_holding(path, &self.environment, branch).await else { return Ok(()) };
+        let own = {
+            let threads = self.threads.lock().await;
+            let live = threads.values().find(|live| same_folder(&live.stored.thread.cwd, &holder));
+            match live {
+                None => bail!("{branch} is checked out in the worktree at {holder}."),
+                Some(live) if live.activity.running => {
+                    bail!(
+                        "{branch} is checked out in the worktree of “{}”, which is still working.",
+                        live.stored.thread.title
+                    )
+                }
+                Some(live) => live.stored.worktree.as_ref().map(|worktree| worktree.branch.clone()),
+            }
+        };
+        git::release_branch(&holder, &self.environment, own.as_deref()).await?;
+        self.read_git(&holder, false).await;
         Ok(())
     }
 
@@ -3224,6 +3250,12 @@ fn refresh_icon(store: &Store, project: &mut StoredProject) {
     if let Err(error) = store.save_project_icon(project) {
         tracing::error!(project_id = project.id, "couldn't save a project's icon: {error:#}");
     }
+}
+
+/// Whether the two paths name one folder, however either is spelled.
+fn same_folder(a: &str, b: &str) -> bool {
+    let real = |path: &str| std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path));
+    a == b || real(a) == real(b)
 }
 
 fn thread_worktree(stored: &StoredThread) -> Option<(String, ThreadWorktree)> {
