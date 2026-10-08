@@ -177,7 +177,7 @@ function Control({
   return (
     <span
       className={cn(
-        "flex h-7 cursor-default items-center gap-1.5 rounded-[7px] pr-[11px] text-[12px] font-medium text-muted-foreground hover:bg-composer-secondary hover:text-foreground",
+        "flex h-7 cursor-default items-center gap-1.5 rounded-[7px] pr-[9px] text-[12px] font-medium text-muted-foreground hover:bg-composer-secondary hover:text-foreground",
         icon ? "pl-[9px]" : "pl-[11px]"
       )}
     >
