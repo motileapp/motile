@@ -23,6 +23,8 @@ pub struct Quick {
     pub url: Option<String>,
     pub hint: Option<String>,
     pub confirm: Option<Confirm>,
+    /// The pull request the button opens, for its symbol and its title.
+    pub pull_request: Option<PullRequest>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -47,16 +49,18 @@ pub struct Confirm {
 
 const UP_TO_DATE: &str = "The branch is up to date. Nothing to do.";
 
-pub fn control(status: &GitStatus) -> Control {
+/// `own` is the pull request of the thread the button is shown in. The button names it instead
+/// of the branch's, as the thread's row in the sidebar does, so that the two never differ.
+pub fn control(status: &GitStatus, own: Option<&PullRequest>) -> Control {
     let warning = match (&status.branch, status.behind > 0) {
         (None, _) => Some("No branch is checked out. Check one out to push or open a pull request."),
         (Some(_), true) => Some("Behind the remote. Pull first."),
         (Some(_), false) => None,
     };
-    Control { quick: quick(status), menu: menu(status), warning: warning.map(str::to_string) }
+    Control { quick: quick(status, own), menu: menu(status), warning: warning.map(str::to_string) }
 }
 
-fn quick(status: &GitStatus) -> Quick {
+fn quick(status: &GitStatus, own: Option<&PullRequest>) -> Quick {
     let run = |label: &str, action| Quick {
         label: label.to_string(),
         action: Some(action),
@@ -92,11 +96,13 @@ fn quick(status: &GitStatus) -> Quick {
         }
         return run("Push & Create PR", GitAction::CreatePr);
     }
-    if let Some(pull_request) = &status.pull_request {
+    if let Some(found) = &status.pull_request {
+        let pull_request = own.unwrap_or(found);
         return Quick {
             label: format!("PR #{}", pull_request.number),
             state: state(pull_request).map(str::to_string),
             url: Some(pull_request.url.clone()),
+            pull_request: Some(pull_request.clone()),
             ..Quick::default()
         };
     }
@@ -245,7 +251,7 @@ mod tests {
     }
 
     fn quick_of(status: GitStatus) -> (String, Option<GitAction>) {
-        let quick = control(&status).quick;
+        let quick = control(&status, None).quick;
         (quick.label, quick.action)
     }
 
@@ -281,7 +287,7 @@ mod tests {
         assert_eq!(quick_of(GitStatus { upstream: false, ..branch() }), off("Push"));
         assert_eq!(quick_of(GitStatus { branch: None, changed: 1, ..branch() }), off("Commit"));
 
-        let opened = control(&GitStatus { ahead_of_default: 2, pull_request: open(), ..branch() }).quick;
+        let opened = control(&GitStatus { ahead_of_default: 2, pull_request: open(), ..branch() }, None).quick;
         assert_eq!(
             (opened.label.as_str(), opened.url.as_deref(), opened.action),
             ("PR #12", Some("https://x/12"), None)
@@ -293,7 +299,7 @@ mod tests {
     fn a_merged_pull_request_is_shown_instead_of_creating_another() {
         // A squash merge leaves the branch ahead of the default one.
         let status = GitStatus { ahead_of_default: 2, pull_request: merged(), ..branch() };
-        let control = control(&status);
+        let control = control(&status, None);
         assert_eq!(
             (control.quick.label.as_str(), control.quick.url.as_deref(), control.quick.action),
             ("PR #12", Some("https://x/12"), None)
@@ -312,7 +318,7 @@ mod tests {
     #[test]
     fn a_closed_pull_request_is_shown_and_another_can_be_created() {
         let status = GitStatus { ahead_of_default: 2, pull_request: closed(), ..branch() };
-        let control = control(&status);
+        let control = control(&status, None);
         assert_eq!((control.quick.label.as_str(), control.quick.url.as_deref()), ("PR #12", Some("https://x/12")));
         assert_eq!(control.quick.state.as_deref(), Some("Closed"));
         assert_eq!((control.menu[2].label.as_str(), control.menu[2].reason.as_deref()), ("Create PR", None));
@@ -324,14 +330,30 @@ mod tests {
     #[test]
     fn a_draft_pull_request_says_so() {
         let draft = open().map(|open| PullRequest { draft: true, ..open });
-        let quick = control(&GitStatus { pull_request: draft, ..branch() }).quick;
+        let quick = control(&GitStatus { pull_request: draft, ..branch() }, None).quick;
         assert_eq!((quick.label.as_str(), quick.state.as_deref()), ("PR #12", Some("Draft")));
+    }
+
+    #[test]
+    fn the_threads_own_pull_request_is_named_instead_of_the_branchs() {
+        let own = PullRequest { number: 9, url: "https://x/9".to_string(), ..merged().unwrap() };
+        let status = GitStatus { pull_request: open(), ..branch() };
+        let quick = control(&status, Some(&own)).quick;
+        assert_eq!(
+            (quick.label.as_str(), quick.state.as_deref(), quick.url.as_deref()),
+            ("PR #9", Some("Merged"), Some("https://x/9"))
+        );
+        assert_eq!(quick.pull_request.as_ref().map(|found| found.number), Some(9));
+        // The menu still follows the branch, whose open pull request stops another.
+        assert_eq!(control(&GitStatus { ahead: 1, ..status }, Some(&own)).quick.label, "Push");
+        // Without a pull request on the branch the button says what to do, not the thread's own.
+        assert_eq!(control(&GitStatus { ahead: 1, ..branch() }, Some(&own)).quick.label, "Push & Create PR");
     }
 
     #[test]
     fn the_menu_says_why_an_item_cannot_run() {
         let reasons = |status: GitStatus| -> Vec<(String, bool)> {
-            control(&status).menu.into_iter().map(|item| (item.label, item.reason.is_none())).collect()
+            control(&status, None).menu.into_iter().map(|item| (item.label, item.reason.is_none())).collect()
         };
         let item = |label: &str, runs: bool| (label.to_string(), runs);
 
@@ -344,7 +366,7 @@ mod tests {
         let local = GitStatus { remote: false, changed: 1, ..branch() };
         assert_eq!(reasons(local), [item("Commit", true)]);
 
-        let behind = control(&GitStatus { behind: 1, ahead_of_default: 1, ..branch() });
+        let behind = control(&GitStatus { behind: 1, ahead_of_default: 1, ..branch() }, None);
         assert_eq!(behind.warning.as_deref(), Some("Behind the remote. Pull first."));
         assert_eq!(
             behind.menu[2].reason.as_deref(),
@@ -354,14 +376,14 @@ mod tests {
 
     #[test]
     fn pushing_from_the_default_branch_is_asked_about_first() {
-        let quick = control(&GitStatus { changed: 1, ..main() }).quick;
+        let quick = control(&GitStatus { changed: 1, ..main() }, None).quick;
         let confirm = quick.confirm.expect("a push from the default branch is confirmed");
         assert_eq!(confirm.title, "Commit & push to main?");
         assert_eq!(confirm.proceed, "Commit & push to main");
 
-        let push = control(&GitStatus { ahead: 1, ..main() }).quick.confirm.unwrap();
+        let push = control(&GitStatus { ahead: 1, ..main() }, None).quick.confirm.unwrap();
         assert_eq!(push.proceed, "Push to main");
-        assert_eq!(control(&GitStatus { changed: 1, ..branch() }).quick.confirm, None);
-        assert_eq!(control(&GitStatus { changed: 1, ..main() }).menu[0].confirm, None);
+        assert_eq!(control(&GitStatus { changed: 1, ..branch() }, None).quick.confirm, None);
+        assert_eq!(control(&GitStatus { changed: 1, ..main() }, None).menu[0].confirm, None);
     }
 }

@@ -30,12 +30,12 @@ struct GitButton: View {
     }
 
     private func symbol(of quick: GitQuick) -> Symbol {
-        guard quick.url == nil else { return project.git?.pullRequest?.state.symbol ?? .gitPullRequest }
+        guard quick.url == nil else { return quick.pullRequest?.state.symbol ?? .gitPullRequest }
         return GitSymbol.symbol(for: quick.action)
     }
 
     private func pullRequestColor(of quick: GitQuick) -> PlatformColor? {
-        guard quick.url != nil, let state = project.git?.pullRequest?.state else { return nil }
+        guard quick.url != nil, let state = quick.pullRequest?.state else { return nil }
         return state == .draft ? Theme.text : state.platformColor
     }
 
@@ -45,7 +45,7 @@ struct GitButton: View {
         let quick = control.quick
         return HStack(spacing: 0) {
             ActionButton(
-                stage?.label ?? quick.title, icon: symbol(of: quick), help: quick.hint ?? project.git?.pullRequest?.title ?? quick.title, variant: .ghost,
+                stage?.label ?? quick.title, icon: symbol(of: quick), help: quick.hint ?? quick.pullRequest?.title ?? quick.title, variant: .ghost,
                 pending: stage != nil, joined: .all, tint: tint(of: quick, at: stage)
             ) {
                 store.runQuickGit(in: project)

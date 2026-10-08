@@ -365,6 +365,8 @@ struct GitQuick: Equatable {
     let url: String?
     let hint: String?
     let confirm: GitConfirm?
+    /// The pull request the button opens, for its symbol and its title.
+    let pullRequest: PullRequest?
 
     init(json: JSON) {
         label = json.string("label")
@@ -373,6 +375,7 @@ struct GitQuick: Equatable {
         url = json.optionalString("url")
         hint = json.optionalString("hint")
         confirm = json.object("confirm").map { GitConfirm(json: $0) }
+        pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
     }
 
     var title: String {
