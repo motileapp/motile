@@ -115,6 +115,8 @@ struct SidebarView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, rowMargin.leading + 8)
                         .padding(.vertical, 6 + rowGap / 2)
+                case .newThread:
+                    NewThreadRow()
                 }
             }
             if let undo = store.undo {
@@ -145,6 +147,7 @@ struct SidebarView: View {
         var items: [SidebarItem] = drafts.isEmpty ? [] : [.drafts]
         items += active.map(SidebarItem.active)
         if active.isEmpty { items.append(.empty) }
+        if store.offersNewThread(drafts: drafts, active: active, search: search) { items.append(.newThread) }
         return items
     }
 
@@ -153,6 +156,7 @@ struct SidebarView: View {
         case .drafts: CGFloat(drafts) * (DraftRow.height + rowGap) + DraftRows.dividerHeight
         case .active: ThreadRow.height + rowGap
         case .empty: Self.emptyLineHeight + 2 * (6 + rowGap / 2)
+        case .newThread: doneRowHeight + rowGap
         }
     }
 
@@ -166,12 +170,14 @@ private enum SidebarItem: Identifiable {
     case drafts
     case active(ThreadInfo)
     case empty
+    case newThread
 
     var id: String {
         switch self {
         case .drafts: "drafts"
         case .active(let thread): thread.id
         case .empty: "empty"
+        case .newThread: "newThread"
         }
     }
 
@@ -739,6 +745,36 @@ struct DoneRow: View, Equatable {
         #if os(macOS)
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
         #endif
+    }
+}
+
+/// Starts a thread, where the sidebar has no draft and no active thread. Laid out like a done row.
+struct NewThreadRow: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(.plus, size: 14)
+                .frame(width: 14)
+            Text("Create a thread")
+                .font(.ui(size: 13))
+                .lineLimit(1)
+            Spacer(minLength: 6)
+        }
+        .foregroundStyle(Color.themeSecondary)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(rowMargin)
+        .button(.highlight(radius: 8, inset: rowMargin)) { store.newThread() }
+    }
+}
+
+extension AppStore {
+    /// Whether the sidebar offers to start a thread: there is somewhere to start it, and nothing
+    /// above the offer.
+    func offersNewThread(drafts: [ListedDraft], active: [ThreadInfo], search: String) -> Bool {
+        guard search.isEmpty, drafts.isEmpty, active.isEmpty else { return false }
+        return !projects.isEmpty || !noProjects.isEmpty
     }
 }
 
