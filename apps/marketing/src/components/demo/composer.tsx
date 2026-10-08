@@ -103,23 +103,22 @@ export function Composer({
           }}
           className="flex cursor-text items-center px-1.5 py-2"
         >
-          <Control icon>
-            <AgentIcon agent={thread.agent} size={14} />
+          <Control icon={<AgentIcon agent={thread.agent} size={14} />}>
             {thread.model}
           </Control>
+          <span className="mx-1 h-3.5 w-px bg-border" />
           <Control>High</Control>
-          <Control icon>
-            {thread.approval ? (
-              <>
-                <ShieldIcon className="size-3.5" />
-                Supervised
-              </>
-            ) : (
-              <>
-                <LockOpenIcon className="size-3.5" />
-                Full access
-              </>
-            )}
+          <span className="mx-1 h-3.5 w-px bg-border" />
+          <Control
+            icon={
+              thread.approval ? (
+                <ShieldIcon className="size-[13px]" />
+              ) : (
+                <LockOpenIcon className="size-[13px]" />
+              )
+            }
+          >
+            {thread.approval ? "Supervised" : "Full access"}
           </Control>
           <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-composer-secondary hover:text-foreground">
             <PaperclipIcon className="size-3.5" />
@@ -169,10 +168,10 @@ export function Composer({
 }
 
 function Control({
-  icon = false,
+  icon,
   children,
 }: {
-  icon?: boolean
+  icon?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -182,7 +181,10 @@ function Control({
         icon ? "pl-[9px]" : "pl-[11px]"
       )}
     >
-      {children}
+      <span className="flex items-center gap-[5px]">
+        {icon}
+        {children}
+      </span>
       <MenuChevron />
     </span>
   )
