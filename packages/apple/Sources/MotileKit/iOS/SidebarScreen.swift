@@ -120,6 +120,9 @@ struct SidebarScreen: View {
         var items: [SidebarItem] = [.drafts]
         items += active.map(SidebarItem.active)
         if active.isEmpty { items.append(.empty) }
+        if store.offersNewThread(drafts: store.searched(store.listedDrafts, for: search), active: active, search: search) {
+            items.append(.newThread)
+        }
         guard !done.isEmpty else { return items }
         items.append(.doneHeader)
         if expanded { items += done.map(SidebarItem.done) }
@@ -159,6 +162,9 @@ struct SidebarScreen: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, sidebarRowInset + 8)
                 .padding(.vertical, 10)
+        case .newThread:
+            NewThreadRow()
+                .frame(height: 44)
         case .doneHeader:
             doneHeader(count: done.count, expanded: expanded)
         case .done(let thread):
@@ -274,6 +280,7 @@ private enum SidebarItem: Identifiable {
     case drafts
     case active(ThreadInfo)
     case empty
+    case newThread
     case doneHeader
     case done(ThreadInfo)
 
@@ -285,6 +292,7 @@ private enum SidebarItem: Identifiable {
         case .drafts: "drafts"
         case .active(let thread): thread.id
         case .empty: "empty"
+        case .newThread: "newThread"
         case .doneHeader: "done"
         case .done(let thread): Self.doneID(thread.id)
         }
