@@ -13,6 +13,9 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     var scrollTarget: Item.ID?
     /// A click on a row that doesn't take it itself.
     var clicked: (Item) -> Void = { _ in }
+    /// The shape a row lifts in when it is dragged: its light, inset from the row's edges.
+    var rowInset = NSEdgeInsetsZero
+    var rowRadius: CGFloat = 0
     /// Whether the row can be dragged into another place among the rows that can.
     var movable: (Item) -> Bool = { _ in false }
     /// The row was dropped where `index` is in `items` without it.
@@ -56,11 +59,12 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        guard let table = scroll.documentView as? NSTableView else { return }
+        guard let table = scroll.documentView as? RecycledTable else { return }
         let coordinator = context.coordinator
         coordinator.list = self
         coordinator.store = store
         coordinator.surface = context.environment.surface
+        table.light = (rowInset, rowRadius, coordinator.surface.next.platform)
         scroll.contentInsets.top = topInset
         scroll.contentInsets.bottom = bottomInset
         if let first = items.first { table.rowHeight = height(first) }
@@ -190,53 +194,54 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
 }
 
 /// Clicking a row never takes the keyboard from the composer. A row that moves is picked up by
-/// the table itself, not by a dragging session: it shrinks a little and follows the pointer, the
-/// rows it passes slide out of its way, and let go it slides into its place and grows back.
-/// Nothing is hidden or faded on the way.
+/// the table itself, not by a dragging session: it shrinks a little and floats over the window
+/// under the pointer, the rows it passes slide out of its way, and let go it slides into its
+/// place and grows back.
 private final class RecycledTable: NSTableView {
     var canDrag: (Int) -> Bool = { _ in false }
     var clicked: (Int) -> Void = { _ in }
     /// The row at `from` was let go where `index` is in the list without it.
     var dropped: (_ from: Int, _ index: Int) -> Void = { _, _ in }
-    private var press: (row: Int, point: NSPoint)?
+    /// What a lifted row lies on: its light, on the colour its list lies on.
+    var light = (inset: NSEdgeInsetsZero, radius: CGFloat(0), color: NSColor.clear)
+    private var pressed = false
     private var lift: RowLift?
 
     override var acceptsFirstResponder: Bool { false }
 
     override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool { true }
 
+    /// Follows the pointer itself while a row that moves is pressed, as the cell it picks up
+    /// leaves the table.
     override func mouseDown(with event: NSEvent) {
         guard lift == nil else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        let row = row(at: point)
-        guard row >= 0, canDrag(row) else {
+        let start = convert(event.locationInWindow, from: nil)
+        let row = row(at: start)
+        guard row >= 0, canDrag(row), let window else {
             super.mouseDown(with: event)
             return
         }
-        press = (row, point)
+        pressed = true
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration, mode: .eventTracking) { [self] event, stop in
+            guard pressed, let event, event.type == .leftMouseDragged else {
+                stop.pointee = true
+                release(row)
+                return
+            }
+            let point = convert(event.locationInWindow, from: nil)
+            if lift == nil {
+                guard hypot(point.x - start.x, point.y - start.y) >= 3 else { return }
+                lift = RowLift(table: self, row: row, grip: start, light: light, movable: canDrag)
+            }
+            lift?.follow(event.locationInWindow)
+        }
     }
 
-    override func mouseDragged(with event: NSEvent) {
-        guard let press else {
-            super.mouseDragged(with: event)
-            return
-        }
-        let point = convert(event.locationInWindow, from: nil)
-        if lift == nil {
-            guard hypot(point.x - press.point.x, point.y - press.point.y) >= 3 else { return }
-            lift = RowLift(table: self, row: press.row, grip: press.point.y, movable: canDrag)
-        }
-        lift?.follow(point.y)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        guard let press else {
-            super.mouseUp(with: event)
-            return
-        }
-        self.press = nil
+    private func release(_ row: Int) {
+        guard pressed else { return }
+        pressed = false
         guard let lift else {
-            clicked(press.row)
+            clicked(row)
             return
         }
         lift.drop { [weak self] from, index in
@@ -247,14 +252,15 @@ private final class RecycledTable: NSTableView {
 
     /// Puts the rows back where they are laid out, for when the list changes under a lift.
     func cancelLift() {
-        press = nil
+        pressed = false
         lift?.cancel()
         lift = nil
     }
 }
 
-/// A row on its way: where it was picked up, where it hangs, and where it would land. It is
-/// moved with transforms only, so the table's layout stays as it was until it lands.
+/// A row on its way: where it was picked up, where it floats, and where it would land. Its cell
+/// floats over the window so that it goes wherever the pointer does, and the other rows move with
+/// transforms only, so the table's layout stays as it was until it lands.
 private final class RowLift {
     private static let scale: CGFloat = 0.96
     private let table: NSTableView
@@ -263,34 +269,66 @@ private final class RowLift {
     private let grip: CGFloat
     /// Every row as it is laid out.
     private let rects: [CGRect]
-    /// Where its top can hang: over the rows that move.
-    private let tops: ClosedRange<CGFloat>
     /// Where it can land, in the list without it.
     private let landings: ClosedRange<Int>
     private var index: Int
+    private let rowView: NSTableRowView
+    private let cell: NSView
+    private let cellFrame: CGRect
+    /// Covers the window and carries the cell while it floats.
+    private let overlay = FloatOverlay()
+    /// The cell on its light.
+    private let holder = NSView()
+    private let light = NSView()
+    /// Where the pointer is from the holder's origin.
+    private let offset: CGPoint
 
-    init(table: NSTableView, row: Int, grip: CGFloat, movable: (Int) -> Bool) {
+    init?(
+        table: NSTableView, row: Int, grip: NSPoint, light shape: (inset: NSEdgeInsets, radius: CGFloat, color: NSColor), movable: (Int) -> Bool
+    ) {
+        guard let content = table.window?.contentView, let rowView = table.rowView(atRow: row, makeIfNecessary: false),
+              let cell = rowView.view(atColumn: 0) as? NSView
+        else { return nil }
         self.table = table
+        self.rowView = rowView
+        self.cell = cell
+        cellFrame = cell.frame
         from = row
         index = row
         rects = (0..<table.numberOfRows).map(table.rect(ofRow:))
-        self.grip = grip - rects[row].minY
-        let movers = rects.indices.filter(movable)
-        tops = rects[movers.first ?? row].minY...rects[movers.last ?? row].maxY - rects[row].height
-        let others = movers.filter { $0 != row }.map { $0 > row ? $0 - 1 : $0 }
+        self.grip = grip.y - rects[row].minY
+        let others = rects.indices.filter(movable).filter { $0 != row }.map { $0 > row ? $0 - 1 : $0 }
         landings = (others.first ?? row)...(others.last.map { $0 + 1 } ?? row)
-        rowView?.layer?.zPosition = 1
-        guard let cell, let layer = cell.layer else { return }
-        animate(layer, to: Self.scaled(Self.scale, in: cell.bounds.size), duration: 0.15)
+
+        overlay.frame = content.bounds
+        overlay.autoresizingMask = [.width, .height]
+        overlay.wantsLayer = true
+        content.addSubview(overlay)
+        holder.frame = rowView.convert(cellFrame, to: overlay)
+        holder.wantsLayer = true
+        overlay.addSubview(holder)
+        let pointer = table.convert(grip, to: overlay)
+        offset = CGPoint(x: pointer.x - holder.frame.minX, y: pointer.y - holder.frame.minY)
+        let size = holder.bounds.size
+        let inset = shape.inset
+        light.frame = CGRect(x: inset.left, y: inset.bottom, width: size.width - inset.left - inset.right, height: size.height - inset.top - inset.bottom)
+        light.wantsLayer = true
+        light.layer?.cornerRadius = shape.radius
+        holder.effectiveAppearance.performAsCurrentDrawingAppearance { light.layer?.backgroundColor = shape.color.cgColor }
+        holder.addSubview(light)
+        cell.removeFromSuperview()
+        cell.frame = holder.bounds
+        holder.addSubview(cell)
+        guard let layer = holder.layer else { return }
+        animate(layer, to: Self.scaled(Self.scale, in: size), duration: 0.15)
     }
 
-    private var rowView: NSTableRowView? { table.rowView(atRow: from, makeIfNecessary: false) }
-    private var cell: NSView? { rowView?.view(atColumn: 0) as? NSView }
-
-    func follow(_ y: CGFloat) {
-        let top = min(max(y - grip, tops.lowerBound), tops.upperBound)
-        rowView?.layer?.transform = CATransform3DMakeTranslation(0, top - rects[from].minY, 0)
-        let center = top + rects[from].height / 2
+    /// Floats the row under the pointer, at `location` in the window, and parts the rows where it
+    /// would land.
+    func follow(_ location: NSPoint) {
+        let pointer = overlay.convert(location, from: nil)
+        holder.setFrameOrigin(CGPoint(x: pointer.x - offset.x, y: pointer.y - offset.y))
+        let center = table.convert(location, from: nil).y - grip + rects[from].height / 2
         let landing = index
         while index < landings.upperBound, center >= middle(ofRowBelow: index) { index += 1 }
         while index > landings.lowerBound, center <= middle(ofRowAbove: index) { index -= 1 }
@@ -319,32 +357,34 @@ private final class RowLift {
         return rects[row].midY + shift(row)
     }
 
-    /// Slides the row into its place and grows it back, then says where it landed.
+    /// Slides the row into its place, grows it back and puts out its light, then says where it
+    /// landed.
     func drop(_ landed: @escaping (_ from: Int, _ index: Int) -> Void) {
         let top = index <= from ? rects[index].minY : rects[index].maxY - rects[from].height
-        CATransaction.begin()
-        CATransaction.setCompletionBlock { [self] in
+        let place = table.convert(cellFrame.offsetBy(dx: rects[from].minX, dy: top), to: overlay)
+        NSAnimationContext.runAnimationGroup { [self] context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            holder.animator().setFrameOrigin(place.origin)
+            light.animator().alphaValue = 0
+            guard let layer = holder.layer else { return }
+            animate(layer, to: CATransform3DIdentity, duration: 0.25)
+        } completionHandler: { [self] in
             cancel()
             landed(from, index)
         }
-        if let layer = rowView?.layer {
-            animate(layer, to: CATransform3DMakeTranslation(0, top - rects[from].minY, 0), duration: 0.25)
-        }
-        if let layer = cell?.layer {
-            animate(layer, to: CATransform3DIdentity, duration: 0.25)
-        }
-        CATransaction.commit()
     }
 
-    /// Puts every row back where it is laid out.
+    /// Puts the row back in its place and every row where it is laid out.
     func cancel() {
+        cell.removeFromSuperview()
+        cell.frame = cellFrame
+        rowView.addSubview(cell)
+        overlay.removeFromSuperview()
         table.enumerateAvailableRowViews { rowView, _ in
-            for layer in [rowView.layer, (rowView.view(atColumn: 0) as? NSView)?.layer] {
-                guard let layer else { continue }
-                layer.removeAllAnimations()
-                layer.transform = CATransform3DIdentity
-                layer.zPosition = 0
-            }
+            guard let layer = rowView.layer else { return }
+            layer.removeAllAnimations()
+            layer.transform = CATransform3DIdentity
         }
     }
 
@@ -363,6 +403,11 @@ private final class RowLift {
         transform = CATransform3DScale(transform, scale, scale, 1)
         return CATransform3DTranslate(transform, -size.width / 2, -size.height / 2, 0)
     }
+}
+
+/// Lets the pointer through to what lies under it.
+private final class FloatOverlay: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 final class RecycledCell<Content: View>: NSView {

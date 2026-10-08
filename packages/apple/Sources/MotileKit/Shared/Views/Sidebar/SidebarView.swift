@@ -85,6 +85,8 @@ struct SidebarView: View {
                     guard case .active(let thread) = item else { return }
                     store.select(.thread(thread.id))
                 },
+                rowInset: NSEdgeInsets(top: rowMargin.top, left: rowMargin.leading, bottom: rowMargin.bottom, right: rowMargin.trailing),
+                rowRadius: 8,
                 movable: { item in
                     guard search.isEmpty, active.count > 1, case .active(let thread) = item else { return false }
                     return store.moves(thread)
