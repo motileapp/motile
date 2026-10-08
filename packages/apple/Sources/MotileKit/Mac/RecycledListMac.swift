@@ -38,6 +38,7 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         table.delegate = context.coordinator
         table.target = context.coordinator
         table.action = #selector(Coordinator.clicked(_:))
+        table.canDrag = { [weak coordinator = context.coordinator] in coordinator?.movable($0) ?? false }
         table.registerForDraggedTypes([Coordinator.rowType])
         table.setDraggingSourceOperationMask(.move, forLocal: true)
         table.draggingDestinationFeedbackStyle = .gap
@@ -158,8 +159,13 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
 
         // MARK: Moving a row
 
+        func movable(_ row: Int) -> Bool {
+            guard let list, let item = list.items[safe: row] else { return false }
+            return list.movable(item)
+        }
+
         func tableView(_ table: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
-            guard let list, let item = list.items[safe: row], list.movable(item) else { return nil }
+            guard movable(row) else { return nil }
             let written = NSPasteboardItem()
             written.setString(String(row), forType: Self.rowType)
             return written
@@ -183,7 +189,9 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             else { return false }
             ids.remove(at: from)
             ids.insert(item.id, at: to.index)
+            table.beginUpdates()
             table.moveRow(at: from, to: to.index)
+            table.endUpdates()
             list.moved(item, to.index)
             return true
         }
@@ -213,9 +221,16 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     }
 }
 
-/// Clicking a row never takes the keyboard from the composer.
+/// Clicking a row never takes the keyboard from the composer. A row that can't move refuses the
+/// drag before it starts: once a drag has begun, the table hides the row until the drag ends.
 private final class RecycledTable: NSTableView {
+    var canDrag: (Int) -> Bool = { _ in false }
+
     override var acceptsFirstResponder: Bool { false }
+
+    override func canDragRows(with rows: IndexSet, at point: NSPoint) -> Bool {
+        rows.allSatisfy(canDrag)
+    }
 
     override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool { true }
 }
