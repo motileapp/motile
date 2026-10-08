@@ -196,6 +196,7 @@ struct ComposerView: View {
     private func controls(compact: Bool) -> some View {
         HStack(spacing: 0) {
             modelMenu(compact: compact)
+            ComposerDivider()
             effortMenu
             accessMenu(compact: compact)
             typingArea
@@ -225,11 +226,11 @@ struct ComposerView: View {
         let current = store.composerModel
         let account = store.composerAccount
         let name = store.composerModelLabel
-        let margin = Self.margin(leading: 8)
+        let margin = Self.margin(leading: 8, trailing: 4)
         let logo = current.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         ActionMenu(
             compact && current != nil ? nil : name, picture: logo, help: current?.name ?? name, symbolSize: ControlSize.regular.symbol,
-            gap: 4, margin: margin
+            gap: 5, margin: margin
         ) {
             ForEach(store.composerChoices, id: \.account.id) { choices in
                 Section(choices.title) {
@@ -247,13 +248,14 @@ struct ComposerView: View {
 
     @ViewBuilder private var effortMenu: some View {
         if let model = store.composerModel, !model.efforts.isEmpty {
-            ActionMenu(Self.effortLabel(store.composerEffort ?? ""), margin: Self.margin()) {
+            ActionMenu(Self.effortLabel(store.composerEffort ?? ""), margin: Self.margin(leading: 4, trailing: 4)) {
                 ForEach(model.efforts, id: \.self) { effort in
                     choice(Self.effortLabel(effort), chosen: effort == store.composerEffort) {
                         store.setEffort(effort)
                     }
                 }
             }
+            ComposerDivider()
         }
     }
 
@@ -261,7 +263,8 @@ struct ComposerView: View {
         let label = store.composerPlan ? "Plan" : store.composerAccess.label
         return ActionMenu(
             compact ? nil : label, icon: store.composerPlan ? .clipboardList : store.composerAccess.symbol,
-            help: store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail, margin: Self.margin()
+            help: store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail,
+            symbolSize: ControlSize.small.symbol, gap: 5, margin: Self.margin(leading: 4)
         ) {
             ForEach(Access.allCases) { access in
                 choice(access.label, image: PlatformImage.symbol(access.symbol, size: 13), chosen: access == store.composerAccess) {

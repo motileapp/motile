@@ -79,7 +79,7 @@ struct ContextStrip: View {
                 }
                 .padding(.leading, 14)
                 .help("On \(server.name)")
-                divider
+                ComposerDivider()
                     .padding(.horizontal, 10)
             }
             part(project.name) {
@@ -90,7 +90,7 @@ struct ContextStrip: View {
             Spacer(minLength: 8)
             workspace
             if hasWorkspace, branch != nil {
-                divider
+                ComposerDivider()
             }
             branchPart
         }
@@ -173,12 +173,6 @@ struct ContextStrip: View {
         .padding(.horizontal, 13)
     }
 
-    private var divider: some View {
-        Rectangle()
-            .fill(Color.themeBorder)
-            .frame(width: 1, height: 14)
-    }
-
     private func part(_ title: String, @ViewBuilder icon: () -> some View) -> some View {
         HStack(spacing: 5) {
             icon()
@@ -199,6 +193,21 @@ struct ContextStrip: View {
     }
 }
 #endif
+
+/// The line between the parts of the composer's rows. It takes no room and no clicks, so the
+/// controls on either side of it reach its middle.
+struct ComposerDivider: View {
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 14)
+            .overlay {
+                Rectangle()
+                    .fill(Color.themeBorder)
+                    .frame(width: 1)
+            }
+            .allowsHitTesting(false)
+    }
+}
 
 /// The branches of the project's repository, to switch to one or make a new one. What is typed
 /// narrows the list, and becomes the name of a branch to make when it matches none. With `base`
