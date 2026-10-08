@@ -72,6 +72,10 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         coordinator.scroll(scroll, table: table, to: scrollTarget)
     }
 
+    static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
+        (scroll.documentView as? RecycledTable)?.cancelLift()
+    }
+
     /// Takes the room it is offered, so that SwiftUI doesn't measure the rows through Auto Layout.
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
         proposal.replacingUnspecifiedDimensions()
@@ -194,9 +198,9 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
 }
 
 /// Clicking a row never takes the keyboard from the composer. A row that moves is picked up by
-/// the table itself, not by a dragging session: it shrinks a little and floats over the window
-/// under the pointer, the rows it passes slide out of its way, and let go it slides into its
-/// place and grows back.
+/// the table itself, not by a dragging session: a picture of it shrinks a little and floats over
+/// the window under the pointer, the rows it passes slide out of its way, and let go it slides
+/// into its place and grows back.
 private final class RecycledTable: NSTableView {
     var canDrag: (Int) -> Bool = { _ in false }
     var clicked: (Int) -> Void = { _ in }
@@ -211,8 +215,7 @@ private final class RecycledTable: NSTableView {
 
     override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool { true }
 
-    /// Follows the pointer itself while a row that moves is pressed, as the cell it picks up
-    /// leaves the table.
+    /// Follows the pointer itself while a row that moves is pressed.
     override func mouseDown(with event: NSEvent) {
         guard lift == nil else { return }
         let start = convert(event.locationInWindow, from: nil)
@@ -258,9 +261,10 @@ private final class RecycledTable: NSTableView {
     }
 }
 
-/// A row on its way: where it was picked up, where it floats, and where it would land. Its cell
-/// floats over the window so that it goes wherever the pointer does, and the other rows move with
-/// transforms only, so the table's layout stays as it was until it lands.
+/// A row on its way: where it was picked up, where it floats, and where it would land. A picture
+/// of its cell floats over the window so that it goes wherever the pointer does, while the cell
+/// itself stays in the table, hidden, and the other rows move with transforms only, so the
+/// table's layout stays as it was until it lands.
 private final class RowLift {
     private static let scale: CGFloat = 0.96
     private let table: NSTableView
@@ -272,12 +276,12 @@ private final class RowLift {
     /// Where it can land, in the list without it.
     private let landings: ClosedRange<Int>
     private var index: Int
-    private let rowView: NSTableRowView
     private let cell: NSView
+    /// The cell's frame in its row.
     private let cellFrame: CGRect
-    /// Covers the window and carries the cell while it floats.
+    /// Covers the window and carries the picture while it floats.
     private let overlay = FloatOverlay()
-    /// The cell on its light.
+    /// The picture on its light.
     private let holder = NSView()
     private let light = NSView()
     /// Where the pointer is from the holder's origin.
@@ -287,10 +291,9 @@ private final class RowLift {
         table: NSTableView, row: Int, grip: NSPoint, light shape: (inset: NSEdgeInsets, radius: CGFloat, color: NSColor), movable: (Int) -> Bool
     ) {
         guard let content = table.window?.contentView, let rowView = table.rowView(atRow: row, makeIfNecessary: false),
-              let cell = rowView.view(atColumn: 0) as? NSView
+              let cell = rowView.view(atColumn: 0) as? NSView, let picture = Self.picture(of: cell)
         else { return nil }
         self.table = table
-        self.rowView = rowView
         self.cell = cell
         cellFrame = cell.frame
         from = row
@@ -304,7 +307,7 @@ private final class RowLift {
         overlay.autoresizingMask = [.width, .height]
         overlay.wantsLayer = true
         content.addSubview(overlay)
-        holder.frame = rowView.convert(cellFrame, to: overlay)
+        holder.frame = cell.convert(cell.bounds, to: overlay)
         holder.wantsLayer = true
         overlay.addSubview(holder)
         let pointer = table.convert(grip, to: overlay)
@@ -316,11 +319,22 @@ private final class RowLift {
         light.layer?.cornerRadius = shape.radius
         holder.effectiveAppearance.performAsCurrentDrawingAppearance { light.layer?.backgroundColor = shape.color.cgColor }
         holder.addSubview(light)
-        cell.removeFromSuperview()
-        cell.frame = holder.bounds
-        holder.addSubview(cell)
+        let image = NSImageView(image: picture)
+        image.frame = holder.bounds
+        image.imageScaling = .scaleNone
+        holder.addSubview(image)
+        cell.isHidden = true
         guard let layer = holder.layer else { return }
         animate(layer, to: Self.scaled(Self.scale, in: size), duration: 0.15)
+    }
+
+    /// The cell as it is drawn right now.
+    private static func picture(of cell: NSView) -> NSImage? {
+        guard let rep = cell.bitmapImageRepForCachingDisplay(in: cell.bounds) else { return nil }
+        cell.cacheDisplay(in: cell.bounds, to: rep)
+        let image = NSImage(size: cell.bounds.size)
+        image.addRepresentation(rep)
+        return image
     }
 
     /// Floats the row under the pointer, at `location` in the window, and parts the rows where it
@@ -375,11 +389,9 @@ private final class RowLift {
         }
     }
 
-    /// Puts the row back in its place and every row where it is laid out.
+    /// Shows the row in its place again and puts every row where it is laid out.
     func cancel() {
-        cell.removeFromSuperview()
-        cell.frame = cellFrame
-        rowView.addSubview(cell)
+        cell.isHidden = false
         overlay.removeFromSuperview()
         table.enumerateAvailableRowViews { rowView, _ in
             guard let layer = rowView.layer else { return }
