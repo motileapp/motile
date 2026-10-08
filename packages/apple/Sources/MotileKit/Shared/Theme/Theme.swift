@@ -174,6 +174,9 @@ enum ControlSize {
         }
     }
 
+    /// How much nearer its side a chevron stands than words do, so that the control's sides look alike.
+    var chevronOutset: CGFloat { self == .regular ? 2 : 0 }
+
     /// The room between its symbol and its words.
     var gap: CGFloat {
         switch self {

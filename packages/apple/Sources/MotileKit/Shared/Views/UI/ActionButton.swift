@@ -137,7 +137,7 @@ struct ControlLabel: View {
         }
         .frame(maxWidth: fills ? .infinity : nil, alignment: Alignment(horizontal: alignment, vertical: .center))
         .padding(.leading, wordless ? 0 : size.padding - (icon == nil ? 0 : size.symbolOutset) + pictureInset)
-        .padding(.trailing, wordless ? 0 : size.padding)
+        .padding(.trailing, wordless ? 0 : size.padding - (chevron ? size.chevronOutset : 0))
         .frame(minWidth: size.height)
         .frame(height: size.height)
         .overlay {
