@@ -638,7 +638,7 @@ private struct StackCard: View {
                             .foregroundStyle(Color.themeSecondary)
                             .monospacedDigit()
                         Text(layer.title)
-                            .font(.ui(size: 12.5, weight: layer.current ? .semibold : .regular))
+                            .font(.ui(size: 12.5))
                             .foregroundStyle(Color.themeText)
                             .lineLimit(1)
                         Spacer(minLength: 4)
