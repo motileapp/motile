@@ -59,7 +59,7 @@ struct SidebarScreen: View {
         .contentShape(Rectangle())
         .onTapGesture { Platform.endEditing() }
         .animation(.easeOut(duration: 0.15), value: store.undo)
-        .onChange(of: store.newThreadsStarted) {
+        .onChange(of: store.threadsShown) {
             guard underThread else { return }
             drawer.isOpen = false
         }
