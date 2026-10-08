@@ -88,8 +88,8 @@ struct UpdateLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: 7) {
-            TurningSymbol(symbol: symbol, size: 13, turning: turning)
+        HStack(spacing: 5) {
+            TurningSymbol(symbol: symbol, size: 12, turning: turning)
                 .foregroundStyle(tint)
             label
                 .font(.ui(size: 12, weight: .medium))
