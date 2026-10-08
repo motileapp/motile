@@ -176,8 +176,9 @@ final class AppStore {
     @ObservationIgnored private var awaitedFolder: (serverID: String, path: String)?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
-    /// Counts up when an empty draft is opened for a new thread.
-    private(set) var newThreadsStarted = 0
+    /// Counts up when a thread or a draft is brought to the front, which puts away a sidebar
+    /// that lies over it.
+    private(set) var threadsShown = 0
 
     // What the servers hold
     private(set) var servers: [Server] = []
@@ -1647,7 +1648,13 @@ final class AppStore {
     func startNewThread(in project: Project? = nil) {
         openEmptyDraft()
         if let project { setNewThreadProject(project.id) }
-        newThreadsStarted += 1
+        threadsShown += 1
+    }
+
+    /// Opens a thread or a draft and brings it to the front.
+    func show(_ selection: Selection) {
+        select(selection)
+        threadsShown += 1
     }
 
     /// Where the client goes when what was open is gone.

@@ -592,7 +592,7 @@ struct CommandPanel: View {
             let name = project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
             let state = thread.isDone ? "done" : thread.needsApproval ? "needs approval" : thread.running ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt)
             return PanelItem(id: "thread-\(thread.id)", title: thread.title, detail: "\(name) · \(state)", icon: .project(project)) {
-                store.select(.thread(thread.id))
+                store.show(.thread(thread.id))
             }
         }
     }
