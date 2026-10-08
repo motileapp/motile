@@ -16,7 +16,9 @@ pub struct Read {
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Section {
     pub agent: Agent,
-    /// Who is signed in, or the account's name when that isn't known.
+    /// The account's name on the server, when it has one.
+    pub name: Option<String>,
+    /// Who is signed in.
     pub account: Option<String>,
     pub plan: Option<String>,
     /// The servers with this login.
@@ -77,8 +79,16 @@ fn section(server: String, limits: AgentLimits, now: f64) -> Section {
         (None, false) => None,
     };
     let windows = limits.windows.iter().map(|window| row(window, limits.reset_credits, now)).collect();
-    let account = limits.account.or_else(|| Some(limits.account_name).filter(|name| !name.is_empty()));
-    Section { agent: limits.agent, account, plan: limits.plan, servers: vec![server], windows, note }
+    let name = Some(limits.account_name).filter(|name| !name.is_empty());
+    Section {
+        agent: limits.agent,
+        name,
+        account: limits.account,
+        plan: limits.plan,
+        servers: vec![server],
+        windows,
+        note,
+    }
 }
 
 fn row(window: &LimitWindow, reset_credits: u32, now: f64) -> Row {
@@ -190,12 +200,22 @@ mod tests {
     }
 
     #[test]
-    fn an_account_nobody_is_known_to_be_signed_in_to_goes_by_its_name() {
+    fn a_section_names_the_account_and_who_is_signed_in_to_it() {
+        let mut named = read("studio", Agent::Claude, Some("a@b.c"), vec![]);
+        named.limits.account_name = "Work".into();
         let mut router = read("studio", Agent::Claude, None, vec![]);
         router.limits.account_name = "Router".into();
-        let reads = vec![read("studio", Agent::Claude, Some("a@b.c"), vec![]), router];
-        let accounts: Vec<_> = sections(reads, 1000.0).into_iter().map(|section| section.account).collect();
-        assert_eq!(accounts, [Some("a@b.c".to_string()), Some("Router".to_string())]);
+        let reads = vec![named, router, read("box", Agent::Claude, Some("c@d.e"), vec![])];
+        let shown: Vec<_> =
+            sections(reads, 1000.0).into_iter().map(|section| (section.name, section.account)).collect();
+        assert_eq!(
+            shown,
+            [
+                (Some("Work".to_string()), Some("a@b.c".to_string())),
+                (Some("Router".to_string()), None),
+                (None, Some("c@d.e".to_string())),
+            ]
+        );
     }
 
     #[test]

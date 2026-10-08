@@ -1208,7 +1208,9 @@ struct UsageReport {
 struct LimitsReport {
     struct Section: Identifiable {
         let agent: Agent
-        /// Said when the agent has more than one login.
+        /// The account's name on the server.
+        let name: String?
+        /// Who is signed in.
         let account: String?
         let plan: String?
         let servers: [String]
@@ -1216,7 +1218,7 @@ struct LimitsReport {
         /// Why there are no windows.
         let note: String?
 
-        var id: String { "\(agent.rawValue)/\(account ?? servers.joined(separator: ","))/\(note ?? "")" }
+        var id: String { "\(agent.rawValue)/\(name ?? "")/\(account ?? servers.joined(separator: ","))/\(note ?? "")" }
     }
 
     struct Window: Identifiable {
@@ -1244,7 +1246,8 @@ struct LimitsReport {
     init(json: JSON) {
         sections = json.objects("sections").map { section in
             Section(
-                agent: Agent(rawValue: section.string("agent")) ?? .claude, account: section.optionalString("account"),
+                agent: Agent(rawValue: section.string("agent")) ?? .claude, name: section.optionalString("name"),
+                account: section.optionalString("account"),
                 plan: section.optionalString("plan"), servers: section.strings("servers"),
                 windows: section.objects("windows").map { window in
                     Window(

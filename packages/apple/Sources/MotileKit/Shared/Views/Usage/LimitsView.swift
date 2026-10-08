@@ -49,17 +49,29 @@ struct LimitsView: View {
             if let plan = section.plan {
                 Chip(plan)
             }
-            if let account = section.account {
-                Text(account)
-                    .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeSecondary)
-                    .truncationMode(.middle)
-            }
+            login(section)
+                .font(.ui(size: 12))
+                .foregroundStyle(Color.themeSecondary)
+                .truncationMode(.middle)
             Spacer(minLength: 0)
         }
         .lineLimit(1)
         .padding(.horizontal, 4)
         .padding(.bottom, 4)
+    }
+
+    /// "Work · a@b.c", or whichever of the two is known.
+    private func login(_ section: LimitsReport.Section) -> Text {
+        switch (section.name, section.account) {
+        case let (name?, account?):
+            return Text(name) + Text(" · ").foregroundStyle(Color.themeTertiary) + Text(account)
+        case let (name?, nil):
+            return Text(name)
+        case let (nil, account?):
+            return Text(account)
+        case (nil, nil):
+            return Text("")
+        }
     }
 }
 
