@@ -26,10 +26,10 @@ final class UsageModel {
 
         var label: String {
             switch self {
-            case .day: "24 hours"
-            case .week: "7 days"
-            case .month: "30 days"
-            case .quarter: "90 days"
+            case .day: "24h"
+            case .week: "7d"
+            case .month: "30d"
+            case .quarter: "90d"
             }
         }
 
@@ -57,7 +57,7 @@ final class UsageModel {
         }
     }
 
-    var period = Period(rawValue: UserDefaults.standard.string(forKey: periodKey) ?? "") ?? .week {
+    var period = Period(rawValue: UserDefaults.standard.string(forKey: periodKey) ?? "") ?? .month {
         didSet {
             UserDefaults.standard.set(period.rawValue, forKey: Self.periodKey)
             load()
