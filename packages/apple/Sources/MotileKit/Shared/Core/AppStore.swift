@@ -735,7 +735,12 @@ final class AppStore {
     /// The server the composer is talking to: the open thread's, or the open draft's project's.
     var composerServer: Server? {
         if let thread = selectedThread { return server(thread.serverID) }
-        return server(project(selectedDraft?.projectID)?.serverID) ?? servers.first
+        return selectedDraft.flatMap(server(of:)) ?? servers.first
+    }
+
+    /// The server a draft starts its thread on: its project's, or the first one.
+    private func server(of draft: ThreadDraft) -> Server? {
+        server(project(draft.projectID)?.serverID) ?? servers.first
     }
 
     /// The models the composer offers. An open thread on a server from before accounts stays
@@ -759,7 +764,7 @@ final class AppStore {
 
     /// The agent a draft starts with: its model's, or its server's first model's.
     func agent(of draft: ThreadDraft) -> Agent? {
-        guard let server = server(project(draft.projectID)?.serverID) ?? servers.first else { return nil }
+        guard let server = server(of: draft) else { return nil }
         return (server.models.first { $0.id == draft.model } ?? server.models.first)?.agent
     }
 
@@ -850,22 +855,26 @@ final class AppStore {
         return draft
     }
 
+    /// The model, account and effort are the server's, so each server keeps what was last
+    /// chosen on it. A draft whose server isn't known yet keeps what it had.
     private func applyLastSettings(to draft: inout ThreadDraft) {
-        draft.model = defaults.string(forKey: "new.model")
-        draft.agentAccount = defaults.string(forKey: "new.agentAccount")
-        draft.effort = defaults.string(forKey: "new.effort")
         draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
         draft.base = nil
+        guard let server = server(of: draft) else { return }
+        draft.model = defaults.string(forKey: "new.model-\(server.id)")
+        draft.agentAccount = defaults.string(forKey: "new.agentAccount-\(server.id)")
+        draft.effort = defaults.string(forKey: "new.effort-\(server.id)")
     }
 
     /// Has the next draft start with what was just chosen, and only that.
     private func rememberChoices(of draft: ThreadDraft, changedFrom before: ThreadDraft) {
         if draft.projectID != before.projectID { defaults.set(draft.projectID, forKey: "new.project") }
         if draft.worktree != before.worktree { defaults.set(draft.worktree == true, forKey: "new.worktree") }
-        if draft.model != before.model { defaults.set(draft.model, forKey: "new.model") }
-        if draft.agentAccount != before.agentAccount { defaults.set(draft.agentAccount, forKey: "new.agentAccount") }
-        if draft.effort != before.effort { defaults.set(draft.effort, forKey: "new.effort") }
         if draft.access != before.access { defaults.set(draft.access.rawValue, forKey: "new.access") }
+        guard let server = server(of: draft) else { return }
+        if draft.model != before.model { defaults.set(draft.model, forKey: "new.model-\(server.id)") }
+        if draft.agentAccount != before.agentAccount { defaults.set(draft.agentAccount, forKey: "new.agentAccount-\(server.id)") }
+        if draft.effort != before.effort { defaults.set(draft.effort, forKey: "new.effort-\(server.id)") }
     }
 
     /// A draft with nothing in it: the one that is already there, or a new one.
@@ -901,7 +910,19 @@ final class AppStore {
         guard ready, let draft = selectedDraft, project(draft.projectID) == nil, let first = projects.first ?? noProjects.first else {
             return
         }
-        updateDraft { $0.projectID = first.id }
+        moveDraft(to: first.id)
+    }
+
+    /// Puts the open draft in a project. On another server, it starts with that server's last
+    /// choices.
+    private func moveDraft(to projectID: String?) {
+        let from = selectedDraft.flatMap(server(of:))?.id
+        updateDraft { draft in
+            draft.projectID = projectID
+            draft.base = nil
+            guard server(of: draft)?.id != from else { return }
+            applyLastSettings(to: &draft)
+        }
     }
 
     /// Opens the thread that was open when the client was last closed, once it is known.
@@ -1668,10 +1689,7 @@ final class AppStore {
     }
 
     func setNewThreadProject(_ id: String?) {
-        updateDraft {
-            $0.projectID = id
-            $0.base = nil
-        }
+        moveDraft(to: id)
         uploadToComposerServer()
         readGit(fetch: true)
     }

@@ -1392,15 +1392,17 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
     assert_eq!(saved, Message::Ok);
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
-    let ids: Vec<&str> = server.agent_accounts.iter().map(|account| account.id.as_str()).collect();
-    assert_eq!(ids, ["claude", "codex", "claude-personal"]);
+    let names: Vec<&str> = server.agent_accounts.iter().map(|account| account.name.as_str()).collect();
+    assert_eq!(names, ["Default", "Default", "Personal"]);
+    let personal_id = server.agent_accounts[2].id.clone();
+    assert!(uuid::Uuid::parse_str(&personal_id).is_ok(), "{personal_id}");
     assert_eq!(server.agent_accounts[2].variables[0].value, "", "a sensitive value stays on the server");
     // The new account's agent is asked what models it runs, and the clients are told once it answered.
     let lists_for = |server: &ServerInfo, account: &str| {
         server.models.iter().any(|model| model.account == account && model.id == "claude-opus-5-5")
     };
     let mut server = server;
-    while !lists_for(&server, "claude-personal") {
+    while !lists_for(&server, &personal_id) {
         let Message::Server { server: told } = next(&mut list).await else { continue };
         server = told;
     }
@@ -1409,7 +1411,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
     let new_thread = NewThread {
         project_id: project.id,
         agent: Agent::Claude,
-        agent_account: Some("claude-personal".into()),
+        agent_account: Some(personal_id.clone()),
         model: None,
         effort: None,
         access: AgentAccess::Full,
@@ -1440,7 +1442,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
 
     let removed = connection.request(&Request::RemoveAgentAccount { id: "claude".into() }).await.unwrap();
     assert!(matches!(removed, Message::Error { .. }), "the default account stays");
-    let removed = connection.request(&Request::RemoveAgentAccount { id: "claude-personal".into() }).await.unwrap();
+    let removed = connection.request(&Request::RemoveAgentAccount { id: personal_id }).await.unwrap();
     assert_eq!(removed, Message::Ok);
 }
 

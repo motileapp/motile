@@ -114,25 +114,9 @@ pub fn checked(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::
         }
     }
     if account.id.is_empty() {
-        account.id = new_id(&account, accounts);
+        account.id = uuid::Uuid::new_v4().to_string();
     }
     Ok(account)
-}
-
-fn new_id(account: &AgentAccount, accounts: &[AgentAccount]) -> String {
-    let slug: String = account
-        .name
-        .to_lowercase()
-        .chars()
-        .map(|character| if character.is_ascii_alphanumeric() { character } else { '-' })
-        .collect();
-    let slug = slug.split('-').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("-");
-    let base = format!("{}-{}", default_id(account.agent), if slug.is_empty() { "account" } else { &slug });
-    let taken = |id: &str| accounts.iter().any(|account| account.id == id);
-    (1..)
-        .map(|number| if number == 1 { base.clone() } else { format!("{base}-{number}") })
-        .find(|id| !taken(id))
-        .unwrap_or(base)
 }
 
 fn agent_name(agent: Agent) -> &'static str {
@@ -277,15 +261,15 @@ mod tests {
     }
 
     #[test]
-    fn a_new_account_is_named_by_its_agent_and_name() {
+    fn a_new_account_gets_an_id_of_its_own_and_a_kept_one_keeps_it() {
         let accounts = with_defaults(vec![account("claude-personal", Agent::Claude, "Personal", "~/.a")]);
         let new = checked(account("", Agent::Claude, "  Work Plan ", "~/.claude-work/"), &accounts).unwrap();
-        assert_eq!(
-            (new.id.as_str(), new.name.as_str(), new.folder.as_str()),
-            ("claude-work-plan", "Work Plan", "~/.claude-work")
-        );
+        assert_eq!((new.name.as_str(), new.folder.as_str()), ("Work Plan", "~/.claude-work"));
+        assert!(uuid::Uuid::parse_str(&new.id).is_ok(), "{}", new.id);
         let again = checked(account("", Agent::Codex, "Personal", "~/.codex-personal"), &accounts).unwrap();
-        assert_eq!(again.id, "codex-personal");
+        assert_ne!(again.id, new.id);
+        let kept = checked(account("claude-personal", Agent::Claude, "Renamed", "~/.a"), &accounts).unwrap();
+        assert_eq!(kept.id, "claude-personal");
     }
 
     #[test]
