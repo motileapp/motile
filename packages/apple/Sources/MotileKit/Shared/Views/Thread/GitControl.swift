@@ -361,11 +361,12 @@ struct GitNoticeView: View {
 
     private static let outputFont = PlatformFont.uiMono(11.5)
     private static let outputPadding: CGFloat = scaled(8)
-    private static let outputHeight = (outputFont.textLineHeight + 2) * 10 + outputPadding * 2
+    /// Eight lines of output and the room around them.
+    private static let outputHeight = (outputFont.textLineHeight + 2) * 8 + outputPadding * 2
 
     /// What git printed, scrolled to its end, where a hook says what it found.
     private func output(_ text: String) -> some View {
-        FadingScroll(maxHeight: Self.outputHeight, anchor: .bottom) {
+        FadingScroll(maxHeight: Self.outputHeight, anchor: .bottom, padding: Self.outputPadding) {
             Text(text)
                 .font(.ui(size: 11.5, design: .monospaced))
                 .foregroundStyle(Color.themeSecondary)
@@ -373,7 +374,6 @@ struct GitNoticeView: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(Self.outputPadding)
         }
         .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay {
