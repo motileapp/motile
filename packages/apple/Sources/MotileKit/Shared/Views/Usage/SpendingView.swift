@@ -121,7 +121,7 @@ struct SpendingView: View {
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 7) {
                 Circle()
-                    .fill(Self.color(of: series.agent))
+                    .fill(series.agent.color)
                     .frame(width: 8, height: 8)
                 AgentIcon(agent: series.agent, size: 14)
                 Text(series.agent.name)
@@ -156,7 +156,7 @@ struct SpendingView: View {
             ForEach(report.agents) { series in
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(Self.color(of: series.agent))
+                        .fill(series.agent.color)
                         .frame(width: 8, height: 8)
                     Text(series.agent.name)
                         .foregroundStyle(Color.themeForeground)
@@ -198,7 +198,7 @@ struct SpendingView: View {
                 }
             }
             .chartForegroundStyleScale(
-                domain: report.agents.map(\.agent.name), range: report.agents.map { Self.color(of: $0.agent) }
+                domain: report.agents.map(\.agent.name), range: report.agents.map { $0.agent.color }
             )
             .chartLegend(.hidden)
             .chartXSelection(value: $pointed)
@@ -255,10 +255,6 @@ struct SpendingView: View {
         }
     }
 
-    static func color(of agent: Agent) -> Color {
-        agent == .claude ? .themeClaude : .themeOpenai
-    }
-
     static func cost(_ value: Double) -> String {
         if value > 0 && value < 0.01 { return "<" + 0.01.formatted(.currency(code: "USD")) }
         return value.formatted(.currency(code: "USD"))
@@ -308,7 +304,7 @@ private struct UsageLineRow: View {
         HStack(spacing: Self.spacing) {
             if let agent = line.agent {
                 Circle()
-                    .fill(SpendingView.color(of: agent))
+                    .fill(agent.color)
                     .frame(width: Self.dotWidth, height: Self.dotWidth)
             }
             Text(line.name)

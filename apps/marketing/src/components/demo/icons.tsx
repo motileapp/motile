@@ -35,7 +35,7 @@ export function AgentIcon({
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className="text-foreground"
+      className={agent === "claude" ? "text-claude" : "text-openai"}
       aria-hidden="true"
     >
       {agent === "claude" ? (
