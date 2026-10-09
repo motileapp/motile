@@ -206,7 +206,7 @@ struct ComposerDivider: View {
             .frame(width: 0, height: 14)
             .overlay {
                 Rectangle()
-                    .fill(Color.themeBorder)
+                    .fill(Color.themeBorderInput)
                     .frame(width: 1)
             }
             .allowsHitTesting(false)
@@ -230,7 +230,6 @@ struct BranchPicker: View {
     private static let listPadding: CGFloat = 8
     private static let maxListHeight: CGFloat = Platform.scale > 1 ? 420 : 300
     private static let placeholderCount = 5
-    private static let dividerColor = Color.themeBorder
 
     private enum Choice: Identifiable {
         case branch(Branch)
@@ -300,12 +299,12 @@ struct BranchPicker: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 38)
-            ThemeDivider(color: Self.dividerColor)
+            ThemeDivider()
             #endif
             list(choices)
             let note: String? = working ? "An agent is working in this project. Switch when it has finished." : problem
             if let note {
-                ThemeDivider(color: Self.dividerColor)
+                ThemeDivider()
                 Text(note)
                     .font(.ui(size: 11.5))
                     .foregroundStyle(working ? Color.themeMutedForeground : Color.themeDestructive)

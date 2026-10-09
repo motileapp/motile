@@ -279,6 +279,15 @@ enum Surface {
 
     var color: Color { Color(platform: platform) }
 
+    /// The surface's edge, which the lines across it share.
+    var border: Color {
+        switch self {
+        case .background, .secondary: .themeBorder
+        case .card: .themeBorderCard
+        case .popover: .themeBorderPopover
+        }
+    }
+
     func platform(_ layer: Layer) -> PlatformColor {
         switch self {
         case .background:

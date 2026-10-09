@@ -48,9 +48,9 @@ struct CommandPanel: View {
     private var panel: some View {
         VStack(spacing: 0) {
             header
-            ThemeDivider(color: .themeBorder)
+            ThemeDivider()
             results(page)
-            ThemeDivider(color: .themeBorder)
+            ThemeDivider()
             hints
         }
         .frame(width: 620)
