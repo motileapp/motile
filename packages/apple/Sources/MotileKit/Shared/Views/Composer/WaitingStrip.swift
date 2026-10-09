@@ -8,13 +8,13 @@ struct WaitingStrip: View {
     let count: Int
 
     static let padding: CGFloat = 12
-    /// Four lines of a command, after which it scrolls.
-    private static let targetHeight: CGFloat = scaled(66)
+    private static let targetFont = PlatformFont.uiMono(12)
+    /// Eight lines of a command and the room under them, after which it scrolls to the strip's edge.
+    private static let targetHeight = targetFont.textLineHeight * 8 + padding
 
     var body: some View {
         content
             .font(.ui(size: 12.5))
-            .padding(Self.padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(ComposerStrip(edge: .top, height: nil))
     }
@@ -25,11 +25,12 @@ struct WaitingStrip: View {
         } else {
             QuestionsView(approval: approval)
                 .id(approval.id)
+                .padding(Self.padding)
         }
     }
 
     private var call: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 WaitingTitle(approval.title, symbol: approval.symbol, place: count > 1 ? "1 of \(count)" : nil)
                     .foregroundStyle(Color.themeWarning)
@@ -37,15 +38,17 @@ struct WaitingStrip: View {
                 ActionButton(approval.refuseLabel, size: .small) { store.answer(approval, allow: false) }
                 ActionButton(approval.allowLabel, variant: .warning, size: .small) { store.answer(approval, allow: true) }
             }
+            .padding([.top, .horizontal], Self.padding)
+            .padding(.bottom, approval.target.isEmpty ? Self.padding : 8)
             if !approval.target.isEmpty {
-                ScrollView {
+                FadingScroll(maxHeight: Self.targetHeight) {
                     Text(approval.target)
                         .font(.ui(size: 12, design: .monospaced))
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding([.bottom, .horizontal], Self.padding)
                 }
-                .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: Self.targetHeight)
                 .fixedSize(horizontal: false, vertical: true)
             }
         }
