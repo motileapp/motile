@@ -50,6 +50,7 @@
   --color-border: var(--border);
   --color-border-card: var(--border-card);
   --color-border-input: var(--border-input);
+  --color-border-popover: var(--border-popover);
   --color-input: var(--input);
   --color-composer: var(--composer);
   --color-ring: var(--ring);
