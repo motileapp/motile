@@ -257,11 +257,12 @@ struct PanelTabChip: View {
         .button(
             .highlight(
                 selected: active, lit: hovering,
-                inset: EdgeInsets(top: Self.reach, leading: Self.margin, bottom: Self.reach, trailing: Self.margin), faded: true)
+                inset: EdgeInsets(top: Self.reach, leading: Self.margin, bottom: Self.reach, trailing: Self.margin), faded: true,
+                small: true)
         ) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
             ActionButton(icon: .x, help: "Close (⌘W)", size: .small, symbolSize: 11) { panel.close(tab) }
-                .environment(\.row, active ? .rowSelectedLit : .row)
+                .environment(\.row, active ? .controlLit : .control)
                 .padding(.trailing, Self.closeMargin + Self.margin)
                 .opacity(hovering || active ? 1 : 0)
         }
