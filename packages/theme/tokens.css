@@ -91,7 +91,7 @@
   --card-accent: #1e1f26;
   --popover: #191a1f;
   --popover-accent: #222226;
-  --foreground: #dcdee4;
+  --foreground: #d0d2d9;
   --emphasized-foreground: #ffffff;
   --muted-foreground: #9a9eab;
   --muted-stronger-foreground: #646875;
@@ -115,7 +115,7 @@
   --border-input: #1a1b21;
   --input: #111217;
   --composer: #111217;
-  --ring: #dcdee4;
+  --ring: #d0d2d9;
   --overlay: #000000;
   --shadow: #000000;
   --chart-1: #4f7cff;
@@ -124,9 +124,9 @@
   --chart-4: #ba93fb;
   --chart-5: #38bdf8;
   --claude: #d97757;
-  --openai: #dcdee4;
-  --google: #dcdee4;
-  --linear: #dcdee4;
+  --openai: #d0d2d9;
+  --google: #d0d2d9;
+  --linear: #d0d2d9;
   --window-close: #ff5f57;
   --window-minimize: #febc2e;
   --window-zoom: #28c840;
