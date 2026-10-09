@@ -83,7 +83,7 @@ struct SpendingView: View {
                     let written = measure == .cost ? Self.cost(report.writingCostUSD) : Self.count(report.writingTokens)
                     Text("\(written) of \(measure == .cost ? "it" : "them") for titles, branch names, commit messages and pull requests")
                         .font(.caption)
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if measure == .cost && report.unpricedTokens > 0 {
