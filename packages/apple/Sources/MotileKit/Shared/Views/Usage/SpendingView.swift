@@ -185,12 +185,11 @@ struct SpendingView: View {
                         AreaMark(x: .value("Time", start), y: .value("Spent", value(of: series, at: index)), stacking: .unstacked)
                             .foregroundStyle(by: .value("Agent", series.agent.name))
                             .interpolationMethod(.monotone)
-                            .opacity(Opacity.colorTint.value(for: scheme))
+                            .opacity(Opacity.colorTintChart.value(for: scheme))
                         LineMark(x: .value("Time", start), y: .value("Spent", value(of: series, at: index)))
                             .foregroundStyle(by: .value("Agent", series.agent.name))
                             .interpolationMethod(.monotone)
                             .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                            .opacity(Opacity.colorTintChart.value(for: scheme))
                     }
                 }
                 if let index = pointedIndex {
