@@ -64,8 +64,7 @@ struct CheckMenu: View {
         VStack(spacing: 0) {
             ForEach(groups.indices, id: \.self) { index in
                 if index > 0 {
-                    Color.themeBorder
-                        .frame(height: 1)
+                    ThemeDivider()
                         .padding(.horizontal, -Self.padding)
                         .padding(.vertical, Self.padding)
                 }

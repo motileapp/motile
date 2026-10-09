@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// A horizontal line in the colour of the client's other borders.
+/// A line across the surface it lies on, in that surface's border.
 struct ThemeDivider: View {
-    var color = Color.themeBorder
+    var color: Color?
+    @Environment(\.surface) private var surface
 
     var body: some View {
         Rectangle()
-            .fill(color)
+            .fill(color ?? surface.border)
             .frame(height: 1)
     }
 }

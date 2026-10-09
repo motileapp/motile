@@ -106,9 +106,9 @@ export function Composer({
           <Control icon={<AgentIcon agent={thread.agent} size={14} />}>
             {thread.model}
           </Control>
-          <span className="mx-1 h-3.5 w-px bg-border" />
+          <span className="mx-1 h-3.5 w-px bg-border-input" />
           <Control>High</Control>
-          <span className="mx-1 h-3.5 w-px bg-border" />
+          <span className="mx-1 h-3.5 w-px bg-border-input" />
           <Control
             icon={
               thread.approval ? (
@@ -141,7 +141,7 @@ export function Composer({
           <ServerIcon className="size-[11px]" />
           {thread.server.name}
         </span>
-        <span className="mx-2.5 h-3 w-px bg-border" />
+        <span className="mx-2.5 h-3 w-px bg-border-input" />
         <span className="flex items-center gap-1.5">
           <ProjectIcon project={thread.project} size={13} />
           {thread.project.name}
@@ -154,7 +154,7 @@ export function Composer({
           )}
           {thread.worktree ? "Worktree" : "Local checkout"}
         </span>
-        <span className="ml-2.5 h-3 w-px bg-border" />
+        <span className="ml-2.5 h-3 w-px bg-border-input" />
         <span className="mr-2 flex items-center">
           <Control icon={<GitBranchIcon className="size-3.5" />} plain={!!thread.worktree}>
             {thread.branch}
