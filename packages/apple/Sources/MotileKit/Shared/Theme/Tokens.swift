@@ -182,7 +182,7 @@ enum ShadowSize {
 
     var down: CGFloat {
         switch self {
-        case .sm: 1
+        case .sm: 2
         case .md: 4
         case .lg: 8
         case .xl: 16
@@ -191,7 +191,7 @@ enum ShadowSize {
 
     var blur: CGFloat {
         switch self {
-        case .sm: 2
+        case .sm: 6
         case .md: 12
         case .lg: 24
         case .xl: 40
