@@ -10,7 +10,7 @@ struct ComposerStrip: ViewModifier {
 
     static let radius = Radius.lg
     /// The room between a control and the strip's visible edges.
-    static let inset: CGFloat = 4
+    static let inset: CGFloat = 3
     static let height = ControlSize.regular.height + inset * 2
     /// The room around a control in a strip, which is the control's to click.
     static let margin = EdgeInsets(top: inset, leading: 4, bottom: inset, trailing: 8)

@@ -209,7 +209,7 @@ function Strip({
         "mx-[22px] border border-border-input bg-composer text-[12px] text-muted-foreground",
         tall
           ? "p-3 text-[12.5px]"
-          : "flex h-[37px] items-center",
+          : "flex h-[35px] items-center",
         edge === "top"
           ? "-mb-px rounded-t-lg pb-px text-foreground"
           : "-mt-px rounded-b-lg pt-px"
