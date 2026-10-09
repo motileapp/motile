@@ -108,7 +108,7 @@ def answer_control(message):
     if subtype == "initialize":
         answer = {"account": {"email": "demo@motile.app", "subscriptionType": "Claude Max"}}
     elif subtype == "get_usage":
-        limits = [claude_limit("session", 34, 3.5), claude_limit("weekly", 61, 98), claude_limit("weekly", 82, 98, "Fable")]
+        limits = [claude_limit("session", 3, 3.5), claude_limit("weekly", 61, 98), claude_limit("weekly", 97, 98, "Fable")]
         answer = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {"limits": limits}}
     else:
         return

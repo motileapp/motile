@@ -1226,13 +1226,17 @@ struct LimitsReport {
             case ahead, on, under
         }
 
+        enum Tone: String {
+            case success, pending, warning
+        }
+
         let label: String
         /// Between 0 and 100.
         let usedPercent: Double
         let used: String
         let resetsIn: String?
         let pace: Pace?
-        let warning: Bool
+        let tone: Tone
         let resetCredits: Int
 
         var id: String { label }
@@ -1253,7 +1257,8 @@ struct LimitsReport {
                     Window(
                         label: window.string("label"), usedPercent: window.double("used_percent"), used: window.string("used"),
                         resetsIn: window.optionalString("resets_in"), pace: window.optionalString("pace").flatMap(Window.Pace.init),
-                        warning: window.bool("warning"), resetCredits: window.int("reset_credits"))
+                        tone: Window.Tone(rawValue: window.string("tone")) ?? .success,
+                        resetCredits: window.int("reset_credits"))
                 },
                 note: section.optionalString("note"))
         }
