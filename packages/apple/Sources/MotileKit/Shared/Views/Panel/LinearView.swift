@@ -29,14 +29,14 @@ private struct LinearConnect: View {
         let linear = store.linear
         VStack(spacing: 16) {
             Image(.linear, size: 28)
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
             VStack(spacing: 6) {
                 Text("Connect Linear")
                     .font(.ui(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                 Text("See your issues and hand them to your agents. The connection is kept on your server.")
                     .font(.ui(size: 12.5))
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                     .multilineTextAlignment(.center)
             }
             ActionButton("Connect Linear", variant: .primary, pending: linear.connecting == target.serverID) {
@@ -45,7 +45,7 @@ private struct LinearConnect: View {
             if let error = linear.error {
                 Text(error)
                     .font(.ui(size: 12.5))
-                    .foregroundStyle(Color.themeDestructive)
+                    .foregroundStyle(Color.themeDanger)
                     .multilineTextAlignment(.center)
                     .textSelection(.enabled)
             }
@@ -247,9 +247,9 @@ private struct LinearInitials: View {
     var body: some View {
         Text(verbatim: initials)
             .font(.ui(size: 9, weight: .semibold))
-            .foregroundStyle(Color.themeMutedForeground)
+            .foregroundStyle(Color.themeSecondary)
             .frame(width: scaled(18), height: scaled(18))
-            .background(Color.themeAccent, in: Circle())
+            .background(Color.themeBackgroundTertiary, in: Circle())
             .help(name)
     }
 }
@@ -276,7 +276,7 @@ struct LinearIssueSurface: View {
             PanelBar {
                 Text(verbatim: page.value?.row.identifier ?? "")
                     .font(.ui(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                 Spacer(minLength: 4)
                 if let url = page.value?.row.url {
                     ActionButton(icon: .squareArrowOutUpRight, help: "Open in Linear") { Platform.open(url) }
@@ -305,7 +305,7 @@ struct LinearIssueSurface: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text(page.row.title)
                     .font(.ui(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .textSelection(.enabled)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) { properties(page) }
@@ -324,7 +324,7 @@ struct LinearIssueSurface: View {
                 if page.description.isEmpty {
                     Text("No description.")
                         .font(.ui(size: 12.5))
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                 } else {
                     PullRequestTextView(blocks: page.description)
                 }
@@ -334,8 +334,8 @@ struct LinearIssueSurface: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 6) {
                                 LinearInitials(initials: comment.initials, name: comment.author)
-                                (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
-                                    + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeMutedMoreForeground))
+                                (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
+                                    + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeTertiary))
                                     .font(.ui(size: 12.5))
                             }
                             PullRequestTextView(blocks: comment.body)
@@ -413,7 +413,7 @@ private struct LinearNewIssue: View {
             if let error = linear.error {
                 Text(error)
                     .font(.ui(size: 12.5))
-                    .foregroundStyle(Color.themeDestructive)
+                    .foregroundStyle(Color.themeDanger)
             }
             HStack(spacing: 8) {
                 Spacer()

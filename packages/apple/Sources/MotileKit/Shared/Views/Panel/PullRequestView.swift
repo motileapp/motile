@@ -46,19 +46,19 @@ struct PullRequestSurface: View {
                 .foregroundStyle(page.state.color)
             Text(verbatim: "#\(page.number)")
                 .font(.ui(size: 12.5, weight: .medium))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
                 .monospacedDigit()
                 .padding(.leading, 2)
             if page.number == target.pullRequest, store.selectedThread?.watching == true {
                 Image(.eye, size: 12)
-                    .foregroundStyle(Color.themePrimary)
+                    .foregroundStyle(Color.themeLink)
                     .padding(.leading, 4)
                     .help("The agent hears when its checks finish, someone comments or it conflicts")
             }
         } else {
             Text("Pull Request")
                 .font(.ui(size: 12.5, weight: .medium))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
         }
         Spacer(minLength: 4)
         if let page, let url = page.url {
@@ -92,10 +92,10 @@ private struct NoPullRequest: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(.gitPullRequest, size: 22)
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
             Text("This branch has no pull request yet.")
                 .font(.ui(size: 13))
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
             HStack(spacing: 8) {
                 if let project = store.gitProject, let create = project.gitControl?.menu.first(where: { $0.action == "create_pr" }),
                     create.reason == nil
@@ -238,7 +238,7 @@ private struct PullRequestPageView: View {
                 } else {
                     Text(page.title)
                         .font(.ui(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.themeForeground)
+                        .foregroundStyle(Color.themeText)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -250,13 +250,13 @@ private struct PullRequestPageView: View {
                 Chip(page.state.title, icon: page.state.symbol, tone: page.state.color)
                 Text(page.byline)
                     .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 6) {
                 BranchName(name: page.base)
                 Image(.arrowLeft, size: 10)
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                 BranchName(name: page.head)
                 Spacer(minLength: 8)
                 Button {
@@ -264,9 +264,9 @@ private struct PullRequestPageView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(.diff, size: 11)
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
                         Text(page.files == 1 ? "1 file" : "\(page.files) files")
-                            .foregroundStyle(Color.themeForeground)
+                            .foregroundStyle(Color.themeText)
                         if page.additions + page.deletions > 0 {
                             Text(AttributedString(LineCountText.text(added: page.additions, removed: page.deletions)))
                         }
@@ -284,10 +284,10 @@ private struct PullRequestPageView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(.layers, size: 11)
-                            .foregroundStyle(Color.themeMutedForeground)
-                        (Text("Stacked on ").foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
+                        (Text("Stacked on ").foregroundStyle(Color.themeSecondary)
                             + Text(verbatim: "#\(below.number) ").foregroundStyle(below.state.color)
-                            + Text(below.title).foregroundStyle(Color.themeForeground))
+                            + Text(below.title).foregroundStyle(Color.themeText))
                             .lineLimit(1)
                     }
                     .font(.ui(size: 12))
@@ -402,10 +402,10 @@ private struct PullRequestPageView: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text("Activity")
                 .font(.ui(size: 13, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
             Text("Oldest first")
                 .font(.ui(size: 12))
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
         }
         .padding(.top, 6)
     }
@@ -505,12 +505,12 @@ private struct PeopleRow<Chips: View>: View {
         HStack(alignment: .center, spacing: 8) {
             Text(title)
                 .font(.ui(size: 12))
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
                 .frame(width: 70, alignment: .leading)
             if let empty {
                 Text(empty)
                     .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
             } else {
                 FlowRow(spacing: 5) { chips }
             }
@@ -572,7 +572,7 @@ private struct PendingComments: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(comments.count == 1 ? "1 comment on a line goes with your review" : "\(comments.count) comments on lines go with your review")
                 .font(.ui(size: 12, weight: .medium))
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.horizontal, 12)
                 .padding(.top, 9)
                 .padding(.bottom, 4)
@@ -580,10 +580,10 @@ private struct PendingComments: View {
                 HStack(alignment: .top, spacing: 8) {
                     Text(verbatim: "\(URL(fileURLWithPath: comment.path).lastPathComponent):\(comment.line)")
                         .font(.ui(size: 11.5, design: .monospaced))
-                        .foregroundStyle(Color.themePrimary)
+                        .foregroundStyle(Color.themeLink)
                     Text(comment.body)
                         .font(.ui(size: 12.5))
-                        .foregroundStyle(Color.themeForeground)
+                        .foregroundStyle(Color.themeText)
                         .lineLimit(2)
                     Spacer(minLength: 4)
                     ActionButton(icon: .x, help: "Take it back", size: .small) { remove(comment) }
@@ -607,13 +607,13 @@ private struct StackCard: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Image(.layers, size: 12)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                 Text("Stack")
                     .font(.ui(size: 13, weight: .medium))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                 Text("\(stack.layers.count) pull requests onto \(stack.base)")
                     .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                 Spacer(minLength: 4)
                 if let url = stack.url {
                     ActionButton("Open on GitHub", help: "A stack merges on GitHub, bottom first", variant: .link, size: .small) {
@@ -635,17 +635,17 @@ private struct StackCard: View {
                             .frame(width: 16)
                         Text(verbatim: "#\(layer.number)")
                             .font(.ui(size: 12, weight: .medium))
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
                             .monospacedDigit()
                         Text(layer.title)
                             .font(.ui(size: 12.5))
-                            .foregroundStyle(Color.themeForeground)
+                            .foregroundStyle(Color.themeText)
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         if layer.current {
                             Text("This one")
                                 .font(.ui(size: 11.5))
-                                .foregroundStyle(Color.themeMutedMoreForeground)
+                                .foregroundStyle(Color.themeTertiary)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -757,17 +757,17 @@ private struct StatusRow: View {
                 HStack(spacing: 6) {
                     Text(status.title)
                         .font(.ui(size: 13, weight: .medium))
-                        .foregroundStyle(Color.themeForeground)
+                        .foregroundStyle(Color.themeText)
                     if let at = status.at {
                         Text(Time.ago(at))
                             .font(.ui(size: 12))
-                            .foregroundStyle(Color.themeMutedMoreForeground)
+                            .foregroundStyle(Color.themeTertiary)
                     }
                 }
                 if let detail = status.detail {
                     Text(detail)
                         .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !status.buttons.isEmpty {
@@ -816,20 +816,20 @@ private struct CheckRow: View {
                 .frame(width: 18)
             Text(check.name)
                 .font(.ui(size: 12.5))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
                 .lineLimit(1)
                 .help(check.description ?? check.name)
             if let workflow = check.workflow {
                 Text(workflow)
                     .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                     .lineLimit(1)
                     .layoutPriority(-1)
             }
             Spacer(minLength: 6)
             Text(check.label)
                 .font(.ui(size: 12))
-                .foregroundStyle(check.tone == .neutral ? Color.themeMutedMoreForeground : check.tone.color)
+                .foregroundStyle(check.tone == .neutral ? Color.themeTertiary : check.tone.color)
             if let fix = check.fix {
                 ActionButton("Fix", help: "Have the agent fix it", variant: .link, size: .small) { store.handOff(fix) }
             }

@@ -27,7 +27,7 @@ struct MediaViewer: View {
     var body: some View {
         let item = viewing.item
         ZStack {
-            Color.themeOverlay
+            Color.black.opacity(0.86)
                 .ignoresSafeArea()
                 .onTapGesture { store.closeViewer() }
             content(item)
@@ -47,14 +47,14 @@ struct MediaViewer: View {
                     .truncationMode(.middle)
                 if viewing.items.count > 1 {
                     Text("\(viewing.index + 1) of \(viewing.items.count)")
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(.white.opacity(0.6))
                 }
             }
             .font(.ui(size: 13, weight: .medium))
-            .foregroundStyle(Color.themeForeground)
+            .foregroundStyle(.white)
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .background(Color.themeOverlay, in: Capsule())
+            .background(.black.opacity(0.5), in: Capsule())
             .padding(.top, 14)
             .padding(.horizontal, 80)
         }
@@ -86,7 +86,6 @@ struct MediaViewer: View {
             keys = nil
             pause()
         }
-        .environment(\.colorScheme, .dark)
     }
 
     @ViewBuilder private func content(_ item: ViewedMedia) -> some View {
@@ -107,7 +106,7 @@ struct MediaViewer: View {
                 .overlay {
                     if !playerReady {
                         Spinner(size: ControlSize.large.symbol)
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(.white.opacity(0.7))
                     }
                 }
         case nil:
@@ -121,7 +120,7 @@ struct MediaViewer: View {
                 }
             }
             .font(.ui(size: 13))
-            .foregroundStyle(Color.themeMutedForeground)
+            .foregroundStyle(.white.opacity(0.7))
         }
     }
 

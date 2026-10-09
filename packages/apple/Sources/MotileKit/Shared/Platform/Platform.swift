@@ -198,19 +198,6 @@ extension PlatformColor {
     }
 }
 
-extension PlatformColor {
-    /// The colour as it is in the dark, for what is drawn over a picture.
-    var inDark: PlatformColor {
-        #if os(macOS)
-        var resolved = self
-        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance { resolved = usingColorSpace(.sRGB) ?? self }
-        return resolved
-        #else
-        resolvedColor(with: UITraitCollection(userInterfaceStyle: .dark))
-        #endif
-    }
-}
-
 extension Color {
     init(platform color: PlatformColor) {
         #if os(macOS)

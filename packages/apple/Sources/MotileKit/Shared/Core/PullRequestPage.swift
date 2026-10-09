@@ -257,7 +257,7 @@ struct PullRequestPage {
 
     /// A label's colour, from GitHub's hex.
     static func color(hex: String) -> Color {
-        guard let value = UInt32(hex, radix: 16) else { return .themeMutedMoreForeground }
+        let value = UInt32(hex, radix: 16) ?? 0x888888
         return Color(platform: Theme.hex(value))
     }
 

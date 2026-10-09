@@ -21,14 +21,14 @@ struct QuestionsView: View {
                 approval.title, symbol: .messageCircleQuestionMark,
                 place: approval.questions.count > 1 ? "\(index + 1) of \(approval.questions.count)" : nil
             )
-            .foregroundStyle(Color.themeMutedForeground)
+            .foregroundStyle(Color.themeSecondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(question.text)
                     .font(.ui(size: 13, weight: .medium))
                     .fixedSize(horizontal: false, vertical: true)
                 if question.multiple {
                     Text("Choose any that apply")
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                 }
             }
             VStack(spacing: 2) {
@@ -67,7 +67,7 @@ struct QuestionsView: View {
                     if !option.detail.isEmpty {
                         Text(option.detail)
                             .font(.ui(size: 11.5))
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

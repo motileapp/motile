@@ -33,19 +33,19 @@ struct LineCommentSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Image(FileSymbol.symbol(for: commented.path), size: 12)
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                     Text(commented.path)
                         .font(.ui(size: 13, weight: .semibold))
                         .lineLimit(1)
                         .truncationMode(.head)
                     Text("line \(commented.line)")
                         .font(.ui(size: 12.5))
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                         .fixedSize()
                 }
                 Text(commented.code.isEmpty ? " " : commented.code)
                     .font(.ui(size: 12, design: .monospaced))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .lineLimit(3)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
@@ -58,8 +58,8 @@ struct LineCommentSheet: View {
                         ForEach(threads) { thread in
                             ForEach(thread.comments) { comment in
                                 VStack(alignment: .leading, spacing: 4) {
-                                    (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
-                                        + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeMutedMoreForeground))
+                                    (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
+                                        + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeTertiary))
                                         .font(.ui(size: 12.5))
                                     PullRequestTextView(blocks: comment.body)
                                 }

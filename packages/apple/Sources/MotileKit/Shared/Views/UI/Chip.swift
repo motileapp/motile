@@ -21,11 +21,6 @@ struct Chip: View {
         self.monospaced = monospaced
     }
 
-    private var fill: AnyShapeStyle {
-        guard let tone else { return AnyShapeStyle(surface.boxColor) }
-        return AnyShapeStyle(tone.tinted())
-    }
-
     var body: some View {
         HStack(spacing: 5) {
             if let dot {
@@ -40,13 +35,13 @@ struct Chip: View {
                 .font(.ui(size: 11.5, weight: .medium, design: monospaced ? .monospaced : .default))
                 .lineLimit(1)
         }
-        .foregroundStyle(dot == nil ? tone ?? Color.themeForeground : Color.themeForeground)
+        .foregroundStyle(dot == nil ? tone ?? Color.themeText : Color.themeText)
         .padding(.horizontal, 7)
         .frame(height: Self.height)
-        .background(fill, in: Capsule())
+        .background(tone?.opacity(0.14) ?? surface.next.color, in: Capsule())
         .overlay {
             if tone == nil {
-                Capsule().strokeBorder(Color.themeBorderCard, lineWidth: 1)
+                Capsule().strokeBorder(surface.border, lineWidth: 1)
             }
         }
     }

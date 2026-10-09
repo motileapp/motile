@@ -89,9 +89,9 @@ struct ThreadScreen: View {
     private var attention: Color? {
         let others = store.activeThreads.filter { store.selection != .thread($0.id) }
         if let color = others.lazy.compactMap(\.attentionColor).first { return color }
-        if others.contains(where: { $0.running || $0.gitStage != nil }) { return .themePrimary }
+        if others.contains(where: { $0.running || $0.gitStage != nil }) { return .themeWorking }
         guard others.contains(where: \.monitoring) else { return nil }
-        return .themeForeground
+        return .themeMonitoring
     }
 
     /// The menu icon, with a dot on its top right corner, cut out of the icon, when another
@@ -116,7 +116,7 @@ struct ThreadScreen: View {
         VStack(alignment: .leading, spacing: 1) {
             Text(store.selectedThread?.title ?? "New thread")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
             if let parts = store.composerProjectLine {
                 ProjectLine(project: store.composerProject, parts: parts, size: 12, iconSize: 12)
             }
@@ -133,7 +133,7 @@ struct ThreadScreen: View {
                     .font(.system(size: 26, weight: .regular))
                 Text("A project is a folder on your server that threads work in.")
                     .font(.system(size: 16))
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                     .multilineTextAlignment(.center)
                 ActionButton("Add Project", icon: .folderPlus, variant: .primary, size: .large) { store.addProject() }
                 .disabled(!store.servers.contains { $0.state == .connected })
@@ -154,17 +154,17 @@ struct ThreadScreen: View {
         let headline = Project.headline(selected)
         return VStack(spacing: 12) {
             Text(headline.lead)
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
             Button {
                 store.openPanel(.draftProject)
             } label: {
                 HStack(spacing: 9) {
                     ProjectIcon(project: selected, size: 24)
                     Text(headline.name)
-                        .foregroundStyle(Color.themeForeground)
+                        .foregroundStyle(Color.themeText)
                         .lineLimit(1)
                     Image(.chevronDown, size: 11)
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                 }
                 .padding(.leading, 12)
                 .padding(.trailing, 14)

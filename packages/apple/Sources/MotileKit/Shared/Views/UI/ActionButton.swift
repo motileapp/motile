@@ -46,26 +46,34 @@ struct ControlLook {
     var foreground: Color {
         if let tint, variant == .ghost || variant == .secondary { return tint }
         switch variant {
-        case .secondary: return .themeForeground
-        case .primary: return .themePrimaryForeground
-        case .danger: return .themeDestructiveForeground
-        case .warning: return .themeWarningForeground
-        case .ghost: return selected || lit ? .themeForeground : .themeMutedForeground
-        case .link, .accent: return .themePrimary
-        case .overlay: return .themeForeground
+        case .secondary: return .themeText
+        case .primary, .danger: return .white
+        case .warning: return .themeBackground
+        case .ghost: return selected || lit ? .themeText : .themeSecondary
+        case .link, .accent: return .themeLink
+        case .overlay: return .white
         }
     }
 
-    private var fill: AnyShapeStyle {
+    private var fill: Color {
         switch variant {
-        case .primary: AnyShapeStyle(Color.themePrimary)
-        case .secondary: AnyShapeStyle(selected || lit ? surface.accentStrongerColor : surface.accentColor)
-        case .danger: AnyShapeStyle(Color.themeDestructive)
-        case .warning: AnyShapeStyle(Color.themeWarning)
-        case .ghost: AnyShapeStyle(selected ? surface.accentStrongerColor : lit ? surface.accentColor : Color.clear)
-        case .link: AnyShapeStyle(lit ? Color.themePrimary.tinted() : Color.clear.tinted())
-        case .accent: AnyShapeStyle(Color.themePrimary.tinted(stronger: lit))
-        case .overlay: AnyShapeStyle(Color.themeOverlay)
+        case .primary: .themePrimary
+        case .secondary: (selected || lit ? surface.further : surface.next).color
+        case .danger: .themeDangerFill
+        case .warning: .themeWarning
+        case .ghost: selected ? surface.further.color : lit ? ghostLit : .clear
+        case .link: lit ? .themeLinkHover : .clear
+        case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
+        case .overlay: .black.opacity(0.5)
+        }
+    }
+
+    private var ghostLit: Color {
+        guard wordless else { return surface.next.color }
+        switch surface {
+        case .background: return Surface.tertiary.color
+        case .popover: return .themeBorderSecondary
+        default: return surface.next.color
         }
     }
 
@@ -82,9 +90,8 @@ struct ControlLook {
         shape
             .fill(fill)
             .overlay {
-                if lit, variant == .primary || variant == .danger || variant == .warning || variant == .overlay {
-                    shape.fill(foreground.tinted())
-                }
+                if variant == .primary || variant == .danger || variant == .warning, lit { shape.fill(Color.white.opacity(0.12)) }
+                if variant == .overlay { shape.fill(Color.white.opacity(lit ? 0.22 : 0.14)) }
             }
     }
 }

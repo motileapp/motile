@@ -46,7 +46,7 @@ struct InputField: View {
 
     private var fill: Color {
         switch variant {
-        case .outlined, .filled: surface.boxColor
+        case .outlined, .filled: surface.next.color
         case .bare: .clear
         }
     }
@@ -57,7 +57,7 @@ struct InputField: View {
         HStack(spacing: size.gap) {
             if let icon {
                 Image(icon, size: size.smallSymbol)
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                     .allowsHitTesting(false)
             }
             field
@@ -85,7 +85,7 @@ struct InputField: View {
 
 extension InputField {
     @ViewBuilder fileprivate var field: some View {
-        let prompt = Text(placeholder).foregroundStyle(Color.themeMutedMoreForeground)
+        let prompt = Text(placeholder).foregroundStyle(Color.themeTertiary)
         if secure {
             SecureField("", text: $text, prompt: prompt)
         } else {
@@ -97,10 +97,10 @@ extension InputField {
 extension View {
     /// The fill and the border of a field of the size, on the surface it lies on.
     func fieldFrame(_ size: ControlSize, surface: Surface, fill: Color? = nil, outlined: Bool = true) -> some View {
-        background(fill ?? surface.boxColor, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
+        background(fill ?? surface.next.color, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
             .overlay {
                 if outlined {
-                    RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(Color.themeBorderCard, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(surface.border, lineWidth: 1)
                 }
             }
     }

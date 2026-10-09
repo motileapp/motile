@@ -35,11 +35,11 @@ extension NSView {
         }
     }
 
-    func dropShadow(_ level: Shadow) {
+    func dropShadow(opacity: CGFloat, radius: CGFloat, down: CGFloat) {
         let shadow = NSShadow()
-        shadow.shadowColor = level.platform
-        shadow.shadowBlurRadius = level.radius
-        shadow.shadowOffset = NSSize(width: 0, height: -level.down)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(opacity)
+        shadow.shadowBlurRadius = radius
+        shadow.shadowOffset = NSSize(width: 0, height: -down)
         self.shadow = shadow
     }
 
@@ -236,7 +236,7 @@ final class ShimmerLabel: TextLabel {
     }
 
     static func make(_ font: NSFont) -> ShimmerLabel {
-        let field = ShimmerLabel(font: font, color: Theme.foreground)
+        let field = ShimmerLabel(font: font, color: Theme.shimmer)
         field.setAccessibilityElement(false)
 
         let alphas: [CGFloat] = [0, 0.12, 0.55, 1, 0.55, 0.12, 0]
@@ -288,7 +288,7 @@ final class ShimmerLabel: TextLabel {
 
 /// A symbol in one colour, in the middle of its frame.
 final class SymbolView: NSImageView {
-    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: NSColor = Theme.mutedForeground) {
+    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: NSColor = Theme.secondary) {
         self.init(frame: .zero)
         imageScaling = .scaleNone
         contentTintColor = tint
@@ -332,7 +332,7 @@ final class IconButton: NSButton {
         imagePosition = title.isEmpty ? .imageOnly : .imageLeading
         self.title = title
         font = Theme.smallFont
-        contentTintColor = Theme.mutedForeground
+        contentTintColor = Theme.secondary
         toolTip = tooltip
         target = self
         self.action = #selector(pressed)
@@ -371,9 +371,9 @@ final class IconButton: NSButton {
 
     private func light() {
         let lit = hovering || pressing
-        contentTintColor = lit ? Theme.foreground : Theme.mutedForeground
+        contentTintColor = lit ? Theme.text : Theme.secondary
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = lit ? surface.accent.cgColor : nil
+            layer?.backgroundColor = lit ? surface.next.platform.cgColor : nil
         }
     }
 
@@ -404,7 +404,7 @@ final class RowTextView: NSTextView {
         view.usesFontPanel = false
         view.usesFindBar = false
         view.isRichText = true
-        view.linkTextAttributes = [.foregroundColor: Theme.primary, .cursor: NSCursor.pointingHand]
+        view.linkTextAttributes = [.foregroundColor: Theme.link, .cursor: NSCursor.pointingHand]
         if !wraps { system.unwrap() }
         return view
     }

@@ -36,7 +36,7 @@ struct GitButton: View {
 
     private func pullRequestColor(of quick: GitQuick) -> PlatformColor? {
         guard quick.url != nil, let state = quick.pullRequest?.state else { return nil }
-        return state == .draft ? Theme.foreground : state.platformColor
+        return state == .draft ? Theme.text : state.platformColor
     }
 
     #if os(macOS)
@@ -51,13 +51,13 @@ struct GitButton: View {
                 store.runQuickGit(in: project)
             }
             Rectangle()
-                .fill(Color.themeBorderCard)
+                .fill(Color.themeBorderSecondary)
                 .frame(width: 1, height: Self.height)
             menuButton
         }
         .clipShape(RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeBorderCard, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).stroke(Color.themeBorderSecondary, lineWidth: 1)
         }
         .background(MenuAnchor(anchor: anchor))
         .padding(.horizontal, 6)
@@ -65,10 +65,10 @@ struct GitButton: View {
 
     /// A pull request is in the colour of its state, and what has nothing to do is quiet.
     private func tint(of quick: GitQuick, at stage: GitStage?) -> Color? {
-        if stage != nil { return .themeForeground }
+        if stage != nil { return .themeText }
         if let color = pullRequestColor(of: quick) { return Color(platform: color) }
-        guard quick.action != nil || quick.url != nil else { return .themeMutedMoreForeground }
-        return .themeForeground
+        guard quick.action != nil || quick.url != nil else { return .themeTertiary }
+        return .themeText
     }
 
     private var menuButton: some View {
@@ -302,12 +302,12 @@ struct GitNoticeView: View {
         let url = notice.url.flatMap { URL(string: $0) }
         HStack(alignment: .top, spacing: 10) {
             Image(notice.failed ? .circleAlert : .circleCheck, size: 15)
-                .foregroundStyle(notice.failed ? Color.themeDestructive : Color.themeSuccess)
+                .foregroundStyle(notice.failed ? Color.themeDanger : Color.themeSuccess)
                 .frame(height: Self.titleHeight)
             VStack(alignment: .leading, spacing: 4) {
                 Text(notice.title)
                     .font(.ui(size: 13, weight: .medium))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .frame(minHeight: Self.titleHeight)
                 if let description = notice.description {
                     if notice.failed {
@@ -315,7 +315,7 @@ struct GitNoticeView: View {
                     } else {
                         Text(description)
                             .font(.ui(size: 12.5))
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
                             .lineLimit(2)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
@@ -342,10 +342,11 @@ struct GitNoticeView: View {
         .background {
             RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
                 .fill(Color.themePopover)
-                .shadow(.regular)
+                .shadow(color: .black.opacity(0.05), radius: 1.5, y: 1)
+                .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderCard, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
             ActionButton(icon: .x, help: "Close", symbolSize: ControlSize.regular.smallSymbol) { store.dismissGitNotice() }
@@ -367,7 +368,7 @@ struct GitNoticeView: View {
         FadingScroll(maxHeight: Self.outputHeight, anchor: .bottom) {
             Text(text)
                 .font(.ui(size: 11.5, design: .monospaced))
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
                 .lineSpacing(2)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -377,7 +378,7 @@ struct GitNoticeView: View {
         .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                .strokeBorder(Color.themeBorderCard, lineWidth: 1)
+                .strokeBorder(Color.themeBorderSecondary, lineWidth: 1)
         }
         .padding(.top, 4)
         .padding(.trailing, Self.padding - Self.trailing)
@@ -406,11 +407,11 @@ struct CommitSheet: View {
                     .font(.ui(size: 15, weight: .semibold))
                 Text("Review and confirm your commit. Leave the message empty to have one written.")
                     .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
             }
             HStack(spacing: 8) {
                 Text("Branch")
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                 Text(project.git?.branch ?? "No branch")
                     .fontWeight(.medium)
                 Spacer()
@@ -466,7 +467,7 @@ struct CommitSheet: View {
                 if !excluded.isEmpty, !editing {
                     Text("\(included.count) of \(files.count)")
                         .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                 }
                 Spacer()
                 HStack(spacing: 0) {
@@ -493,7 +494,7 @@ struct CommitSheet: View {
             .frame(height: min(CGFloat(files.count) * Self.rowHeight, 192) + 8)
             .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorderCard, lineWidth: 1)
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1)
             }
         }
     }
@@ -509,7 +510,7 @@ struct CommitSheet: View {
                 #else
                 ActionButton(
                     icon: isExcluded ? .circle : .circleCheck, help: isExcluded ? "Include" : "Leave out", size: .small,
-                    tint: isExcluded ? .themeMutedMoreForeground : .themePrimary
+                    tint: isExcluded ? .themeTertiary : .themePrimary
                 ) {
                     includes(file.path).wrappedValue.toggle()
                 }
@@ -519,16 +520,16 @@ struct CommitSheet: View {
             Text(file.path)
                 .lineLimit(1)
                 .truncationMode(.head)
-                .foregroundStyle(isExcluded ? Color.themeMutedMoreForeground : Color.themeForeground)
+                .foregroundStyle(isExcluded ? Color.themeTertiary : Color.themeText)
             Spacer(minLength: 8)
             if isExcluded {
                 Text("Excluded")
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
             } else if file.added + file.removed > 0 {
                 LineCounts(added: file.added, removed: file.removed)
             } else {
                 Text(file.change == "added" ? "new" : file.change)
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
             }
         }
         .font(.ui(size: 12.5))
@@ -562,7 +563,7 @@ private struct LineCounts: View {
                 Text("+\(added)").foregroundStyle(Color.themeSuccess)
             }
             if removed > 0 {
-                Text("−\(removed)").foregroundStyle(Color.themeDestructive)
+                Text("−\(removed)").foregroundStyle(Color.themeDanger)
             }
         }
         .font(.ui(size: 11, weight: .medium).monospacedDigit())

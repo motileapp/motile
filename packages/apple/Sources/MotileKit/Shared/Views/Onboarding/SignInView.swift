@@ -7,13 +7,13 @@ struct SignInView: View {
         VStack(spacing: 0) {
             Spacer()
             LogoView(size: 72)
-                .shadow(.stronger)
+                .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
             Text("Motile")
                 .font(.ui(size: 30, weight: .semibold))
                 .padding(.top, 22)
             Text("The command center for coding agents.")
                 .font(.ui(size: 15))
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
                 .padding(.top, 6)
 
             ActionButton("Continue with Google", picture: AnyView(GoogleMark()), size: .large, pending: store.signingIn, fills: true) {
@@ -24,14 +24,14 @@ struct SignInView: View {
             if store.signingIn {
                 Text("Waiting for the browser")
                     .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                     .padding(.top, 10)
             }
 
             if let error = store.signInError {
                 Text(error)
                     .font(.ui(size: 13))
-                    .foregroundStyle(Color.themeDestructive)
+                    .foregroundStyle(Color.themeDanger)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 360)
                     .padding(.top, 14)
@@ -40,7 +40,7 @@ struct SignInView: View {
             Text("Signing in links this \(Platform.device) to your account. Your threads stay on your own machines.")
                 .multilineTextAlignment(.center)
                 .font(.ui(size: 12))
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
                 .padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

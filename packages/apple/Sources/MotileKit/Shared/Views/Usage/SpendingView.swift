@@ -29,7 +29,6 @@ struct SpendingView: View {
     private static let stackWidth: CGFloat = 520
 
     @Environment(AppStore.self) private var store
-    @Environment(\.colorScheme) private var colorScheme
     let report: UsageReport
     let measure: Measure
     let period: UsageModel.Period
@@ -62,7 +61,7 @@ struct SpendingView: View {
             ForEach(outdated) { server in
                 Text("Update \(server.name) to see what its agents spend.")
                     .font(.caption)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -74,22 +73,22 @@ struct SpendingView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(measure == .cost ? Self.cost(report.costUSD) : Self.count(report.tokens))
                     .font(.ui(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .monospacedDigit()
                 Text(measure == .cost ? "What the API would have charged" : "Tokens in and out")
                     .font(.caption)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                 if report.writingTokens > 0 {
                     let written = measure == .cost ? Self.cost(report.writingCostUSD) : Self.count(report.writingTokens)
                     Text("\(written) of \(measure == .cost ? "it" : "them") for titles, branch names, commit messages and pull requests")
                         .font(.caption)
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if measure == .cost && report.unpricedTokens > 0 {
                     Text("Without \(Self.count(report.unpricedTokens)) tokens of models whose price isn’t known")
                         .font(.caption)
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -100,10 +99,10 @@ struct SpendingView: View {
                 if report.cacheSavingsUSD > 0 {
                     HStack {
                         Text("Saved by the cache")
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
                         Spacer(minLength: 8)
                         Text(Self.cost(report.cacheSavingsUSD))
-                            .foregroundStyle(Color.themeForeground)
+                            .foregroundStyle(Color.themeText)
                             .monospacedDigit()
                     }
                     .font(.ui(size: 12))
@@ -125,16 +124,16 @@ struct SpendingView: View {
                     .frame(width: 8, height: 8)
                 AgentIcon(agent: series.agent, size: 14)
                 Text(series.agent.name)
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                 Spacer(minLength: 8)
                 Text(amount(part))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .monospacedDigit()
             }
             .font(.ui(size: 12))
             Text("\(share.formatted(.percent.precision(.fractionLength(0...1)))) of \(measure == .cost ? "the cost" : "the tokens") · \(other)")
                 .font(.ui(size: 11))
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
                 .monospacedDigit()
                 .padding(.leading, 15)
         }
@@ -159,9 +158,9 @@ struct SpendingView: View {
                         .fill(Self.color(of: series.agent))
                         .frame(width: 8, height: 8)
                     Text(series.agent.name)
-                        .foregroundStyle(Color.themeForeground)
+                        .foregroundStyle(Color.themeText)
                     Text(amount(index.map { value(of: series, at: $0) } ?? (measure == .cost ? series.costUSD : Double(series.tokens))))
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                         .monospacedDigit()
                 }
             }
@@ -169,7 +168,7 @@ struct SpendingView: View {
             if let index {
                 let start = report.starts[index]
                 Text(period == .day ? start.formatted(.dateTime.weekday().hour()) : start.formatted(.dateTime.weekday().month(.abbreviated).day()))
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
             }
         }
         .font(.ui(size: 12))
@@ -184,7 +183,7 @@ struct SpendingView: View {
                         AreaMark(x: .value("Time", start), y: .value("Spent", value(of: series, at: index)), stacking: .unstacked)
                             .foregroundStyle(by: .value("Agent", series.agent.name))
                             .interpolationMethod(.monotone)
-                            .opacity(Theme.tintOpacity(dark: colorScheme == .dark))
+                            .opacity(0.12)
                         LineMark(x: .value("Time", start), y: .value("Spent", value(of: series, at: index)))
                             .foregroundStyle(by: .value("Agent", series.agent.name))
                             .interpolationMethod(.monotone)
@@ -193,7 +192,7 @@ struct SpendingView: View {
                 }
                 if let index = pointedIndex {
                     RuleMark(x: .value("Time", report.starts[index]))
-                        .foregroundStyle(Color.themeBorderCard)
+                        .foregroundStyle(Color.themeBorderSecondary)
                         .lineStyle(StrokeStyle(lineWidth: 1))
                 }
             }
@@ -206,7 +205,7 @@ struct SpendingView: View {
             .chartXAxis {
                 AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in
                     AxisValueLabel(format: period == .day ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                 }
             }
             .chartYAxis {
@@ -215,7 +214,7 @@ struct SpendingView: View {
                     AxisValueLabel {
                         if let value = mark.as(Double.self) { Text(amount(value)) }
                     }
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                 }
             }
             .frame(height: 190)
@@ -256,7 +255,7 @@ struct SpendingView: View {
     }
 
     static func color(of agent: Agent) -> Color {
-        agent == .claude ? .themeChart[0] : .themeChart[1]
+        agent == .claude ? .themeClaudeSeries : .themeCodexSeries
     }
 
     static func cost(_ value: Double) -> String {
@@ -312,13 +311,13 @@ private struct UsageLineRow: View {
                     .frame(width: Self.dotWidth, height: Self.dotWidth)
             }
             Text(line.name)
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .fixedSize(horizontal: whole, vertical: false)
             if let server = line.server {
                 Text(server)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .fixedSize(horizontal: whole, vertical: false)
@@ -328,10 +327,10 @@ private struct UsageLineRow: View {
                 bar(width: Self.barWidth)
             }
             Text(SpendingView.count(line.tokens))
-                .foregroundStyle(measure == .tokens ? Color.themeForeground : Color.themeMutedForeground)
+                .foregroundStyle(measure == .tokens ? Color.themeText : Color.themeSecondary)
                 .frame(width: scaled(64), alignment: .trailing)
             Text(line.costUSD.map(SpendingView.cost) ?? "No price")
-                .foregroundStyle(measure == .cost && line.costUSD != nil ? Color.themeForeground : Color.themeMutedForeground)
+                .foregroundStyle(measure == .cost && line.costUSD != nil ? Color.themeText : Color.themeSecondary)
                 .frame(width: scaled(72), alignment: .trailing)
         }
     }
@@ -339,12 +338,12 @@ private struct UsageLineRow: View {
     /// The line's share of the whole, `width` wide or as wide as it is given.
     private func bar(width: CGFloat?) -> some View {
         Capsule()
-            .fill(surface.boxColor)
+            .fill(surface.next.color)
             .frame(width: width, height: 4)
             .overlay(alignment: .leading) {
                 GeometryReader { track in
                     Capsule()
-                        .fill(Color.themeMutedForeground)
+                        .fill(Color.themeSecondary)
                         .frame(width: track.size.width * min(max(line.share, 0), 1))
                 }
             }

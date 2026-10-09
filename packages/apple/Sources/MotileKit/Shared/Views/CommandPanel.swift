@@ -48,19 +48,19 @@ struct CommandPanel: View {
     private var panel: some View {
         VStack(spacing: 0) {
             header
-            ThemeDivider(color: .themeBorderCard)
+            ThemeDivider(color: .themeBorderSecondary)
             results(page)
-            ThemeDivider(color: .themeBorderCard)
+            ThemeDivider(color: .themeBorderSecondary)
             hints
         }
         .frame(width: 620)
         .background {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(Color.themePopover)
-                .shadow(.stronger)
+                .shadow(color: .black.opacity(0.3), radius: 30, y: 14)
         }
         .environment(\.surface, .popover)
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.themeBorderCard, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.themeBorderSecondary, lineWidth: 1))
         .padding(.top, 70)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {
@@ -108,7 +108,7 @@ struct CommandPanel: View {
 
     private func screen(_ page: PanelPage) -> some View {
         results(page)
-            .background(Color.themeBackground.ignoresSafeArea())
+            .background(Color.themeSheet.ignoresSafeArea())
             .navigationTitle(title(page))
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, prompt: prompt(page))
@@ -172,10 +172,10 @@ struct CommandPanel: View {
                 ActionButton(icon: .arrowLeft, help: "Back") { back() }
             } else {
                 Image(.search, size: 15)
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                     .frame(width: ControlSize.regular.height, height: ControlSize.regular.height)
             }
-            TextField("", text: $query, prompt: Text(prompt(page)).foregroundStyle(Color.themeMutedMoreForeground))
+            TextField("", text: $query, prompt: Text(prompt(page)).foregroundStyle(Color.themeTertiary))
                 .textFieldStyle(.plain)
                 .font(.ui(size: 16))
                 .focused($searching)
@@ -226,7 +226,7 @@ struct CommandPanel: View {
                     if rows == 0 {
                         Text(emptyText(page))
                             .font(.ui(size: 13))
-                            .foregroundStyle(Color.themeMutedMoreForeground)
+                            .foregroundStyle(Color.themeTertiary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                             .padding(.horizontal, 24)
@@ -235,7 +235,7 @@ struct CommandPanel: View {
                     ForEach(sections) { section in
                         Text(section.title)
                             .font(.ui(size: 12, weight: .medium))
-                            .foregroundStyle(Color.themeMutedMoreForeground)
+                            .foregroundStyle(Color.themeTertiary)
                             .padding(.horizontal, PanelRow.sideMargin + 10)
                             .padding(.top, 10)
                             .padding(.bottom, 4)
@@ -250,7 +250,7 @@ struct CommandPanel: View {
                     if let refused {
                         Text(refused)
                             .font(.ui(size: 12))
-                            .foregroundStyle(Color.themeDestructive)
+                            .foregroundStyle(Color.themeDanger)
                             .lineLimit(2)
                             .padding(.horizontal, PanelRow.sideMargin + 10)
                             .frame(height: Self.noticeHeight, alignment: .leading)
@@ -327,7 +327,7 @@ struct CommandPanel: View {
             Text(text)
                 .font(.ui(size: 12))
         }
-        .foregroundStyle(Color.themeMutedForeground)
+        .foregroundStyle(Color.themeSecondary)
     }
 
     #endif
@@ -811,7 +811,7 @@ private struct KeyCap: View {
             .font(.ui(size: 11, weight: .medium))
             .padding(.horizontal, 6)
             .frame(minWidth: 22, minHeight: 20)
-            .background(surface.boxColor, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .background(surface.next.color, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
     }
 }
 
@@ -903,7 +903,7 @@ private struct PanelRow: View {
                     } else if !item.detail.isEmpty {
                         Text(item.detail)
                             .font(.ui(size: 12))
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .frame(height: Self.detailHeight)
@@ -929,7 +929,7 @@ private struct PanelRow: View {
             ForEach(Array(item.detailParts.enumerated()), id: \.offset) { position, part in
                 if position > 0 {
                     Text("·")
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                 }
                 HStack(spacing: 3) {
                     // Lucide's server fills more of its square than the icons beside it.
@@ -942,7 +942,7 @@ private struct PanelRow: View {
             }
         }
         .font(.ui(size: 12))
-        .foregroundStyle(Color.themeMutedForeground)
+        .foregroundStyle(Color.themeSecondary)
         .frame(height: Self.detailHeight)
     }
 
@@ -960,25 +960,25 @@ private struct PanelRow: View {
 
     private func bar(width: CGFloat, height: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-            .fill(surface.boxColor)
+            .fill(surface.next.color)
             .frame(width: width, height: height)
     }
 
     @ViewBuilder private var trailing: some View {
         if item.busy {
             Spinner()
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
         } else if let note = item.note {
             Text(note)
                 .font(.ui(size: 12, weight: .medium))
-                .foregroundStyle(item.warns ? Color.themeWarning : Color.themeMutedMoreForeground)
+                .foregroundStyle(item.warns ? Color.themeWarning : Color.themeTertiary)
                 .padding(.horizontal, item.warns ? 8 : 0)
                 .padding(.vertical, item.warns ? 3 : 0)
-                .background(item.warns ? Color.themeWarning.tinted() : Color.clear.tinted(), in: Capsule())
+                .background(item.warns ? Color.themeWarning.opacity(0.14) : Color.clear, in: Capsule())
         } else if let shortcut = item.shortcut {
             Text("⌘\(shortcut)")
                 .font(.ui(size: 12, weight: .medium))
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
                 .monospacedDigit()
         }
     }
@@ -987,18 +987,18 @@ private struct PanelRow: View {
         switch item.icon {
         case .symbol where item.placeholderLines > 0:
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(surface.boxColor)
+                .fill(surface.next.color)
                 .frame(width: scaled(20), height: scaled(20))
         case .symbol(let name):
             Image(name, size: 15)
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
         case .logo(let logo):
             Image(platform: logo ?? PlatformImage())
                 .renderingMode(.template)
                 .resizable()
                 .interpolation(.high)
                 .frame(width: scaled(16), height: scaled(16))
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
         case .project(let project):
             ProjectIcon(project: project, size: scaled(20))
         }

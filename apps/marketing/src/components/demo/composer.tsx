@@ -40,14 +40,14 @@ export function Composer({
     <div className="mx-auto w-full max-w-[796px]">
       {status.kind === "monitoring" && (
         <Strip edge="top">
-          <span className="mr-2 ml-3.5 size-1.5 rounded-full bg-foreground" />
-          <span className="text-[12.5px] font-medium tabular-nums text-foreground">
+          <span className="mr-2 ml-3.5 size-1.5 rounded-full bg-monitoring" />
+          <span className="text-[12.5px] font-medium tabular-nums text-monitoring">
             Monitoring for {elapsed(status.since)}
           </span>
           <button
             type="button"
             onClick={onStop}
-            className="mr-1 ml-auto h-6 rounded-[6px] px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-accent-card hover:text-foreground"
+            className="mr-1 ml-auto h-6 rounded-[6px] px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-composer-secondary hover:text-foreground"
           >
             Stop
           </button>
@@ -63,7 +63,7 @@ export function Composer({
             <button
               type="button"
               onClick={() => onAnswer(false)}
-              className="ml-auto h-6 rounded-[6px] bg-accent-card px-2 text-[11.5px] font-medium hover:bg-accent-card-stronger"
+              className="ml-auto h-6 rounded-[6px] bg-composer-secondary px-2 text-[11.5px] font-medium hover:bg-background"
             >
               Refuse
             </button>
@@ -80,7 +80,7 @@ export function Composer({
           </p>
         </Strip>
       )}
-      <div className="relative z-10 rounded-[22px] border-border-card bg-card">
+      <div className="relative z-10 rounded-[22px] border bg-composer">
         <textarea
           ref={input}
           value={text}
@@ -94,7 +94,7 @@ export function Composer({
           placeholder={
             status.kind === "working" ? "Send a follow-up" : "Ask anything"
           }
-          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none pointer-coarse:text-[16px] placeholder:text-muted-more-foreground"
+          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none pointer-coarse:text-[16px] placeholder:text-tertiary"
         />
         <div
           onClick={(event) => {
@@ -120,7 +120,7 @@ export function Composer({
           >
             {thread.approval ? "Supervised" : "Full access"}
           </Control>
-          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-accent-card hover:text-foreground">
+          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-composer-secondary hover:text-foreground">
             <PaperclipIcon className="size-3.5" />
           </span>
           <button
@@ -177,7 +177,7 @@ function Control({
   return (
     <span
       className={cn(
-        "flex h-7 cursor-default items-center gap-1.5 rounded-[7px] pr-[9px] text-[12px] font-medium text-muted-foreground hover:bg-accent-card hover:text-foreground",
+        "flex h-7 cursor-default items-center gap-1.5 rounded-[7px] pr-[9px] text-[12px] font-medium text-muted-foreground hover:bg-composer-secondary hover:text-foreground",
         icon ? "pl-[9px]" : "pl-[11px]"
       )}
     >
@@ -203,7 +203,7 @@ function Strip({
   return (
     <div
       className={cn(
-        "mx-[22px] border-border-card bg-card text-[12px] text-muted-foreground",
+        "mx-[22px] border bg-composer text-[12px] text-muted-foreground",
         tall
           ? "p-3 text-[12.5px]"
           : "flex h-8 items-center",

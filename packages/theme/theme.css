@@ -5,15 +5,6 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* A wash of a colour, as much of it as the tint lets through: `tint-success`, `tint-stronger-primary`. */
-@utility tint-* {
-  background-color: color-mix(in srgb, --value(--color-*) calc(var(--color-tint-opacity) * 100%), transparent);
-}
-
-@utility tint-stronger-* {
-  background-color: color-mix(in srgb, --value(--color-*) calc(var(--color-tint-opacity-stronger) * 100%), transparent);
-}
-
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "DM Sans Variable", sans-serif;
@@ -48,24 +39,27 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --color-accent-stronger: var(--accent-stronger);
-  --color-accent-larger: var(--accent-larger);
-  --color-accent-larger-stronger: var(--accent-larger-stronger);
-  --color-accent-card: var(--accent-card);
-  --color-accent-card-stronger: var(--accent-card-stronger);
-  --color-accent-popover: var(--accent-popover);
-  --color-accent-popover-stronger: var(--accent-popover-stronger);
-  --color-muted-more-foreground: var(--muted-more-foreground);
-  --color-muted-most-foreground: var(--muted-most-foreground);
-  --color-border-card: var(--border-card);
-  --color-destructive-foreground: var(--destructive-foreground);
+  --color-background-secondary: var(--background-secondary);
+  --color-background-tertiary: var(--background-tertiary);
+  --color-background-quaternary: var(--background-quaternary);
+  --color-popover-secondary: var(--popover-secondary);
+  --color-composer: var(--composer);
+  --color-composer-secondary: var(--composer-secondary);
+  --color-border-secondary: var(--border-secondary);
+  --color-prose: var(--prose);
+  --color-tertiary: var(--tertiary);
+  --color-activity: var(--activity);
+  --color-link: var(--link);
   --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-background: var(--warning-background);
+  --color-working: var(--working);
+  --color-monitoring: var(--monitoring);
   --color-merged: var(--merged);
-  --color-overlay: var(--overlay);
-  --color-shadow: var(--shadow);
+  --color-added: var(--added);
+  --color-removed: var(--removed);
+  --color-added-text: var(--added-text);
+  --color-removed-text: var(--removed-text);
   --color-syntax-comment: var(--syntax-comment);
   --color-syntax-keyword: var(--syntax-keyword);
   --color-syntax-string: var(--syntax-string);

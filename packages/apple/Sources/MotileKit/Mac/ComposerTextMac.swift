@@ -64,8 +64,8 @@ struct ComposerTextView: NSViewRepresentable {
         view.allowsUndo = true
         view.drawsBackground = false
         view.font = font
-        view.textColor = Theme.foreground
-        view.insertionPointColor = Theme.foreground
+        view.textColor = Theme.text
+        view.insertionPointColor = Theme.text
         view.textContainerInset = NSSize(width: 0, height: Self.verticalInset)
         view.textContainer?.lineFragmentPadding = 2
         view.isVerticallyResizable = true
@@ -79,7 +79,7 @@ struct ComposerTextView: NSViewRepresentable {
         view.defaultParagraphStyle = Self.paragraphStyle
         view.typingAttributes = [
             .font: font,
-            .foregroundColor: Theme.foreground,
+            .foregroundColor: Theme.text,
             .paragraphStyle: Self.paragraphStyle,
         ]
         view.onSubmit = onSubmit
@@ -182,7 +182,7 @@ final class ComposerNSTextView: NSTextView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard string.isEmpty, !placeholder.isEmpty else { return }
-        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? ComposerTextView.font, .foregroundColor: Theme.mutedMoreForeground]
+        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? ComposerTextView.font, .foregroundColor: Theme.tertiary]
         let origin = NSPoint(x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0), y: textContainerInset.height)
         (placeholder as NSString).draw(at: origin, withAttributes: attributes)
     }

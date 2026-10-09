@@ -94,13 +94,13 @@ struct SidebarScreen: View {
         HStack(spacing: 10) {
             Text("Motile")
                 .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
             Spacer()
             Button {
                 store.openPanel(.commands)
             } label: {
                 Image(.command, size: 15)
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .frame(width: 42, height: 42)
                     .contentShape(Circle())
             }
@@ -150,7 +150,7 @@ struct SidebarScreen: View {
             )
             .equatable()
             .rowSwipe(
-                .check, "Mark Done", tint: thread.busy ? .themeMutedForeground : .themeSuccess, size: 36,
+                .check, "Mark Done", tint: thread.busy ? .themeSecondary : .themeSuccess, size: 36,
                 leaves: !thread.busy, isOpen: swipe(item.id, swiped: shown.swiped)
             ) {
                 markDone(thread)
@@ -158,7 +158,7 @@ struct SidebarScreen: View {
         case .empty:
             Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
                 .font(.ui(size: 13))
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, sidebarRowInset + 8)
                 .padding(.vertical, 10)
@@ -174,7 +174,7 @@ struct SidebarScreen: View {
             )
             .equatable()
             .frame(height: 44)
-            .rowSwipe(.undo2, "Mark Undone", tint: .themeMutedForeground, size: 28, isOpen: swipe(item.id, swiped: shown.swiped)) {
+            .rowSwipe(.undo2, "Mark Undone", tint: .themeSecondary, size: 28, isOpen: swipe(item.id, swiped: shown.swiped)) {
                 store.setDone([thread.id], done: false)
             }
         }
@@ -193,10 +193,10 @@ struct SidebarScreen: View {
                 Spacer()
                 Text("\(count)")
                     .font(.ui(size: 11))
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                     .monospacedDigit()
             }
-            .foregroundStyle(Color.themeMutedForeground)
+            .foregroundStyle(Color.themeSecondary)
             .padding(.horizontal, sidebarRowInset + 8)
             .frame(height: 44)
             .contentShape(Rectangle())
@@ -234,7 +234,7 @@ struct SidebarScreen: View {
     private func circleButton(_ symbol: Symbol, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(symbol, size: 15)
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
                 .frame(width: 46, height: 46)
                 .contentShape(Circle())
         }

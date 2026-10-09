@@ -24,7 +24,7 @@ struct UsageRoute: View {
                                 .padding(.horizontal, -ControlSize.regular.padding)
                                 .padding(.leading, ControlSize.regular.symbolOutset)
                             Rectangle()
-                                .fill(Color.themeBorderCard)
+                                .fill(Color.themeBorderSecondary)
                                 .frame(width: 1, height: 14)
                             UsageTitle(model: model)
                         }

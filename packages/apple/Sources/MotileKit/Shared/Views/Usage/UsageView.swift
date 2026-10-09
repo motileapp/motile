@@ -183,11 +183,11 @@ struct UsageTitle: View {
     var body: some View {
         HStack(spacing: Self.size.padding) {
             Text("Usage")
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
             Text("/")
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
             CheckMenu(
-                model.serversLabel(among: store.servers), help: "The servers counted", size: Self.size, tint: .themeForeground,
+                model.serversLabel(among: store.servers), help: "The servers counted", size: Self.size, tint: .themeText,
                 groups: model.serverChecks(among: store.servers)
             )
             .padding(.leading, -Self.size.padding)
@@ -307,7 +307,7 @@ struct UsageContent: View {
 
     private var loading: some View {
         Spinner()
-            .foregroundStyle(Color.themeMutedForeground)
+            .foregroundStyle(Color.themeSecondary)
             .frame(maxWidth: .infinity, minHeight: 240)
     }
 }
@@ -319,7 +319,7 @@ struct UsageNote: View {
     var body: some View {
         Text(text)
             .font(.ui(size: 12))
-            .foregroundStyle(Color.themeMutedForeground)
+            .foregroundStyle(Color.themeSecondary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, minHeight: 240)
     }
