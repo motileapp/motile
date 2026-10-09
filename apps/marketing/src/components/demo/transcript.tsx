@@ -41,7 +41,7 @@ export function Transcript({
         </Shimmer>
       )}
       {thread.status.kind === "approval" && (
-        <p className="mt-2 text-[13px] text-muted-foreground">
+        <p className="mt-2 text-[13px] text-muted-stronger-foreground">
           Waiting for your approval
         </p>
       )}
@@ -86,14 +86,19 @@ function Row({
     case "tool": {
       const Icon = TOOL_ICONS[item.tool]
       return (
-        <div className="-mx-2 flex h-7 items-center gap-2 rounded-md px-2 text-[13px] text-muted-foreground">
+        <div className="-mx-2 flex h-7 items-center gap-2 rounded-md px-2 text-[13px] text-muted-stronger-foreground">
           <Icon className="size-3.5 shrink-0" />
           {item.running ? (
             <Shimmer>{item.verb}</Shimmer>
           ) : (
             <span>{item.verb}</span>
           )}
-          <span className="truncate font-mono text-[12px] text-muted-stronger-foreground">
+          <span
+            className={cn(
+              "truncate font-mono text-[12px]",
+              item.running ? "text-muted-stronger-foreground" : "text-muted-foreground"
+            )}
+          >
             {item.target}
           </span>
         </div>
@@ -121,7 +126,7 @@ export function Shimmer({
   return (
     <span
       className={cn(
-        "animate-[demo-shimmer_2s_linear_infinite] bg-[linear-gradient(90deg,var(--muted-foreground)_40%,var(--emphasized-foreground)_50%,var(--muted-foreground)_60%)] bg-size-[200%_100%] bg-clip-text text-transparent",
+        "animate-[demo-shimmer_2s_linear_infinite] bg-[linear-gradient(90deg,var(--muted-stronger-foreground)_40%,var(--emphasized-foreground)_50%,var(--muted-stronger-foreground)_60%)] bg-size-[200%_100%] bg-clip-text text-transparent",
         className
       )}
     >
