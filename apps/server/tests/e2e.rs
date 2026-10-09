@@ -125,11 +125,14 @@ impl Harness {
         calls.filter(is_turn).map(|arguments| arguments.join("\n")).collect()
     }
 
-    /// The settings a running agent was told to change, leaving out what it was asked to list.
+    /// The settings a running agent was told to change, leaving out what it was asked about its models.
     fn recorded_changes(&self) -> Vec<serde_json::Value> {
         let recorded = std::fs::read_to_string(self.dir.path().join("arguments.txt")).unwrap_or_default();
         let lines = recorded.lines().filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok());
-        lines.filter(|line| line.is_object() && line["subtype"] != "list_models").collect()
+        let asked = |line: &serde_json::Value| {
+            ["list_models", "get_settings"].iter().any(|subtype| line["subtype"] == *subtype)
+        };
+        lines.filter(|line| line.is_object() && !asked(line)).collect()
     }
 }
 
@@ -1333,7 +1336,11 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
     let opus = server.models.iter().find(|model| model.id == "claude-opus-5-5").expect("Claude's models are offered");
     assert_eq!((opus.agent, opus.account.as_str(), opus.name.as_str()), (Agent::Claude, "claude", "Claude Opus 5.5"));
     assert!(opus.efforts.ends_with(&["xhigh".to_string(), "max".to_string(), "ultracode".to_string()]));
-    assert_eq!(opus.default_effort, None, "Claude Code applies its own default");
+    assert_eq!(opus.default_effort.as_deref(), Some("medium"), "the effort Claude Code would apply");
+    let default_effort =
+        |id: &str| server.models.iter().find(|model| model.id == id).and_then(|model| model.default_effort.clone());
+    assert_eq!(default_effort("claude-fable-5-1").as_deref(), Some("high"), "each model's own");
+    assert_eq!(default_effort("gpt-6.1-sol").as_deref(), Some("low"), "Codex's are listed with theirs");
     assert!(server.models.iter().all(|model| model.id != "default"), "the picker's default row isn't a model");
 
     let new_thread = NewThread {

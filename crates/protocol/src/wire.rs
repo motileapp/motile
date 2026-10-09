@@ -611,6 +611,9 @@ pub enum Request {
         #[serde(default)]
         refresh: bool,
     },
+    /// Has the agents asked what models they run, unless they were in the last minute. `Ok`
+    /// answers at once, and `Server` follows on the list when what they run changed.
+    RefreshModels,
     /// Adds an account of an agent, or changes the one with the same id. A new account's id is
     /// empty; the server picks it.
     SaveAgentAccount {
@@ -1398,7 +1401,8 @@ pub struct ModelInfo {
     pub account: String,
     /// Reasoning efforts it accepts, weakest first. Empty when it has no such setting.
     pub efforts: Vec<String>,
-    /// Missing when the agent applies its own default, as Claude Code does.
+    /// The effort it runs at when the thread doesn't pick one: its own, or what the account's
+    /// settings say. Missing when the agent couldn't say.
     pub default_effort: Option<String>,
 }
 

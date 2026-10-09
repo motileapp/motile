@@ -104,7 +104,10 @@ impl Server {
         let request: Request = read_frame(&mut recv).await?.context("The stream ended before a request.")?;
         let hub = &self.hub;
         let reply = match request {
-            Request::Subscribe => return follow_list(send, hub.subscribe().await).await,
+            Request::Subscribe => {
+                hub.refresh_models_soon();
+                return follow_list(send, hub.subscribe().await).await;
+            }
             Request::UpdateServer { when } => return update_server(send, hub.clone(), when).await,
             Request::GitRun { project_id, action, thread_id, message, paths, new_branch } => {
                 let run = GitRun { action, thread_id, message, paths, new_branch };
@@ -168,6 +171,10 @@ impl Server {
                 hub.usage(since, until, bucket_secs, utc_offset_secs)
             }
             Request::Limits { refresh } => Ok(hub.limits(refresh).await),
+            Request::RefreshModels => {
+                hub.refresh_models_soon();
+                Ok(Message::Ok)
+            }
             Request::SaveAgentAccount { account } => hub.save_agent_account(account).await.map(|_| Message::Ok),
             Request::RemoveAgentAccount { id } => hub.remove_agent_account(&id).await.map(|_| Message::Ok),
             Request::LinkPullRequest { thread_id, number } => {

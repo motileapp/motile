@@ -2,17 +2,12 @@
 //! answers `account/read` and `account/rateLimits/read`, and Claude Code answers the `initialize`
 //! and `get_usage` control requests. Neither spends tokens.
 
-use std::process::Stdio;
-use std::time::Duration;
-
 use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitWindow};
 use serde_json::{Value, json};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command;
 
+use crate::agents::ask;
 use crate::agents::environment::Environment;
 
-const TIMEOUT: Duration = Duration::from_secs(30);
 const SESSION_SECS: u64 = 5 * 3600;
 const WEEK_SECS: u64 = 7 * 86400;
 
@@ -62,31 +57,10 @@ async fn read_account(account: &AgentAccount, environment: &Environment) -> Opti
 }
 
 async fn read_claude(environment: &Environment) -> anyhow::Result<AgentLimits> {
-    let arguments = [
-        "-p",
-        "--input-format",
-        "stream-json",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-        "--settings",
-        r#"{"disableAllHooks":true}"#,
-        "--strict-mcp-config",
-    ];
-    let requests = [("initialize", "initialize"), ("usage", "get_usage")]
-        .map(|(id, subtype)| json!({"type": "control_request", "request_id": id, "request": {"subtype": subtype}}));
-    let answers = converse(environment, Agent::Claude, &arguments, &requests, |message| {
-        let response = &message["response"];
-        let id = response["request_id"].as_str().filter(|_| message["type"] == "control_response")?;
-        let answer = match response["subtype"].as_str() {
-            Some("success") => Ok(response["response"].clone()),
-            _ => Err(response["error"].as_str().unwrap_or("Claude Code refused").to_string()),
-        };
-        Some((id.to_string(), answer))
-    })
-    .await?;
+    let arguments = ["--settings", r#"{"disableAllHooks":true}"#, "--strict-mcp-config"];
+    let answers = ask::claude(environment, &arguments, &["initialize", "get_usage"]).await?;
     let account = answers.get("initialize").cloned().unwrap_or(Ok(Value::Null)).unwrap_or_default();
-    let usage = answers.get("usage").cloned().ok_or_else(|| anyhow::anyhow!("Claude Code didn't say"))?;
+    let usage = answers.get("get_usage").cloned().ok_or_else(|| anyhow::anyhow!("Claude Code didn't say"))?;
     Ok(claude_limits(&account["account"], &usage.map_err(anyhow::Error::msg)?))
 }
 
@@ -143,25 +117,11 @@ fn claude_window(limit: &Value, label: &str, secs: u64, used: &str) -> Option<Li
 }
 
 async fn read_codex(environment: &Environment) -> anyhow::Result<AgentLimits> {
-    let client = json!({"name": "motile", "title": "Motile", "version": env!("CARGO_PKG_VERSION")});
-    let requests = [
-        json!({"id": "initialize", "method": "initialize", "params": {"clientInfo": client}}),
-        json!({"method": "initialized"}),
-        json!({"id": "account", "method": "account/read", "params": {}}),
-        json!({"id": "limits", "method": "account/rateLimits/read"}),
-    ];
-    let answers = converse(environment, Agent::Codex, &["app-server"], &requests, |message| {
-        let id = message["id"].as_str()?;
-        let answer = match message["error"]["message"].as_str() {
-            Some(error) => Err(error.to_string()),
-            None => Ok(message["result"].clone()),
-        };
-        Some((id.to_string(), answer))
-    })
-    .await?;
-    let account = answers.get("account").cloned().ok_or_else(|| anyhow::anyhow!("Codex didn't say"))?;
+    let requests = [("account/read", json!({})), ("account/rateLimits/read", Value::Null)];
+    let answers = ask::codex(environment, &requests).await?;
+    let account = answers.get("account/read").cloned().ok_or_else(|| anyhow::anyhow!("Codex didn't say"))?;
     let account = account.map_err(anyhow::Error::msg)?;
-    let limits = answers.get("limits").cloned().unwrap_or(Ok(Value::Null));
+    let limits = answers.get("account/rateLimits/read").cloned().unwrap_or(Ok(Value::Null));
     codex_limits(&account["account"], limits)
 }
 
@@ -217,50 +177,6 @@ fn codex_plan(plan: &str) -> String {
 fn capitalized(text: &str) -> String {
     let mut characters = text.chars();
     characters.next().map(|first| first.to_uppercase().chain(characters).collect()).unwrap_or_default()
-}
-
-type Answers = std::collections::HashMap<String, Result<Value, String>>;
-
-/// Writes `requests` to the agent's CLI and gathers what `answer` picks out of its lines, until
-/// every request with an id has its answer.
-async fn converse(
-    environment: &Environment,
-    agent: Agent,
-    arguments: &[&str],
-    requests: &[Value],
-    answer: impl Fn(&Value) -> Option<(String, Result<Value, String>)>,
-) -> anyhow::Result<Answers> {
-    let executable = environment.executable(agent).ok_or_else(|| anyhow::anyhow!("It isn't installed."))?;
-    let mut child = Command::new(executable)
-        .args(arguments)
-        .current_dir(std::env::temp_dir())
-        .env_clear()
-        .envs(&environment.variables)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true)
-        .spawn()?;
-    let mut stdin = child.stdin.take().ok_or_else(|| anyhow::anyhow!("no stdin"))?;
-    let stdout = child.stdout.take().ok_or_else(|| anyhow::anyhow!("no stdout"))?;
-    let input: String = requests.iter().map(|request| format!("{request}\n")).collect();
-    stdin.write_all(input.as_bytes()).await?;
-    let awaited =
-        requests.iter().filter(|request| request["id"].is_string() || request["request_id"].is_string()).count();
-    let gather = async {
-        let mut answers = Answers::new();
-        let mut lines = BufReader::new(stdout).lines();
-        while answers.len() < awaited {
-            let Some(line) = lines.next_line().await? else { break };
-            let Ok(message) = serde_json::from_str::<Value>(&line) else { continue };
-            answers.extend(answer(&message));
-        }
-        anyhow::Ok(answers)
-    };
-    let answers =
-        tokio::time::timeout(TIMEOUT, gather).await.map_err(|_| anyhow::anyhow!("It didn't answer in time."))??;
-    drop(stdin);
-    Ok(answers)
 }
 
 #[cfg(test)]
