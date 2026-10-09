@@ -77,7 +77,7 @@ struct ControlLook {
     /// A ghost button lights a step above the row it lies on.
     private var ghostLit: Color {
         switch row {
-        case .rowSelected, .rowSelectedLit, .controlLit: surface.color(.controlLitOnSelected)
+        case .rowSelected, .controlLit: surface.color(.controlLitOnSelected)
         case .row, .control: surface.color(.controlLit)
         default: surface.color(.control)
         }

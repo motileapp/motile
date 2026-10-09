@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Lights up what the pointer is over, what is selected and what is `lit`. The light is drawn `inset` from the
-/// view's edges: that margin looks empty but is the view's, so neighbours leave no gap to miss.
-/// What is `faded` is in the muted colour until it lights up. A view that follows the pointer
-/// itself passes `hovered`, so that the pointer is followed once. What is `small`, like a tab,
-/// lights as a control does, not as a row.
+/// Lights up what the pointer is over, what is selected and what is `lit`. What is selected is
+/// lit no further. The light is drawn `inset` from the view's edges: that margin looks empty but
+/// is the view's, so neighbours leave no gap to miss. What is `faded` is in the muted colour
+/// until it lights up. A view that follows the pointer itself passes `hovered`, so that the
+/// pointer is followed once. What is `small`, like a tab, lights as a control does, not as a row.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
@@ -44,13 +44,9 @@ private struct HoverHighlight: ViewModifier {
     }
 
     private var light: Surface.Layer? {
-        let up = enabled && (hovering || lit)
-        if small {
-            if selected { return .controlLit }
-            return up ? .control : nil
-        }
-        if selected { return up ? .rowSelectedLit : .rowSelected }
-        return up ? .row : nil
+        if selected { return small ? .controlLit : .rowSelected }
+        guard enabled && (hovering || lit) else { return nil }
+        return small ? .control : .row
     }
 
     private var text: Color {

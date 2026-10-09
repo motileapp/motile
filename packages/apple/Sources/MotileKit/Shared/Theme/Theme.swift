@@ -265,8 +265,6 @@ enum Surface {
         case row
         /// A row or a tab selected.
         case rowSelected
-        /// A selected row lit.
-        case rowSelectedLit
         /// A box on it: code, a message, a notice, a quoted line.
         case box
     }
@@ -300,13 +298,12 @@ enum Surface {
             case .controlLitOnSelected: Theme.backgroundAccentStrongest
             case .row: Theme.backgroundAccentLarger
             case .rowSelected: Theme.backgroundAccentLargerStronger
-            case .rowSelectedLit: Theme.backgroundAccentLargerStrongest
             case .box: Theme.backgroundSecondary
             }
         case .secondary:
             switch layer {
             case .control, .row, .box: Theme.backgroundSecondaryAccent
-            case .controlLit, .controlLitOnSelected, .rowSelected, .rowSelectedLit: Theme.backgroundSecondaryAccentStronger
+            case .controlLit, .controlLitOnSelected, .rowSelected: Theme.backgroundSecondaryAccentStronger
             }
         case .card: Theme.cardAccent
         case .popover: Theme.popoverAccent

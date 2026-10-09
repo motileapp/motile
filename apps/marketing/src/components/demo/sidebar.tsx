@@ -171,9 +171,7 @@ function ThreadRow({
       onClick={onSelect}
       className={cn(
         "group mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
-        selected
-          ? "bg-background-accent-larger-stronger hover:bg-background-accent-larger-strongest"
-          : "hover:bg-background-accent-larger"
+        selected ? "bg-background-accent-larger-stronger" : "hover:bg-background-accent-larger"
       )}
     >
       <span className="flex h-5 w-full items-center gap-1.5 text-muted-foreground">
