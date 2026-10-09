@@ -157,6 +157,7 @@ struct SpendingView: View {
                 HStack(spacing: 6) {
                     Circle()
                         .fill(series.agent.color)
+                        .opacity(.colorTintChart)
                         .frame(width: 8, height: 8)
                     Text(series.agent.name)
                         .foregroundStyle(Color.themeForeground)
@@ -189,6 +190,7 @@ struct SpendingView: View {
                             .foregroundStyle(by: .value("Agent", series.agent.name))
                             .interpolationMethod(.monotone)
                             .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                            .opacity(Opacity.colorTintChart.value(for: scheme))
                     }
                 }
                 if let index = pointedIndex {

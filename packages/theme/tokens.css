@@ -72,6 +72,7 @@
   --opacity-shadow-strongest: 25%;
   --opacity-color-tint: 12%;
   --opacity-color-tint-stronger: 20%;
+  --opacity-color-tint-chart: 25%;
   --opacity-input-glass-tint: 80%;
   --opacity-shimmer-band-edge: 12%;
   --opacity-shimmer-band-middle: 55%;
@@ -151,6 +152,7 @@
   --opacity-shadow-strongest: 60%;
   --opacity-color-tint: 10%;
   --opacity-color-tint-stronger: 16%;
+  --opacity-color-tint-chart: 15%;
   --opacity-input-glass-tint: 80%;
   --opacity-shimmer-band-edge: 12%;
   --opacity-shimmer-band-middle: 55%;
