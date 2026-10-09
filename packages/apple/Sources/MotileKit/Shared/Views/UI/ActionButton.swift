@@ -16,9 +16,8 @@ enum ButtonVariant {
     case link
     /// A link's colour on a wash of it: a choice that is on.
     case accent
-    /// The foreground as in the dark on the scrim, over a picture or a video.
+    /// A secondary button as it is in the dark, over a picture or a video.
     case overlay
-
 }
 
 /// What a button shows before its words: a symbol, or a picture of its own like a logo.
@@ -67,7 +66,7 @@ struct ControlLook {
         case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
         case .link: lit ? AnyShapeStyle(Color.themePrimary.wash()) : AnyShapeStyle(Color.clear)
         case .accent: AnyShapeStyle(Color.themePrimary.wash(lit: lit))
-        case .overlay: filled(.themeScrim)
+        case .overlay: AnyShapeStyle(lit ? Color.themeControlLitOverPicture : Color.themeControlOverPicture)
         }
     }
 
