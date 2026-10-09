@@ -22,50 +22,50 @@ enum Theme {
 
     // Surfaces
     /// The window, sheets, settings and usage.
-    static let background = dynamic(hex(0xfbfcfd), hex(0x161819))
+    static let background = dynamic(hex(0xf8f9fc), hex(0x0a0b0f))
     /// Anything boxed on the page: the composer, code, notices, cards, strips.
-    static let card = dynamic(hex(0xfbfcfd), hex(0x1a1c1e))
+    static let card = dynamic(hex(0xeceef4), hex(0x111217))
     /// Menus and the command panel.
-    static let popover = dynamic(hex(0xffffff), hex(0x232429))
+    static let popover = dynamic(hex(0xffffff), hex(0x191a1f))
     /// A control under the pointer, and a filled control at rest, on the page.
-    static let accent = dynamic(hex(0xe6e8eb), hex(0x282a2c))
+    static let accent = dynamic(hex(0xe1e4ed), hex(0x191a1f))
     /// A control selected or pressed, on the page.
-    static let accentStronger = dynamic(hex(0xdee0e3), hex(0x323436))
+    static let accentStronger = dynamic(hex(0xd6dae6), hex(0x212227))
     /// A row or a tab under the pointer, on the page.
-    static let accentLarger = dynamic(hex(0xf0f1f3), hex(0x1c1e1f))
+    static let accentLarger = dynamic(hex(0xeceef4), hex(0x111217))
     /// A row or a tab selected, on the page.
-    static let accentLargerStronger = dynamic(hex(0xe9ebed), hex(0x222426))
+    static let accentLargerStronger = dynamic(hex(0xe1e4ed), hex(0x191a1f))
     /// What is lit or lifted on a card.
-    static let accentCard = dynamic(hex(0xe6e8eb), hex(0x2c2e30))
-    static let accentCardStronger = dynamic(hex(0xdee0e3), hex(0x363839))
+    static let accentCard = dynamic(hex(0xe1e4ed), hex(0x191a1f))
+    static let accentCardStronger = dynamic(hex(0xd6dae6), hex(0x212227))
     /// What is lit or lifted on a popover.
-    static let accentPopover = dynamic(hex(0xeaecef), hex(0x33343a))
-    static let accentPopoverStronger = dynamic(hex(0xe2e4e7), hex(0x3d3e44))
+    static let accentPopover = dynamic(hex(0xeceef4), hex(0x222226))
+    static let accentPopoverStronger = dynamic(hex(0xe1e4ed), hex(0x2b2b2f))
 
     // Lines
     /// Dividers on the page.
-    static let border = dynamic(hex(0xe1e3e6), hex(0x222425))
+    static let border = dynamic(hex(0xe2e3e5), hex(0x191a1e))
     /// The edge of a card, a field, a popover.
-    static let borderCard = dynamic(hex(0xebecee), hex(0x2a2c2f))
+    static let borderCard = dynamic(hex(0xd5d6d9), hex(0x2b2b2f))
 
     // Text
-    static let foreground = dynamic(hex(0x434b52), hex(0xf1f1f1))
+    static let foreground = dynamic(hex(0x22242b), hex(0xdcdee4))
     /// Secondary labels, tool rows, what the agent is doing.
-    static let mutedForeground = dynamic(hex(0x717171), hex(0xbbbbbb))
+    static let mutedForeground = dynamic(hex(0x6b6f7c), hex(0x9a9eab))
     /// Times, hints, counts.
-    static let mutedMoreForeground = dynamic(hex(0xa0a0a0), hex(0x8a8a8a))
+    static let mutedMoreForeground = dynamic(hex(0x9a9eab), hex(0x646875))
     /// Placeholders and what is dimmed.
-    static let mutedMostForeground = dynamic(hex(0xc4c4c4), hex(0x5c5c5c))
+    static let mutedMostForeground = dynamic(hex(0xc0c3cc), hex(0x4b4e59))
 
     // Meaning
-    static let primary = dynamic(hex(0x4f96f2), hex(0x5ea2f5))
+    static let primary = dynamic(hex(0x2a5bd7), hex(0x4f7cff))
     static let primaryForeground = hex(0xffffff)
-    static let destructive = dynamic(hex(0xdd5050), hex(0xe06060))
+    static let destructive = dynamic(hex(0xc62828), hex(0xff7b72))
     static let destructiveForeground = hex(0xffffff)
-    static let success = dynamic(hex(0x4a9d5f), hex(0x5fab72))
+    static let success = dynamic(hex(0x047857), hex(0x55c483))
     static let successForeground = hex(0xffffff)
-    static let warning = dynamic(hex(0xf0a21e), hex(0xf2ad33))
-    static let warningForeground = hex(0xffffff)
+    static let warning = dynamic(hex(0xb45309), hex(0xf5b454))
+    static let warningForeground = dynamic(hex(0xf8f9fc), hex(0x0a0b0f))
     static let merged = dynamic(hex(0x8250df), hex(0xba93fb))
 
     /// The charts' series, as light as each other, in a fixed order: Claude is the first, Codex
@@ -80,18 +80,18 @@ enum Theme {
 
     // Overlay and shadow
     /// The scrim over the page under what floats on it.
-    static let overlay = dynamic(hex(0x000000, alpha: 0.5), hex(0x000000, alpha: 0.6))
-    static let shadow = dynamic(hex(0x000000, alpha: 0.1), hex(0x000000, alpha: 0.25))
-    static let shadowStronger = dynamic(hex(0x000000, alpha: 0.22), hex(0x000000, alpha: 0.6))
+    static let overlay = dynamic(hex(0x000000, alpha: 0.32), hex(0x000000, alpha: 0.6))
+    static let shadow = dynamic(hex(0x1a1f36, alpha: 0.1), hex(0x030407, alpha: 0.2))
+    static let shadowStronger = dynamic(hex(0x1a1f36, alpha: 0.18), hex(0x030407, alpha: 0.4))
 
     // Tints
     /// How much of a colour a wash of it shows: a chip's tone, a notice, a diff's lines, a hover.
     static func tintOpacity(dark: Bool, stronger: Bool = false) -> CGFloat {
         switch (dark, stronger) {
-        case (false, false): 0.12
-        case (false, true): 0.2
-        case (true, false): 0.08
-        case (true, true): 0.14
+        case (false, false): 0.1
+        case (false, true): 0.22
+        case (true, false): 0.14
+        case (true, true): 0.3
         }
     }
 
