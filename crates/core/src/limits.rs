@@ -123,6 +123,9 @@ fn tone(used_percent: f64, warning: bool) -> Tone {
 }
 
 fn pace(used_percent: f64, window: &LimitWindow, now: f64) -> Option<Pace> {
+    if used_percent == 0.0 {
+        return Some(Pace::Under);
+    }
     let length = window.window_secs? as f64;
     let left = (window.resets_at? - now).clamp(0.0, length);
     let passed = (length - left) / length * 100.0;
@@ -179,7 +182,9 @@ mod tests {
         let even = window("Weekly", 50.0, 302400.0, 604800);
         let mut flagged = window("Weekly · Fable", 30.0, 302400.0, 604800);
         flagged.warning = true;
-        let windows = vec![session, weekly, even, flagged];
+        let mut unused = window("Weekly · Opus", 0.0, 0.0, 604800);
+        unused.resets_at = None;
+        let windows = vec![session, weekly, even, flagged, unused];
         let [section] = &sections(vec![read("studio", Agent::Codex, Some("a"), windows)], 1000.0)[..] else {
             panic!("one section")
         };
@@ -195,6 +200,7 @@ mod tests {
                 ("5%", Some("5d 11h"), Some(Pace::Under), Tone::Success),
                 ("50%", Some("3d 12h"), Some(Pace::On), Tone::Pending),
                 ("30%", Some("3d 12h"), Some(Pace::Under), Tone::Warning),
+                ("0%", None, Some(Pace::Under), Tone::Success),
             ]
         );
         assert_eq!(section.windows[0].reset_credits, 2);
