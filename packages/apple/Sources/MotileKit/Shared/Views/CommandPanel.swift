@@ -111,7 +111,7 @@ struct CommandPanel: View {
             .background(Color.themeBackground.ignoresSafeArea())
             .navigationTitle(title(page))
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, prompt: prompt(page))
+            .searchField(text: $query, prompt: prompt(page))
             .searchFocused($typing, equals: page)
             .searchPresentationToolbarBehavior(.avoidHidingContent)
             .searchAtBottom()
@@ -175,7 +175,7 @@ struct CommandPanel: View {
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .frame(width: ControlSize.regular.height, height: ControlSize.regular.height)
             }
-            TextField("", text: $query, prompt: Text(prompt(page)).foregroundStyle(Color.themeMutedStrongerForeground))
+            TextField("", text: $query, prompt: .placeholder(prompt(page)))
                 .textFieldStyle(.plain)
                 .font(.ui(size: 16))
                 .focused($searching)

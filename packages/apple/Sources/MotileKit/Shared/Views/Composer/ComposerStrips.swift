@@ -276,7 +276,7 @@ struct BranchPicker: View {
             HStack(spacing: 8) {
                 Image(.search, size: 12)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
-                TextField("", text: $query, prompt: Text(prompt).foregroundStyle(Color.themeMutedStrongerForeground))
+                TextField("", text: $query, prompt: .placeholder(prompt))
                     .textFieldStyle(.plain)
                     .font(.ui(size: 13))
                     .focused($searching)
@@ -323,7 +323,7 @@ struct BranchPicker: View {
         .environment(\.surface, .background)
         .navigationTitle(base == nil ? "Branch" : "Start From")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, prompt: prompt)
+        .searchField(text: $query, prompt: prompt)
         .searchPresentationToolbarBehavior(.avoidHidingContent)
         .searchAtBottom()
         .textInputAutocapitalization(.never)

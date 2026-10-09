@@ -41,12 +41,6 @@ enum DemoDriver {
         }
     }
 
-    private static func first<Found: UIView>(_ kind: Found.Type, in view: UIView?) -> Found? {
-        guard let view else { return nil }
-        if let found = view as? Found { return found }
-        return view.subviews.lazy.compactMap { first(kind, in: $0) }.first
-    }
-
     /// Signs in on an auth server with the dev login, once the core has said who it is.
     private static func signIn(_ email: String, store: AppStore) {
         guard store.ready else {
@@ -138,19 +132,19 @@ enum DemoDriver {
         case "drop": store.dropTargeted = rest == "on"
         case "top":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
-            (first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView)?.setContentOffset(.zero, animated: false)
+            (UIView.first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView)?.setContentOffset(.zero, animated: false)
         case "flash":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
-            let scroll = first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView
+            let scroll = UIView.first(TranscriptScroller.self, in: window)?.subviews.first as? UIScrollView
             if rest == "end", let scroll { scroll.setContentOffset(CGPoint(x: 0, y: scroll.contentSize.height - scroll.bounds.height), animated: false) }
             scroll?.flashScrollIndicators()
             print("FLASH", scroll?.verticalScrollIndicatorInsets as Any, scroll?.safeAreaInsets as Any, scroll?.automaticallyAdjustsScrollIndicatorInsets as Any)
         case "focus":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
-            first(ComposerUITextView.self, in: window)?.becomeFirstResponder()
+            UIView.first(ComposerUITextView.self, in: window)?.becomeFirstResponder()
         case "search":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
-            first(UITextField.self, in: window)?.becomeFirstResponder()
+            UIView.first(UITextField.self, in: window)?.becomeFirstResponder()
         case "blur": Platform.endEditing()
         case "access": store.setAccess(Access(rawValue: rest) ?? .full)
         case "view":
