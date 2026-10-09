@@ -17,7 +17,7 @@ final class AttachedFilesView: FlippedView {
     private weak var owner: RowOwner?
     private var files: [AttachedFile] = []
     private var tiles: [TileView] = []
-    private let names = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
+    private let names = TextLabel(font: Theme.smallFont, color: Theme.secondary)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -91,14 +91,14 @@ final class AttachedFilesView: FlippedView {
     /// One image or video: its picture, cut to the tile, with a play sign on a video.
     private final class TileView: FlippedView {
         private let picture = PictureView()
-        private let playSymbol = SymbolView(.circlePlay, size: 26, tint: Theme.foreground.inDark)
+        private let playSymbol = SymbolView(.circlePlay, size: 26, tint: .white)
         private var shown: AttachedFile?
 
         override init(frame: CGRect) {
             super.init(frame: frame)
             picture.fills = true
             addSubview(picture)
-            playSymbol.dropShadow(.stronger)
+            playSymbol.dropShadow(opacity: 0.4, radius: 4, down: 0)
             addSubview(playSymbol)
             pointer = .hand
         }

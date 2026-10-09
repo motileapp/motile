@@ -55,7 +55,7 @@ struct SettingsPage: View {
                 SettingsLabel("Signed in as")
             } trailing: {
                 Text(store.account.signedIn ? store.account.email : "Not signed in")
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                 if store.account.signedIn {
                     ActionButton("Sign Out", size: .small) { store.signOut() }
                 }
@@ -273,12 +273,12 @@ struct SettingsPage: View {
                 Text(server.name)
                     .font(.ui(size: 13, weight: .medium))
             }
-            .foregroundStyle(Color.themeForeground)
+            .foregroundStyle(Color.themeText)
         } trailing: {
             if let reason = accountsUnavailable(on: server) {
                 Text(reason)
                     .font(.ui(size: 12))
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
             }
         }
         if accountsUnavailable(on: server) == nil {
@@ -499,7 +499,7 @@ private struct AgentAccountSheet: View {
                                 .font(.ui(size: 13, weight: .medium))
                             Text("The folder keeps only the sign-in. Threads move between the two and go on where they were.")
                                 .font(.ui(size: 11.5))
-                                .foregroundStyle(Color.themeMutedForeground)
+                                .foregroundStyle(Color.themeSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.horizontal, 4)
@@ -558,7 +558,7 @@ private struct AgentAccountSheet: View {
             if let caption {
                 Text(caption)
                     .font(.ui(size: 11.5))
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)
             }
@@ -603,7 +603,7 @@ private struct SetupSheet: View {
                 .font(.ui(size: 13, weight: .semibold))
             Text("A shell script that runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder, as in: cp \"$MOTILE_PROJECT/.env\" . && pnpm install")
                 .font(.caption)
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             TextArea("cp \"$MOTILE_PROJECT/.env\" . && pnpm install", text: $script, monospaced: true, lines: 5, maxLines: 14)
             HStack {
@@ -649,11 +649,11 @@ private struct SettingsGroup<Content: View>: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.ui(size: 13))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                 if let caption {
                     Text(caption)
                         .font(.ui(size: 11.5))
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -692,7 +692,7 @@ private struct SettingsLabel: View {
         HStack(spacing: 8) {
             if let icon {
                 Image(icon, size: 13)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -700,7 +700,7 @@ private struct SettingsLabel: View {
                 if let description {
                     Text(description)
                         .font(.ui(size: 11.5))
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                         .lineLimit(truncates ? 1 : nil)
                         .truncationMode(.head)
                         .fixedSize(horizontal: false, vertical: !truncates)
@@ -747,7 +747,7 @@ private struct SettingsNote: View {
     var body: some View {
         Text(text)
             .font(.ui(size: 13))
-            .foregroundStyle(Color.themeMutedForeground)
+            .foregroundStyle(Color.themeSecondary)
             .fixedSize(horizontal: false, vertical: true)
             .padding(settingsInset)
             .frame(maxWidth: .infinity, alignment: .leading)

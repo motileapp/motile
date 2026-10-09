@@ -72,7 +72,7 @@ struct PanelMessage: View {
     var body: some View {
         Text(text)
             .font(.ui(size: 12.5))
-            .foregroundStyle(failed ? Color.themeDestructive : Color.themeMutedForeground)
+            .foregroundStyle(failed ? Color.themeDanger : Color.themeSecondary)
             .multilineTextAlignment(.center)
             .textSelection(.enabled)
             .padding(24)
@@ -90,7 +90,7 @@ private struct NoRepositoryMessage: View {
         VStack(spacing: 12) {
             Text("This folder isn't a git repository.")
                 .font(.ui(size: 12.5))
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
                 .multilineTextAlignment(.center)
             if let project = store.project(projectID), store.canInitializeGit(of: project) {
                 ActionButton("Initialize git", icon: .gitBranch, pending: store.initializingGit.contains(project.id)) {
@@ -106,7 +106,7 @@ private struct NoRepositoryMessage: View {
 struct PanelLoading: View {
     var body: some View {
         Spinner(size: ControlSize.large.symbol)
-            .foregroundStyle(Color.themeMutedMoreForeground)
+            .foregroundStyle(Color.themeTertiary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -156,7 +156,7 @@ struct PanelNote: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(Color.themeWarning.tinted())
+                .background(Color(platform: Theme.warningBackground))
             PanelLine()
         }
     }
@@ -225,6 +225,7 @@ struct PanelTabChip: View {
     let tab: PanelTab
     let active: Bool
     @State private var hovering = false
+    @Environment(\.surface) private var surface
 
     private static let height = ControlSize.regular.height
     private static let closeSize = ControlSize.small.height
@@ -260,6 +261,7 @@ struct PanelTabChip: View {
         ) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
             ActionButton(icon: .x, help: "Close (⌘W)", size: .small, symbolSize: 11) { panel.close(tab) }
+                .environment(\.surface, active ? surface.further : surface.next)
                 .padding(.trailing, Self.closeMargin + Self.margin)
                 .opacity(hovering || active ? 1 : 0)
         }
@@ -281,14 +283,13 @@ struct PanelTabChip: View {
 /// What a blank tab shows: the tabs there are to open.
 private struct PanelLauncher: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.surface) private var surface
     let target: PanelTarget
 
     var body: some View {
         VStack(spacing: 12) {
             Text("Open")
                 .font(.ui(size: 13, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
             VStack(spacing: 2) {
                 row(.folder, "Files", keys: "⇧⌘E", reason: nil) { store.sidePanel.open(.files) }
                 row(.diff, "Diff", keys: "⌘D", reason: target.repository ? nil : "Available in git repositories.") {
@@ -325,19 +326,20 @@ private struct PanelLauncher: View {
                 if let keys {
                     Text(keys)
                         .font(.ui(size: 11, weight: .medium))
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                         .padding(.horizontal, 6)
                         .frame(height: 20)
-                        .background(surface.boxColor, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .background(Color.themeBackgroundTertiary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                 }
                 #endif
             }
-            .foregroundStyle(reason == nil ? Color.themeForeground : Color.themeMutedMoreForeground)
+            .foregroundStyle(Color.themeText)
             .padding(.horizontal, 10)
             .frame(height: pressable(34))
         }
         .buttonStyle(.highlight())
         .disabled(reason != nil)
+        .opacity(reason == nil ? 1 : 0.45)
         .help(reason ?? "")
     }
 }
@@ -416,7 +418,7 @@ struct DiffSurface: View {
                     let viewed = page.viewed.values.filter { $0 }.count
                     Text("\(viewed) of \(page.viewed.count) viewed")
                         .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                         .padding(.leading, 6)
                         .help(page.canReviewLines ? "Click a line's number to comment on it" : "")
                 }
@@ -573,10 +575,10 @@ struct FilesSurface: View {
         VStack(spacing: 0) {
             PanelBar {
                 Image(.folder, size: 11)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                 Text(target.name)
                     .font(.ui(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .lineLimit(1)
                     .padding(.leading, 3)
                 Spacer(minLength: 4)
@@ -615,19 +617,20 @@ private struct FileRow: View {
         let panel = store.sidePanel
         HStack(spacing: 6) {
             Image(node.open ? .chevronDown : .chevronRight, size: 8)
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
                 .frame(width: 10)
                 .opacity(node.folder ? 1 : 0)
             Image(node.folder ? .folder : FileSymbol.symbol(for: node.path), size: 11)
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
                 .frame(width: 16)
             Text(node.name)
                 .font(.ui(size: 12.5))
-                .foregroundStyle(node.ignored ? Color.themeMutedMoreForeground : Color.themeForeground)
+                .foregroundStyle(Color.themeText)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
         }
+        .opacity(node.ignored ? 0.5 : 1)
         .padding(.leading, 12 + CGFloat(node.depth) * 14)
         .padding(.trailing, 10)
         .frame(height: pressable(26))
@@ -652,7 +655,7 @@ struct FileSurface: View {
         let panel = store.sidePanel
         VStack(spacing: 0) {
             PanelBar {
-                (Text(folder).foregroundStyle(Color.themeMutedForeground) + Text((path as NSString).lastPathComponent).foregroundStyle(Color.themeForeground))
+                (Text(folder).foregroundStyle(Color.themeSecondary) + Text((path as NSString).lastPathComponent).foregroundStyle(Color.themeText))
                     .font(.ui(size: 12.5, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.head)
@@ -720,7 +723,7 @@ struct ChangeSurface: View {
             PanelBar {
                 Text(panel.name(ofTurn: turn))
                     .font(.ui(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 ActionButton(icon: .diff, help: "Show everything this turn changed") {

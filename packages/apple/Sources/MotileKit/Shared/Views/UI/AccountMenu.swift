@@ -59,9 +59,9 @@ struct AccountPicture: View {
         GeometryReader { disc in
             Text((account.name ?? account.email).prefix(1).uppercased())
                 .font(.ui(size: disc.size.height * 0.5, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.themeAccent)
+                .background(Color.themeBorderSecondary)
         }
     }
 }

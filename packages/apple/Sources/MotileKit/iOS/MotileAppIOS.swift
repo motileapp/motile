@@ -20,7 +20,7 @@ struct MotileApp: App {
             RootView()
                 .environment(store)
                 .environment(drawer)
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
                 .onAppear {
                     guard !delegate.started else { return }
                     delegate.started = true
@@ -267,20 +267,20 @@ struct MainScreen: View {
             SidebarScreen()
                 .environment(store)
                 .environment(drawer)
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
         } content: {
             NavigationStack {
                 ThreadScreen()
             }
             .environment(store)
             .environment(drawer)
-            .foregroundStyle(Color.themeForeground)
+            .foregroundStyle(Color.themeText)
         } panel: {
             NavigationStack {
                 PanelScreen()
             }
             .environment(store)
-            .foregroundStyle(Color.themeForeground)
+            .foregroundStyle(Color.themeText)
         }
         .ignoresSafeArea()
     }

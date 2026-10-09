@@ -20,7 +20,7 @@ struct LimitsView: View {
                     if let note = section.note {
                         Text(note)
                             .font(.ui(size: 12))
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(16)
@@ -34,7 +34,7 @@ struct LimitsView: View {
             ForEach(report.notes, id: \.self) { note in
                 Text(note)
                     .font(.caption)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -45,13 +45,13 @@ struct LimitsView: View {
             AgentIcon(agent: section.agent, size: 16)
             Text(section.agent.name)
                 .font(.ui(size: 14, weight: .medium))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
             if let plan = section.plan {
                 Chip(plan)
             }
             login(section)
                 .font(.ui(size: 12))
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeSecondary)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
         }
@@ -64,7 +64,7 @@ struct LimitsView: View {
     private func login(_ section: LimitsReport.Section) -> Text {
         switch (section.name, section.account) {
         case let (name?, account?):
-            return Text(name) + Text(" · ").foregroundStyle(Color.themeMutedMoreForeground) + Text(account)
+            return Text(name) + Text(" · ").foregroundStyle(Color.themeTertiary) + Text(account)
         case let (name?, nil):
             return Text(name)
         case let (nil, account?):
@@ -102,23 +102,23 @@ private struct LimitCard: View {
     }
 
     private var color: Color {
-        window.warning ? .themeWarning : agent == .claude ? .themeChart[0] : .themeChart[1]
+        window.warning ? .themeWarning : agent == .claude ? .themeClaudeSeries : .themeCodexSeries
     }
 
     private var numbers: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(window.label)
                 .font(.ui(size: 13, weight: .medium))
-                .foregroundStyle(Color.themeForeground)
+                .foregroundStyle(Color.themeText)
                 .lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(window.used)
                     .font(.ui(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .monospacedDigit()
                 Text("used")
                     .font(.ui(size: 13))
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
             }
             if let pace = window.pace {
                 HStack(spacing: 5) {
@@ -126,7 +126,7 @@ private struct LimitCard: View {
                     Text(Self.label(of: pace))
                         .font(.ui(size: 12))
                 }
-                .foregroundStyle(Color.themeMutedMoreForeground)
+                .foregroundStyle(Color.themeTertiary)
                 .help(Self.help(of: pace))
             }
         }
@@ -168,11 +168,11 @@ private struct LimitBar: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-            .fill(surface.boxColor)
+            .fill(surface.next.color)
             .overlay(alignment: .leading) {
                 GeometryReader { bar in
                     RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                        .fill(color.tinted(stronger: true))
+                        .fill(color.opacity(0.45))
                         .frame(width: bar.size.width * window.usedPercent / 100)
                 }
             }
@@ -180,7 +180,7 @@ private struct LimitBar: View {
                 HStack(spacing: 8) {
                     Text(window.used)
                         .font(.ui(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.themeForeground)
+                        .foregroundStyle(Color.themeText)
                         .monospacedDigit()
                     Spacer(minLength: 0)
                     plate
@@ -200,7 +200,7 @@ private struct LimitBar: View {
                 }
                 if window.resetsIn != nil, window.resetCredits > 0 {
                     Text("·")
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                 }
                 if window.resetCredits > 0 {
                     HStack(spacing: 3) {
@@ -211,11 +211,11 @@ private struct LimitBar: View {
                 }
             }
             .font(.ui(size: 11, weight: .medium))
-            .foregroundStyle(Color.themeForeground)
+            .foregroundStyle(Color.themeText)
             .monospacedDigit()
             .padding(.horizontal, 7)
             .frame(height: scaled(Self.height) - 8)
-            .background(surface.boxColor, in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+            .background(surface.next.color, in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
         }
     }
 }

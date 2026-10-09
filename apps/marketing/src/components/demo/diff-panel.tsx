@@ -47,24 +47,24 @@ export function DiffPanel({
           pastWindowButtons ? "pl-[116px]" : "pl-2"
         )}
       >
-        <span className="flex h-7 items-center gap-1.5 rounded-[7px] bg-accent pr-0.5 pl-[9px] text-[12px] font-medium">
+        <span className="flex h-7 items-center gap-1.5 rounded-[7px] bg-background-tertiary pr-0.5 pl-[9px] text-[12px] font-medium">
           <DiffIcon className="size-[11px]" />
           Diff
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent-stronger hover:text-foreground"
+            className="flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-background-quaternary hover:text-foreground"
           >
             <XIcon className="size-[13px]" />
           </button>
         </span>
-        <span className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground">
+        <span className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground">
           <PlusIcon className="size-3.5" />
         </span>
       </div>
       <div className="flex h-9 shrink-0 items-center gap-1 border-t border-b pr-1 pl-3">
-        <span className="-ml-2 flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
+        <span className="-ml-2 flex h-7 items-center gap-1.5 rounded-[7px] px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-background-secondary hover:text-foreground">
           Uncommitted
           <MenuChevron />
         </span>
@@ -80,7 +80,7 @@ export function DiffPanel({
               setClosed(allClosed ? [] : files.map((file) => file.path))
             }
             aria-label={allClosed ? "Open every file" : "Close every file"}
-            className="ml-auto flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="ml-auto flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground"
           >
             {allClosed ? (
               <UnfoldVerticalIcon className="size-3.5" />
@@ -91,7 +91,7 @@ export function DiffPanel({
         )}
         <span
           className={cn(
-            "flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground",
+            "flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground",
             files.length < 2 && "ml-auto"
           )}
         >
@@ -120,9 +120,9 @@ export function DiffPanel({
 }
 
 const LINE_FILLS = {
-  added: "tint-success",
-  removed: "tint-destructive",
-  note: "bg-accent-larger text-muted-foreground",
+  added: "bg-added",
+  removed: "bg-removed",
+  note: "bg-background-secondary text-muted-foreground",
   unchanged: "",
 }
 
@@ -143,11 +143,11 @@ function File({
         type="button"
         onClick={onToggle}
         className={cn(
-          "flex h-[34px] w-full items-center border-b bg-card pr-1.5 text-left text-[12.5px]",
+          "flex h-[34px] w-full items-center border-b bg-background-secondary pr-1.5 text-left text-[12.5px]",
           !first && "border-t"
         )}
       >
-        <span className="flex w-7 justify-center text-muted-more-foreground">
+        <span className="flex w-7 justify-center text-tertiary">
           {closed ? (
             <ChevronRightIcon className="size-[9px]" />
           ) : (
@@ -159,7 +159,7 @@ function File({
           <span className="text-muted-foreground">{folderOf(file.path)}</span>
           <span className="font-medium">{nameOf(file.path)}</span>
           {file.isNew && (
-            <span className="ml-3 text-[11.5px] text-muted-more-foreground">new</span>
+            <span className="ml-3 text-[11.5px] text-tertiary">new</span>
           )}
         </span>
         <span className="mr-1 ml-auto pl-2.5">
@@ -173,10 +173,10 @@ function File({
         <div className="min-w-max font-mono text-[12.5px] leading-[18px]">
           {file.lines.map((line, index) => (
             <div key={index} className={cn("flex", LINE_FILLS[line.kind])}>
-              <span className="w-9 shrink-0 pr-1.5 text-right text-[11px] text-muted-more-foreground tabular-nums select-none">
+              <span className="w-9 shrink-0 pr-1.5 text-right text-[11px] text-tertiary tabular-nums select-none">
                 {line.old}
               </span>
-              <span className="w-9 shrink-0 pr-1.5 text-right text-[11px] text-muted-more-foreground tabular-nums select-none">
+              <span className="w-9 shrink-0 pr-1.5 text-right text-[11px] text-tertiary tabular-nums select-none">
                 {line.new}
               </span>
               <span className="pr-3 pl-2 whitespace-pre">

@@ -11,7 +11,7 @@ struct ActivityRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(symbol, size: 12)
-                .foregroundStyle(entry.tone == .neutral ? Color.themeMutedForeground : entry.tone.color)
+                .foregroundStyle(entry.tone == .neutral ? Color.themeSecondary : entry.tone.color)
                 .frame(width: 18, height: Self.lineHeight)
             VStack(alignment: .leading, spacing: 6) {
                 byline
@@ -36,9 +36,9 @@ struct ActivityRow: View {
 
     private var byline: some View {
         HStack(alignment: .top, spacing: 0) {
-            (Text(entry.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
-                + Text(entry.author.isEmpty ? entry.said : " \(entry.said)").foregroundStyle(Color.themeMutedForeground)
-                + Text(" · \(Time.ago(entry.at))").foregroundStyle(Color.themeMutedMoreForeground))
+            (Text(entry.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
+                + Text(entry.author.isEmpty ? entry.said : " \(entry.said)").foregroundStyle(Color.themeSecondary)
+                + Text(" · \(Time.ago(entry.at))").foregroundStyle(Color.themeTertiary))
                 .font(.ui(size: 12.5))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 6)
@@ -67,10 +67,10 @@ struct ActivityRow: View {
                     HStack(spacing: 8) {
                         Text(commit.oid)
                             .font(.ui(size: 11.5, design: .monospaced))
-                            .foregroundStyle(Color.themePrimary)
+                            .foregroundStyle(Color.themeLink)
                         Text(commit.headline)
                             .font(.ui(size: 12.5))
-                            .foregroundStyle(Color.themeForeground)
+                            .foregroundStyle(Color.themeText)
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Spacer(minLength: 0)
@@ -138,19 +138,19 @@ struct ThreadCard: View {
         } label: {
             HStack(spacing: 6) {
                 Image(isOpen ? .chevronDown : .chevronRight, size: 8)
-                    .foregroundStyle(Color.themeMutedMoreForeground)
+                    .foregroundStyle(Color.themeTertiary)
                     .frame(width: 10)
                 Image(FileSymbol.symbol(for: thread.path), size: 11)
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                 Text(thread.path)
                     .font(.ui(size: 12, weight: .medium))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .lineLimit(1)
                     .truncationMode(.head)
                 if let line = thread.line {
                     Text("line \(line)")
                         .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                         .fixedSize()
                 }
                 if thread.outdated { Chip("Outdated", tone: .themeWarning).fixedSize() }
@@ -159,7 +159,7 @@ struct ThreadCard: View {
                 if !isOpen {
                     Text(thread.comments.count == 1 ? "1 comment" : "\(thread.comments.count) comments")
                         .font(.ui(size: 11.5))
-                        .foregroundStyle(Color.themeMutedMoreForeground)
+                        .foregroundStyle(Color.themeTertiary)
                 }
             }
             .padding(.horizontal, 12)
@@ -218,21 +218,21 @@ private struct HunkView: View {
             ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                 Text(line.isEmpty ? " " : line)
                     .font(.ui(size: 11.5, design: .monospaced))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
-                    .background(fill(line))
+                    .background(fill(line).opacity(index == lines.count - 1 ? 1 : 0.7))
             }
         }
         .padding(.bottom, 6)
     }
 
-    private func fill(_ line: String) -> Tinted {
-        if line.hasPrefix("+") { return Color.themeSuccess.tinted() }
-        if line.hasPrefix("-") { return Color.themeDestructive.tinted() }
-        return Color.clear.tinted()
+    private func fill(_ line: String) -> Color {
+        if line.hasPrefix("+") { return .themeSuccess.opacity(0.14) }
+        if line.hasPrefix("-") { return .themeDanger.opacity(0.14) }
+        return .clear
     }
 }
 
@@ -244,8 +244,8 @@ private struct CommentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 0) {
-                (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
-                    + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeMutedMoreForeground))
+                (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeText)
+                    + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeTertiary))
                     .font(.ui(size: 12.5))
                 Spacer(minLength: 4)
                 HStack(spacing: 0) {

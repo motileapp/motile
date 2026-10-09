@@ -117,14 +117,14 @@ struct ComposerView: View {
     private var monitoringStrip: some View {
         HStack(spacing: 0) {
             Circle()
-                .fill(Color.themeForeground)
+                .fill(Color.themeMonitoring)
                 .frame(width: 6, height: 6)
                 .padding(.leading, 14)
                 .padding(.trailing, 8)
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(monitoringLabel(now: context.date.timeIntervalSince1970))
                     .font(.ui(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeMonitoring)
             }
             Spacer(minLength: 8)
             ActionButton("Stop", help: "Stop monitoring (⌘.)", variant: .ghost, size: .small, margin: ComposerStrip.margin) { store.stop() }

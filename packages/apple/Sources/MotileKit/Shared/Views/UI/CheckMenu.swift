@@ -64,7 +64,7 @@ struct CheckMenu: View {
         VStack(spacing: 0) {
             ForEach(groups.indices, id: \.self) { index in
                 if index > 0 {
-                    Color.themeBorderCard
+                    Color.themeBorderSecondary
                         .frame(height: 1)
                         .padding(.horizontal, -Self.padding)
                         .padding(.vertical, Self.padding)
@@ -87,7 +87,7 @@ struct CheckMenu: View {
             Spacer(minLength: 12)
         }
         .font(.ui(size: 13))
-        .foregroundStyle(Color.themeForeground)
+        .foregroundStyle(Color.themeText)
         .padding(.horizontal, 8)
         .frame(height: pressable(28))
         .contentShape(Rectangle())
@@ -129,9 +129,10 @@ extension View {
             .background {
                 shape
                     .fill(Color.themePopover)
-                    .shadow(.regular)
+                    .shadow(color: .black.opacity(0.04), radius: 1.5, y: 1)
+                    .shadow(color: .black.opacity(0.1), radius: 12, y: 6)
             }
-            .overlay { shape.strokeBorder(Color.themeBorderCard, lineWidth: 1) }
+            .overlay { shape.strokeBorder(Color.themeBorderSecondary, lineWidth: 1) }
             .environment(\.surface, .popover)
     }
 }

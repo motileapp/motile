@@ -15,7 +15,7 @@ struct AgentsSurface: View {
                 PanelBar {
                     Text(Self.summary(of: agents))
                         .font(.ui(size: 12, weight: .medium))
-                        .foregroundStyle(Color.themeMutedForeground)
+                        .foregroundStyle(Color.themeSecondary)
                     Spacer()
                 }
                 ScrollView {
@@ -54,12 +54,12 @@ private struct AgentRow: View {
                     HStack(spacing: 6) {
                         Text(agent.title)
                             .font(.ui(size: 13, weight: .medium))
-                            .foregroundStyle(Color.themeForeground)
+                            .foregroundStyle(Color.themeText)
                             .lineLimit(1)
                         if let kind = agent.kind {
                             Text(kind)
                                 .font(.ui(size: 11))
-                                .foregroundStyle(Color.themeMutedForeground)
+                                .foregroundStyle(Color.themeSecondary)
                                 .lineLimit(1)
                                 .layoutPriority(-1)
                         }
@@ -69,14 +69,14 @@ private struct AgentRow: View {
                     if !agent.detail.isEmpty {
                         Text(agent.detail)
                             .font(.ui(size: 12))
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeSecondary)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
                     }
                     if let usage = agent.usage {
                         Text(usage)
                             .font(.ui(size: 11))
-                            .foregroundStyle(Color.themeMutedMoreForeground)
+                            .foregroundStyle(Color.themeTertiary)
                     }
                 }
             }
@@ -95,9 +95,9 @@ private struct AgentStatusIcon: View {
 
     var body: some View {
         switch status {
-        case .running: icon(.circleDashed, Color.themePrimary)
-        case .succeeded: icon(.check, Color.themeMutedForeground)
-        case .failed: icon(.x, Color.themeDestructive)
+        case .running: icon(.circleDashed, Color.themeWorking)
+        case .succeeded: icon(.check, Color.themeSecondary)
+        case .failed: icon(.x, Color.themeDanger)
         }
     }
 
@@ -114,10 +114,10 @@ private struct AgentTime: View {
     var body: some View {
         if agent.working {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                time(Time.elapsed(since: agent.startedAt, now: context.date.timeIntervalSince1970), Color.themePrimary)
+                time(Time.elapsed(since: agent.startedAt, now: context.date.timeIntervalSince1970), Color.themeWorking)
             }
         } else if let milliseconds = agent.durationMs {
-            time(Time.duration(milliseconds: milliseconds), Color.themeMutedMoreForeground)
+            time(Time.duration(milliseconds: milliseconds), Color.themeTertiary)
         }
     }
 
@@ -143,7 +143,7 @@ private struct AgentTranscript: View {
                     .frame(width: 16)
                 Text(agent.title)
                     .font(.ui(size: 12, weight: .medium))
-                    .foregroundStyle(Color.themeForeground)
+                    .foregroundStyle(Color.themeText)
                     .lineLimit(1)
                 Spacer(minLength: 6)
                 AgentTime(agent: agent)

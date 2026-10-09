@@ -77,7 +77,7 @@ struct WaitingTitle: View {
                 Text(place)
                     .font(.ui(size: 12))
                     .monospacedDigit()
-                    .foregroundStyle(Color.themeMutedForeground)
+                    .foregroundStyle(Color.themeSecondary)
                     .fixedSize()
             }
         }
