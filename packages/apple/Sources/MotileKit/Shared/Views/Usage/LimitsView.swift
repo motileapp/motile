@@ -169,8 +169,7 @@ private struct LimitRow: View {
 }
 
 /// What was used of a window as the part of a bar it fills, and at its end when the window starts
-/// over and the resets the login may use. The text is drawn in the fill's foreground where it lies
-/// on the fill and the page's elsewhere.
+/// over and the resets the login may use.
 private struct LimitBar: View {
     private static let height: CGFloat = 28
 
@@ -186,32 +185,21 @@ private struct LimitBar: View {
                 .overlay(alignment: .leading) {
                     RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
                         .fill(color)
+                        .opacity(.colorTintChart)
                         .frame(width: filled)
                 }
                 .overlay {
                     HStack(spacing: 8) {
-                        onFill(used, filled: filled)
+                        used
                         Spacer(minLength: 0)
-                        onFill(end, filled: filled)
+                        end
                     }
+                    .foregroundStyle(Color.themeForeground)
                     .padding(.horizontal, 9)
                     .monospacedDigit()
                 }
-                .coordinateSpace(name: "bar")
         }
         .frame(height: scaled(Self.height))
-    }
-
-    private func onFill(_ text: some View, filled: CGFloat) -> some View {
-        text.foregroundStyle(Color.themeForeground)
-            .overlay {
-                text.foregroundStyle(fillForeground)
-                    .mask(alignment: .leading) {
-                        GeometryReader { text in
-                            Rectangle().frame(width: max(0, filled - text.frame(in: .named("bar")).minX))
-                        }
-                    }
-            }
     }
 
     private var used: some View {
@@ -236,13 +224,5 @@ private struct LimitBar: View {
             }
         }
         .font(.ui(size: 11, weight: .medium))
-    }
-
-    private var fillForeground: Color {
-        switch window.tone {
-        case .success: .themeSuccessForeground
-        case .pending: .themePendingForeground
-        case .warning: .themeWarningForeground
-        }
     }
 }
