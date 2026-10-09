@@ -261,6 +261,7 @@ struct PanelTabChip: View {
         ) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
             ActionButton(icon: .x, help: "Close (⌘W)", size: .small, symbolSize: 11) { panel.close(tab) }
+                .environment(\.row, active ? .rowSelectedLit : .row)
                 .padding(.trailing, Self.closeMargin + Self.margin)
                 .opacity(hovering || active ? 1 : 0)
         }
