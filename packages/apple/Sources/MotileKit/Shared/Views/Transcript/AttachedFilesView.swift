@@ -91,15 +91,15 @@ final class AttachedFilesView: FlippedView {
     /// One image or video: its picture, cut to the tile, with a play sign on a video.
     private final class TileView: FlippedView {
         private let picture = PictureView()
-        private let playSymbol = SymbolView(.circlePlay, size: 26, tint: Theme.foregroundOverPicture)
+        private var playButton: OverlayButton!
         private var shown: AttachedFile?
 
         override init(frame: CGRect) {
             super.init(frame: frame)
             picture.fills = true
             addSubview(picture)
-            playSymbol.dropShadow(.sm, .shadowStrongest)
-            addSubview(playSymbol)
+            playButton = OverlayButton(.play, size: .regular, tooltip: "Play") { [weak self] in self?.onPress?(.zero) }
+            addSubview(playButton)
             pointer = .hand
         }
 
@@ -118,7 +118,7 @@ final class AttachedFilesView: FlippedView {
             }
             tip = file.name
             describe(file.name)
-            playSymbol.isHidden = !file.video
+            playButton.isHidden = !file.video
             guard file != shown || picture.picture == nil else { return }
             shown = file
             guard let id = file.picture else {
@@ -140,7 +140,12 @@ final class AttachedFilesView: FlippedView {
 
         override func layoutNow() {
             picture.frame = bounds
-            playSymbol.frame = CGRect(x: bounds.midX - 17, y: bounds.midY - 17, width: 34, height: 34)
+            let side = playButton.size.height
+            playButton.frame = CGRect(x: (bounds.midX - side / 2).rounded(), y: (bounds.midY - side / 2).rounded(), width: side, height: side)
+        }
+
+        override func takesPress(at point: CGPoint) -> Bool {
+            bounds.contains(point) && (playButton.isHidden || !playButton.frame.contains(point))
         }
     }
 }

@@ -139,6 +139,40 @@ final class RowButton: FlippedView {
     }
 }
 
+/// A round button of one symbol over a picture, as `ActionButton`'s overlay variant is: for the
+/// views the transcript draws itself. Pressed looks as under the pointer does.
+final class OverlayButton: FlippedView {
+    let size: ControlSize
+    private let fill = SurfaceView()
+    private let symbol: SymbolView
+
+    init(_ symbol: Symbol, size: ControlSize, tooltip: String, action: @escaping () -> Void) {
+        self.size = size
+        self.symbol = SymbolView(symbol, size: size.symbol, tint: Theme.foregroundOverPicture)
+        super.init(frame: .zero)
+        fill.radius = size.height / 2
+        addSubview(fill)
+        addSubview(self.symbol)
+        light(false)
+        tip = tooltip
+        describe(tooltip, button: true)
+        pointer = .hand
+        onPress = { _ in action() }
+        onHover = { [weak self] point in self?.light(point != nil) }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layoutNow() {
+        fill.frame = bounds
+        symbol.frame = bounds
+    }
+
+    private func light(_ lit: Bool) {
+        fill.fill = lit ? Theme.controlLitOverPicture : Theme.controlOverPicture
+    }
+}
+
 /// The box an image or a video is shown in: empty until the picture is there.
 final class PictureView: LayerView {
     static let radius = Radius.lg
