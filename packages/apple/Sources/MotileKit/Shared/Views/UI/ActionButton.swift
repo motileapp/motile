@@ -43,8 +43,6 @@ struct ControlLook {
     var joined: HorizontalEdge.Set = []
     /// A colour that says something, like a pull request's state, in place of the quiet ones.
     var tint: Color?
-    /// Only a symbol: too small for the next layer to show under the pointer.
-    var wordless = false
 
     var foreground: Color {
         if let tint, variant == .ghost || variant == .secondary { return tint }
@@ -77,13 +75,12 @@ struct ControlLook {
         lit ? AnyShapeStyle(color.at(.lit)) : AnyShapeStyle(color)
     }
 
-    /// A ghost button lights a step above the row it lies on. Off a row, one that is only a
-    /// symbol is too small for the control colour to show, so it lights a step further.
+    /// A ghost button lights a step above the row it lies on.
     private var ghostLit: Color {
         switch row {
         case .rowSelected, .rowSelectedLit: surface.color(.controlLitOnSelected)
         case .row: surface.color(.controlLit)
-        default: surface.color(wordless ? .controlLit : .control)
+        default: surface.color(.control)
         }
     }
 
@@ -312,7 +309,7 @@ struct ActionButton: View {
         title = nil
         self.icon = .symbol(icon)
         self.help = help
-        look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint, wordless: true)
+        look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
         pendingTitle = nil
         fills = false
@@ -394,7 +391,7 @@ struct ActionMenu<Content: View>: View {
         title = nil
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture)
         self.help = help
-        look = ControlLook(variant: variant, size: size, round: round, joined: joined, tint: tint, wordless: true)
+        look = ControlLook(variant: variant, size: size, round: round, joined: joined, tint: tint)
         chevron = false
         self.pending = pending
         self.symbolSize = symbolSize
