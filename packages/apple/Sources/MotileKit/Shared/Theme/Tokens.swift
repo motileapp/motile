@@ -49,7 +49,7 @@ extension Theme {
     static let chart3 = tone(0xb45309, 0xf5b454)
     static let chart4 = tone(0x8250df, 0xba93fb)
     static let chart5 = tone(0x0284c7, 0x38bdf8)
-    static let claude = tone(0xd97757, 0xd97757)
+    static let claude = tone(0xd07c60, 0xd07c60)
     static let openai = tone(0x22242b, 0xd0d2d9)
     static let google = tone(0x22242b, 0xd0d2d9)
     static let linear = tone(0x22242b, 0xd0d2d9)
