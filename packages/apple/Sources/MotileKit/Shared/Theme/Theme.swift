@@ -328,21 +328,25 @@ extension EnvironmentValues {
     @Entry var row: Surface.Layer?
 }
 
-private struct Box<S: Shape>: ViewModifier {
+private struct Box<S: InsettableShape>: ViewModifier {
     let shape: S
+    let bordered: Bool
     @Environment(\.surface) private var surface
 
     func body(content: Content) -> some View {
         content
             .background(surface.color(.box), in: shape)
+            .overlay {
+                if bordered { shape.strokeBorder(surface.border, lineWidth: 1) }
+            }
             .environment(\.surface, surface.inBox)
     }
 }
 
 extension View {
-    /// Makes the view a box on the surface it is on.
-    func box(in shape: some Shape) -> some View {
-        modifier(Box(shape: shape))
+    /// Makes the view a box on the surface it is on, `bordered` in that surface's border.
+    func box(in shape: some InsettableShape, bordered: Bool = false) -> some View {
+        modifier(Box(shape: shape, bordered: bordered))
     }
 
     /// A sheet's content: on the background, with what lies on it filled from there.
