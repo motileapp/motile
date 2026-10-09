@@ -18,12 +18,14 @@ private struct HoverHighlight: ViewModifier {
     private var hovering: Bool { hovered ?? tracked }
 
     @ViewBuilder func body(content: Content) -> some View {
+        let light = self.light
         let lighted = tinted(content)
             .background {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(light.map(surface.color) ?? Color.clear)
                     .padding(inset)
             }
+            .environment(\.row, light)
         if hovered == nil {
             lighted.onHover { tracked = $0 }
         } else {
@@ -40,9 +42,9 @@ private struct HoverHighlight: ViewModifier {
     }
 
     private var light: Surface.Layer? {
-        if selected { return .rowSelected }
-        guard enabled, hovering || lit else { return nil }
-        return .row
+        let up = enabled && (hovering || lit)
+        if selected { return up ? .rowSelectedLit : .rowSelected }
+        return up ? .row : nil
     }
 
     private var text: Color {

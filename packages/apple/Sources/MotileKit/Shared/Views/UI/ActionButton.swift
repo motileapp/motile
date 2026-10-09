@@ -35,6 +35,8 @@ struct ControlLook {
     var lit = false
     /// The layer it lies on.
     var surface = Surface.background
+    /// The row it lies on, as it is lit.
+    var row: Surface.Layer?
     /// Round ends, for the composer's buttons.
     var round = false
     /// The sides another control touches, which stay square.
@@ -75,9 +77,14 @@ struct ControlLook {
         lit ? AnyShapeStyle(color.at(.lit)) : AnyShapeStyle(color)
     }
 
-    /// A ghost button that is only a symbol is too small for the control colour to show, so it lights a step further.
+    /// A ghost button lights a step above the row it lies on. Off a row, one that is only a
+    /// symbol is too small for the control colour to show, so it lights a step further.
     private var ghostLit: Color {
-        surface.color(wordless ? .controlLit : .control)
+        switch row {
+        case .rowSelected, .rowSelectedLit: surface.color(.controlLitOnSelected)
+        case .row: surface.color(.controlLit)
+        default: surface.color(wordless ? .controlLit : .control)
+        }
     }
 
     private var shape: UnevenRoundedRectangle {
@@ -216,10 +223,12 @@ private struct ControlBody<Label: View>: View {
     @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
     @Environment(\.surface) private var surface
+    @Environment(\.row) private var row
 
     var body: some View {
         var look = self.look
         look.surface = surface
+        look.row = row
         look.lit = enabled && !pending && (hovering || pressed)
         return label
             .foregroundStyle(look.foreground)
@@ -356,6 +365,7 @@ struct ActionMenu<Content: View>: View {
     @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
     @Environment(\.surface) private var surface
+    @Environment(\.row) private var row
 
     /// A menu with words shows what is chosen, and a chevron after it.
     init(
@@ -396,6 +406,7 @@ struct ActionMenu<Content: View>: View {
         let reach = ControlReach(size: look.size, wordless: title == nil && !chevron, margin: margin)
         var look = self.look
         look.surface = surface
+        look.row = row
         look.lit = enabled && !pending && hovering
         return Menu {
             content

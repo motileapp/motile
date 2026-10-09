@@ -256,10 +256,14 @@ enum Surface {
         case control
         /// The same lit, or selected.
         case controlLit
+        /// A control lit on a selected row, which is already as light as a lit control.
+        case controlLitOnSelected
         /// A row or a tab lit.
         case row
         /// A row or a tab selected.
         case rowSelected
+        /// A selected row lit.
+        case rowSelectedLit
         /// A box on it: code, a message, a notice, a quoted line.
         case box
     }
@@ -281,14 +285,16 @@ enum Surface {
             switch layer {
             case .control: Theme.backgroundAccent
             case .controlLit: Theme.backgroundAccentStronger
+            case .controlLitOnSelected: Theme.backgroundAccentStrongest
             case .row: Theme.backgroundAccentLarger
             case .rowSelected: Theme.backgroundAccentLargerStronger
+            case .rowSelectedLit: Theme.backgroundAccentLargerStrongest
             case .box: Theme.backgroundSecondary
             }
         case .secondary:
             switch layer {
             case .control, .row, .box: Theme.backgroundSecondaryAccent
-            case .controlLit, .rowSelected: Theme.backgroundSecondaryAccentStronger
+            case .controlLit, .controlLitOnSelected, .rowSelected, .rowSelectedLit: Theme.backgroundSecondaryAccentStronger
             }
         case .card: Theme.cardAccent
         case .popover: Theme.popoverAccent
@@ -306,6 +312,8 @@ enum Surface {
 extension EnvironmentValues {
     /// The layer the view lies on.
     @Entry var surface = Surface.background
+    /// The row the view lies on, as it is lit, so that a control on it lights a step above it.
+    @Entry var row: Surface.Layer?
 }
 
 private struct Box<S: Shape>: ViewModifier {
