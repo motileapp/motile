@@ -47,7 +47,7 @@ export function Composer({
           <button
             type="button"
             onClick={onStop}
-            className="mr-1 ml-auto h-6 rounded-sm px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground"
+            className="mr-2 ml-auto h-7 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground"
           >
             Stop
           </button>
@@ -154,38 +154,41 @@ export function Composer({
           )}
           {thread.worktree ? "Worktree" : "Local checkout"}
         </span>
-        <span className="mx-2.5 h-3 w-px bg-border" />
-        <span className="mr-3.5 flex items-center gap-[5px] text-[11.5px] font-medium">
-          <GitBranchIcon className="size-[13px]" />
-          {thread.branch}
-          {!thread.worktree && (
-            <MenuChevron />
-          )}
+        <span className="ml-2.5 h-3 w-px bg-border" />
+        <span className="mr-2 flex items-center">
+          <Control icon={<GitBranchIcon className="size-3.5" />} plain={!!thread.worktree}>
+            {thread.branch}
+          </Control>
         </span>
       </Strip>
     </div>
   )
 }
 
+/** A control of the composer's rows. A plain one is a label set like the menus beside it. */
 function Control({
   icon,
+  plain,
   children,
 }: {
   icon?: ReactNode
+  plain?: boolean
   children: ReactNode
 }) {
   return (
     <span
       className={cn(
-        "flex h-7 cursor-default items-center gap-1.5 rounded-md pr-[9px] text-[12px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground",
-        icon ? "pl-[9px]" : "pl-[11px]"
+        "flex h-7 cursor-default items-center gap-1.5 rounded-md text-[12px] font-medium text-muted-foreground",
+        !plain && "hover:bg-background-accent hover:text-foreground",
+        icon ? "pl-[9px]" : "pl-[11px]",
+        plain ? "pr-[11px]" : "pr-[9px]"
       )}
     >
       <span className="flex items-center gap-[5px]">
         {icon}
         {children}
       </span>
-      <MenuChevron />
+      {!plain && <MenuChevron />}
     </span>
   )
 }

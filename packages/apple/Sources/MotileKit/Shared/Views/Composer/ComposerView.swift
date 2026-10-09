@@ -126,7 +126,7 @@ struct ComposerView: View {
                     .foregroundStyle(Color.themeForeground)
             }
             Spacer(minLength: 8)
-            ActionButton("Stop", help: "Stop monitoring (⌘.)", variant: .ghost, size: .small, margin: ComposerStrip.margin) { store.stop() }
+            ActionButton("Stop", help: "Stop monitoring (⌘.)", variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
         }
         .modifier(ComposerStrip(edge: .top))
     }

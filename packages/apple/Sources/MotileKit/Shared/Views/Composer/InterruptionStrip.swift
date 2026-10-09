@@ -53,6 +53,6 @@ struct InterruptionStrip: View {
     }
 
     private func button(_ title: String, help: String, action: @escaping () -> Void) -> some View {
-        ActionButton(title, help: help, variant: .ghost, size: .small, margin: ComposerStrip.margin, action: action)
+        ActionButton(title, help: help, variant: .ghost, margin: ComposerStrip.margin, action: action)
     }
 }
