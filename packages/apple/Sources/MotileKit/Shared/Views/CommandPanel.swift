@@ -896,6 +896,7 @@ private struct PanelRow: View {
                 } else {
                     Text(item.title)
                         .font(.ui(size: 14))
+                        .foregroundStyle(item.off ? Color.themeMutedMoreForeground : Color.themeForeground)
                         .lineLimit(1)
                         .frame(height: Self.titleHeight)
                     if !item.detailParts.isEmpty {
@@ -916,9 +917,7 @@ private struct PanelRow: View {
         .padding(.horizontal, 10)
         .frame(height: Self.height)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .opacity(item.off ? 0.45 : 1)
         .padding(.horizontal, Self.sideMargin)
-        .opacity(faded ? 0.45 : 1)
         .animation(item.placeholderLines > 0 ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : nil, value: faded)
         .onAppear { faded = item.placeholderLines > 0 }
         .onChange(of: item.placeholderLines) { faded = item.placeholderLines > 0 }
@@ -960,7 +959,7 @@ private struct PanelRow: View {
 
     private func bar(width: CGFloat, height: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: height / 2, style: .continuous)
-            .fill(surface.boxColor)
+            .fill(faded ? surface.boxColor : surface.accentStrongerColor)
             .frame(width: width, height: height)
     }
 
@@ -987,7 +986,7 @@ private struct PanelRow: View {
         switch item.icon {
         case .symbol where item.placeholderLines > 0:
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(surface.boxColor)
+                .fill(faded ? surface.boxColor : surface.accentStrongerColor)
                 .frame(width: scaled(20), height: scaled(20))
         case .symbol(let name):
             Image(name, size: 15)

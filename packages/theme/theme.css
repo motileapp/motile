@@ -14,6 +14,11 @@
   background-color: color-mix(in srgb, --value(--color-*) calc(var(--color-tint-opacity-stronger) * 100%), transparent);
 }
 
+/* A focus ring in a wash of a colour: `ring-tint-ring`. */
+@utility ring-tint-* {
+  --tw-ring-color: color-mix(in srgb, --value(--color-*) calc(var(--color-tint-opacity-stronger) * 100%), transparent);
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "DM Sans Variable", sans-serif;

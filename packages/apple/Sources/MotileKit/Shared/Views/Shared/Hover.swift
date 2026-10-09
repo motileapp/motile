@@ -81,12 +81,12 @@ struct HighlightButtonStyle: ButtonStyle {
     }
 }
 
-/// A button whose own look says what it does, like a picture: it only dims under a finger.
+/// A button whose own look says what it does, like a picture: under a finger it is washed over.
 struct DimButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .opacity(configuration.isPressed ? 0.7 : 1)
+            .overlay { if configuration.isPressed { Rectangle().fill(Color.themeForeground.tinted(stronger: true)) } }
     }
 }
 

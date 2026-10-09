@@ -47,7 +47,7 @@ header a {
 }
 header a:hover { background: var(--muted); }
 .dark header a:hover { background: color-mix(in oklab, var(--muted) 50%, transparent); }
-header a:focus-visible { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 30%, transparent); }
+header a:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) calc(var(--color-tint-opacity-stronger) * 100%), transparent); }
 header svg { width: 1.125rem; height: 1.125rem; fill: currentColor; }
 main {
   display: flex;

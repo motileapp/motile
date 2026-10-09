@@ -32,6 +32,7 @@ struct ControlLook {
     let size: ControlSize
     var selected = false
     var lit = false
+    var enabled = true
     /// The layer it lies on.
     var surface = Surface.background
     /// Round ends, for the composer's buttons.
@@ -44,6 +45,7 @@ struct ControlLook {
     var wordless = false
 
     var foreground: Color {
+        guard enabled else { return .themeMutedMoreForeground }
         if let tint, variant == .ghost || variant == .secondary { return tint }
         switch variant {
         case .secondary: return .themeForeground
@@ -57,7 +59,8 @@ struct ControlLook {
     }
 
     private var fill: AnyShapeStyle {
-        switch variant {
+        guard enabled || variant == .ghost || variant == .link else { return AnyShapeStyle(surface.accentColor) }
+        return switch variant {
         case .primary: AnyShapeStyle(Color.themePrimary)
         case .secondary: AnyShapeStyle(selected || lit ? surface.accentStrongerColor : surface.accentColor)
         case .danger: AnyShapeStyle(Color.themeDestructive)
@@ -107,9 +110,6 @@ struct ControlLabel: View {
     /// The room between its symbol and its words where it isn't the one that goes with `size`.
     var gap: CGFloat?
 
-    /// How much the chevron and the dots between a title's parts let through.
-    private static let muted = 0.6
-
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: CGFloat { symbolSize ?? size.symbol }
     private var waitingTitle: String? { pending ? pendingTitle : nil }
@@ -125,7 +125,7 @@ struct ControlLabel: View {
             }
             if chevron {
                 Image(.chevronDown, size: size.textSize, trimmed: true)
-                    .opacity(Self.muted)
+                    .foregroundStyle(Color.themeMutedMoreForeground)
             }
         }
         .frame(maxWidth: fills ? .infinity : nil, alignment: Alignment(horizontal: alignment, vertical: .center))
@@ -166,7 +166,7 @@ struct ControlLabel: View {
     private static func text(_ title: String) -> Text {
         let parts = title.components(separatedBy: " · ")
         return parts.dropFirst().reduce(Text(verbatim: parts[0])) { line, part in
-            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(.foreground.opacity(muted)))\(Text(verbatim: part))")
+            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(Color.themeMutedMoreForeground))\(Text(verbatim: part))")
         }
     }
 
@@ -218,12 +218,12 @@ private struct ControlBody<Label: View>: View {
     var body: some View {
         var look = self.look
         look.surface = surface
+        look.enabled = enabled || pending
         look.lit = enabled && !pending && (hovering || pressed)
         return label
             .foregroundStyle(look.foreground)
             .background { look.background.padding(margin) }
             .contentShape(Rectangle())
-            .opacity(enabled || pending ? 1 : 0.45)
             .onHover { hovering = $0 }
             .background { ArrowPointer() }
     }
@@ -394,6 +394,7 @@ struct ActionMenu<Content: View>: View {
         let reach = ControlReach(size: look.size, wordless: title == nil && !chevron, margin: margin)
         var look = self.look
         look.surface = surface
+        look.enabled = enabled || pending
         look.lit = enabled && !pending && hovering
         return Menu {
             content
@@ -409,7 +410,6 @@ struct ActionMenu<Content: View>: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .background { look.background.padding(reach.around) }
-        .opacity(enabled || pending ? 1 : 0.45)
         .onHover { hovering = $0 }
         .padding(reach.outset)
         .allowsHitTesting(!pending)

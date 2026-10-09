@@ -10,7 +10,7 @@ export function MenuChevron() {
   return (
     <svg
       viewBox="5 8 14 8"
-      className="h-[4.7px] w-[8.2px] shrink-0 opacity-60"
+      className="h-[4.7px] w-[8.2px] shrink-0 text-muted-more-foreground"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -77,7 +77,7 @@ export function TrafficLights() {
       {["#ff5f57", "#febc2e", "#28c840"].map((color) => (
         <span
           key={color}
-          className="size-3 rounded-full ring-1 ring-black/10 ring-inset"
+          className="size-3 rounded-full ring-1 ring-border ring-inset"
           style={{ background: color }}
         />
       ))}
