@@ -168,6 +168,7 @@ async fn run_server(data: &DataDir, endpoint: iroh::Endpoint, key: DeviceKey) {
     let store = Store::open(&data.database()).unwrap();
     let hub =
         Hub::new(store, data.media(), data.attachments(), data.worktrees(), data.no_project(), environment).unwrap();
+    hub.refresh_models().await;
 
     let account = data.account().expect("setup linked the server");
     let access =
