@@ -4,7 +4,7 @@ import SwiftUI
 extension Theme {
     static let background = tone(0xf8f9fc, 0x0a0b0f)
     static let backgroundAccent = tone(0xe6e8ef, 0x191a1f)
-    static let backgroundAccentStronger = tone(0xdbdee8, 0x222226)
+    static let backgroundAccentStronger = tone(0xdbdee8, 0x212329)
     static let backgroundAccentStrongest = tone(0xd0d4e0, 0x2b2c32)
     static let backgroundAccentLarger = tone(0xeceef4, 0x111217)
     static let backgroundAccentLargerStronger = tone(0xe1e4ed, 0x191a1f)
@@ -15,7 +15,7 @@ extension Theme {
     static let card = tone(0xf3f4f8, 0x15161b)
     static let cardAccent = tone(0xe8eaf0, 0x1e1f26)
     static let popover = tone(0xffffff, 0x191a1f)
-    static let popoverAccent = tone(0xeceef4, 0x222226)
+    static let popoverAccent = tone(0xeceef4, 0x212329)
     static let foreground = tone(0x22242b, 0xd0d2d9)
     static let emphasizedForeground = tone(0x000000, 0xffffff)
     static let mutedForeground = tone(0x6b6f7c, 0x9a9eab)
