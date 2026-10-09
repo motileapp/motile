@@ -38,9 +38,19 @@ pub struct Row {
     /// "3h 30m", "5d 11h".
     pub resets_in: Option<String>,
     pub pace: Option<Pace>,
-    pub warning: bool,
+    pub tone: Tone,
     /// Resets the login may use to start its windows over.
     pub reset_credits: u32,
+}
+
+/// The colour a window's bar takes: calm until half is used, then pending, warning from three
+/// quarters or when the agent says so.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Tone {
+    Success,
+    Pending,
+    Warning,
 }
 
 /// How what was used compares with how much of the window has passed.
@@ -99,8 +109,16 @@ fn row(window: &LimitWindow, reset_credits: u32, now: f64) -> Row {
         used: format!("{}%", used_percent.round()),
         resets_in: window.resets_at.map(|at| duration(at - now)),
         pace: pace(used_percent, window, now),
-        warning: window.warning,
+        tone: tone(used_percent, window.warning),
         reset_credits,
+    }
+}
+
+fn tone(used_percent: f64, warning: bool) -> Tone {
+    match used_percent {
+        _ if warning || used_percent >= 75.0 => Tone::Warning,
+        _ if used_percent >= 50.0 => Tone::Pending,
+        _ => Tone::Success,
     }
 }
 
@@ -159,19 +177,24 @@ mod tests {
         let session = window("Session", 80.0, 3600.0 + 1800.0, 18000);
         let weekly = window("Weekly", 4.6, 5.0 * 86400.0 + 11.0 * 3600.0, 604800);
         let even = window("Weekly", 50.0, 302400.0, 604800);
-        let [section] =
-            &sections(vec![read("studio", Agent::Codex, Some("a"), vec![session, weekly, even])], 1000.0)[..]
-        else {
+        let mut flagged = window("Weekly · Fable", 30.0, 302400.0, 604800);
+        flagged.warning = true;
+        let windows = vec![session, weekly, even, flagged];
+        let [section] = &sections(vec![read("studio", Agent::Codex, Some("a"), windows)], 1000.0)[..] else {
             panic!("one section")
         };
-        let rows: Vec<_> =
-            section.windows.iter().map(|row| (row.used.as_str(), row.resets_in.as_deref(), row.pace)).collect();
+        let rows: Vec<_> = section
+            .windows
+            .iter()
+            .map(|row| (row.used.as_str(), row.resets_in.as_deref(), row.pace, row.tone))
+            .collect();
         assert_eq!(
             rows,
             [
-                ("80%", Some("1h 30m"), Some(Pace::Ahead)),
-                ("5%", Some("5d 11h"), Some(Pace::Under)),
-                ("50%", Some("3d 12h"), Some(Pace::On)),
+                ("80%", Some("1h 30m"), Some(Pace::Ahead), Tone::Warning),
+                ("5%", Some("5d 11h"), Some(Pace::Under), Tone::Success),
+                ("50%", Some("3d 12h"), Some(Pace::On), Tone::Pending),
+                ("30%", Some("3d 12h"), Some(Pace::Under), Tone::Warning),
             ]
         );
         assert_eq!(section.windows[0].reset_credits, 2);

@@ -27,7 +27,7 @@ struct LimitsView: View {
                             .card()
                     }
                     ForEach(section.windows) { window in
-                        LimitCard(window: window, agent: section.agent, beside: width >= Self.besideWidth)
+                        LimitCard(window: window, beside: width >= Self.besideWidth)
                     }
                 }
             }
@@ -79,7 +79,6 @@ struct LimitsView: View {
 /// with when it starts over.
 private struct LimitCard: View {
     let window: LimitsReport.Window
-    let agent: Agent
     let beside: Bool
 
     var body: some View {
@@ -102,7 +101,11 @@ private struct LimitCard: View {
     }
 
     private var color: Color {
-        window.warning ? .themeWarning : agent.color
+        switch window.tone {
+        case .success: .themeSuccess
+        case .pending: .themePending
+        case .warning: .themeWarning
+        }
     }
 
     private var numbers: some View {
@@ -158,7 +161,8 @@ private struct LimitCard: View {
 }
 
 /// What was used of a window as the part of a bar it fills, and at its end when the window starts
-/// over and the resets the login may use.
+/// over and the resets the login may use. The text is drawn in the fill's foreground where it lies
+/// on the fill and the page's elsewhere.
 private struct LimitBar: View {
     private static let height: CGFloat = 28
 
@@ -167,55 +171,70 @@ private struct LimitBar: View {
     let color: Color
 
     var body: some View {
-        RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-            .fill(surface.color(.control))
-            .overlay(alignment: .leading) {
-                GeometryReader { bar in
+        GeometryReader { bar in
+            let filled = bar.size.width * window.usedPercent / 100
+            RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                .fill(surface.color(.control))
+                .overlay(alignment: .leading) {
                     RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
                         .fill(color)
-                        .frame(width: bar.size.width * window.usedPercent / 100)
+                        .frame(width: filled)
                 }
-            }
-            .overlay {
-                HStack(spacing: 8) {
-                    Text(window.used)
-                        .font(.ui(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.themeForeground)
-                        .monospacedDigit()
-                    Spacer(minLength: 0)
-                    plate
+                .overlay {
+                    HStack(spacing: 8) {
+                        onFill(used, filled: filled)
+                        Spacer(minLength: 0)
+                        onFill(end, filled: filled)
+                    }
+                    .padding(.horizontal, 9)
+                    .monospacedDigit()
                 }
-                .padding(.leading, 9)
-                .padding(.trailing, 4)
-            }
-            .frame(height: scaled(Self.height))
+                .coordinateSpace(name: "bar")
+        }
+        .frame(height: scaled(Self.height))
     }
 
-    @ViewBuilder private var plate: some View {
-        if window.resetsIn != nil || window.resetCredits > 0 {
-            HStack(spacing: 6) {
-                if let resetsIn = window.resetsIn {
-                    Text(resetsIn)
-                        .help("Starts over in \(resetsIn)")
-                }
-                if window.resetsIn != nil, window.resetCredits > 0 {
-                    Text("·")
-                        .foregroundStyle(Color.themeMutedStrongerForeground)
-                }
-                if window.resetCredits > 0 {
-                    HStack(spacing: 3) {
-                        Image(.ticket, size: 11)
-                        Text("\(window.resetCredits)")
+    private func onFill(_ text: some View, filled: CGFloat) -> some View {
+        text.foregroundStyle(Color.themeForeground)
+            .overlay {
+                text.foregroundStyle(fillForeground)
+                    .mask(alignment: .leading) {
+                        GeometryReader { text in
+                            Rectangle().frame(width: max(0, filled - text.frame(in: .named("bar")).minX))
+                        }
                     }
-                    .help(window.resetCredits == 1 ? "1 reset to use" : "\(window.resetCredits) resets to use")
-                }
             }
-            .font(.ui(size: 11, weight: .medium))
-            .foregroundStyle(Color.themeForeground)
-            .monospacedDigit()
-            .padding(.horizontal, 7)
-            .frame(height: scaled(Self.height) - 8)
-            .background(surface.color(.control), in: RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+    }
+
+    private var used: some View {
+        Text(window.used).font(.ui(size: 11, weight: .semibold))
+    }
+
+    @ViewBuilder private var end: some View {
+        HStack(spacing: 6) {
+            if let resetsIn = window.resetsIn {
+                Text(resetsIn)
+                    .help("Starts over in \(resetsIn)")
+            }
+            if window.resetsIn != nil, window.resetCredits > 0 {
+                Text("·")
+            }
+            if window.resetCredits > 0 {
+                HStack(spacing: 3) {
+                    Image(.ticket, size: 11)
+                    Text("\(window.resetCredits)")
+                }
+                .help(window.resetCredits == 1 ? "1 reset to use" : "\(window.resetCredits) resets to use")
+            }
+        }
+        .font(.ui(size: 11, weight: .medium))
+    }
+
+    private var fillForeground: Color {
+        switch window.tone {
+        case .success: .themeSuccessForeground
+        case .pending: .themePendingForeground
+        case .warning: .themeWarningForeground
         }
     }
 }
