@@ -11,6 +11,7 @@ struct ThreadPane: View {
     var titleInset: CGFloat = 20
     /// The side panel is beside the pane, so the window's last button isn't over it.
     var besidePanel = false
+    @State private var removal: Removal?
 
     private static let composerBottomGap: CGFloat = 16
 
@@ -51,6 +52,7 @@ struct ThreadPane: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: store.gitNotice)
+        .confirmsRemoval($removal)
     }
 
     /// The thread's project and name and its git button, drawn in the window's top bar over
@@ -148,7 +150,7 @@ struct ThreadPane: View {
                 Button("Add Project") { store.addProject() }
                 if let project = selected, !project.noProject {
                     Button("Choose an Icon for “\(project.name)”") { store.openPanel(.icon(project.id)) }
-                    Button("Remove “\(project.name)” from Projects") { store.removeProject(project) }
+                    Button("Remove “\(project.name)” from Projects…") { removal = .project(project) }
                 }
             } label: {
                 HStack(spacing: 8) {

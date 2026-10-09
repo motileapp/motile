@@ -6,6 +6,8 @@ enum ButtonVariant {
     case primary
     /// The others beside it.
     case secondary
+    /// Only its border until the pointer is over it: the buttons of settings rows.
+    case outline
     /// What can't be taken back.
     case danger
     /// What the user is asked to let happen.
@@ -47,7 +49,7 @@ struct ControlLook {
     var foreground: Color {
         if let tint, variant == .ghost || variant == .secondary { return tint }
         switch variant {
-        case .secondary: return .themeForeground
+        case .secondary, .outline: return .themeForeground
         case .primary: return .themePrimaryForeground
         case .danger: return .themeDestructiveForeground
         case .warning: return .themeWarningForeground
@@ -62,6 +64,7 @@ struct ControlLook {
         switch variant {
         case .primary: filled(.themePrimary)
         case .secondary: AnyShapeStyle(surface.color(selected || lit ? .controlLit : .control))
+        case .outline: AnyShapeStyle(selected || lit ? surface.color(.control) : .clear)
         case .danger: filled(.themeDestructive)
         case .warning: filled(.themeWarning)
         case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
@@ -95,6 +98,9 @@ struct ControlLook {
 
     var background: some View {
         shape.fill(fill)
+            .overlay {
+                if variant == .outline { shape.strokeBorder(surface.border, lineWidth: 1) }
+            }
     }
 }
 

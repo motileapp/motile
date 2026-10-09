@@ -11,6 +11,7 @@ struct SettingsPage: View {
     @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
     @State private var setupProject: Project?
     @State private var editedAccount: EditedAccount?
+    @State private var removal: Removal?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -39,6 +40,7 @@ struct SettingsPage: View {
             }
         }
         .onAppear { store.refreshMediaStorage() }
+        .confirmsRemoval($removal)
         .sheet(item: $setupProject) { project in
             SetupSheet(project: project)
                 .sheetSurface()
@@ -52,12 +54,10 @@ struct SettingsPage: View {
     @ViewBuilder private var general: some View {
         SettingsGroup("account", "Account") {
             SettingsRow {
-                SettingsLabel("Signed in as")
+                SettingsLabel("Signed in as", description: store.account.signedIn ? store.account.email : "Not signed in", truncates: .middle)
             } trailing: {
-                Text(store.account.signedIn ? store.account.email : "Not signed in")
-                    .foregroundStyle(Color.themeMutedForeground)
                 if store.account.signedIn {
-                    ActionButton("Sign Out", size: .small) { store.signOut() }
+                    ActionButton("Sign Out", variant: .outline, size: .large) { store.signOut() }
                 }
             }
         }
@@ -67,13 +67,14 @@ struct SettingsPage: View {
             SettingsRow {
                 SettingsLabel("Motile \(store.updater.current)")
             } trailing: {
-                ActionButton("Check for Updates", size: .small, pending: store.updater.state == .checking) { store.updater.check(asked: true) }
+                ActionButton("Check for Updates", variant: .outline, size: .large, pending: store.updater.state == .checking) { store.updater.check(asked: true) }
             }
             if store.updater.state != .idle {
                 ThemeDivider()
-                AppUpdateRow(updater: store.updater)
-                    .padding(.horizontal, settingsInset)
-                    .padding(.vertical, 10)
+                AppUpdateRow(updater: store.updater, variant: .outline, size: .large)
+                    .padding(.leading, settingsInset)
+                    .padding(.trailing, settingsInset - rowOutset(for: ControlSize.large.height))
+                    .padding(.vertical, (settingsRowHeight - ControlSize.large.height) / 2)
             }
         }
         #else
@@ -91,6 +92,7 @@ struct SettingsPage: View {
                 SettingsLabel("Theme")
             } trailing: {
                 Segmented(Appearance.allCases.map { ($0.label, $0) }, selection: $appearance)
+                    .padding(.trailing, -segmentedOutset)
             }
         }
 
@@ -101,6 +103,7 @@ struct SettingsPage: View {
                     description: steers ? "The agent reads it at once, in the turn that runs" : "Waits for the turn to end and starts the next one")
             } trailing: {
                 Segmented([("Queue", false), ("Steer", true)], selection: $steers)
+                    .padding(.trailing, -segmentedOutset)
             }
         }
 
@@ -108,7 +111,7 @@ struct SettingsPage: View {
             SettingsRow {
                 SettingsLabel("Images and videos", description: storageDescription)
             } trailing: {
-                ActionButton("Clear", size: .small) { store.clearMedia() }
+                ActionButton("Clear", variant: .outline, size: .large) { store.clearMedia() }
                     .disabled((store.mediaStorage?.used ?? 0) == 0)
             }
         }
@@ -128,15 +131,18 @@ struct SettingsPage: View {
         SettingsGroup("servers", "Servers") {
             ForEach(store.servers) { server in
                 SettingsRow {
-                    SettingsLabel(server.name, description: description(of: server))
+                    SettingsLabel(server.name, description: description(of: server), truncates: .tail)
                 } trailing: {
-                    ServerUpdateStatus(server: server) { EmptyView() }
-                    ActionButton("Remove", size: .small) { store.removeServer(server) }
+                    ServerUpdateStatus(server: server, variant: .outline, size: .large) { EmptyView() }
+                    more("What to do with \(server.name)") {
+                        item("Remove Server…", symbol: .trash2, role: .destructive) { removal = .server(server) }
+                    }
                 }
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add a Server", size: .small) { store.showsAddServer = true }
+                ActionButton("Add a Server", variant: .outline, size: .large) { store.showsAddServer = true }
+                    .padding(.leading, -rowOutset(for: ControlSize.large.height))
             } trailing: {
                 EmptyView()
             }
@@ -188,7 +194,7 @@ struct SettingsPage: View {
                     SettingsRow {
                         serverName(server)
                     } trailing: {
-                        ActionMenu(textModelName(of: server), variant: .secondary, size: .small) {
+                        ActionMenu(textModelName(of: server), variant: .outline, size: .large) {
                             Button("Automatic") { store.setTextModel(nil, on: server) }
                             ForEach(server.models) { model in
                                 Button(model.name) { store.setTextModel(model.id, on: server) }
@@ -289,17 +295,21 @@ struct SettingsPage: View {
                     AgentIcon(agent: account.agent, size: 16)
                     SettingsLabel("\(account.agent.name) · \(account.name)", description: description(of: account))
                 } trailing: {
-                    ActionButton("Edit", size: .small) { editedAccount = EditedAccount(server: server, account: account) }
-                    if !account.isDefault {
-                        ActionButton("Remove", size: .small) { store.removeAgentAccount(account, on: server) }
+                    more("What to do with the account") {
+                        item("Edit…", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
+                        if !account.isDefault {
+                            Divider()
+                            item("Remove Account…", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
+                        }
                     }
                 }
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add an Account", size: .small) {
+                ActionButton("Add an Account", variant: .outline, size: .large) {
                     editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
                 }
+                .padding(.leading, -rowOutset(for: ControlSize.large.height))
                 .disabled(installed.isEmpty)
             } trailing: {
                 EmptyView()
@@ -333,25 +343,25 @@ struct SettingsPage: View {
             ForEach(store.projects) { project in
                 SettingsRow {
                     ProjectIcon(project: project, size: 26)
-                    SettingsLabel(project.name, description: project.path, truncates: true)
+                    SettingsLabel(project.name, description: project.path, truncates: .head)
                 } trailing: {
-                    ActionButton("Icon", help: "Choose the icon of \(project.name)", size: .small) {
-                        store.openPanel(.icon(project.id))
-                    }
-                    if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
-                        ActionButton("Setup", help: "The script that runs in each new worktree of \(project.name)", size: .small) {
-                            setupProject = project
+                    more("What to do with \(project.name)") {
+                        item("Choose an Icon…", symbol: .image) { store.openPanel(.icon(project.id)) }
+                        if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
+                            item("Worktree Setup…", symbol: .terminal) { setupProject = project }
                         }
+                        Divider()
+                        item("Remove Project…", symbol: .trash2, role: .destructive) { removal = .project(project) }
                     }
-                    ActionButton("Remove", size: .small) { store.removeProject(project) }
                 }
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add a Project", size: .small) {
+                ActionButton("Add a Project", variant: .outline, size: .large) {
                     store.closeSettings()
                     store.addProject()
                 }
+                .padding(.leading, -rowOutset(for: ControlSize.large.height))
                 .disabled(store.servers.isEmpty)
             } trailing: {
                 EmptyView()
@@ -369,9 +379,37 @@ struct SettingsPage: View {
         case .refused: return "This server no longer accepts this \(Platform.device)"
         }
     }
+
+    /// The row's other actions, under its three dots.
+    private func more<Items: View>(_ help: String, @ViewBuilder items: () -> Items) -> some View {
+        ActionMenu(icon: .ellipsis, help: help, size: .large, content: items)
+    }
+
+    private func item(_ title: String, symbol: Symbol, role: ButtonRole? = nil, action: @escaping () -> Void) -> some View {
+        Button(role: role, action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                Image(platform: .symbol(symbol, size: 13))
+            }
+        }
+    }
 }
 
 private let settingsInset: CGFloat = 14
+private let settingsRowHeight: CGFloat = scaled(48)
+
+/// What stands a control this tall as far from its row's right as from its top and bottom.
+private func rowOutset(for height: CGFloat) -> CGFloat {
+    settingsInset - (settingsRowHeight - height) / 2
+}
+
+/// A row's controls are large; a segmented picker is a little taller than one, so it reaches a
+/// little further.
+private var segmentedOutset: CGFloat {
+    let track = Segmented<Bool>.inset + Segmented<Bool>.border
+    return rowOutset(for: ControlSize.regular.height + 2 * track) - rowOutset(for: ControlSize.large.height)
+}
 
 /// How a server's writer is told to name the branches it makes, to change and to put back.
 private struct BranchInstructionsEditor: View {
@@ -386,17 +424,16 @@ private struct BranchInstructionsEditor: View {
             TextArea("How to name a branch", text: $text, maxLines: 16)
             HStack(spacing: 8) {
                 Spacer()
-                ActionButton("Reset", size: .small) {
+                ActionButton("Reset", variant: .outline, size: .large) {
                     text = server.defaultBranchInstructions
                     store.setBranchInstructions(nil, on: server)
                 }
                 .disabled(server.branchInstructions == server.defaultBranchInstructions && !changed)
-                ActionButton("Save", variant: .primary, size: .small) { store.setBranchInstructions(text, on: server) }
+                ActionButton("Save", variant: .primary, size: .large) { store.setBranchInstructions(text, on: server) }
                     .disabled(!changed)
             }
         }
-        .padding(.horizontal, settingsInset)
-        .padding(.vertical, 10)
+        .padding(settingsInset)
         .onAppear { text = server.branchInstructions }
         .onChange(of: server.branchInstructions) { text = server.branchInstructions }
     }
@@ -678,10 +715,10 @@ private struct SettingsLabel: View {
     let title: String
     var description: String?
     var icon: Symbol?
-    /// A description that is a path is cut at its start, not wrapped.
-    var truncates = false
+    /// A description that is cut on one line instead of wrapped: a path at its start, a sentence at its end.
+    var truncates: Text.TruncationMode?
 
-    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Bool = false) {
+    init(_ title: String, description: String? = nil, icon: Symbol? = nil, truncates: Text.TruncationMode? = nil) {
         self.title = title
         self.description = description
         self.icon = icon
@@ -701,38 +738,31 @@ private struct SettingsLabel: View {
                     Text(description)
                         .font(.ui(size: 11.5))
                         .foregroundStyle(Color.themeMutedForeground)
-                        .lineLimit(truncates ? 1 : nil)
-                        .truncationMode(.head)
-                        .fixedSize(horizontal: false, vertical: !truncates)
+                        .lineLimit(truncates == nil ? nil : 1)
+                        .truncationMode(truncates ?? .tail)
+                        .fixedSize(horizontal: false, vertical: truncates == nil)
                 }
             }
         }
     }
 }
 
-/// What the row is about on the left, its controls on the right, with the same room above and
-/// below.
+/// What the row is about on the left, its controls on the right. Every row is as tall as the
+/// tallest, with the same room above and below.
 private struct SettingsRow<Leading: View, Trailing: View>: View {
     @ViewBuilder let leading: Leading
     @ViewBuilder let trailing: Trailing
 
     var body: some View {
-        // A row too narrow for both puts its controls under what they are about.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                leading
-                Spacer(minLength: 12)
-                trailing
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) { leading }
-                HStack(spacing: 10) { trailing }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: 10) {
+            leading
+                .padding(.vertical, scaled(8))
+            Spacer(minLength: 12)
+            trailing
+                .padding(.trailing, -rowOutset(for: ControlSize.large.height))
         }
         .padding(.horizontal, settingsInset)
-        .padding(.vertical, 10)
-        .frame(minHeight: 46)
+        .frame(minHeight: settingsRowHeight)
     }
 }
 
