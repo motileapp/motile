@@ -49,7 +49,6 @@ struct WaitingStrip: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding([.bottom, .horizontal], Self.padding)
                 }
-                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

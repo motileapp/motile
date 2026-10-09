@@ -1,24 +1,32 @@
 import SwiftUI
 
-/// Content that scrolls once it is taller than `maxHeight`, fading out at an edge with more behind it.
+/// Content as tall as it is up to `maxHeight`, past which it scrolls, fading out at an edge
+/// with more behind it. `padding` insets the content inside the scrolling edges.
 struct FadingScroll<Content: View>: View {
     let maxHeight: CGFloat
     var anchor: UnitPoint = .top
+    var padding: CGFloat = 0
     @ViewBuilder let content: Content
 
+    @State private var contentHeight: CGFloat = 0
     @State private var hidden = HiddenEdges()
 
     private static var fade: CGFloat { scaled(24) }
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            content
-            ScrollView { content }
-                .defaultScrollAnchor(anchor)
-                .modifier(TracksHiddenEdges(hidden: $hidden))
-                .mask { mask }
+        ScrollView {
+            content.background {
+                GeometryReader { proxy in
+                    Color.clear.onChange(of: proxy.size.height, initial: true) { contentHeight = proxy.size.height }
+                }
+            }
         }
-        .frame(maxHeight: maxHeight)
+        .contentMargins(padding, for: .scrollContent)
+        .scrollBounceBehavior(.basedOnSize)
+        .defaultScrollAnchor(anchor)
+        .modifier(TracksHiddenEdges(hidden: $hidden))
+        .mask { mask }
+        .frame(height: min(contentHeight + padding * 2, maxHeight))
     }
 
     private var mask: some View {
