@@ -374,11 +374,7 @@ struct GitNoticeView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .box(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                .strokeBorder(Color.themeBorder, lineWidth: 1)
-        }
+        .box(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous), bordered: true)
         .padding(.top, 4)
         .padding(.trailing, Self.padding - Self.trailing)
     }
@@ -491,10 +487,7 @@ struct CommitSheet: View {
                 .padding(.vertical, 4)
             }
             .frame(height: min(CGFloat(files.count) * Self.rowHeight, 192) + 8)
-            .box(in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.md, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
-            }
+            .box(in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous), bordered: true)
         }
     }
 

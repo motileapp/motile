@@ -41,7 +41,7 @@ struct Chip: View {
         .background(tone.map { AnyShapeStyle($0.wash()) } ?? AnyShapeStyle(surface.color(.control)), in: Capsule())
         .overlay {
             if tone == nil {
-                Capsule().strokeBorder(Color.themeBorder, lineWidth: 1)
+                Capsule().strokeBorder(surface.border, lineWidth: 1)
             }
         }
     }

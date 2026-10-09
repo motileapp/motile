@@ -37,11 +37,7 @@ struct CommandBox: View {
             .disabled(command == nil)
         }
         .padding(scaled(4))
-        .box(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
-                .strokeBorder(Color.themeBorder, lineWidth: 1)
-        }
+        .box(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous), bordered: true)
     }
 
     /// The command in its colours. It wraps between any two characters, as CSS's `break-all`
