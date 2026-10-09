@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// How much of their plans the agents' logins have used: a section for each login, a card for
-/// each of its windows with a bar of what was used.
+/// How much of their plans the agents' logins have used: a section for each login, its windows
+/// in one card, each with a bar of what was used.
 struct LimitsView: View {
-    /// Narrower than this, a card puts its bar under its numbers.
+    /// Narrower than this, a window puts its bar under its numbers.
     private static let besideWidth: CGFloat = 520
 
     let report: LimitsReport
@@ -26,8 +26,16 @@ struct LimitsView: View {
                             .padding(16)
                             .card()
                     }
-                    ForEach(section.windows) { window in
-                        LimitCard(window: window, beside: width >= Self.besideWidth)
+                    if !section.windows.isEmpty {
+                        VStack(spacing: 0) {
+                            ForEach(section.windows) { window in
+                                LimitRow(window: window, beside: width >= Self.besideWidth)
+                                if window.id != section.windows.last?.id {
+                                    ThemeDivider()
+                                }
+                            }
+                        }
+                        .card()
                     }
                 }
             }
@@ -77,7 +85,7 @@ struct LimitsView: View {
 
 /// One window of a plan: what was used of it, how that compares with the time passed, and a bar
 /// with when it starts over.
-private struct LimitCard: View {
+private struct LimitRow: View {
     let window: LimitsReport.Window
     let beside: Bool
 
@@ -96,8 +104,8 @@ private struct LimitCard: View {
                 }
             }
         }
-        .padding(16)
-        .card()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
     private var color: Color {
