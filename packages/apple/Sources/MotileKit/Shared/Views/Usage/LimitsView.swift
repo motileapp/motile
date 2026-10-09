@@ -102,7 +102,7 @@ private struct LimitCard: View {
     }
 
     private var color: Color {
-        window.warning ? .themeWarning : agent == .claude ? .themeClaude : .themeOpenai
+        window.warning ? .themeWarning : agent.color
     }
 
     private var numbers: some View {
