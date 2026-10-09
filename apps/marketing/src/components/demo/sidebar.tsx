@@ -181,7 +181,12 @@ function ThreadRow({
           <ThreadStatus thread={thread} elapsed={elapsed} />
         </span>
       </span>
-      <span className="w-full truncate pt-px pb-[5px] text-[13px] font-medium">
+      <span
+        className={cn(
+          "w-full truncate pt-px pb-[5px] text-[13px] font-medium",
+          selected ? "text-foreground" : "text-muted-foreground"
+        )}
+      >
         {thread.title}
       </span>
       <span className="flex h-4 w-full items-center gap-1.5 text-muted-stronger-foreground">

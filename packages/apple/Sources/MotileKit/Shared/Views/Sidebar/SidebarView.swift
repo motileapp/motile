@@ -344,6 +344,7 @@ struct ThreadRow: View, Equatable {
             Text(thread.title)
                 .font(.ui(size: 13, weight: .medium))
                 .lineLimit(1)
+                .foregroundStyle(selected ? Color.themeForeground : Color.themeMutedForeground)
                 .frame(height: Self.titleHeight)
                 .padding(.top, 1)
                 .padding(.bottom, 5)
@@ -501,6 +502,7 @@ private struct DraftRow: View {
 
     var body: some View {
         let project = store.project(listed.draft.projectID)
+        let selected = store.selection == .draft(listed.id)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: 14)
@@ -526,6 +528,7 @@ private struct DraftRow: View {
             Text(listed.preview)
                 .font(.ui(size: 13, weight: .medium))
                 .lineLimit(1)
+                .foregroundStyle(selected ? Color.themeForeground : Color.themeMutedForeground)
                 .frame(height: ThreadRow.titleHeight)
                 .padding(.top, 1)
                 .padding(.bottom, 5)
@@ -552,7 +555,7 @@ private struct DraftRow: View {
         .padding(.bottom, ThreadRow.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: Radius.md, selected: store.selection == .draft(listed.id), inset: rowMargin, hovered: hovering)) {
+        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering)) {
             open(.draft(listed.id))
         }
         .onHover { hovering = $0 }
