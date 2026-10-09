@@ -60,14 +60,24 @@ What the programs agree on.
 - `DEV_LOGIN=1` lets anyone sign in as anyone without Google. It is for tests, the demo and
   local work, and must never be set in production.
 
+### packages/theme
+
+The design tokens. `tokens.json` is the one source of every colour, opacity, shadow and radius
+in the repo; `pnpm tokens` (`build.mjs`) writes it out as `tokens.css` (plain variables, for the
+auth page), `theme.css` (Tailwind, for the web projects) and the clients' `Tokens.swift`. A
+colour that only one place needs, like the window buttons of the demo or the icons' tile,
+is added to the JSON, never written where it is used.
+
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
 
 One pnpm workspace. Both use shadcn/ui (preset `b1VlIvUO`); add components with
-`pnpm dlx shadcn@latest add <name>` inside the app.
+`pnpm dlx shadcn@latest add <name>` inside the app, then rewrite the component on our tokens:
+shadcn's own colours, opacities and radii are gone from the theme.
 
-- Both take their colours from `packages/theme/theme.css`, the Mac app's `Theme.swift` in CSS.
-  Dark is the default; the theme switch keeps the choice in a cookie on motile.app, which both
-  read.
+- Both take their colours from `packages/theme/theme.css`: the design tokens as Tailwind
+  colours, shadows and radii. An opacity is one of the tokens, as Tailwind's own modifier:
+  `bg-overlay/(--opacity-overlay)`, `opacity-(--opacity-disabled)`. Dark is the default; the
+  theme switch keeps the choice in a cookie on motile.app, which both read.
 - `apps/marketing` ships no JavaScript but the theme switch and the demo: `src/components/demo`
   is the Mac app's window in React, with made-up threads. `public/i` is the installer, and `public/install.sh` its old address.
   `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
@@ -178,6 +188,11 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 - `Shared/Views/UI`: the components every view is made of. `ActionButton` and `ActionMenu` (a
   variant, one of three sizes, an optional symbol, a pending state), `Spinner`, `Chip`,
   `InputField`. Their sizes are `ControlSize` and their corners `Radius`, in `Theme.swift`.
+- `Shared/Theme/Theme.swift`: the design tokens, generated into `Tokens.swift` beside it from
+  `packages/theme/tokens.json`. Every colour is a `Theme` token, every opacity one of `Opacity`,
+  every shadow a `ShadowSize` at one of the shadow opacities and every radius one of `Radius`. A view lies on a `Surface` (the page, a box, a card or a popover) and what it
+  draws on it, a control, a row or a box, takes that surface's accent. A colour's wash is
+  `.wash()`, a whole disabled view `.opacity(.disabled)`.
 - `Shared/Views/CommandPanel.swift`: the panel behind ⌘K, ⌘N and ⌘P, a sheet on iOS.
 - `Shared/Views/Settings`: the settings, a route over the whole client with a way back: the
   sections and a search of their groups in a sidebar (`SettingsSidebar.swift`) and the open
@@ -277,8 +292,11 @@ Mac app.
   them concise. Remove such comments when you come by them in the codebase. Comments should
   always move with code, not be left behind.
 - Use guard statement patterns in any code you write.
-- Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`
-  and the shadcn components in `src/components/ui`. Never edit an applied migration in
+- Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
+  and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css` and
+  `Tokens.swift`.
+  The shadcn components in `src/components/ui` are ours once added: they are rewritten on the
+  design tokens and edited like any view. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.
 - Do not write useless tests; tests should cover input/output behaviour.
 - Reinvent the wheel but do not reinvent the car. If you are solving a simple problem do not

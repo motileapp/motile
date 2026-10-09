@@ -45,7 +45,7 @@
 }
 
 .demo-glow {
-  opacity: 0.4;
+  opacity: var(--opacity-glow);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -57,11 +57,11 @@
 @keyframes demo-glow {
   0%,
   100% {
-    opacity: 0.3;
+    opacity: var(--opacity-glow-faint);
     transform: scale(0.99);
   }
   50% {
-    opacity: 0.5;
+    opacity: var(--opacity-glow-bright);
     transform: scale(1.01);
   }
 }

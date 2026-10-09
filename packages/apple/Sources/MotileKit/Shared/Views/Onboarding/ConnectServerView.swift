@@ -21,7 +21,7 @@ struct ConnectServerView: View {
             Image(.server, size: 24)
                 .foregroundStyle(Color.themePrimary)
                 .frame(width: 56, height: 56)
-                .background(Color.themePrimary.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color.themePrimary.wash(), in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
                 .padding(.top, centred ? 0 : 32)
             Text(isFirst ? "Connect your first server" : "Run this on your server")
                 .font(.ui(size: 24, weight: .semibold))
@@ -30,7 +30,7 @@ struct ConnectServerView: View {
                 .padding(.top, 18)
             Text("Run the command below on the server that will run your agents")
                 .font(.ui(size: 14))
-                .foregroundStyle(Color.themeSecondary)
+                .foregroundStyle(Color.themeMutedForeground)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
                 .frame(maxWidth: 480)
@@ -53,7 +53,7 @@ struct ConnectServerView: View {
                     ActionButton("Sign out", variant: .link, size: .small) { store.signOut() }
                 }
                 .font(.ui(size: 12))
-                .foregroundStyle(Color.themeTertiary)
+                .foregroundStyle(Color.themeMutedStrongerForeground)
                 .padding(.bottom, 20)
             } else if centred {
                 Spacer()
@@ -76,22 +76,22 @@ struct ConnectServerView: View {
             VStack(spacing: 14) {
                 Text("The command has expired")
                     .font(.ui(size: 13))
-                    .foregroundStyle(Color.themeSecondary)
+                    .foregroundStyle(Color.themeMutedForeground)
                 ActionButton("Regenerate", pending: store.enrollTokenPending) { store.regenerateEnrollToken() }
             }
         } else {
             VStack(spacing: 14) {
                 HStack(spacing: 8) {
                     Spinner()
-                        .foregroundStyle(Color.themeSecondary)
+                        .foregroundStyle(Color.themeMutedForeground)
                     Text("Waiting for your server")
                         .font(.ui(size: 13))
-                        .foregroundStyle(Color.themeSecondary)
+                        .foregroundStyle(Color.themeMutedForeground)
                 }
                 Text(store.enrollToken?.timeLeft(at: date) ?? "15:00")
                     .font(.ui(size: 12))
                     .monospacedDigit()
-                    .foregroundStyle(Color.themeTertiary)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
             }
         }
     }

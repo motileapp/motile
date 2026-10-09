@@ -26,7 +26,7 @@ struct ReviewerChip: View {
     let reviewer: PullRequestPage.Reviewer
 
     var body: some View {
-        Chip(reviewer.name, dot: reviewer.tone == .neutral ? Color.themeTertiary : reviewer.tone.color)
+        Chip(reviewer.name, dot: reviewer.tone == .neutral ? Color.themeMutedStrongerForeground : reviewer.tone.color)
             .help("\(reviewer.name): \(reviewer.label)")
     }
 }
@@ -80,11 +80,11 @@ struct PullRequestNoticeBar: View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
                 Image(notice.failed ? .circleAlert : .circleCheck, size: 13)
-                    .foregroundStyle(notice.failed ? Color.themeDanger : Color.themeSuccess)
+                    .foregroundStyle(notice.failed ? Color.themeDestructive : Color.themeSuccess)
                     .frame(height: Self.lineHeight)
                 Text(notice.text)
                     .font(.ui(size: 12.5))
-                    .foregroundStyle(Color.themeText)
+                    .foregroundStyle(Color.themeForeground)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(minHeight: Self.lineHeight)
@@ -100,7 +100,7 @@ struct PullRequestNoticeBar: View {
             .padding(.leading, 12)
             .padding(.trailing, 6)
             .padding(.vertical, 8)
-            .background(notice.failed ? Color.themeDanger.opacity(0.08) : Color.themeSuccess.opacity(0.08))
+            .background((notice.failed ? Color.themeDestructive : Color.themeSuccess).wash())
             PanelLine()
         }
     }
@@ -119,7 +119,7 @@ struct PullRequestTextView: View {
                 case .code(let code):
                     ProseText(text: code)
                         .padding(10)
-                        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                        .box(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
                 }
             }
         }
@@ -149,7 +149,7 @@ struct DescriptionEditor: View {
                     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text("Nothing to preview")
                             .font(.ui(size: 12.5))
-                            .foregroundStyle(Color.themeTertiary)
+                            .foregroundStyle(Color.themeMutedStrongerForeground)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         PullRequestTextView(blocks: preview)
@@ -158,7 +158,7 @@ struct DescriptionEditor: View {
                 }
                 .padding(12)
                 .frame(maxHeight: .infinity)
-                .layered(in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .box(in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
             } else {
                 TextArea("Say what this changes and why", text: $text, lines: 4, fills: true)
             }
@@ -205,10 +205,10 @@ extension PullRequestPage.Tone {
     var color: Color {
         switch self {
         case .success: .themeSuccess
-        case .danger: .themeDanger
+        case .danger: .themeDestructive
         case .warning: .themeWarning
-        case .pending: .themeWorking
-        case .neutral: .themeSecondary
+        case .pending: .themeProcess
+        case .neutral: .themeMutedForeground
         case .merged: .themeMerged
         }
     }

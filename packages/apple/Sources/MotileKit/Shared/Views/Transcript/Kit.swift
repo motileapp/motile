@@ -13,6 +13,8 @@ final class SurfaceView: LayerView {
     var stroke: PlatformColor? { didSet { repaint() } }
     var dotted = false { didSet { repaint() } }
     var radius: CGFloat = 0 { didSet { repaint() } }
+    /// A shadow of the size, in the colour shadow at one of its opacities.
+    var drop: (size: ShadowSize, strength: Opacity)? { didSet { repaint() } }
     private var dots: CAShapeLayer?
 
     override var frame: CGRect {
@@ -33,6 +35,10 @@ final class SurfaceView: LayerView {
         layer.cornerCurve = .continuous
         layer.borderColor = dotted ? nil : stroke.map(resolved)
         layer.borderWidth = stroke == nil || dotted ? 0 : 1
+        layer.shadowColor = drop.map { resolved(Theme.thinned(Theme.shadow, $0.strength)) }
+        layer.shadowOpacity = drop == nil ? 0 : 1
+        layer.shadowRadius = drop?.size.radius ?? 0
+        layer.shadowOffset = CGSize(width: 0, height: drop?.size.down ?? 0)
         paintDots(layer)
     }
 
@@ -93,10 +99,10 @@ final class RowButton: FlippedView {
         self.bordered = bordered
         font = bordered ? .ui(Self.metrics.textSize, weight: .medium) : Theme.smallFont
         sidePadding = bordered ? Self.metrics.padding : Self.padding
-        self.title = TextLabel(font: font, color: bordered ? Theme.text : Theme.secondary)
+        self.title = TextLabel(font: font, color: bordered ? Theme.foreground : Theme.mutedForeground)
         super.init(frame: .zero)
         highlight.radius = radius
-        if bordered { highlight.stroke = Theme.borderSecondary }
+        if bordered { highlight.stroke = Theme.border }
         addSubview(highlight)
         self.title.string = title
         self.title.centered = true
@@ -129,13 +135,13 @@ final class RowButton: FlippedView {
 
     private func light(_ lit: Bool) {
         highlight.fill = lit ? hover : .clear
-        title.color = lit || bordered ? Theme.text : Theme.secondary
+        title.color = lit || bordered ? Theme.foreground : Theme.mutedForeground
     }
 }
 
 /// The box an image or a video is shown in: empty until the picture is there.
 final class PictureView: LayerView {
-    static let radius: CGFloat = 10
+    static let radius = Radius.lg
 
     var picture: CGImage? { didSet { repaint() } }
     /// Fills the box with the picture, cutting off what doesn't fit, instead of showing all of it.
@@ -160,7 +166,7 @@ final class SpinnerView: LayerView {
 
     private let loader = CAShapeLayer()
     private let side: CGFloat
-    var tint: PlatformColor = Theme.secondary { didSet { repaint() } }
+    var tint: PlatformColor = Theme.mutedForeground { didSet { repaint() } }
 
     init(size: CGFloat) {
         side = PlatformImage.symbolSide(size * Self.fill)
@@ -255,7 +261,7 @@ enum LineCountText {
         }
         if removed > 0 || added == 0 {
             let space = text.length > 0 ? " " : ""
-            text.append(NSAttributedString(string: "\(space)−\(removed)", attributes: [.font: font, .foregroundColor: Theme.danger]))
+            text.append(NSAttributedString(string: "\(space)−\(removed)", attributes: [.font: font, .foregroundColor: Theme.destructive]))
         }
         return text
     }

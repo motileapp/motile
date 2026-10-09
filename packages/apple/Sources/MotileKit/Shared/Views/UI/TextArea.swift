@@ -11,7 +11,6 @@ struct TextArea: View {
     private let fills: Bool
     private let heights: ClosedRange<CGFloat>
     @State private var height: CGFloat
-    @Environment(\.surface) private var surface
 
     init(
         _ placeholder: String, text: Binding<String>, size: ControlSize = .regular, monospaced: Bool = false, lines: Int = 3, maxLines: Int = 12,
@@ -39,6 +38,6 @@ struct TextArea: View {
             .padding(.horizontal, size.padding - 2)
             .padding(.vertical, max(0, size.padding - ComposerTextView.verticalInset))
             .textPointer()
-            .fieldFrame(size, surface: surface)
+            .fieldFrame(size)
     }
 }

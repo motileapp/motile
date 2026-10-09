@@ -90,7 +90,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
                 let bottom = (baseline - font.descender).rounded()
                 self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
                     let box = CGRect(x: rect.minX - 2, y: top, width: rect.width + 4, height: bottom - top)
-                    RoundedBox.fill(box.offsetBy(dx: origin.x, dy: origin.y), radius: 4)
+                    RoundedBox.fill(box.offsetBy(dx: origin.x, dy: origin.y), radius: Radius.xs)
                 }
             }
         }
@@ -98,7 +98,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
         storage.enumerateAttribute(.motileQuote, in: characters) { value, range, _ in
             guard let depth = (value as? NSNumber)?.intValue, depth > 0 else { return }
             let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            Theme.borderSecondary.setFill()
+            Theme.border.setFill()
             enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
                 for level in 0..<depth {
                     let bar = CGRect(x: rect.minX + CGFloat(level) * 14 + 1, y: rect.minY, width: 2, height: rect.height)
@@ -125,9 +125,9 @@ final class DecoratingLayoutManager: NSLayoutManager {
                 .offsetBy(dx: origin.x, dy: origin.y)
                 .insetBy(dx: 0.5, dy: 0.5)
             Theme.backgroundSecondary.setFill()
-            RoundedBox.fill(frame, radius: 10)
+            RoundedBox.fill(frame, radius: Radius.lg)
             Theme.border.setStroke()
-            RoundedBox.stroke(frame, radius: 10)
+            RoundedBox.stroke(frame, radius: Radius.lg)
         }
     }
 }
@@ -282,9 +282,9 @@ extension RowTextView {
     /// pay for loading the fonts and the text system while it streams.
     static func warmUp() {
         let view = make()
-        let sample = NSMutableAttributedString(attributedString: Typesetter.plain("Warm up", color: Theme.text))
+        let sample = NSMutableAttributedString(attributedString: Typesetter.plain("Warm up", color: Theme.foreground))
         sample.append(Typesetter.code("let warm = true", spans: [0, 3, 2]))
-        sample.append(Typesetter.mono("up", color: Theme.secondary))
+        sample.append(Typesetter.mono("up", color: Theme.mutedForeground))
         sample.append(NSAttributedString(string: "bold", attributes: [.font: Theme.proseBold]))
         sample.append(NSAttributedString(string: "heading", attributes: [.font: Theme.heading(2)]))
         view.content = sample

@@ -35,11 +35,14 @@ extension NSView {
         }
     }
 
-    func dropShadow(opacity: CGFloat, radius: CGFloat, down: CGFloat) {
+    /// A shadow of the size, in the colour shadow at one of its opacities, as the appearance
+    /// has it now. A view applies it again when its appearance changes.
+    func applyShadow(_ size: ShadowSize, _ strength: Opacity) {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(opacity)
-        shadow.shadowBlurRadius = radius
-        shadow.shadowOffset = NSSize(width: 0, height: -down)
+        shadow.shadowColor = Theme.resolved(Theme.thinned(Theme.shadow, strength), dark: dark)
+        shadow.shadowBlurRadius = size.radius
+        shadow.shadowOffset = NSSize(width: 0, height: -size.down)
         self.shadow = shadow
     }
 
@@ -236,10 +239,11 @@ final class ShimmerLabel: TextLabel {
     }
 
     static func make(_ font: NSFont) -> ShimmerLabel {
-        let field = ShimmerLabel(font: font, color: Theme.shimmer)
+        let field = ShimmerLabel(font: font, color: Theme.emphasizedForeground)
         field.setAccessibilityElement(false)
 
-        let alphas: [CGFloat] = [0, 0.12, 0.55, 1, 0.55, 0.12, 0]
+        let (edge, middle) = (Opacity.shimmerBandEdge.fixed, Opacity.shimmerBandMiddle.fixed)
+        let alphas: [CGFloat] = [0, edge, middle, 1, middle, edge, 0]
         field.band.colors = alphas.map { NSColor.black.withAlphaComponent($0).cgColor }
         field.band.locations = [0, 0.15, 0.35, 0.5, 0.65, 0.85, 1]
         field.band.startPoint = CGPoint(x: 0, y: 0.5)
@@ -288,7 +292,7 @@ final class ShimmerLabel: TextLabel {
 
 /// A symbol in one colour, in the middle of its frame.
 final class SymbolView: NSImageView {
-    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: NSColor = Theme.secondary) {
+    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: NSColor = Theme.mutedForeground) {
         self.init(frame: .zero)
         imageScaling = .scaleNone
         contentTintColor = tint
@@ -302,6 +306,20 @@ final class SymbolView: NSImageView {
     var tint: NSColor? {
         get { contentTintColor }
         set { contentTintColor = newValue }
+    }
+
+    private var shadowSpec: (size: ShadowSize, strength: Opacity)?
+
+    /// A shadow of the size, which follows the appearance.
+    func dropShadow(_ size: ShadowSize, _ strength: Opacity) {
+        shadowSpec = (size, strength)
+        applyShadow(size, strength)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard let shadowSpec else { return }
+        applyShadow(shadowSpec.size, shadowSpec.strength)
     }
 }
 
@@ -332,7 +350,7 @@ final class IconButton: NSButton {
         imagePosition = title.isEmpty ? .imageOnly : .imageLeading
         self.title = title
         font = Theme.smallFont
-        contentTintColor = Theme.secondary
+        contentTintColor = Theme.mutedForeground
         toolTip = tooltip
         target = self
         self.action = #selector(pressed)
@@ -371,9 +389,9 @@ final class IconButton: NSButton {
 
     private func light() {
         let lit = hovering || pressing
-        contentTintColor = lit ? Theme.text : Theme.secondary
+        contentTintColor = lit ? Theme.foreground : Theme.mutedForeground
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = lit ? surface.next.platform.cgColor : nil
+            layer?.backgroundColor = lit ? surface.platform(.control).cgColor : nil
         }
     }
 
@@ -404,7 +422,7 @@ final class RowTextView: NSTextView {
         view.usesFontPanel = false
         view.usesFindBar = false
         view.isRichText = true
-        view.linkTextAttributes = [.foregroundColor: Theme.link, .cursor: NSCursor.pointingHand]
+        view.linkTextAttributes = [.foregroundColor: Theme.primary, .cursor: NSCursor.pointingHand]
         if !wraps { system.unwrap() }
         return view
     }

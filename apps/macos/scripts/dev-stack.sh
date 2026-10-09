@@ -139,8 +139,11 @@ start_stack() {
         echo "▸ Signing in and making the threads…"
         mkdir -p "$PROJECT"
         printf 'def greet(name):\n    print("Hello " + name)\n\ngreet("world")\n' > "$PROJECT/greet.py"
-        cat > "$PROJECT/favicon.svg" <<'SVG'
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0f766e"/><path d="M9 20l5-9 4 6 2-3 3 6z" fill="#fff"/></svg>
+        # The project's icon, in the demo's project colour with the mark as in the dark.
+        ICON_FILL="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["colors"]["dark"][sys.argv[2]])' "$ROOT/packages/theme/tokens.json" chart-2)"
+        ICON_MARK="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["colors"]["dark"][sys.argv[2]])' "$ROOT/packages/theme/tokens.json" emphasized-foreground)"
+        cat > "$PROJECT/favicon.svg" <<SVG
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="$ICON_FILL"/><path d="M9 20l5-9 4 6 2-3 3 6z" fill="$ICON_MARK"/></svg>
 SVG
         git -C "$PROJECT" init -q -b main
         git -C "$PROJECT" -c user.name=Dev -c user.email=demo@motile.app add -A

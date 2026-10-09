@@ -38,7 +38,7 @@ struct Segmented<Value: Hashable>: View {
         .environment(\.surface, .background)
         .background(Color.themeBackground, in: shape)
         .overlay { shape.strokeBorder(Color.themeBorder, lineWidth: Self.border) }
-        .opacity(enabled ? 1 : 0.45)
+        .opacity(.disabled, when: !enabled)
         .animation(.easeOut(duration: 0.12), value: selection)
     }
 

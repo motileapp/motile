@@ -25,7 +25,7 @@ export function AccountMenu({ user }: { user: Account["user"] }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Account"
-        className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+        className="rounded-full outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
         <Avatar>
           {user.picture && (

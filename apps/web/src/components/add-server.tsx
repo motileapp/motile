@@ -131,7 +131,7 @@ function Command({ text }: { text: string }) {
   }
 
   return (
-    <div className="flex items-start gap-2 rounded-2xl bg-background p-3 pl-4">
+    <div className="flex items-start gap-2 rounded-lg border bg-background-secondary p-3 pl-4">
       <code className="min-w-0 flex-1 py-1.5 font-mono text-xs leading-relaxed break-all">
         {colouredWords(text).map(({ word, colour }, index) => (
           <Fragment key={index}>

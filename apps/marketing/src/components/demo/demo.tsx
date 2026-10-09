@@ -71,7 +71,7 @@ export function Demo() {
     <div className="@container relative isolate w-full">
       <Glow />
       <div className="h-[calc(760px*var(--demo-scale))] [--demo-scale:var(--demo-fit,min(1,tan(atan2(100cqw,1200px))))]">
-        <div className="relative flex h-[760px] w-[1200px] origin-top-left scale-(--demo-scale) overflow-hidden rounded-[16px] bg-background text-[13px] text-foreground ring-1 ring-black/10 select-none dark:ring-white/12">
+        <div className="relative flex h-[760px] w-[1200px] origin-top-left scale-(--demo-scale) overflow-hidden rounded-xl bg-background text-[13px] text-foreground ring-1 ring-border select-none">
           <div className="absolute top-5 left-5 z-20">
             <TrafficLights />
           </div>
@@ -131,7 +131,7 @@ export function Demo() {
                 <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   <ProjectIcon project={thread.project} size={12} />
                   <span>
-                    {thread.project.name} <span className="text-tertiary">·</span>{" "}
+                    {thread.project.name} <span className="text-muted-stronger-foreground">·</span>{" "}
                     {thread.branch}
                   </span>
                 </p>
@@ -240,7 +240,7 @@ function WindowButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground",
+        "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent-stronger hover:text-foreground",
         !inline && "m-0.5"
       )}
     >
@@ -251,12 +251,12 @@ function WindowButton({
 
 function GitButton() {
   return (
-    <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-[7px] border border-border-secondary text-[12px] font-medium">
-      <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-background-secondary">
+    <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-md border border-border text-[12px] font-medium">
+      <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-background-accent">
         <GitCommitHorizontalIcon className="size-3.5" />
         Commit
       </span>
-      <span className="flex h-full items-center justify-center border-l border-border-secondary px-[11px] text-muted-foreground hover:bg-background-secondary hover:text-foreground">
+      <span className="flex h-full items-center justify-center border-l border-border px-[11px] text-muted-foreground hover:bg-background-accent hover:text-foreground">
         <MenuChevron />
       </span>
     </span>

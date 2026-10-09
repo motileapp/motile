@@ -7,10 +7,10 @@ struct LogoView: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
-            .fill(Color(platform: Theme.hex(0x0a0b0f)))
+            .fill(Color(platform: Theme.resolved(Theme.background, dark: true)))
             .overlay {
                 Mark()
-                    .fill(.white)
+                    .fill(Color(platform: Theme.resolved(Theme.emphasizedForeground, dark: true)))
                     .frame(width: size * 720 / 1024, height: size * 720 / 1024)
             }
             .frame(width: size, height: size)

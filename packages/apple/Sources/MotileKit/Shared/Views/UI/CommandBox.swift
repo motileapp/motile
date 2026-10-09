@@ -16,7 +16,7 @@ struct CommandBox: View {
         HStack(alignment: .top, spacing: 8) {
             Text(command.map { Self.highlighted($0, spans: spans) } ?? AttributedString(placeholder))
                 .font(.ui(size: 12.5, design: .monospaced))
-                .foregroundStyle(command == nil ? Color.themeTertiary : Color.themeText)
+                .foregroundStyle(command == nil ? Color.themeMutedStrongerForeground : Color.themeForeground)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -37,10 +37,10 @@ struct CommandBox: View {
             .disabled(command == nil)
         }
         .padding(scaled(4))
-        .layered(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .box(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                .strokeBorder(surface.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+                .strokeBorder(Color.themeBorder, lineWidth: 1)
         }
     }
 

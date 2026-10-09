@@ -49,9 +49,9 @@ export type DoneThread = {
   pullRequest?: number
 }
 
-const api: Project = { name: "api", color: "#2a5bd7" }
-const web: Project = { name: "web", color: "#0f9f6e" }
-const mobile: Project = { name: "mobile", color: "#e8590c" }
+const api: Project = { name: "api", color: "var(--chart-1)" }
+const web: Project = { name: "web", color: "var(--chart-2)" }
+const mobile: Project = { name: "mobile", color: "var(--chart-3)" }
 
 export const servers: Server[] = [
   { name: "studio", path: "direct", ms: 41 },

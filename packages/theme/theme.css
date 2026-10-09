@@ -1,5 +1,9 @@
-/* The colours of the marketing site and the web app, from the Mac app's Theme.swift. Dark is the
-   default: the page starts with the "dark" class on <html> unless the theme cookie says light. */
+/* The design tokens for Tailwind, in the marketing site and the web app. Generated from tokens.json by build.mjs: edit tokens.json and run `pnpm tokens`.
+   Dark is the default: the page starts with the "dark" class on <html> unless the theme cookie
+   says light. Nothing but these colours, shadows and radii exists: Tailwind's own palette and
+   scales are gone. An opacity is one of the tokens, as Tailwind's own modifier:
+   bg-overlay/(--opacity-overlay), opacity-(--opacity-disabled),
+   shadow-lg shadow-shadow/(--opacity-shadow-stronger). */
 
 @import "./tokens.css";
 
@@ -8,76 +12,84 @@
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "DM Sans Variable", sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
+
+  --color-*: initial;
   --color-background: var(--background);
+  --color-background-accent: var(--background-accent);
+  --color-background-accent-stronger: var(--background-accent-stronger);
+  --color-background-accent-larger: var(--background-accent-larger);
+  --color-background-accent-larger-stronger: var(--background-accent-larger-stronger);
   --color-background-secondary: var(--background-secondary);
-  --color-background-tertiary: var(--background-tertiary);
-  --color-background-quaternary: var(--background-quaternary);
-  --color-popover-secondary: var(--popover-secondary);
-  --color-composer: var(--composer);
-  --color-composer-secondary: var(--composer-secondary);
-  --color-border-secondary: var(--border-secondary);
-  --color-prose: var(--prose);
-  --color-tertiary: var(--tertiary);
-  --color-activity: var(--activity);
-  --color-link: var(--link);
+  --color-background-secondary-accent: var(--background-secondary-accent);
+  --color-background-secondary-accent-stronger: var(--background-secondary-accent-stronger);
+  --color-card: var(--card);
+  --color-card-accent: var(--card-accent);
+  --color-popover: var(--popover);
+  --color-popover-accent: var(--popover-accent);
+  --color-foreground: var(--foreground);
+  --color-emphasized-foreground: var(--emphasized-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-stronger-foreground: var(--muted-stronger-foreground);
+  --color-muted-strongest-foreground: var(--muted-strongest-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
-  --color-warning-background: var(--warning-background);
-  --color-working: var(--working);
-  --color-monitoring: var(--monitoring);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-pending: var(--pending);
+  --color-pending-foreground: var(--pending-foreground);
+  --color-process: var(--process);
+  --color-process-foreground: var(--process-foreground);
   --color-merged: var(--merged);
-  --color-added: var(--added);
-  --color-removed: var(--removed);
-  --color-added-text: var(--added-text);
-  --color-removed-text: var(--removed-text);
+  --color-merged-foreground: var(--merged-foreground);
+  --color-border: var(--border);
+  --color-border-card: var(--border-card);
+  --color-border-input: var(--border-input);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+  --color-shadow: var(--shadow);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-claude: var(--claude);
+  --color-openai: var(--openai);
+  --color-google: var(--google);
+  --color-linear: var(--linear);
+  --color-window-close: var(--window-close);
+  --color-window-minimize: var(--window-minimize);
+  --color-window-zoom: var(--window-zoom);
   --color-syntax-comment: var(--syntax-comment);
   --color-syntax-keyword: var(--syntax-keyword);
   --color-syntax-string: var(--syntax-string);
   --color-syntax-constant: var(--syntax-constant);
   --color-syntax-function: var(--syntax-function);
   --color-syntax-type: var(--syntax-type);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-syntax-tag: var(--syntax-tag);
+
+  --radius-*: initial;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+
+  --shadow-*: initial;
+  --shadow-sm: 0 1px 2px var(--tw-shadow-color, var(--shadow-color));
+  --shadow-md: 0 4px 12px var(--tw-shadow-color, var(--shadow-color));
+  --shadow-lg: 0 8px 24px var(--tw-shadow-color, var(--shadow-color));
+  --shadow-xl: 0 16px 40px var(--tw-shadow-color, var(--shadow-color));
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;

@@ -110,7 +110,7 @@ struct SidebarView: View {
                 case .empty:
                     Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
                         .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                         .frame(height: Self.emptyLineHeight)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, rowMargin.leading + 8)
@@ -338,7 +338,7 @@ struct ThreadRow: View, Equatable {
                 ThreadStatus(thread: thread)
                 #endif
             }
-            .foregroundStyle(Color.themeSecondary)
+            .foregroundStyle(Color.themeMutedForeground)
             .frame(height: scaled(22))
 
             Text(thread.title)
@@ -361,7 +361,7 @@ struct ThreadRow: View, Equatable {
                 ThreadServerLabel(serverID: thread.serverID)
                 AgentIcon(agent: thread.agent, size: 12)
             }
-            .foregroundStyle(Color.themeTertiary)
+            .foregroundStyle(Color.themeMutedStrongerForeground)
             .frame(height: scaled(16))
         }
         .padding(.horizontal, Self.sidePadding)
@@ -373,10 +373,10 @@ struct ThreadRow: View, Equatable {
         // The table the row is in takes the click, so that it can drag the row as well. The menu
         // still comes up anywhere on the row.
         .contentShape(Rectangle())
-        .hoverHighlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)
+        .hoverHighlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering)
         #else
         // The list the row is in brings up its menu, so that a hold can drag the row as well.
-        .button(.highlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
         #endif
         .onHover { hovering = $0 }
         #if os(macOS)
@@ -477,7 +477,7 @@ struct DraftRows: View {
             ForEach(listed) { listed in
                 DraftRow(listed: listed, open: open)
                     #if os(iOS)
-                    .rowSwipe(.trash2, "Discard Draft", tint: .themeDanger, size: 36, isOpen: swiped(listed.id)) {
+                    .rowSwipe(.trash2, "Discard Draft", tint: .themeDestructive, size: 36, isOpen: swiped(listed.id)) {
                         store.discard(listed.draft)
                     }
                     #endif
@@ -520,7 +520,7 @@ private struct DraftRow: View {
                     }
                 }
             }
-            .foregroundStyle(Color.themeSecondary)
+            .foregroundStyle(Color.themeMutedForeground)
             .frame(height: scaled(22))
 
             Text(listed.preview)
@@ -544,7 +544,7 @@ private struct DraftRow: View {
                     AgentIcon(agent: agent, size: 12)
                 }
             }
-            .foregroundStyle(Color.themeTertiary)
+            .foregroundStyle(Color.themeMutedStrongerForeground)
             .frame(height: scaled(16))
         }
         .padding(.horizontal, ThreadRow.sidePadding)
@@ -552,7 +552,7 @@ private struct DraftRow: View {
         .padding(.bottom, ThreadRow.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: 8, selected: store.selection == .draft(listed.id), inset: rowMargin, hovered: hovering)) {
+        .button(.highlight(radius: Radius.md, selected: store.selection == .draft(listed.id), inset: rowMargin, hovered: hovering)) {
             open(.draft(listed.id))
         }
         .onHover { hovering = $0 }
@@ -635,7 +635,7 @@ private struct DoneShelf: View {
                     Spacer()
                     Text("\(threads.count)")
                         .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                         .monospacedDigit()
                 }
                 .padding(.horizontal, 18)
@@ -719,20 +719,20 @@ struct DoneRow: View, Equatable {
             Text(thread.title)
                 .font(.ui(size: 13))
                 .lineLimit(1)
-                .foregroundStyle(Color.themeSecondary)
+                .foregroundStyle(Color.themeMutedForeground)
             Spacer(minLength: 6)
             if let pullRequest {
                 ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, colored: false, open: open)
             }
             Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: AgoClock.shared.now))
                 .font(.ui(size: 11))
-                .foregroundStyle(Color.themeTertiary)
+                .foregroundStyle(Color.themeMutedStrongerForeground)
                 .opacity(hovering ? 0 : 1)
         }
         .padding(.horizontal, Self.sidePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .overlay(alignment: .trailing) {
-            OnRowSurface {
+            OnRowSurface(selected: selected) {
                 ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
             }
             .padding(.trailing, Self.buttonInset)
@@ -740,7 +740,7 @@ struct DoneRow: View, Equatable {
             .allowsHitTesting(hovering)
         }
         .padding(rowMargin)
-        .button(.highlight(radius: 8, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         #if os(macOS)
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
@@ -761,11 +761,11 @@ struct NewThreadRow: View {
                 .lineLimit(1)
             Spacer(minLength: 6)
         }
-        .foregroundStyle(Color.themeSecondary)
+        .foregroundStyle(Color.themeMutedForeground)
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: 8, inset: rowMargin)) { store.newThread() }
+        .button(.highlight(radius: Radius.md, inset: rowMargin)) { store.newThread() }
     }
 }
 
@@ -780,13 +780,14 @@ extension AppStore {
 
 /// Covers what lies under it with the colour the row is lit in, hovered or selected.
 private struct OnRowSurface<Content: View>: View {
-    @Environment(\.surface) private var surface
+    let selected: Bool
     @ViewBuilder let content: Content
+    @Environment(\.surface) private var surface
 
     var body: some View {
         content
             .padding(.leading, 6)
-            .background(surface.color)
+            .background(surface.color(selected ? .rowSelected : .row))
     }
 }
 
@@ -811,24 +812,24 @@ struct ThreadStatus: View {
         } else if thread.running {
             HStack(spacing: 9) {
                 if thread.agents > 0 {
-                    label("\(thread.agents)", Color.themeAgents) {
+                    label("\(thread.agents)", Color.themePending) {
                         symbol(.users)
                     }
                     .help(thread.agents == 1 ? "1 agent is working" : "\(thread.agents) agents are working")
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
+                    label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeProcess) {
                         Image(.circleDashed, size: 10)
                     }
                 }
             }
         } else if let stage = thread.gitStage {
-            label(stage.label, Color.themeWorking) {
+            label(stage.label, Color.themeProcess) {
                 Spinner(size: 11)
             }
         } else if thread.monitoring {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeMonitoring) {
+                label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeForeground) {
                     symbol(.eye)
                 }
             }
@@ -844,7 +845,7 @@ struct ThreadStatus: View {
         } else {
             Text(Time.ago(thread.updatedAt, now: AgoClock.shared.now))
                 .font(.ui(size: 11))
-                .foregroundStyle(Color.themeTertiary)
+                .foregroundStyle(Color.themeMutedStrongerForeground)
         }
     }
 
@@ -879,7 +880,7 @@ struct ServerLine: View {
             ServerUpdateStatus(server: server) {
                 Text(detail)
                     .font(.ui(size: 11))
-                    .foregroundStyle(Color.themeTertiary)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
                     .monospacedDigit()
             }
         }
@@ -891,7 +892,7 @@ struct ServerLine: View {
         switch server.state {
         case .connected: return Color.themeSuccess
         case .connecting: return Color.themeWarning
-        case .disconnected, .refused: return Color.themeDanger
+        case .disconnected, .refused: return Color.themeDestructive
         }
     }
 

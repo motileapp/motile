@@ -2,9 +2,8 @@ import SwiftUI
 
 /// Lights up what the pointer is over, what is selected and what is `lit`. The light is drawn `inset` from the
 /// view's edges: that margin looks empty but is the view's, so neighbours leave no gap to miss.
-/// What is `faded` is in the secondary color until it lights up. What is inside lies on the light,
-/// so a button in it lights up a layer further. A view that follows the pointer itself passes
-/// `hovered`, so that the pointer is followed once.
+/// What is `faded` is in the muted colour until it lights up. A view that follows the pointer
+/// itself passes `hovered`, so that the pointer is followed once.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
@@ -20,10 +19,9 @@ private struct HoverHighlight: ViewModifier {
 
     @ViewBuilder func body(content: Content) -> some View {
         let lighted = tinted(content)
-            .environment(\.surface, light ?? surface)
             .background {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(light?.color ?? Color.clear)
+                    .fill(light.map(surface.color) ?? Color.clear)
                     .padding(inset)
             }
         if hovered == nil {
@@ -41,22 +39,22 @@ private struct HoverHighlight: ViewModifier {
         }
     }
 
-    private var light: Surface? {
-        if selected { return surface.further }
+    private var light: Surface.Layer? {
+        if selected { return .rowSelected }
         guard enabled, hovering || lit else { return nil }
-        return surface.next
+        return .row
     }
 
     private var text: Color {
-        guard enabled else { return Color.themeTertiary }
-        guard selected || hovering || lit else { return Color.themeSecondary }
-        return Color.themeText
+        guard enabled else { return Color.themeMutedStrongerForeground }
+        guard selected || hovering || lit else { return Color.themeMutedForeground }
+        return Color.themeForeground
     }
 }
 
 extension View {
     func hoverHighlight(
-        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false,
+        radius: CGFloat = Radius.md, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false,
         hovered: Bool? = nil
     ) -> some View {
         modifier(HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded, hovered: hovered))
@@ -67,7 +65,7 @@ extension View {
 /// is selected, or `lit` as the one the arrow keys are on, has it without either. All of the
 /// label takes the click, so wherever it lights it can be pressed.
 struct HighlightButtonStyle: ButtonStyle {
-    var radius: CGFloat = 7
+    var radius: CGFloat = Radius.md
     var selected = false
     var lit = false
     var inset = EdgeInsets()
@@ -83,18 +81,19 @@ struct HighlightButtonStyle: ButtonStyle {
     }
 }
 
-/// A button whose own look says what it does, like a picture: it only dims under a finger.
+/// A button whose own look says what it does, like a picture: under a finger it is lit, at
+/// opacity lit.
 struct DimButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .opacity(configuration.isPressed ? 0.7 : 1)
+            .opacity(.lit, when: configuration.isPressed)
     }
 }
 
 extension ButtonStyle where Self == HighlightButtonStyle {
     static func highlight(
-        radius: CGFloat = 7, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false,
+        radius: CGFloat = Radius.md, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false,
         hovered: Bool? = nil
     ) -> HighlightButtonStyle {
         HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded, hovered: hovered)

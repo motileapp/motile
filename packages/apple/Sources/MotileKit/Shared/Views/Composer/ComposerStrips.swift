@@ -9,7 +9,7 @@ struct ComposerStrip: ViewModifier {
     }
 
     static let height: CGFloat = Platform.scale > 1 ? 38 : 32
-    static let radius: CGFloat = 14
+    static let radius = Radius.lg
     /// The room around a control in a strip, which is the control's to click.
     static let margin = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 8)
 
@@ -181,14 +181,14 @@ struct ContextStrip: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .foregroundStyle(Color.themeSecondary)
+        .foregroundStyle(Color.themeMutedForeground)
     }
 
     /// A branch that can't be switched from here, set as the button that switches one is.
     private func branchLabel(_ branch: String) -> some View {
         ControlLabel(title: branch, icon: .symbol(.gitBranch), size: .small)
             .truncationMode(.middle)
-            .foregroundStyle(Color.themeSecondary)
+            .foregroundStyle(Color.themeMutedForeground)
             .padding(ComposerStrip.margin)
     }
 }
@@ -226,11 +226,7 @@ struct BranchPicker: View {
     private static let listPadding: CGFloat = 8
     private static let maxListHeight: CGFloat = Platform.scale > 1 ? 420 : 300
     private static let placeholderCount = 5
-    #if os(macOS)
-    private static let dividerColor = Color.themeGlassBorder
-    #else
     private static let dividerColor = Color.themeBorder
-    #endif
 
     private enum Choice: Identifiable {
         case branch(Branch)
@@ -279,8 +275,8 @@ struct BranchPicker: View {
             #if os(macOS)
             HStack(spacing: 8) {
                 Image(.search, size: 12)
-                    .foregroundStyle(Color.themeTertiary)
-                TextField("", text: $query, prompt: Text(prompt).foregroundStyle(Color.themeTertiary))
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                TextField("", text: $query, prompt: Text(prompt).foregroundStyle(Color.themeMutedStrongerForeground))
                     .textFieldStyle(.plain)
                     .font(.ui(size: 13))
                     .focused($searching)
@@ -308,7 +304,7 @@ struct BranchPicker: View {
                 ThemeDivider(color: Self.dividerColor)
                 Text(note)
                     .font(.ui(size: 11.5))
-                    .foregroundStyle(working ? Color.themeSecondary : Color.themeDanger)
+                    .foregroundStyle(working ? Color.themeMutedForeground : Color.themeDestructive)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
@@ -323,8 +319,8 @@ struct BranchPicker: View {
         #else
         // A screen of the thread's settings, where the keyboard only comes when the field is tapped.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.themeSheet)
-        .environment(\.surface, .sheet)
+        .background(Color.themeBackground)
+        .environment(\.surface, .background)
         .navigationTitle(base == nil ? "Branch" : "Start From")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: prompt)
@@ -351,14 +347,14 @@ struct BranchPicker: View {
         } else if let listProblem {
             Text(listProblem)
                 .font(.ui(size: 12.5))
-                .foregroundStyle(Color.themeDanger)
+                .foregroundStyle(Color.themeDestructive)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
         } else if choices.isEmpty {
             Text("No branch matches.")
                 .font(.ui(size: 12.5))
-                .foregroundStyle(Color.themeSecondary)
+                .foregroundStyle(Color.themeMutedForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
         } else {
@@ -367,7 +363,7 @@ struct BranchPicker: View {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
                             row(choice, index: index)
-                                .button(.highlight(radius: 8, lit: index == highlighted)) { choose(choices, at: index) }
+                                .button(.highlight(radius: Radius.md, lit: index == highlighted)) { choose(choices, at: index) }
                                 .onHover { if $0 { highlighted = index } }
                                 .id(choice.id)
                         }
@@ -392,7 +388,7 @@ struct BranchPicker: View {
             case .branch(let branch):
                 let chosen = base.map { $0 == branch.name } ?? branch.current
                 Image(chosen ? .check : .gitBranch, size: 11)
-                    .foregroundStyle(chosen ? Color.themeText : Color.themeTertiary)
+                    .foregroundStyle(chosen ? Color.themeForeground : Color.themeMutedStrongerForeground)
                     .frame(width: 14)
                 Text(branch.name)
                     .lineLimit(1)
@@ -403,11 +399,11 @@ struct BranchPicker: View {
                 if let tag {
                     Text(tag)
                         .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
             case .create(let name):
                 Image(.plus, size: 11)
-                    .foregroundStyle(Color.themeTertiary)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
                     .frame(width: 14)
                 Text("Create branch “\(name)”")
                     .lineLimit(1)
@@ -416,11 +412,11 @@ struct BranchPicker: View {
             }
         }
         .font(.ui(size: 12.5))
-        .foregroundStyle(Color.themeText)
+        .foregroundStyle(Color.themeForeground)
         .padding(.horizontal, 8)
         .frame(height: Self.rowHeight)
         .frame(maxWidth: .infinity)
-        .opacity(working ? 0.5 : 1)
+        .opacity(.disabled, when: working)
     }
 
     private func choose(_ choices: [Choice], at index: Int) {
@@ -462,18 +458,18 @@ private struct BranchPlaceholder: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(surface.next.color)
+            RoundedRectangle(cornerRadius: Radius.xs, style: .continuous)
+                .fill(surface.color(.control))
                 .frame(width: 11, height: 11)
                 .frame(width: 14)
             Capsule()
-                .fill(surface.next.color)
+                .fill(surface.color(.control))
                 .frame(width: Self.widths[index % Self.widths.count], height: 8)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
         .frame(height: height)
-        .opacity(faded ? 0.45 : 1)
+        .opacity(.disabled, when: faded)
         .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: faded)
         .onAppear { faded = true }
     }

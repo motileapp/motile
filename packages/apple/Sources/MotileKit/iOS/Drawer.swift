@@ -115,9 +115,6 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         card.clipsToBounds = true
         card.backgroundColor = Theme.background
         cardShadow.isUserInteractionEnabled = false
-        cardShadow.layer.shadowColor = UIColor.black.cgColor
-        cardShadow.layer.shadowOffset = .zero
-        cardShadow.layer.shadowRadius = 20
         paintCardShadow()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: Self, _: UITraitCollection) in
             controller.paintCardShadow()
@@ -146,7 +143,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     private func paintCardShadow() {
-        cardShadow.layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.5 : 0.16
+        cardShadow.applyShadow(.lg, .shadowStronger)
     }
 
     override func viewDidLayoutSubviews() {

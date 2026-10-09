@@ -64,7 +64,7 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         coordinator.list = self
         coordinator.store = store
         coordinator.surface = context.environment.surface
-        table.light = (rowInset, rowRadius, coordinator.surface.next.platform)
+        table.light = (rowInset, rowRadius, coordinator.surface.platform(.row))
         scroll.contentInsets.top = topInset
         scroll.contentInsets.bottom = bottomInset
         if let first = items.first { table.rowHeight = height(first) }

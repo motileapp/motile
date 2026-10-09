@@ -10,7 +10,7 @@ export function MenuChevron() {
   return (
     <svg
       viewBox="5 8 14 8"
-      className="h-[4.7px] w-[8.2px] shrink-0 opacity-60"
+      className="h-[4.7px] w-[8.2px] shrink-0 text-muted-stronger-foreground"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -39,7 +39,7 @@ export function AgentIcon({
       aria-hidden="true"
     >
       {agent === "claude" ? (
-        <path fill="#D97757" d={CLAUDE} />
+        <path fill="currentColor" d={CLAUDE} />
       ) : (
         <path fill="currentColor" d={OPENAI} />
       )}
@@ -56,7 +56,7 @@ export function ProjectIcon({
 }) {
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center font-semibold text-white"
+      className="inline-flex shrink-0 items-center justify-center font-semibold text-primary-foreground"
       style={{
         width: size,
         height: size,
@@ -74,10 +74,10 @@ export function ProjectIcon({
 export function TrafficLights() {
   return (
     <div className="flex gap-2">
-      {["#ff5f57", "#febc2e", "#28c840"].map((color) => (
+      {["var(--window-close)", "var(--window-minimize)", "var(--window-zoom)"].map((color) => (
         <span
           key={color}
-          className="size-3 rounded-full ring-1 ring-black/10 ring-inset"
+          className="size-3 rounded-full"
           style={{ background: color }}
         />
       ))}

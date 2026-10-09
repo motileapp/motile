@@ -21,14 +21,14 @@ struct QuestionsView: View {
                 approval.title, symbol: .messageCircleQuestionMark,
                 place: approval.questions.count > 1 ? "\(index + 1) of \(approval.questions.count)" : nil
             )
-            .foregroundStyle(Color.themeSecondary)
+            .foregroundStyle(Color.themeMutedForeground)
             VStack(alignment: .leading, spacing: 2) {
                 Text(question.text)
                     .font(.ui(size: 13, weight: .medium))
                     .fixedSize(horizontal: false, vertical: true)
                 if question.multiple {
                     Text("Choose any that apply")
-                        .foregroundStyle(Color.themeSecondary)
+                        .foregroundStyle(Color.themeMutedForeground)
                 }
             }
             VStack(spacing: 2) {
@@ -67,7 +67,7 @@ struct QuestionsView: View {
                     if !option.detail.isEmpty {
                         Text(option.detail)
                             .font(.ui(size: 11.5))
-                            .foregroundStyle(Color.themeSecondary)
+                            .foregroundStyle(Color.themeMutedForeground)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -80,7 +80,7 @@ struct QuestionsView: View {
             .padding(.vertical, 6)
             .padding(.horizontal, Self.optionReach)
         }
-        .buttonStyle(.highlight(radius: 8, lit: picked))
+        .buttonStyle(.highlight(radius: Radius.md, lit: picked))
     }
 
     /// What was typed for a question, or else the options chosen for it, in their order.

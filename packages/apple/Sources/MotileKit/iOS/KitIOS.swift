@@ -33,11 +33,14 @@ extension UIView {
         UIView.animate(withDuration: duration, delay: 0, options: [.allowUserInteraction, .curveEaseOut]) { self.alpha = opacity }
     }
 
-    func dropShadow(opacity: CGFloat, radius: CGFloat, down: CGFloat) {
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = Float(opacity)
-        layer.shadowRadius = radius
-        layer.shadowOffset = CGSize(width: 0, height: down)
+    /// A shadow of the size, in the colour shadow at one of its opacities, as the appearance
+    /// has it now. A view applies it again when its appearance changes.
+    func applyShadow(_ size: ShadowSize, _ strength: Opacity) {
+        let dark = traitCollection.userInterfaceStyle == .dark
+        layer.shadowColor = Theme.resolved(Theme.shadow, dark: dark).cgColor
+        layer.shadowOpacity = Float(dark ? strength.dark : strength.light)
+        layer.shadowRadius = size.radius
+        layer.shadowOffset = CGSize(width: 0, height: size.down)
     }
 
     func ticker(target: Any, selector: Selector) -> CADisplayLink {
@@ -266,9 +269,10 @@ final class ShimmerLabel: TextLabel {
     }
 
     static func make(_ font: UIFont) -> ShimmerLabel {
-        let label = ShimmerLabel(font: font, color: Theme.shimmer)
+        let label = ShimmerLabel(font: font, color: Theme.emphasizedForeground)
         label.isAccessibilityElement = false
-        let alphas: [CGFloat] = [0, 0.12, 0.55, 1, 0.55, 0.12, 0]
+        let (edge, middle) = (Opacity.shimmerBandEdge.fixed, Opacity.shimmerBandMiddle.fixed)
+        let alphas: [CGFloat] = [0, edge, middle, 1, middle, edge, 0]
         label.band.colors = alphas.map { UIColor.black.withAlphaComponent($0).cgColor }
         label.band.locations = [0, 0.15, 0.35, 0.5, 0.65, 0.85, 1]
         label.band.startPoint = CGPoint(x: 0, y: 0.5)
@@ -306,7 +310,7 @@ final class ShimmerLabel: TextLabel {
 
 /// A symbol in one colour, in the middle of its frame.
 final class SymbolView: UIImageView {
-    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: UIColor = Theme.secondary) {
+    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: UIColor = Theme.mutedForeground) {
         self.init(frame: .zero)
         contentMode = .center
         tintColor = tint
@@ -320,6 +324,20 @@ final class SymbolView: UIImageView {
     var tint: UIColor? {
         get { tintColor }
         set { tintColor = newValue }
+    }
+
+    private var shadowSpec: (size: ShadowSize, strength: Opacity)?
+
+    /// A shadow of the size, which follows the appearance.
+    func dropShadow(_ size: ShadowSize, _ strength: Opacity) {
+        if shadowSpec == nil {
+            registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in
+                guard let spec = view.shadowSpec else { return }
+                view.applyShadow(spec.size, spec.strength)
+            }
+        }
+        shadowSpec = (size, strength)
+        applyShadow(size, strength)
     }
 }
 
@@ -339,8 +357,8 @@ final class IconButton: UIButton {
         self.symbolSize = symbolSize ?? Self.metrics.symbol
         layer.cornerRadius = Self.metrics.radius
         layer.cornerCurve = .continuous
-        tintColor = Theme.secondary
-        setTitleColor(Theme.secondary, for: .normal)
+        tintColor = Theme.mutedForeground
+        setTitleColor(Theme.mutedForeground, for: .normal)
         titleLabel?.font = Theme.smallFont
         accessibilityLabel = tooltip
         set(symbol: symbol, title: title)
@@ -354,8 +372,8 @@ final class IconButton: UIButton {
 
     override var isHighlighted: Bool {
         didSet {
-            backgroundColor = isHighlighted ? surface.next.platform : .clear
-            tintColor = isHighlighted ? Theme.text : Theme.secondary
+            backgroundColor = isHighlighted ? surface.platform(.control) : .clear
+            tintColor = isHighlighted ? Theme.foreground : Theme.mutedForeground
         }
     }
 
@@ -383,7 +401,7 @@ final class RowTextView: UITextView, UITextViewDelegate {
         view.textContainerInset = .zero
         view.contentInsetAdjustmentBehavior = .never
         view.dataDetectorTypes = []
-        view.linkTextAttributes = [.foregroundColor: Theme.link]
+        view.linkTextAttributes = [.foregroundColor: Theme.primary]
         view.textDragInteraction?.isEnabled = false
         view.delegate = view
         if !wraps { system.unwrap() }
