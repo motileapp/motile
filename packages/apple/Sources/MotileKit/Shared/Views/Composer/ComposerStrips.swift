@@ -97,6 +97,7 @@ struct ContextStrip: View {
                 ComposerDivider()
             }
             branchPart
+                .padding(.trailing, ComposerStrip.inset - ComposerStrip.margin.trailing)
         }
     }
 
