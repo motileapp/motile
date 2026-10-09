@@ -49,6 +49,7 @@
   --color-border-card: var(--border-card);
   --color-border-input: var(--border-input);
   --color-input: var(--input);
+  --color-composer: var(--composer);
   --color-ring: var(--ring);
   --color-overlay: var(--overlay);
   --color-shadow: var(--shadow);

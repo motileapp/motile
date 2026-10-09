@@ -80,7 +80,7 @@ export function Composer({
           </p>
         </Strip>
       )}
-      <div className="relative z-10 rounded-2xl border border-border-input bg-input">
+      <div className="relative z-10 rounded-2xl border border-border-input bg-composer">
         <textarea
           ref={input}
           value={text}
@@ -203,7 +203,7 @@ function Strip({
   return (
     <div
       className={cn(
-        "mx-[22px] border border-border-input bg-input text-[12px] text-muted-foreground",
+        "mx-[22px] border border-border-input bg-composer text-[12px] text-muted-foreground",
         tall
           ? "p-3 text-[12.5px]"
           : "flex h-8 items-center",

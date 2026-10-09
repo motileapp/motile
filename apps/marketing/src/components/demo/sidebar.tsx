@@ -44,7 +44,7 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col">
       <div className="mx-2.5 mt-0.5 mb-1.5 flex shrink-0 gap-2">
-        <label className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border-input bg-input px-[9px]">
+        <label className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md bg-input px-[9px]">
           <SearchIcon className="size-3 text-muted-stronger-foreground" />
           <input
             value={search}

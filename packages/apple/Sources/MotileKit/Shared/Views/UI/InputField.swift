@@ -2,9 +2,7 @@ import SwiftUI
 
 /// How a field is set off from what it lies on.
 enum InputVariant {
-    /// A fill with a border around it.
-    case outlined
-    /// A fill alone: a search above a list.
+    /// A fill alone.
     case filled
     /// No background or height of its own, for a field that lies on glass.
     case bare
@@ -26,7 +24,7 @@ struct InputField: View {
     @FocusState private var ownFocus: Bool
 
     init(
-        _ placeholder: String, text: Binding<String>, icon: Symbol? = nil, variant: InputVariant = .outlined, size: ControlSize = .regular,
+        _ placeholder: String, text: Binding<String>, icon: Symbol? = nil, variant: InputVariant = .filled, size: ControlSize = .regular,
         clearable: Bool = false, monospaced: Bool = false, secure: Bool = false, focus: FocusState<Bool>.Binding? = nil
     ) {
         self.placeholder = placeholder
@@ -45,7 +43,7 @@ struct InputField: View {
 
     private var fill: Color {
         switch variant {
-        case .outlined, .filled: .themeInput
+        case .filled: .themeInput
         case .bare: .clear
         }
     }
@@ -78,7 +76,7 @@ struct InputField: View {
                 .onTapGesture { (focus ?? $ownFocus).wrappedValue = true }
                 .textPointer()
         }
-        .fieldFrame(size, fill: fill, outlined: variant == .outlined, focused: (focus ?? $ownFocus).wrappedValue)
+        .fieldFrame(size, fill: fill)
     }
 }
 
@@ -94,16 +92,9 @@ extension InputField {
 }
 
 extension View {
-    /// The fill and the border of a field of the size: input with border-input, and the ring in
-    /// place of the border while it is focused.
-    func fieldFrame(_ size: ControlSize, fill: Color = .themeInput, outlined: Bool = true, focused: Bool = false) -> some View {
+    /// The fill of a field of the size: input, with no border, focused or not.
+    func fieldFrame(_ size: ControlSize, fill: Color = .themeInput) -> some View {
         background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
-            .overlay {
-                if outlined || focused {
-                    RoundedRectangle(cornerRadius: size.radius, style: .continuous)
-                        .strokeBorder(focused ? Color.themeRing : Color.themeBorderInput, lineWidth: 1)
-                }
-            }
     }
 }
 
