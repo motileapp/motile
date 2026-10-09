@@ -31,12 +31,9 @@ struct AttachmentTile: View {
         .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).stroke(Color.themeBorder, lineWidth: 1))
         .button(DimButtonStyle(), action: open)
         .overlay(alignment: .topTrailing) {
-            // Over a picture the button is as in the dark, on a backdrop that shows on any picture.
-            ActionButton(icon: .x, help: "Remove", variant: .secondary, size: .small, round: true) {
+            ActionButton(icon: .x, help: "Remove", variant: .overlay, size: .small, round: true) {
                 store.removeAttachment(attachment.id)
             }
-            .background(Color.themeScrim, in: Circle())
-            .environment(\.colorScheme, .dark)
             .padding(2)
         }
         .help(attachment.name)
