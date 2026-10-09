@@ -49,7 +49,7 @@ struct ComposerTouchControls: View {
             AttachMenu()
             if !collapsed, let server = store.composerServer {
                 ServerLabel(server: server, weight: .medium)
-                    .padding(.leading, 3)
+                    .padding(.leading, 4)
                     .appearing()
             }
             Spacer(minLength: 8)
