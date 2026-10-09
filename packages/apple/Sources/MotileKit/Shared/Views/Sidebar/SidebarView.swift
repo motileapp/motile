@@ -732,7 +732,7 @@ struct DoneRow: View, Equatable {
         .padding(.horizontal, Self.sidePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .overlay(alignment: .trailing) {
-            OnRowSurface(selected: selected) {
+            OnRowSurface {
                 ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
             }
             .padding(.trailing, Self.buttonInset)
@@ -780,14 +780,14 @@ extension AppStore {
 
 /// Covers what lies under it with the colour the row is lit in, hovered or selected.
 private struct OnRowSurface<Content: View>: View {
-    let selected: Bool
     @ViewBuilder let content: Content
     @Environment(\.surface) private var surface
+    @Environment(\.row) private var row
 
     var body: some View {
         content
             .padding(.leading, 6)
-            .background(surface.color(selected ? .rowSelected : .row))
+            .background(surface.color(row ?? .row))
     }
 }
 

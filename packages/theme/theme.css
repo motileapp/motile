@@ -17,8 +17,10 @@
   --color-background: var(--background);
   --color-background-accent: var(--background-accent);
   --color-background-accent-stronger: var(--background-accent-stronger);
+  --color-background-accent-strongest: var(--background-accent-strongest);
   --color-background-accent-larger: var(--background-accent-larger);
   --color-background-accent-larger-stronger: var(--background-accent-larger-stronger);
+  --color-background-accent-larger-strongest: var(--background-accent-larger-strongest);
   --color-background-secondary: var(--background-secondary);
   --color-background-secondary-accent: var(--background-secondary-accent);
   --color-background-secondary-accent-stronger: var(--background-secondary-accent-stronger);
