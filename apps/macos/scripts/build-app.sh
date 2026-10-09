@@ -32,7 +32,7 @@ cp "$BINARY" "$APP/Contents/MacOS/Motile"
 cp -R "$ROOT/packages/apple/Sources/MotileKit/Fonts" "$APP/Contents/Resources/Fonts"
 
 # The Icon Composer icon becomes Assets.car for macOS 26, and AppIcon.icns for the ones before.
-xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" \
+xcrun actool "$PWD/Resources/AppIcon.icon" --compile "$PWD/$APP/Contents/Resources" \
     --platform macosx --target-device mac --minimum-deployment-target 14.0 \
     --app-icon AppIcon --output-partial-info-plist "$(mktemp)" >/dev/null
 test -f "$APP/Contents/Resources/Assets.car" && test -f "$APP/Contents/Resources/AppIcon.icns"
