@@ -47,7 +47,7 @@ export function DiffPanel({
           pastWindowButtons ? "pl-[116px]" : "pl-2"
         )}
       >
-        <span className="flex h-7 items-center gap-1.5 rounded-md bg-background-accent-larger-stronger pr-0.5 pl-[9px] text-[12px] font-medium">
+        <span className="flex h-7 items-center gap-1.5 rounded-md bg-background-accent-stronger pr-0.5 pl-[9px] text-[12px] font-medium">
           <DiffIcon className="size-[11px]" />
           Diff
           <button
