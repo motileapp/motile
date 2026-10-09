@@ -82,12 +82,18 @@ struct InputField: View {
 
 extension InputField {
     @ViewBuilder fileprivate var field: some View {
-        let prompt = Text(placeholder).foregroundStyle(Color.themeMutedStrongerForeground)
         if secure {
-            SecureField("", text: $text, prompt: prompt)
+            SecureField("", text: $text, prompt: .placeholder(placeholder))
         } else {
-            TextField("", text: $text, prompt: prompt)
+            TextField("", text: $text, prompt: .placeholder(placeholder))
         }
+    }
+}
+
+extension Text {
+    /// What a field shows while it is empty, in the one colour every field's placeholder has.
+    static func placeholder(_ text: String) -> Text {
+        Text(text).foregroundStyle(Color.themeMutedStrongerForeground)
     }
 }
 
