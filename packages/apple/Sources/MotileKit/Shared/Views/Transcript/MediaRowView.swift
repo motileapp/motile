@@ -137,12 +137,27 @@ extension MediaFiles {
 
 final class MediaRowView: RowView {
     private static let gap: CGFloat = 6
+    private static let stackGap: CGFloat = 10
+    private static let lineHeight = scaled(16)
 
     private let picture = PictureView()
-    private let playSymbol = SymbolView(.circlePlay, size: 40, tint: Theme.mutedForeground)
+    private var playButton: OverlayButton!
     private let caption = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
+    private let spinner = SpinnerView(size: ControlSize.large.symbol)
+    private let progress = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
+    private let message = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
+    private var retryButton: RowButton!
     private var content: MediaContent?
     private var file: URL?
+    private var progressWatch: NSObjectProtocol?
+
+    private enum State {
+        case loading(fraction: Double?)
+        case shown
+        case failed(String)
+    }
+
+    private var state = State.shown { didSet { show(state) } }
 
     static func height(_ content: MediaContent, width: CGFloat) -> CGFloat {
         content.box(width: width).height + gap * 2
@@ -151,9 +166,24 @@ final class MediaRowView: RowView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(picture)
-        addSubview(playSymbol)
+        playButton = OverlayButton(.play, size: .large, tooltip: "Play") { [weak self] in self?.pressed() }
+        addSubview(playButton)
         caption.breaks = .byTruncatingMiddle
         addSubview(caption)
+        addSubview(spinner)
+        progress.centered = true
+        addSubview(progress)
+        message.centered = true
+        addSubview(message)
+        retryButton = RowButton(
+            title: "Try again",
+            tooltip: "Load the image again",
+            radius: RowButton.metrics.radius,
+            bordered: true,
+            insets: PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        ) { [weak self] in self?.retry() }
+        addSubview(retryButton)
+        show(state)
         onPress = { [weak self] _ in self?.pressed() }
         menuActions = { [weak self] in
             guard let self, let media = self.content else { return [] }
@@ -164,9 +194,18 @@ final class MediaRowView: RowView {
                 }
             }
         }
+        progressWatch = NotificationCenter.default.addObserver(forName: .mediaProgress, object: nil, queue: .main) { [weak self] note in
+            guard let self, let id = self.content?.id, note.userInfo?["id"] as? String == id else { return }
+            guard case .loading = self.state, let fraction = note.userInfo?["fraction"] as? Double else { return }
+            self.state = .loading(fraction: fraction)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    deinit {
+        if let progressWatch { NotificationCenter.default.removeObserver(progressWatch) }
+    }
 
     override func configure(_ row: RowModel) {
         super.configure(row)
@@ -175,9 +214,10 @@ final class MediaRowView: RowView {
         file = nil
         tip = media.alt.isEmpty ? nil : media.alt
         describe(media.alt.isEmpty ? media.name : media.alt)
-        playSymbol.isHidden = !media.video
+        playButton.isHidden = !media.video
         picture.picture = media.video ? nil : Pictures.cached(media.id)
         caption.string = media.video ? "\(media.name) · \(ByteCountFormatter.string(fromByteCount: media.bytes, countStyle: .file))" : ""
+        state = .shown
         guard !media.video, picture.picture == nil else { return }
         loadPicture(media)
     }
@@ -185,20 +225,44 @@ final class MediaRowView: RowView {
     private func loadPicture(_ media: MediaContent) {
         let box = media.box(width: Theme.contentWidth)
         let maxPixels = max(box.width, box.height) * Platform.pixelsPerPoint
+        state = .loading(fraction: nil)
         fetch { [weak self] file in
-            guard let file else {
-                self?.caption.string = "This image couldn't be loaded. \(Self.pressWord) to try again."
-                return
-            }
+            guard let self, self.content?.id == media.id else { return }
+            guard let file else { return self.state = .failed("This image couldn't be loaded.") }
             Pictures.decode(file, id: media.id, maxPixels: maxPixels) { image in
-                guard let self, self.content?.id == media.id else { return }
+                guard self.content?.id == media.id else { return }
                 self.picture.picture = image
-                self.caption.string = image == nil ? "This image couldn't be shown" : ""
+                self.state = image == nil ? .failed("This image couldn't be shown.") : .shown
             }
         }
     }
 
-    private static let pressWord = Platform.scale > 1 ? "Tap" : "Click"
+    private func retry() {
+        guard let media = content else { return }
+        file = nil
+        retryButton.dim()
+        loadPicture(media)
+    }
+
+    private func show(_ state: State) {
+        var loading = false
+        var failed = false
+        switch state {
+        case .loading(let fraction):
+            loading = true
+            progress.string = fraction.map { "\(Int($0 * 100))%" } ?? ""
+        case .shown:
+            break
+        case .failed(let why):
+            failed = true
+            message.string = why
+        }
+        spinner.isHidden = !loading
+        progress.isHidden = !loading || progress.string.isEmpty
+        message.isHidden = !failed
+        retryButton.isHidden = !failed
+        placeStates()
+    }
 
     /// Hands over the file, which the core fetches from the server if this device doesn't have it.
     private func fetch(_ done: @escaping (URL?) -> Void) {
@@ -217,19 +281,40 @@ final class MediaRowView: RowView {
         let box = content.box(width: width)
         let frame = CGRect(x: 0, y: Self.gap, width: box.width, height: box.height)
         picture.frame = frame
-        playSymbol.frame = CGRect(x: frame.midX - 24, y: frame.midY - 24, width: 48, height: 48)
+        let side = playButton.size.height
+        playButton.frame = CGRect(x: (frame.midX - side / 2).rounded(), y: (frame.midY - side / 2).rounded(), width: side, height: side)
         caption.frame = CGRect(x: 12, y: frame.maxY - 10 - scaled(16), width: max(0, frame.width - 24), height: scaled(16))
+        placeStates()
         return box.height + Self.gap * 2
     }
 
+    /// Centres the spinner with its percentage, or the message with its button, in the box.
+    private func placeStates() {
+        let box = picture.frame
+        let spinnerSide = ControlSize.large.symbol + 4
+        let spinnerStack = spinnerSide + (progress.isHidden ? 0 : Self.stackGap + Self.lineHeight)
+        var y = (box.midY - spinnerStack / 2).rounded()
+        spinner.frame = CGRect(x: (box.midX - spinnerSide / 2).rounded(), y: y, width: spinnerSide, height: spinnerSide)
+        progress.frame = CGRect(x: box.minX, y: y + spinnerSide + Self.stackGap, width: box.width, height: Self.lineHeight)
+        let buttonHeight = RowButton.metrics.height
+        let messageStack = Self.lineHeight + Self.stackGap + buttonHeight
+        y = (box.midY - messageStack / 2).rounded()
+        message.frame = CGRect(x: box.minX + 12, y: y, width: max(0, box.width - 24), height: Self.lineHeight)
+        let buttonWidth = retryButton.width
+        retryButton.frame = CGRect(
+            x: (box.midX - buttonWidth / 2).rounded(), y: y + Self.lineHeight + Self.stackGap, width: buttonWidth, height: buttonHeight
+        )
+    }
+
     override func takesPress(at point: CGPoint) -> Bool {
-        picture.frame.contains(point)
+        guard picture.frame.contains(point) else { return false }
+        let buttons = [retryButton!, playButton!].filter { !$0.isHidden }
+        return !buttons.contains { $0.frame.contains(point) }
     }
 
     /// Opens the image or the video in the viewer, which plays a video and fills the screen with it.
     private func pressed() {
-        guard let media = content else { return }
-        guard media.video || picture.picture != nil else { return loadPicture(media) }
+        guard let media = content, media.video || picture.picture != nil else { return }
         owner?.view([ViewedMedia(name: media.name, video: media.video, source: .media(media.id))], at: 0)
     }
 }
