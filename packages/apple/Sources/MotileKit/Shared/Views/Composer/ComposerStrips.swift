@@ -8,21 +8,25 @@ struct ComposerStrip: ViewModifier {
         case top, bottom
     }
 
-    static let height: CGFloat = Platform.scale > 1 ? 38 : 32
     static let radius = Radius.lg
+    /// The room between a control and the strip's visible edges.
+    static let inset: CGFloat = 4
+    static let height = ControlSize.regular.height + inset * 2
     /// The room around a control in a strip, which is the control's to click.
-    static let margin = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 8)
+    static let margin = EdgeInsets(top: inset, leading: 4, bottom: inset, trailing: 8)
 
     let edge: Edge
     /// Nil for a strip that is as tall as what is in it.
     var height: CGFloat? = Self.height
 
     func body(content: Content) -> some View {
+        let hidden: SwiftUI.Edge.Set = edge == .top ? .bottom : .top
         content
-            .frame(height: height)
+            .padding(hidden, Self.overlap)
+            .frame(height: height.map { $0 + Self.overlap })
             .composerSurface(in: StripShape(edge: edge))
             .padding(.horizontal, ComposerView.radius)
-            .padding(edge == .top ? .bottom : .top, -Self.overlap)
+            .padding(hidden, -Self.overlap)
     }
 
     /// How far the strip's open edge goes under the composer, which covers its outline there.
@@ -117,7 +121,7 @@ struct ContextStrip: View {
                 ActionButton(
                     startsInWorktree ? "From \(store.draftStart ?? branch)" : branch, icon: .gitBranch,
                     help: startsInWorktree ? startHelp(base: branch) : "Switch the branch of \(project.name)",
-                    variant: .ghost, size: .small, opens: true, margin: ComposerStrip.margin
+                    variant: .ghost, opens: true, margin: ComposerStrip.margin
                 ) {
                     store.showBranches(of: project)
                 }
@@ -148,11 +152,11 @@ struct ContextStrip: View {
                 .help("The thread works in the project's folder")
         } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
             let inWorktree = store.draftUsesWorktree
-            let margin = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+            let margin = EdgeInsets(top: ComposerStrip.inset, leading: 4, bottom: ComposerStrip.inset, trailing: 4)
             ActionMenu(
                 inWorktree ? "New worktree" : "Current checkout", icon: inWorktree ? .folderGit2 : .folder,
                 help: inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder",
-                size: .small, margin: margin
+                margin: margin
             ) {
                 Section("Workspace") {
                     Toggle(isOn: Binding(get: { !inWorktree }, set: { _ in store.setDraftWorktree(false) })) {
@@ -186,7 +190,7 @@ struct ContextStrip: View {
 
     /// A branch that can't be switched from here, set as the button that switches one is.
     private func branchLabel(_ branch: String) -> some View {
-        ControlLabel(title: branch, icon: .symbol(.gitBranch), size: .small)
+        ControlLabel(title: branch, icon: .symbol(.gitBranch), size: .regular)
             .truncationMode(.middle)
             .foregroundStyle(Color.themeMutedForeground)
             .padding(ComposerStrip.margin)
