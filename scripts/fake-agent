@@ -102,6 +102,25 @@ def claude_limit(group, percent, hours, model=None):
     return {"group": group, "percent": percent, "resets_at": resets_in(hours), "severity": severity, "scope": scope}
 
 
+def claude_models():
+    """What Claude Code's model picker lists: an alias or an id, and the id it stands for."""
+    efforts = ["low", "medium", "high", "xhigh", "max"]
+
+    def model(value, resolved, name, efforts=efforts):
+        listed = {"value": value, "resolvedModel": resolved, "displayName": name, "description": name}
+        if efforts:
+            listed.update({"supportsEffort": True, "supportedEffortLevels": efforts})
+        return listed
+
+    return [
+        model("default", "claude-opus-5-5", "Default (recommended)"),
+        model("opus", "claude-opus-5-5", "Opus"),
+        model("claude-fable-5-1[1m]", "claude-fable-5-1", "Fable"),
+        model("sonnet", "claude-sonnet-5-5", "Sonnet"),
+        model("haiku", "claude-haiku-4-5-20251001", "Haiku", efforts=None),
+    ]
+
+
 def answer_control(message):
     """Answers what Claude Code is asked about its login and the limits of its plan."""
     subtype = message["request"].get("subtype")
@@ -110,6 +129,8 @@ def answer_control(message):
     elif subtype == "get_usage":
         limits = [claude_limit("session", 34, 3.5), claude_limit("weekly", 61, 98), claude_limit("weekly", 82, 98, "Fable")]
         answer = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {"limits": limits}}
+    elif subtype == "list_models":
+        answer = {"models": claude_models()}
     else:
         return
     emit({"type": "control_response", "response": {"subtype": "success", "request_id": message["request_id"], "response": answer}})

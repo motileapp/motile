@@ -20,8 +20,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
     Activity, Agent, AgentAccount, AgentLimits, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings,
     DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, Media, MergeMethod,
-    Message, NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo, ServerUpdate, Subagent, Thread,
-    ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    Message, ModelInfo, NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo, ServerUpdate, Subagent,
+    Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -30,9 +30,9 @@ use tokio::sync::{Mutex, broadcast, mpsc};
 use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
-use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name};
+use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name, models};
 use crate::files::FileBytes;
-use crate::generate::Writer;
+use crate::generate::{self, Writer};
 use crate::linear::Linear;
 use crate::media::MediaStore;
 use crate::pricing::{self, Prices};
@@ -52,10 +52,14 @@ pub const PULL_REQUEST_FRESH: Duration = Duration::from_secs(60);
 pub const PULL_REQUEST_WATCH: Duration = Duration::from_secs(30);
 /// How often the threads that wait for their usage limit are looked at.
 pub const LIMITS_CHECK: Duration = Duration::from_secs(30);
+/// How often the agents are asked again what models their accounts run.
+pub const MODELS_CHECK: Duration = Duration::from_secs(60 * 60);
 const DONE_ON_MERGE: &str = "done_on_merge";
 const REMOVE_MERGED_WORKTREES: &str = "remove_merged_worktrees";
 const TEXT_MODEL: &str = "text_model";
 const AGENT_ACCOUNTS: &str = "agent_accounts";
+/// The models the agents' accounts last listed, served until they are asked again.
+const MODELS: &str = "models";
 const BRANCH_INSTRUCTIONS: &str = "branch_instructions";
 const CONTINUE_AFTER_LIMITS: &str = "continue_after_limits";
 const CONTINUE_AFTER_RESTARTS: &str = "continue_after_restarts";
@@ -109,6 +113,8 @@ pub struct Hub {
     worktrees: std::sync::Mutex<HashMap<String, ThreadWorktree>>,
     /// The agents' accounts, the default ones first.
     agent_accounts: std::sync::Mutex<Vec<AgentAccount>>,
+    /// The models the accounts run, as their agents last listed them.
+    models: std::sync::Mutex<Vec<ModelInfo>>,
     /// The model the user picked to write titles, commit messages and pull requests.
     text_model: std::sync::Mutex<Option<String>>,
     /// How the user wants branches named.
@@ -272,6 +278,9 @@ impl Hub {
         let agent_accounts = store.setting(AGENT_ACCOUNTS).and_then(|kept| serde_json::from_str(&kept).ok());
         Ok(Arc::new(Self {
             agent_accounts: std::sync::Mutex::new(agent_accounts::with_defaults(agent_accounts.unwrap_or_default())),
+            models: std::sync::Mutex::new(
+                store.setting(MODELS).and_then(|models| serde_json::from_str(&models).ok()).unwrap_or_default(),
+            ),
             text_model: std::sync::Mutex::new(store.setting(TEXT_MODEL)),
             branch_instructions: std::sync::Mutex::new(store.setting(BRANCH_INSTRUCTIONS)),
             pull_request_settings: std::sync::Mutex::new(PullRequestSettings {
@@ -314,7 +323,7 @@ impl Hub {
             hostname: Environment::hostname(),
             home: self.environment.variables.get("HOME").cloned().unwrap_or_default(),
             agents: self.environment.agents(),
-            models: self.environment.models().to_vec(),
+            models: self.models(),
             agent_accounts: self.agent_accounts().into_iter().map(agent_accounts::redacted).collect(),
             text_model: self.text_model(),
             branch_instructions: self.branch_instructions(),
@@ -366,11 +375,63 @@ impl Hub {
                 == agent_accounts::sessions_folder(other, &self.environment)
     }
 
-    fn keep_agent_accounts(&self, accounts: Vec<AgentAccount>) -> anyhow::Result<()> {
+    fn keep_agent_accounts(self: &Arc<Self>, accounts: Vec<AgentAccount>) -> anyhow::Result<()> {
         self.store.set_setting(AGENT_ACCOUNTS, Some(&serde_json::to_string(&accounts)?))?;
         *self.lock_agent_accounts() = accounts;
         self.announce_server();
+        let hub = self.clone();
+        tokio::spawn(async move { hub.refresh_models().await });
         Ok(())
+    }
+
+    pub fn models(&self) -> Vec<ModelInfo> {
+        self.models.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+    }
+
+    /// Asks each account's agent what models it runs, and tells the clients when that changed.
+    /// What an account last listed stays while its agent doesn't answer.
+    pub async fn refresh_models(&self) {
+        let known = self.models();
+        let mut listed = Vec::new();
+        for account in self.agent_accounts() {
+            let environment = self.account_environment(&account);
+            let models = match (account.agent, environment.executable(account.agent)) {
+                (_, None) => Some(Vec::new()),
+                (Agent::Claude, Some(_)) => models::claude_models(&environment).await,
+                (Agent::Codex, Some(_)) => Some(models::codex_models(&models::codex_home(&environment))),
+            };
+            let Some(models) = models else {
+                tracing::warn!("{:?} didn't list the models of its {} account", account.agent, account.name);
+                listed.extend(known.iter().filter(|model| model.account == account.id).cloned());
+                continue;
+            };
+            listed.extend(models.into_iter().map(|model| ModelInfo { account: account.id.clone(), ..model }));
+        }
+        if listed == known {
+            return;
+        }
+        match serde_json::to_string(&listed) {
+            Ok(kept) => {
+                if let Err(error) = self.store.set_setting(MODELS, Some(&kept)) {
+                    tracing::warn!("couldn't keep the models the agents listed: {error:#}");
+                }
+            }
+            Err(error) => tracing::warn!("couldn't keep the models the agents listed: {error:#}"),
+        }
+        *self.models.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = listed;
+        self.announce_server();
+    }
+
+    /// Asks the agents for their models now and again every `every`, so that a model they gain
+    /// shows up without a restart.
+    pub fn keep_models_current(self: &Arc<Self>, every: Duration) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            loop {
+                hub.refresh_models().await;
+                tokio::time::sleep(every).await;
+            }
+        });
     }
 
     /// Adds an account of an agent or changes one. Threads whose sessions it no longer has start
@@ -846,24 +907,26 @@ impl Hub {
     /// lightest one of the account's agent. The account writes when it is of the writer's agent,
     /// that agent's default account otherwise.
     fn writer(&self, account: &AgentAccount) -> Writer {
+        let models = self.models();
         let model = self.text_model();
         let agent = model
             .as_ref()
-            .and_then(|id| self.environment.models().iter().find(|model| &model.id == id))
+            .and_then(|id| models.iter().find(|model| &model.id == id))
             .map_or(account.agent, |model| model.agent);
         let account = if agent == account.agent { account.clone() } else { self.default_account(agent) };
+        let model = model.or_else(|| generate::small_codex_model(&models, &account));
         Writer::new(&account, model, self.account_environment(&account))
     }
 
     /// The model the user picked to write, while the server still has it.
     fn text_model(&self) -> Option<String> {
         let picked = self.text_model.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
-        picked.filter(|id| self.environment.models().iter().any(|model| &model.id == id))
+        picked.filter(|id| self.models().iter().any(|model| &model.id == id))
     }
 
     pub fn set_text_model(&self, model: Option<String>) -> anyhow::Result<()> {
         if let Some(id) = &model
-            && !self.environment.models().iter().any(|model| &model.id == id)
+            && !self.models().iter().any(|model| &model.id == id)
         {
             bail!("{id} isn't a model on your server.");
         }

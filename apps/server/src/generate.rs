@@ -6,7 +6,7 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use motile_protocol::wire::{Agent, AgentAccount, Tokens};
+use motile_protocol::wire::{Agent, AgentAccount, ModelInfo, Tokens};
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -95,13 +95,12 @@ async fn ask_codex(writer: &Writer, prompt: &str, schema: &Value) -> anyhow::Res
     let mut command = Command::new(executable);
     command.args(["exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "--json"]);
     command.args(["--config", "model_reasoning_effort=\"low\""]);
-    let model = writer.model.clone().or_else(|| small_codex_model(environment));
-    if let Some(model) = &model {
+    if let Some(model) = &writer.model {
         command.args(["--model", model]);
     }
     command.arg("--output-schema").arg(&schema_file).arg("--output-last-message").arg(&answer_file).arg("-");
     let events = run(command, environment, folder.path(), prompt).await?;
-    writer.spend(codex_usage(&events, model.unwrap_or_default()));
+    writer.spend(codex_usage(&events, writer.model.clone().unwrap_or_default()));
     let answer = std::fs::read_to_string(&answer_file)?;
     json_in(&answer).ok_or_else(|| anyhow::anyhow!("codex answered without JSON"))
 }
@@ -122,10 +121,10 @@ fn codex_usage(events: &str, model: String) -> Option<ModelUsage> {
     Some(ModelUsage { model, tokens, cost_usd: None })
 }
 
-/// The lightest model Codex lists, which is plenty for a title.
-fn small_codex_model(environment: &Environment) -> Option<String> {
-    let models = environment.models().iter().filter(|model| model.agent == Agent::Codex);
-    let small = models.filter(|model| ["luna", "mini", "nano"].iter().any(|hint| model.id.contains(hint)));
+/// The lightest model Codex lists for the account, which is plenty for a title.
+pub fn small_codex_model(models: &[ModelInfo], account: &AgentAccount) -> Option<String> {
+    let listed = models.iter().filter(|model| model.agent == Agent::Codex && model.account == account.id);
+    let small = listed.filter(|model| ["luna", "mini", "nano"].iter().any(|hint| model.id.contains(hint)));
     small.map(|model| model.id.clone()).next()
 }
 

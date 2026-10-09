@@ -196,7 +196,7 @@ struct SettingsPage: View {
                     } trailing: {
                         ActionMenu(textModelName(of: server), variant: .outline, size: .large) {
                             Button("Automatic") { store.setTextModel(nil, on: server) }
-                            ForEach(server.models) { model in
+                            ForEach(server.distinctModels) { model in
                                 Button(model.name) { store.setTextModel(model.id, on: server) }
                             }
                         }

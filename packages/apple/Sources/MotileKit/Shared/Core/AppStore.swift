@@ -746,11 +746,15 @@ final class AppStore {
         return models.filter { $0.agent == thread.agent }
     }
 
+    /// The model of the thread or the draft, as its account lists it, or the first one offered.
     var composerModel: ModelInfo? {
         let id = selectedThread.map { $0.model } ?? selectedDraft?.model
         let agent = selectedThread?.agent
-        return composerModels.first { $0.id == id && (agent == nil || $0.agent == agent) }
-            ?? composerModels.first { agent == nil || $0.agent == agent }
+        let accountID = selectedThread.map { $0.agentAccount } ?? selectedDraft?.agentAccount
+        let offered = composerModels.filter { agent == nil || $0.agent == agent }
+        let named = offered.filter { $0.id == id }
+        let listedByAccount = { (model: ModelInfo) in model.account.isEmpty || model.account == accountID }
+        return named.first(where: listedByAccount) ?? named.first ?? offered.first(where: listedByAccount) ?? offered.first
     }
 
     /// The agent a draft starts with: its model's, or its server's first model's.
@@ -785,15 +789,16 @@ final class AppStore {
         composerAccounts.map { account in
             let several = (composerServer?.accounts(of: account.agent).count ?? 0) > 1
             let title = several ? "\(account.agent.name) · \(account.name)" : account.agent.name
-            return (title, account, composerModels.filter { $0.agent == account.agent })
+            return (title, account, composerModels.filter { $0.runs(under: account) })
         }
     }
 
+    /// The effort the thread or the draft runs at: "" where the agent applies its own default.
     var composerEffort: String? {
         let effort = selectedThread.map { $0.effort } ?? selectedDraft?.effort
         guard let model = composerModel, !model.efforts.isEmpty else { return nil }
         if let effort, model.efforts.contains(effort) { return effort }
-        return model.defaultEffort ?? model.efforts.first
+        return model.defaultEffort ?? ""
     }
 
     var composerAccess: Access { selectedThread?.access ?? selectedDraft?.access ?? .full }

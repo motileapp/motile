@@ -248,7 +248,7 @@ struct ComposerView: View {
     @ViewBuilder private var effortMenu: some View {
         if let model = store.composerModel, !model.efforts.isEmpty {
             ActionMenu(Self.effortLabel(store.composerEffort ?? ""), margin: Self.margin(leading: 4, trailing: 4)) {
-                ForEach(model.efforts, id: \.self) { effort in
+                ForEach(model.effortChoices, id: \.self) { effort in
                     choice(Self.effortLabel(effort), chosen: effort == store.composerEffort) {
                         store.setEffort(effort)
                     }
