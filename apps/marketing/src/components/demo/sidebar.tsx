@@ -44,13 +44,13 @@ export function Sidebar({
   return (
     <div className="flex h-full flex-col">
       <div className="mx-2.5 mt-0.5 mb-1.5 flex shrink-0 gap-2">
-        <label className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-[7px] bg-background-secondary px-[9px]">
-          <SearchIcon className="size-3 text-tertiary" />
+        <label className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border-input bg-input px-[9px]">
+          <SearchIcon className="size-3 text-muted-stronger-foreground" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search"
-            className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-tertiary pointer-coarse:text-[16px]"
+            className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-muted-stronger-foreground pointer-coarse:text-[16px]"
           />
         </label>
         <div className="flex">{actions}</div>
@@ -66,7 +66,7 @@ export function Sidebar({
           />
         ))}
         {active.length === 0 && (
-          <p className="px-[18px] py-[7px] text-[12px] text-tertiary">
+          <p className="px-[18px] py-[7px] text-[12px] text-muted-stronger-foreground">
             No threads found
           </p>
         )}
@@ -76,7 +76,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setDoneOpen(!doneOpen)}
-            className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-secondary"
+            className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-accent-larger"
           >
             <ChevronRightIcon
               className={cn(
@@ -85,7 +85,7 @@ export function Sidebar({
               )}
             />
             <span className="text-[12px] font-medium">Done</span>
-            <span className="ml-auto text-[11px] text-tertiary tabular-nums">
+            <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
               {done.length}
             </span>
           </button>
@@ -93,13 +93,13 @@ export function Sidebar({
             done.map((thread) => (
               <div
                 key={thread.title}
-                className="mx-2.5 flex h-[30px] items-center gap-[7px] rounded-lg px-2 hover:bg-background-secondary"
+                className="mx-2.5 flex h-[30px] items-center gap-[7px] rounded-md px-2 hover:bg-background-accent-larger"
               >
                 <ProjectIcon project={thread.project} />
                 <span className="truncate text-[13px] text-muted-foreground">
                   {thread.title}
                 </span>
-                <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-tertiary">
+                <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-stronger-foreground">
                   {thread.pullRequest && (
                     <PullRequest number={thread.pullRequest} quiet />
                   )}
@@ -115,7 +115,7 @@ export function Sidebar({
           <div key={server.name} className="flex h-5 items-center gap-[7px]">
             <span className="size-[7px] rounded-full bg-success" />
             <span className="text-[12px] font-medium">{server.name}</span>
-            <span className="ml-auto text-[11px] text-tertiary tabular-nums">
+            <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
               {server.path} · {server.ms} ms
             </span>
           </div>
@@ -125,9 +125,9 @@ export function Sidebar({
             type="button"
             aria-label="you@motile.app"
             title="you@motile.app"
-            className="ml-[3px] flex size-7 items-center justify-center rounded-[7px] hover:bg-background-secondary"
+            className="ml-[3px] flex size-7 items-center justify-center rounded-md hover:bg-background-accent-stronger"
           >
-            <span className="flex size-5 items-center justify-center rounded-full bg-border-secondary text-[10px] font-semibold text-foreground">
+            <span className="flex size-5 items-center justify-center rounded-full bg-background-accent text-[10px] font-semibold text-foreground">
               Y
             </span>
           </button>
@@ -147,7 +147,7 @@ function FooterButton({ icon: Icon, label }: { icon: LucideIcon; label: string }
       type="button"
       aria-label={label}
       title={label}
-      className="flex size-7 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-secondary hover:text-foreground"
+      className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent-stronger hover:text-foreground"
     >
       <Icon className="size-3.5" />
     </button>
@@ -170,8 +170,8 @@ function ThreadRow({
       type="button"
       onClick={onSelect}
       className={cn(
-        "mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-lg px-2 pt-[5px] pb-[7px] text-left",
-        selected ? "bg-background-tertiary" : "hover:bg-background-secondary"
+        "mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
+        selected ? "bg-background-accent-larger-stronger" : "hover:bg-background-accent-larger"
       )}
     >
       <span className="flex h-5 w-full items-center gap-1.5 text-muted-foreground">
@@ -184,7 +184,7 @@ function ThreadRow({
       <span className="w-full truncate pt-px pb-[5px] text-[13px] font-medium">
         {thread.title}
       </span>
-      <span className="flex h-4 w-full items-center gap-1.5 text-tertiary">
+      <span className="flex h-4 w-full items-center gap-1.5 text-muted-stronger-foreground">
         <span className="flex min-w-0 items-center gap-[3px] text-[11px]">
           <GitBranchIcon className="size-[11px] shrink-0" />
           <span className="truncate">{thread.branch}</span>
@@ -221,21 +221,21 @@ function ThreadStatus({
       )
     case "working":
       return (
-        <span className={cn(label, "text-working")}>
+        <span className={cn(label, "text-process")}>
           <CircleDashedIcon className="size-[10px]" />
           {elapsed(thread.status.since)}
         </span>
       )
     case "monitoring":
       return (
-        <span className={cn(label, "text-monitoring")}>
+        <span className={cn(label, "text-foreground")}>
           <EyeIcon className="size-[11px]" />
           {elapsed(thread.status.since)}
         </span>
       )
     case "idle":
       return (
-        <span className="text-[11px] text-tertiary">{thread.status.ago}</span>
+        <span className="text-[11px] text-muted-stronger-foreground">{thread.status.ago}</span>
       )
   }
 }
@@ -251,7 +251,7 @@ function PullRequest({
     <span
       className={cn(
         "flex cursor-pointer items-center gap-0.5 text-[11px] font-medium tabular-nums hover:underline",
-        quiet ? "text-tertiary" : "text-success"
+        quiet ? "text-muted-stronger-foreground" : "text-success"
       )}
     >
       <GitPullRequestIcon className="size-[11px]" />

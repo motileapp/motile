@@ -50,7 +50,7 @@ struct ComposerTextView: UIViewRepresentable {
         let view = ComposerUITextView()
         view.delegate = context.coordinator
         view.font = font
-        view.textColor = Theme.text
+        view.textColor = Theme.foreground
         view.tintColor = Theme.primary
         view.backgroundColor = .clear
         view.textContainerInset = UIEdgeInsets(top: Self.verticalInset, left: 0, bottom: Self.verticalInset, right: 0)
@@ -146,7 +146,7 @@ final class ComposerUITextView: UITextView {
     init() {
         super.init(frame: .zero, textContainer: nil)
         placeholderLabel.font = ComposerTextView.font
-        placeholderLabel.textColor = Theme.tertiary
+        placeholderLabel.textColor = Theme.mutedStrongerForeground
         placeholderLabel.numberOfLines = 1
         placeholderLabel.lineBreakMode = .byTruncatingTail
         addSubview(placeholderLabel)

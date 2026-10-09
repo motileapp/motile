@@ -27,7 +27,7 @@ struct MediaViewer: View {
     var body: some View {
         let item = viewing.item
         ZStack {
-            Color.black.opacity(0.86)
+            Color.themeScrim
                 .ignoresSafeArea()
                 .onTapGesture { store.closeViewer() }
             content(item)
@@ -47,14 +47,14 @@ struct MediaViewer: View {
                     .truncationMode(.middle)
                 if viewing.items.count > 1 {
                     Text("\(viewing.index + 1) of \(viewing.items.count)")
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(Color.themeMutedForegroundOverPicture)
                 }
             }
             .font(.ui(size: 13, weight: .medium))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.themeForegroundOverPicture)
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .background(.black.opacity(0.5), in: Capsule())
+            .background(Color.themeScrim, in: Capsule())
             .padding(.top, 14)
             .padding(.horizontal, 80)
         }
@@ -95,18 +95,18 @@ struct MediaViewer: View {
                 image: image,
                 size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
                 margin: ZoomingScrollView.viewerMargin,
-                radius: 8
+                radius: Radius.md
             ) { store.closeViewer() }
             .ignoresSafeArea()
         case .video(let player):
             PlayerView(player: player, ready: $playerReady, fullScreen: $fullScreen)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 .padding(.horizontal, ZoomingScrollView.viewerMargin.width)
                 .padding(.vertical, ZoomingScrollView.viewerMargin.height)
                 .overlay {
                     if !playerReady {
                         Spinner(size: ControlSize.large.symbol)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(Color.themeMutedForegroundOverPicture)
                     }
                 }
         case nil:
@@ -120,7 +120,7 @@ struct MediaViewer: View {
                 }
             }
             .font(.ui(size: 13))
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(Color.themeMutedForegroundOverPicture)
         }
     }
 

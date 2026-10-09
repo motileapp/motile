@@ -35,13 +35,13 @@ struct Chip: View {
                 .font(.ui(size: 11.5, weight: .medium, design: monospaced ? .monospaced : .default))
                 .lineLimit(1)
         }
-        .foregroundStyle(dot == nil ? tone ?? Color.themeText : Color.themeText)
+        .foregroundStyle(dot == nil ? tone ?? Color.themeForeground : Color.themeForeground)
         .padding(.horizontal, 7)
         .frame(height: Self.height)
-        .background(tone?.opacity(0.14) ?? surface.next.color, in: Capsule())
+        .background(tone.map { AnyShapeStyle($0.wash()) } ?? AnyShapeStyle(surface.color(.control)), in: Capsule())
         .overlay {
             if tone == nil {
-                Capsule().strokeBorder(surface.border, lineWidth: 1)
+                Capsule().strokeBorder(Color.themeBorder, lineWidth: 1)
             }
         }
     }

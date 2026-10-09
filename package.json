@@ -1,5 +1,8 @@
 {
   "name": "motile",
   "private": true,
-  "packageManager": "pnpm@11.24.0"
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "tokens": "node packages/theme/build.mjs"
+  }
 }

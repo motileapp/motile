@@ -24,19 +24,19 @@ struct AppUpdateRow: View {
             }
         case .downloading(let version, let fraction):
             VStack(alignment: .leading, spacing: 5) {
-                line("Downloading v\(version)", symbol: .circleArrowDown, tint: .themeText) {
+                line("Downloading v\(version)", symbol: .circleArrowDown, tint: .themeForeground) {
                     Text("\(Int(fraction * 100))%")
                         .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                         .monospacedDigit()
                 }
                 ProgressView(value: fraction)
                     .progressViewStyle(.linear)
                     .controlSize(.small)
-                    .tint(Color.themeSecondary)
+                    .tint(Color.themeMutedForeground)
             }
         case .installing(let version):
-            line("Installing v\(version)", symbol: .circleArrowDown, tint: .themeText) { spinner }
+            line("Installing v\(version)", symbol: .circleArrowDown, tint: .themeForeground) { spinner }
         case .ready(let version):
             line("v\(version) is installed", symbol: .circleCheck, tint: .themeSuccess) {
                 ActionButton("Restart", size: .small) { updater.relaunch() }
@@ -48,7 +48,7 @@ struct AppUpdateRow: View {
                 }
                 Text(message)
                     .font(.ui(size: 11))
-                    .foregroundStyle(Color.themeSecondary)
+                    .foregroundStyle(Color.themeMutedForeground)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -56,7 +56,7 @@ struct AppUpdateRow: View {
 
     private var spinner: some View {
         Spinner(size: ControlSize.small.symbol)
-            .foregroundStyle(Color.themeSecondary)
+            .foregroundStyle(Color.themeMutedForeground)
     }
 
     private func line(_ text: String, symbol: Symbol, turning: Bool = false) -> some View {
@@ -64,7 +64,7 @@ struct AppUpdateRow: View {
     }
 
     private func line<Trailing: View>(
-        _ text: String, symbol: Symbol, tint: Color = .themeSecondary, turning: Bool = false, @ViewBuilder trailing: () -> Trailing
+        _ text: String, symbol: Symbol, tint: Color = .themeMutedForeground, turning: Bool = false, @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         HStack(spacing: 7) {
             UpdateLabel(text: text, symbol: symbol, tint: tint, turning: turning)
@@ -80,7 +80,7 @@ struct UpdateLabel: View {
     let text: String
     var detail: String?
     let symbol: Symbol
-    var tint = Color.themeSecondary
+    var tint = Color.themeMutedForeground
     var turning = false
 
     static func upToDate(_ version: String) -> UpdateLabel {
@@ -99,7 +99,7 @@ struct UpdateLabel: View {
 
     private var label: Text {
         guard let detail else { return Text(text) }
-        return Text("\(text) \(Text(detail).foregroundStyle(Color.themeSecondary))")
+        return Text("\(text) \(Text(detail).foregroundStyle(Color.themeMutedForeground))")
     }
 }
 
@@ -118,7 +118,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
             HStack(spacing: 6) {
                 Text("Waiting")
                     .font(.ui(size: 11))
-                    .foregroundStyle(Color.themeSecondary)
+                    .foregroundStyle(Color.themeMutedForeground)
                 ActionButton(
                     "Restart Now", help: "Stop the agents on \(server.name) and restart it. Their threads continue once it is back.",
                     size: .small
@@ -131,10 +131,10 @@ struct ServerUpdateStatus<Otherwise: View>: View {
             HStack(spacing: 6) {
                 Text(progress(of: update))
                     .font(.ui(size: 11))
-                    .foregroundStyle(Color.themeSecondary)
+                    .foregroundStyle(Color.themeMutedForeground)
                     .monospacedDigit()
                 Spinner(size: ControlSize.small.symbol)
-                    .foregroundStyle(Color.themeSecondary)
+                    .foregroundStyle(Color.themeMutedForeground)
             }
         } else if store.isOutdated(server), store.isBusy(server), store.canChooseRestart(server) {
             ActionMenu(

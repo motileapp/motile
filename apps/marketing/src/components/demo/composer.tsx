@@ -40,14 +40,14 @@ export function Composer({
     <div className="mx-auto w-full max-w-[796px]">
       {status.kind === "monitoring" && (
         <Strip edge="top">
-          <span className="mr-2 ml-3.5 size-1.5 rounded-full bg-monitoring" />
-          <span className="text-[12.5px] font-medium tabular-nums text-monitoring">
+          <span className="mr-2 ml-3.5 size-1.5 rounded-full bg-foreground" />
+          <span className="text-[12.5px] font-medium tabular-nums text-foreground">
             Monitoring for {elapsed(status.since)}
           </span>
           <button
             type="button"
             onClick={onStop}
-            className="mr-1 ml-auto h-6 rounded-[6px] px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-composer-secondary hover:text-foreground"
+            className="mr-1 ml-auto h-6 rounded-sm px-2 text-[11.5px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground"
           >
             Stop
           </button>
@@ -63,14 +63,14 @@ export function Composer({
             <button
               type="button"
               onClick={() => onAnswer(false)}
-              className="ml-auto h-6 rounded-[6px] bg-composer-secondary px-2 text-[11.5px] font-medium hover:bg-background"
+              className="ml-auto h-6 rounded-sm bg-background-accent px-2 text-[11.5px] font-medium hover:bg-background-accent-stronger"
             >
               Refuse
             </button>
             <button
               type="button"
               onClick={() => onAnswer(true)}
-              className="h-6 rounded-[6px] bg-warning px-2 text-[11.5px] font-medium text-background hover:brightness-110"
+              className="h-6 rounded-sm bg-warning px-2 text-[11.5px] font-medium text-warning-foreground hover:bg-warning/(--opacity-lit)"
             >
               Allow
             </button>
@@ -80,7 +80,7 @@ export function Composer({
           </p>
         </Strip>
       )}
-      <div className="relative z-10 rounded-[22px] border bg-composer">
+      <div className="relative z-10 rounded-2xl border border-border-input bg-input">
         <textarea
           ref={input}
           value={text}
@@ -94,7 +94,7 @@ export function Composer({
           placeholder={
             status.kind === "working" ? "Send a follow-up" : "Ask anything"
           }
-          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none pointer-coarse:text-[16px] placeholder:text-tertiary"
+          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none pointer-coarse:text-[16px] placeholder:text-muted-stronger-foreground"
         />
         <div
           onClick={(event) => {
@@ -120,7 +120,7 @@ export function Composer({
           >
             {thread.approval ? "Supervised" : "Full access"}
           </Control>
-          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-composer-secondary hover:text-foreground">
+          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-background-accent-stronger hover:text-foreground">
             <PaperclipIcon className="size-3.5" />
           </span>
           <button
@@ -129,7 +129,7 @@ export function Composer({
             aria-label="Send"
             className={cn(
               "ml-1 flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground",
-              text.trim() ? "hover:brightness-110" : "opacity-45"
+              text.trim() ? "hover:bg-primary/(--opacity-lit)" : "opacity-(--opacity-disabled)"
             )}
           >
             <ArrowUpIcon className="size-3.5" />
@@ -177,7 +177,7 @@ function Control({
   return (
     <span
       className={cn(
-        "flex h-7 cursor-default items-center gap-1.5 rounded-[7px] pr-[9px] text-[12px] font-medium text-muted-foreground hover:bg-composer-secondary hover:text-foreground",
+        "flex h-7 cursor-default items-center gap-1.5 rounded-md pr-[9px] text-[12px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground",
         icon ? "pl-[9px]" : "pl-[11px]"
       )}
     >
@@ -203,13 +203,13 @@ function Strip({
   return (
     <div
       className={cn(
-        "mx-[22px] border bg-composer text-[12px] text-muted-foreground",
+        "mx-[22px] border border-border-input bg-input text-[12px] text-muted-foreground",
         tall
           ? "p-3 text-[12.5px]"
           : "flex h-8 items-center",
         edge === "top"
-          ? "-mb-px rounded-t-[14px] text-foreground"
-          : "-mt-px rounded-b-[14px]"
+          ? "-mb-px rounded-t-lg text-foreground"
+          : "-mt-px rounded-b-lg"
       )}
     >
       {children}

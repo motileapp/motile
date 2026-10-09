@@ -24,7 +24,6 @@ struct InputField: View {
     private let variant: InputVariant
     private let focus: FocusState<Bool>.Binding?
     @FocusState private var ownFocus: Bool
-    @Environment(\.surface) private var surface
 
     init(
         _ placeholder: String, text: Binding<String>, icon: Symbol? = nil, variant: InputVariant = .outlined, size: ControlSize = .regular,
@@ -46,7 +45,7 @@ struct InputField: View {
 
     private var fill: Color {
         switch variant {
-        case .outlined, .filled: surface.next.color
+        case .outlined, .filled: .themeInput
         case .bare: .clear
         }
     }
@@ -57,7 +56,7 @@ struct InputField: View {
         HStack(spacing: size.gap) {
             if let icon {
                 Image(icon, size: size.smallSymbol)
-                    .foregroundStyle(Color.themeTertiary)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
                     .allowsHitTesting(false)
             }
             field
@@ -79,13 +78,13 @@ struct InputField: View {
                 .onTapGesture { (focus ?? $ownFocus).wrappedValue = true }
                 .textPointer()
         }
-        .fieldFrame(size, surface: surface, fill: fill, outlined: variant == .outlined)
+        .fieldFrame(size, fill: fill, outlined: variant == .outlined, focused: (focus ?? $ownFocus).wrappedValue)
     }
 }
 
 extension InputField {
     @ViewBuilder fileprivate var field: some View {
-        let prompt = Text(placeholder).foregroundStyle(Color.themeTertiary)
+        let prompt = Text(placeholder).foregroundStyle(Color.themeMutedStrongerForeground)
         if secure {
             SecureField("", text: $text, prompt: prompt)
         } else {
@@ -95,12 +94,14 @@ extension InputField {
 }
 
 extension View {
-    /// The fill and the border of a field of the size, on the surface it lies on.
-    func fieldFrame(_ size: ControlSize, surface: Surface, fill: Color? = nil, outlined: Bool = true) -> some View {
-        background(fill ?? surface.next.color, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
+    /// The fill and the border of a field of the size: input with border-input, and the ring in
+    /// place of the border while it is focused.
+    func fieldFrame(_ size: ControlSize, fill: Color = .themeInput, outlined: Bool = true, focused: Bool = false) -> some View {
+        background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
             .overlay {
-                if outlined {
-                    RoundedRectangle(cornerRadius: size.radius, style: .continuous).strokeBorder(surface.border, lineWidth: 1)
+                if outlined || focused {
+                    RoundedRectangle(cornerRadius: size.radius, style: .continuous)
+                        .strokeBorder(focused ? Color.themeRing : Color.themeBorderInput, lineWidth: 1)
                 }
             }
     }

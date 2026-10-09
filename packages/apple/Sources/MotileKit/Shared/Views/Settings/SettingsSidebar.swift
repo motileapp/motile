@@ -70,14 +70,14 @@ struct SettingsSidebar: View {
             Spacer(minLength: 0)
             if pushes {
                 Image(.chevronRight, size: 13)
-                    .foregroundStyle(Color.themeTertiary)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
             }
         }
         .padding(.horizontal, 9)
         .frame(height: pressable(32))
         .padding(Self.rowMargin)
         .contentShape(Rectangle())
-        .button(.highlight(radius: 8, selected: selected == section, inset: Self.rowMargin, faded: true)) { choose(section) }
+        .button(.highlight(radius: Radius.md, selected: selected == section, inset: Self.rowMargin, faded: true)) { choose(section) }
     }
 
     @ViewBuilder private var results: some View {
@@ -90,7 +90,7 @@ struct SettingsSidebar: View {
                         .font(.ui(size: 13, weight: .medium))
                     Text(entry.section.title)
                         .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
                 .lineLimit(1)
                 Spacer(minLength: 0)
@@ -100,7 +100,7 @@ struct SettingsSidebar: View {
             .padding(.vertical, 4)
             .padding(Self.rowMargin)
             .contentShape(Rectangle())
-            .button(.highlight(radius: 8, inset: Self.rowMargin, faded: true)) {
+            .button(.highlight(radius: Radius.md, inset: Self.rowMargin, faded: true)) {
                 store.settingsTarget = entry.id
                 choose(entry.section)
             }
@@ -108,7 +108,7 @@ struct SettingsSidebar: View {
         if found.isEmpty {
             Text("No settings found")
                 .font(.ui(size: 13))
-                .foregroundStyle(Color.themeTertiary)
+                .foregroundStyle(Color.themeMutedStrongerForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, sidebarRowInset + 8)
                 .padding(.vertical, 10)

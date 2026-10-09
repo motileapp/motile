@@ -176,7 +176,7 @@ final class TranscriptView: FlippedView, RowOwner {
 
         let side = Self.jumpButtonSide
         jumpButton.fill = Theme.popover
-        jumpButton.stroke = Theme.borderSecondary
+        jumpButton.stroke = Theme.border
         jumpButton.radius = side / 2
         jumpButton.frame = CGRect(x: 0, y: 0, width: side, height: side)
         jumpButton.isHidden = true
@@ -186,7 +186,7 @@ final class TranscriptView: FlippedView, RowOwner {
         arrow.frame = CGRect(x: (side - 16) / 2, y: (side - 16) / 2, width: 16, height: 16)
         jumpButton.addSubview(arrow)
         jumpButton.onClick = { [weak self] in self?.scrollToEnd() }
-        jumpButton.dropShadow(opacity: 0.18, radius: 8, down: 2)
+        jumpButton.drop = (.md, .shadow)
         addSubview(jumpButton)
 
         if Platform.hoverReveals {

@@ -10,7 +10,7 @@ extension View {
             glassEffect(.regular.interactive(), in: shape)
         } else {
             background(.regularMaterial, in: shape)
-                .overlay { shape.stroke(Color.themeBorderSecondary, lineWidth: 1) }
+                .overlay { shape.stroke(Color.themeBorder, lineWidth: 1) }
         }
     }
 }

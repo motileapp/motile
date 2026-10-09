@@ -64,14 +64,14 @@ struct CheckMenu: View {
         VStack(spacing: 0) {
             ForEach(groups.indices, id: \.self) { index in
                 if index > 0 {
-                    Color.themeBorderSecondary
+                    Color.themeBorder
                         .frame(height: 1)
                         .padding(.horizontal, -Self.padding)
                         .padding(.vertical, Self.padding)
                 }
                 ForEach(groups[index]) { check in
                     row(check)
-                        .button(.highlight(radius: Radius.small)) { check.toggle() }
+                        .button(.highlight(radius: Radius.sm)) { check.toggle() }
                 }
             }
         }
@@ -87,7 +87,7 @@ struct CheckMenu: View {
             Spacer(minLength: 12)
         }
         .font(.ui(size: 13))
-        .foregroundStyle(Color.themeText)
+        .foregroundStyle(Color.themeForeground)
         .padding(.horizontal, 8)
         .frame(height: pressable(28))
         .contentShape(Rectangle())
@@ -124,15 +124,14 @@ extension View {
     /// The look of what drops from a button: the popover's colour, a line around it and a faint
     /// shadow under it.
     fileprivate func dropdownCard() -> some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.large, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
         return clipShape(shape)
             .background {
                 shape
                     .fill(Color.themePopover)
-                    .shadow(color: .black.opacity(0.04), radius: 1.5, y: 1)
-                    .shadow(color: .black.opacity(0.1), radius: 12, y: 6)
+                    .shadow(.md)
             }
-            .overlay { shape.strokeBorder(Color.themeBorderSecondary, lineWidth: 1) }
+            .overlay { shape.strokeBorder(Color.themeBorder, lineWidth: 1) }
             .environment(\.surface, .popover)
     }
 }

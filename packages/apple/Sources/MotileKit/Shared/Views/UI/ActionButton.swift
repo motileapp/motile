@@ -16,8 +16,9 @@ enum ButtonVariant {
     case link
     /// A link's colour on a wash of it: a choice that is on.
     case accent
-    /// White on a dark wash, over a picture or a video.
+    /// The foreground as in the dark on the scrim, over a picture or a video.
     case overlay
+
 }
 
 /// What a button shows before its words: a symbol, or a picture of its own like a logo.
@@ -46,35 +47,37 @@ struct ControlLook {
     var foreground: Color {
         if let tint, variant == .ghost || variant == .secondary { return tint }
         switch variant {
-        case .secondary: return .themeText
-        case .primary, .danger: return .white
-        case .warning: return .themeBackground
-        case .ghost: return selected || lit ? .themeText : .themeSecondary
-        case .link, .accent: return .themeLink
-        case .overlay: return .white
+        case .secondary: return .themeForeground
+        case .primary: return .themePrimaryForeground
+        case .danger: return .themeDestructiveForeground
+        case .warning: return .themeWarningForeground
+        case .ghost: return selected || lit ? .themeForeground : .themeMutedForeground
+        case .link, .accent: return .themePrimary
+        case .overlay: return .themeForegroundOverPicture
         }
     }
 
-    private var fill: Color {
+    /// A button filled with a colour of its own lights by that colour at opacity lit.
+    private var fill: AnyShapeStyle {
         switch variant {
-        case .primary: .themePrimary
-        case .secondary: (selected || lit ? surface.further : surface.next).color
-        case .danger: .themeDangerFill
-        case .warning: .themeWarning
-        case .ghost: selected ? surface.further.color : lit ? ghostLit : .clear
-        case .link: lit ? .themeLinkHover : .clear
-        case .accent: .themeLink.opacity(lit ? 0.22 : 0.14)
-        case .overlay: .black.opacity(0.5)
+        case .primary: filled(.themePrimary)
+        case .secondary: AnyShapeStyle(surface.color(selected || lit ? .controlLit : .control))
+        case .danger: filled(.themeDestructive)
+        case .warning: filled(.themeWarning)
+        case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
+        case .link: lit ? AnyShapeStyle(Color.themePrimary.wash()) : AnyShapeStyle(Color.clear)
+        case .accent: AnyShapeStyle(Color.themePrimary.wash(lit: lit))
+        case .overlay: filled(.themeScrim)
         }
     }
 
+    private func filled(_ color: Color) -> AnyShapeStyle {
+        lit ? AnyShapeStyle(color.at(.lit)) : AnyShapeStyle(color)
+    }
+
+    /// A ghost button that is only a symbol is too small for the control colour to show, so it lights a step further.
     private var ghostLit: Color {
-        guard wordless else { return surface.next.color }
-        switch surface {
-        case .background: return Surface.tertiary.color
-        case .popover: return .themeBorderSecondary
-        default: return surface.next.color
-        }
+        surface.color(wordless ? .controlLit : .control)
     }
 
     private var shape: UnevenRoundedRectangle {
@@ -87,12 +90,7 @@ struct ControlLook {
     }
 
     var background: some View {
-        shape
-            .fill(fill)
-            .overlay {
-                if variant == .primary || variant == .danger || variant == .warning, lit { shape.fill(Color.white.opacity(0.12)) }
-                if variant == .overlay { shape.fill(Color.white.opacity(lit ? 0.22 : 0.14)) }
-            }
+        shape.fill(fill)
     }
 }
 
@@ -114,9 +112,6 @@ struct ControlLabel: View {
     /// The room between its symbol and its words where it isn't the one that goes with `size`.
     var gap: CGFloat?
 
-    /// How much the chevron and the dots between a title's parts let through.
-    private static let muted = 0.6
-
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: CGFloat { symbolSize ?? size.symbol }
     private var waitingTitle: String? { pending ? pendingTitle : nil }
@@ -132,7 +127,7 @@ struct ControlLabel: View {
             }
             if chevron {
                 Image(.chevronDown, size: size.textSize, trimmed: true)
-                    .opacity(Self.muted)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
             }
         }
         .frame(maxWidth: fills ? .infinity : nil, alignment: Alignment(horizontal: alignment, vertical: .center))
@@ -173,7 +168,7 @@ struct ControlLabel: View {
     private static func text(_ title: String) -> Text {
         let parts = title.components(separatedBy: " · ")
         return parts.dropFirst().reduce(Text(verbatim: parts[0])) { line, part in
-            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(.foreground.opacity(muted)))\(Text(verbatim: part))")
+            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongerForeground))\(Text(verbatim: part))")
         }
     }
 
@@ -230,7 +225,7 @@ private struct ControlBody<Label: View>: View {
             .foregroundStyle(look.foreground)
             .background { look.background.padding(margin) }
             .contentShape(Rectangle())
-            .opacity(enabled || pending ? 1 : 0.45)
+            .opacity(.disabled, when: !enabled && !pending)
             .onHover { hovering = $0 }
             .background { ArrowPointer() }
     }
@@ -416,7 +411,7 @@ struct ActionMenu<Content: View>: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .background { look.background.padding(reach.around) }
-        .opacity(enabled || pending ? 1 : 0.45)
+        .opacity(.disabled, when: !enabled && !pending)
         .onHover { hovering = $0 }
         .padding(reach.outset)
         .allowsHitTesting(!pending)

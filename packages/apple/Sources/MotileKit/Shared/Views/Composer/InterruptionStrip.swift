@@ -21,7 +21,7 @@ struct InterruptionStrip: View {
                             .font(.ui(size: 12.5, weight: .medium))
                             .foregroundStyle(Color.themeWarning)
                         Text(interruption.detail(now: now))
-                            .foregroundStyle(Color.themeSecondary)
+                            .foregroundStyle(Color.themeMutedForeground)
                     }
                     Text(interruption.detail(now: now))
                         .foregroundStyle(Color.themeWarning)

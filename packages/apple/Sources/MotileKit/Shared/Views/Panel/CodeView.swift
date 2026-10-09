@@ -173,9 +173,9 @@ final class CodeSheet {
     private static let advance = font.letterWidth
     /// How far under a line's top its text stands.
     private static let baseline: CGFloat = 13
-    private static let addedFill = Theme.dynamic(Theme.hex(0x1a7f37, alpha: 0.11), Theme.hex(0x3fb950, alpha: 0.15))
-    private static let removedFill = Theme.dynamic(Theme.hex(0xcf222e, alpha: 0.09), Theme.hex(0xf85149, alpha: 0.15))
-    private static let selectionFill = Theme.dynamic(Theme.hex(0x2a5bd7, alpha: 0.22), Theme.hex(0x4f7cff, alpha: 0.35))
+    private static let addedFill = Theme.successTint
+    private static let removedFill = Theme.destructiveTint
+    private static let selectionFill = Theme.primaryTintStronger
     private static let lineStyle: NSParagraphStyle = {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byClipping
@@ -390,7 +390,7 @@ final class CodeSheet {
                 if document.headed { drawNumber(file.old[line], right: visible.minX + numberWidth, y: y) }
                 drawNumber(file.new[line], right: visible.minX + gutter - 4, y: y)
                 if marks.marked[file.path]?.contains(line) == true {
-                    Theme.link.setFill()
+                    Theme.primary.setFill()
                     RoundedBox.fill(CGRect(x: visible.minX + 3, y: y + 5, width: 3, height: Self.lineHeight - 10), radius: 1.5)
                 }
                 if marks.commentable, let hovered, hovered.file == block.file, hovered.line == line {
@@ -405,21 +405,21 @@ final class CodeSheet {
     private func drawMedia(_ media: CodeMedia, of file: CodeFile, in room: CGRect, context: CGContext) {
         guard let picture = Pictures.cached(media.id) else {
             Theme.backgroundSecondary.setFill()
-            RoundedBox.fill(room, radius: Radius.large)
+            RoundedBox.fill(room, radius: Radius.md)
             guard media.failed else {
                 if !media.asked { wantsMedia(file) }
                 return
             }
             let note = NSAttributedString(
                 string: media.video ? "This video couldn't be shown." : "This image couldn't be shown.",
-                attributes: [.font: PlatformFont.ui(12.5), .foregroundColor: Theme.secondary])
+                attributes: [.font: PlatformFont.ui(12.5), .foregroundColor: Theme.mutedForeground])
             let size = note.size()
             note.draw(at: CGPoint(x: (room.midX - size.width / 2).rounded(), y: (room.midY - size.height / 2).rounded()))
             return
         }
         let frame = CGRect(origin: room.origin, size: Self.size(of: picture, in: room.size))
         context.saveGState()
-        context.addPath(RoundedBox.path(frame, radius: Radius.small))
+        context.addPath(RoundedBox.path(frame, radius: Radius.sm))
         context.clip()
         // The sheet is drawn from the top down and the picture from the bottom up.
         context.translateBy(x: 0, y: frame.minY + frame.maxY)
@@ -427,7 +427,7 @@ final class CodeSheet {
         context.draw(picture, in: frame)
         context.restoreGState()
         if media.video {
-            TintedSymbol.draw(.circlePlay, size: 40, color: .white, in: frame)
+            TintedSymbol.draw(.circlePlay, size: 40, color: Theme.foregroundOverPicture, in: frame)
         }
     }
 
@@ -436,8 +436,8 @@ final class CodeSheet {
         let size: CGFloat = 16
         let badge = CGRect(x: topRight.x - size, y: topRight.y + (Self.lineHeight - size) / 2, width: size, height: size)
         Theme.primary.setFill()
-        RoundedBox.fill(badge, radius: 4)
-        TintedSymbol.draw(.plus, size: 10, color: .white, in: badge)
+        RoundedBox.fill(badge, radius: Radius.xs)
+        TintedSymbol.draw(.plus, size: 10, color: Theme.primaryForeground, in: badge)
     }
 
     /// Whether a click at `x` from the view's left edge is on the numbers of the lines.
@@ -464,7 +464,7 @@ final class CodeSheet {
 
     private func drawNumber(_ number: Int32, right: CGFloat, y: CGFloat) {
         guard number > 0 else { return }
-        let text = NSAttributedString(string: String(number), attributes: [.font: Self.numberFont, .foregroundColor: Theme.tertiary])
+        let text = NSAttributedString(string: String(number), attributes: [.font: Self.numberFont, .foregroundColor: Theme.mutedStrongerForeground])
         let size = text.size()
         text.draw(at: CGPoint(x: right - 6 - size.width, y: y + ((Self.lineHeight - size.height) / 2).rounded()))
     }
@@ -476,7 +476,7 @@ final class CodeSheet {
         let text = NSMutableAttributedString(
             string: file.lines[line],
             attributes: [
-                .font: Self.font, .foregroundColor: (note ? Theme.secondary : Theme.text).drawn, .paragraphStyle: Self.lineStyle,
+                .font: Self.font, .foregroundColor: (note ? Theme.mutedForeground : Theme.foreground).drawn, .paragraphStyle: Self.lineStyle,
             ])
         if line < file.spans.count {
             let spans = file.spans[line]
@@ -509,12 +509,12 @@ final class CodeSheet {
 
         let closed = collapsed.contains(file.path)
         let chevron = CGRect(x: rect.minX + 8, y: rect.minY, width: 16, height: rect.height)
-        TintedSymbol.draw(closed ? .chevronRight : .chevronDown, size: 9, color: Theme.tertiary, in: chevron)
+        TintedSymbol.draw(closed ? .chevronRight : .chevronDown, size: 9, color: Theme.mutedStrongerForeground, in: chevron)
         let icon = CGRect(x: rect.minX + 28, y: rect.minY, width: 18, height: rect.height)
-        TintedSymbol.draw(FileSymbol.symbol(for: file.path), size: 11, color: Theme.secondary, in: icon)
+        TintedSymbol.draw(FileSymbol.symbol(for: file.path), size: 11, color: Theme.mutedForeground, in: icon)
 
         let open = CGRect(x: rect.maxX - 34, y: rect.minY, width: 28, height: rect.height)
-        TintedSymbol.draw(.squareArrowOutUpRight, size: 12, color: Theme.secondary, in: open)
+        TintedSymbol.draw(.squareArrowOutUpRight, size: 12, color: Theme.mutedForeground, in: open)
         let counts = LineCountText.text(added: file.added, removed: file.removed)
         let countsSize = counts.size()
         let countsX = open.minX - 4 - countsSize.width
@@ -540,9 +540,9 @@ final class CodeSheet {
         let folder = (file.path as NSString).deletingLastPathComponent
         let title = NSMutableAttributedString()
         if !folder.isEmpty {
-            title.append(NSAttributedString(string: folder + "/", attributes: [.font: PlatformFont.ui(12.5), .foregroundColor: Theme.secondary]))
+            title.append(NSAttributedString(string: folder + "/", attributes: [.font: PlatformFont.ui(12.5), .foregroundColor: Theme.mutedForeground]))
         }
-        title.append(NSAttributedString(string: (file.path as NSString).lastPathComponent, attributes: [.font: font, .foregroundColor: Theme.text]))
+        title.append(NSAttributedString(string: (file.path as NSString).lastPathComponent, attributes: [.font: font, .foregroundColor: Theme.foreground]))
         let note: String? =
             switch file.change {
             case "added": "new"
@@ -551,7 +551,7 @@ final class CodeSheet {
             default: nil
             }
         if let note {
-            title.append(NSAttributedString(string: "   \(note)", attributes: [.font: PlatformFont.ui(11.5), .foregroundColor: Theme.tertiary]))
+            title.append(NSAttributedString(string: "   \(note)", attributes: [.font: PlatformFont.ui(11.5), .foregroundColor: Theme.mutedStrongerForeground]))
         }
         title.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: title.length))
         return title
@@ -571,14 +571,14 @@ final class CodeSheet {
         let box = CGRect(x: rect.minX + 6, y: rect.midY - 7, width: 14, height: 14)
         if viewed {
             Theme.primary.setFill()
-            RoundedBox.fill(box, radius: 3.5)
-            TintedSymbol.draw(.check, size: 9, color: .white, in: box)
+            RoundedBox.fill(box, radius: Radius.xs)
+            TintedSymbol.draw(.check, size: 9, color: Theme.primaryForeground, in: box)
         } else {
-            Theme.borderSecondary.setStroke()
-            RoundedBox.stroke(box.insetBy(dx: 0.5, dy: 0.5), radius: 3.5)
+            Theme.border.setStroke()
+            RoundedBox.stroke(box.insetBy(dx: 0.5, dy: 0.5), radius: Radius.xs)
         }
         let label = NSAttributedString(string: "Viewed", attributes: [
-            .font: PlatformFont.ui(11.5), .foregroundColor: viewed ? Theme.text : Theme.secondary,
+            .font: PlatformFont.ui(11.5), .foregroundColor: viewed ? Theme.foreground : Theme.mutedForeground,
         ])
         let size = label.size()
         label.draw(at: CGPoint(x: box.maxX + 6, y: rect.minY + ((rect.height - size.height) / 2).rounded()))

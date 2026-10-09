@@ -212,7 +212,7 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         private func lifted<Parameters: UIPreviewParameters>(_ view: UICollectionView, at indexPath: IndexPath, _ parameters: Parameters) -> Parameters? {
             guard let list, let cell = view.cellForItem(at: indexPath) else { return nil }
             parameters.visiblePath = UIBezierPath(roundedRect: cell.bounds.inset(by: list.rowInset), cornerRadius: list.rowRadius)
-            parameters.backgroundColor = surface.next.platform
+            parameters.backgroundColor = surface.platform(.row)
             return parameters
         }
 
