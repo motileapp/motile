@@ -5,6 +5,8 @@ import SwiftUI
 /// the restart that finishes it.
 struct AppUpdateRow: View {
     let updater: AppUpdater
+    var variant: ButtonVariant = .secondary
+    var size: ControlSize = .small
 
     var body: some View {
         switch updater.state {
@@ -20,7 +22,7 @@ struct AppUpdateRow: View {
             .frame(minHeight: ControlSize.small.height)
         case .available(let version):
             line("v\(version) is available", symbol: .circleArrowDown, tint: .themeSuccess) {
-                ActionButton("Update", size: .small) { updater.install() }
+                ActionButton("Update", variant: variant, size: size) { updater.install() }
             }
         case .downloading(let version, let fraction):
             VStack(alignment: .leading, spacing: 5) {
@@ -111,6 +113,8 @@ struct UpdateLabel: View {
 struct ServerUpdateStatus<Otherwise: View>: View {
     @Environment(AppStore.self) private var store
     let server: Server
+    var variant: ButtonVariant = .secondary
+    var size: ControlSize = .small
     @ViewBuilder let otherwise: () -> Otherwise
 
     var body: some View {
@@ -121,7 +125,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                     .foregroundStyle(Color.themeMutedForeground)
                 ActionButton(
                     "Restart Now", help: "Stop the agents on \(server.name) and restart it. Their threads continue once it is back.",
-                    size: .small
+                    variant: variant, size: size
                 ) {
                     store.update(server, when: .now)
                 }
@@ -133,19 +137,19 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                     .font(.ui(size: 11))
                     .foregroundStyle(Color.themeMutedForeground)
                     .monospacedDigit()
-                Spinner(size: ControlSize.small.symbol)
+                Spinner(size: size.symbol)
                     .foregroundStyle(Color.themeMutedForeground)
             }
         } else if store.isOutdated(server), store.isBusy(server), store.canChooseRestart(server) {
             ActionMenu(
                 "Update", help: "Agents are working on \(server.name). Update it once they finish, or now: they stop and continue once it is back.",
-                variant: .secondary, size: .small
+                variant: variant, size: size
             ) {
                 Button("Update when agents finish") { store.update(server, when: .idle) }
                 Button("Update now and auto-resume agents") { store.update(server, when: .now) }
             }
         } else if store.isOutdated(server) {
-            ActionButton("Update", help: updateHelp, size: .small) {
+            ActionButton("Update", help: updateHelp, variant: variant, size: size) {
                 store.update(server)
             }
         } else {
