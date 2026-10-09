@@ -2,9 +2,8 @@ import SwiftUI
 
 /// Lights up what the pointer is over, what is selected and what is `lit`. The light is drawn `inset` from the
 /// view's edges: that margin looks empty but is the view's, so neighbours leave no gap to miss.
-/// What is `faded` is in the secondary color until it lights up. What is inside lies on the light,
-/// so a button in it lights up a layer further. A view that follows the pointer itself passes
-/// `hovered`, so that the pointer is followed once.
+/// What is `faded` is in the muted color until it lights up. A view that follows the pointer
+/// itself passes `hovered`, so that the pointer is followed once.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
@@ -20,10 +19,9 @@ private struct HoverHighlight: ViewModifier {
 
     @ViewBuilder func body(content: Content) -> some View {
         let lighted = tinted(content)
-            .environment(\.surface, light ?? surface)
             .background {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(light?.color ?? Color.clear)
+                    .fill(light ?? Color.clear)
                     .padding(inset)
             }
         if hovered == nil {
@@ -41,16 +39,16 @@ private struct HoverHighlight: ViewModifier {
         }
     }
 
-    private var light: Surface? {
-        if selected { return surface.further }
+    private var light: Color? {
+        if selected { return surface.rowAccentStrongerColor }
         guard enabled, hovering || lit else { return nil }
-        return surface.next
+        return surface.rowAccentColor
     }
 
     private var text: Color {
-        guard enabled else { return Color.themeTertiary }
-        guard selected || hovering || lit else { return Color.themeSecondary }
-        return Color.themeText
+        guard enabled else { return Color.themeMutedMoreForeground }
+        guard selected || hovering || lit else { return Color.themeMutedForeground }
+        return Color.themeForeground
     }
 }
 

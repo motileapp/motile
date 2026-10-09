@@ -27,14 +27,14 @@ private struct FileDrop: ViewModifier {
             Text("Drop files here")
                 .font(.ui(size: 17, weight: .semibold))
         }
-        .foregroundStyle(Color.themeText)
+        .foregroundStyle(Color.themeForeground)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.themePrimary, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
                 .padding(8)
         }
-        .background(Color.themeBackground.opacity(0.9).ignoresSafeArea(edges: [.bottom, .horizontal]))
+        .background(Color.themeBackground.ignoresSafeArea(edges: [.bottom, .horizontal]))
         .allowsHitTesting(false)
         .appearing()
     }

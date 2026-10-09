@@ -139,8 +139,8 @@ final class MediaRowView: RowView {
     private static let gap: CGFloat = 6
 
     private let picture = PictureView()
-    private let playSymbol = SymbolView(.circlePlay, size: 40, tint: Theme.secondary)
-    private let caption = TextLabel(font: Theme.smallFont, color: Theme.secondary)
+    private let playSymbol = SymbolView(.circlePlay, size: 40, tint: Theme.mutedForeground)
+    private let caption = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
     private var content: MediaContent?
     private var file: URL?
 

@@ -11,10 +11,10 @@ struct ProjectLine: View {
         HStack(spacing: 4) {
             ProjectIcon(project: project, size: iconSize)
             parts.dropFirst().reduce(Text(parts.first ?? "")) { line, part in
-                Text("\(line)\(Text(" · ").foregroundStyle(Color.themeTertiary))\(part)")
+                Text("\(line)\(Text(" · ").foregroundStyle(Color.themeMutedMoreForeground))\(part)")
             }
             .font(.system(size: size))
-            .foregroundStyle(Color.themeSecondary)
+            .foregroundStyle(Color.themeMutedForeground)
         }
     }
 }

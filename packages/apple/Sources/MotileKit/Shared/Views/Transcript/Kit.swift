@@ -84,7 +84,7 @@ final class RowButton: FlippedView {
         tooltip: String,
         radius: CGFloat,
         bordered: Bool = false,
-        hover: PlatformColor = Theme.backgroundSecondary,
+        hover: PlatformColor = Theme.accentCard,
         insets: PlatformEdgeInsets,
         action: @escaping () -> Void
     ) {
@@ -93,10 +93,10 @@ final class RowButton: FlippedView {
         self.bordered = bordered
         font = bordered ? .ui(Self.metrics.textSize, weight: .medium) : Theme.smallFont
         sidePadding = bordered ? Self.metrics.padding : Self.padding
-        self.title = TextLabel(font: font, color: bordered ? Theme.text : Theme.secondary)
+        self.title = TextLabel(font: font, color: bordered ? Theme.foreground : Theme.mutedForeground)
         super.init(frame: .zero)
         highlight.radius = radius
-        if bordered { highlight.stroke = Theme.borderSecondary }
+        if bordered { highlight.stroke = Theme.borderCard }
         addSubview(highlight)
         self.title.string = title
         self.title.centered = true
@@ -129,7 +129,7 @@ final class RowButton: FlippedView {
 
     private func light(_ lit: Bool) {
         highlight.fill = lit ? hover : .clear
-        title.color = lit || bordered ? Theme.text : Theme.secondary
+        title.color = lit || bordered ? Theme.foreground : Theme.mutedForeground
     }
 }
 
@@ -144,11 +144,11 @@ final class PictureView: LayerView {
     override func paint(_ layer: CALayer) {
         layer.contents = picture
         layer.contentsGravity = fills ? .resizeAspectFill : .resizeAspect
-        layer.backgroundColor = resolved(Theme.backgroundSecondary)
+        layer.backgroundColor = resolved(Theme.card)
         layer.cornerRadius = Self.radius
         layer.cornerCurve = .continuous
         layer.masksToBounds = true
-        layer.borderColor = resolved(Theme.border)
+        layer.borderColor = resolved(Theme.borderCard)
         layer.borderWidth = 1
     }
 }
@@ -160,7 +160,7 @@ final class SpinnerView: LayerView {
 
     private let loader = CAShapeLayer()
     private let side: CGFloat
-    var tint: PlatformColor = Theme.secondary { didSet { repaint() } }
+    var tint: PlatformColor = Theme.mutedForeground { didSet { repaint() } }
 
     init(size: CGFloat) {
         side = PlatformImage.symbolSide(size * Self.fill)
@@ -255,7 +255,7 @@ enum LineCountText {
         }
         if removed > 0 || added == 0 {
             let space = text.length > 0 ? " " : ""
-            text.append(NSAttributedString(string: "\(space)−\(removed)", attributes: [.font: font, .foregroundColor: Theme.danger]))
+            text.append(NSAttributedString(string: "\(space)−\(removed)", attributes: [.font: font, .foregroundColor: Theme.destructive]))
         }
         return text
     }

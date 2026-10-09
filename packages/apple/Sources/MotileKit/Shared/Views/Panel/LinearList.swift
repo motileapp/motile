@@ -226,9 +226,9 @@ private final class LinearHeaderCell: LinearCell {
 
     private let light = SurfaceView()
     private let symbol = SymbolView(size: 12)
-    private let name = TextLabel(font: .ui(12, weight: .semibold), color: Theme.text)
-    private let count = TextLabel(font: .ui(12), color: Theme.tertiary)
-    private let chevron = SymbolView(.chevronDown, size: 10, tint: Theme.tertiary)
+    private let name = TextLabel(font: .ui(12, weight: .semibold), color: Theme.foreground)
+    private let count = TextLabel(font: .ui(12), color: Theme.mutedMoreForeground)
+    private let chevron = SymbolView(.chevronDown, size: 10, tint: Theme.mutedMoreForeground)
     private var stateID = ""
 
     override init(list: LinearListView) {
@@ -240,8 +240,8 @@ private final class LinearHeaderCell: LinearCell {
             guard let self else { return }
             self.list?.onFold?(stateID)
         }
-        light.fill = Theme.backgroundSecondary
-        onHover = { [weak self] point in self?.light.fill = point == nil ? Theme.backgroundSecondary : Theme.backgroundTertiary }
+        light.fill = Theme.card
+        onHover = { [weak self] point in self?.light.fill = point == nil ? Theme.card : Theme.accentLarger }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -263,7 +263,7 @@ private final class LinearHeaderCell: LinearCell {
     }
 
     override func dim() {
-        light.fill = Theme.backgroundSecondary
+        light.fill = Theme.card
     }
 
     override func layoutNow() {
@@ -289,11 +289,11 @@ private final class LinearIssueCell: LinearCell {
     private let light = SurfaceView()
     private let priority = LinearRowButton()
     private let status = LinearRowButton()
-    private let key = TextLabel(font: .ui(11.5), color: Theme.tertiary)
-    private let title = TextLabel(font: .ui(13), color: Theme.text)
+    private let key = TextLabel(font: .ui(11.5), color: Theme.mutedMoreForeground)
+    private let title = TextLabel(font: .ui(13), color: Theme.foreground)
     private let chips = [LinearChipView(), LinearChipView()]
     private let initials = LinearInitialsView()
-    private let time = TextLabel(font: .ui(11.5), color: Theme.tertiary)
+    private let time = TextLabel(font: .ui(11.5), color: Theme.mutedMoreForeground)
     private var row: LinearRow?
     private var state: LinearState?
     private var states: [LinearState] = []
@@ -405,7 +405,7 @@ private final class LinearIssueCell: LinearCell {
     /// Lights the row under the pointer, and the control under it a layer further.
     private func light(at point: CGPoint?) {
         let over = point != nil
-        light.fill = over ? Theme.backgroundSecondary : .clear
+        light.fill = over ? Theme.accentLarger : .clear
         priority.lit = point.map { priority.frame.contains($0) } ?? false
         status.lit = point.map { status.frame.contains($0) } ?? false
         for chip in chips { chip.lit = over }
@@ -426,7 +426,7 @@ private final class LinearRowButton: LayerView {
     var lit = false {
         didSet {
             guard lit != oldValue else { return }
-            highlight.fill = lit ? Theme.backgroundTertiary : .clear
+            highlight.fill = lit ? Theme.accent : .clear
             colorSymbol()
         }
     }
@@ -466,7 +466,7 @@ private final class LinearRowButton: LayerView {
     }
 
     private func colorSymbol() {
-        symbol.tint = tint ?? (lit ? Theme.text : Theme.secondary)
+        symbol.tint = tint ?? (lit ? Theme.foreground : Theme.mutedForeground)
     }
 
     override func layoutNow() {
@@ -479,7 +479,7 @@ private final class LinearRowButton: LayerView {
 
     override func paint(_ layer: CALayer) {
         if loader.superlayer !== layer { layer.addSublayer(loader) }
-        loader.fillColor = resolved(tint ?? Theme.secondary)
+        loader.fillColor = resolved(tint ?? Theme.mutedForeground)
     }
 }
 
@@ -491,20 +491,20 @@ private final class LinearChipView: FlippedView {
 
     private let fill = SurfaceView()
     private let dot = SurfaceView()
-    private let words = TextLabel(font: .ui(11.5, weight: .medium), color: Theme.text)
+    private let words = TextLabel(font: .ui(11.5, weight: .medium), color: Theme.foreground)
     private(set) var width: CGFloat = 0
 
     var lit = false {
         didSet {
             guard lit != oldValue else { return }
-            fill.fill = lit ? Theme.backgroundTertiary : Theme.backgroundSecondary
+            fill.fill = lit ? Theme.accentStronger : Theme.accent
         }
     }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         fill.radius = Self.height / 2
-        fill.fill = Theme.backgroundSecondary
+        fill.fill = Theme.accent
         dot.radius = Self.dot / 2
         addSubview(fill)
         addSubview(dot)
@@ -534,12 +534,12 @@ private final class LinearInitialsView: FlippedView {
     static let side = scaled(18)
 
     private let disc = SurfaceView()
-    private let letters = TextLabel(font: .ui(9, weight: .semibold), color: Theme.secondary)
+    private let letters = TextLabel(font: .ui(9, weight: .semibold), color: Theme.mutedForeground)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         disc.radius = Self.side / 2
-        disc.fill = Theme.backgroundTertiary
+        disc.fill = Theme.accent
         letters.centered = true
         addSubview(disc)
         addSubview(letters)

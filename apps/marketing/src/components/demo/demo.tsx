@@ -131,7 +131,7 @@ export function Demo() {
                 <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   <ProjectIcon project={thread.project} size={12} />
                   <span>
-                    {thread.project.name} <span className="text-tertiary">·</span>{" "}
+                    {thread.project.name} <span className="text-muted-more-foreground">·</span>{" "}
                     {thread.branch}
                   </span>
                 </p>
@@ -240,7 +240,7 @@ function WindowButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-background-tertiary hover:text-foreground",
+        "flex size-7 shrink-0 items-center justify-center rounded-[7px] text-muted-foreground hover:bg-accent hover:text-foreground",
         !inline && "m-0.5"
       )}
     >
@@ -251,12 +251,12 @@ function WindowButton({
 
 function GitButton() {
   return (
-    <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-[7px] border border-border-secondary text-[12px] font-medium">
-      <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-background-secondary">
+    <span className="mx-1.5 ml-auto flex h-7 shrink-0 items-center overflow-hidden rounded-[7px] border border-border-card text-[12px] font-medium">
+      <span className="flex h-full items-center gap-1.5 pr-[11px] pl-[9px] hover:bg-accent">
         <GitCommitHorizontalIcon className="size-3.5" />
         Commit
       </span>
-      <span className="flex h-full items-center justify-center border-l border-border-secondary px-[11px] text-muted-foreground hover:bg-background-secondary hover:text-foreground">
+      <span className="flex h-full items-center justify-center border-l border-border-card px-[11px] text-muted-foreground hover:bg-accent hover:text-foreground">
         <MenuChevron />
       </span>
     </span>

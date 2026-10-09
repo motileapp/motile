@@ -98,7 +98,7 @@ final class DecoratingLayoutManager: NSLayoutManager {
         storage.enumerateAttribute(.motileQuote, in: characters) { value, range, _ in
             guard let depth = (value as? NSNumber)?.intValue, depth > 0 else { return }
             let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            Theme.borderSecondary.setFill()
+            Theme.borderCard.setFill()
             enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
                 for level in 0..<depth {
                     let bar = CGRect(x: rect.minX + CGFloat(level) * 14 + 1, y: rect.minY, width: 2, height: rect.height)
@@ -124,9 +124,9 @@ final class DecoratingLayoutManager: NSLayoutManager {
             let frame = box.frame(of: glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: self)
                 .offsetBy(dx: origin.x, dy: origin.y)
                 .insetBy(dx: 0.5, dy: 0.5)
-            Theme.backgroundSecondary.setFill()
+            Theme.card.setFill()
             RoundedBox.fill(frame, radius: 10)
-            Theme.border.setStroke()
+            Theme.borderCard.setStroke()
             RoundedBox.stroke(frame, radius: 10)
         }
     }
@@ -282,9 +282,9 @@ extension RowTextView {
     /// pay for loading the fonts and the text system while it streams.
     static func warmUp() {
         let view = make()
-        let sample = NSMutableAttributedString(attributedString: Typesetter.plain("Warm up", color: Theme.text))
+        let sample = NSMutableAttributedString(attributedString: Typesetter.plain("Warm up", color: Theme.foreground))
         sample.append(Typesetter.code("let warm = true", spans: [0, 3, 2]))
-        sample.append(Typesetter.mono("up", color: Theme.secondary))
+        sample.append(Typesetter.mono("up", color: Theme.mutedForeground))
         sample.append(NSAttributedString(string: "bold", attributes: [.font: Theme.proseBold]))
         sample.append(NSAttributedString(string: "heading", attributes: [.font: Theme.heading(2)]))
         view.content = sample

@@ -18,7 +18,7 @@ struct MotileApp: App {
         Window("Motile", id: "main") {
             RootView()
                 .environment(store)
-                .foregroundStyle(Color.themeText)
+                .foregroundStyle(Color.themeForeground)
                 .frame(minWidth: 780, minHeight: 500)
                 .onAppear {
                     guard !delegate.started else { return }
@@ -160,7 +160,7 @@ struct RootView: View {
         .overlay {
             ZStack {
                 if store.panel != nil {
-                    Color.black.opacity(0.32)
+                    Color.themeOverlay
                         .ignoresSafeArea()
                         .onTapGesture { store.closePanel() }
                         .appearing()
@@ -261,7 +261,7 @@ struct MainView: View {
                             if panelOpen && !fits && !maximized {
                                 Color.themeBackground
                                     .ignoresSafeArea()
-                                    .shadow(color: .black.opacity(0.18), radius: 14, x: -4)
+                                    .shadow(.stronger)
                             }
                         }
                         .environment(\.panelInView, panelOpen)

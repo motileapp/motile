@@ -172,7 +172,7 @@ final class TableView: FlippedView {
                     x += width
                 }
                 y += table.rowHeights[row]
-                (row < table.headers ? Theme.borderSecondary : Theme.border).setFill()
+                (row < table.headers ? Theme.borderCard : Theme.border).setFill()
                 CGRect(x: 0, y: y - 1, width: table.size.width, height: 1).fillCurrent()
             }
         }

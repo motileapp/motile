@@ -52,11 +52,11 @@ struct ThreadSettingsSheet: View {
                         } label: {
                             HStack {
                                 Text(model.name)
-                                    .foregroundStyle(Color.themeText)
+                                    .foregroundStyle(Color.themeForeground)
                                 Spacer()
                                 if model.id == current?.id && id == account?.id {
                                     Image(.check, size: 13)
-                                        .foregroundStyle(Color.themeText)
+                                        .foregroundStyle(Color.themeForeground)
                                 }
                             }
                         }
@@ -77,7 +77,7 @@ struct ThreadSettingsSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .listRowBackground(surface.next.color)
+                .listRowBackground(surface.boxColor)
             }
         }
     }
@@ -101,7 +101,7 @@ struct ThreadSettingsSheet: View {
         } header: {
             Text("Options")
         }
-        .listRowBackground(surface.next.color)
+        .listRowBackground(surface.boxColor)
     }
 
     /// Where the thread works: the server, the folder or a worktree of its own, and the branch
@@ -133,16 +133,16 @@ struct ThreadSettingsSheet: View {
                         HStack(spacing: 8) {
                             LabeledContent(title, value: value)
                             Image(.chevronRight, size: 11)
-                                .foregroundStyle(Color.themeTertiary)
+                                .foregroundStyle(Color.themeMutedMoreForeground)
                         }
-                        .foregroundStyle(Color.themeText)
+                        .foregroundStyle(Color.themeForeground)
                     }
                 } else {
                     LabeledContent(title, value: value)
                 }
             }
         }
-        .listRowBackground(surface.next.color)
+        .listRowBackground(surface.boxColor)
     }
 }
 
@@ -166,21 +166,21 @@ private struct ChoiceList<Option: Hashable>: View {
                     } label: {
                         HStack {
                             Text(label(option))
-                                .foregroundStyle(Color.themeText)
+                                .foregroundStyle(Color.themeForeground)
                             Spacer()
                             if option == chosen {
                                 Image(.check, size: 13)
-                                    .foregroundStyle(Color.themeText)
+                                    .foregroundStyle(Color.themeForeground)
                             }
                         }
                     }
                 }
             }
-            .listRowBackground(surface.next.color)
+            .listRowBackground(surface.boxColor)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.themeSheet.ignoresSafeArea())
+        .background(Color.themeBackground.ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }
