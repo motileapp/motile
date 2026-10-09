@@ -78,7 +78,7 @@ struct InputField: View {
                 .onTapGesture { (focus ?? $ownFocus).wrappedValue = true }
                 .textPointer()
         }
-        .fieldFrame(size, fill: fill, outlined: variant == .outlined, focused: (focus ?? $ownFocus).wrappedValue)
+        .fieldFrame(size, fill: fill, outlined: variant == .outlined)
     }
 }
 
@@ -94,14 +94,13 @@ extension InputField {
 }
 
 extension View {
-    /// The fill and the border of a field of the size: input with border-input, and the ring in
-    /// place of the border while it is focused.
-    func fieldFrame(_ size: ControlSize, fill: Color = .themeInput, outlined: Bool = true, focused: Bool = false) -> some View {
+    /// The fill and the border of a field of the size: input with border-input, focused or not.
+    func fieldFrame(_ size: ControlSize, fill: Color = .themeInput, outlined: Bool = true) -> some View {
         background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
             .overlay {
-                if outlined || focused {
+                if outlined {
                     RoundedRectangle(cornerRadius: size.radius, style: .continuous)
-                        .strokeBorder(focused ? Color.themeRing : Color.themeBorderInput, lineWidth: 1)
+                        .strokeBorder(Color.themeBorderInput, lineWidth: 1)
                 }
             }
     }

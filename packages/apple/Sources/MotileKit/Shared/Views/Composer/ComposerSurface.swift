@@ -29,14 +29,14 @@ extension View {
     @ViewBuilder
     private func composerFill<S: Shape>(in shape: S) -> some View {
         #if os(macOS)
-        background(Color.themeInput, in: shape)
+        background(Color.themeComposer, in: shape)
             .overlay { shape.stroke(Color.themeBorderInput, lineWidth: 1) }
         #else
         if #available(iOS 26.0, *) {
-            background(Color.themeInput.at(.inputGlassTint), in: shape)
+            background(Color.themeComposer.at(.inputGlassTint), in: shape)
                 .glassEffect(.regular, in: shape)
         } else {
-            background(Color.themeInput.at(.inputGlassTint), in: shape)
+            background(Color.themeComposer.at(.inputGlassTint), in: shape)
                 .background(.regularMaterial, in: shape)
                 .overlay { shape.stroke(Color.themeBorderInput, lineWidth: 1) }
         }
