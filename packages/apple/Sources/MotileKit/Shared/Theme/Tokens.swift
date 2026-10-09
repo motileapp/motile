@@ -163,7 +163,7 @@ enum Opacity {
         case .shadowStrongest: 0.6
         case .colorTint: 0.1
         case .colorTintStronger: 0.16
-        case .colorTintChart: 0.15
+        case .colorTintChart: 0.2
         case .inputGlassTint: 0.8
         case .shimmerBandEdge: 0.12
         case .shimmerBandMiddle: 0.55
