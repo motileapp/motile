@@ -120,7 +120,7 @@ export function Composer({
           >
             {thread.approval ? "Supervised" : "Full access"}
           </Control>
-          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-background-accent-stronger hover:text-foreground">
+          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-background-accent hover:text-foreground">
             <PaperclipIcon className="size-3.5" />
           </span>
           <button

@@ -240,7 +240,7 @@ function WindowButton({
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent-stronger hover:text-foreground",
+        "flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground",
         !inline && "m-0.5"
       )}
     >

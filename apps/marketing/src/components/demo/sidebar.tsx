@@ -125,7 +125,7 @@ export function Sidebar({
             type="button"
             aria-label="you@motile.app"
             title="you@motile.app"
-            className="ml-[3px] flex size-7 items-center justify-center rounded-md hover:bg-background-accent-stronger"
+            className="ml-[3px] flex size-7 items-center justify-center rounded-md hover:bg-background-accent"
           >
             <span className="flex size-5 items-center justify-center rounded-full bg-background-accent text-[10px] font-semibold text-foreground">
               Y
@@ -147,7 +147,7 @@ function FooterButton({ icon: Icon, label }: { icon: LucideIcon; label: string }
       type="button"
       aria-label={label}
       title={label}
-      className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent-stronger hover:text-foreground"
+      className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-background-accent hover:text-foreground"
     >
       <Icon className="size-3.5" />
     </button>
