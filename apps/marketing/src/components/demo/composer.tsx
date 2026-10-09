@@ -70,7 +70,7 @@ export function Composer({
             <button
               type="button"
               onClick={() => onAnswer(true)}
-              className="h-6 rounded-[6px] bg-warning px-2 text-[11.5px] font-medium text-warning-foreground"
+              className="h-6 rounded-[6px] bg-warning px-2 text-[11.5px] font-medium text-background hover:brightness-110"
             >
               Allow
             </button>
@@ -128,8 +128,8 @@ export function Composer({
             onClick={send}
             aria-label="Send"
             className={cn(
-              "ml-1 flex size-7 cursor-default items-center justify-center rounded-full",
-              text.trim() ? "bg-primary text-primary-foreground" : "bg-accent-card text-muted-more-foreground"
+              "ml-1 flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground",
+              text.trim() ? "hover:brightness-110" : "opacity-45"
             )}
           >
             <ArrowUpIcon className="size-3.5" />

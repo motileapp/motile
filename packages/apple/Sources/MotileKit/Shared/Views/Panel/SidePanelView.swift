@@ -332,12 +332,13 @@ private struct PanelLauncher: View {
                 }
                 #endif
             }
-            .foregroundStyle(reason == nil ? Color.themeForeground : Color.themeMutedMoreForeground)
+            .foregroundStyle(Color.themeForeground)
             .padding(.horizontal, 10)
             .frame(height: pressable(34))
         }
         .buttonStyle(.highlight())
         .disabled(reason != nil)
+        .opacity(reason == nil ? 1 : 0.45)
         .help(reason ?? "")
     }
 }
@@ -623,11 +624,12 @@ private struct FileRow: View {
                 .frame(width: 16)
             Text(node.name)
                 .font(.ui(size: 12.5))
-                .foregroundStyle(node.ignored ? Color.themeMutedMoreForeground : Color.themeForeground)
+                .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
         }
+        .opacity(node.ignored ? 0.5 : 1)
         .padding(.leading, 12 + CGFloat(node.depth) * 14)
         .padding(.trailing, 10)
         .frame(height: pressable(26))

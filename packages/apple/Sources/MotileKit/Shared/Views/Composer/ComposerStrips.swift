@@ -412,10 +412,11 @@ struct BranchPicker: View {
             }
         }
         .font(.ui(size: 12.5))
-        .foregroundStyle(working ? Color.themeMutedMoreForeground : Color.themeForeground)
+        .foregroundStyle(Color.themeForeground)
         .padding(.horizontal, 8)
         .frame(height: Self.rowHeight)
         .frame(maxWidth: .infinity)
+        .opacity(working ? 0.5 : 1)
     }
 
     private func choose(_ choices: [Choice], at index: Int) {
@@ -458,16 +459,17 @@ private struct BranchPlaceholder: View {
     var body: some View {
         HStack(spacing: 7) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(faded ? surface.boxColor : surface.accentStrongerColor)
+                .fill(surface.boxColor)
                 .frame(width: 11, height: 11)
                 .frame(width: 14)
             Capsule()
-                .fill(faded ? surface.boxColor : surface.accentStrongerColor)
+                .fill(surface.boxColor)
                 .frame(width: Self.widths[index % Self.widths.count], height: 8)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
         .frame(height: height)
+        .opacity(faded ? 0.45 : 1)
         .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: faded)
         .onAppear { faded = true }
     }

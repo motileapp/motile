@@ -12,6 +12,7 @@ struct Segmented<Value: Hashable>: View {
     @Binding private var selection: Value
     private let size: ControlSize
     private let fills: Bool
+    @Environment(\.isEnabled) private var enabled
 
     /// With `fills`, the choices share the whole width they are given.
     init(_ options: [(title: String, value: Value)], selection: Binding<Value>, size: ControlSize = .regular, fills: Bool = false) {
@@ -36,6 +37,7 @@ struct Segmented<Value: Hashable>: View {
         }
         .layered(in: shape)
         .overlay { shape.strokeBorder(Color.themeBorderCard, lineWidth: Self.border) }
+        .opacity(enabled ? 1 : 0.45)
         .animation(.easeOut(duration: 0.12), value: selection)
     }
 
