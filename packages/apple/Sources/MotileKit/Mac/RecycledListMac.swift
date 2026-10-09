@@ -198,9 +198,10 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
 }
 
 /// Clicking a row never takes the keyboard from the composer. A row that moves is picked up by
-/// the table itself, not by a dragging session: a picture of it shrinks a little and floats under
-/// the pointer, over everything in the window, the rows it passes slide out of its way, and let
-/// go it slides into its place and grows back.
+/// the table itself, not by a dragging session: held or pulled, a picture of it shrinks a little
+/// and floats under the pointer, over everything in the window, the rows it passes slide out of
+/// its way, and let go it slides into its place and grows back. Let go where it was held, it is
+/// clicked.
 private final class RecycledTable: NSTableView {
     var canDrag: (Int) -> Bool = { _ in false }
     var clicked: (Int) -> Void = { _ in }
@@ -209,6 +210,8 @@ private final class RecycledTable: NSTableView {
     /// What a lifted row lies on: its light, on the colour its list lies on.
     var light = (inset: NSEdgeInsetsZero, radius: CGFloat(0), color: NSColor.clear)
     private var pressed = false
+    private var pulled = false
+    private var hold: Timer?
     private var lift: RowLift?
 
     override var acceptsFirstResponder: Bool { false }
@@ -225,6 +228,10 @@ private final class RecycledTable: NSTableView {
             return
         }
         pressed = true
+        pulled = false
+        let hold = Timer(timeInterval: 0.2, repeats: false) { [weak self] _ in self?.pickUp(row, at: start) }
+        RunLoop.main.add(hold, forMode: .common)
+        self.hold = hold
         window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: NSEvent.foreverDuration, mode: .eventTracking) { [self] event, stop in
             guard pressed, let event, event.type == .leftMouseDragged else {
                 stop.pointee = true
@@ -232,17 +239,27 @@ private final class RecycledTable: NSTableView {
                 return
             }
             let point = convert(event.locationInWindow, from: nil)
-            if lift == nil {
+            if !pulled {
                 guard hypot(point.x - start.x, point.y - start.y) >= 3 else { return }
-                lift = RowLift(table: self, row: row, grip: start, light: light, movable: canDrag)
+                pulled = true
+                pickUp(row, at: start)
             }
             lift?.follow(event.locationInWindow)
         }
     }
 
+    private func pickUp(_ row: Int, at start: NSPoint) {
+        guard pressed, lift == nil else { return }
+        hold?.invalidate()
+        hold = nil
+        lift = RowLift(table: self, row: row, grip: start, light: light, movable: canDrag)
+    }
+
     private func release(_ row: Int) {
         guard pressed else { return }
         pressed = false
+        hold?.invalidate()
+        hold = nil
         guard let lift else {
             clicked(row)
             return
@@ -251,11 +268,14 @@ private final class RecycledTable: NSTableView {
             self?.lift = nil
             self?.dropped(from, index)
         }
+        if !pulled { clicked(row) }
     }
 
     /// Puts the rows back where they are laid out, for when the list changes under a lift.
     func cancelLift() {
         pressed = false
+        hold?.invalidate()
+        hold = nil
         lift?.cancel()
         lift = nil
     }
@@ -265,9 +285,10 @@ private final class RecycledTable: NSTableView {
 /// of its cell floats in a window of its own over the table's, so that it goes wherever the
 /// pointer does, over everything the window shows. The cell itself stays in the table, hidden,
 /// and the other rows move with transforms only, so the table's layout stays as it was until it
-/// lands.
+/// lands. The picture is scaled on a layer of its own, because AppKit resets the transform of a
+/// view's layer whenever the view's frame changes.
 private final class RowLift {
-    private static let scale: CGFloat = 0.96
+    private static let scale: CGFloat = 0.92
     private let table: NSTableView
     private let window: NSWindow
     private let from: Int
@@ -284,9 +305,10 @@ private final class RowLift {
     /// Lies over the table's window, lets the pointer through, and carries the picture.
     private let float: NSWindow
     private let overlay: NSView
-    /// The picture on its light.
+    /// Moves under the pointer and holds the card: the picture on its light.
     private let holder = NSView()
-    private let light = NSView()
+    private let card = CALayer()
+    private let light = CALayer()
     /// Where the pointer is from the holder's origin.
     private var offset = CGPoint.zero
 
@@ -319,25 +341,27 @@ private final class RowLift {
         float.appearance = window.effectiveAppearance
         overlay.wantsLayer = true
         window.addChildWindow(float, ordered: .above)
-        holder.frame = inOverlay(cell.convert(cell.bounds, to: nil))
+        holder.layer = CALayer()
         holder.wantsLayer = true
+        holder.frame = inOverlay(cell.convert(cell.bounds, to: nil))
         overlay.addSubview(holder)
         let pointer = inOverlay(table.convert(grip, to: nil))
         offset = CGPoint(x: pointer.x - holder.frame.minX, y: pointer.y - holder.frame.minY)
         let size = holder.bounds.size
         let inset = shape.inset
+        card.frame = holder.bounds
+        holder.layer?.addSublayer(card)
         light.frame = CGRect(x: inset.left, y: inset.bottom, width: size.width - inset.left - inset.right, height: size.height - inset.top - inset.bottom)
-        light.wantsLayer = true
-        light.layer?.cornerRadius = shape.radius
-        holder.effectiveAppearance.performAsCurrentDrawingAppearance { light.layer?.backgroundColor = shape.color.cgColor }
-        holder.addSubview(light)
-        let image = NSImageView(image: picture)
+        light.cornerRadius = shape.radius
+        holder.effectiveAppearance.performAsCurrentDrawingAppearance { light.backgroundColor = shape.color.cgColor }
+        card.addSublayer(light)
+        let image = CALayer()
         image.frame = holder.bounds
-        image.imageScaling = .scaleNone
-        holder.addSubview(image)
+        image.contents = picture
+        image.contentsGravity = .resize
+        card.addSublayer(image)
         cell.isHidden = true
-        guard let layer = holder.layer else { return }
-        animate(layer, to: Self.scaled(Self.scale, in: size), duration: 0.15)
+        animate(card, "transform", to: NSValue(caTransform3D: CATransform3DMakeScale(Self.scale, Self.scale, 1)), duration: 0.15)
     }
 
     /// A rect of the table's window in the overlay.
@@ -351,12 +375,10 @@ private final class RowLift {
     }
 
     /// The cell as it is drawn right now.
-    private static func picture(of cell: NSView) -> NSImage? {
+    private static func picture(of cell: NSView) -> CGImage? {
         guard let rep = cell.bitmapImageRepForCachingDisplay(in: cell.bounds) else { return nil }
         cell.cacheDisplay(in: cell.bounds, to: rep)
-        let image = NSImage(size: cell.bounds.size)
-        image.addRepresentation(rep)
-        return image
+        return rep.cgImage
     }
 
     /// Floats the row under the pointer, at `location` in the window, and parts the rows where it
@@ -371,7 +393,7 @@ private final class RowLift {
         guard landing != index else { return }
         table.enumerateAvailableRowViews { [self] rowView, row in
             guard row != from, let layer = rowView.layer else { return }
-            animate(layer, to: CATransform3DMakeTranslation(0, shift(row), 0), duration: 0.2)
+            animate(layer, "transform", to: NSValue(caTransform3D: CATransform3DMakeTranslation(0, shift(row), 0)), duration: 0.2)
         }
     }
 
@@ -402,9 +424,8 @@ private final class RowLift {
             context.duration = 0.25
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             holder.animator().setFrameOrigin(place.origin)
-            light.animator().alphaValue = 0
-            guard let layer = holder.layer else { return }
-            animate(layer, to: CATransform3DIdentity, duration: 0.25)
+            animate(light, "opacity", to: Float(0), duration: 0.25)
+            animate(card, "transform", to: NSValue(caTransform3D: CATransform3DIdentity), duration: 0.25)
         } completionHandler: { [self] in
             cancel()
             landed(from, index)
@@ -423,20 +444,15 @@ private final class RowLift {
         }
     }
 
-    private func animate(_ layer: CALayer, to transform: CATransform3D, duration: CFTimeInterval) {
-        let animation = CABasicAnimation(keyPath: "transform")
-        animation.fromValue = layer.presentation()?.transform ?? layer.transform
-        animation.toValue = transform
+    /// Eases the layer's `keyPath` to `value` from wherever it is on screen.
+    private func animate(_ layer: CALayer, _ keyPath: String, to value: Any, duration: CFTimeInterval) {
+        let animation = CABasicAnimation(keyPath: keyPath)
+        animation.fromValue = (layer.presentation() ?? layer).value(forKeyPath: keyPath)
+        animation.toValue = value
         animation.duration = duration
         animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer.transform = transform
-        layer.add(animation, forKey: "transform")
-    }
-
-    private static func scaled(_ scale: CGFloat, in size: CGSize) -> CATransform3D {
-        var transform = CATransform3DMakeTranslation(size.width / 2, size.height / 2, 0)
-        transform = CATransform3DScale(transform, scale, scale, 1)
-        return CATransform3DTranslate(transform, -size.width / 2, -size.height / 2, 0)
+        layer.setValue(value, forKeyPath: keyPath)
+        layer.add(animation, forKey: keyPath)
     }
 }
 
