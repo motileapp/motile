@@ -345,7 +345,7 @@ struct GitNoticeView: View {
                 .shadow(.md)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderPopover, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
             ActionButton(icon: .x, help: "Close", symbolSize: ControlSize.regular.smallSymbol) { store.dismissGitNotice() }

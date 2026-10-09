@@ -60,7 +60,7 @@ struct CommandPanel: View {
                 .shadow(.xl, .shadowStrongest)
         }
         .environment(\.surface, .popover)
-        .overlay(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous).strokeBorder(Color.themeBorder, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous).strokeBorder(Color.themeBorderPopover, lineWidth: 1))
         .padding(.top, 70)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear {

@@ -131,7 +131,7 @@ extension View {
                     .fill(Color.themePopover)
                     .shadow(.md)
             }
-            .overlay { shape.strokeBorder(Color.themeBorder, lineWidth: 1) }
+            .overlay { shape.strokeBorder(Color.themeBorderPopover, lineWidth: 1) }
             .environment(\.surface, .popover)
     }
 }
