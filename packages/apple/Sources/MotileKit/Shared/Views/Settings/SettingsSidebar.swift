@@ -70,7 +70,7 @@ struct SettingsSidebar: View {
             Spacer(minLength: 0)
             if pushes {
                 Image(.chevronRight, size: 13)
-                    .foregroundStyle(Color.themeTertiary)
+                    .foregroundStyle(Color.themeMutedMoreForeground)
             }
         }
         .padding(.horizontal, 9)
@@ -90,7 +90,7 @@ struct SettingsSidebar: View {
                         .font(.ui(size: 13, weight: .medium))
                     Text(entry.section.title)
                         .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedMoreForeground)
                 }
                 .lineLimit(1)
                 Spacer(minLength: 0)
@@ -108,7 +108,7 @@ struct SettingsSidebar: View {
         if found.isEmpty {
             Text("No settings found")
                 .font(.ui(size: 13))
-                .foregroundStyle(Color.themeTertiary)
+                .foregroundStyle(Color.themeMutedMoreForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, sidebarRowInset + 8)
                 .padding(.vertical, 10)

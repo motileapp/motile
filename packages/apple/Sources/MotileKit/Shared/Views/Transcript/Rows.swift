@@ -71,7 +71,7 @@ final class RowModel {
         case "tool":
             kind = .tool(ToolContent(json: json))
         case "thinking":
-            kind = .thinking(Typesetter.plain(json.string("text"), color: Theme.secondary, size: 13 * Platform.scale))
+            kind = .thinking(Typesetter.plain(json.string("text"), color: Theme.mutedForeground, size: 13 * Platform.scale))
         case "media":
             kind = .media(MediaContent(json: json))
         case "group":
@@ -79,7 +79,7 @@ final class RowModel {
         case "fold":
             kind = .fold(FoldContent(json: json))
         case "error":
-            kind = .error(Typesetter.plain(json.string("message"), color: Theme.danger, size: 13 * Platform.scale))
+            kind = .error(Typesetter.plain(json.string("message"), color: Theme.destructive, size: 13 * Platform.scale))
         case "changes":
             kind = .changes(ChangesContent(json: json))
         case "turn_end":
@@ -99,10 +99,10 @@ final class RowModel {
     /// it shows as it will once the server has it.
     static func pending(text: String, attachments: [AttachedFile], queued: Bool) -> RowModel {
         guard !queued else {
-            let content = QueuedContent(text: Typesetter.plain(text, color: Theme.prose), attachments: attachments, status: "Queued")
+            let content = QueuedContent(text: Typesetter.plain(text, color: Theme.foreground), attachments: attachments, status: "Queued")
             return RowModel(id: pendingID, itemID: pendingID, kind: .queued(content))
         }
-        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: Typesetter.plain(text, color: Theme.text), attachments: attachments, at: Date().timeIntervalSince1970))
+        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: Typesetter.plain(text, color: Theme.foreground), attachments: attachments, at: Date().timeIntervalSince1970))
     }
 
     static let pendingID = "pending"
@@ -217,11 +217,11 @@ struct ToolContent {
     func detail() -> NSAttributedString {
         let result = NSMutableAttributedString()
         if !input.isEmpty {
-            result.append(inputLanguage == "diff" ? Typesetter.diff(input) : Typesetter.mono(input, color: Theme.text))
+            result.append(inputLanguage == "diff" ? Typesetter.diff(input) : Typesetter.mono(input, color: Theme.foreground))
         }
         if let output, !output.isEmpty {
-            if result.length > 0 { result.append(Typesetter.mono("\n\n", color: Theme.secondary)) }
-            result.append(Typesetter.mono(Self.clipped(output), color: status == .failed ? Theme.danger : Theme.secondary))
+            if result.length > 0 { result.append(Typesetter.mono("\n\n", color: Theme.mutedForeground)) }
+            result.append(Typesetter.mono(Self.clipped(output), color: status == .failed ? Theme.destructive : Theme.mutedForeground))
         }
         return result
     }
@@ -297,7 +297,7 @@ struct ChangesContent {
         at = json.double("at")
         let title = NSMutableAttributedString(
             string: files == 1 ? "1 changed file" : "\(files) changed files",
-            attributes: [.font: PlatformFont.ui(13, weight: .medium), .foregroundColor: Theme.text])
+            attributes: [.font: PlatformFont.ui(13, weight: .medium), .foregroundColor: Theme.foreground])
         title.append(NSAttributedString(string: "   "))
         title.append(LineCountText.text(added: json.int("added"), removed: json.int("removed")))
         self.title = title
@@ -306,7 +306,7 @@ struct ChangesContent {
             let name = NSAttributedString(
                 string: entry.string("name"),
                 attributes: [
-                    .font: Theme.smallMono, .foregroundColor: folder ? Theme.secondary : Theme.text, .paragraphStyle: Self.nameStyle,
+                    .font: Theme.smallMono, .foregroundColor: folder ? Theme.mutedForeground : Theme.foreground, .paragraphStyle: Self.nameStyle,
                 ])
             return Entry(
                 id: entry.string("id"), path: entry.string("path"), depth: entry.int("depth"), folder: folder, open: entry.bool("open"),
@@ -329,7 +329,7 @@ struct QueuedContent {
     }
 
     init(json: JSON) {
-        text = Typesetter.plain(json.string("text"), color: Theme.prose)
+        text = Typesetter.plain(json.string("text"), color: Theme.foreground)
         attachments = json.objects("attachments").map(AttachedFile.init(json:))
         status = json.string("status")
     }
@@ -383,7 +383,7 @@ extension NSAttributedString.Key {
 
 /// Turns the core's rows into attributed strings. Safe to call from any thread.
 enum Typesetter {
-    static let inlineCodeBackground = Theme.backgroundTertiary
+    static let inlineCodeBackground = Theme.accent
 
     private static let italicFont = Theme.proseFont.italicised
     private static let boldItalicFont = Theme.proseBold.italicised
@@ -456,7 +456,7 @@ enum Typesetter {
     }
 
     static func message(_ json: JSON) -> NSAttributedString {
-        let result = NSMutableAttributedString(attributedString: plain(json.string("text"), color: Theme.text))
+        let result = NSMutableAttributedString(attributedString: plain(json.string("text"), color: Theme.foreground))
         link(result, json)
         return result
     }
@@ -465,7 +465,7 @@ enum Typesetter {
         for link in json.objects("links") {
             let range = NSRange(location: link.int("start"), length: link.int("len"))
             guard range.location >= 0, range.length > 0, NSMaxRange(range) <= text.length, let url = URL(string: link.string("url")) else { continue }
-            text.addAttributes([.link: url, .foregroundColor: Theme.link], range: range)
+            text.addAttributes([.link: url, .foregroundColor: Theme.primary], range: range)
         }
     }
 
@@ -477,7 +477,7 @@ enum Typesetter {
     static func diff(_ text: String) -> NSAttributedString {
         let result = NSMutableAttributedString()
         for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-            let color = line.hasPrefix("+") ? Theme.syntax[10] : line.hasPrefix("-") ? Theme.syntax[11] : Theme.text
+            let color = line.hasPrefix("+") ? Theme.syntax[10] : line.hasPrefix("-") ? Theme.syntax[11] : Theme.foreground
             result.append(mono((index == 0 ? "" : "\n") + line, color: color))
         }
         return result
@@ -486,7 +486,7 @@ enum Typesetter {
     static func code(_ code: String, spans: [NSNumber]) -> NSAttributedString {
         let result = NSMutableAttributedString(
             string: code,
-            attributes: [.font: Theme.codeFont, .foregroundColor: Theme.text, .paragraphStyle: codeStyle]
+            attributes: [.font: Theme.codeFont, .foregroundColor: Theme.foreground, .paragraphStyle: codeStyle]
         )
         colour(result, spans: spans, in: NSRange(location: 0, length: result.length))
         return result
@@ -507,7 +507,7 @@ enum Typesetter {
     static func prose(_ json: JSON) -> NSAttributedString {
         let result = NSMutableAttributedString(
             string: json.string("text"),
-            attributes: [.font: Theme.proseFont, .foregroundColor: Theme.prose, .paragraphStyle: bodyStyle]
+            attributes: [.font: Theme.proseFont, .foregroundColor: Theme.foreground, .paragraphStyle: bodyStyle]
         )
         let length = result.length
         func clamp(_ start: Int, _ len: Int) -> NSRange? {
@@ -529,7 +529,7 @@ enum Typesetter {
                 style.lineSpacing = 3
                 style.paragraphSpacingBefore = range.location == 0 ? 0 : headingGap
                 style.paragraphSpacing = 8
-                result.addAttributes([.font: font, .foregroundColor: Theme.text, .paragraphStyle: style], range: range)
+                result.addAttributes([.font: font, .foregroundColor: Theme.foreground, .paragraphStyle: style], range: range)
                 headingRanges.append((range, font))
             case "list_item":
                 let depth = CGFloat(max(1, para.int("depth")))
@@ -553,7 +553,7 @@ enum Typesetter {
                 style.headIndent = CGFloat(depth) * 14
                 style.firstLineHeadIndent = style.headIndent
                 result.addAttributes(
-                    [.paragraphStyle: style, .foregroundColor: Theme.secondary, .motileQuote: NSNumber(value: depth)],
+                    [.paragraphStyle: style, .foregroundColor: Theme.mutedForeground, .motileQuote: NSNumber(value: depth)],
                     range: range
                 )
             case "pre":
@@ -567,7 +567,7 @@ enum Typesetter {
                 let block = CodeBoxes.make(language: para.string("language"), index: codeBlocks, indent: indent, style: style)
                 codeBlocks += 1
                 result.addAttributes(
-                    [.paragraphStyle: style, .font: Theme.codeFont, .foregroundColor: Theme.text, .motileCode: block],
+                    [.paragraphStyle: style, .font: Theme.codeFont, .foregroundColor: Theme.foreground, .motileCode: block],
                     range: range
                 )
                 colour(result, spans: para["spans"] as? [NSNumber] ?? [], in: range)
@@ -584,7 +584,7 @@ enum Typesetter {
                 result.addAttributes([.paragraphStyle: style, .font: PlatformFont.ui(13)], range: range)
                 if para.bool("header") {
                     let bold = PlatformFont.ui(13, weight: .semibold)
-                    result.addAttributes([.font: bold, .foregroundColor: Theme.text], range: range)
+                    result.addAttributes([.font: bold, .foregroundColor: Theme.foreground], range: range)
                     headingRanges.append((range, bold))
                 }
             default:
@@ -615,13 +615,13 @@ enum Typesetter {
             let heading = headingRanges.first { NSLocationInRange(range.location, $0.0) }?.1
             if code {
                 let font = bold || heading != nil ? inlineCodeBold : Theme.inlineCodeFont
-                result.addAttributes([.font: font, .foregroundColor: Theme.text, .backgroundColor: inlineCodeBackground], range: range)
+                result.addAttributes([.font: font, .foregroundColor: Theme.foreground, .backgroundColor: inlineCodeBackground], range: range)
             } else if let heading {
                 if italic { result.addAttribute(.font, value: heading.italicised, range: range) }
             } else if bold || italic {
                 let font = bold && italic ? boldItalicFont : bold ? Theme.proseBold : italicFont
                 result.addAttribute(.font, value: font, range: range)
-                if bold { result.addAttribute(.foregroundColor, value: Theme.text, range: range) }
+                if bold { result.addAttribute(.foregroundColor, value: Theme.foreground, range: range) }
             }
             if style & 8 != 0 {
                 result.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: range)
@@ -669,7 +669,7 @@ struct TableSetter {
         block.setWidth(10, type: .absoluteValueType, for: .padding, edge: .minX)
         block.setWidth(10, type: .absoluteValueType, for: .padding, edge: .maxX)
         block.setWidth(1, type: .absoluteValueType, for: .border, edge: .maxY)
-        block.setBorderColor(Theme.border)
+        block.setBorderColor(Theme.borderCard)
         style.textBlocks = [block]
     }
 

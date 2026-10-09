@@ -15,7 +15,7 @@ struct MediaViewer: View {
     var body: some View {
         let item = viewing.item
         ZStack {
-            Color.black
+            Color.themeBackground
                 .opacity(1 - min(0.6, Double(abs(pulled)) / 500))
                 .ignoresSafeArea()
             TabView(selection: index) {
@@ -32,6 +32,7 @@ struct MediaViewer: View {
         .simultaneousGesture(pull)
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
+        .environment(\.colorScheme, .dark)
     }
 
     private var index: Binding<Int> {
@@ -73,10 +74,10 @@ struct MediaViewer: View {
                 if viewing.items.count > 1 {
                     Text("\(viewing.index + 1) of \(viewing.items.count)")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(Color.themeMutedForeground)
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Color.themeForeground)
             Spacer(minLength: 8)
             if let shared {
                 CopyButton(
@@ -158,7 +159,7 @@ private struct MediaPage: View {
                 .buttonStyle(.control(.primary, size: .large))
             }
             .font(.system(size: 15))
-            .foregroundStyle(.white.opacity(0.8))
+            .foregroundStyle(Color.themeMutedForeground)
         case nil:
             Group {
                 if failed {
@@ -170,7 +171,7 @@ private struct MediaPage: View {
                 }
             }
             .font(.system(size: 15))
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(Color.themeMutedForeground)
         }
     }
 

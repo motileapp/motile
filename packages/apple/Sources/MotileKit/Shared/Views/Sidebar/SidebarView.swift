@@ -110,7 +110,7 @@ struct SidebarView: View {
                 case .empty:
                     Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
                         .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedMoreForeground)
                         .frame(height: Self.emptyLineHeight)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, rowMargin.leading + 8)
@@ -338,7 +338,7 @@ struct ThreadRow: View, Equatable {
                 ThreadStatus(thread: thread)
                 #endif
             }
-            .foregroundStyle(Color.themeSecondary)
+            .foregroundStyle(Color.themeMutedForeground)
             .frame(height: scaled(22))
 
             Text(thread.title)
@@ -361,7 +361,7 @@ struct ThreadRow: View, Equatable {
                 ThreadServerLabel(serverID: thread.serverID)
                 AgentIcon(agent: thread.agent, size: 12)
             }
-            .foregroundStyle(Color.themeTertiary)
+            .foregroundStyle(Color.themeMutedMoreForeground)
             .frame(height: scaled(16))
         }
         .padding(.horizontal, Self.sidePadding)
@@ -477,7 +477,7 @@ struct DraftRows: View {
             ForEach(listed) { listed in
                 DraftRow(listed: listed, open: open)
                     #if os(iOS)
-                    .rowSwipe(.trash2, "Discard Draft", tint: .themeDanger, size: 36, isOpen: swiped(listed.id)) {
+                    .rowSwipe(.trash2, "Discard Draft", tint: .themeDestructive, size: 36, isOpen: swiped(listed.id)) {
                         store.discard(listed.draft)
                     }
                     #endif
@@ -520,7 +520,7 @@ private struct DraftRow: View {
                     }
                 }
             }
-            .foregroundStyle(Color.themeSecondary)
+            .foregroundStyle(Color.themeMutedForeground)
             .frame(height: scaled(22))
 
             Text(listed.preview)
@@ -544,7 +544,7 @@ private struct DraftRow: View {
                     AgentIcon(agent: agent, size: 12)
                 }
             }
-            .foregroundStyle(Color.themeTertiary)
+            .foregroundStyle(Color.themeMutedMoreForeground)
             .frame(height: scaled(16))
         }
         .padding(.horizontal, ThreadRow.sidePadding)
@@ -635,7 +635,7 @@ private struct DoneShelf: View {
                     Spacer()
                     Text("\(threads.count)")
                         .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedMoreForeground)
                         .monospacedDigit()
                 }
                 .padding(.horizontal, 18)
@@ -719,14 +719,14 @@ struct DoneRow: View, Equatable {
             Text(thread.title)
                 .font(.ui(size: 13))
                 .lineLimit(1)
-                .foregroundStyle(Color.themeSecondary)
+                .foregroundStyle(Color.themeMutedForeground)
             Spacer(minLength: 6)
             if let pullRequest {
                 ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, colored: false, open: open)
             }
             Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: AgoClock.shared.now))
                 .font(.ui(size: 11))
-                .foregroundStyle(Color.themeTertiary)
+                .foregroundStyle(Color.themeMutedMoreForeground)
                 .opacity(hovering ? 0 : 1)
         }
         .padding(.horizontal, Self.sidePadding)
@@ -761,7 +761,7 @@ struct NewThreadRow: View {
                 .lineLimit(1)
             Spacer(minLength: 6)
         }
-        .foregroundStyle(Color.themeSecondary)
+        .foregroundStyle(Color.themeMutedForeground)
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
@@ -811,24 +811,24 @@ struct ThreadStatus: View {
         } else if thread.running {
             HStack(spacing: 9) {
                 if thread.agents > 0 {
-                    label("\(thread.agents)", Color.themeAgents) {
+                    label("\(thread.agents)", Color.themeWarning) {
                         symbol(.users)
                     }
                     .help(thread.agents == 1 ? "1 agent is working" : "\(thread.agents) agents are working")
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeWorking) {
+                    label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themePrimary) {
                         Image(.circleDashed, size: 10)
                     }
                 }
             }
         } else if let stage = thread.gitStage {
-            label(stage.label, Color.themeWorking) {
+            label(stage.label, Color.themePrimary) {
                 Spinner(size: 11)
             }
         } else if thread.monitoring {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeMonitoring) {
+                label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeForeground) {
                     symbol(.eye)
                 }
             }
@@ -844,7 +844,7 @@ struct ThreadStatus: View {
         } else {
             Text(Time.ago(thread.updatedAt, now: AgoClock.shared.now))
                 .font(.ui(size: 11))
-                .foregroundStyle(Color.themeTertiary)
+                .foregroundStyle(Color.themeMutedMoreForeground)
         }
     }
 
@@ -879,7 +879,7 @@ struct ServerLine: View {
             ServerUpdateStatus(server: server) {
                 Text(detail)
                     .font(.ui(size: 11))
-                    .foregroundStyle(Color.themeTertiary)
+                    .foregroundStyle(Color.themeMutedMoreForeground)
                     .monospacedDigit()
             }
         }
@@ -891,7 +891,7 @@ struct ServerLine: View {
         switch server.state {
         case .connected: return Color.themeSuccess
         case .connecting: return Color.themeWarning
-        case .disconnected, .refused: return Color.themeDanger
+        case .disconnected, .refused: return Color.themeDestructive
         }
     }
 

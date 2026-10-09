@@ -12,7 +12,7 @@ struct AttachmentTile: View {
 
     var body: some View {
         ZStack {
-            Color.themeBackgroundSecondary
+            Color.themeCard
             if let picture {
                 Image(decorative: picture, scale: 1)
                     .resizable()
@@ -21,21 +21,22 @@ struct AttachmentTile: View {
             }
             if attachment.video {
                 Image(.play, size: 16)
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 3)
+                    .foregroundStyle(Color.themeForeground)
+                    .shadow(.regular)
+                    .environment(\.colorScheme, .dark)
             }
         }
         .frame(width: Self.side, height: Self.side)
         .overlay(alignment: .bottom) { AttachmentProgress(attachment: attachment, onPicture: true) }
         .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Color.themeBorder, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).stroke(Color.themeBorderCard, lineWidth: 1))
         .button(DimButtonStyle(), action: open)
         .overlay(alignment: .topTrailing) {
             // Over a picture the button is as in the dark, on a backdrop that shows on any picture.
             ActionButton(icon: .x, help: "Remove", variant: .secondary, size: .small, round: true) {
                 store.removeAttachment(attachment.id)
             }
-            .background(.black.opacity(0.6), in: Circle())
+            .background(Color.themeOverlay, in: Circle())
             .environment(\.colorScheme, .dark)
             .padding(2)
         }
@@ -77,7 +78,7 @@ struct AttachmentChip: View {
                 .lineLimit(1)
             if let bytes = attachment.bytes {
                 Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
-                    .foregroundStyle(Color.themeSecondary)
+                    .foregroundStyle(Color.themeMutedForeground)
             }
             AttachmentProgress(attachment: attachment, onPicture: false)
             ActionButton(icon: .x, help: "Remove", size: .small, round: true) { store.removeAttachment(attachment.id) }
@@ -106,21 +107,22 @@ private struct AttachmentProgress: View {
             if onPicture {
                 percent
                     .font(.ui(size: 10, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.themeForeground)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 2)
-                    .background(.black.opacity(0.6))
+                    .background(Color.themeOverlay)
+                    .environment(\.colorScheme, .dark)
             } else {
-                percent.foregroundStyle(Color.themeSecondary)
+                percent.foregroundStyle(Color.themeMutedForeground)
             }
         case .failed(let reason):
             if onPicture {
                 Label("Retry", symbol: .rotateCw, size: 10)
                     .font(.ui(size: 10, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.themeDestructiveForeground)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 2)
-                    .background(Color.themeDanger.opacity(0.85))
+                    .background(Color.themeDestructive)
                     .button(DimButtonStyle()) { store.retryAttachment(attachment.id) }
                     .help("\(reason) Click to try again.")
             } else {

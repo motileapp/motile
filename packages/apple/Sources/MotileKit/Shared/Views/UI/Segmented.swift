@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A short row of choices of which one is on, in a track on the background with the border
+/// A short row of choices of which one is on, in a track with the border
 /// around it. The choices touch each other and the track's edge, so no click falls between them;
 /// their light is drawn `inset` from their edges, as the sidebar's rows are.
 struct Segmented<Value: Hashable>: View {
@@ -35,9 +35,8 @@ struct Segmented<Value: Hashable>: View {
                 }
             }
         }
-        .environment(\.surface, .background)
-        .background(Color.themeBackground, in: shape)
-        .overlay { shape.strokeBorder(Color.themeBorder, lineWidth: Self.border) }
+        .layered(in: shape)
+        .overlay { shape.strokeBorder(Color.themeBorderCard, lineWidth: Self.border) }
         .opacity(enabled ? 1 : 0.45)
         .animation(.easeOut(duration: 0.12), value: selection)
     }

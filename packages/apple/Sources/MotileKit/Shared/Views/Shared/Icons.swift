@@ -46,7 +46,7 @@ struct AgentIcon: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: size, height: size)
-                .foregroundStyle(Color.themeText)
+                .foregroundStyle(Color.themeForeground)
         } else {
             Image(.sparkle, size: size * 0.85)
                 .frame(width: size, height: size)
@@ -212,7 +212,7 @@ struct ProjectIcon: View {
                     .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
             } else {
                 Image(project?.noProject == true ? .messageSquareDashed : .folder, size: size * 0.78)
-                    .foregroundStyle(Color.themeSecondary)
+                    .foregroundStyle(Color.themeMutedForeground)
             }
         }
         .frame(width: size, height: size)
@@ -240,7 +240,7 @@ struct ServerLabel: View {
                 .font(.ui(size: size, weight: weight))
                 .lineLimit(1)
         }
-        .foregroundStyle(Color.themeTertiary)
+        .foregroundStyle(Color.themeMutedMoreForeground)
         .help("On \(server.name)")
     }
 }
@@ -249,9 +249,9 @@ extension PullRequest.State {
     var platformColor: PlatformColor {
         switch self {
         case .open: Theme.success
-        case .draft: Theme.secondary
+        case .draft: Theme.mutedForeground
         case .merged: Theme.merged
-        case .closed: Theme.danger
+        case .closed: Theme.destructive
         }
     }
 
@@ -284,7 +284,7 @@ struct PullRequestLabel: View {
                 .monospacedDigit()
                 .underline(hovering)
         }
-        .foregroundStyle(colored ? pullRequest.state.color : Color.themeTertiary)
+        .foregroundStyle(colored ? pullRequest.state.color : Color.themeMutedMoreForeground)
         .help(pullRequest.title)
     }
 }

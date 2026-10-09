@@ -164,7 +164,7 @@ final class UserRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        bubble.fill = Theme.backgroundSecondary
+        bubble.fill = Theme.card
         bubble.radius = 18
         addSubview(bubble)
         bubble.addSubview(text)
@@ -242,7 +242,7 @@ final class QueuedRowView: RowView {
     private let text = RowTextView.make()
     private let attachments = AttachedFilesView()
     private let clock = SymbolView(.clock, size: 11)
-    private let status = TextLabel(font: Theme.smallFont, color: Theme.secondary)
+    private let status = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
     private var sendButton: RowButton!
     private var cancelButton: RowButton!
     private var messageID = ""
@@ -251,7 +251,7 @@ final class QueuedRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        bubble.stroke = Theme.borderSecondary
+        bubble.stroke = Theme.borderCard
         bubble.dotted = true
         bubble.radius = Self.radius
         addSubview(bubble)
@@ -404,7 +404,7 @@ final class CodeHeader: FlippedView {
     private static let buttonInset: CGFloat = 4
     static let height = IconButton.side + buttonInset * 2
 
-    private let language = TextLabel(font: Theme.smallMono, color: Theme.secondary)
+    private let language = TextLabel(font: Theme.smallMono, color: Theme.mutedForeground)
     private var copyButton: IconButton!
     private var code = ""
 
@@ -412,7 +412,7 @@ final class CodeHeader: FlippedView {
         super.init(frame: frame)
         addSubview(language)
         copyButton = IconButton(symbol: .copy, symbolSize: 12, tooltip: "Copy code") { [weak self] in self?.copy() }
-        copyButton.surface = .secondary
+        copyButton.surface = .card
         addSubview(copyButton)
     }
 
@@ -455,8 +455,8 @@ final class CodeRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.backgroundSecondary
-        surface.stroke = Theme.border
+        surface.fill = Theme.card
+        surface.stroke = Theme.borderCard
         surface.radius = 10
         addSubview(surface)
         surface.addSubview(header)
@@ -528,12 +528,12 @@ final class ToolRowView: RowView {
     private let header = SurfaceView()
     private static let titleFont = PlatformFont.ui(13)
 
-    private let icon = SymbolView(tint: Theme.activity)
-    private let title = TextLabel(font: ToolRowView.titleFont, color: Theme.activity)
+    private let icon = SymbolView(tint: Theme.mutedForeground)
+    private let title = TextLabel(font: ToolRowView.titleFont, color: Theme.mutedForeground)
     private let shine = ShimmerLabel.make(ToolRowView.titleFont)
-    private let chevron = SymbolView(tint: Theme.tertiary)
+    private let chevron = SymbolView(tint: Theme.mutedMoreForeground)
     /// How long a call that still runs has been running.
-    private let elapsed = TextLabel(font: .uiDigits(12), color: Theme.tertiary)
+    private let elapsed = TextLabel(font: .uiDigits(12), color: Theme.mutedMoreForeground)
     private var startedAt: Double?
     private var timer: Timer?
     /// The call started an agent: the row opens what that agent did.
@@ -557,7 +557,7 @@ final class ToolRowView: RowView {
         header.addSubview(chevron)
         header.addSubview(elapsed)
 
-        detailSurface.fill = Theme.backgroundSecondary
+        detailSurface.fill = Theme.accentCard
         detailSurface.radius = 8
         detailSurface.isHidden = true
         addSubview(detailSurface)
@@ -648,12 +648,12 @@ final class ToolRowView: RowView {
     private func setTitle(_ words: String, target: String = "", note: String? = nil, failed: Bool = false) {
         let text = NSMutableAttributedString(
             string: target.isEmpty ? words : words + " ",
-            attributes: [.font: Self.titleFont, .foregroundColor: Theme.activity]
+            attributes: [.font: Self.titleFont, .foregroundColor: Theme.mutedForeground]
         )
-        let targetColor = failed ? Theme.danger : running ? Theme.activity : Theme.prose
+        let targetColor = failed ? Theme.destructive : running ? Theme.mutedForeground : Theme.foreground
         text.append(NSAttributedString(string: target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
         if let note {
-            let attributes: [NSAttributedString.Key: Any] = [.font: Self.titleFont, .foregroundColor: Theme.tertiary]
+            let attributes: [NSAttributedString.Key: Any] = [.font: Self.titleFont, .foregroundColor: Theme.mutedMoreForeground]
             text.append(NSAttributedString(string: "  \(note)", attributes: attributes))
         }
         // Without this a title too long for the row wraps, and loses its last words unseen.
@@ -663,7 +663,7 @@ final class ToolRowView: RowView {
         title.attributed = text
         title.breaks = .byTruncatingTail
         guard running else { return }
-        text.addAttribute(.foregroundColor, value: Theme.text, range: NSRange(location: 0, length: text.length))
+        text.addAttribute(.foregroundColor, value: Theme.foreground, range: NSRange(location: 0, length: text.length))
         shine.attributed = text
         shine.breaks = .byTruncatingTail
     }
@@ -708,12 +708,12 @@ final class ErrorRowView: RowView {
     static let padding: CGFloat = 20 + 14
 
     private let surface = SurfaceView()
-    private let icon = SymbolView(.circleAlert, size: 13, tint: Theme.danger)
+    private let icon = SymbolView(.circleAlert, size: 13, tint: Theme.destructive)
     private let text = RowTextView.make()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.dangerBackground
+        surface.fill = Theme.tint(Theme.destructive)
         surface.radius = 10
         addSubview(surface)
         surface.addSubview(icon)
@@ -766,8 +766,8 @@ final class ChangesRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        surface.fill = Theme.backgroundSecondary
-        surface.stroke = Theme.border
+        surface.fill = Theme.card
+        surface.stroke = Theme.borderCard
         surface.radius = Self.radius
         addSubview(surface)
         surface.addSubview(list)
@@ -775,7 +775,7 @@ final class ChangesRowView: RowView {
             title: "Open diff",
             tooltip: "Show what this turn changed",
             radius: Self.radius - Self.buttonMargin,
-            hover: Theme.backgroundTertiary,
+            hover: Theme.accentCard,
             insets: PlatformEdgeInsets(top: Self.buttonMargin, left: 2, bottom: Self.buttonMargin, right: Self.buttonMargin)
         ) { [weak self] in
             guard let self else { return }
@@ -845,17 +845,17 @@ final class ChangesRowView: RowView {
                 let row = CGRect(x: 0, y: headHeight + CGFloat(index) * entryHeight, width: bounds.width, height: entryHeight)
                 guard row.intersects(dirtyRect) else { continue }
                 if hovered == index {
-                    Theme.backgroundTertiary.setFill()
+                    Theme.accentCard.setFill()
                     RoundedBox.fill(row.insetBy(dx: 6, dy: 1), radius: 6)
                 }
                 var x = 12 + CGFloat(entry.depth) * 16
                 if entry.folder {
                     let chevron = CGRect(x: x, y: row.minY, width: 12, height: row.height)
-                    TintedSymbol.draw(entry.open ? .chevronDown : .chevronRight, size: 8, color: Theme.tertiary, in: chevron)
+                    TintedSymbol.draw(entry.open ? .chevronDown : .chevronRight, size: 8, color: Theme.mutedMoreForeground, in: chevron)
                 }
                 x += 16
                 let symbol: Symbol = entry.folder ? .folder : FileSymbol.symbol(for: entry.path)
-                TintedSymbol.draw(symbol, size: 11, color: Theme.secondary, in: CGRect(x: x, y: row.minY, width: 16, height: row.height))
+                TintedSymbol.draw(symbol, size: 11, color: Theme.mutedForeground, in: CGRect(x: x, y: row.minY, width: 16, height: row.height))
                 x += 24
                 let counts = entry.counts.size()
                 let countsX = bounds.width - 14 - counts.width
@@ -931,7 +931,7 @@ final class MessageMeta: FlippedView {
     }
 
     private let trailing: Bool
-    private let time = TextLabel(font: Theme.smallFont, color: Theme.tertiary)
+    private let time = TextLabel(font: Theme.smallFont, color: Theme.mutedMoreForeground)
     private var button: IconButton?
     private var copied = false
 
@@ -995,7 +995,7 @@ final class WorkingView: FlippedView {
     /// Digits of one width, so the line doesn't change size with every second.
     private static let font = PlatformFont.uiDigits(13)
 
-    private let text = TextLabel(font: WorkingView.font, color: Theme.activity)
+    private let text = TextLabel(font: WorkingView.font, color: Theme.mutedForeground)
     private let shine = ShimmerLabel.make(WorkingView.font)
     private var timer: Timer?
     private var activity = Activity()

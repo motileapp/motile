@@ -68,7 +68,7 @@ struct PullRequestListSurface: View {
                     if shown.isEmpty {
                         Text(search.isEmpty ? "No \(state == "all" ? "" : "\(state) ")pull requests." : "None match “\(search)”.")
                             .font(.ui(size: 12.5))
-                            .foregroundStyle(Color.themeSecondary)
+                            .foregroundStyle(Color.themeMutedForeground)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 40)
                     }
@@ -109,11 +109,11 @@ private struct PullRequestListRow: View {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(row.title)
                             .font(.ui(size: 13, weight: .medium))
-                            .foregroundStyle(Color.themeText)
+                            .foregroundStyle(Color.themeForeground)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
                         if linked {
-                            Chip("This thread", tone: .themeLink)
+                            Chip("This thread", tone: .themePrimary)
                                 .fixedSize()
                         }
                         Spacer(minLength: 4)
@@ -121,7 +121,7 @@ private struct PullRequestListRow: View {
                     }
                     (Text(verbatim: "#\(row.number)") + Text(" · \(row.author) · \(row.head) → \(row.base) · \(Time.ago(row.updatedAt))"))
                         .font(.ui(size: 11.5))
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedMoreForeground)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }

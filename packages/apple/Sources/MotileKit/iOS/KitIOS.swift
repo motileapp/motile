@@ -33,11 +33,11 @@ extension UIView {
         UIView.animate(withDuration: duration, delay: 0, options: [.allowUserInteraction, .curveEaseOut]) { self.alpha = opacity }
     }
 
-    func dropShadow(opacity: CGFloat, radius: CGFloat, down: CGFloat) {
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = Float(opacity)
-        layer.shadowRadius = radius
-        layer.shadowOffset = CGSize(width: 0, height: down)
+    func dropShadow(_ level: Shadow) {
+        layer.shadowColor = level.platform.resolvedColor(with: traitCollection).cgColor
+        layer.shadowOpacity = 1
+        layer.shadowRadius = level.radius
+        layer.shadowOffset = CGSize(width: 0, height: level.down)
     }
 
     func ticker(target: Any, selector: Selector) -> CADisplayLink {
@@ -266,7 +266,7 @@ final class ShimmerLabel: TextLabel {
     }
 
     static func make(_ font: UIFont) -> ShimmerLabel {
-        let label = ShimmerLabel(font: font, color: Theme.shimmer)
+        let label = ShimmerLabel(font: font, color: Theme.foreground)
         label.isAccessibilityElement = false
         let alphas: [CGFloat] = [0, 0.12, 0.55, 1, 0.55, 0.12, 0]
         label.band.colors = alphas.map { UIColor.black.withAlphaComponent($0).cgColor }
@@ -306,7 +306,7 @@ final class ShimmerLabel: TextLabel {
 
 /// A symbol in one colour, in the middle of its frame.
 final class SymbolView: UIImageView {
-    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: UIColor = Theme.secondary) {
+    convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: UIColor = Theme.mutedForeground) {
         self.init(frame: .zero)
         contentMode = .center
         tintColor = tint
@@ -339,8 +339,8 @@ final class IconButton: UIButton {
         self.symbolSize = symbolSize ?? Self.metrics.symbol
         layer.cornerRadius = Self.metrics.radius
         layer.cornerCurve = .continuous
-        tintColor = Theme.secondary
-        setTitleColor(Theme.secondary, for: .normal)
+        tintColor = Theme.mutedForeground
+        setTitleColor(Theme.mutedForeground, for: .normal)
         titleLabel?.font = Theme.smallFont
         accessibilityLabel = tooltip
         set(symbol: symbol, title: title)
@@ -354,8 +354,8 @@ final class IconButton: UIButton {
 
     override var isHighlighted: Bool {
         didSet {
-            backgroundColor = isHighlighted ? surface.next.platform : .clear
-            tintColor = isHighlighted ? Theme.text : Theme.secondary
+            backgroundColor = isHighlighted ? surface.accent : .clear
+            tintColor = isHighlighted ? Theme.foreground : Theme.mutedForeground
         }
     }
 
@@ -383,7 +383,7 @@ final class RowTextView: UITextView, UITextViewDelegate {
         view.textContainerInset = .zero
         view.contentInsetAdjustmentBehavior = .never
         view.dataDetectorTypes = []
-        view.linkTextAttributes = [.foregroundColor: Theme.link]
+        view.linkTextAttributes = [.foregroundColor: Theme.primary]
         view.textDragInteraction?.isEnabled = false
         view.delegate = view
         if !wraps { system.unwrap() }

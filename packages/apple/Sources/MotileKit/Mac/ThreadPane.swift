@@ -85,7 +85,7 @@ struct ThreadPane: View {
             }
             Text(store.selectedThread?.title ?? "New thread")
                 .font(.ui(size: 13, weight: .semibold))
-                .foregroundStyle(Color.themeText)
+                .foregroundStyle(Color.themeForeground)
         }
         .lineLimit(1)
     }
@@ -112,7 +112,7 @@ struct ThreadPane: View {
                         .font(.ui(size: 28, weight: .regular))
                     Text("A project is a folder on your server that threads work in.")
                         .font(.ui(size: 14))
-                        .foregroundStyle(Color.themeSecondary)
+                        .foregroundStyle(Color.themeMutedForeground)
                     ActionButton("Add Project", icon: .folderPlus, variant: .primary, size: .large) { store.addProject() }
                     .disabled(!store.servers.contains { $0.state == .connected })
                     .padding(.top, 8)
@@ -130,7 +130,7 @@ struct ThreadPane: View {
         let headline = Project.headline(selected)
         return HStack(spacing: Self.headlineWordSpace) {
             Text(headline.lead)
-                .foregroundStyle(Color.themeText)
+                .foregroundStyle(Color.themeForeground)
             Menu {
                 ForEach(store.recentProjects + store.noProjects) { project in
                     Button {
@@ -155,7 +155,7 @@ struct ThreadPane: View {
                     ProjectIcon(project: selected, size: 22)
                     Text(headline.name)
                     Image(.chevronDown, size: 13)
-                        .foregroundStyle(Color.themeTertiary)
+                        .foregroundStyle(Color.themeMutedMoreForeground)
                 }
                 .padding(.leading, 9)
                 .padding(.trailing, 11)

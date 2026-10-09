@@ -26,7 +26,7 @@ struct ReviewerChip: View {
     let reviewer: PullRequestPage.Reviewer
 
     var body: some View {
-        Chip(reviewer.name, dot: reviewer.tone == .neutral ? Color.themeTertiary : reviewer.tone.color)
+        Chip(reviewer.name, dot: reviewer.tone == .neutral ? Color.themeMutedMoreForeground : reviewer.tone.color)
             .help("\(reviewer.name): \(reviewer.label)")
     }
 }
@@ -80,11 +80,11 @@ struct PullRequestNoticeBar: View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
                 Image(notice.failed ? .circleAlert : .circleCheck, size: 13)
-                    .foregroundStyle(notice.failed ? Color.themeDanger : Color.themeSuccess)
+                    .foregroundStyle(notice.failed ? Color.themeDestructive : Color.themeSuccess)
                     .frame(height: Self.lineHeight)
                 Text(notice.text)
                     .font(.ui(size: 12.5))
-                    .foregroundStyle(Color.themeText)
+                    .foregroundStyle(Color.themeForeground)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(minHeight: Self.lineHeight)
@@ -100,7 +100,7 @@ struct PullRequestNoticeBar: View {
             .padding(.leading, 12)
             .padding(.trailing, 6)
             .padding(.vertical, 8)
-            .background(notice.failed ? Color.themeDanger.opacity(0.08) : Color.themeSuccess.opacity(0.08))
+            .background((notice.failed ? Color.themeDestructive : Color.themeSuccess).tinted())
             PanelLine()
         }
     }
@@ -149,7 +149,7 @@ struct DescriptionEditor: View {
                     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text("Nothing to preview")
                             .font(.ui(size: 12.5))
-                            .foregroundStyle(Color.themeTertiary)
+                            .foregroundStyle(Color.themeMutedMoreForeground)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         PullRequestTextView(blocks: preview)
@@ -205,10 +205,10 @@ extension PullRequestPage.Tone {
     var color: Color {
         switch self {
         case .success: .themeSuccess
-        case .danger: .themeDanger
+        case .danger: .themeDestructive
         case .warning: .themeWarning
-        case .pending: .themeWorking
-        case .neutral: .themeSecondary
+        case .pending: .themePrimary
+        case .neutral: .themeMutedForeground
         case .merged: .themeMerged
         }
     }
