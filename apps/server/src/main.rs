@@ -9,7 +9,7 @@ use motile_protocol::identity::is_public_key;
 use motile_server::access::{Access, AccountSource};
 use motile_server::agents::environment::Environment;
 use motile_server::config::DataDir;
-use motile_server::hub::{Hub, LIMITS_CHECK, MODELS_CHECK, PULL_REQUEST_FRESH, PULL_REQUEST_WATCH};
+use motile_server::hub::{Hub, LIMITS_CHECK, PULL_REQUEST_FRESH, PULL_REQUEST_WATCH};
 use motile_server::serve::{BindOptions, Server, bind};
 use motile_server::store::Store;
 use motile_server::{pricing, service, setup, update};
@@ -147,7 +147,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     if hub.models().is_empty() {
         hub.refresh_models().await;
     }
-    hub.keep_models_current(MODELS_CHECK);
+    hub.refresh_models_soon();
     hub.keep_uploads_swept();
     hub.keep_pull_requests_current(PULL_REQUEST_FRESH);
     hub.watch_pull_requests(PULL_REQUEST_WATCH);

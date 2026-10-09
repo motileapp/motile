@@ -1,19 +1,13 @@
-//! The models each agent's accounts can run. Claude Code is asked for what its model picker
-//! lists, which depends on who is signed in; Codex keeps its own list on disk, which is read.
-
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::time::Duration;
+//! The models each agent's accounts can run, and the effort each runs at when it isn't given one.
+//! Claude Code is asked for what its model picker lists, which depends on who is signed in, and
+//! for the settings it would apply to each; `codex app-server` for its list and its config.
 
 use motile_protocol::wire::{Agent, ModelInfo};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command;
 
 use super::environment::Environment;
-
-const LIST_WITHIN: Duration = Duration::from_secs(30);
+use super::{ask, claude};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,32 +19,34 @@ struct ClaudeModel {
     supported_effort_levels: Vec<String>,
 }
 
-/// What Claude Code lists under the account of `environment`, asked through the control request
+/// What Claude Code lists under the account of `environment`, asked through the control requests
 /// the Agent SDK uses. `None` when it doesn't answer, as one too old to does.
 pub async fn claude_models(environment: &Environment) -> Option<Vec<ModelInfo>> {
-    let executable = environment.executable(Agent::Claude)?;
-    let mut command = Command::new(executable);
-    command.args(["-p", "--bare", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]);
-    command.env_clear().envs(&environment.variables);
-    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
-    let mut child = command.spawn().ok()?;
-    let request = json!({"type": "control_request", "request_id": "models", "request": {"subtype": "list_models"}});
-    let mut stdin = child.stdin.take()?;
-    stdin.write_all(format!("{request}\n").as_bytes()).await.ok()?;
-    drop(stdin);
-    let mut lines = BufReader::new(child.stdout.take()?).lines();
-    let answer = tokio::time::timeout(LIST_WITHIN, async {
-        while let Ok(Some(line)) = lines.next_line().await {
-            let Ok(mut event) = serde_json::from_str::<Value>(&line) else { continue };
-            if event["type"] == "control_response" {
-                return Some(event["response"]["response"]["models"].take());
-            }
-        }
-        None
-    });
-    let listed = answer.await.ok()??;
-    let models: Vec<ClaudeModel> = serde_json::from_value(listed).ok()?;
-    Some(claude_list(models))
+    let mut answers = ask::claude(environment, &["--bare"], &["list_models"]).await.ok()?;
+    let listed = answers.remove("list_models")?.ok()?;
+    let mut models = claude_list(serde_json::from_value(listed["models"].clone()).ok()?);
+    for model in &mut models {
+        model.default_effort = claude_default_effort(environment, model).await;
+    }
+    Some(models)
+}
+
+/// The effort Claude Code runs `model` at when it isn't given one: the model's own, or what the
+/// account's settings say. Only a process started with the model reports it.
+async fn claude_default_effort(environment: &Environment, model: &ModelInfo) -> Option<String> {
+    if model.efforts.is_empty() {
+        return None;
+    }
+    let arguments = ["--bare", "--model", model.id.as_str()];
+    let mut answers = ask::claude(environment, &arguments, &["get_settings"]).await.ok()?;
+    let settings = answers.remove("get_settings")?.ok()?;
+    applied_effort(&settings["applied"], &model.efforts)
+}
+
+fn applied_effort(applied: &Value, efforts: &[String]) -> Option<String> {
+    let ultracode = (applied["ultracode"] == true).then_some(claude::ULTRACODE);
+    let mut wanted = [ultracode, applied["effort"].as_str()].into_iter().flatten();
+    wanted.find(|effort| efforts.iter().any(|offered| offered == effort)).map(String::from)
 }
 
 fn claude_list(models: Vec<ClaudeModel>) -> Vec<ModelInfo> {
@@ -96,49 +92,50 @@ fn claude_name(id: &str) -> String {
 }
 
 #[derive(Deserialize)]
-struct CodexCache {
-    models: Vec<CodexModel>,
-}
-
-#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CodexModel {
-    slug: String,
+    model: String,
     display_name: String,
     #[serde(default)]
-    visibility: String,
+    hidden: bool,
+    default_reasoning_effort: Option<String>,
     #[serde(default)]
-    priority: i64,
-    default_reasoning_level: Option<String>,
-    #[serde(default)]
-    supported_reasoning_levels: Vec<CodexEffort>,
+    supported_reasoning_efforts: Vec<CodexEffort>,
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CodexEffort {
-    effort: String,
+    reasoning_effort: String,
 }
 
-/// The folder Codex keeps the account of `environment` in: `CODEX_HOME`, or `~/.codex`.
-pub fn codex_home(environment: &Environment) -> PathBuf {
-    if let Some(home) = environment.variables.get("CODEX_HOME").filter(|home| !home.is_empty()) {
-        return PathBuf::from(home);
-    }
-    Path::new(environment.variables.get("HOME").map(String::as_str).unwrap_or_default()).join(".codex")
+/// What Codex lists in its own picker under the account of `environment`. `None` when it doesn't
+/// answer.
+pub async fn codex_models(environment: &Environment) -> Option<Vec<ModelInfo>> {
+    let requests = [("model/list", json!({})), ("config/read", json!({}))];
+    let mut answers = ask::codex(environment, &requests).await.ok()?;
+    let listed = answers.remove("model/list")?.ok()?;
+    let config = answers.remove("config/read").and_then(Result::ok).unwrap_or_default();
+    let models = serde_json::from_value(listed["data"].clone()).ok()?;
+    Some(codex_list(models, config["config"]["model_reasoning_effort"].as_str()))
 }
 
-/// The models Codex lists in its own picker, from `models_cache.json` in its folder.
-pub fn codex_models(codex_home: &Path) -> Vec<ModelInfo> {
-    let text = std::fs::read_to_string(codex_home.join("models_cache.json")).unwrap_or_default();
-    let Ok(mut cache) = serde_json::from_str::<CodexCache>(&text) else { return Vec::new() };
-    cache.models.retain(|model| model.visibility == "list");
-    cache.models.sort_by_key(|model| model.priority);
-    let models = cache.models.into_iter().map(|model| ModelInfo {
-        id: model.slug,
-        name: model.display_name,
-        agent: Agent::Codex,
-        account: String::new(),
-        efforts: model.supported_reasoning_levels.into_iter().map(|level| level.effort).collect(),
-        default_effort: model.default_reasoning_level,
+/// The models to offer, each defaulting to the effort the account's config sets where it takes
+/// that one, and to its own otherwise.
+fn codex_list(models: Vec<CodexModel>, configured: Option<&str>) -> Vec<ModelInfo> {
+    let shown = models.into_iter().filter(|model| !model.hidden);
+    let models = shown.map(|model| {
+        let efforts: Vec<String> =
+            model.supported_reasoning_efforts.into_iter().map(|level| level.reasoning_effort).collect();
+        let configured = configured.filter(|effort| efforts.iter().any(|offered| offered == effort));
+        ModelInfo {
+            id: model.model,
+            name: model.display_name,
+            agent: Agent::Codex,
+            account: String::new(),
+            default_effort: configured.map(String::from).or(model.default_reasoning_effort),
+            efforts,
+        }
     });
     models.collect()
 }
@@ -175,5 +172,40 @@ mod tests {
         assert_eq!(models[1].efforts, ["low", "xhigh", "max", "ultracode"]);
         assert!(models[2].efforts.is_empty());
         assert!(models.iter().all(|model| model.default_effort.is_none() && model.agent == Agent::Claude));
+    }
+
+    #[test]
+    fn claude_code_s_default_effort_is_the_one_it_applies_where_the_model_takes_it() {
+        let efforts: Vec<String> = ["low", "medium", "xhigh", "ultracode"].map(String::from).into();
+        let applied = |value: Value| applied_effort(&value, &efforts);
+        assert_eq!(applied(json!({"effort": "medium", "ultracode": false})).as_deref(), Some("medium"));
+        assert_eq!(applied(json!({"effort": "xhigh", "ultracode": true})).as_deref(), Some("ultracode"));
+        assert_eq!(applied(json!({"effort": "max", "ultracode": false})), None, "not one it offers");
+        assert_eq!(
+            applied_effort(&json!({"effort": "xhigh", "ultracode": true}), &efforts[..3]).as_deref(),
+            Some("xhigh")
+        );
+    }
+
+    #[test]
+    fn codex_defaults_to_the_effort_its_config_sets_where_the_model_takes_it() {
+        let listed = json!([
+            {"id": "gpt-6.1-sol", "model": "gpt-6.1-sol", "displayName": "GPT-6.1-Sol", "hidden": false,
+             "defaultReasoningEffort": "low",
+             "supportedReasoningEfforts": [{"reasoningEffort": "low"}, {"reasoningEffort": "xhigh"}]},
+            {"id": "gpt-6-luna", "model": "gpt-6-luna", "displayName": "GPT-6-Luna", "hidden": false,
+             "defaultReasoningEffort": "medium",
+             "supportedReasoningEfforts": [{"reasoningEffort": "medium"}, {"reasoningEffort": "high"}]},
+            {"id": "codex-auto-review", "model": "codex-auto-review", "displayName": "Codex Auto Review", "hidden": true},
+        ]);
+        let models = |configured| codex_list(serde_json::from_value(listed.clone()).unwrap(), configured);
+        let defaults = |configured| {
+            let models = models(configured).into_iter();
+            models.map(|model| format!("{} {}", model.id, model.default_effort.unwrap_or_default())).collect::<Vec<_>>()
+        };
+        assert_eq!(defaults(None), ["gpt-6.1-sol low", "gpt-6-luna medium"]);
+        assert_eq!(defaults(Some("xhigh")), ["gpt-6.1-sol xhigh", "gpt-6-luna medium"], "where the model takes it");
+        let first = &models(None)[0];
+        assert_eq!((first.name.as_str(), first.efforts.join(" ")), ("GPT-6.1-Sol", "low xhigh".to_string()));
     }
 }

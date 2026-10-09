@@ -39,12 +39,14 @@ to implement it, "ask an agent" starts an agent, whose work comes as a thread of
 the limit" is stopped by the usage limit.
 
 Asked for its login and the limits of its plan (`initialize` and `get_usage` for Claude Code,
-`account/read` and `account/rateLimits/read` for Codex) it answers with made-up ones.
+`account/read` and `account/rateLimits/read` for Codex) it answers with made-up ones. Asked for its
+models (`list_models` and `get_settings` for Claude Code, `model/list` and `config/read` for Codex)
+it lists made-up ones, Fable and gpt-6.1-sol with a default effort of their own.
 
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
 answers with FAKE_AGENT_TITLE, and asked the same way for a commit message, a pull request's text
 or a branch's name it writes one. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
-per call, and what it was told while it ran, one JSON object each: the settings Claude Code was
+per call (for Codex, once it is asked for a thread), and what it was told while it ran, one JSON object each: the settings Claude Code was
 told to change, and the threads and turns Codex was asked for.
 """
 import json
@@ -131,6 +133,10 @@ def answer_control(message):
         answer = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {"limits": limits}}
     elif subtype == "list_models":
         answer = {"models": claude_models()}
+    elif subtype == "get_settings":
+        model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "claude-opus-5-5"
+        effort = "high" if "fable" in model else "medium"
+        answer = {"effective": {}, "sources": [], "applied": {"model": model, "effort": effort, "ultracode": False}}
     else:
         return
     emit({"type": "control_response", "response": {"subtype": "success", "request_id": message["request_id"], "response": answer}})
@@ -188,7 +194,8 @@ def read_prompt():
 
 APP_SERVER = sys.argv[1:2] == ["app-server"]
 prompt = "" if APP_SERVER else read_prompt()
-record(sys.argv[1:])
+if not APP_SERVER:
+    record(sys.argv[1:])
 
 delay = float(os.environ.get("FAKE_AGENT_DELAY", "0.02"))
 
@@ -697,7 +704,13 @@ class Codex:
                 emit({"id": message["id"], "result": {"account": account, "requiresOpenaiAuth": True}})
             if method == "account/rateLimits/read":
                 emit({"id": message["id"], "result": self.limits()})
+            if method == "model/list":
+                emit({"id": message["id"], "result": {"data": self.models(), "nextCursor": None}})
+            if method == "config/read":
+                emit({"id": message["id"], "result": {"config": {"model_reasoning_effort": None}, "origins": {}}})
             if method in ("thread/start", "thread/resume"):
+                if not self.thread:
+                    record(sys.argv[1:])
                 record({method: params})
                 self.thread = params
                 thread = {"id": params.get("threadId", self.THREAD)}
@@ -722,6 +735,15 @@ class Codex:
 
         codex = {"limitId": "codex", "primary": window(12, 300, 1.2), "secondary": window(48, 10080, 76)}
         return {"rateLimits": codex, "rateLimitsByLimitId": {"codex": codex}, "rateLimitResetCredits": {"availableCount": 1}}
+
+    def models(self):
+        efforts = [{"reasoningEffort": effort} for effort in ["low", "medium", "high", "xhigh"]]
+
+        def model(slug, name, default):
+            return {"id": slug, "model": slug, "displayName": name, "hidden": False,
+                    "defaultReasoningEffort": default, "supportedReasoningEfforts": efforts}
+
+        return [model("gpt-6.1-sol", "GPT-6.1-Sol", "low"), model("gpt-6-luna", "GPT-6-Luna", "medium")]
 
     def turn_id(self):
         return f"turn-{self.process}-{max(self.turns, 1)}"

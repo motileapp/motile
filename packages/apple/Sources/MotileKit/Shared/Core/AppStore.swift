@@ -923,6 +923,14 @@ final class AppStore {
             guard server(of: draft)?.id != from else { return }
             applyLastSettings(to: &draft)
         }
+        if selectedDraft.flatMap(server(of:))?.id != from { refreshComposerModels() }
+    }
+
+    /// Has the open draft's server ask its agents what models they run, so that its menus offer
+    /// what the thread would start with.
+    private func refreshComposerModels() {
+        guard let server = composerServer, server.state == .connected, server.refreshesModels else { return }
+        core.send("request", ["server_id": server.id, "request": ["type": "refresh_models"]])
     }
 
     /// Opens the thread that was open when the client was last closed, once it is known.
@@ -1644,6 +1652,7 @@ final class AppStore {
             defaults.set(draftKey, forKey: "selection")
             ensureDraftProject()
             readGit(fetch: true)
+            refreshComposerModels()
             return
         }
         open(thread)

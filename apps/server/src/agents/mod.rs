@@ -3,6 +3,7 @@
 //! `codex.rs` turn those into the same `AgentEvent`s so the rest of the server doesn't care which
 //! agent is running.
 
+pub mod ask;
 pub mod claude;
 pub mod codex;
 pub mod environment;

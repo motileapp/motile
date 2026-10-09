@@ -52,8 +52,8 @@ pub const PULL_REQUEST_FRESH: Duration = Duration::from_secs(60);
 pub const PULL_REQUEST_WATCH: Duration = Duration::from_secs(30);
 /// How often the threads that wait for their usage limit are looked at.
 pub const LIMITS_CHECK: Duration = Duration::from_secs(30);
-/// How often the agents are asked again what models their accounts run.
-pub const MODELS_CHECK: Duration = Duration::from_secs(60 * 60);
+/// How long what the agents last said of their models is taken as current when a client asks.
+const MODELS_FRESH: Duration = Duration::from_secs(60);
 const DONE_ON_MERGE: &str = "done_on_merge";
 const REMOVE_MERGED_WORKTREES: &str = "remove_merged_worktrees";
 const TEXT_MODEL: &str = "text_model";
@@ -115,6 +115,8 @@ pub struct Hub {
     agent_accounts: std::sync::Mutex<Vec<AgentAccount>>,
     /// The models the accounts run, as their agents last listed them.
     models: std::sync::Mutex<Vec<ModelInfo>>,
+    /// When the agents were last asked for their models, held while they are asked.
+    models_asked: Mutex<Option<Instant>>,
     /// The model the user picked to write titles, commit messages and pull requests.
     text_model: std::sync::Mutex<Option<String>>,
     /// How the user wants branches named.
@@ -281,6 +283,7 @@ impl Hub {
             models: std::sync::Mutex::new(
                 store.setting(MODELS).and_then(|models| serde_json::from_str(&models).ok()).unwrap_or_default(),
             ),
+            models_asked: Mutex::default(),
             text_model: std::sync::Mutex::new(store.setting(TEXT_MODEL)),
             branch_instructions: std::sync::Mutex::new(store.setting(BRANCH_INSTRUCTIONS)),
             pull_request_settings: std::sync::Mutex::new(PullRequestSettings {
@@ -388,24 +391,59 @@ impl Hub {
         self.models.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
     }
 
-    /// Asks each account's agent what models it runs, and tells the clients when that changed.
-    /// What an account last listed stays while its agent doesn't answer.
+    /// Asks each account's agent what models it runs, after any asking under way, and tells the
+    /// clients when that changed.
     pub async fn refresh_models(&self) {
+        let mut asked = self.models_asked.lock().await;
+        self.ask_models().await;
+        *asked = Some(Instant::now());
+    }
+
+    /// Asks the agents what models they run in the background, unless they are being asked or
+    /// were within the last minute, so that a client that connects or starts a thread soon
+    /// offers what they would.
+    pub fn refresh_models_soon(self: &Arc<Self>) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            let Ok(mut asked) = hub.models_asked.try_lock() else { return };
+            if asked.is_some_and(|at| at.elapsed() < MODELS_FRESH) {
+                return;
+            }
+            hub.ask_models().await;
+            *asked = Some(Instant::now());
+        });
+    }
+
+    /// Asks each account's agent what models it runs, the accounts at once. What an account last
+    /// listed stays while its agent doesn't answer, and a default effort it can't say now stays
+    /// as it was.
+    async fn ask_models(&self) {
         let known = self.models();
+        let asks: Vec<_> = self
+            .agent_accounts()
+            .into_iter()
+            .map(|account| {
+                let environment = self.account_environment(&account);
+                tokio::spawn(async move {
+                    let models = match (account.agent, environment.executable(account.agent)) {
+                        (_, None) => Some(Vec::new()),
+                        (Agent::Claude, Some(_)) => models::claude_models(&environment).await,
+                        (Agent::Codex, Some(_)) => models::codex_models(&environment).await,
+                    };
+                    (account, models)
+                })
+            })
+            .collect();
         let mut listed = Vec::new();
-        for account in self.agent_accounts() {
-            let environment = self.account_environment(&account);
-            let models = match (account.agent, environment.executable(account.agent)) {
-                (_, None) => Some(Vec::new()),
-                (Agent::Claude, Some(_)) => models::claude_models(&environment).await,
-                (Agent::Codex, Some(_)) => Some(models::codex_models(&models::codex_home(&environment))),
-            };
+        for ask in asks {
+            let Ok((account, models)) = ask.await else { continue };
             let Some(models) = models else {
                 tracing::warn!("{:?} didn't list the models of its {} account", account.agent, account.name);
                 listed.extend(known.iter().filter(|model| model.account == account.id).cloned());
                 continue;
             };
-            listed.extend(models.into_iter().map(|model| ModelInfo { account: account.id.clone(), ..model }));
+            let models = models.into_iter().map(|model| ModelInfo { account: account.id.clone(), ..model });
+            listed.extend(models.map(|model| with_known_default(model, &known)));
         }
         if listed == known {
             return;
@@ -420,18 +458,6 @@ impl Hub {
         }
         *self.models.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = listed;
         self.announce_server();
-    }
-
-    /// Asks the agents for their models now and again every `every`, so that a model they gain
-    /// shows up without a restart.
-    pub fn keep_models_current(self: &Arc<Self>, every: Duration) {
-        let hub = self.clone();
-        tokio::spawn(async move {
-            loop {
-                hub.refresh_models().await;
-                tokio::time::sleep(every).await;
-            }
-        });
     }
 
     /// Adds an account of an agent or changes one. Threads whose sessions it no longer has start
@@ -3259,6 +3285,17 @@ impl Live {
         };
         self.append(store, ItemKind::Error { message })
     }
+}
+
+/// The model with the default effort it was known to have, where its agent couldn't say it now.
+fn with_known_default(model: ModelInfo, known: &[ModelInfo]) -> ModelInfo {
+    if model.default_effort.is_some() {
+        return model;
+    }
+    let same = known.iter().find(|before| before.account == model.account && before.id == model.id);
+    let default_effort =
+        same.and_then(|before| before.default_effort.clone()).filter(|effort| model.efforts.contains(effort));
+    ModelInfo { default_effort, ..model }
 }
 
 /// Model and effort names end up on the agent's command line and in its config, so they are

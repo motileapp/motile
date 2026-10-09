@@ -61,7 +61,8 @@ struct ModelInfo: Equatable, Identifiable {
     /// The account whose agent lists it. Empty from a server that lists models for an agent as a whole.
     let account: String
     let efforts: [String]
-    /// Missing when the agent applies its own default, as Claude Code does.
+    /// The effort the agent runs it at when the thread doesn't pick one. Missing when the server
+    /// couldn't learn it.
     let defaultEffort: String?
 
     init(json: JSON, shortNames: JSON?) {
@@ -74,8 +75,8 @@ struct ModelInfo: Equatable, Identifiable {
         defaultEffort = json.optionalString("default_effort")
     }
 
-    /// What the effort menu offers: the agent's own default, as "", ahead of the efforts when the
-    /// agent has one.
+    /// What the effort menu offers: the efforts, with the agent's own default as "" ahead of them
+    /// only when the server couldn't say which one that is.
     var effortChoices: [String] {
         guard !efforts.isEmpty, defaultEffort == nil else { return efforts }
         return [""] + efforts
@@ -256,6 +257,9 @@ struct Server: Equatable, Identifiable {
 
     /// Whether the server keeps where the user moves its threads in the sidebar.
     var movesThreads: Bool { protocolVersion >= 21 }
+
+    /// Whether the server asks its agents for their models when asked to.
+    var refreshesModels: Bool { protocolVersion >= 23 }
 
     func accounts(of agent: Agent) -> [AgentAccount] {
         agentAccounts.filter { $0.agent == agent }
