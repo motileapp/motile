@@ -6,18 +6,16 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use motile_protocol::wire::{Agent, AgentInfo, ModelInfo};
+use motile_protocol::wire::{Agent, AgentInfo};
 use tokio::process::Command;
 
 use super::executable_name;
-use super::models::{claude_models, codex_models};
 
 #[derive(Clone)]
 pub struct Environment {
     pub variables: HashMap<String, String>,
     executables: HashMap<Agent, PathBuf>,
     versions: HashMap<Agent, String>,
-    models: Vec<ModelInfo>,
     /// A stand-in for GitHub's `gh` from `MOTILE_GH_PATH`, for the dev apps.
     gh: Option<PathBuf>,
 }
@@ -33,16 +31,14 @@ impl Environment {
             executables.insert(agent, path);
             versions.insert(agent, version);
         }
-        let models = installed_models(&variables, &executables);
         let gh = std::env::var_os("MOTILE_GH_PATH").map(PathBuf::from);
-        Self { variables, executables, versions, models, gh }
+        Self { variables, executables, versions, gh }
     }
 
     /// Skips the lookup, for tests that stand in for the agents.
     pub fn fixed(variables: HashMap<String, String>, executables: HashMap<Agent, PathBuf>) -> Self {
         let versions = executables.keys().map(|agent| (*agent, "test".to_string())).collect();
-        let models = installed_models(&variables, &executables);
-        Self { variables, executables, versions, models, gh: None }
+        Self { variables, executables, versions, gh: None }
     }
 
     /// The same, with these variables set besides.
@@ -80,22 +76,6 @@ impl Environment {
             .map(|agent| AgentInfo { agent, version: self.versions.get(&agent).cloned() })
             .collect()
     }
-
-    pub fn models(&self) -> &[ModelInfo] {
-        &self.models
-    }
-}
-
-fn installed_models(variables: &HashMap<String, String>, executables: &HashMap<Agent, PathBuf>) -> Vec<ModelInfo> {
-    let mut models = Vec::new();
-    if executables.contains_key(&Agent::Claude) {
-        models.extend(claude_models());
-    }
-    if executables.contains_key(&Agent::Codex) {
-        let home = variables.get("HOME").map(String::as_str).unwrap_or_default();
-        models.extend(codex_models(Path::new(home)));
-    }
-    models
 }
 
 fn override_variable(agent: Agent) -> &'static str {

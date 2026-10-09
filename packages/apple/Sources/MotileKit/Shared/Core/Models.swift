@@ -58,7 +58,10 @@ struct ModelInfo: Equatable, Identifiable {
     /// The name without its maker, for the model picker.
     let shortName: String
     let agent: Agent
+    /// The account whose agent lists it. Empty from a server that lists models for an agent as a whole.
+    let account: String
     let efforts: [String]
+    /// Missing when the agent applies its own default, as Claude Code does.
     let defaultEffort: String?
 
     init(json: JSON, shortNames: JSON?) {
@@ -66,8 +69,20 @@ struct ModelInfo: Equatable, Identifiable {
         name = json.string("name")
         shortName = shortNames?.optionalString(id) ?? name
         agent = Agent(rawValue: json.string("agent")) ?? .claude
+        account = json.string("account")
         efforts = json.strings("efforts")
         defaultEffort = json.optionalString("default_effort")
+    }
+
+    /// What the effort menu offers: the agent's own default, as "", ahead of the efforts when the
+    /// agent has one.
+    var effortChoices: [String] {
+        guard !efforts.isEmpty, defaultEffort == nil else { return efforts }
+        return [""] + efforts
+    }
+
+    func runs(under account: AgentAccount) -> Bool {
+        agent == account.agent && (self.account.isEmpty || self.account == account.id)
     }
 }
 
@@ -244,6 +259,12 @@ struct Server: Equatable, Identifiable {
 
     func accounts(of agent: Agent) -> [AgentAccount] {
         agentAccounts.filter { $0.agent == agent }
+    }
+
+    /// Each model once, however many accounts run it, for picking one by its id.
+    var distinctModels: [ModelInfo] {
+        var seen = Set<String>()
+        return models.filter { seen.insert($0.id).inserted }
     }
 
     /// The account with that id, or the agent's default one.

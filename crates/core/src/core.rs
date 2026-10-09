@@ -2209,6 +2209,7 @@ mod tests {
             id: "id".into(),
             name: name.into(),
             agent: motile_protocol::wire::Agent::Claude,
+            account: String::new(),
             efforts: Vec::new(),
             default_effort: None,
         };

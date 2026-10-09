@@ -87,7 +87,7 @@ struct ThreadSettingsSheet: View {
             if let model = store.composerModel, !model.efforts.isEmpty {
                 let effort = store.composerEffort ?? ""
                 NavigationLink {
-                    ChoiceList(title: "Reasoning", options: model.efforts, chosen: effort, label: ComposerView.effortLabel) { store.setEffort($0) }
+                    ChoiceList(title: "Reasoning", options: model.effortChoices, chosen: effort, label: ComposerView.effortLabel) { store.setEffort($0) }
                 } label: {
                     LabeledContent("Reasoning", value: ComposerView.effortLabel(effort))
                 }

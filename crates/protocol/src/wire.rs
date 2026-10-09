@@ -1387,14 +1387,18 @@ pub enum GitStage {
     Unknown,
 }
 
-/// A model an agent on the server can run, and the choices it offers.
+/// A model an agent's account on the server can run, and the choices it offers.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct ModelInfo {
     pub id: String,
     pub name: String,
     pub agent: Agent,
+    /// The account whose CLI lists it.
+    #[serde(default)]
+    pub account: String,
     /// Reasoning efforts it accepts, weakest first. Empty when it has no such setting.
     pub efforts: Vec<String>,
+    /// Missing when the agent applies its own default, as Claude Code does.
     pub default_effort: Option<String>,
 }
 

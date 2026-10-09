@@ -104,8 +104,15 @@ pub fn model_line(model: Option<&str>) -> String {
     control(json!({"subtype": "set_model", "model": model}))
 }
 
+/// Offered as an effort, though to Claude Code it is `xhigh` with a setting that has it plan a
+/// workflow of agents for every task.
+pub const ULTRACODE: &str = "ultracode";
+
 pub fn effort_line(effort: Option<&str>) -> String {
-    control(json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": effort}}))
+    let ultracode = effort == Some(ULTRACODE);
+    let level = if ultracode { Some("xhigh") } else { effort };
+    let settings = json!({"effortLevel": level, "ultracode": ultracode});
+    control(json!({"subtype": "apply_flag_settings", "settings": settings}))
 }
 
 pub fn access_line(plan: bool, access: Access) -> String {

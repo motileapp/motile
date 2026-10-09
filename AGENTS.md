@@ -101,7 +101,8 @@ shadcn's own colours, opacities and radii are gone from the theme.
   `no-project` in its data folder, out of reach of any git repository above it.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
-  (`claude.rs`, `codex.rs`). `models.rs` lists Claude's models by hand.
+  (`claude.rs`, `codex.rs`). `models.rs` asks Claude Code what each account's picker lists and
+  reads Codex's list from its folder; `hub.rs` keeps the answer and asks again every hour.
 - `store.rs`: SQLite. Every item has a position (`seq`) and the revision that last changed it
   (`rev`); a client asks for what changed after the revision it has. It also keeps what the
   agents spend, by model and by what it was spent on (a turn, or writing a title, a branch's

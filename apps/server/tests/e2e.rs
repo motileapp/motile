@@ -12,8 +12,9 @@ use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, CONTINUE_PROMPT, Change, CheckStatus, DiffScope,
     EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LineComment,
     MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail,
-    PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerUpdate, Side,
-    Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary, UsageBucket, Variable,
+    PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerInfo,
+    ServerUpdate, Side, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary, UsageBucket,
+    Variable,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -116,17 +117,19 @@ impl Harness {
     fn recorded_turns_in(&self, file: &str) -> Vec<String> {
         let recorded = std::fs::read_to_string(self.dir.path().join(file)).unwrap_or_default();
         let calls = recorded.lines().filter_map(|line| serde_json::from_str::<Vec<String>>(line).ok());
-        let is_title = |arguments: &Vec<String>| {
-            arguments.iter().any(|argument| argument == "--json-schema" || argument == "--output-last-message")
+        let is_turn = |arguments: &Vec<String>| {
+            !arguments
+                .iter()
+                .any(|argument| ["--json-schema", "--output-last-message", "--bare"].contains(&argument.as_str()))
         };
-        calls.filter(|arguments| !is_title(arguments)).map(|arguments| arguments.join("\n")).collect()
+        calls.filter(is_turn).map(|arguments| arguments.join("\n")).collect()
     }
 
-    /// The settings a running agent was told to change.
+    /// The settings a running agent was told to change, leaving out what it was asked to list.
     fn recorded_changes(&self) -> Vec<serde_json::Value> {
         let recorded = std::fs::read_to_string(self.dir.path().join("arguments.txt")).unwrap_or_default();
         let lines = recorded.lines().filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok());
-        lines.filter(|line| line.is_object()).collect()
+        lines.filter(|line| line.is_object() && line["subtype"] != "list_models").collect()
     }
 }
 
@@ -150,6 +153,7 @@ async fn serve(
         environment,
     )
     .unwrap();
+    hub.refresh_models().await;
     hub.keep_pull_requests_current(Duration::from_millis(200));
     hub.watch_pull_requests(Duration::from_millis(300));
     hub.keep_limits_continued(Duration::from_millis(200));
@@ -775,6 +779,8 @@ async fn settings_changed_while_the_agent_is_there_reach_its_process() {
     assert_eq!(update(&connection, &thread_id, model).await, Message::Ok);
     let effort = ThreadChange { effort: Some("high".into()), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, effort).await, Message::Ok);
+    let ultracode = ThreadChange { effort: Some("ultracode".into()), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, ultracode).await, Message::Ok);
     let access = ThreadChange { access: Some(AgentAccess::Full), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, access).await, Message::Ok);
     thread_where(&mut list, |thread| !thread.monitoring && !thread.running).await;
@@ -783,7 +789,8 @@ async fn settings_changed_while_the_agent_is_there_reach_its_process() {
         harness.recorded_changes(),
         vec![
             serde_json::json!({"subtype": "set_model", "model": "sonnet"}),
-            serde_json::json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": "high"}}),
+            serde_json::json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": "high", "ultracode": false}}),
+            serde_json::json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": "xhigh", "ultracode": true}}),
             serde_json::json!({"subtype": "set_permission_mode", "mode": "bypassPermissions"}),
         ]
     );
@@ -1324,8 +1331,10 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
     let opus = server.models.iter().find(|model| model.id == "claude-opus-5-5").expect("Claude's models are offered");
-    assert_eq!(opus.agent, Agent::Claude);
-    assert!(opus.efforts.contains(&"xhigh".to_string()));
+    assert_eq!((opus.agent, opus.account.as_str(), opus.name.as_str()), (Agent::Claude, "claude", "Claude Opus 5.5"));
+    assert!(opus.efforts.ends_with(&["xhigh".to_string(), "max".to_string(), "ultracode".to_string()]));
+    assert_eq!(opus.default_effort, None, "Claude Code applies its own default");
+    assert!(server.models.iter().all(|model| model.id != "default"), "the picker's default row isn't a model");
 
     let new_thread = NewThread {
         project_id: project.id,
@@ -1386,6 +1395,16 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
     let ids: Vec<&str> = server.agent_accounts.iter().map(|account| account.id.as_str()).collect();
     assert_eq!(ids, ["claude", "codex", "claude-personal"]);
     assert_eq!(server.agent_accounts[2].variables[0].value, "", "a sensitive value stays on the server");
+    // The new account's agent is asked what models it runs, and the clients are told once it answered.
+    let lists_for = |server: &ServerInfo, account: &str| {
+        server.models.iter().any(|model| model.account == account && model.id == "claude-opus-5-5")
+    };
+    let mut server = server;
+    while !lists_for(&server, "claude-personal") {
+        let Message::Server { server: told } = next(&mut list).await else { continue };
+        server = told;
+    }
+    assert!(lists_for(&server, "claude"));
 
     let new_thread = NewThread {
         project_id: project.id,
@@ -1458,6 +1477,8 @@ async fn projects_are_added_and_removed_and_show_their_branch() {
         else {
             panic!("expected the folder's contents")
         };
+        // macOS's python3, which runs the fake agent, caches under ~/Library.
+        let folders: Vec<_> = folders.into_iter().filter(|folder| folder != "Library").collect();
         assert_eq!(folders, vec!["no-project", "repository"]);
         assert_eq!(files, images);
     }
