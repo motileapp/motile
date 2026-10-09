@@ -595,6 +595,48 @@ fn migrate(connection: &Connection) -> anyhow::Result<()> {
     for (index, migration) in MIGRATIONS.iter().enumerate().skip(applied as usize) {
         connection.execute_batch(&format!("BEGIN; {migration} PRAGMA user_version = {}; COMMIT;", index + 1))?;
     }
+    renumber_agent_accounts(connection)
+}
+
+/// Accounts were once named after their names. Each gets a UUID, and its threads, usage and
+/// models go with it. The default accounts keep their agents' names.
+fn renumber_agent_accounts(connection: &Connection) -> anyhow::Result<()> {
+    let setting = |name: &str| -> rusqlite::Result<Option<String>> {
+        connection.query_row("SELECT value FROM settings WHERE name = ?1", [name], |row| row.get(0)).optional()
+    };
+    let Some(kept) = setting("agent_accounts")? else { return Ok(()) };
+    let mut accounts: Vec<serde_json::Value> = serde_json::from_str(&kept)?;
+    let mut renumbered = Vec::new();
+    for account in &mut accounts {
+        let Some(id) = account["id"].as_str().map(str::to_string) else { continue };
+        let agent: Agent = serde_json::from_value(account["agent"].clone())?;
+        if id == crate::agent_accounts::default_id(agent) || uuid::Uuid::parse_str(&id).is_ok() {
+            continue;
+        }
+        let new = uuid::Uuid::new_v4().to_string();
+        account["id"] = new.clone().into();
+        renumbered.push((id, new));
+    }
+    if renumbered.is_empty() {
+        return Ok(());
+    }
+    let mut models: Vec<serde_json::Value> =
+        setting("models")?.map(|models| serde_json::from_str(&models)).transpose()?.unwrap_or_default();
+    for model in &mut models {
+        let Some((_, new)) = renumbered.iter().find(|(old, _)| model["account"].as_str() == Some(old)) else {
+            continue;
+        };
+        model["account"] = new.clone().into();
+    }
+    let transaction = connection.unchecked_transaction()?;
+    for (old, new) in &renumbered {
+        transaction.execute("UPDATE threads SET agent_account = ?2 WHERE agent_account = ?1", params![old, new])?;
+        transaction.execute("UPDATE usage SET agent_account = ?2 WHERE agent_account = ?1", params![old, new])?;
+    }
+    let keep = "INSERT INTO settings (name, value) VALUES (?1, ?2) ON CONFLICT (name) DO UPDATE SET value = ?2";
+    transaction.execute(keep, params!["agent_accounts", serde_json::to_string(&accounts)?])?;
+    transaction.execute(keep, params!["models", serde_json::to_string(&models)?])?;
+    transaction.commit()?;
     Ok(())
 }
 
@@ -624,5 +666,41 @@ mod tests {
         assert_eq!(store.load_threads().unwrap()[0].thread.agent_account, "codex");
         let buckets = store.usage(0.0, 1.0, 3600, 0).unwrap();
         assert_eq!(buckets[0].account_name, "codex");
+    }
+
+    #[test]
+    fn accounts_named_after_their_names_get_uuids_with_their_threads_usage_and_models() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("motile.db");
+        {
+            let store = Store::open(&path).unwrap();
+            let accounts = r#"[{"id":"claude","agent":"claude","name":"Default","folder":""},
+                {"id":"claude-work","agent":"claude","name":"Work","folder":"~/.claude-work"}]"#;
+            let models =
+                r#"[{"id":"claude-opus-5-5","name":"Opus","agent":"claude","account":"claude-work","efforts":[]}]"#;
+            store.set_setting("agent_accounts", Some(accounts)).unwrap();
+            store.set_setting("models", Some(models)).unwrap();
+            store.connection().execute_batch(
+                "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, access, created_at, updated_at, agent_account)
+                 VALUES ('t', 'Title', 'user', 'p', '/tmp', 'claude', 'full', 0, 0, 'claude-work');
+                 INSERT INTO usage (at, thread_id, project_id, agent, model, input, cache_read, cache_write, output, agent_account)
+                 VALUES (0, 't', 'p', 'claude', 'claude-opus-5-5', 1, 0, 0, 1, 'claude-work');",
+            ).unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        let accounts: Vec<serde_json::Value> = serde_json::from_str(&store.setting("agent_accounts").unwrap()).unwrap();
+        assert_eq!(accounts[0]["id"], "claude");
+        let work = accounts[1]["id"].as_str().unwrap().to_string();
+        assert!(uuid::Uuid::parse_str(&work).is_ok(), "{work}");
+        assert_eq!(store.load_threads().unwrap()[0].thread.agent_account, work);
+        let models: Vec<serde_json::Value> = serde_json::from_str(&store.setting("models").unwrap()).unwrap();
+        assert_eq!(models[0]["account"], work);
+        let usage: String =
+            store.connection().query_row("SELECT agent_account FROM usage", [], |row| row.get(0)).unwrap();
+        assert_eq!(usage, work);
+        drop(store);
+        let again: Vec<serde_json::Value> =
+            serde_json::from_str(&Store::open(&path).unwrap().setting("agent_accounts").unwrap()).unwrap();
+        assert_eq!(again[1]["id"], work, "an account keeps its id from then on");
     }
 }
