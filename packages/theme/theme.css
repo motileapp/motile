@@ -81,7 +81,7 @@
   --radius-2xl: 24px;
 
   --shadow-*: initial;
-  --shadow-sm: 0 1px 2px var(--tw-shadow-color, var(--shadow-color));
+  --shadow-sm: 0 2px 6px var(--tw-shadow-color, var(--shadow-color));
   --shadow-md: 0 4px 12px var(--tw-shadow-color, var(--shadow-color));
   --shadow-lg: 0 8px 24px var(--tw-shadow-color, var(--shadow-color));
   --shadow-xl: 0 16px 40px var(--tw-shadow-color, var(--shadow-color));
