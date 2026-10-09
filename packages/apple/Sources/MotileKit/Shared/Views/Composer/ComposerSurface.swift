@@ -2,35 +2,54 @@ import SwiftUI
 
 extension View {
     /// The surface of the composer and its strips. On the Mac it is the composer's colour with a
-    /// hairline around it. On iOS it is Liquid Glass under a tint where the system has it, which
-    /// draws its own edge, and the system's material with a hairline before that.
-    func composerSurface<S: Shape>(in shape: S) -> some View {
-        composerFill(in: shape).environment(\.surface, .background)
+    /// hairline around it, and `shadow` is cast by the fill alone: on the whole box, the text
+    /// view inside splits it into layers that shade each other. On iOS it is Liquid Glass under
+    /// a tint where the system has it, which draws its own edge, and the system's material with
+    /// a hairline before that.
+    func composerSurface<S: Shape>(in shape: S, shadow: ShadowSize? = nil) -> some View {
+        composerFill(in: shape, shadow: shadow)
+            .composerSilhouette(shape)
+            .environment(\.surface, .background)
     }
 
-    /// The small shadow the composer's box casts on its strips.
-    func composerBoxShadow() -> some View {
+    /// The wide shadow the composer and its strips cast together, from one silhouette of their
+    /// surfaces behind them all.
+    func composerOutlineShadow() -> some View {
         #if os(macOS)
-        shadow(.sm)
+        backgroundPreferenceValue(ComposerSilhouette.self) { parts in
+            GeometryReader { proxy in
+                ZStack {
+                    ForEach(parts.indices, id: \.self) { index in
+                        parts[index].path(proxy[parts[index].bounds]).fill(Color.themeComposer)
+                    }
+                }
+                .shadow(.lg)
+            }
+        }
         #else
         self
         #endif
     }
 
-    /// The wide shadow around the composer and its strips together.
-    func composerOutlineShadow() -> some View {
+    private func composerSilhouette<S: Shape>(_ shape: S) -> some View {
         #if os(macOS)
-        shadow(.lg)
+        anchorPreference(key: ComposerSilhouette.self, value: .bounds) { [ComposerSilhouette.Part(bounds: $0, path: shape.path(in:))] }
         #else
         self
         #endif
     }
 
     @ViewBuilder
-    private func composerFill<S: Shape>(in shape: S) -> some View {
+    private func composerFill<S: Shape>(in shape: S, shadow: ShadowSize?) -> some View {
         #if os(macOS)
-        background(Color.themeComposer, in: shape)
-            .overlay { shape.stroke(Color.themeBorderInput, lineWidth: 1) }
+        background {
+            if let shadow {
+                shape.fill(Color.themeComposer).shadow(shadow)
+            } else {
+                shape.fill(Color.themeComposer)
+            }
+        }
+        .overlay { shape.stroke(Color.themeBorderInput, lineWidth: 1) }
         #else
         if #available(iOS 26.0, *) {
             background(Color.themeComposer.at(.inputGlassTint), in: shape)
@@ -43,6 +62,22 @@ extension View {
         #endif
     }
 }
+
+#if os(macOS)
+/// The surfaces of the composer and its strips, where they are and their outlines.
+struct ComposerSilhouette: PreferenceKey {
+    struct Part {
+        let bounds: Anchor<CGRect>
+        let path: (CGRect) -> Path
+    }
+
+    static let defaultValue: [Part] = []
+
+    static func reduce(value: inout [Part], nextValue: () -> [Part]) {
+        value += nextValue()
+    }
+}
+#endif
 
 /// Draws the glass surfaces inside it as one piece of glass.
 struct GlassGroup<Content: View>: View {
