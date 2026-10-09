@@ -85,19 +85,18 @@ struct ThreadSettingsSheet: View {
     private var options: some View {
         Section {
             if let model = store.composerModel, !model.efforts.isEmpty {
-                Picker("Reasoning", selection: Binding(get: { store.composerEffort ?? "" }, set: { store.setEffort($0) })) {
-                    ForEach(model.efforts, id: \.self) { effort in
-                        Text(ComposerView.effortLabel(effort)).tag(effort)
-                    }
-                }
-                .pickerStyle(.navigationLink)
-            }
-            Picker("Access", selection: Binding(get: { store.composerAccess }, set: { store.setAccess($0) })) {
-                ForEach(Access.allCases) { access in
-                    Text(access.label).tag(access)
+                let effort = store.composerEffort ?? ""
+                NavigationLink {
+                    ChoiceList(title: "Reasoning", options: model.efforts, chosen: effort, label: ComposerView.effortLabel) { store.setEffort($0) }
+                } label: {
+                    LabeledContent("Reasoning", value: ComposerView.effortLabel(effort))
                 }
             }
-            .pickerStyle(.navigationLink)
+            NavigationLink {
+                ChoiceList(title: "Access", options: Access.allCases, chosen: store.composerAccess, label: \.label) { store.setAccess($0) }
+            } label: {
+                LabeledContent("Access", value: store.composerAccess.label)
+            }
             Toggle("Plan mode", isOn: Binding(get: { store.composerPlan }, set: { store.setPlan($0) }))
         } header: {
             Text("Options")
@@ -144,6 +143,46 @@ struct ThreadSettingsSheet: View {
             }
         }
         .listRowBackground(surface.next.color)
+    }
+}
+
+/// A setting's options on a page of their own, drawn like the sheet's list. Picking one goes back.
+private struct ChoiceList<Option: Hashable>: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.surface) private var surface
+    let title: String
+    let options: [Option]
+    let chosen: Option
+    let label: (Option) -> String
+    let choose: (Option) -> Void
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(options, id: \.self) { option in
+                    Button {
+                        choose(option)
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text(label(option))
+                                .foregroundStyle(Color.themeText)
+                            Spacer()
+                            if option == chosen {
+                                Image(.check, size: 13)
+                                    .foregroundStyle(Color.themeText)
+                            }
+                        }
+                    }
+                }
+            }
+            .listRowBackground(surface.next.color)
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color.themeSheet.ignoresSafeArea())
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 #endif

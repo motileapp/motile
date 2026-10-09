@@ -323,8 +323,8 @@ struct BranchPicker: View {
         #else
         // A screen of the thread's settings, where the keyboard only comes when the field is tapped.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.themeBackgroundSecondary)
-        .environment(\.surface, .secondary)
+        .background(Color.themeSheet)
+        .environment(\.surface, .sheet)
         .navigationTitle(base == nil ? "Branch" : "Start From")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: prompt)
