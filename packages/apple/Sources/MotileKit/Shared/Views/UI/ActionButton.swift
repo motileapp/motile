@@ -165,19 +165,11 @@ struct ControlLabel: View {
                 mark(icon)
             }
             if let title {
-                Self.text(title)
+                Text(dotted: title)
                     .font(size.font)
                     .lineLimit(1)
                     .opacity(pending && !spins ? 0 : 1)
             }
-        }
-    }
-
-    /// The title with the dots between its parts muted.
-    private static func text(_ title: String) -> Text {
-        let parts = title.components(separatedBy: " · ")
-        return parts.dropFirst().reduce(Text(verbatim: parts[0])) { line, part in
-            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongerForeground))\(Text(verbatim: part))")
         }
     }
 
@@ -430,5 +422,15 @@ struct ActionMenu<Content: View>: View {
         .allowsHitTesting(!pending)
         .help(help ?? "")
         .accessibilityLabel(title ?? help ?? "")
+    }
+}
+
+extension Text {
+    /// The text with the dots between its parts muted, as "Opus 5.5 · Work".
+    init(dotted text: String) {
+        let parts = text.components(separatedBy: " · ")
+        self = parts.dropFirst().reduce(Text(verbatim: parts[0])) { line, part in
+            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongerForeground))\(Text(verbatim: part))")
+        }
     }
 }

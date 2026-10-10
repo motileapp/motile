@@ -9,7 +9,7 @@ import {
   ShieldIcon,
   SquareTerminalIcon,
 } from "lucide-react"
-import { useRef, useState, type ReactNode } from "react"
+import { Fragment, useRef, useState, type ReactNode } from "react"
 import { AgentIcon, MenuChevron, ProjectIcon } from "./icons"
 import type { Thread } from "./threads"
 import { cn } from "@/lib/utils"
@@ -104,7 +104,7 @@ export function Composer({
           className="flex cursor-text items-center px-1.5 py-2"
         >
           <Control icon={<AgentIcon agent={thread.agent} size={14} />}>
-            {thread.model}
+            <Dotted text={thread.model} />
           </Control>
           <span className="mx-1 h-3.5 w-px bg-border-input" />
           <Control>High</Control>
@@ -218,4 +218,14 @@ function Strip({
       {children}
     </div>
   )
+}
+
+/** The text with the dots between its parts muted, as "Opus 5.5 · Work". */
+export function Dotted({ text }: { text: string }) {
+  return text.split(" · ").map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 && <span className="text-muted-stronger-foreground"> · </span>}
+      {part}
+    </Fragment>
+  ))
 }

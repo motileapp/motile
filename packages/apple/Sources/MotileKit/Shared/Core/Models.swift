@@ -276,6 +276,19 @@ struct Server: Equatable, Identifiable {
         let accounts = accounts(of: agent)
         return accounts.first { $0.id == id } ?? accounts.first { $0.isDefault } ?? accounts.first
     }
+
+    /// The model with that id as the account lists it, or else the first one offered.
+    static func model(_ id: String?, account: String?, among offered: [ModelInfo]) -> ModelInfo? {
+        let named = offered.filter { $0.id == id }
+        let listedByAccount = { (model: ModelInfo) in model.account.isEmpty || model.account == account }
+        return named.first(where: listedByAccount) ?? named.first ?? offered.first(where: listedByAccount) ?? offered.first
+    }
+
+    /// The model's name, with the account's when its agent has more than one.
+    func label(of model: ModelInfo, account id: String?) -> String {
+        guard accounts(of: model.agent).count > 1, let account = account(id, of: model.agent) else { return model.shortName }
+        return "\(model.shortName) · \(account.name)"
+    }
 }
 
 /// A branch of a project's repository.

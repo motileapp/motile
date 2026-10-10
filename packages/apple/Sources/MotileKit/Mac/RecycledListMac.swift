@@ -20,6 +20,8 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     var movable: (Item) -> Bool = { _ in false }
     /// The row was dropped where `index` is in `items` without it.
     var moved: (Item, Int) -> Void = { _, _ in }
+    /// The pointer came to rest on a row, its rect in the view given, or left the rows.
+    var pointed: (Item?, CGRect, NSView) -> Void = { _, _, _ in }
     @ViewBuilder let row: (Item) -> Row
     @Environment(AppStore.self) private var store
 
@@ -47,6 +49,11 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             guard let table else { return }
             coordinator?.dropped(from, at: index, in: table)
         }
+        table.pointed = { [weak coordinator = context.coordinator, weak table] row in
+            guard let table else { return }
+            coordinator?.pointed(row, in: table)
+        }
+        table.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: table))
 
         let scroll = NSScrollView()
         scroll.documentView = table
@@ -74,6 +81,7 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
 
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
         (scroll.documentView as? RecycledTable)?.cancelLift()
+        (scroll.documentView as? RecycledTable)?.forgetPointer()
     }
 
     /// Takes the room it is offered, so that SwiftUI doesn't measure the rows through Auto Layout.
@@ -119,6 +127,15 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             list.clicked(item)
         }
 
+        func pointed(_ row: Int?, in table: NSTableView) {
+            guard let list else { return }
+            guard let row, let item = list.items[safe: row] else {
+                list.pointed(nil, .zero, table)
+                return
+            }
+            list.pointed(item, table.rect(ofRow: row), table)
+        }
+
         /// Reloads the table when its rows are others, or else only redraws the rows it has,
         /// resized where their heights changed.
         func show(in table: NSTableView) {
@@ -128,6 +145,7 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
                 self.ids = ids
                 self.heights = heights
                 (table as? RecycledTable)?.cancelLift()
+                (table as? RecycledTable)?.forgetPointer()
                 table.reloadData()
                 return
             }
@@ -207,6 +225,10 @@ private final class RecycledTable: NSTableView {
     var clicked: (Int) -> Void = { _ in }
     /// The row at `from` was let go where `index` is in the list without it.
     var dropped: (_ from: Int, _ index: Int) -> Void = { _, _ in }
+    /// The row the pointer is on, or none. A click puts its card away until the pointer comes to
+    /// another row.
+    var pointed: (Int?) -> Void = { _ in }
+    private var pointedRow: Int?
     /// What a lifted row lies on: its light, on the colour its list lies on.
     var light = (inset: NSEdgeInsetsZero, radius: CGFloat(0), color: NSColor.clear)
     private var pressed = false
@@ -218,8 +240,37 @@ private final class RecycledTable: NSTableView {
 
     override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool { true }
 
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let row = row(at: convert(event.locationInWindow, from: nil))
+        point(at: row >= 0 ? row : nil)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        point(at: nil)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        super.scrollWheel(with: event)
+        forgetPointer()
+    }
+
+    private func point(at row: Int?) {
+        guard row != pointedRow else { return }
+        pointedRow = row
+        pointed(row)
+    }
+
+    /// Puts the card away, for rows that are no longer where they were.
+    func forgetPointer() {
+        pointedRow = nil
+        pointed(nil)
+    }
+
     /// Follows the pointer itself while a row that moves is pressed.
     override func mouseDown(with event: NSEvent) {
+        pointed(nil)
         guard lift == nil else { return }
         let start = convert(event.locationInWindow, from: nil)
         let row = row(at: start)

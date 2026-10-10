@@ -35,7 +35,7 @@ export type Thread = {
   model: string
   server: Server
   status: Status
-  pullRequest?: number
+  pullRequest?: { number: number; title: string }
   worktree?: boolean
   items: Item[]
   approval?: { verb: string; target: string; allowed: Item[]; denied: Item[] }
@@ -45,8 +45,12 @@ export type Thread = {
 export type DoneThread = {
   title: string
   project: Project
+  branch: string
+  agent: Agent
+  model: string
+  server: Server
   ago: string
-  pullRequest?: number
+  pullRequest?: { number: number; title: string }
 }
 
 const api: Project = { name: "api", color: "var(--chart-1)" }
@@ -67,10 +71,10 @@ export const threads: Thread[] = [
     project: api,
     branch: "rate-limit",
     agent: "claude",
-    model: "Opus 5.5",
+    model: "Opus 5.5 · Work",
     server: studio,
     status: { kind: "idle", ago: "2m" },
-    pullRequest: 128,
+    pullRequest: { number: 128, title: "Rate limit the public API per key" },
     items: [
       {
         kind: "user",
@@ -240,7 +244,7 @@ src/middleware.ts
     project: mobile,
     branch: "settings-sqlite",
     agent: "claude",
-    model: "Opus 5.5",
+    model: "Opus 5.5 · Personal",
     server: studio,
     status: { kind: "approval" },
     items: [
@@ -327,7 +331,7 @@ src/middleware.ts
     project: api,
     branch: "main",
     agent: "claude",
-    model: "Sonnet 5.5",
+    model: "Sonnet 5.5 · Personal",
     server: studio,
     status: { kind: "monitoring", since: 754 },
     items: [
@@ -365,16 +369,52 @@ export const doneThreads: DoneThread[] = [
   {
     title: "Add dark mode to settings",
     project: web,
+    branch: "settings-dark-mode",
+    agent: "claude",
+    model: "Opus 5.5 · Work",
+    server: studio,
     ago: "1h",
-    pullRequest: 124,
+    pullRequest: { number: 124, title: "Add dark mode to the settings page" },
   },
-  { title: "Bump iroh to 0.95", project: api, ago: "3h", pullRequest: 125 },
-  { title: "Fix the sidebar flicker", project: mobile, ago: "5h" },
-  { title: "Write the release notes", project: web, ago: "1d" },
+  {
+    title: "Bump iroh to 0.95",
+    project: api,
+    branch: "bump-iroh",
+    agent: "codex",
+    model: "6.1-Sol",
+    server: buildBox,
+    ago: "3h",
+    pullRequest: { number: 125, title: "Bump iroh to 0.95" },
+  },
+  {
+    title: "Fix the sidebar flicker",
+    project: mobile,
+    branch: "sidebar-flicker",
+    agent: "claude",
+    model: "Sonnet 5.5 · Personal",
+    server: studio,
+    ago: "5h",
+  },
+  {
+    title: "Write the release notes",
+    project: web,
+    branch: "main",
+    agent: "codex",
+    model: "6.1-Sol",
+    server: studio,
+    ago: "1d",
+  },
   {
     title: "Cache the avatar images",
     project: mobile,
+    branch: "avatar-cache",
+    agent: "claude",
+    model: "Opus 5.5 · Personal",
+    server: buildBox,
     ago: "2d",
-    pullRequest: 119,
+    pullRequest: {
+      number: 119,
+      title: "Cache the avatar images on disk and evict the oldest past 50 MB",
+    },
   },
 ]
