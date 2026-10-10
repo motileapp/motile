@@ -5,6 +5,12 @@ import SwiftUI
 /// there is more than one, ⌘P on the threads and ⌘K on the commands.
 struct CommandPanel: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.leavePushedPanel) private var leavePushedPanel
+    /// The panel is pushed on another view's stack, like the settings', not a sheet: each of its
+    /// pages is a panel of its own, pushed by the one before.
+    private let inStack: Bool
+    @State private var next: PanelPage?
     @State private var pages: [PanelPage]
     @State private var query = ""
     @State private var highlighted = 0
@@ -23,7 +29,8 @@ struct CommandPanel: View {
     @FocusState private var typing: PanelPage?
     #endif
 
-    init(start: PanelPage) {
+    init(start: PanelPage, inStack: Bool = false) {
+        self.inStack = inStack
         _pages = State(initialValue: [start])
     }
 
@@ -37,8 +44,9 @@ struct CommandPanel: View {
                 browse()
             }
             .onChange(of: store.github) { followGitHub() }
-            .onChange(of: store.projectsAdded) { store.closePanel() }
+            .onChange(of: store.projectsAdded) { close() }
             .onAppear {
+                if inStack, leavePushedPanel == nil { store.readGitHubOfServers() }
                 guard browsed(page) != nil else { return }
                 arrive()
             }
@@ -77,7 +85,19 @@ struct CommandPanel: View {
     #else
     /// The panel as a sheet: its pages pushed on a stack, each with the system's search field,
     /// picked by a tap. The keyboard only comes by itself where the page is something to type.
-    private var panel: some View {
+    @ViewBuilder private var panel: some View {
+        if inStack {
+            screen(pages[0])
+                .navigationDestination(item: $next) { page in
+                    CommandPanel(start: page, inStack: true)
+                        .environment(\.leavePushedPanel, leavePushedPanel ?? dismiss)
+                }
+        } else {
+            sheet
+        }
+    }
+
+    private var sheet: some View {
         NavigationStack(path: pushed) {
             screen(pages[0])
                 .toolbar {
@@ -88,7 +108,7 @@ struct CommandPanel: View {
         .onKeyPress(.downArrow) { steer(1) }
         .onKeyPress(.upArrow) { steer(-1) }
         .onKeyPress(.escape) {
-            store.closePanel()
+            close()
             return .handled
         }
         .presentationSizing(.page)
@@ -674,8 +694,14 @@ struct CommandPanel: View {
     // MARK: Acting
 
     private func open(_ page: PanelPage) {
+        guard !inStack else { return next = page }
         pages.append(page)
         arrive()
+    }
+
+    private func close() {
+        guard inStack else { return store.closePanel() }
+        (leavePushedPanel ?? dismiss)()
     }
 
     private func back() {
@@ -746,7 +772,7 @@ struct CommandPanel: View {
 
     private func run(_ item: PanelItem) {
         guard item.selectable else { return }
-        if !item.keepsOpen { store.closePanel() }
+        if !item.keepsOpen { close() }
         item.action()
     }
 
@@ -757,7 +783,7 @@ struct CommandPanel: View {
         let command = event.modifierFlags.contains(.command)
         switch event.keyCode {
         case 53:
-            store.closePanel()
+            close()
         case 125:
             highlighted = min(highlighted + 1, max(0, items.filter(\.selectable).count - 1))
         case 126:
@@ -768,7 +794,7 @@ struct CommandPanel: View {
                 run(item)
                 return true
             }
-            store.closePanel()
+            close()
             alternate()
         case 51 where query.isEmpty && pages.count > 1:
             back()
@@ -1003,4 +1029,9 @@ private struct PanelRow: View {
             ProjectIcon(project: project, size: scaled(20))
         }
     }
+}
+
+extension EnvironmentValues {
+    /// Pops the first of the pushed panel's pages, and all that came after it.
+    @Entry var leavePushedPanel: DismissAction?
 }
