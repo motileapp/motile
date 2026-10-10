@@ -11,16 +11,38 @@ BIN="$ROOT/target/release"
 APP="$PWD/build/Motile.app/Contents/MacOS/Motile"
 OUT="$PWD/screenshots"
 WORK="$(mktemp -d)"
-AUTH_URL="http://127.0.0.1:3111"
-SERVER_PORT=47613
-rm -rf "$OUT"
-mkdir -p "$OUT"
+LOCK="$HOME/Library/Caches/motile-dev/demo.lock"
+CLAIMANT="$WORK"
+source scripts/claims.sh
 
 cleanup() {
     kill "${SERVER_PID:-}" "${AUTH_PID:-}" "${APP_PID:-}" 2>/dev/null || true
     [ -d "$WORK/pg" ] && pg_ctl -D "$WORK/pg" stop -m immediate >/dev/null 2>&1 || true
+    release_ports
+    [ "$(cat "$LOCK/pid" 2>/dev/null)" != $$ ] || rm -rf "$LOCK"
 }
 trap cleanup EXIT
+
+# One demo runs at a time on this Mac: every run shares the client's preferences and the project
+# folder, and another's load skews the stall numbers.
+until mkdir "$LOCK" 2>/dev/null; do
+    holder="$(cat "$LOCK/pid" 2>/dev/null || true)"
+    if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
+        rm -rf "$LOCK"
+        continue
+    fi
+    [ -n "${WAITED:-}" ] || echo "▸ Waiting for the demo another tree runs…"
+    WAITED=1
+    sleep 2
+done
+echo $$ > "$LOCK/pid"
+
+PG_PORT="$(claim_port TCP 5435)"
+AUTH_PORT="$(claim_port TCP 3111)"
+SERVER_PORT="$(claim_port UDP 47613)"
+AUTH_URL="http://127.0.0.1:$AUTH_PORT"
+rm -rf "$OUT"
+mkdir -p "$OUT"
 
 echo "▸ Starting PostgreSQL…"
 if ! command -v initdb >/dev/null; then
@@ -28,10 +50,10 @@ if ! command -v initdb >/dev/null; then
     export PATH="$(brew --prefix postgresql@17)/bin:$PATH"
 fi
 initdb -D "$WORK/pg" -U motile --auth=trust >/dev/null
-pg_ctl -D "$WORK/pg" -o "-p 5435 -k $WORK" -l "$OUT/postgres.log" -w start >/dev/null
+pg_ctl -D "$WORK/pg" -o "-p $PG_PORT -k $WORK" -l "$OUT/postgres.log" -w start >/dev/null
 
 echo "▸ Starting the auth server…"
-PUBLIC_URL="$AUTH_URL" PORT=3111 DATABASE_URL="postgres://motile@127.0.0.1:5435/postgres" \
+PUBLIC_URL="$AUTH_URL" PORT="$AUTH_PORT" DATABASE_URL="postgres://motile@127.0.0.1:$PG_PORT/postgres" \
     GOOGLE_CLIENT_ID=demo GOOGLE_CLIENT_SECRET=demo DEV_LOGIN=1 "$BIN/motile-auth" > "$OUT/auth.log" 2>&1 &
 AUTH_PID=$!
 for _ in $(seq 1 50); do

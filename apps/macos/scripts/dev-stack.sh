@@ -17,21 +17,22 @@ if ! command -v initdb >/dev/null && command -v brew >/dev/null; then
     export PATH="$(brew --prefix postgresql@17)/bin:$PATH"
 fi
 
-# The first port from `$2` on that nothing has, of TCP's or UDP's: another tree's dev app may
-# have the usual one.
-free_port() {
-    local port="$2"
-    while lsof -nP -i"$1:$port" >/dev/null 2>&1; do port=$((port + 1)); done
-    echo "$port"
-}
+CLAIMANT="$DEV"
+# shellcheck disable=SC1091
+source "$STACK_HOME/scripts/claims.sh"
 
-# The ports are picked once and kept, since the server is set up against the auth server's.
-if [ ! -f "$DEV/ports" ]; then
-    echo "PG_PORT=$(free_port TCP 5436) AUTH_PORT=$(free_port TCP 3112) SERVER_PORT=$(free_port UDP 47614)" > "$DEV/ports"
-fi
-grep -q LINEAR_PORT "$DEV/ports" || echo "LINEAR_PORT=$(free_port TCP 3212)" >> "$DEV/ports"
+# The ports are kept, since the server is set up against the auth server's, unless another tree
+# claimed them; then the stack restarts on new ones.
+# shellcheck disable=SC1091
+[ ! -f "$DEV/ports" ] || source "$DEV/ports"
+KEPT="PG_PORT=${PG_PORT:-} AUTH_PORT=${AUTH_PORT:-} SERVER_PORT=${SERVER_PORT:-} LINEAR_PORT=${LINEAR_PORT:-}"
+PORTS="PG_PORT=$(claim_port TCP "${PG_PORT:-5436}") AUTH_PORT=$(claim_port TCP "${AUTH_PORT:-3112}") SERVER_PORT=$(claim_port UDP "${SERVER_PORT:-47614}") LINEAR_PORT=$(claim_port TCP "${LINEAR_PORT:-3212}")"
+PORTS_MOVED=0
+if [ -n "${PG_PORT:-}" ] && [ "$PORTS" != "$KEPT" ]; then PORTS_MOVED=1; fi
+echo "$PORTS" > "$DEV/ports"
 # shellcheck disable=SC1091
 source "$DEV/ports"
+release_ports "$PG_PORT" "$AUTH_PORT" "$SERVER_PORT" "$LINEAR_PORT"
 AUTH_URL="http://127.0.0.1:$AUTH_PORT"
 
 # A pid file holds the process and the version of the program it runs.
@@ -70,6 +71,12 @@ stop_stack() {
 }
 
 start_stack() {
+    if [ "$PORTS_MOVED" = 1 ]; then
+        echo "▸ Another tree had this one's ports; restarting on $PORTS"
+        stop app
+        stop_stack
+    fi
+
     echo "▸ Building the servers…"
     (cd "$ROOT" && cargo build --release -p motile-server -p motile-auth)
 
