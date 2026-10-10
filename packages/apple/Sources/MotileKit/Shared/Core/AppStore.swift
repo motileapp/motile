@@ -2017,7 +2017,7 @@ final class AppStore {
             undo = nil
             return
         }
-        showUndo(UndoNotice(threadIDs: changed.map(\.id), text: changed.count == 1 ? "Marked done" : "Marked \(changed.count) threads done"))
+        showUndo(UndoNotice(threadIDs: changed.map(\.id), text: changed.count == 1 ? "Done" : "Marked \(changed.count) threads done"))
     }
 
     /// Has the agent of the open thread go on with what it was doing when it was interrupted.

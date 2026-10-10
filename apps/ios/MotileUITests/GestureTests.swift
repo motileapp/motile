@@ -71,7 +71,7 @@ final class GestureTests: XCTestCase {
         guard let thread = row("Use an F-String in Greet") else { return XCTFail("no row") }
         thread.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
             .press(forDuration: 0.05, thenDragTo: thread.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)))
-        let undo = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Marked done'")).firstMatch
+        let undo = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Undo'")).firstMatch
         XCTAssertTrue(shown(undo))
         // The swipe was the row's, so the sidebar is where it was.
         XCTAssertTrue(newThread.isHittable)
