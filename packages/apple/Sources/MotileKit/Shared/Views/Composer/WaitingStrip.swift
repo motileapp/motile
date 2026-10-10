@@ -45,7 +45,7 @@ struct WaitingStrip: View {
                     ProseText(text: approval.typesetTarget)
                         .padding(Self.targetInset)
                 }
-                .background(Color.themeBorderInput, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                .background(Color.themeBorderComposer, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                 .padding([.bottom, .horizontal], Self.padding)
             }
         }

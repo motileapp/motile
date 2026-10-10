@@ -2,7 +2,6 @@ import {
   ChartColumnIcon,
   ChevronRightIcon,
   CircleDashedIcon,
-  CircleQuestionMarkIcon,
   EyeIcon,
   GitBranchIcon,
   GitPullRequestIcon,
@@ -10,6 +9,7 @@ import {
   SearchIcon,
   ServerIcon,
   SettingsIcon,
+  ShieldIcon,
   type LucideIcon,
 } from "lucide-react"
 import { useState, type ReactNode } from "react"
@@ -270,7 +270,7 @@ function ThreadStatus({
     case "approval":
       return (
         <span className={cn(label, "text-warning")}>
-          <CircleQuestionMarkIcon className="size-[11px]" />
+          <ShieldIcon className="size-[11px]" />
           Approval
         </span>
       )

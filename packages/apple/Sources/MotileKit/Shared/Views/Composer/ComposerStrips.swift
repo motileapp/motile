@@ -208,7 +208,7 @@ struct ComposerDivider: View {
             .frame(width: 0, height: 14)
             .overlay {
                 Rectangle()
-                    .fill(Color.themeBorderInput)
+                    .fill(Color.themeBorderComposer)
                     .frame(width: 1)
             }
             .allowsHitTesting(false)

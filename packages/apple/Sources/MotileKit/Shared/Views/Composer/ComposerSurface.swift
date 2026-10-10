@@ -49,7 +49,7 @@ extension View {
                 shape.fill(Color.themeComposer)
             }
         }
-        .overlay { shape.stroke(Color.themeBorderInput, lineWidth: 1) }
+        .overlay { shape.stroke(Color.themeBorderComposer, lineWidth: 1) }
         #else
         if #available(iOS 26.0, *) {
             background(Color.themeComposer.at(.inputGlassTint), in: shape)
@@ -57,7 +57,7 @@ extension View {
         } else {
             background(Color.themeComposer.at(.inputGlassTint), in: shape)
                 .background(.regularMaterial, in: shape)
-                .overlay { shape.stroke(Color.themeBorderInput, lineWidth: 1) }
+                .overlay { shape.stroke(Color.themeBorderComposer, lineWidth: 1) }
         }
         #endif
     }

@@ -40,6 +40,7 @@
   --border-popover: #e8eaef;
   --input: #eaecf2;
   --composer: #ffffff;
+  --border-composer: #eceef4;
   --ring: #22242b;
   --overlay: #000000;
   --shadow: #000000;
@@ -123,6 +124,7 @@
   --border-popover: #222228;
   --input: #14151a;
   --composer: #111217;
+  --border-composer: #1a1b21;
   --ring: #d0d2d9;
   --overlay: #000000;
   --shadow: #000000;

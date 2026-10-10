@@ -266,6 +266,7 @@ mod tests {
             running: false,
             monitoring: false,
             needs_approval: false,
+            asking: None,
             agents: 0,
             turn_ended_at: None,
             pull_request: None,

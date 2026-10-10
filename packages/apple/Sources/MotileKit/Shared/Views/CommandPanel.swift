@@ -611,7 +611,7 @@ struct CommandPanel: View {
         (store.activeThreads + store.doneThreads).map { thread in
             let project = store.project(thread.projectID)
             let name = project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
-            let state = thread.isDone ? "done" : thread.needsApproval ? "needs approval" : thread.running ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt)
+            let state = thread.isDone ? "done" : thread.asking?.phrase ?? (thread.running ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt))
             return PanelItem(id: "thread-\(thread.id)", title: thread.title, detail: "\(name) · \(state)", icon: .project(project)) {
                 store.show(.thread(thread.id))
             }

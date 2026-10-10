@@ -1136,13 +1136,13 @@ final class WorkingView: FlippedView {
 
     func update(_ activity: Activity) {
         self.activity = activity
-        let waiting = !activity.approvals.isEmpty
+        let asking = activity.approvals.first?.ask
         isHidden = !activity.running
-        shine.sweeps = activity.running && !waiting
+        shine.sweeps = activity.running && asking == nil
         timer?.invalidate()
         timer = nil
-        guard activity.running, !waiting else {
-            if activity.running { show("Waiting for your approval") }
+        guard activity.running, asking == nil else {
+            if activity.running, let asking { show(asking.waiting) }
             return
         }
         refresh()

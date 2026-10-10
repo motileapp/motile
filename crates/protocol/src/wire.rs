@@ -57,6 +57,9 @@ pub struct Thread {
     pub monitoring: bool,
     /// A tool call waits for the user to allow or refuse it.
     pub needs_approval: bool,
+    /// What that tool call asks of the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asking: Option<Ask>,
     /// How many agents the thread's agent has started that still work.
     #[serde(default)]
     pub agents: u32,
@@ -89,6 +92,23 @@ pub enum Interruption {
     /// The server restarted while the agent worked.
     Restart,
 }
+
+/// What a tool call that waits for the user asks of them.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Ask {
+    /// To allow a tool call.
+    Approval,
+    /// To answer the agent's questions.
+    Question,
+    /// To have a plan carried out.
+    Plan,
+}
+
+/// The tool call the agents present a plan with; allowing it has the plan carried out.
+pub const PLAN_TOOL: &str = "ExitPlanMode";
+/// The tool call the agents ask the user questions with.
+pub const QUESTION_TOOL: &str = "AskUserQuestion";
 
 /// What the server tells an agent to have it go on with what it was doing.
 pub const CONTINUE_PROMPT: &str = "Continue where you left off.";
@@ -243,6 +263,16 @@ pub struct Approval {
     pub tool_name: String,
     /// The tool's input as JSON text.
     pub input: String,
+}
+
+impl Approval {
+    pub fn ask(&self) -> Ask {
+        match self.tool_name.as_str() {
+            PLAN_TOOL => Ask::Plan,
+            QUESTION_TOOL => Ask::Question,
+            _ => Ask::Approval,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

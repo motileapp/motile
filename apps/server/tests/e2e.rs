@@ -9,12 +9,12 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, CONTINUE_PROMPT, Change, CheckStatus, DiffScope,
-    EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LineComment,
-    MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail,
-    PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerInfo,
-    ServerUpdate, Side, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary, UsageBucket,
-    Variable,
+    Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
+    DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind,
+    LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction,
+    PullRequestDetail, PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict,
+    ServerInfo, ServerUpdate, Side, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary,
+    UsageBucket, Variable,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -692,6 +692,7 @@ async fn a_tool_call_that_needs_approval_waits_for_the_answer(agent: Agent) {
     assert!(edit.input.contains("greet.py"));
     let waiting = thread_where(&mut list, |thread| thread.needs_approval).await;
     assert!(waiting.running, "the turn stands still, it has not ended");
+    assert_eq!(waiting.asking, Some(Ask::Approval));
 
     assert_eq!(answer(edit.id.clone(), true).await.unwrap(), Message::Ok);
     while transcript.approvals.first().is_none_or(|approval| approval.id == edit.id) {
@@ -709,6 +710,7 @@ async fn a_tool_call_that_needs_approval_waits_for_the_answer(agent: Agent) {
     assert!(transcript.approvals.is_empty());
     let ended = thread_where(&mut list, |thread| !thread.running).await;
     assert!(!ended.needs_approval);
+    assert_eq!(ended.asking, None);
     assert_eq!(harness.recorded_turns().len(), 1, "the answers reach the process that asked");
 }
 
@@ -734,12 +736,15 @@ async fn a_question_the_agent_asks_is_answered_by_the_user(agent: Agent) {
     let harness = Harness::start(fixture(agent), "0").await;
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, agent).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
     let thread_id = send(&connection, None, new_thread, "Which color should the button be? Ask me.").await;
 
     let mut transcript = Transcript::default();
     let mut follow = open(&connection, &thread_id, 0).await;
     let asked = first_approval(&mut transcript, &mut follow).await;
     assert_eq!(asked.tool_name, "AskUserQuestion");
+    assert_eq!(thread_where(&mut list, |thread| thread.needs_approval).await.asking, Some(Ask::Question));
     let answers = HashMap::from([("Which color should the button be?".to_string(), "Blue".to_string())]);
     let answer = Request::Answer { thread_id: thread_id.clone(), approval_id: asked.id, allow: true, answers };
     assert_eq!(connection.request(&answer).await.unwrap(), Message::Ok);
@@ -762,7 +767,9 @@ async fn an_approved_plan_is_carried_out_with_the_threads_access() {
     let mut follow = open(&connection, &thread_id, 0).await;
     let plan = first_approval(&mut transcript, &mut follow).await;
     assert_eq!(plan.tool_name, "ExitPlanMode");
-    assert!(thread_where(&mut list, |thread| thread.needs_approval).await.plan);
+    let waiting = thread_where(&mut list, |thread| thread.needs_approval).await;
+    assert!(waiting.plan);
+    assert_eq!(waiting.asking, Some(Ask::Plan));
     let approve =
         Request::Answer { thread_id: thread_id.clone(), approval_id: plan.id, allow: true, answers: HashMap::new() };
     assert_eq!(connection.request(&approve).await.unwrap(), Message::Ok);
