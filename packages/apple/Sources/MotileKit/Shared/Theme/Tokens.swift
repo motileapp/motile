@@ -6,7 +6,7 @@ extension Theme {
     static let backgroundAccent = tone(0xe6e8ef, 0x191a1f)
     static let backgroundAccentStronger = tone(0xdbdee8, 0x212329)
     static let backgroundAccentStrongest = tone(0xd0d4e0, 0x2b2c32)
-    static let backgroundAccentLarger = tone(0xeceef4, 0x111217)
+    static let backgroundAccentLarger = tone(0xeaecf2, 0x14151a)
     static let backgroundAccentLargerStronger = tone(0xe1e4ed, 0x191a1f)
     static let backgroundSecondary = tone(0xeceef4, 0x111217)
     static let backgroundSecondaryAccent = tone(0xe1e4ed, 0x191a1f)
