@@ -61,7 +61,6 @@ struct SidebarScreen: View {
         .contentShape(Rectangle())
         .onTapGesture { Platform.endEditing() }
         .animation(.easeOut(duration: 0.15), value: store.undo)
-        .transaction(value: serversExpanded) { $0.animation = nil }
         .onChange(of: store.threadsShown) {
             ThreadPeek.shared.hide()
             guard underThread else { return }
@@ -215,7 +214,6 @@ struct SidebarScreen: View {
         VStack(alignment: .leading, spacing: 0) {
             if !store.servers.isEmpty {
                 servers
-                    .padding(.horizontal, sidebarRowInset + 8)
                 ThemeDivider()
             }
             HStack(spacing: 8) {
@@ -228,7 +226,7 @@ struct SidebarScreen: View {
                     .disabled(store.projects.isEmpty && store.noProjects.isEmpty)
             }
             .padding(.horizontal, sidebarRowInset + 8)
-            .padding(.top, 10)
+            .padding(.top, 16)
         }
         .padding(.bottom, 8)
         .background(alignment: .top) {
@@ -244,10 +242,12 @@ struct SidebarScreen: View {
         let servers = store.servers
         if servers.count == 1 {
             ServerLine(server: servers[0])
-                .frame(height: 44)
+                .padding(.horizontal, sidebarRowInset + 8)
+                .frame(height: ServerLines.lineHeight)
         } else if servers.count > 1 {
             Button {
-                serversExpanded.toggle()
+                // Out of the tap's update, which the button animates.
+                DispatchQueue.main.async { serversExpanded.toggle() }
             } label: {
                 HStack(spacing: 7) {
                     Image(.chevronRight, size: 10)
@@ -255,11 +255,10 @@ struct SidebarScreen: View {
                         .frame(width: 14)
                     AllServersLine(servers: servers)
                 }
-                .foregroundStyle(Color.themeMutedForeground)
-                .frame(height: 44)
-                .contentShape(Rectangle())
+                .padding(.horizontal, sidebarRowInset + 8)
+                .frame(height: ServerLines.lineHeight)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.highlight(radius: 0, faded: true))
             if serversExpanded {
                 ServerLines(servers: servers)
             }
@@ -311,10 +310,9 @@ struct SidebarScreen: View {
     }
 }
 
-/// A line for each server, under the line of them all, tall enough for a small button with room
-/// around it. A long list scrolls, and rests between two lines.
+/// A line for each server, under the line of them all. A long list scrolls, and rests between two lines.
 private struct ServerLines: View {
-    private static let lineHeight = ControlSize.small.height + 8
+    static let lineHeight: CGFloat = 44
     private static let mostShown = 5
 
     let servers: [Server]
@@ -322,7 +320,11 @@ private struct ServerLines: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                ForEach(servers) { ServerLine(server: $0).frame(height: Self.lineHeight) }
+                ForEach(servers) {
+                    ServerLine(server: $0)
+                        .padding(.horizontal, sidebarRowInset + 8)
+                        .frame(height: Self.lineHeight)
+                }
             }
             .scrollTargetLayout()
         }

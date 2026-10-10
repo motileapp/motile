@@ -18,7 +18,7 @@ import { doneThreads, servers, type DoneThread, type Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
 const serversPaths = new Set(servers.map((server) => server.path))
-const serversReach = `${serversPaths.size > 1 ? "mixed" : servers[0].path} · ${Math.max(...servers.map((server) => server.ms))} ms`
+const serversReach = `${serversPaths.size > 1 ? "Mixed" : servers[0].path} · ${Math.max(...servers.map((server) => server.ms))} ms`
 
 export function Sidebar({
   actions,
@@ -90,7 +90,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setDoneOpen(!doneOpen)}
-            className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
+            className="flex h-[36px] w-full items-center gap-[7px] pr-[18px] pl-[11px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
           >
             <ChevronRightIcon
               className={cn(
@@ -130,7 +130,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={() => setServersOpen(!serversOpen)}
-          className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
+          className="flex h-[36px] w-full items-center gap-[7px] pr-[18px] pl-[11px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
         >
           <ChevronRightIcon
             className={cn(
@@ -139,7 +139,7 @@ export function Sidebar({
             )}
           />
           <span className="size-[7px] rounded-full bg-success" />
-          <span className="text-[12px] font-medium">All servers</span>
+          <span className="text-[12px] font-medium">Servers</span>
           <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
             {serversReach}
           </span>
