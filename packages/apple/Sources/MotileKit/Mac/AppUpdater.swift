@@ -37,6 +37,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
 
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var downloadingVersion = ""
+    @ObservationIgnored private var download: URLSessionDownloadTask?
     @ObservationIgnored private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
 
     /// Looks for a new release now and every few hours.
@@ -99,7 +100,16 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
         guard let url = URL(string: "https://github.com/motileapp/motile/releases/download/v\(version)/Motile.zip") else { return }
         downloadingVersion = version
         state = .downloading(version, 0)
-        session.downloadTask(with: url).resume()
+        download = session.downloadTask(with: url)
+        download?.resume()
+    }
+
+    /// Stops the download and offers the update again.
+    func cancelDownload() {
+        guard case .downloading(let version, _) = state else { return }
+        download?.cancel()
+        download = nil
+        state = .available(version)
     }
 
     /// Back to offering the update, after it failed.
@@ -111,11 +121,12 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     // MARK: Downloading
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard totalBytesExpectedToWrite > 0 else { return }
+        guard downloadTask === download, totalBytesExpectedToWrite > 0 else { return }
         state = .downloading(downloadingVersion, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard downloadTask === download else { return }
         let version = downloadingVersion
         let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else {
@@ -146,7 +157,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let error else { return }
+        guard let error, task === download else { return }
         state = .failed("The new version couldn’t be downloaded: \(error.localizedDescription)")
     }
 
