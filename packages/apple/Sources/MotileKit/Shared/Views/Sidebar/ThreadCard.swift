@@ -19,7 +19,7 @@ struct ThreadCard: View {
                 .font(.ui(size: 13, weight: .medium))
                 .foregroundStyle(Color.themeForeground)
                 .lineLimit(1)
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 10) {
                 CardLine(text: project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent) {
                     ProjectIcon(project: project, size: 14)
                 }

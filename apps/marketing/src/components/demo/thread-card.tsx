@@ -103,7 +103,7 @@ function ThreadCard({
       <p className="truncate text-[13px] font-medium text-foreground">
         {thread.title}
       </p>
-      <div className="flex flex-col gap-[7px] pt-2.5">
+      <div className="flex flex-col gap-2.5 pt-2.5">
         <Line icon={<ProjectIcon project={thread.project} />}>
           {thread.project.name}
         </Line>
