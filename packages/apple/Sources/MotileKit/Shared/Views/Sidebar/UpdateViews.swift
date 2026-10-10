@@ -31,6 +31,7 @@ struct AppUpdateRow: View {
                         .font(.ui(size: 11))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .monospacedDigit()
+                    ActionButton(icon: .x, help: "Cancel the download", size: size) { updater.cancelDownload() }
                 }
                 ProgressView(value: fraction)
                     .progressViewStyle(.linear)
