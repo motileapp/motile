@@ -274,8 +274,10 @@ pub struct Waiting {
     pub icon: &'static str,
     /// What is asked for: the tool, or what to do with a plan.
     pub title: String,
-    /// What the tool acts on: the command, the file.
+    /// What the tool acts on: the whole command, the file.
     pub target: String,
+    /// The target's highlighting, when it is a command.
+    pub spans: Spans,
     /// What the buttons that allow and refuse it say.
     pub allow: &'static str,
     pub refuse: &'static str,
@@ -362,13 +364,30 @@ impl Transcript {
             agent: None,
         };
         let tool = describe(&call, &self.cwd, 0.0);
-        let (title, target, allow, refuse) = match approval.tool_name.as_str() {
-            PLAN_TOOL => ("The plan is ready".to_string(), String::new(), "Implement", "Keep planning"),
-            QUESTION_TOOL => ("The agent has a question".to_string(), String::new(), "Answer", "Skip"),
-            _ => (tool.name, tool.target, "Allow", "Refuse"),
+        let (title, target, spans, allow, refuse) = match approval.tool_name.as_str() {
+            PLAN_TOOL => {
+                ("The plan is ready".to_string(), String::new(), Spans::default(), "Implement", "Keep planning")
+            }
+            QUESTION_TOOL => {
+                ("The agent has a question".to_string(), String::new(), Spans::default(), "Answer", "Skip")
+            }
+            _ if tool.input_language == "bash" => {
+                let spans = highlight::highlight("bash", &tool.input);
+                (tool.name, tool.input, spans, "Allow", "Refuse")
+            }
+            _ => (tool.name, tool.target, Spans::default(), "Allow", "Refuse"),
         };
         let input: Value = serde_json::from_str(&approval.input).unwrap_or_default();
-        Waiting { id: approval.id.clone(), icon: tool.icon, title, target, allow, refuse, questions: questions(&input) }
+        Waiting {
+            id: approval.id.clone(),
+            icon: tool.icon,
+            title,
+            target,
+            spans,
+            allow,
+            refuse,
+            questions: questions(&input),
+        }
     }
 
     /// Fills an empty transcript with stored items, in order.
@@ -1837,6 +1856,13 @@ mod tests {
         let waiting = transcript.waiting(&approval);
         assert_eq!((waiting.id.as_str(), waiting.title.as_str(), waiting.target.as_str()), ("r1", "Edit", "greet.py"));
         assert_eq!((waiting.allow, waiting.refuse, waiting.questions.len()), ("Allow", "Refuse", 0));
+        assert!(waiting.spans.is_empty());
+
+        let input = serde_json::json!({"command": "cd /srv/api\ncargo test"});
+        let approval = Approval { id: "r3".into(), tool_name: "Bash".into(), input: input.to_string() };
+        let waiting = transcript.waiting(&approval);
+        assert_eq!(waiting.target, "cd /srv/api\ncargo test");
+        assert!(!waiting.spans.is_empty());
 
         let options =
             serde_json::json!([{"label": "Red", "description": "Warm"}, {"label": "Blue", "description": "Calm"}]);

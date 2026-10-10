@@ -408,6 +408,8 @@ extension NSAttributedString.Key {
     static let motileRule = NSAttributedString.Key("motile.rule")
     /// The paragraph is a code block inside a list or a quote; the value is its `CodeBox`.
     static let motileCode = NSAttributedString.Key("motile.code")
+    /// The text is a shell command, whose lines break between its words.
+    static let motileShellWords = NSAttributedString.Key("motile.shellWords")
 }
 
 /// Turns the core's rows into attributed strings. Safe to call from any thread.
@@ -520,6 +522,23 @@ enum Typesetter {
         colour(result, spans: spans, in: NSRange(location: 0, length: result.length))
         return result
     }
+
+    /// A command, or what else a tool acts on, wrapped between its words.
+    static func command(_ command: String, spans: [NSNumber]) -> NSAttributedString {
+        let result = NSMutableAttributedString(
+            string: command,
+            attributes: [.font: Theme.inlineCodeFont, .foregroundColor: Theme.foreground, .paragraphStyle: commandStyle, .motileShellWords: true]
+        )
+        colour(result, spans: spans, in: NSRange(location: 0, length: result.length))
+        return result
+    }
+
+    private static let commandStyle: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = Theme.codeLineHeight
+        style.maximumLineHeight = Theme.codeLineHeight
+        return style
+    }()
 
     /// Colours the code in `range` with its spans, which count from the start of the range.
     private static func colour(_ text: NSMutableAttributedString, spans: [NSNumber], in range: NSRange) {

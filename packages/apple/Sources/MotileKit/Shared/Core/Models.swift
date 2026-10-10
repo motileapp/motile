@@ -1007,8 +1007,10 @@ struct Approval: Equatable, Identifiable {
     let id: String
     /// What is asked for: the tool, or what to do with a plan.
     let title: String
-    /// What the tool acts on: the command, the file.
+    /// What the tool acts on: the whole command, the file.
     let target: String
+    /// The target set in its colours.
+    let typesetTarget: NSAttributedString
     let symbol: Symbol
     /// What the buttons that allow and refuse it say.
     let allowLabel: String
@@ -1020,6 +1022,7 @@ struct Approval: Equatable, Identifiable {
         id = json.string("id")
         title = json.string("title")
         target = json.string("target")
+        typesetTarget = Typesetter.command(target, spans: json["spans"] as? [NSNumber] ?? [])
         symbol = ToolContent.symbol(for: json.string("icon"))
         allowLabel = json.string("allow")
         refuseLabel = json.string("refuse")

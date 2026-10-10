@@ -8,9 +8,9 @@ struct WaitingStrip: View {
     let count: Int
 
     static let padding: CGFloat = 12
-    private static let targetFont = PlatformFont.uiMono(12)
-    /// Eight lines of a command and the room under them, after which it scrolls to the strip's edge.
-    private static let targetHeight = targetFont.textLineHeight * 8 + padding
+    private static let targetInset: CGFloat = 10
+    /// Eight lines of a command, after which it scrolls inside its box.
+    private static let targetHeight = Theme.codeLineHeight * 8 + targetInset * 2
 
     var body: some View {
         content
@@ -42,13 +42,11 @@ struct WaitingStrip: View {
             .padding(.bottom, approval.target.isEmpty ? Self.padding : 8)
             if !approval.target.isEmpty {
                 FadingScroll(maxHeight: Self.targetHeight) {
-                    Text(approval.target)
-                        .font(.ui(size: 12, design: .monospaced))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding([.bottom, .horizontal], Self.padding)
+                    ProseText(text: approval.typesetTarget)
+                        .padding(Self.targetInset)
                 }
+                .background(Color.themeBorderInput, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                .padding([.bottom, .horizontal], Self.padding)
             }
         }
     }
