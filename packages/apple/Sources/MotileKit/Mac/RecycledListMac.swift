@@ -67,6 +67,8 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let table = scroll.documentView as? RecycledTable else { return }
+        if context.environment.putAway, !scroll.isHidden { table.forgetPointer() }
+        scroll.putAway(context.environment.putAway)
         let coordinator = context.coordinator
         coordinator.list = self
         coordinator.store = store
