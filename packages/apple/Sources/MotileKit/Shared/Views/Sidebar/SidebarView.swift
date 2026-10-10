@@ -44,7 +44,7 @@ struct SidebarView: View {
                 .padding(.top, 2)
                 .padding(.bottom, 6)
             GeometryReader { list in
-                threads(active: active, done: done, projects: projects, selection: selection, maxDoneHeight: list.size.height * 0.6)
+                threads(active: active, done: done, projects: projects, selection: selection, sidebarHeight: list.size.height)
             }
         }
         .onChange(of: store.settledThreadID) { _, settled in
@@ -73,7 +73,7 @@ struct SidebarView: View {
     }
 
     private func threads(
-        active: [ThreadInfo], done: [ThreadInfo], projects: [String: Project], selection: Selection, maxDoneHeight: Double
+        active: [ThreadInfo], done: [ThreadInfo], projects: [String: Project], selection: Selection, sidebarHeight: Double
     ) -> some View {
         let drafts = store.searched(store.listedDrafts, for: search)
         let items = items(drafts: drafts, active: active)
@@ -129,11 +129,17 @@ struct SidebarView: View {
                     threads: done,
                     projects: projects,
                     selection: selection,
-                    maxHeight: maxDoneHeight,
+                    maxHeight: sidebarHeight * 0.5,
                     expanded: search.isEmpty ? $doneExpanded : .constant(true),
                     rename: beginRename,
                     delete: { deleting = $0 }
                 )
+            }
+            if !store.servers.isEmpty {
+                ServersShelf(maxHeight: sidebarHeight * 0.3)
+            }
+            if !done.isEmpty || !store.servers.isEmpty {
+                ThemeDivider()
             }
             SidebarFooter()
         }
@@ -600,25 +606,24 @@ struct UndoRow: View {
 }
 
 #if os(macOS)
-/// The threads marked done, at the bottom of the sidebar: a line that opens into their list.
-private struct DoneShelf: View {
-    static let rowHeight = doneRowHeight
-    private static let defaultHeight = 250.0
-    private static let minHeight = 4 * (rowHeight + rowGap) + 4
+/// A shelf at the bottom of the sidebar: a line that opens into a list, which the line above it
+/// makes taller or shorter.
+private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
+    private static var rowHeight: Double { doneRowHeight }
+    private static var minHeight: Double { 4 * (rowHeight + rowGap) + 4 }
 
-    @Environment(AppStore.self) private var store
-    let threads: [ThreadInfo]
-    let projects: [String: Project]
-    let selection: Selection
+    let items: [Item]
     let maxHeight: Double
     @Binding var expanded: Bool
-    let rename: (ThreadInfo) -> Void
-    let delete: (ThreadInfo) -> Void
-    @AppStorage("sidebar.doneHeight") private var height = DoneShelf.defaultHeight
+    @Binding var height: Double
+    var scrollTarget: Item.ID?
+    var pointed: (Item?, CGRect, NSView) -> Void = { _, _, _ in }
+    @ViewBuilder let header: () -> Header
+    @ViewBuilder let row: (Item) -> Row
     @GestureState private var pulledUp = 0.0
 
     var body: some View {
-        let contentHeight = Double(threads.count) * (Self.rowHeight + rowGap) + 4
+        let contentHeight = Double(items.count) * (Self.rowHeight + rowGap) + 4
         let tallest = min(maxHeight, contentHeight)
         let heights = min(Self.minHeight, tallest)...tallest
         VStack(spacing: 0) {
@@ -634,13 +639,7 @@ private struct DoneShelf: View {
                     Image(.chevronRight, size: 10)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .frame(width: 14)
-                    Text("Done")
-                        .font(.ui(size: 12, weight: .medium))
-                    Spacer()
-                    Text("\(threads.count)")
-                        .font(.ui(size: 11))
-                        .foregroundStyle(Color.themeMutedStrongerForeground)
-                        .monospacedDigit()
+                    header()
                 }
                 .padding(.horizontal, 18)
                 .frame(height: Self.rowHeight)
@@ -651,23 +650,16 @@ private struct DoneShelf: View {
 
             if expanded {
                 RecycledList(
-                    items: threads, height: { _ in Self.rowHeight + rowGap }, bottomInset: 4 - rowGap / 2, scrollTarget: store.settledThreadID,
-                    pointed: { thread, row, view in ThreadPeek.shared.point(at: thread, row: row, in: view, store: store) }
-                ) { thread in
-                    DoneRow(
-                        thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
-                        rename: rename, delete: delete
-                    ) { store.select($0) }
-                    .equatable()
-                }
+                    items: items, height: { _ in Self.rowHeight + rowGap }, bottomInset: 4 - rowGap / 2, scrollTarget: scrollTarget,
+                    pointed: pointed, row: row
+                )
                 .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
             }
-            ThemeDivider()
         }
     }
 
-    /// The line above the done threads. Dragging it makes their list taller or shorter; the
-    /// height is saved when the drag ends.
+    /// The line above the shelf. Dragging it makes the list taller or shorter; the height is saved
+    /// when the drag ends.
     private func resizeHandle(_ heights: ClosedRange<Double>) -> some View {
         ThemeDivider()
             .overlay {
@@ -691,6 +683,70 @@ private struct DoneShelf: View {
     private func listHeight(in heights: ClosedRange<Double>, pulledUp: Double) -> Double {
         let resting = min(heights.upperBound, max(heights.lowerBound, height))
         return min(heights.upperBound, max(heights.lowerBound, resting + pulledUp))
+    }
+}
+
+/// The threads marked done.
+private struct DoneShelf: View {
+    @Environment(AppStore.self) private var store
+    let threads: [ThreadInfo]
+    let projects: [String: Project]
+    let selection: Selection
+    let maxHeight: Double
+    @Binding var expanded: Bool
+    let rename: (ThreadInfo) -> Void
+    let delete: (ThreadInfo) -> Void
+    @AppStorage("sidebar.doneHeight") private var height = 250.0
+
+    var body: some View {
+        Shelf(
+            items: threads, maxHeight: maxHeight, expanded: $expanded, height: $height, scrollTarget: store.settledThreadID,
+            pointed: { thread, row, view in ThreadPeek.shared.point(at: thread, row: row, in: view, store: store) }
+        ) {
+            Text("Done")
+                .font(.ui(size: 12, weight: .medium))
+            Spacer()
+            Text("\(threads.count)")
+                .font(.ui(size: 11))
+                .foregroundStyle(Color.themeMutedStrongerForeground)
+                .monospacedDigit()
+        } row: { thread in
+            DoneRow(
+                thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
+                rename: rename, delete: delete
+            ) { store.select($0) }
+            .equatable()
+        }
+    }
+}
+
+/// The servers: one line for them all that opens into a line for each, or the one server's line.
+private struct ServersShelf: View {
+    @Environment(AppStore.self) private var store
+    let maxHeight: Double
+    @AppStorage("sidebar.serversExpanded") private var expanded = false
+    @AppStorage("sidebar.serversHeight") private var height = 250.0
+
+    var body: some View {
+        let servers = store.servers
+        if servers.count == 1 {
+            VStack(spacing: 0) {
+                ThemeDivider()
+                ServerLine(server: servers[0])
+                    .padding(.horizontal, 18)
+                    .frame(height: doneRowHeight)
+                    .padding(.vertical, 3)
+            }
+        } else {
+            Shelf(items: servers, maxHeight: maxHeight, expanded: $expanded, height: $height) {
+                AllServersLine(servers: servers)
+            } row: { server in
+                ServerLine(server: server)
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(rowMargin)
+            }
+        }
     }
 }
 
@@ -869,15 +925,63 @@ struct ThreadStatus: View {
     }
 }
 
+/// Every server in one line, which opens into a line for each: the worst of their states, how
+/// they are reached and the slowest round trip.
+struct AllServersLine: View {
+    let servers: [Server]
+
+    var body: some View {
+        HStack(spacing: 7) {
+            StateDot(tint: servers.worstTint)
+            Text("All servers")
+                .font(.ui(size: 12, weight: .medium))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(servers.reach)
+                .font(.ui(size: 11))
+                .foregroundStyle(Color.themeMutedStrongerForeground)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
+    }
+}
+
+struct StateDot: View {
+    let tint: Color
+
+    var body: some View {
+        Circle()
+            .fill(tint)
+            .frame(width: 7, height: 7)
+    }
+}
+
+extension [Server] {
+    /// The worst state among the servers: one out of reach, then one connecting.
+    var worstTint: Color {
+        if contains(where: { $0.state == .disconnected || $0.state == .refused }) { return .themeDestructive }
+        if contains(where: { $0.state == .connecting }) { return .themePending }
+        return .themeSuccess
+    }
+
+    /// How the connected ones are reached, "mixed" if not all alike, and their slowest round trip.
+    var reach: String {
+        let connected = filter { $0.state == .connected }
+        let paths = Set(connected.compactMap(\.path))
+        let path = paths.count > 1 ? "mixed" : paths.first
+        let slowest = connected.compactMap(\.rttMs).max().map { "\($0) ms" }
+        return [path, slowest].compactMap { $0 }.joined(separator: " · ")
+    }
+}
+
 /// A server and how the client reaches it.
 struct ServerLine: View {
     let server: Server
 
     var body: some View {
         HStack(spacing: 7) {
-            Circle()
-                .fill(server.stateTint ?? .themeSuccess)
-                .frame(width: 7, height: 7)
+            StateDot(tint: server.stateTint ?? .themeSuccess)
+                .frame(width: 14)
             Text(server.name)
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)
@@ -889,7 +993,6 @@ struct ServerLine: View {
                     .monospacedDigit()
             }
         }
-        .frame(height: scaled(20))
         .help(server.error ?? detail)
     }
 
@@ -906,8 +1009,7 @@ struct ServerLine: View {
 }
 
 #if os(macOS)
-/// The servers and how the client reaches them, and the ways to the settings and the usage (or
-/// back from them) and a new version of the client.
+/// The ways to the settings and the usage (or back from them) and a new version of the client.
 struct SidebarFooter: View {
     private static let reach = EdgeInsets(top: 4, leading: ToolbarButton.margin, bottom: 4, trailing: ToolbarButton.margin)
 
@@ -915,7 +1017,6 @@ struct SidebarFooter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(store.servers) { ServerLine(server: $0) }
             if ![.idle, .checking, .upToDate].contains(store.updater.state) {
                 AppUpdateRow(updater: store.updater)
             }

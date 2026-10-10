@@ -17,6 +17,9 @@ import { AgentIcon, ProjectIcon } from "./icons"
 import { doneThreads, servers, type DoneThread, type Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
+const serversPaths = new Set(servers.map((server) => server.path))
+const serversReach = `${serversPaths.size > 1 ? "mixed" : servers[0].path} · ${Math.max(...servers.map((server) => server.ms))} ms`
+
 export function Sidebar({
   actions,
   threads,
@@ -35,6 +38,7 @@ export function Sidebar({
 }) {
   const [search, setSearch] = useState("")
   const [doneOpen, setDoneOpen] = useState(false)
+  const [serversOpen, setServersOpen] = useState(false)
   const matches = (title: string, project: string) =>
     `${title} ${project}`.toLowerCase().includes(search.toLowerCase())
   const active = threads.filter((thread) =>
@@ -122,16 +126,44 @@ export function Sidebar({
           {doneOpen && <div className="h-1" />}
         </div>
       )}
-      <div className="flex flex-col gap-2 border-t px-[18px] pt-2.5 pb-2">
-        {servers.map((server) => (
-          <div key={server.name} className="flex h-5 items-center gap-[7px]">
-            <span className="size-[7px] rounded-full bg-success" />
-            <span className="text-[12px] font-medium">{server.name}</span>
-            <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
-              {server.path} · {server.ms} ms
-            </span>
+      <div className="border-t">
+        <button
+          type="button"
+          onClick={() => setServersOpen(!serversOpen)}
+          className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-accent-larger"
+        >
+          <ChevronRightIcon
+            className={cn(
+              "size-2.5 w-3.5 transition-transform",
+              serversOpen && "rotate-90"
+            )}
+          />
+          <span className="size-[7px] rounded-full bg-success" />
+          <span className="text-[12px] font-medium">All servers</span>
+          <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
+            {serversReach}
+          </span>
+        </button>
+        {serversOpen && (
+          <div className="pb-1">
+            {servers.map((server) => (
+              <div
+                key={server.name}
+                className="mx-2.5 flex h-[30px] items-center gap-[7px] px-2"
+              >
+                <span className="flex w-3.5 justify-center">
+                  <span className="size-[7px] rounded-full bg-success" />
+                </span>
+                <span className="text-[12px] font-medium">{server.name}</span>
+                <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
+                  {server.path} · {server.ms} ms
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
+      </div>
+      <div className="flex flex-col border-t px-[18px] pt-2.5 pb-2">
         <div className="-mx-[7px] flex items-center gap-1">
           <button
             type="button"
