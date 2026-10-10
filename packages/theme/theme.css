@@ -62,7 +62,10 @@
   --color-chart-5: var(--chart-5);
   --color-claude: var(--claude);
   --color-openai: var(--openai);
-  --color-google: var(--google);
+  --color-google-blue: var(--google-blue);
+  --color-google-red: var(--google-red);
+  --color-google-yellow: var(--google-yellow);
+  --color-google-green: var(--google-green);
   --color-linear: var(--linear);
   --color-window-close: var(--window-close);
   --color-window-minimize: var(--window-minimize);
