@@ -107,12 +107,12 @@ function ThreadCard({
         <Line icon={<ProjectIcon project={thread.project} />}>
           {thread.project.name}
         </Line>
-        <Line icon={<ServerIcon className="size-3" />}>
-          {thread.server.name}
-        </Line>
         <Line icon={<Checkout className="size-[13px]" />}>{thread.branch}</Line>
         <Line icon={<AgentIcon agent={thread.agent} size={13} />}>
           <Dotted text={thread.model} />
+        </Line>
+        <Line icon={<ServerIcon className="size-3" />}>
+          {thread.server.name}
         </Line>
       </div>
       {thread.pullRequest && (

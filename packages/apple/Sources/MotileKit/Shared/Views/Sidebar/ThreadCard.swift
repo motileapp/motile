@@ -23,9 +23,6 @@ struct ThreadCard: View {
                 CardLine(text: project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent) {
                     ProjectIcon(project: project, size: 14)
                 }
-                if let server = store.server(thread.serverID) {
-                    CardLine(text: server.name) { Image(.server, size: 12) }
-                }
                 if let project, let branch = project.branch {
                     CardLine(text: branch, middle: true) { Image(project.checkoutSymbol, size: 13) }
                 } else {
@@ -33,6 +30,9 @@ struct ThreadCard: View {
                     CardLine(text: ThreadFolderLabel.shortened(thread.cwd, home: home), middle: true) { Image(.folder, size: 13) }
                 }
                 CardLine(text: store.modelLabel(of: thread)) { AgentIcon(agent: thread.agent, size: 13) }
+                if let server = store.server(thread.serverID) {
+                    CardLine(text: server.name) { Image(.server, size: 12) }
+                }
             }
             .padding(.top, 10)
             if let pullRequest = project?.pullRequest(of: thread) {
