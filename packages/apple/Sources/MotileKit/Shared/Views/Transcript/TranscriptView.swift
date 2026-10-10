@@ -186,6 +186,7 @@ final class TranscriptView: FlippedView, RowOwner {
         arrow.frame = CGRect(x: (side - 16) / 2, y: (side - 16) / 2, width: 16, height: 16)
         jumpButton.addSubview(arrow)
         jumpButton.onClick = { [weak self] in self?.scrollToEnd() }
+        jumpButton.onHover = { [weak self] point in self?.jumpButton.fill = point == nil ? Theme.popover : Theme.borderPopover }
         jumpButton.drop = (.md, .shadow)
         addSubview(jumpButton)
 
@@ -764,7 +765,10 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private func updateJumpButton() {
         let distance = endY - scroller.offsetY
-        jumpButton.isHidden = pinned || rows.isEmpty || distance < jumpDistance
+        let hidden = pinned || rows.isEmpty || distance < jumpDistance
+        guard hidden != jumpButton.isHidden else { return }
+        jumpButton.isHidden = hidden
+        if hidden { jumpButton.fill = Theme.popover }
     }
 
     private func scroll(to y: CGFloat) {
