@@ -111,7 +111,7 @@ struct SidebarScreen: View {
             .glassButton(in: Circle())
             .accessibilityLabel("Commands")
         }
-        .padding(.leading, sidebarRowInset + 8)
+        .padding(.leading, sidebarEdge)
         .padding(.trailing, sidebarRowInset + 2)
         .padding(.top, 6)
         .padding(.bottom, 12)
@@ -163,7 +163,7 @@ struct SidebarScreen: View {
                 .font(.ui(size: 13))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, sidebarRowInset + 8)
+                .padding(.horizontal, sidebarEdge)
                 .padding(.vertical, 10)
         case .newThread:
             NewThreadRow()
@@ -200,7 +200,7 @@ struct SidebarScreen: View {
                     .monospacedDigit()
             }
             .foregroundStyle(Color.themeMutedForeground)
-            .padding(.horizontal, sidebarRowInset + 8)
+            .padding(.horizontal, sidebarEdge)
             .frame(height: 44)
             .contentShape(Rectangle())
         }
@@ -225,7 +225,7 @@ struct SidebarScreen: View {
                 circleButton(.squarePen, label: "New thread") { store.newThread() }
                     .disabled(store.projects.isEmpty && store.noProjects.isEmpty)
             }
-            .padding(.horizontal, sidebarRowInset + 8)
+            .padding(.horizontal, sidebarEdge)
             .padding(.top, 16)
         }
         .padding(.bottom, 8)
@@ -242,7 +242,7 @@ struct SidebarScreen: View {
         let servers = store.servers
         if servers.count == 1 {
             ServerLine(server: servers[0])
-                .padding(.horizontal, sidebarRowInset + 8)
+                .padding(.horizontal, sidebarEdge)
                 .frame(height: ServerLines.lineHeight)
         } else if servers.count > 1 {
             Button {
@@ -250,12 +250,10 @@ struct SidebarScreen: View {
                 DispatchQueue.main.async { serversExpanded.toggle() }
             } label: {
                 HStack(spacing: 7) {
-                    Image(.chevronRight, size: 10)
-                        .rotationEffect(.degrees(serversExpanded ? 90 : 0))
-                        .frame(width: 14)
+                    SidebarChevron(expanded: serversExpanded)
                     AllServersLine(servers: servers)
                 }
-                .padding(.horizontal, sidebarRowInset + 8)
+                .padding(.horizontal, sidebarEdge)
                 .frame(height: ServerLines.lineHeight)
             }
             .buttonStyle(.highlight(radius: 0, faded: true))
@@ -322,7 +320,7 @@ private struct ServerLines: View {
             VStack(spacing: 0) {
                 ForEach(servers) {
                     ServerLine(server: $0)
-                        .padding(.horizontal, sidebarRowInset + 8)
+                        .padding(.horizontal, sidebarEdge)
                         .frame(height: Self.lineHeight)
                 }
             }

@@ -27,7 +27,7 @@ private struct RowSwipe: ViewModifier {
     @State private var offsetAtStart: Double?
     @State private var width = 0.0
 
-    private static let leading = sidebarRowInset + 8
+    private static let leading = sidebarEdge
     private static let settle = Animation.spring(response: 0.29, dampingFraction: 0.86)
 
     /// How far the row rests aside while its button shows.
