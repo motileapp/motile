@@ -38,7 +38,7 @@ extension Theme {
     static let borderCard = tone(0xe6e8ee, 0x1e1f25)
     static let borderInput = tone(0xeceef4, 0x1a1b21)
     static let borderPopover = tone(0xe8eaef, 0x222228)
-    static let input = tone(0xeceef4, 0x111217)
+    static let input = tone(0xeaecf2, 0x14151a)
     static let composer = tone(0xffffff, 0x111217)
     static let ring = tone(0x22242b, 0xd0d2d9)
     static let overlay = tone(0x000000, 0x000000)
