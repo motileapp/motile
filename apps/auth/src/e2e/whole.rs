@@ -360,6 +360,26 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
     assert_eq!((alt.as_str(), name.as_str()), ("The landing page", "screenshot.png"));
     let screenshot = std::fs::read(project_folder.join("screenshot.png")).unwrap();
     let find = || Command::Media { server_id: server.id.clone(), media_id: media.clone() };
+
+    // A fetch that is stopped answers with an error and leaves nothing behind.
+    let (fetch, cancel) = (client.next_id + 1, client.next_id + 2);
+    client.next_id = cancel;
+    client.handle.send(fetch, find());
+    client.handle.send(cancel, Command::CancelMedia { media_id: media.clone() });
+    let mut answers = HashMap::new();
+    while answers.len() < 2 {
+        let event =
+            tokio::time::timeout(TIMEOUT, client.events.recv()).await.expect("no answer").expect("the core stopped");
+        client.apply(&event);
+        if let Event::Reply { id, ok, value } = event {
+            answers.insert(id, (ok, value["error"].as_str().map(str::to_string)));
+        }
+    }
+    assert_eq!(answers[&fetch], (false, Some("The download was stopped.".to_string())));
+    assert_eq!(answers[&cancel], (true, None));
+    let left = std::fs::read_dir(client_data.join("media")).map(|entries| entries.count()).unwrap_or(0);
+    assert_eq!(left, 0);
+
     let fetched = client.ask(find()).await.unwrap()["path"].as_str().unwrap().to_string();
     assert!(Path::new(&fetched).starts_with(&client_data));
     assert_eq!(std::fs::read(&fetched).unwrap(), screenshot);

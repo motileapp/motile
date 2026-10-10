@@ -20,6 +20,9 @@ final class TranscriptView: FlippedView, RowOwner {
     var onToggleRow: ((String) -> Void)?
     /// A row needs the file of an image or a video; it is called back with it.
     var onNeedMedia: ((String, @escaping (URL?) -> Void) -> Void)?
+    /// A row needs a file an agent sent, and is called back with it or with why it can't be had.
+    var onFetchFile: ((String, @escaping (Result<URL, Error>) -> Void) -> Void)?
+    var onCancelFetch: ((String) -> Void)?
     var onViewMedia: (([ViewedMedia], Int) -> Void)?
     /// A queued message is to be given to the agent now, or taken back.
     var onSendQueued: ((String) -> Void)?
@@ -840,6 +843,13 @@ final class TranscriptView: FlippedView, RowOwner {
         guard let onNeedMedia else { return done(nil) }
         onNeedMedia(id, done)
     }
+
+    func fetchFile(id: String, done: @escaping (Result<URL, Error>) -> Void) {
+        guard let onFetchFile else { return done(.failure(CoreBridge.CoreError(message: "Something went wrong."))) }
+        onFetchFile(id, done)
+    }
+
+    func cancelFetch(id: String) { onCancelFetch?(id) }
 
     func view(_ media: [ViewedMedia], at index: Int) { onViewMedia?(media, index) }
 

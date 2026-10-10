@@ -1849,11 +1849,24 @@ final class AppStore {
     /// The file of an image or a video the open thread shows. The core fetches it from the
     /// thread's server if this Mac doesn't have it.
     func media(_ id: String, done: @escaping (URL?) -> Void) {
-        guard let serverID = selectedThread?.serverID ?? composerServer?.id else { return done(nil) }
-        core.send("media", ["server_id": serverID, "media_id": id]) { result in
-            guard case .success(let value) = result, let path = value["path"] as? String else { return done(nil) }
-            done(URL(fileURLWithPath: path))
+        fetchMedia(id) { done(try? $0.get()) }
+    }
+
+    /// The file, or why it can't be had.
+    func fetchMedia(_ id: String, done: @escaping (Result<URL, Error>) -> Void) {
+        guard let serverID = selectedThread?.serverID ?? composerServer?.id else {
+            return done(.failure(CoreBridge.CoreError(message: "That server isn't connected. Try again when it is back.")))
         }
+        core.send("media", ["server_id": serverID, "media_id": id]) { result in
+            done(result.flatMap { value in
+                guard let path = value["path"] as? String else { return .failure(CoreBridge.CoreError(message: "Something went wrong.")) }
+                return .success(URL(fileURLWithPath: path))
+            }.mapError { $0 })
+        }
+    }
+
+    func cancelMedia(_ id: String) {
+        core.send("cancel_media", ["media_id": id])
     }
 
     func refreshMediaStorage() {

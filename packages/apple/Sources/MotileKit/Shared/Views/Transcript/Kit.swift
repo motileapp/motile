@@ -249,6 +249,43 @@ final class SpinnerView: LayerView {
     }
 }
 
+/// How much of something has arrived, as a ring that fills clockwise from the top.
+final class ProgressRingView: LayerView {
+    private static let line: CGFloat = 2
+    private let track = CAShapeLayer()
+    private let arc = CAShapeLayer()
+
+    var fraction: Double = 0 {
+        didSet { arc.strokeEnd = min(max(fraction, 0), 1) }
+    }
+
+    override func layoutNow() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let side = min(bounds.width, bounds.height) - Self.line
+        let circle = CGRect(x: (bounds.width - side) / 2, y: (bounds.height - side) / 2, width: side, height: side)
+        var fromTop = CGAffineTransform(translationX: circle.midX, y: circle.midY).rotated(by: -.pi / 2)
+        fromTop = fromTop.translatedBy(x: -circle.midX, y: -circle.midY)
+        let path = CGPath(ellipseIn: circle, transform: &fromTop)
+        for layer in [track, arc] {
+            layer.frame = bounds
+            layer.path = path
+        }
+        CATransaction.commit()
+    }
+
+    override func paint(_ layer: CALayer) {
+        for ring in [track, arc] where ring.superlayer !== layer {
+            ring.fillColor = nil
+            ring.lineWidth = Self.line
+            ring.lineCap = .round
+            layer.addSublayer(ring)
+        }
+        track.strokeColor = resolved(Theme.mutedStrongestForeground)
+        arc.strokeColor = resolved(Theme.foreground)
+    }
+}
+
 /// Symbols drawn in a colour that follows the appearance.
 enum TintedSymbol {
     private static var cache: [String: PlatformImage] = [:]

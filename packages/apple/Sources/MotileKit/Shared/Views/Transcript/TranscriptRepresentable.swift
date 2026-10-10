@@ -30,6 +30,8 @@ struct TranscriptRepresentable {
             store.core.send("toggle_row", ["thread_id": threadID, "row_id": rowID])
         }
         view.onNeedMedia = { id, done in store.media(id, done: done) }
+        view.onFetchFile = { id, done in store.fetchMedia(id, done: done) }
+        view.onCancelFetch = { id in store.cancelMedia(id) }
         view.onViewMedia = { media, index in store.view(media, at: index) }
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }

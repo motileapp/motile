@@ -333,6 +333,11 @@ pub enum Command {
         server_id: String,
         media_id: String,
     },
+    /// Stops fetching the image, the video or the file. The `media` commands waiting for it answer
+    /// with an error.
+    CancelMedia {
+        media_id: String,
+    },
     /// Answers with `media_bytes`, what the fetched images, videos and files take on this device,
     /// and `media_limit`, what they may take.
     Storage,

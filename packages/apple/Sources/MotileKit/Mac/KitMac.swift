@@ -657,7 +657,7 @@ enum MediaFiles {
 
     /// Puts a copy of the file in Downloads, under its name or a free one like it, as a browser
     /// does, and hands over where it went.
-    static func download(_ file: URL, named name: String, from view: NSView, done: @escaping (URL?) -> Void) {
+    static func download(_ file: URL, named name: String, done: @escaping (URL?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
             let destination = freeName(for: name.isEmpty ? file.lastPathComponent : name, in: downloads)
@@ -671,12 +671,15 @@ enum MediaFiles {
         }
     }
 
-    /// Opens the file in the app the Mac opens its kind with.
+    static let revealTitle = "Show in Finder"
+
+    static func reveal(_ file: URL, named name: String, from view: NSView) {
+        NSWorkspace.shared.activateFileViewerSelecting([file])
+    }
+
+    /// Opens the downloaded file in the app the Mac opens its kind with.
     static func open(_ file: URL, named name: String, from view: NSView) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let named = namedCopy(of: file, name: name)
-            DispatchQueue.main.async { _ = NSWorkspace.shared.open(named) }
-        }
+        NSWorkspace.shared.open(file)
     }
 
     /// `name` in `folder`, or "name 2", "name 3" and so on when it is taken.

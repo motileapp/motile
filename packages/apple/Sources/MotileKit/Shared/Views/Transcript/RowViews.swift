@@ -17,6 +17,10 @@ protocol RowOwner: AnyObject {
     func copyReply(endingAt rowID: String)
     /// Hands over the file of an image or a video, or nothing when it can't be had.
     func media(id: String, done: @escaping (URL?) -> Void)
+    /// Hands over a file an agent sent, or why it can't be had.
+    func fetchFile(id: String, done: @escaping (Result<URL, Error>) -> Void)
+    /// Stops fetching the file, whose `fetchFile` then fails.
+    func cancelFetch(id: String)
     /// Opens the images and videos in the viewer, on the one at `index`.
     func view(_ media: [ViewedMedia], at index: Int)
     /// Gives the agent a queued message now, or takes it back into the composer.

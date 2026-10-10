@@ -209,8 +209,8 @@ struct Core {
     media: Arc<MediaCache>,
     /// How many bytes the fetched images and videos may take.
     media_limit: u64,
-    /// The commands waiting for each image or video that is being fetched.
-    media_waiting: HashMap<String, Vec<u64>>,
+    /// The commands waiting for each image, video or file that is being fetched, and what stops it.
+    media_waiting: HashMap<String, (Vec<u64>, AbortHandle)>,
     /// The files on their way to a server, by the key the client gave: the command that waits for
     /// each, and what stops it.
     uploads: HashMap<String, (u64, AbortHandle)>,
@@ -387,7 +387,8 @@ impl Core {
             }
             Input::MediaFetched { id, result } => {
                 let answer = result.map(|path| json!({ "path": path }));
-                for waiting in self.media_waiting.remove(&id).unwrap_or_default() {
+                let waiting = self.media_waiting.remove(&id).map(|(waiting, _)| waiting).unwrap_or_default();
+                for waiting in waiting {
                     self.reply(waiting, answer.clone());
                 }
             }
@@ -847,7 +848,7 @@ impl Core {
         if let Some(file) = self.media.get(&media_id) {
             return self.reply(id, Ok(json!({ "path": file.to_string_lossy() })));
         }
-        if let Some(waiting) = self.media_waiting.get_mut(&media_id) {
+        if let Some((waiting, _)) = self.media_waiting.get_mut(&media_id) {
             return waiting.push(id);
         }
         let Some(unfinished) = self.media.unfinished(&media_id) else {
@@ -857,10 +858,10 @@ impl Core {
             Ok(link) => link,
             Err(error) => return self.reply(id, Err(error)),
         };
-        self.media_waiting.insert(media_id.clone(), vec![id]);
-        let (cache, inputs, sink) = (self.media.clone(), self.inputs.clone(), self.sink.clone());
+        let (cache, inputs, sink, waiting_key) =
+            (self.media.clone(), self.inputs.clone(), self.sink.clone(), media_id.clone());
         let limit = self.media_limit;
-        tokio::spawn(async move {
+        let fetch = tokio::spawn(async move {
             let mut told = Instant::now();
             let progress = |received, size| {
                 if told.elapsed() < PROGRESS_EVERY {
@@ -881,6 +882,18 @@ impl Core {
             }
             let _ = inputs.send(Input::MediaFetched { id: media_id, result });
         });
+        self.media_waiting.insert(waiting_key, (vec![id], fetch.abort_handle()));
+    }
+
+    fn cancel_media(&mut self, media_id: &str) {
+        let Some((waiting, fetch)) = self.media_waiting.remove(media_id) else { return };
+        fetch.abort();
+        if let Some(unfinished) = self.media.unfinished(media_id) {
+            let _ = std::fs::remove_file(unfinished);
+        }
+        for waiting in waiting {
+            self.reply(waiting, Err("The download was stopped.".to_string()));
+        }
     }
 
     /// Sends a file to the server and answers with its path there. An image or a video is kept
@@ -1859,6 +1872,10 @@ impl Core {
                 self.reply(id, Ok(json!({})));
             }
             Command::Media { server_id, media_id } => self.find_media(id, &server_id, media_id),
+            Command::CancelMedia { media_id } => {
+                self.cancel_media(&media_id);
+                self.reply(id, Ok(json!({})));
+            }
             Command::Storage => {
                 let (media, sink, limit) = (self.media.clone(), self.sink.clone(), self.media_limit);
                 tokio::task::spawn_blocking(move || {

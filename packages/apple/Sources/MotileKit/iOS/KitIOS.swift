@@ -609,17 +609,15 @@ enum MediaFiles {
         view.presenter?.present(sheet, animated: true)
     }
 
-    /// Asks where in Files a copy of the file goes. Where it went isn't known, so nothing is
-    /// handed over.
-    static func download(_ file: URL, named name: String, from view: UIView, done: @escaping (URL?) -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let named = namedCopy(of: file, name: name)
-            DispatchQueue.main.async {
-                let picker = UIDocumentPickerViewController(forExporting: [named], asCopy: true)
-                view.presenter?.present(picker, animated: true)
-                done(nil)
-            }
-        }
+    /// Keeps the file in the client, where the core put it, as a messaging app does.
+    static func download(_ file: URL, named name: String, done: @escaping (URL?) -> Void) {
+        done(file)
+    }
+
+    static let revealTitle = "Share"
+
+    static func reveal(_ file: URL, named name: String, from view: UIView) {
+        save(file, named: name, from: view)
     }
 
     /// Shows the file in Quick Look, which also shares it.
