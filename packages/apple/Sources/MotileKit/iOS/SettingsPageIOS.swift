@@ -552,7 +552,7 @@ struct SettingsList<Content: View>: View {
     }
 }
 
-/// A row's picture: the section's symbol on a tile, as the system's settings have.
+/// A row's picture: its symbol, as wide as the agents' and projects' icons beside it.
 struct SettingsTile: View {
     static let size: CGFloat = 30
     let symbol: Symbol
@@ -561,7 +561,6 @@ struct SettingsTile: View {
         Image(symbol, size: 16)
             .foregroundStyle(Color.themeForeground)
             .frame(width: Self.size, height: Self.size)
-            .background(Color.themeBackgroundAccentStronger, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
     }
 }
 
