@@ -26,7 +26,7 @@ type Peek = { thread: CardThread; top: number; left: number; fading: boolean }
 
 /** How long the pointer rests on a row before its card comes up, and how long after the card
  * went away the next one still comes up at once. */
-const REST = 150
+const REST = 200
 const LINGER = 400
 /** Between the row's light and the card. */
 const GAP = 4

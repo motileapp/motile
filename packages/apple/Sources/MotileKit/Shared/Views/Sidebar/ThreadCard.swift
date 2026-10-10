@@ -81,7 +81,7 @@ private struct CardLine<Icon: View>: View {
 /// time, then goes at once to every row the pointer moves to, and shortly after it went away.
 final class ThreadPeek {
     static let shared = ThreadPeek()
-    private static let rest: TimeInterval = 0.15
+    private static let rest: TimeInterval = 0.2
     private static let linger: TimeInterval = 0.4
     private let card = ThreadCardWindow()
     private var waiting: Timer?
