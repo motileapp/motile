@@ -597,13 +597,13 @@ struct UndoRow: View {
                 }
                 .buttonStyle(.highlight(radius: 0, faded: true))
                 Spacer()
-                HStack(spacing: 3) {
-                    Image(.check, size: 9)
+                HStack(spacing: 4) {
+                    Image(.check, size: 10)
                     Text(notice.text)
                         .font(.ui(size: 11))
                         .lineLimit(1)
                 }
-                .foregroundStyle(Color.themeMutedForeground)
+                .foregroundStyle(Color.themeMutedStrongerForeground)
                 .padding(.trailing, sidebarEdge)
             }
             .frame(height: doneRowHeight + 8)
