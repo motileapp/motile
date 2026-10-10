@@ -35,6 +35,8 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     private(set) var latest: String?
     let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
 
+    /// Called with each release found, and whether the user asked for it.
+    @ObservationIgnored var onFound: ((_ asked: Bool) -> Void)?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var downloadingVersion = ""
     @ObservationIgnored private var download: URLSessionDownloadTask?
@@ -70,6 +72,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
             return
         }
         latest = version
+        onFound?(asked)
         if Version.isOlder(current, than: version) {
             state = .available(version)
         } else if asked {

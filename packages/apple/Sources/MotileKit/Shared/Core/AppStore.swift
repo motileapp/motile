@@ -267,6 +267,7 @@ final class AppStore {
         loadPreferences()
         sidePanel.store = self
         linear.store = self
+        updater.onFound = { [weak self] asked in self?.showServerUpdates(asked: asked) }
     }
 
     // MARK: Starting
@@ -482,6 +483,7 @@ final class AppStore {
             guard let update = serverUpdates[server.id], update.restarting, server.version != update.from else { continue }
             serverUpdates[server.id] = nil
         }
+        showServerUpdates()
         ensureDraftProject()
         // The server has arrived; the install command has done its job.
         if showsAddServer, servers.count > addServerCount {
@@ -1062,6 +1064,15 @@ final class AppStore {
     /// Whether the server runs an older version than the newest release.
     func isOutdated(_ server: Server) -> Bool {
         server.state == .connected && Version.isOlder(server.version, than: updater.latest)
+    }
+
+    /// Opens the sidebar's servers on an update one of them needs: once for each release, or
+    /// whenever the user looked for one.
+    private func showServerUpdates(asked: Bool = false) {
+        guard let latest = updater.latest, servers.contains(where: isOutdated) else { return }
+        guard asked || defaults.string(forKey: "sidebar.serversOpenedFor") != latest else { return }
+        defaults.set(latest, forKey: "sidebar.serversOpenedFor")
+        defaults.set(true, forKey: "sidebar.serversExpanded")
     }
 
     /// Whether an agent works on the server: in a turn, or watching something it left running.

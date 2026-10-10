@@ -13,6 +13,8 @@ final class AppUpdater {
     private(set) var latest: String?
     let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
 
+    /// Called with each release found, and whether the user asked for it.
+    @ObservationIgnored var onFound: ((_ asked: Bool) -> Void)?
     @ObservationIgnored private var timer: Timer?
 
     /// Looks for a new release now and every few hours.
@@ -29,7 +31,10 @@ final class AppUpdater {
             // The address redirects to the release's own page, whose last part is its tag.
             let tag = response?.url?.lastPathComponent ?? ""
             guard tag.hasPrefix("v") else { return }
-            DispatchQueue.main.async { self?.latest = String(tag.dropFirst()) }
+            DispatchQueue.main.async {
+                self?.latest = String(tag.dropFirst())
+                self?.onFound?(false)
+            }
         }.resume()
     }
 }
