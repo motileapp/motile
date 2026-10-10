@@ -330,6 +330,7 @@ private struct ServerLines: View {
         }
         .scrollTargetBehavior(.viewAligned)
         .scrollBounceBehavior(.basedOnSize)
+        .fadesHiddenEdges()
         .frame(height: CGFloat(min(servers.count, Self.mostShown)) * Self.lineHeight)
     }
 }
