@@ -154,6 +154,8 @@ pub struct HandoffLabel {
     pub agent: Agent,
     /// The model's short name, "Opus 5.5", or else its id, or else the agent's name.
     pub label: String,
+    /// The account's name, when its agent has more than one.
+    pub account: Option<String>,
 }
 
 impl HandoffLabel {
@@ -167,7 +169,7 @@ impl HandoffLabel {
             (None, Some(model)) => model,
             (None, None) => agent_name,
         };
-        Self { agent: end.agent, label: label.to_string() }
+        Self { agent: end.agent, label: label.to_string(), account: end.account.clone() }
     }
 }
 
@@ -1642,6 +1644,7 @@ mod tests {
             agent,
             model: model.map(str::to_string),
             name: name.map(str::to_string),
+            account: None,
         };
         let user = |id: &str, seq| item(id, seq, ItemKind::User { text: "Go".into(), attachments: Vec::new() });
         let read = call("t1", 2, "Read", serde_json::json!({"file_path": "/srv/api/a.rs"}), ToolStatus::Succeeded);

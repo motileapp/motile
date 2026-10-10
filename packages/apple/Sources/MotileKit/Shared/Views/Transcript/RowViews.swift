@@ -946,8 +946,27 @@ final class HandoffRowView: RowView {
 
     override func layout(width: CGFloat) -> CGFloat { Self.height }
 
+    /// The model, and the account after a muted dot, as the model picker shows them.
     private static func label(_ end: HandoffContent.End) -> NSAttributedString {
-        NSAttributedString(string: end.label, attributes: [.font: Theme.smallFont, .foregroundColor: Theme.mutedStrongerForeground])
+        let text = { (string: String, color: PlatformColor) in
+            NSAttributedString(string: string, attributes: [.font: Theme.smallFont, .foregroundColor: color])
+        }
+        let label = NSMutableAttributedString(attributedString: text(end.label, Theme.foreground))
+        guard let account = end.account else { return label }
+        label.append(text(" · ", Theme.mutedStrongerForeground))
+        label.append(text(account, Theme.foreground))
+        return label
+    }
+
+    /// The widths of the two labels: as wide as they are where they fit, else the shorter one whole
+    /// and the other what is left, or each half.
+    private static func fitted(_ from: CGFloat, _ to: CGFloat, in room: CGFloat) -> (CGFloat, CGFloat) {
+        let room = max(0, room)
+        guard from + to > room else { return (from, to) }
+        let half = (room / 2).rounded(.down)
+        if from <= half { return (from, room - from) }
+        if to <= half { return (room - to, to) }
+        return (half, half)
     }
 
     override func draw(_ dirtyRect: CGRect) {
@@ -955,8 +974,10 @@ final class HandoffRowView: RowView {
         let from = Self.label(content.from)
         let to = Self.label(content.to)
         let arrowSide = PlatformImage.symbolSide(Self.arrowSize)
-        let endWidth = { (label: NSAttributedString) in Self.logoSide + Self.labelGap + ceil(label.size().width) }
-        let middle = endWidth(from) + Self.arrowGap * 2 + arrowSide + endWidth(to)
+        let fixed = (Self.logoSide + Self.labelGap) * 2 + Self.arrowGap * 2 + arrowSide
+        let room = bounds.width - Self.lineGap * 4 - fixed
+        let (fromWidth, toWidth) = Self.fitted(ceil(from.size().width), ceil(to.size().width), in: room)
+        let middle = fixed + fromWidth + toWidth
         let midY = bounds.height / 2
         var x = ((bounds.width - middle) / 2).rounded()
 
@@ -966,22 +987,22 @@ final class HandoffRowView: RowView {
         let rightLine = x + middle + Self.lineGap
         CGRect(x: rightLine, y: lineY, width: max(0, bounds.width - rightLine), height: 1).fillCurrent()
 
-        let drawEnd = { (end: HandoffContent.End, label: NSAttributedString) in
+        let drawEnd = { (end: HandoffContent.End, label: NSAttributedString, width: CGFloat) in
             if let logo = Self.logos[end.agent] {
                 let side = Self.logoSide
                 logo.drawUpright(in: CGRect(x: x, y: (midY - side / 2).rounded(), width: side, height: side))
             }
             x += Self.logoSide + Self.labelGap
-            let size = label.size()
-            label.draw(at: CGPoint(x: x, y: (midY - size.height / 2).rounded()))
-            x += ceil(size.width)
+            let height = ceil(label.size().height)
+            label.drawTruncated(in: CGRect(x: x, y: (midY - height / 2).rounded(), width: width, height: height))
+            x += width
         }
-        drawEnd(content.from, from)
+        drawEnd(content.from, from, fromWidth)
         x += Self.arrowGap
         let arrow = CGRect(x: x, y: 0, width: arrowSide, height: bounds.height)
         TintedSymbol.draw(.arrowRight, size: Self.arrowSize, color: Theme.mutedStrongerForeground, in: arrow)
         x += arrowSide + Self.arrowGap
-        drawEnd(content.to, to)
+        drawEnd(content.to, to, toWidth)
     }
 }
 

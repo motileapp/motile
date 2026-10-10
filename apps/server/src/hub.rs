@@ -2907,10 +2907,12 @@ impl Hub {
         let Some(turn) = live.turn.as_mut().filter(|turn| !turn.accepted) else { return Ok(()) };
         turn.accepted = true;
         let message_seq = turn.message_seq;
+        let account = live.stored.thread.agent_account.clone();
         self.change_session(&live.stored.thread, |session| {
             session.seen_through = session.seen_through.max(session.pending_through.unwrap_or(0)).max(message_seq);
             session.pending_through = None;
             session.last_turn_at = Some(now());
+            session.account = Some(account);
         })?;
         Ok(())
     }
@@ -3054,17 +3056,19 @@ impl Hub {
             return Ok(());
         }
         let own = sessions.iter().find(|(kept, _)| *kept == continuation).and_then(|(_, own)| own.model.clone());
-        let from = self.handoff_end(last.agent, session.model.clone());
-        let to = self.handoff_end(thread.agent, thread.model.clone().or(own));
+        let from = self.handoff_end(last.agent, session.model.clone(), session.account.as_deref());
+        let to = self.handoff_end(thread.agent, thread.model.clone().or(own), Some(&thread.agent_account));
         let waits_for_model = to.model.is_none();
         let item = live.new_item(new_id(), ItemKind::Handoff { from, to });
         live.handoff_item = waits_for_model.then(|| item.id.clone());
         live.save(&self.store, item)
     }
 
-    fn handoff_end(&self, agent: Agent, model: Option<String>) -> HandoffEnd {
+    fn handoff_end(&self, agent: Agent, model: Option<String>, account: Option<&str>) -> HandoffEnd {
         let name = model.as_deref().and_then(|model| self.model_name(agent, model));
-        HandoffEnd { agent, model, name }
+        let accounts = self.agent_accounts().into_iter().filter(|kept| kept.agent == agent).collect::<Vec<_>>();
+        let named = accounts.iter().find(|kept| accounts.len() > 1 && Some(kept.id.as_str()) == account);
+        HandoffEnd { agent, model, name, account: named.map(|kept| kept.name.clone()) }
     }
 
     /// The model's name as the picker lists it. An agent names a model it runs with its whole id,
@@ -3083,7 +3087,7 @@ impl Hub {
         let Some(item_id) = live.handoff_item.take() else { return Ok(()) };
         let Some(mut item) = self.store.item(&live.stored.thread.id, &item_id)? else { return Ok(()) };
         let ItemKind::Handoff { to, .. } = &mut item.kind else { return Ok(()) };
-        *to = self.handoff_end(to.agent, Some(model.to_string()));
+        *to = HandoffEnd { account: to.account.take(), ..self.handoff_end(to.agent, Some(model.to_string()), None) };
         item.rev = live.next_rev();
         live.save(&self.store, item)
     }

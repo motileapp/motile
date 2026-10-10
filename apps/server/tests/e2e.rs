@@ -1487,7 +1487,12 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
     let change = ThreadChange { agent_account: Some("claude".into()), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, change).await, Message::Ok);
     send(&connection, Some(thread_id.clone()), None, "And in Cargo.toml?").await;
-    finished_transcript(&connection, &thread_id).await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    let handoff = transcript.items.iter().find_map(|item| match &item.kind {
+        ItemKind::Handoff { from, to } => Some((from.account.as_deref(), to.account.as_deref())),
+        _ => None,
+    });
+    assert_eq!(handoff, Some((Some("Personal"), Some("Default"))));
     let moved = turns_in("arguments.txt");
     assert_eq!(moved.len(), 1, "{moved:?}");
     assert!(!moved[0].contains("--resume"), "a new session starts where the old one isn't: {moved:?}");
