@@ -212,8 +212,12 @@ struct SidebarScreen: View {
     /// The servers and how the client reaches them, and under them the account, which leads to the
     /// settings and the usage, the search and the way to a new thread.
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            servers
+        VStack(alignment: .leading, spacing: 0) {
+            if !store.servers.isEmpty {
+                servers
+                    .padding(.horizontal, sidebarRowInset + 8)
+                ThemeDivider()
+            }
             HStack(spacing: 8) {
                 AccountMenu()
                 SearchField(text: $search, bare: true)
@@ -223,10 +227,9 @@ struct SidebarScreen: View {
                 circleButton(.squarePen, label: "New thread") { store.newThread() }
                     .disabled(store.projects.isEmpty && store.noProjects.isEmpty)
             }
-            .padding(.top, 6)
+            .padding(.horizontal, sidebarRowInset + 8)
+            .padding(.top, 10)
         }
-        .padding(.horizontal, sidebarRowInset + 8)
-        .padding(.top, store.servers.isEmpty ? 10 : 0)
         .padding(.bottom, 8)
         .background(alignment: .top) {
             Rectangle()
