@@ -15,7 +15,7 @@ struct SettingsSections: View {
     var body: some View {
         @Bindable var store = store
         SettingsList { sections }
-            .searchable(text: $store.settingsQuery, prompt: "Search")
+            .searchField(text: $store.settingsQuery, prompt: "Search")
     }
 
     @ViewBuilder private var sections: some View {

@@ -175,7 +175,8 @@ struct CommandPanel: View {
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .frame(width: ControlSize.regular.height, height: ControlSize.regular.height)
             }
-            TextField("", text: $query, prompt: .placeholder(prompt(page)))
+            TextField("", text: $query)
+                .placeholder(prompt(page), shown: query.isEmpty)
                 .textFieldStyle(.plain)
                 .font(.ui(size: 16))
                 .focused($searching)

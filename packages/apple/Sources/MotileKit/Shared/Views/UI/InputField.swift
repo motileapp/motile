@@ -83,17 +83,27 @@ struct InputField: View {
 extension InputField {
     @ViewBuilder fileprivate var field: some View {
         if secure {
-            SecureField("", text: $text, prompt: .placeholder(placeholder))
+            SecureField("", text: $text).placeholder(placeholder, shown: text.isEmpty)
         } else {
-            TextField("", text: $text, prompt: .placeholder(placeholder))
+            TextField("", text: $text).placeholder(placeholder, shown: text.isEmpty)
         }
     }
 }
 
-extension Text {
-    /// What a field shows while it is empty, in the one colour every field's placeholder has.
-    static func placeholder(_ text: String) -> Text {
-        Text(text).foregroundStyle(Color.themeMutedStrongerForeground)
+extension View {
+    /// What a field shows while it is empty, in the one colour every field's placeholder has. It is
+    /// drawn behind the field, as the Mac's field ignores the colour of its prompt.
+    func placeholder(_ text: String, shown: Bool) -> some View {
+        background(alignment: .leading) {
+            if shown {
+                Text(text)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                    .lineLimit(1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityLabel(text)
     }
 }
 
