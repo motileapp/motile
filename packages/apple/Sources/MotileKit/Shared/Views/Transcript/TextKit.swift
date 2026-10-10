@@ -53,6 +53,19 @@ enum CodeBoxes {
     }
 }
 
+/// Keeps a shell command's words whole: its lines break only after a space, or inside a word
+/// longer than the line.
+final class ShellWords: NSObject, NSLayoutManagerDelegate {
+    static let shared = ShellWords()
+
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldBreakLineByWordBeforeCharacterAt charIndex: Int) -> Bool {
+        guard let storage = layoutManager.textStorage, charIndex > 0, charIndex < storage.length else { return true }
+        guard storage.attribute(.motileShellWords, at: charIndex, effectiveRange: nil) != nil else { return true }
+        let before = (storage.string as NSString).character(at: charIndex - 1)
+        return before == 0x20 || before == 0x09
+    }
+}
+
 /// Draws what attributes alone can't: rounded backgrounds behind inline code, the bar beside a
 /// quote and horizontal rules.
 final class DecoratingLayoutManager: NSLayoutManager {
@@ -140,6 +153,7 @@ final class TextSystem {
     let container = NSTextContainer(size: CGSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
 
     init() {
+        layout.delegate = ShellWords.shared
         layout.allowsNonContiguousLayout = true
         storage.addLayoutManager(layout)
         container.lineFragmentPadding = 0

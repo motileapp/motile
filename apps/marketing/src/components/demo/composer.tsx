@@ -75,8 +75,8 @@ export function Composer({
               Allow
             </button>
           </div>
-          <p className="mt-2 font-mono text-[12px] break-words">
-            {thread.approval.target}
+          <p className="mt-2 rounded-md bg-border-input p-2.5 font-mono text-[12.5px] break-words">
+            <Command text={thread.approval.target} />
           </p>
         </Strip>
       )}
@@ -217,6 +217,18 @@ function Strip({
     >
       {children}
     </div>
+  )
+}
+
+/** A command with its program in the function colour, as the core's highlighter colours it. */
+function Command({ text }: { text: string }) {
+  const space = text.indexOf(" ")
+  if (space < 0) return <span className="text-syntax-function">{text}</span>
+  return (
+    <>
+      <span className="text-syntax-function">{text.slice(0, space)}</span>
+      {text.slice(space)}
+    </>
   )
 }
 
