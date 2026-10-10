@@ -5,11 +5,18 @@
 #
 # MOTILE_AUTH_URL, if set, becomes the auth server the client signs in with (default https://auth.motile.app).
 # MOTILE_SIGN_IDENTITY, if set, is the Developer ID certificate the client is signed with.
+# MOTILE_DEV_BUILD=1 builds the dev app's client into build/Motile Dev.app instead, optimized but a file
+# at a time, so on every core and only what changed. It isn't for judging speed.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$(cd ../.. && pwd)"
 APP="build/Motile.app"
+SWIFT=(swift build -c release)
+if [ -n "${MOTILE_DEV_BUILD:-}" ]; then
+    APP="build/Motile Dev.app"
+    SWIFT=(swift build -c debug -Xswiftc -O --scratch-path .build/dev)
+fi
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/Cargo.toml" | head -1)"
 
 echo "▸ Building the core…"
@@ -23,8 +30,8 @@ if [ -n "$LINK_FLAGS" ]; then
 fi
 
 echo "▸ Building the client…"
-swift build -c release
-BINARY="$(swift build -c release --show-bin-path)/Motile"
+"${SWIFT[@]}"
+BINARY="$("${SWIFT[@]}" --show-bin-path)/Motile"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

@@ -335,7 +335,8 @@ Mac app.
   the Mac app's demo (`DemoDriver.swift`, run by `scripts/ci-demo.sh` in the `Release` and
   `macOS` workflows), which signs in, adds a project, and drives threads, git and drafts end to
   end. When a change touches what one of them does or expects, read it, update it in the same
-  change, and run it (`apps/macos/scripts/ci-demo.sh`, then read `screenshots/checks.txt`)
+  change, and run it (`apps/macos/scripts/build-app.sh`, then `apps/macos/scripts/ci-demo.sh`,
+  then read `screenshots/checks.txt`)
   before calling the change done. A push to `main` with a red workflow blocks the release.
 
 ## Development
@@ -390,7 +391,8 @@ account. Their server, `studio`, runs `scripts/fake-agent` and starts with a pro
 finished threads. All of it lives in `apps/macos/build/dev` and keeps running until you stop it,
 which you do when your task is done; its ports are in `build/dev/ports`. On the Mac, type with `osascript` (System Events
 `keystroke`, which needs Accessibility; pictures need Screen Recording) and address the client by
-the pid in `build/dev/app.pid`. Use the demo (`scripts/ci-demo.sh`) only for the stall numbers.
+the pid in `build/dev/app.pid`. The Mac's dev app is built without whole-module optimization, so
+that it builds fast; judge speed with the demo (`scripts/ci-demo.sh`), and use it only for that.
 
 ### The fake agent
 
