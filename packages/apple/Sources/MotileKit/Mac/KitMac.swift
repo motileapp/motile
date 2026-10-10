@@ -654,5 +654,43 @@ enum MediaFiles {
         guard let window = view?.window ?? NSApp.keyWindow ?? NSApp.mainWindow else { return write(panel.runModal()) }
         panel.beginSheetModal(for: window, completionHandler: write)
     }
+
+    /// Puts a copy of the file in Downloads, under its name or a free one like it, as a browser
+    /// does, and hands over where it went.
+    static func download(_ file: URL, named name: String, from view: NSView, done: @escaping (URL?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+            let destination = freeName(for: name.isEmpty ? file.lastPathComponent : name, in: downloads)
+            let copied = (try? FileManager.default.copyItem(at: file, to: destination)) != nil
+            DispatchQueue.main.async {
+                guard copied else { return done(nil) }
+                // Has the Downloads stack in the Dock bounce, as it does for a browser's download.
+                DistributedNotificationCenter.default().post(name: .init("com.apple.DownloadFileFinished"), object: destination.path)
+                done(destination)
+            }
+        }
+    }
+
+    /// Opens the file in the app the Mac opens its kind with.
+    static func open(_ file: URL, named name: String, from view: NSView) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let named = namedCopy(of: file, name: name)
+            DispatchQueue.main.async { _ = NSWorkspace.shared.open(named) }
+        }
+    }
+
+    /// `name` in `folder`, or "name 2", "name 3" and so on when it is taken.
+    private static func freeName(for name: String, in folder: URL) -> URL {
+        let stem = (name as NSString).deletingPathExtension
+        let suffix = (name as NSString).pathExtension
+        var candidate = folder.appendingPathComponent(name)
+        var number = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            let numbered = suffix.isEmpty ? "\(stem) \(number)" : "\(stem) \(number).\(suffix)"
+            candidate = folder.appendingPathComponent(numbered)
+            number += 1
+        }
+        return candidate
+    }
 }
 #endif

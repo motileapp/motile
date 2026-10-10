@@ -64,7 +64,7 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width) + ProseRowView.gap + row.above
         case .error(let text):
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
-        case .code, .tool, .thinking, .group, .fold, .media, .changes, .turnEnd, .handoff, .queued:
+        case .code, .tool, .thinking, .group, .fold, .media, .file, .changes, .turnEnd, .handoff, .queued:
             return estimatedHeight(row, width: width)
         }
     }
@@ -82,6 +82,8 @@ class RowView: FlippedView {
             return ToolRowView.rowHeight + row.above
         case .media(let content):
             return MediaRowView.height(content, width: width)
+        case .file:
+            return FileRowView.height
         case .error(let text):
             return estimatedTextHeight(text.length, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .changes(let content):
@@ -108,6 +110,7 @@ class RowView: FlippedView {
         case .code: return CodeRowView()
         case .tool, .thinking, .group, .fold: return ToolRowView()
         case .media: return MediaRowView()
+        case .file: return FileRowView()
         case .error: return ErrorRowView()
         case .changes: return ChangesRowView()
         case .turnEnd: return TurnEndRowView()
@@ -123,6 +126,7 @@ class RowView: FlippedView {
         case .code: return "code"
         case .tool, .thinking, .group, .fold: return "tool"
         case .media: return "media"
+        case .file: return "file"
         case .error: return "error"
         case .changes: return "changes"
         case .turnEnd: return "turnEnd"

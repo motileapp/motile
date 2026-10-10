@@ -1,6 +1,6 @@
-//! The images and videos this device has fetched from its servers. The servers keep them all; this
-//! copy only makes them show at once, and without a connection. When it grows past its limit,
-//! what was looked at longest ago goes first.
+//! The images, videos and files this device has fetched from its servers. The servers keep them
+//! all; this copy only makes them show at once, and without a connection. When it grows past its
+//! limit, what was looked at longest ago goes first.
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;

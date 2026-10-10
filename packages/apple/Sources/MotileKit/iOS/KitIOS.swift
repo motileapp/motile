@@ -1,5 +1,6 @@
 #if os(iOS)
 import QuartzCore
+import QuickLook
 import UIKit
 
 /// An entry of the menu a view opens when it is held.
@@ -606,6 +607,49 @@ enum MediaFiles {
         sheet.popoverPresentationController?.sourceView = view
         sheet.popoverPresentationController?.sourceRect = view.bounds
         view.presenter?.present(sheet, animated: true)
+    }
+
+    /// Asks where in Files a copy of the file goes. Where it went isn't known, so nothing is
+    /// handed over.
+    static func download(_ file: URL, named name: String, from view: UIView, done: @escaping (URL?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let named = namedCopy(of: file, name: name)
+            DispatchQueue.main.async {
+                let picker = UIDocumentPickerViewController(forExporting: [named], asCopy: true)
+                view.presenter?.present(picker, animated: true)
+                done(nil)
+            }
+        }
+    }
+
+    /// Shows the file in Quick Look, which also shares it.
+    static func open(_ file: URL, named name: String, from view: UIView) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let named = namedCopy(of: file, name: name)
+            DispatchQueue.main.async {
+                let preview = QLPreviewController()
+                let source = PreviewSource(file: named)
+                preview.dataSource = source
+                objc_setAssociatedObject(preview, &PreviewSource.key, source, .OBJC_ASSOCIATION_RETAIN)
+                view.presenter?.present(preview, animated: true)
+            }
+        }
+    }
+}
+
+/// The one file Quick Look shows. The preview keeps it, as it only holds its source weakly.
+private final class PreviewSource: NSObject, QLPreviewControllerDataSource {
+    static var key: UInt8 = 0
+    let file: URL
+
+    init(file: URL) {
+        self.file = file
+    }
+
+    func numberOfPreviewItems(in controller: QLPreviewController) -> Int { 1 }
+
+    func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+        file as NSURL
     }
 }
 #endif

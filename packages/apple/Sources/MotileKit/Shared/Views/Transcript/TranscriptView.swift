@@ -591,6 +591,7 @@ final class TranscriptView: FlippedView, RowOwner {
         case is CodeRowView: "code"
         case is ToolRowView: "tool"
         case is MediaRowView: "media"
+        case is FileRowView: "file"
         case is ErrorRowView: "error"
         case is ChangesRowView: "changes"
         case is QueuedRowView: "queued"

@@ -3408,8 +3408,8 @@ impl Live {
         Ok(())
     }
 
-    /// Copies the images and videos a reply shows that its item doesn't hold yet. `true` when
-    /// the item holds more now.
+    /// Copies the images, videos and files a reply shows that its item doesn't hold yet. `true`
+    /// when the item holds more now.
     fn keep_media(&mut self, store: &Store, id: &str) -> anyhow::Result<bool> {
         let Some(item) = self.open.get_mut(id) else { return Ok(false) };
         let ItemKind::Assistant { text } = &item.kind else { return Ok(false) };
@@ -3417,8 +3417,8 @@ impl Live {
         if kept.is_empty() {
             return Ok(false);
         }
-        for media in &kept {
-            store.save_media(&self.stored.thread.id, &media.id)?;
+        for id in kept.iter().flat_map(|media| std::iter::once(&media.id).chain(&media.poster)) {
+            store.save_media(&self.stored.thread.id, id)?;
         }
         item.media.extend(kept);
         Ok(true)

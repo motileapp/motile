@@ -17,10 +17,13 @@ use crate::handoff::Handoff;
 use crate::mcp::McpAccess;
 
 const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedding it in your reply as a \
-     Markdown image with the absolute path of the file, like ![what it shows](/path/to/file.png).";
+     Markdown image with the absolute path of the file, like ![what it shows](/path/to/file.png). Give a \
+     video a preview image as its title, like ![what it shows](/path/to/video.mp4 \"/path/to/preview.png\"), \
+     so that it shows before it plays. Any other file embedded the same way, like \
+     ![The report](/path/to/report.pdf), is sent to the user to download; send a folder as an archive.";
 
-/// Told to an agent when it starts: where it runs, and that it shows what it made instead of
-/// naming a file. Claude Code knows its own model and effort; Codex is told them.
+/// Told to an agent when it starts: where it runs, and that it shows or sends what it made instead
+/// of naming a file. Claude Code knows its own model and effort; Codex is told them.
 pub fn instructions(turn: &Turn) -> String {
     let harness = match turn.agent {
         Agent::Claude => "Claude Code",

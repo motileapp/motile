@@ -200,8 +200,8 @@ impl Connection {
         Ok((kind, size, bytes))
     }
 
-    /// Fetches the server's copy of an image or a video into `file`, telling `progress` how many
-    /// of its bytes have arrived.
+    /// Fetches the server's copy of an image, a video or a file an agent sent into `file`, telling
+    /// `progress` how many of its bytes have arrived.
     pub async fn media(&self, id: &str, file: &Path, progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {
         let (mut send, mut recv) = self.inner.open_bi().await?;
         write_frame(&mut send, &Request::Media { id: id.to_string() }).await?;

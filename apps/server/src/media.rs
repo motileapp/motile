@@ -1,12 +1,12 @@
-//! The images and videos agents show in their replies and users attach to their messages. The
-//! server copies each one when it is shown, named by its contents, so a thread keeps showing it
-//! after the file has changed or gone.
+//! The images and videos agents show in their replies and users attach to their messages, and the
+//! other files agents send. The server copies each one when it is shown, named by its contents, so
+//! a thread keeps showing it after the file has changed or gone.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
-use motile_protocol::media::{MAX_SIZE, Namer, is_id, kind};
+use motile_protocol::media::{MAX_SIZE, Namer, extension, is_id, kind};
 use motile_protocol::wire::Media;
 use pulldown_cmark::{Event, Options, Parser, Tag};
 
@@ -24,17 +24,22 @@ impl MediaStore {
         Self { folder, home: home.to_string() }
     }
 
-    /// Copies what `text` shows and `known` doesn't hold yet. Paths are taken from `cwd`.
+    /// Copies what `text` shows or sends and `known` doesn't hold yet, each video with the image
+    /// its title names as its poster. Paths are taken from `cwd`.
     pub fn capture_new(&self, text: &str, cwd: &str, known: &[Media]) -> Vec<Media> {
         if !text.contains("![") {
             return Vec::new();
         }
         let mut captured: Vec<Media> = Vec::new();
-        for src in image_destinations(text) {
+        for (src, title) in images(text) {
             if known.iter().chain(&captured).any(|media| media.src == src) {
                 continue;
             }
-            captured.extend(self.capture(&src, cwd));
+            let Some(mut media) = self.capture(&src, cwd, true) else { continue };
+            if media.video && !title.is_empty() {
+                self.give_poster(&mut media, &title, cwd);
+            }
+            captured.push(media);
         }
         captured
     }
@@ -47,24 +52,34 @@ impl MediaStore {
             if captured.iter().any(|media| &media.src == path) {
                 continue;
             }
-            let Some(mut media) = self.capture(path, "/") else { continue };
-            let poster = Path::new(path).with_file_name(POSTER);
-            if let Some(poster) = poster.to_str().filter(|_| media.video).and_then(|poster| self.capture(poster, "/")) {
-                (media.width, media.height) = (poster.width, poster.height);
-                media.poster = Some(poster.id);
+            let Some(mut media) = self.capture(path, "/", false) else { continue };
+            if let Some(poster) = Path::new(path).with_file_name(POSTER).to_str().filter(|_| media.video) {
+                self.give_poster(&mut media, poster, "/");
             }
             captured.push(media);
         }
         captured
     }
 
-    fn capture(&self, src: &str, cwd: &str) -> Option<Media> {
+    /// Has the image at `poster` stand for the video until it plays, and give it its size.
+    fn give_poster(&self, video: &mut Media, poster: &str, cwd: &str) {
+        let Some(poster) = self.capture(poster, cwd, false).filter(|poster| !poster.video) else { return };
+        (video.width, video.height) = (poster.width, poster.height);
+        video.poster = Some(poster.id);
+    }
+
+    /// Copies the image or the video at `src`, or with `any_file` whatever file is there.
+    fn capture(&self, src: &str, cwd: &str, any_file: bool) -> Option<Media> {
         let path = self.file_shown(src, cwd)?;
-        let (extension, video) = kind(&path)?;
+        let shown = kind(&path);
+        if shown.is_none() && !any_file {
+            return None;
+        }
         let size = std::fs::metadata(&path).ok().filter(|file| file.is_file())?.len();
         if size == 0 || size > MAX_SIZE {
             return None;
         }
+        let (extension, video) = shown.clone().unwrap_or_else(|| (extension(&path), false));
         let (id, size) = match self.copy(&path, &extension) {
             Ok(copied) => copied,
             Err(error) => {
@@ -72,16 +87,29 @@ impl MediaStore {
                 return None;
             }
         };
-        if video {
-            return Some(Media { id, src: src.to_string(), video, size, width: None, height: None, poster: None });
+        let media = Media {
+            id,
+            src: src.to_string(),
+            video,
+            file: shown.is_none(),
+            size,
+            width: None,
+            height: None,
+            poster: None,
+        };
+        if video || media.file {
+            return Some(media);
         }
         // A file that only has an image's name isn't shown as one.
-        let Ok(dimensions) = imagesize::size(self.folder.join(&id)) else {
-            self.remove(&id);
+        let Ok(dimensions) = imagesize::size(self.folder.join(&media.id)) else {
+            if any_file {
+                return Some(Media { file: true, ..media });
+            }
+            self.remove(&media.id);
             return None;
         };
         let (width, height) = (u32::try_from(dimensions.width).ok(), u32::try_from(dimensions.height).ok());
-        Some(Media { id, src: src.to_string(), video, size, width, height, poster: None })
+        Some(Media { width, height, ..media })
     }
 
     /// The file a reply's image points at, if it is one on this machine.
@@ -131,7 +159,7 @@ impl MediaStore {
 
     pub async fn open(&self, id: &str) -> anyhow::Result<(tokio::fs::File, u64)> {
         if !is_id(id) {
-            bail!("{id} isn't the name of an image or a video.");
+            bail!("{id} isn't the name of a file your server keeps.");
         }
         let file = tokio::fs::File::open(self.folder.join(id)).await.context("Your server no longer has that file.")?;
         let size = file.metadata().await?.len();
@@ -145,14 +173,14 @@ impl MediaStore {
     }
 }
 
-/// Where the images of a reply point, as the clients' Markdown parser reads them.
-fn image_destinations(text: &str) -> Vec<String> {
+/// Where the images of a reply point, as the clients' Markdown parser reads them, with their titles.
+fn images(text: &str) -> Vec<(String, String)> {
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
-    let destinations = Parser::new_ext(text, options).filter_map(|event| match event {
-        Event::Start(Tag::Image { dest_url, .. }) => Some(dest_url.to_string()),
+    let images = Parser::new_ext(text, options).filter_map(|event| match event {
+        Event::Start(Tag::Image { dest_url, title, .. }) => Some((dest_url.to_string(), title.to_string())),
         _ => None,
     });
-    destinations.collect()
+    images.collect()
 }
 
 fn percent_decode(text: &str) -> String {
@@ -224,22 +252,65 @@ mod tests {
     }
 
     #[test]
-    fn the_copy_outlives_the_file_and_only_media_is_kept() {
+    fn the_copy_outlives_the_file_and_any_other_file_is_sent() {
         let dir = tempfile::tempdir().unwrap();
         let (store, cwd) = store(&dir);
         let shot = dir.path().join("project/shot.png");
         std::fs::write(&shot, png(10, 20)).unwrap();
         std::fs::write(dir.path().join("project/demo.mp4"), b"not really a video").unwrap();
         std::fs::write(dir.path().join("project/notes.png"), b"not an image").unwrap();
-        std::fs::write(dir.path().join("project/secret.txt"), b"secret").unwrap();
-        let text = "![a](shot.png) ![b](demo.mp4) ![c](notes.png) ![d](secret.txt) ![e](https://example.com/a.png)";
+        std::fs::write(dir.path().join("project/report.pdf"), b"a report").unwrap();
+        std::fs::create_dir_all(dir.path().join("project/folder")).unwrap();
+        let text = "![a](shot.png) ![b](demo.mp4) ![c](notes.png) ![d](report.pdf) ![e](folder) ![f](https://example.com/a.png)";
 
         let captured = store.capture_new(text, &cwd, &[]);
         std::fs::remove_file(&shot).unwrap();
 
-        let kept: Vec<(&str, bool)> = captured.iter().map(|media| (media.src.as_str(), media.video)).collect();
-        assert_eq!(kept, vec![("shot.png", false), ("demo.mp4", true)]);
+        let kept: Vec<(&str, bool, bool)> =
+            captured.iter().map(|media| (media.src.as_str(), media.video, media.file)).collect();
+        assert_eq!(
+            kept,
+            vec![
+                ("shot.png", false, false),
+                ("demo.mp4", true, false),
+                ("notes.png", false, true),
+                ("report.pdf", false, true)
+            ]
+        );
+        assert!(captured[3].id.ends_with(".pdf"));
         assert_eq!(std::fs::read(dir.path().join("media").join(&captured[0].id)).unwrap(), png(10, 20));
-        assert_eq!(std::fs::read_dir(dir.path().join("media")).unwrap().count(), 2);
+        assert_eq!(std::fs::read(dir.path().join("media").join(&captured[3].id)).unwrap(), b"a report");
+        assert_eq!(std::fs::read_dir(dir.path().join("media")).unwrap().count(), 4);
+    }
+
+    #[test]
+    fn a_video_has_the_image_its_title_names_as_its_poster() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, cwd) = store(&dir);
+        std::fs::write(dir.path().join("project/demo.mp4"), b"a video").unwrap();
+        std::fs::write(dir.path().join("project/demo.png"), png(1280, 720)).unwrap();
+        let text = "![Demo](demo.mp4 \"demo.png\") ![Again](demo.mp4) ![Shot](demo.png \"demo.mp4\")";
+
+        let captured = store.capture_new(text, &cwd, &[]);
+
+        let [video, shot] = &captured[..] else { panic!("a video and an image: {captured:?}") };
+        assert_eq!((video.width, video.height), (Some(1280), Some(720)));
+        assert_eq!(video.poster.as_ref(), Some(&shot.id), "the poster is the image's own copy");
+        assert_eq!(shot.poster, None);
+    }
+
+    #[test]
+    fn only_images_and_videos_are_kept_of_what_a_message_attaches() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, _) = store(&dir);
+        let shot = dir.path().join("project/shot.png");
+        let notes = dir.path().join("project/notes.txt");
+        std::fs::write(&shot, png(10, 20)).unwrap();
+        std::fs::write(&notes, b"notes").unwrap();
+        let attached = [shot, notes].map(|path| path.to_string_lossy().into_owned());
+
+        let captured = store.capture_attached(&attached);
+
+        assert_eq!(captured.iter().map(|media| media.src.as_str()).collect::<Vec<_>>(), [attached[0].as_str()]);
     }
 }
