@@ -537,7 +537,12 @@ final class ToolRowView: RowView {
     static let afterProse: CGFloat = 8
     private var above: CGFloat = 0
 
-    private let header = SurfaceView()
+    /// The header reaches past the row's sides by as much room as its icon has above it, so
+    /// that what it lights up stands out while the icon lines up with the text.
+    private static let line = rowHeight - 2
+    private static let bleed = (line - 16) / 2
+    private let header = FlippedView()
+    private let highlight = SurfaceView()
     private static let titleFont = PlatformFont.ui(13)
 
     private let icon = SymbolView(tint: Theme.mutedStrongerForeground)
@@ -561,8 +566,9 @@ final class ToolRowView: RowView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        header.radius = 6
+        highlight.radius = 6
         addSubview(header)
+        header.addSubview(highlight)
         header.addSubview(icon)
         header.addSubview(title)
         header.addSubview(shine)
@@ -578,7 +584,11 @@ final class ToolRowView: RowView {
             guard let self else { return }
             self.owner?.rowWillSelect(self)
         }
-        header.onClick = { [weak self] in
+        header.onHover = { [weak self] point in
+            guard let self else { return }
+            self.highlight.fill = point != nil && self.hasDetail ? Theme.backgroundAccentLarger : .clear
+        }
+        header.onPress = { [weak self] _ in
             guard let self, self.hasDetail else { return }
             guard !self.opensAgent else {
                 self.owner?.openAgent(itemID: self.itemID)
@@ -599,6 +609,7 @@ final class ToolRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         loadedDetail = false
+        highlight.fill = .clear
         open = nil
         startedAt = nil
         opensAgent = false
@@ -650,6 +661,7 @@ final class ToolRowView: RowView {
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] timer in
             guard let self, self.superview != nil else { return timer.invalidate() }
             self.elapsed.string = Time.elapsed(since: startedAt)
+            self.fitHeader()
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
@@ -685,18 +697,19 @@ final class ToolRowView: RowView {
         // The rows of an open group stand in from the group's own.
         let inset: CGFloat = nested ? 24 : 0
         let width = width - inset
-        let line = Self.rowHeight - 2
-        let middle = { (height: CGFloat) in ((line - height) / 2).rounded() }
-        header.frame = CGRect(x: inset - 6, y: 1 + above, width: width + 12, height: line)
-        icon.frame = CGRect(x: 6, y: middle(16), width: 16, height: 16)
+        let bleed = Self.bleed
+        let middle = { (height: CGFloat) in (1 + (Self.line - height) / 2).rounded() }
+        header.frame = CGRect(x: inset - bleed, y: above, width: header.frame.width, height: Self.rowHeight)
+        icon.frame = CGRect(x: bleed, y: middle(16), width: 16, height: 16)
         let timeWidth: CGFloat = startedAt == nil ? 0 : scaled(58)
         let titleWidth = min(title.naturalWidth + 4, width - 60 - timeWidth)
-        title.frame = CGRect(x: 30, y: middle(scaled(18)), width: titleWidth, height: scaled(18))
+        title.frame = CGRect(x: bleed + 24, y: middle(scaled(18)), width: titleWidth, height: scaled(18))
         shine.frame = title.frame
         chevron.isHidden = !hasDetail
         chevron.show(open ?? expanded ? .chevronDown : .chevronRight, size: 9)
-        chevron.frame = CGRect(x: 30 + titleWidth + 2, y: middle(16), width: 14, height: 16)
-        elapsed.frame = CGRect(x: chevron.frame.maxX + 6, y: middle(scaled(16)), width: timeWidth, height: scaled(16))
+        chevron.frame = CGRect(x: title.frame.maxX + 2, y: middle(16), width: 14, height: 16)
+        elapsed.frame = CGRect(x: chevron.frame.maxX + 6, y: middle(scaled(16)), width: 0, height: scaled(16))
+        fitHeader()
 
         detailSurface.isHidden = !expanded
         guard expanded else { return Self.rowHeight + above }
@@ -706,12 +719,21 @@ final class ToolRowView: RowView {
         }
         let inner = width - 30 - 24
         let detailHeight = detail.height(forWidth: inner)
-        detailSurface.frame = CGRect(x: inset + 30, y: Self.rowHeight + above + 2, width: width - 30, height: detailHeight + 20)
+        detailSurface.frame = CGRect(x: inset + 30, y: Self.rowHeight + above + 3, width: width - 30, height: detailHeight + 20)
         detail.frame = CGRect(x: 12, y: 10, width: inner, height: detailHeight)
-        return Self.rowHeight + above + detailHeight + 20 + 8
+        return Self.rowHeight + above + detailHeight + 20 + 9
     }
 
     override func clearSelection() { detail.clearSelection() }
+
+    /// The header ends as far past the last thing on it as it starts before the icon, and a point
+    /// further past the chevron, whose 9 points are drawn in the middle of its frame.
+    private func fitHeader() {
+        elapsed.frame.size.width = elapsed.isHidden ? 0 : elapsed.naturalWidth
+        let end = !elapsed.isHidden ? elapsed.frame.maxX : hasDetail ? chevron.frame.midX + 5.5 : title.frame.maxX
+        header.frame.size.width = (end + Self.bleed).rounded()
+        highlight.frame = CGRect(x: 0, y: 1, width: header.frame.width, height: Self.line)
+    }
 }
 
 final class ErrorRowView: RowView {
