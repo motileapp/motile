@@ -317,6 +317,7 @@ struct BranchPicker: View {
         }
         #if os(macOS)
         .frame(width: 300)
+        .environment(\.surface, .popover)
         .onAppear {
             DispatchQueue.main.async { searching = true }
         }
