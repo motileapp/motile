@@ -6,7 +6,7 @@
   --background-accent: #e6e8ef;
   --background-accent-stronger: #dbdee8;
   --background-accent-strongest: #d0d4e0;
-  --background-accent-larger: #eceef4;
+  --background-accent-larger: #eaecf2;
   --background-accent-larger-stronger: #e1e4ed;
   --background-secondary: #eceef4;
   --background-secondary-accent: #e1e4ed;
@@ -38,7 +38,7 @@
   --border-card: #e6e8ee;
   --border-input: #eceef4;
   --border-popover: #e8eaef;
-  --input: #eceef4;
+  --input: #eaecf2;
   --composer: #ffffff;
   --ring: #22242b;
   --overlay: #000000;
@@ -89,7 +89,7 @@
   --background-accent: #191a1f;
   --background-accent-stronger: #212329;
   --background-accent-strongest: #2b2c32;
-  --background-accent-larger: #111217;
+  --background-accent-larger: #14151a;
   --background-accent-larger-stronger: #191a1f;
   --background-secondary: #111217;
   --background-secondary-accent: #191a1f;
@@ -121,7 +121,7 @@
   --border-card: #1e1f25;
   --border-input: #1a1b21;
   --border-popover: #222228;
-  --input: #111217;
+  --input: #14151a;
   --composer: #111217;
   --ring: #d0d2d9;
   --overlay: #000000;
