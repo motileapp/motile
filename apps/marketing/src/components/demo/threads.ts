@@ -19,6 +19,10 @@ export type Item =
     }
   | { kind: "changes" }
   | { kind: "end"; worked: string }
+  | { kind: "handoff"; from: HandoffEnd; to: HandoffEnd }
+
+/** One side of a handoff: the agent and the model's short name. */
+export type HandoffEnd = { agent: Agent; label: string }
 
 export type Status =
   | { kind: "idle"; ago: string }
@@ -186,6 +190,26 @@ src/middleware.ts
     status: { kind: "working", since: 42 },
     worktree: true,
     items: [
+      {
+        kind: "user",
+        text: "Which tests have been flaky on CI this week?",
+      },
+      {
+        kind: "tool",
+        tool: "run",
+        verb: "Ran",
+        target: "gh run list --branch main --limit 30",
+      },
+      {
+        kind: "text",
+        text: "Only one: `checkout.spec.ts` failed 6 of the last 30 runs on main, and passed when each was retried.",
+      },
+      { kind: "end", worked: "Worked for 48s" },
+      {
+        kind: "handoff",
+        from: { agent: "claude", label: "Opus 5.5" },
+        to: { agent: "codex", label: "6.1-Sol" },
+      },
       {
         kind: "user",
         text: "checkout.spec.ts fails about one run in five on CI. Find out why and fix it.",

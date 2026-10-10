@@ -1,4 +1,5 @@
 import {
+  ArrowRightIcon,
   CopyIcon,
   FileTextIcon,
   GlobeIcon,
@@ -10,7 +11,8 @@ import {
 import type { ReactNode } from "react"
 import { parseDiff } from "./diff"
 import { highlight } from "./highlight"
-import type { Item, Thread, Tool } from "./threads"
+import { AgentIcon } from "./icons"
+import type { HandoffEnd, Item, Thread, Tool } from "./threads"
 import { cn } from "@/lib/utils"
 
 const TOOL_ICONS: Record<Tool, LucideIcon> = {
@@ -113,7 +115,28 @@ function Row({
           <CopyIcon className="size-3" />
         </div>
       )
+    case "handoff":
+      return (
+        <div className="flex h-9 items-center text-[12px] text-muted-stronger-foreground">
+          <span className="h-px flex-1 bg-border" />
+          <span className="mx-[11px] flex items-center gap-2">
+            <Handoff end={item.from} />
+            <ArrowRightIcon className="size-3" />
+            <Handoff end={item.to} />
+          </span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+      )
   }
+}
+
+function Handoff({ end }: { end: HandoffEnd }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <AgentIcon agent={end.agent} size={14} />
+      {end.label}
+    </span>
+  )
 }
 
 export function Shimmer({

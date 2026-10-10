@@ -18,6 +18,8 @@ use super::{AgentEvent, Background, ModelUsage, Turn};
 const WATCH_TASKS: [&str; 4] = ["local_bash", "shell", "monitor", "monitor_mcp"];
 /// Background tasks that are only bookkeeping.
 const IDLE_TASKS: [&str; 2] = ["plan", "dream"];
+/// What Claude Code says when the session it was told to resume isn't in its folder.
+pub const NO_CONVERSATION: &str = "No conversation found";
 
 fn permission_mode(plan: bool, access: Access) -> &'static str {
     match (plan, access) {
@@ -41,13 +43,29 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
         "--replay-user-messages",
         "--permission-prompt-tool",
         "stdio",
-        // Lets a thread be given full access while its process runs.
-        "--allow-dangerously-skip-permissions",
-        "--permission-mode",
-        permission_mode(turn.plan, turn.access),
     ]
     .map(String::from)
     .into();
+    if let Some(mcp) = turn.mcp {
+        // The token is read from the environment, so that it never shows among the arguments.
+        let headers = json!({"Authorization": format!("${{{}}}", crate::mcp::AUTHORIZATION_VARIABLE)});
+        let server = json!({"type": "http", "url": mcp.url, "headers": headers});
+        arguments.extend([
+            "--mcp-config".to_string(),
+            json!({"mcpServers": {crate::mcp::SERVER_NAME: server}}).to_string(),
+            "--allowedTools".to_string(),
+            crate::mcp::READ_THREAD_TOOL.to_string(),
+        ]);
+    }
+    arguments.extend(
+        [
+            // Lets a thread be given full access while its process runs.
+            "--allow-dangerously-skip-permissions",
+            "--permission-mode",
+            permission_mode(turn.plan, turn.access),
+        ]
+        .map(String::from),
+    );
     if let Some(model) = turn.model {
         arguments.extend(["--model".to_string(), model.to_string()]);
     }
@@ -136,6 +154,10 @@ pub struct Parser {
     rate_limited: bool,
     /// The usage limits that refuse the agent, by window, with when each resets.
     refused: HashMap<String, Option<f64>>,
+    /// The model the session runs, as it said when it started.
+    model: Option<String>,
+    /// How much of the context the last request of the session took.
+    context_used: Option<u64>,
 }
 
 impl Parser {
@@ -156,7 +178,10 @@ impl Parser {
                 self.note_rate_limit(&object["rate_limit_info"]);
                 vec![]
             }
-            Some("assistant") => self.parse_assistant(&object["message"]),
+            Some("assistant") => {
+                self.note_context(&object["message"]["usage"]);
+                self.parse_assistant(&object["message"])
+            }
             Some("user") if object["isReplay"] == true => match object["uuid"].as_str() {
                 Some(id) => vec![AgentEvent::Taken { id: id.to_string() }],
                 None => vec![],
@@ -169,14 +194,38 @@ impl Parser {
             }
             // A resumed session whose monitor was cut off starts by ending a turn nobody took.
             Some("result") if object["num_turns"] == 0 && object["is_error"] == false => vec![],
+            Some("result") if missing_session(&object) => vec![AgentEvent::SessionMissing],
             Some("result") => {
                 self.ended = true;
-                let usage = parse_usage(&object["modelUsage"]);
+                let usage = self.parse_usage(&object["modelUsage"]);
                 let limited = self.limit(&object);
                 usage.into_iter().chain(limited).chain([parse_result(&object, self.api_error.take())]).collect()
             }
             _ => vec![],
         }
+    }
+
+    fn note_context(&mut self, usage: &Value) {
+        let counts = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"];
+        let used: u64 = counts.iter().filter_map(|count| usage[count].as_u64()).sum();
+        if used > 0 {
+            self.context_used = Some(used);
+        }
+    }
+
+    /// What the session has spent so far on each model, which every result repeats, and how much
+    /// of its model's context it takes.
+    fn parse_usage(&self, models: &Value) -> Option<AgentEvent> {
+        let spent = model_usage(models);
+        let window_of = |model: &str| models[model]["contextWindow"].as_u64();
+        let any_window = || models.as_object()?.values().filter_map(|usage| usage["contextWindow"].as_u64()).max();
+        let context_window = self.model.as_deref().and_then(window_of).or_else(any_window);
+        (!spent.is_empty()).then_some(AgentEvent::Usage {
+            spent,
+            total: true,
+            context_window,
+            context_used: self.context_used,
+        })
     }
 
     /// Keeps which usage limits refuse the agent. One that allows overage doesn't.
@@ -270,8 +319,10 @@ impl Parser {
             Some("status") => self.set_compacting(object["status"] == "compacting"),
             Some("compact_boundary") => self.set_compacting(false),
             Some("init") => {
+                self.model = text(&object["model"]).or(self.model.take());
                 let session_id = object["session_id"].as_str();
-                let session = session_id.map(|id| AgentEvent::Session { id: id.to_string() });
+                let model = self.model.clone();
+                let session = session_id.map(|id| AgentEvent::Session { id: id.to_string(), model });
                 let woke = std::mem::take(&mut self.ended).then_some(AgentEvent::Woke);
                 session.into_iter().chain(woke).collect()
             }
@@ -419,10 +470,11 @@ fn parse_control_request(object: &Value) -> Vec<AgentEvent> {
     vec![AgentEvent::Approval(approval)]
 }
 
-/// What the session has spent so far on each model, which every result repeats.
-fn parse_usage(models: &Value) -> Option<AgentEvent> {
-    let spent = model_usage(models);
-    (!spent.is_empty()).then_some(AgentEvent::Usage { spent, total: true })
+/// The result Claude Code ends with when it was told to resume a session that isn't there.
+fn missing_session(result: &Value) -> bool {
+    let errors = result["errors"].as_array().map(Vec::as_slice).unwrap_or_default();
+    let said = errors.iter().chain([&result["result"]]).filter_map(Value::as_str);
+    result["is_error"] == true && said.into_iter().any(|text| text.contains(NO_CONVERSATION))
 }
 
 /// A result's `modelUsage`: what its process's session has spent on each model.
@@ -490,7 +542,7 @@ mod tests {
             "claude-haiku-4-5-20251001":{"inputTokens":28,"outputTokens":197,"cacheReadInputTokens":58455,
             "cacheCreationInputTokens":14737,"costUSD":0.0363325}}}"#;
         let events = Parser::default().parse(result);
-        let [AgentEvent::Usage { spent, total: true }, AgentEvent::Completed { summary, .. }] = &events[..] else {
+        let [AgentEvent::Usage { spent, total: true, .. }, AgentEvent::Completed { summary, .. }] = &events[..] else {
             panic!("expected what it spent and then the turn's end, got {events:?}")
         };
         let tokens = Tokens { input: 28, cache_read: 58455, cache_write: 14737, output: 197 };
@@ -507,7 +559,7 @@ mod tests {
             {"task_id":"b","task_type":"local_agent","description":"review"},
             {"task_id":"c","task_type":"plan"}]}"#;
         let init = r#"{"type":"system","subtype":"init","session_id":"s1"}"#;
-        let session = AgentEvent::Session { id: "s1".to_string() };
+        let session = AgentEvent::Session { id: "s1".to_string(), model: None };
 
         assert_eq!(parser.parse(init), vec![session.clone()]);
         assert_eq!(parser.parse(tasks), vec![AgentEvent::Background(Background { watches: 1, agents: 1 })]);
@@ -587,7 +639,7 @@ mod tests {
         let init = r#"{"type":"system","subtype":"init","session_id":"s1"}"#;
 
         assert_eq!(parser.parse(empty), vec![]);
-        assert_eq!(parser.parse(init), vec![AgentEvent::Session { id: "s1".to_string() }]);
+        assert_eq!(parser.parse(init), vec![AgentEvent::Session { id: "s1".to_string(), model: None }]);
         let failed = r#"{"type":"result","subtype":"error_during_execution","is_error":true,"num_turns":0}"#;
         assert!(matches!(parser.parse(failed)[..], [AgentEvent::Completed { .. }]));
     }
@@ -724,6 +776,55 @@ mod tests {
         assert!(matches!(parser.parse(stopped)[..], [AgentEvent::Completed { preempted: true, .. }]));
         let ended = r#"{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed"}"#;
         assert!(matches!(parser.parse(ended)[..], [AgentEvent::Completed { preempted: false, .. }]));
+    }
+
+    #[test]
+    fn a_session_says_its_model_and_how_much_of_its_context_it_takes() {
+        let mut parser = Parser::default();
+        let init = r#"{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5"}"#;
+        let session = AgentEvent::Session { id: "s1".to_string(), model: Some("claude-opus-5-5".to_string()) };
+        assert_eq!(parser.parse(init), vec![session]);
+        parser.parse(
+            r#"{"type":"assistant","message":{"id":"m1","content":[],"usage":{"input_tokens":12,
+            "cache_read_input_tokens":40000,"cache_creation_input_tokens":3000,"output_tokens":90}}}"#,
+        );
+        let result = r#"{"type":"result","subtype":"success","is_error":false,"modelUsage":{
+            "claude-haiku-4-5":{"inputTokens":1,"outputTokens":1,"contextWindow":100000},
+            "claude-opus-5-5":{"inputTokens":12,"outputTokens":90,"contextWindow":1000000}}}"#;
+        let events = parser.parse(result);
+        let [AgentEvent::Usage { context_window, context_used, .. }, _] = &events[..] else { panic!("{events:?}") };
+        assert_eq!((*context_window, *context_used), (Some(1_000_000), Some(43_012)));
+    }
+
+    #[test]
+    fn a_session_that_isnt_there_is_said_so_and_ends_nothing() {
+        let mut parser = Parser::default();
+        let missing = r#"{"type":"result","subtype":"error_during_execution","is_error":true,
+            "errors":["No conversation found with session ID: s0"]}"#;
+        assert_eq!(parser.parse(missing), vec![AgentEvent::SessionMissing]);
+    }
+
+    #[test]
+    fn the_thread_is_read_through_motiles_tool_with_a_token_from_the_environment() {
+        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into() };
+        let turn = Turn {
+            agent: motile_protocol::wire::Agent::Claude,
+            model: None,
+            effort: None,
+            access: Access::Supervised,
+            plan: false,
+            session_id: None,
+            handoff: None,
+            mcp: Some(&mcp),
+        };
+        let arguments = arguments(&turn);
+        let at = arguments.iter().position(|argument| argument == "--mcp-config").unwrap();
+        let config: Value = serde_json::from_str(&arguments[at + 1]).unwrap();
+        let server = &config["mcpServers"]["motile"];
+        assert_eq!((&server["type"], &server["url"]), (&json!("http"), &json!("http://127.0.0.1:9/mcp")));
+        assert_eq!(server["headers"]["Authorization"], "${MOTILE_MCP_AUTHORIZATION}");
+        assert_eq!(arguments[at + 2..at + 4], ["--allowedTools", "mcp__motile__read_thread"]);
+        assert!(!arguments.iter().any(|argument| argument.contains("secret")));
     }
 
     #[test]

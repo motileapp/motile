@@ -594,6 +594,7 @@ final class TranscriptView: FlippedView, RowOwner {
         case is ErrorRowView: "error"
         case is ChangesRowView: "changes"
         case is QueuedRowView: "queued"
+        case is HandoffRowView: "handoff"
         default: "turnEnd"
         }
     }

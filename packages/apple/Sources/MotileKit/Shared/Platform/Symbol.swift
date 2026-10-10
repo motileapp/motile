@@ -5,6 +5,7 @@ import SwiftUI
 enum Symbol: String {
     case arrowDown = "\u{e042}"
     case arrowLeft = "\u{e048}"
+    case arrowRight = "\u{e049}"
     case arrowUp = "\u{e04a}"
     case bookMarked = "\u{e3f1}"
     case braces = "\u{e36a}"

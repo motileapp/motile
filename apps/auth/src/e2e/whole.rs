@@ -192,6 +192,7 @@ fn kinds(client: &Client) -> Vec<&'static str> {
         RowKind::Changes { .. } => "changes",
         RowKind::TurnEnd { .. } => "turn_end",
         RowKind::Queued { .. } => "queued",
+        RowKind::Handoff { .. } => "handoff",
     });
     kinds.collect()
 }

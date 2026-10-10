@@ -43,11 +43,19 @@ Asked for its login and the limits of its plan (`initialize` and `get_usage` for
 models (`list_models` and `get_settings` for Claude Code, `model/list` and `config/read` for Codex)
 it lists made-up ones, Fable and gpt-6.1-sol with a default effort of their own.
 
+A prompt that tells what the thread said before ends with its message after "User message:", which
+is what picks its turn. "crash before taking this" has it exit before it takes the prompt. With
+FAKE_AGENT_SESSIONS_FILE every new session gets an id of its own, kept in that file, and a session
+to resume that isn't there is refused, as Claude Code and Codex refuse one. Codex takes what a
+thread said before as messages (`thread/inject_items`), unless FAKE_AGENT_NO_INJECT is set, and
+refuses a method it doesn't know.
+
 Asked for a thread title (`--json-schema` for Claude Code, `--output-last-message` for Codex) it
 answers with FAKE_AGENT_TITLE, and asked the same way for a commit message, a pull request's text
 or a branch's name it writes one. FAKE_AGENT_ARGUMENTS_FILE records how it was called, one JSON array
 per call (for Codex, once it is asked for a thread), and what it was told while it ran, one JSON object each: the settings Claude Code was
-told to change, and the threads and turns Codex was asked for.
+told to change, and the threads and turns Codex was asked for. FAKE_AGENT_PROMPTS_FILE records
+every prompt Claude Code reads, one JSON string each.
 """
 import json
 import os
@@ -57,6 +65,7 @@ import struct
 import sys
 import threading
 import time
+import uuid
 import zlib
 
 if "--version" in sys.argv:
@@ -65,12 +74,35 @@ if "--version" in sys.argv:
 
 
 arguments_file = os.environ.get("FAKE_AGENT_ARGUMENTS_FILE")
+prompts_file = os.environ.get("FAKE_AGENT_PROMPTS_FILE")
+sessions_file = os.environ.get("FAKE_AGENT_SESSIONS_FILE")
 
 
-def record(what):
-    if arguments_file:
-        with open(arguments_file, "a") as f:
+def record(what, file=arguments_file):
+    if file:
+        with open(file, "a") as f:
             f.write(json.dumps(what) + "\n")
+
+
+def new_session(default):
+    """The id of a new session: one of its own when sessions are kept, `default` otherwise."""
+    if not sessions_file:
+        return default
+    session = str(uuid.uuid4())
+    record(session, sessions_file)
+    return session
+
+
+def session_exists(session):
+    if not sessions_file:
+        return True
+    with open(sessions_file) as f:
+        return json.dumps(session) in f.read().splitlines()
+
+
+def message_of(prompt):
+    """The user's message of a prompt that tells what the thread said before it."""
+    return prompt.split("User message:\n")[-1]
 
 
 # What stdin brings while the process runs: prompts, and answers to what it asked. `None` ends each.
@@ -151,8 +183,10 @@ def emit(event, pause=0.0):
 
 def take(message):
     """Repeats a prompt read from stdin, as `--replay-user-messages` does, and returns its text."""
+    content = message["message"]["content"]
+    record(content, prompts_file)
     emit(dict(message, isReplay=True))
-    return message["message"]["content"]
+    return content
 
 
 def take_waiting():
@@ -189,13 +223,29 @@ def read_prompt():
     message = prompts.get()
     if message is None:
         sys.exit(0)
+    if "crash before taking this" in message_of(message["message"]["content"]):
+        sys.exit(1)
     return take(message)
 
 
+def argument(name):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else None
+
+
 APP_SERVER = sys.argv[1:2] == ["app-server"]
-prompt = "" if APP_SERVER else read_prompt()
+# The session this process works in: the one it resumes, or a new one when sessions are kept.
+SESSION = None
 if not APP_SERVER:
     record(sys.argv[1:])
+    SESSION = argument("--resume")
+    if SESSION and not session_exists(SESSION):
+        error = f"No conversation found with session ID: {SESSION}"
+        emit({"type": "result", "subtype": "error_during_execution", "is_error": True, "errors": [error]})
+        sys.exit(1)
+    if not SESSION and "--input-format" in sys.argv:
+        SESSION = new_session(None)
+MODEL = argument("--model") or "claude-opus-5-5"
+prompt = "" if APP_SERVER else read_prompt()
 
 delay = float(os.environ.get("FAKE_AGENT_DELAY", "0.02"))
 
@@ -256,12 +306,12 @@ class Turn:
     turns = 0
 
     def __init__(self, session_id, piece=24, pause=0.01):
-        self.session_id = session_id
+        self.session_id = SESSION or session_id
         self.piece = piece
         self.pause = pause
         # What the user said while the turn worked.
         self.told = []
-        emit({"type": "system", "subtype": "init", "session_id": session_id})
+        emit({"type": "system", "subtype": "init", "session_id": self.session_id, "model": MODEL})
 
     def _start(self):
         Turn.messages += 1
@@ -361,7 +411,7 @@ class Turn:
         Turn.turns += 1
         usage = {"inputTokens": 12 * Turn.turns, "outputTokens": 640 * Turn.turns,
                  "cacheReadInputTokens": 41000 * Turn.turns, "cacheCreationInputTokens": 5200 * Turn.turns,
-                 "costUSD": 0.0138 * Turn.turns}
+                 "costUSD": 0.0138 * Turn.turns, "contextWindow": 200000}
         emit({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 1,
               "total_cost_usd": usage["costUSD"], "modelUsage": {"claude-haiku-4-5-20251001": usage},
               "permission_denials": [], "terminal_reason": terminal_reason})
@@ -686,6 +736,7 @@ class Codex:
         self.answers = queue.Queue()
         self.stopping = threading.Event()
         self.thread = {}
+        self.thread_id = None
         self.turns = 0
         self.items = 0
         self.requests = 0
@@ -712,9 +763,21 @@ class Codex:
                 if not self.thread:
                     record(sys.argv[1:])
                 record({method: params})
+                if method == "thread/resume" and not session_exists(params["threadId"]):
+                    emit({"id": message["id"], "error": {"code": -32600, "message": "no rollout found for thread id"}})
+                    continue
                 self.thread = params
-                thread = {"id": params.get("threadId", self.THREAD)}
+                self.thread_id = params.get("threadId") or new_session(self.THREAD)
+                thread = {"id": self.thread_id}
                 emit({"id": message["id"], "result": {"thread": thread, "model": params.get("model") or "gpt-fake"}})
+            if method == "thread/inject_items":
+                record({method: params})
+                if os.environ.get("FAKE_AGENT_NO_INJECT"):
+                    emit({"id": message["id"], "error": {"code": -32601, "message": "unknown method"}})
+                else:
+                    emit({"id": message["id"], "result": {}})
+            if method is not None and "id" in message and method not in self.METHODS:
+                emit({"id": message["id"], "error": {"code": -32601, "message": f"unknown method {method}"}})
             if method == "turn/start":
                 record({method: params})
                 emit({"id": message["id"], "result": {"turn": {"id": self.turn_id(), "status": "inProgress"}}})
@@ -728,6 +791,9 @@ class Codex:
                 self.stopping.set()
         self.prompts.put(None)
         self.answers.put(None)
+
+    METHODS = {"initialize", "account/read", "account/rateLimits/read", "model/list", "config/read", "thread/start",
+               "thread/resume", "thread/inject_items", "turn/start", "turn/steer", "turn/interrupt"}
 
     def limits(self):
         def window(used, minutes, hours):
@@ -763,7 +829,7 @@ class Codex:
         item = self.item("userMessage", clientId=params.get("clientUserMessageId"), content=params["input"])
         self.notify("item/started", item=item)
         self.notify("item/completed", item=item)
-        return params["input"][0]["text"]
+        return message_of(params["input"][0]["text"])
 
     def take_waiting(self):
         """The prompts written while the turn worked, which Codex reads after a tool call."""
@@ -880,7 +946,7 @@ class Codex:
         window = {"usedPercent": 100, "resetsAt": limit_resets(), "windowDurationMins": 300}
         self.notify("account/rateLimits/updated", rateLimits={"limitId": "codex", "primary": window})
         error = {"message": "You've hit your usage limit.", "codexErrorInfo": "usageLimitExceeded"}
-        self.notify("error", threadId=self.thread.get("threadId", self.THREAD), turnId=self.turn_id(), willRetry=False,
+        self.notify("error", threadId=self.thread_id, turnId=self.turn_id(), willRetry=False,
                     error=error)
         raise Limited(error)
 
@@ -894,7 +960,7 @@ class Codex:
                     continue
                 # The recording is of another thread; what happens here happens in this one.
                 if "threadId" in event:
-                    event["threadId"] = self.thread.get("threadId", self.THREAD)
+                    event["threadId"] = self.thread_id
                 if "itemId" in event:
                     event["itemId"] = f"{self.process}-{event['itemId']}"
                 if item:
@@ -933,7 +999,7 @@ class Codex:
         last = {"totalTokens": 15040, "inputTokens": 14800, "cachedInputTokens": 12288, "cacheWriteInputTokens": 0,
                 "outputTokens": 240, "reasoningOutputTokens": 64}
         total = {name: count * self.turns for name, count in last.items()}
-        self.notify("thread/tokenUsage/updated", threadId=self.thread.get("threadId", self.THREAD), turnId=turn["id"],
+        self.notify("thread/tokenUsage/updated", threadId=self.thread_id, turnId=turn["id"],
                     tokenUsage={"total": total, "last": last, "modelContextWindow": 258400})
         self.notify("turn/completed", turn=dict(turn, status=status, error=error))
 
@@ -971,6 +1037,8 @@ def replay_fixture():
     )
     with open(fixture) as f:
         for line in f:
+            if SESSION:
+                line = re.sub(r'"session_id":"[^"]*"', f'"session_id":"{SESSION}"', line)
             sys.stdout.write(line)
             sys.stdout.flush()
             time.sleep(delay)
@@ -979,7 +1047,8 @@ def replay_fixture():
 
 
 def answer(prompt):
-    scripted = next((turn for words, turn in SCRIPTED.items() if words in prompt.lower()), replay_fixture)
+    said = message_of(prompt).lower()
+    scripted = next((turn for words, turn in SCRIPTED.items() if words in said), replay_fixture)
     try:
         scripted()
     except Preempted as preempted:

@@ -76,7 +76,7 @@ fn claude_list(models: Vec<ClaudeModel>) -> Vec<ModelInfo> {
 }
 
 /// "Claude Opus 5.5" for `claude-opus-5-5`, with a date like `20251001` at the end left off.
-fn claude_name(id: &str) -> String {
+pub fn claude_name(id: &str) -> String {
     let mut parts = id.strip_prefix("claude-").unwrap_or(id).split('-');
     let family = parts.next().unwrap_or_default();
     let mut name = String::from("Claude ");

@@ -19,9 +19,9 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
     Activity, Agent, AgentAccount, AgentLimits, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings,
-    DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, Media, MergeMethod,
-    Message, ModelInfo, NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo, ServerUpdate, Subagent,
-    Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media,
+    MergeMethod, Message, ModelInfo, NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo,
+    ServerUpdate, Subagent, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -30,13 +30,15 @@ use tokio::sync::{Mutex, broadcast, mpsc};
 use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
-use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Turn, claude, executable_name, models};
+use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Settings, Turn, claude, executable_name, models};
 use crate::files::FileBytes;
 use crate::generate::{self, Writer};
+use crate::handoff::{self, Range};
 use crate::linear::Linear;
+use crate::mcp::{self, McpAccess};
 use crate::media::MediaStore;
 use crate::pricing::{self, Prices};
-use crate::store::{Purpose, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
+use crate::store::{Continuation, Purpose, Session, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, pull_requests, title};
 use motile_protocol::wire::{
     CheckStatus, EventKind, Mergeable, PullRequestDetail, PullRequestEdit, PullRequestSettings, PullRequestState,
@@ -82,6 +84,8 @@ const BRANCH_PREFIX: &str = "motile";
 /// How long an uploaded file waits for the message it is attached to.
 const UNSENT_UPLOADS_STAY: Duration = Duration::from_secs(24 * 3600);
 const SWEEP_UPLOADS_EVERY: Duration = Duration::from_secs(3600);
+const NO_ROOM_FOR_HANDOFF: &str = "There isn't room in this model's context for what was said before. Pick a model \
+     with a larger context, or start a new thread.";
 
 /// What a client asked git to do in a project's folder.
 pub struct GitRun {
@@ -94,7 +98,7 @@ pub struct GitRun {
 }
 
 pub struct Hub {
-    store: Store,
+    store: Arc<Store>,
     pub media: MediaStore,
     pub linear: Linear,
     environment: Environment,
@@ -137,6 +141,10 @@ pub struct Hub {
     /// Held while a folder is kept as it is, so a thread's snapshots follow one another.
     snapshotting: Mutex<()>,
     list_updates: broadcast::Sender<Message>,
+    /// The tokens of the threads whose agents may read threads, and the port they read them on
+    /// once that is served.
+    mcp_tokens: Arc<mcp::Tokens>,
+    mcp_port: std::sync::OnceLock<u16>,
 }
 
 /// What the agent of a thread that watches its pull request was last told about.
@@ -190,6 +198,26 @@ struct Live {
     title_needs_refinement: bool,
     /// What the agent says the turn that runs has cost so far.
     cost_usd: Option<f64>,
+    /// The position of the user's last message, which starts the next turn.
+    last_message_seq: Option<u64>,
+    /// The turn the agent's process was started for.
+    turn: Option<StartedTurn>,
+    /// The agent didn't find the session it was to resume: the turn starts again with this prompt.
+    retry: Option<String>,
+    /// What the thread's agents read threads with.
+    mcp_token: Option<String>,
+    /// The model the agent's session runs, as it said.
+    session_model: Option<String>,
+    /// The handoff that waits to be told the model the new session runs.
+    handoff_item: Option<String>,
+}
+
+struct StartedTurn {
+    prompt_id: String,
+    prompt: String,
+    message_seq: u64,
+    retried: bool,
+    accepted: bool,
 }
 
 /// What happens before a turn's agent starts: the thread's worktree is made when it isn't
@@ -245,6 +273,8 @@ impl Hub {
         let threads = store.load_threads()?;
         let worktrees = threads.iter().filter_map(thread_worktree).collect();
         let mut queued = store.load_queued()?;
+        let kept_accounts = store.setting(AGENT_ACCOUNTS).and_then(|kept| serde_json::from_str(&kept).ok());
+        let accounts = agent_accounts::with_defaults(kept_accounts.unwrap_or_default());
         let continue_settings = ContinueSettings {
             after_limits: store.setting(CONTINUE_AFTER_LIMITS).is_none_or(|value| value == "true"),
             after_restarts: store.setting(CONTINUE_AFTER_RESTARTS).is_some_and(|value| value == "true"),
@@ -252,7 +282,13 @@ impl Hub {
         let continues = continue_settings.after_restarts || store.setting(CONTINUE_AFTER_THIS_RESTART).is_some();
         store.set_setting(CONTINUE_AFTER_THIS_RESTART, None)?;
         let mut to_continue = Vec::new();
-        let mut live = |stored: StoredThread| -> anyhow::Result<(String, Live)> {
+        let mut live = |mut stored: StoredThread| -> anyhow::Result<(String, Live)> {
+            let thread = &stored.thread;
+            let continuation = continuation_of(thread, &accounts, &environment);
+            if let Some(kept) = stored.session_id.take() {
+                store.adopt_session(&thread.id, &continuation, &kept, stored.next_seq.saturating_sub(1))?;
+            }
+            stored.session_id = store.session(&thread.id, &continuation)?.and_then(|session| session.session_id);
             let mut live = Live::new(stored, media.clone());
             live.queued = queued.remove(&live.stored.thread.id).unwrap_or_default();
             let cut_off = live.recover(&store)?;
@@ -277,9 +313,8 @@ impl Hub {
         let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
         let git = std::sync::Mutex::default();
-        let agent_accounts = store.setting(AGENT_ACCOUNTS).and_then(|kept| serde_json::from_str(&kept).ok());
         Ok(Arc::new(Self {
-            agent_accounts: std::sync::Mutex::new(agent_accounts::with_defaults(agent_accounts.unwrap_or_default())),
+            agent_accounts: std::sync::Mutex::new(accounts),
             models: std::sync::Mutex::new(
                 store.setting(MODELS).and_then(|models| serde_json::from_str(&models).ok()).unwrap_or_default(),
             ),
@@ -302,7 +337,7 @@ impl Hub {
             worktrees: std::sync::Mutex::new(worktrees),
             snapshotting: Mutex::default(),
             threads: Mutex::new(threads),
-            store,
+            store: Arc::new(store),
             media,
             linear: Linear::from_environment(),
             environment,
@@ -312,7 +347,23 @@ impl Hub {
             worktrees_folder,
             no_project_folder,
             list_updates,
+            mcp_tokens: Arc::default(),
+            mcp_port: std::sync::OnceLock::new(),
         }))
+    }
+
+    /// Serves the tool the agents read threads with. Agents started before it serves go without.
+    pub async fn serve_mcp(&self) -> anyhow::Result<()> {
+        let port = mcp::serve(self.store.clone(), self.mcp_tokens.clone()).await?;
+        let _ = self.mcp_port.set(port);
+        Ok(())
+    }
+
+    /// Where the thread's agent reads threads, with the token of the thread.
+    fn mcp_access(&self, live: &mut Live) -> Option<McpAccess> {
+        let port = self.mcp_port.get()?;
+        let token = live.mcp_token.get_or_insert_with(|| self.mcp_tokens.mint(&live.stored.thread.id));
+        Some(McpAccess { url: format!("http://127.0.0.1:{port}/mcp"), token: token.clone() })
     }
 
     pub fn store(&self) -> &Store {
@@ -355,17 +406,30 @@ impl Hub {
     }
 
     fn default_account(&self, agent: Agent) -> AgentAccount {
-        let accounts = self.agent_accounts();
-        let found = accounts.into_iter().find(|account| account.id == agent_accounts::default_id(agent));
-        found.unwrap_or_else(|| agent_accounts::default_account(agent))
+        default_account_in(&self.agent_accounts(), agent)
     }
 
     /// The account the thread works with, or its agent's default one when that has gone.
     fn account_of(&self, thread: &Thread) -> AgentAccount {
-        let accounts = self.agent_accounts();
-        let found =
-            accounts.into_iter().find(|account| account.id == thread.agent_account && account.agent == thread.agent);
-        found.unwrap_or_else(|| self.default_account(thread.agent))
+        account_in(&self.agent_accounts(), thread)
+    }
+
+    fn continuation(&self, thread: &Thread) -> Continuation {
+        continuation_of(thread, &self.agent_accounts(), &self.environment)
+    }
+
+    /// The session of the thread's continuation that is there to resume.
+    fn saved_session(&self, thread: &Thread) -> rusqlite::Result<Option<String>> {
+        let session = self.store.session(&thread.id, &self.continuation(thread))?;
+        Ok(session.and_then(|session| session.session_id))
+    }
+
+    /// Changes what is known of the session of the thread's continuation.
+    fn change_session(&self, thread: &Thread, change: impl FnOnce(&mut Session)) -> rusqlite::Result<()> {
+        let continuation = self.continuation(thread);
+        let mut session = self.store.session(&thread.id, &continuation)?.unwrap_or_default();
+        change(&mut session);
+        self.store.save_session(&thread.id, &continuation, &session)
     }
 
     fn account_environment(&self, account: &AgentAccount) -> Environment {
@@ -475,17 +539,20 @@ impl Hub {
             }
             _ => (None, None),
         };
-        if let Some(before) = before
-            && !self.shares_sessions(before, &account)
-        {
-            self.restart_sessions(&mut threads, &account.id, None)?;
+        let moves_sessions = before.is_some_and(|before| !self.shares_sessions(before, &account));
+        if moves_sessions {
+            ensure_idle(&threads, &account.id)?;
         }
+        let id = account.id.clone();
         let mut accounts = accounts;
         match accounts.iter_mut().find(|kept| kept.id == account.id) {
             Some(kept) => *kept = account,
             None => accounts.push(account),
         }
         self.keep_agent_accounts(accounts)?;
+        if moves_sessions {
+            self.reload_sessions(&mut threads, &id, None)?;
+        }
         drop(threads);
         self.refresh_limits();
         Ok(())
@@ -501,34 +568,25 @@ impl Hub {
             bail!("The default account stays. Sign it in to another account instead.");
         }
         let default = self.default_account(account.agent);
-        let moves_sessions = !self.shares_sessions(account, &default);
-        self.restart_sessions(&mut threads, id, Some((&default, moves_sessions)))?;
+        ensure_idle(&threads, id)?;
         accounts.retain(|account| account.id != id);
         self.keep_agent_accounts(accounts)?;
-        Ok(())
+        self.reload_sessions(&mut threads, id, Some(&default))
     }
 
-    /// Has the account's threads start new sessions, or with `moving` go to another account, and
-    /// start new sessions when it doesn't have theirs.
-    fn restart_sessions(
+    /// Has the account's threads, or with `moving` the threads it had, which go to that account,
+    /// go on with the sessions of the folder the account keeps them in now.
+    fn reload_sessions(
         &self,
         threads: &mut HashMap<String, Live>,
         id: &str,
-        moving: Option<(&AgentAccount, bool)>,
+        moving: Option<&AgentAccount>,
     ) -> anyhow::Result<()> {
-        let of_account = |live: &&mut Live| live.stored.thread.agent_account == id;
-        let mut affected: Vec<&mut Live> = threads.values_mut().filter(of_account).collect();
-        if affected.iter().any(|live| live.run.is_some() || live.preparing.is_some()) {
-            bail!("An agent still works with this account. Change it once the agent has finished.");
-        }
-        for live in &mut affected {
-            let restarts = moving.is_none_or(|(_, moves_sessions)| moves_sessions);
-            if restarts {
-                live.stored.session_id = None;
-            }
-            if let Some((to, _)) = moving {
+        for live in threads.values_mut().filter(|live| live.stored.thread.agent_account == id) {
+            if let Some(to) = moving {
                 live.stored.thread.agent_account = to.id.clone();
             }
+            live.stored.session_id = self.saved_session(&live.stored.thread)?;
             self.store.save_thread(&live.stored)?;
             self.announce(&live.stored.thread);
         }
@@ -770,6 +828,7 @@ impl Hub {
             self.resume(live)?;
             return Ok(thread_id);
         }
+        self.note_handoff(live)?;
         live.append_message(&self.store, new_id(), text.clone(), attachments, media)?;
         self.start_turn(live, prompt)?;
         if is_new {
@@ -1180,7 +1239,7 @@ impl Hub {
             }
             thread.position = position;
         }
-        // Codex takes its settings when its next process starts.
+        // Codex takes its settings with its next turn.
         if thread.agent == Agent::Claude {
             for line in told {
                 live.write(line);
@@ -1191,8 +1250,8 @@ impl Hub {
         Ok(())
     }
 
-    /// Has the thread go on with another account. One without the thread's session starts a new
-    /// one, which is told what was said.
+    /// Has the thread go on with another account, in the session it has where that account keeps
+    /// its sessions. Without one, a new one starts and is told what was said.
     fn move_to_account(&self, live: &mut Live, id: &str) -> anyhow::Result<()> {
         if live.run.is_some() || live.preparing.is_some() {
             bail!("The agent is still working. Switch accounts once it has finished.");
@@ -1200,14 +1259,13 @@ impl Hub {
         let account = self.agent_accounts().into_iter().find(|account| account.id == id);
         let account = account.context("That account is no longer on your server.")?;
         let thread = &mut live.stored.thread;
-        if !self.shares_sessions(&self.account_of(thread), &account) {
-            live.stored.session_id = None;
-        }
         if account.agent != thread.agent {
             (thread.model, thread.effort) = (None, None);
         }
         thread.agent = account.agent;
         thread.agent_account = account.id;
+        live.stored.session_id = self.saved_session(&live.stored.thread)?;
+        live.session_model = None;
         Ok(())
     }
 
@@ -2190,7 +2248,7 @@ impl Hub {
         let Some(live) = threads.get_mut(&thread_id) else { return };
         live.preparing = None;
         let started = match made {
-            Ok(()) => self.start_agent(live, prompt),
+            Ok(()) => self.start_agent(live, prompt, false),
             Err(error) => self.end_without_agent(live, Some(error_text(&error))),
         };
         if let Err(error) = started {
@@ -2412,7 +2470,7 @@ impl Hub {
         let thread = &live.stored.thread;
         let makes_worktree = live.stored.worktree.is_some() && !Path::new(&thread.cwd).is_dir();
         if !makes_worktree && !git::in_repository(&thread.cwd) {
-            return self.start_agent(live, prompt);
+            return self.start_agent(live, prompt, false);
         }
         let preparing = self.clone().prepare_and_start(thread.id.clone(), thread.cwd.clone(), prompt, makes_worktree);
         self.announce_working(live)?;
@@ -2420,15 +2478,40 @@ impl Hub {
         Ok(())
     }
 
-    fn start_agent(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
-        let prompt = match live.stored.session_id {
-            Some(_) => prompt,
-            None => {
-                live.flush(&self.store)?;
-                let items = self.store.items_since(&live.stored.thread.id, 0)?;
-                agents::with_earlier_conversation(&items, prompt)
-            }
+    /// Starts the agent's process for a turn, in the session of the thread's continuation, told
+    /// what the thread said that the session didn't see. `retried` when the session it was to
+    /// resume wasn't there.
+    fn start_agent(self: &Arc<Self>, live: &mut Live, prompt: String, retried: bool) -> anyhow::Result<()> {
+        live.flush(&self.store)?;
+        let mcp = self.mcp_access(live);
+        let thread = &live.stored.thread;
+        let continuation = self.continuation(thread);
+        let sessions = self.store.sessions(&thread.id)?;
+        let others_ran = sessions.iter().any(|(kept, session)| *kept != continuation && session.last_turn_at.is_some());
+        let found = sessions.into_iter().find(|(kept, _)| *kept == continuation);
+        let mut session = found.map(|(_, session)| session).unwrap_or_default();
+        // What it was last given may not have reached it; giving it again could tell it twice.
+        if session.pending_through.is_some() {
+            session.session_id = None;
+        }
+        let message_seq = live.last_message_seq.unwrap_or(live.stored.next_seq);
+        let range = match (&session.session_id, others_ran) {
+            (Some(_), false) => None,
+            (Some(_), true) => Some(Range::After(session.seen_through)),
+            (None, _) => Some(Range::Full),
         };
+        let handoff = match range {
+            Some(range) => {
+                let items = self.store.items_since(&thread.id, 0)?;
+                let budget = self.handoff_budget(thread, &session, &items, message_seq, &prompt);
+                match handoff::build(&thread.id, &items, range, message_seq, budget) {
+                    Ok(handoff) => handoff,
+                    Err(handoff::NoRoom) => return self.end_without_agent(live, Some(NO_ROOM_FOR_HANDOFF.to_string())),
+                }
+            }
+            None => None,
+        };
+        live.stored.session_id = session.session_id.clone();
         let thread = &live.stored.thread;
         let agent = thread.agent;
         let account = self.account_of(thread);
@@ -2439,17 +2522,29 @@ impl Hub {
             access: thread.access,
             plan: thread.plan,
             session_id: live.stored.session_id.as_deref(),
+            handoff: handoff.as_ref(),
+            mcp: mcp.as_ref(),
         };
         let child = match self.spawn(&turn, &thread.cwd, &account) {
             Ok(child) => child,
             Err(error) => return self.end_without_agent(live, Some(error.to_string())),
         };
+        if let Some(handoff) = &handoff {
+            session.pending_through = Some(handoff.through);
+            self.store.save_session(&thread.id, &continuation, &session)?;
+        }
 
         let interrupted = Arc::new(AtomicBool::new(false));
         let (input, lines) = mpsc::unbounded_channel();
         let prompt_id = new_id();
-        let _ = input.send(agents::opening(agent, &prompt, &prompt_id));
+        // Codex is given what the thread said as messages of its own once its thread is there.
+        let opening = match (agent, &handoff) {
+            (Agent::Claude, Some(handoff)) => handoff.inline(&prompt),
+            _ => prompt.clone(),
+        };
+        let _ = input.send(agents::opening(agent, &opening, &prompt_id));
         let parser = Parser::new(&turn, &thread.cwd, &prompt, &prompt_id);
+        live.turn = Some(StartedTurn { prompt_id, prompt, message_seq, retried, accepted: false });
         live.run = Some(Run {
             process_id: child.id().unwrap_or_default(),
             started: Instant::now(),
@@ -2463,6 +2558,27 @@ impl Hub {
 
         tokio::spawn(self.clone().drive(live.stored.thread.id.clone(), child, lines, parser, interrupted));
         Ok(())
+    }
+
+    /// How much a handoff may take of the context of the model the turn runs.
+    fn handoff_budget(
+        &self,
+        thread: &Thread,
+        session: &Session,
+        items: &[Item],
+        message_seq: u64,
+        prompt: &str,
+    ) -> usize {
+        let message = items.iter().find(|item| item.seq == message_seq).map(|item| &item.kind);
+        let cost = match message {
+            Some(ItemKind::User { text, attachments }) => handoff::message_cost(text, attachments),
+            _ => prompt.len(),
+        };
+        let model = thread.model.as_deref().or(session.model.as_deref());
+        let prices = self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = session.context_window.or_else(|| prices.context_window(model?));
+        let used = session.session_id.as_ref().and(session.context_used).unwrap_or(0);
+        handoff::budget(window, used, cost)
     }
 
     fn announce_working(&self, live: &mut Live) -> anyhow::Result<()> {
@@ -2551,6 +2667,9 @@ impl Hub {
             .kill_on_drop(true);
         if unsafe { libc::getuid() } == 0 {
             command.env(crate::service::SANDBOX_VARIABLE, "1");
+        }
+        if let Some(mcp) = turn.mcp {
+            command.env(mcp::AUTHORIZATION_VARIABLE, format!("Bearer {}", mcp.token));
         }
         command.spawn().with_context(|| format!("{name} couldn't be started."))
     }
@@ -2642,12 +2761,20 @@ impl Hub {
             live.release_held(store)?;
         }
         match event {
-            AgentEvent::Session { id } => {
-                if live.stored.session_id.as_deref() != Some(&id) {
-                    live.stored.session_id = Some(id);
-                    store.save_thread(&live.stored)?;
+            AgentEvent::Session { id, model } => {
+                let thread = &live.stored.thread;
+                self.change_session(thread, |session| {
+                    session.session_id = Some(id.clone());
+                    session.model = model.clone().or(session.model.take());
+                })?;
+                live.stored.session_id = Some(id);
+                if let Some(model) = model {
+                    self.name_handoff(live, &model)?;
+                    live.session_model = Some(model);
                 }
             }
+            AgentEvent::Accepted => self.accept(live)?,
+            AgentEvent::SessionMissing => self.session_missing(live)?,
             AgentEvent::TextStarted { .. } => live.set_thinking(false),
             AgentEvent::TextDelta { id, text } => live.hold_text(store, id, text)?,
             AgentEvent::Text { id, text } => {
@@ -2688,11 +2815,17 @@ impl Hub {
                     live.send_activity();
                 }
             }
-            AgentEvent::Usage { spent, total } => {
+            AgentEvent::Usage { spent, total, context_window, context_used } => {
                 let thread = &live.stored.thread;
                 let session_id = live.stored.session_id.as_deref().unwrap_or(&thread.id);
                 let cost = store.save_usage(now(), thread, session_id, &spent, total)?;
                 live.cost_usd = cost.map(|cost| cost + live.cost_usd.unwrap_or_default()).or(live.cost_usd);
+                if context_window.is_some() || context_used.is_some() {
+                    self.change_session(thread, |session| {
+                        session.context_window = context_window.or(session.context_window);
+                        session.context_used = context_used.or(session.context_used);
+                    })?;
+                }
             }
             AgentEvent::Completed { mut summary, result_text, preempted } => {
                 live.set_thinking(false);
@@ -2719,6 +2852,7 @@ impl Hub {
                 live.stored.thread.needs_approval = false;
                 summary.cost_usd = live.cost_usd.take();
                 live.end_turn(store, summary)?;
+                self.note_seen(live)?;
             }
             AgentEvent::Approval(approval) => {
                 live.set_thinking(false);
@@ -2735,7 +2869,12 @@ impl Hub {
                 }
             }
             AgentEvent::Woke => self.resume(live)?,
-            AgentEvent::Taken { id } => live.given.retain(|given| given.id != id),
+            AgentEvent::Taken { id } => {
+                live.given.retain(|given| given.id != id);
+                if live.turn.as_ref().is_some_and(|turn| turn.prompt_id == id) {
+                    self.accept(live)?;
+                }
+            }
             AgentEvent::Turn { id } => {
                 if let Some(run) = &mut live.run {
                     run.turn_id = Some(id);
@@ -2762,6 +2901,51 @@ impl Hub {
         Ok(())
     }
 
+    /// The agent has taken its turn, and with it what it was told of the thread: its session has
+    /// seen everything up to the turn's message.
+    fn accept(&self, live: &mut Live) -> anyhow::Result<()> {
+        let Some(turn) = live.turn.as_mut().filter(|turn| !turn.accepted) else { return Ok(()) };
+        turn.accepted = true;
+        let message_seq = turn.message_seq;
+        self.change_session(&live.stored.thread, |session| {
+            session.seen_through = session.seen_through.max(session.pending_through.unwrap_or(0)).max(message_seq);
+            session.pending_through = None;
+            session.last_turn_at = Some(now());
+        })?;
+        Ok(())
+    }
+
+    /// Everything in the transcript happened in the session of the turn that ended.
+    fn note_seen(&self, live: &Live) -> anyhow::Result<()> {
+        if !live.turn.as_ref().is_some_and(|turn| turn.accepted) {
+            return Ok(());
+        }
+        let last = live.stored.next_seq.saturating_sub(1);
+        self.change_session(&live.stored.thread, |session| session.seen_through = session.seen_through.max(last))?;
+        Ok(())
+    }
+
+    /// The session the agent was told to resume isn't there. The turn starts again once, in a new
+    /// session that is told what was said.
+    fn session_missing(&self, live: &mut Live) -> anyhow::Result<()> {
+        self.change_session(&live.stored.thread, |session| {
+            session.session_id = None;
+            session.pending_through = None;
+        })?;
+        live.stored.session_id = None;
+        let again = live.turn.as_ref().filter(|turn| !turn.retried && !turn.accepted);
+        live.retry = again.map(|turn| turn.prompt.clone());
+        if let Some(run) = &mut live.run {
+            run.received_result = true;
+            run.input = None;
+        }
+        if live.retry.is_none() {
+            let message = "The agent couldn't find its session. Send the message again to start a new one.";
+            live.append(&self.store, ItemKind::Error { message: message.to_string() })?;
+        }
+        Ok(())
+    }
+
     /// Tells the clients how many of the agents the thread's agent started still work.
     fn count_agents(&self, live: &mut Live) {
         let working = |item: &&Item| matches!(&item.kind, ItemKind::Tool { call } if call.agent.as_ref().is_some_and(|agent| agent.status == ToolStatus::Running));
@@ -2781,10 +2965,26 @@ impl Hub {
         }
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
+        let answered = live.run.as_ref().is_some_and(|run| run.received_result);
+        if !answered
+            && stderr.contains(claude::NO_CONVERSATION)
+            && let Err(error) = self.session_missing(live)
+        {
+            tracing::error!(thread_id, "couldn't forget a session: {error:#}");
+        }
         let run = live.run.take();
-        if let Err(error) = live.settle(&self.store, run.as_ref(), exit_code, stderr, interrupted) {
+        if let Some(prompt) = live.retry.take() {
+            let started = live.release_held(&self.store).and_then(|_| self.start_agent(live, prompt, true));
+            if let Err(error) = started {
+                tracing::error!(thread_id, "couldn't start a turn again: {error:#}");
+            }
+            return;
+        }
+        let settled = live.settle(&self.store, run.as_ref(), exit_code, stderr, interrupted);
+        if let Err(error) = settled.and_then(|_| self.note_seen(live)) {
             tracing::error!(thread_id, "couldn't save the end of a turn: {error:#}");
         }
+        live.turn = None;
         self.read_changes(live);
         let thread = &mut live.stored.thread;
         // A thread that was monitoring has told of its turn's end already.
@@ -2835,8 +3035,57 @@ impl Hub {
     fn start_next_turn(self: &Arc<Self>, live: &mut Live, queued: Queued) -> anyhow::Result<()> {
         let prompt = prompt(&queued.text, &queued.attachments);
         live.save_queued(&self.store)?;
+        self.note_handoff(live)?;
         live.append_message(&self.store, queued.id, queued.text, queued.attachments, queued.media)?;
         self.start_turn(live, prompt)
+    }
+
+    /// Notes in the transcript that the thread goes on in another continuation than its last turn
+    /// ran in, with another agent or in another sessions folder, from the turn that starts now.
+    fn note_handoff(&self, live: &mut Live) -> anyhow::Result<()> {
+        let thread = &live.stored.thread;
+        let continuation = self.continuation(thread);
+        let sessions = self.store.sessions(&thread.id)?;
+        let ran = sessions.iter().filter_map(|(kept, session)| Some((kept, session, session.last_turn_at?)));
+        let Some((last, session, _)) = ran.max_by(|(_, _, one), (_, _, other)| one.total_cmp(other)) else {
+            return Ok(());
+        };
+        if *last == continuation {
+            return Ok(());
+        }
+        let own = sessions.iter().find(|(kept, _)| *kept == continuation).and_then(|(_, own)| own.model.clone());
+        let from = self.handoff_end(last.agent, session.model.clone());
+        let to = self.handoff_end(thread.agent, thread.model.clone().or(own));
+        let waits_for_model = to.model.is_none();
+        let item = live.new_item(new_id(), ItemKind::Handoff { from, to });
+        live.handoff_item = waits_for_model.then(|| item.id.clone());
+        live.save(&self.store, item)
+    }
+
+    fn handoff_end(&self, agent: Agent, model: Option<String>) -> HandoffEnd {
+        let name = model.as_deref().and_then(|model| self.model_name(agent, model));
+        HandoffEnd { agent, model, name }
+    }
+
+    /// The model's name as the picker lists it. An agent names a model it runs with its whole id,
+    /// which can end in a date or the size of its context.
+    fn model_name(&self, agent: Agent, model: &str) -> Option<String> {
+        let models = self.models();
+        let listed = |id: &str| models.iter().find(|listed| listed.agent == agent && listed.id == id);
+        let base = model.split('[').next().unwrap_or(model);
+        let undated = base.rsplit_once('-').filter(|(_, date)| date.len() == 8).map_or(base, |(undated, _)| undated);
+        let found = [model, base, undated].into_iter().find_map(listed).map(|listed| listed.name.clone());
+        found.or_else(|| (agent == Agent::Claude && model.starts_with("claude-")).then(|| models::claude_name(undated)))
+    }
+
+    /// Gives the handoff that waited for it the model the new session runs.
+    fn name_handoff(&self, live: &mut Live, model: &str) -> anyhow::Result<()> {
+        let Some(item_id) = live.handoff_item.take() else { return Ok(()) };
+        let Some(mut item) = self.store.item(&live.stored.thread.id, &item_id)? else { return Ok(()) };
+        let ItemKind::Handoff { to, .. } = &mut item.kind else { return Ok(()) };
+        *to = self.handoff_end(to.agent, Some(model.to_string()));
+        item.rev = live.next_rev();
+        live.save(&self.store, item)
     }
 
     async fn after_turn(self: &Arc<Self>, live: &mut Live) {
@@ -2876,6 +3125,12 @@ impl Live {
             given: Vec::new(),
             title_needs_refinement: false,
             cost_usd: None,
+            last_message_seq: None,
+            turn: None,
+            retry: None,
+            mcp_token: None,
+            session_model: None,
+            handoff_item: None,
         }
     }
 
@@ -2960,9 +3215,13 @@ impl Live {
         self.give(store, index)
     }
 
-    /// Writes a prompt to the agent's process. `false` when it takes none.
+    /// Writes a prompt to the agent's process, with the thread's settings. `false` when it takes
+    /// none.
     fn write_prompt(&self, prompt: &str, id: &str) -> bool {
-        let line = agents::input(self.stored.thread.agent, self.stored.session_id.as_deref(), prompt, id);
+        let thread = &self.stored.thread;
+        let model = thread.model.as_deref().or(self.session_model.as_deref());
+        let settings = Settings { model, effort: thread.effort.as_deref(), plan: thread.plan };
+        let line = agents::input(thread.agent, self.stored.session_id.as_deref(), prompt, id, settings);
         line.is_some_and(|line| self.write(line))
     }
 
@@ -3065,6 +3324,11 @@ impl Live {
     /// Adds an item that won't change again.
     fn append(&mut self, store: &Store, kind: ItemKind) -> anyhow::Result<()> {
         let item = self.new_item(new_id(), kind);
+        self.save(store, item)
+    }
+
+    /// Keeps the item and sends it to everyone with the thread open.
+    fn save(&self, store: &Store, item: Item) -> anyhow::Result<()> {
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
@@ -3102,6 +3366,7 @@ impl Live {
     ) -> anyhow::Result<()> {
         let mut item = self.new_item(id, ItemKind::User { text, attachments });
         item.media = media;
+        self.last_message_seq = Some(item.seq);
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
@@ -3285,6 +3550,30 @@ impl Live {
         };
         self.append(store, ItemKind::Error { message })
     }
+}
+
+fn default_account_in(accounts: &[AgentAccount], agent: Agent) -> AgentAccount {
+    let found = accounts.iter().find(|account| account.id == agent_accounts::default_id(agent));
+    found.cloned().unwrap_or_else(|| agent_accounts::default_account(agent))
+}
+
+fn account_in(accounts: &[AgentAccount], thread: &Thread) -> AgentAccount {
+    let found = accounts.iter().find(|account| account.id == thread.agent_account && account.agent == thread.agent);
+    found.cloned().unwrap_or_else(|| default_account_in(accounts, thread.agent))
+}
+
+/// The agent of the thread's account and the folder it keeps its sessions in.
+fn continuation_of(thread: &Thread, accounts: &[AgentAccount], environment: &Environment) -> Continuation {
+    let folder = agent_accounts::sessions_folder(&account_in(accounts, thread), environment);
+    Continuation { agent: thread.agent, folder: folder.to_string_lossy().into_owned() }
+}
+
+fn ensure_idle(threads: &HashMap<String, Live>, account_id: &str) -> anyhow::Result<()> {
+    let mut of_account = threads.values().filter(|live| live.stored.thread.agent_account == account_id);
+    if of_account.any(|live| live.run.is_some() || live.preparing.is_some()) {
+        bail!("An agent still works with this account. Change it once the agent has finished.");
+    }
+    Ok(())
 }
 
 /// The model with the default effort it was known to have, where its agent couldn't say it now.

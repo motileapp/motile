@@ -275,11 +275,17 @@ enum TintedSymbol {
     static func draw(_ name: Symbol, size: CGFloat, color: PlatformColor, in rect: CGRect) {
         let image = image(name, size: size, color: color)
         let origin = CGPoint(x: (rect.midX - image.size.width / 2).rounded(), y: (rect.midY - image.size.height / 2).rounded())
-        let frame = CGRect(origin: origin, size: image.size)
+        image.drawUpright(in: CGRect(origin: origin, size: image.size))
+    }
+}
+
+extension PlatformImage {
+    /// Draws the image the right way up in a flipped view.
+    func drawUpright(in frame: CGRect) {
         #if os(macOS)
-        image.draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         #else
-        image.draw(in: frame)
+        draw(in: frame)
         #endif
     }
 }

@@ -42,9 +42,23 @@ struct Harness {
 impl Harness {
     /// A server whose agents replay `fixture`, pausing `delay` seconds between lines.
     async fn start(fixture: &str, delay: &str) -> Self {
+        Self::start_with(fixture, delay, &[]).await
+    }
+
+    /// A server whose agents keep a session of their own for each thread, refuse to resume one
+    /// they never started, and record the prompts they are given.
+    async fn with_sessions(fixture: &str, more: &[(&str, &str)]) -> Self {
+        let mut variables =
+            vec![("FAKE_AGENT_SESSIONS_FILE", "sessions.txt"), ("FAKE_AGENT_PROMPTS_FILE", "prompts.txt")];
+        variables.extend(more);
+        Self::start_with(fixture, "0", &variables).await
+    }
+
+    /// With `more` variables for the agents; a value that names a file names it in the server's folder.
+    async fn start_with(fixture: &str, delay: &str, more: &[(&str, &str)]) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let arguments_file = dir.path().join("arguments.txt");
-        let variables = HashMap::from([
+        let mut variables = HashMap::from([
             // Programs a test stands in for, like GitHub's `gh`, are found in `bin` first.
             ("PATH".to_string(), format!("{}/bin:{}", dir.path().display(), std::env::var("PATH").unwrap_or_default())),
             ("HOME".to_string(), dir.path().to_string_lossy().into_owned()),
@@ -53,6 +67,13 @@ impl Harness {
             ("FAKE_AGENT_RESET".to_string(), "2".to_string()),
             ("FAKE_AGENT_ARGUMENTS_FILE".to_string(), arguments_file.to_string_lossy().into_owned()),
         ]);
+        for (name, value) in more {
+            let value = match value.ends_with(".txt") {
+                true => dir.path().join(value).to_string_lossy().into_owned(),
+                false => value.to_string(),
+            };
+            variables.insert(name.to_string(), value);
+        }
         let server_key = DeviceKey::generate();
         let app_key = DeviceKey::generate();
         let (endpoint, address) = serve(&dir, &server_key, &app_key, &variables, None).await;
@@ -125,6 +146,17 @@ impl Harness {
         calls.filter(is_turn).map(|arguments| arguments.join("\n")).collect()
     }
 
+    /// The prompts Claude Code read, in their order.
+    fn recorded_prompts(&self) -> Vec<String> {
+        let recorded = std::fs::read_to_string(self.dir.path().join("prompts.txt")).unwrap_or_default();
+        recorded.lines().map(|line| serde_json::from_str(line).unwrap()).collect()
+    }
+
+    /// What Codex was asked with `method`, in order.
+    fn recorded_requests(&self, method: &str) -> Vec<serde_json::Value> {
+        self.recorded_changes().into_iter().filter_map(|line| line.get(method).cloned()).collect()
+    }
+
     /// The settings a running agent was told to change, leaving out what it was asked about its models.
     fn recorded_changes(&self) -> Vec<serde_json::Value> {
         let recorded = std::fs::read_to_string(self.dir.path().join("arguments.txt")).unwrap_or_default();
@@ -156,6 +188,7 @@ async fn serve(
         environment,
     )
     .unwrap();
+    hub.serve_mcp().await.unwrap();
     hub.refresh_models().await;
     hub.keep_pull_requests_current(Duration::from_millis(200));
     hub.watch_pull_requests(Duration::from_millis(300));
@@ -330,6 +363,18 @@ impl Transcript {
             _ => None,
         });
         errors.collect()
+    }
+
+    /// Each handoff's agents, and the message of the turn it starts.
+    fn handoffs(&self) -> Vec<(Agent, Agent, &str)> {
+        let handoffs = self.items.windows(2).filter_map(|pair| match (&pair[0].kind, &pair[1].kind) {
+            (ItemKind::Handoff { from, to }, ItemKind::User { text, .. }) => {
+                Some((from.agent, to.agent, text.as_str()))
+            }
+            (ItemKind::Handoff { .. }, other) => panic!("a handoff is followed by {other:?}"),
+            _ => None,
+        });
+        handoffs.collect()
     }
 
     fn turn_ends(&self) -> Vec<&TurnSummary> {
@@ -3052,4 +3097,285 @@ async fn a_thread_without_a_project_works_in_a_folder_of_its_own() {
 
     let remove = Request::RemoveProject { project_id: no_project.id };
     assert!(matches!(connection.request(&remove).await.unwrap(), Message::Error { .. }));
+}
+
+/// Switches the thread to the default account of `agent`.
+async fn switch_to(connection: &Connection, thread_id: &str, agent: Agent) {
+    let account = match agent {
+        Agent::Claude => "claude",
+        Agent::Codex => "codex",
+    };
+    let change = ThreadChange { agent_account: Some(account.into()), ..Default::default() };
+    assert_eq!(update(connection, thread_id, change).await, Message::Ok);
+}
+
+/// A thread of `agent` that never waits for approval. Codex works by script: "Run greet.py".
+async fn full_access(harness: &Harness, connection: &Connection, agent: Agent) -> Option<NewThread> {
+    let new_thread = harness.new_thread(connection, agent).await.unwrap();
+    Some(NewThread { access: AgentAccess::Full, ..new_thread })
+}
+
+async fn turn(connection: &Connection, thread_id: &str, text: &str) -> Transcript {
+    send(connection, Some(thread_id.to_string()), None, text).await;
+    finished_transcript(connection, thread_id).await
+}
+
+/// The arguments of each of Claude Code's turns.
+fn claude_turns(harness: &Harness) -> Vec<String> {
+    let turns = harness.recorded_turns().into_iter();
+    turns.filter(|arguments| arguments.contains("--append-system-prompt")).collect()
+}
+
+const FULL_HANDOFF: &str = "This thread went on with another agent before you.";
+const DELTA_HANDOFF: &str = "This thread went on with another agent since you last took part.";
+
+#[tokio::test]
+async fn a_thread_handed_from_claude_to_codex_and_back_tells_each_what_it_missed() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[]).await;
+    let connection = harness.connect().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "What is in README.md?").await;
+    let first = finished_transcript(&connection, &thread_id).await;
+    let claude_said = first.texts().last().unwrap().to_string();
+
+    switch_to(&connection, &thread_id, Agent::Codex).await;
+    let second = turn(&connection, &thread_id, "Run greet.py").await;
+    assert!(harness.recorded_requests("thread/resume").is_empty(), "Codex starts a thread of its own");
+    let injected = &harness.recorded_requests("thread/inject_items")[0]["items"];
+    let texts: Vec<&str> =
+        injected.as_array().unwrap().iter().map(|item| item["content"][0]["text"].as_str().unwrap()).collect();
+    assert!(texts[0].starts_with(&format!("{FULL_HANDOFF} Thread: {thread_id}.")), "{}", texts[0]);
+    assert!(texts[1].ends_with("\nWhat is in README.md?"), "{}", texts[1]);
+    assert!(texts.iter().any(|text| text.ends_with(&claude_said)), "{texts:?}");
+    let started = harness.recorded_requests("turn/start");
+    assert_eq!(started[0]["input"][0]["text"], "Run greet.py", "the turn has the user's message alone");
+    assert_eq!(second.handoffs(), [(Agent::Claude, Agent::Codex, "Run greet.py")]);
+    let codex_said = second.texts().last().unwrap().to_string();
+
+    switch_to(&connection, &thread_id, Agent::Claude).await;
+    let third = turn(&connection, &thread_id, "And in Cargo.toml?").await;
+    let resumed = &claude_turns(&harness)[1];
+    let session =
+        resumed.split("--resume\n").nth(1).and_then(|rest| rest.lines().next()).expect("Claude's session is resumed");
+    let sessions = std::fs::read_to_string(harness.dir.path().join("sessions.txt")).unwrap();
+    assert!(sessions.contains(session) && !codex_said.contains(session));
+    let prompt = harness.recorded_prompts().pop().unwrap();
+    assert!(prompt.starts_with(&format!("{DELTA_HANDOFF} Thread: {thread_id}.")), "{prompt}");
+    assert!(prompt.contains("\nRun greet.py\n\n") && prompt.contains(&codex_said), "{prompt}");
+    assert!(!prompt.contains("What is in README.md?"), "what Claude saw itself isn't told again: {prompt}");
+    assert!(prompt.ends_with("\n\nUser message:\nAnd in Cargo.toml?"), "{prompt}");
+    let handoffs = third.handoffs();
+    assert_eq!(handoffs[1], (Agent::Codex, Agent::Claude, "And in Cargo.toml?"));
+    let names: Vec<(Option<&str>, Option<&str>)> = third
+        .items
+        .iter()
+        .filter_map(|item| match &item.kind {
+            ItemKind::Handoff { from, to } => Some((from.model.as_deref(), to.model.as_deref())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names[0].1, Some("gpt-fake"), "the new session's model, once it said");
+    assert_eq!(names[1].0, Some("gpt-fake"));
+}
+
+#[tokio::test]
+async fn a_codex_that_takes_no_injected_messages_is_told_before_the_prompt() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[("FAKE_AGENT_NO_INJECT", "1")]).await;
+    let connection = harness.connect().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "What is in README.md?").await;
+    finished_transcript(&connection, &thread_id).await;
+    switch_to(&connection, &thread_id, Agent::Codex).await;
+    let second = turn(&connection, &thread_id, "Run greet.py").await;
+
+    let input = harness.recorded_requests("turn/start")[0]["input"][0]["text"].as_str().unwrap().to_string();
+    assert!(input.starts_with(FULL_HANDOFF) && input.contains("What is in README.md?"), "{input}");
+    assert!(input.ends_with("\n\nUser message:\nRun greet.py"), "{input}");
+    assert!(second.errors().is_empty(), "{:?}", second.errors());
+    assert!(second.texts().last().unwrap().contains("f-string"), "the user's message picks the turn");
+}
+
+#[tokio::test]
+async fn switching_agents_and_back_before_sending_hands_nothing_over() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[]).await;
+    let connection = harness.connect().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "What is in README.md?").await;
+    finished_transcript(&connection, &thread_id).await;
+    switch_to(&connection, &thread_id, Agent::Codex).await;
+    switch_to(&connection, &thread_id, Agent::Claude).await;
+    let second = turn(&connection, &thread_id, "And in LICENSE?").await;
+
+    assert!(second.handoffs().is_empty());
+    assert_eq!(harness.recorded_prompts().last().unwrap(), "And in LICENSE?");
+    assert!(claude_turns(&harness)[1].contains("--resume"));
+}
+
+#[tokio::test]
+async fn another_model_of_the_same_agent_keeps_the_session_and_reaches_a_running_codex() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[]).await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await.unwrap();
+    let new_thread = NewThread { model: Some("claude-opus-5-5".into()), ..new_thread };
+    let thread_id = send(&connection, None, Some(new_thread), "What is in README.md?").await;
+    finished_transcript(&connection, &thread_id).await;
+    let sonnet = ThreadChange { model: Some("claude-sonnet-5-5".into()), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, sonnet).await, Message::Ok);
+    let second = turn(&connection, &thread_id, "And in LICENSE?").await;
+    assert!(second.handoffs().is_empty());
+    let resumed = &claude_turns(&harness)[1];
+    assert!(resumed.contains("--model\nclaude-sonnet-5-5") && resumed.contains("--resume"), "{resumed}");
+    assert_eq!(harness.recorded_prompts().last().unwrap(), "And in LICENSE?");
+
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
+    let new_thread = NewThread { access: AgentAccess::Full, ..new_thread };
+    let thread_id = send(&connection, None, Some(new_thread), "Run greet.py").await;
+    let luna = ThreadChange { model: Some("gpt-6-luna".into()), effort: Some("low".into()), ..Default::default() };
+    assert_eq!(update(&connection, &thread_id, luna).await, Message::Ok);
+    send(&connection, Some(thread_id.clone()), None, "Run greet.py again").await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    while transcript.turn_ends().len() < 2 {
+        transcript.apply(next(&mut follow).await);
+    }
+    let started = harness.recorded_requests("turn/start");
+    let queued = started.iter().find(|params| params["input"][0]["text"] == "Run greet.py again").unwrap();
+    assert_eq!((&queued["model"], &queued["effort"]), (&json!("gpt-6-luna"), &json!("low")));
+    assert_eq!(queued["collaborationMode"]["settings"]["model"], "gpt-6-luna");
+}
+
+#[tokio::test]
+async fn a_handoff_that_may_not_have_arrived_is_given_again_in_a_new_session() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[]).await;
+    let connection = harness.connect().await;
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &thread_id).await;
+    switch_to(&connection, &thread_id, Agent::Claude).await;
+    let crashed = turn(&connection, &thread_id, "Now crash before taking this").await;
+    assert_eq!(crashed.errors().len(), 1, "the agent exited before it took the turn");
+    turn(&connection, &thread_id, "What is in README.md?").await;
+
+    let turns = claude_turns(&harness);
+    assert_eq!(turns.len(), 2, "{turns:?}");
+    assert!(!turns[1].contains("--resume"), "the session that may hold the handoff isn't resumed: {}", turns[1]);
+    let prompt = harness.recorded_prompts().pop().unwrap();
+    assert!(prompt.starts_with(FULL_HANDOFF), "{prompt}");
+    assert!(prompt.contains("Run greet.py") && prompt.contains("Now crash before taking this"), "{prompt}");
+}
+
+#[tokio::test]
+async fn a_session_that_is_gone_is_started_again_once_with_what_was_said() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[]).await;
+    let connection = harness.connect().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "What is in README.md?").await;
+    finished_transcript(&connection, &thread_id).await;
+    std::fs::write(harness.dir.path().join("sessions.txt"), "").unwrap();
+    let second = turn(&connection, &thread_id, "And in LICENSE?").await;
+
+    let turns = claude_turns(&harness);
+    assert_eq!(turns.len(), 3, "{turns:?}");
+    assert!(turns[1].contains("--resume") && !turns[2].contains("--resume"), "{turns:?}");
+    let prompt = harness.recorded_prompts().pop().unwrap();
+    assert!(prompt.starts_with(FULL_HANDOFF) && prompt.contains("What is in README.md?"), "{prompt}");
+    assert!(second.errors().is_empty(), "{:?}", second.errors());
+    assert!(second.handoffs().is_empty(), "the thread stayed with its agent");
+    assert_eq!(second.turn_ends().len(), 2);
+
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &thread_id).await;
+    std::fs::write(harness.dir.path().join("sessions.txt"), "").unwrap();
+    let second = turn(&connection, &thread_id, "Run greet.py again").await;
+    assert_eq!(harness.recorded_requests("thread/resume").len(), 1);
+    assert_eq!(harness.recorded_requests("thread/start").len(), 2, "a new thread after the one that was gone");
+    assert!(second.errors().is_empty(), "{:?}", second.errors());
+    let injected = &harness.recorded_requests("thread/inject_items")[0]["items"][1]["content"][0]["text"];
+    assert!(injected.as_str().unwrap().ends_with("\nRun greet.py"), "{injected}");
+}
+
+/// Calls the thread reader's tool, as an agent does.
+async fn read_thread(url: &str, token: Option<&str>, arguments: serde_json::Value) -> (u16, serde_json::Value) {
+    motile_protocol::tls::install();
+    let client = reqwest::Client::new();
+    let post = |body: serde_json::Value| {
+        let mut request = client
+            .post(url)
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", "2025-06-18")
+            .json(&body);
+        if let Some(token) = token {
+            request = request.bearer_auth(token);
+        }
+        request.send()
+    };
+    let client_info = json!({"name": "test", "version": "1"});
+    let initialize = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": client_info}});
+    let response = post(initialize).await.unwrap();
+    if !response.status().is_success() {
+        return (response.status().as_u16(), serde_json::Value::Null);
+    }
+    let call = json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+        "params": {"name": "read_thread", "arguments": arguments}});
+    let response = post(call).await.unwrap();
+    let status = response.status().as_u16();
+    let answer: serde_json::Value = response.json().await.unwrap();
+    let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_else(|| panic!("{answer}"));
+    (status, serde_json::from_str(text).unwrap())
+}
+
+#[tokio::test]
+async fn an_agent_reads_any_thread_of_its_server_with_its_threads_token() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[]).await;
+    let connection = harness.connect().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let claude_thread = send(&connection, None, new_thread, "What is in README.md?").await;
+    finished_transcript(&connection, &claude_thread).await;
+    let arguments = &claude_turns(&harness)[0];
+    assert!(
+        arguments.contains("--mcp-config\n") && arguments.contains("--allowedTools\nmcp__motile__read_thread"),
+        "{arguments}"
+    );
+
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let codex_thread = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &codex_thread).await;
+    let server = &harness.recorded_requests("thread/start")[0]["config"]["mcp_servers"]["motile"];
+    let url = server["url"].as_str().unwrap();
+    let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
+    assert!(url.starts_with("http://127.0.0.1:") && url.ends_with("/mcp"), "{url}");
+
+    let (status, _) = read_thread(url, None, json!({"thread_id": claude_thread})).await;
+    assert_eq!(status, 401);
+    let (status, _) = read_thread(url, Some("guess"), json!({"thread_id": claude_thread})).await;
+    assert_eq!(status, 401);
+
+    let (_, messages) = read_thread(url, Some(token), json!({"thread_id": claude_thread})).await;
+    assert_eq!(messages["thread"]["agent"], "Claude Code");
+    let types: Vec<&str> =
+        messages["items"].as_array().unwrap().iter().map(|item| item["type"].as_str().unwrap()).collect();
+    assert_eq!(types.first(), Some(&"user"));
+    assert!(types.iter().all(|kind| ["user", "assistant", "plan"].contains(kind)), "{types:?}");
+    let (_, first) =
+        read_thread(url, Some(token), json!({"thread_id": claude_thread, "view": "activity", "limit": 2})).await;
+    assert_eq!((first["items"].as_array().unwrap().len(), &first["has_more"]), (2, &json!(true)));
+    let after = first["next_position"].clone();
+    let (_, second) =
+        read_thread(url, Some(token), json!({"thread_id": claude_thread, "view": "activity", "after": after})).await;
+    assert!(second["items"][0]["position"].as_u64() > after.as_u64());
+    assert_eq!(second["has_more"], false);
+
+    let item_id = messages["items"][0]["item_id"].as_str().unwrap();
+    let mut offset = json!(0);
+    let mut read = String::new();
+    while !offset.is_null() {
+        let slice =
+            json!({"thread_id": claude_thread, "item_id": item_id, "text_offset": offset, "max_chars_per_item": 7});
+        let (_, page) = read_thread(url, Some(token), slice).await;
+        read += page["items"][0]["text"].as_str().unwrap();
+        offset = page["items"][0]["next_text_offset"].clone();
+    }
+    assert_eq!(read, "What is in README.md?");
 }
