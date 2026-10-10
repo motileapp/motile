@@ -150,7 +150,7 @@ final class MediaRowView: RowView {
     private var playButton: OverlayButton!
     private let caption = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
     private let spinner = SpinnerView(size: ControlSize.large.symbol)
-    private let progress = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
+    private let progress = TextLabel(font: .uiDigits(12), color: Theme.mutedForeground)
     private let message = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
     private var retryButton: RowButton!
     private var content: MediaContent?
