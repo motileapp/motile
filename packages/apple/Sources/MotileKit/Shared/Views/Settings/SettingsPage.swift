@@ -141,7 +141,7 @@ struct SettingsPage: View {
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add a Server", variant: .outline, size: .large) { store.showsAddServer = true }
+                ActionButton("Add a Server", icon: .plus, variant: .outline, size: .large) { store.showsAddServer = true }
                     .padding(.leading, -rowOutset(for: ControlSize.large.height))
             } trailing: {
                 EmptyView()
@@ -306,7 +306,7 @@ struct SettingsPage: View {
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add an Account", variant: .outline, size: .large) {
+                ActionButton("Add an Account", icon: .plus, variant: .outline, size: .large) {
                     editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
                 }
                 .padding(.leading, -rowOutset(for: ControlSize.large.height))
@@ -357,7 +357,7 @@ struct SettingsPage: View {
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add a Project", variant: .outline, size: .large) {
+                ActionButton("Add a Project", icon: .plus, variant: .outline, size: .large) {
                     store.closeSettings()
                     store.addProject()
                 }
