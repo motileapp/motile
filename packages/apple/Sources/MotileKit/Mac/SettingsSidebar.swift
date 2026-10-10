@@ -80,7 +80,7 @@ struct SettingsSidebar: View {
                 .font(.ui(size: 13))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, sidebarRowInset + 8)
+                .padding(.horizontal, sidebarEdge)
                 .padding(.vertical, 10)
         }
     }

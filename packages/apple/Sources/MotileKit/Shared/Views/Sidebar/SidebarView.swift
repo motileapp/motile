@@ -5,6 +5,8 @@ private let rowGap = 2.0
 /// How far the rows' highlights stay from the sidebar's edges.
 let sidebarRowInset: CGFloat = 10
 let rowMargin = EdgeInsets(top: rowGap / 2, leading: sidebarRowInset, bottom: rowGap / 2, trailing: sidebarRowInset)
+/// How far everything the sidebar shows stays from its sides, a row's content as well as a line's.
+let sidebarEdge = sidebarRowInset + 8
 let doneRowHeight = Double(scaled(30))
 /// One clock for every "5m" in the sidebar, so that they all change at once.
 @Observable
@@ -114,7 +116,7 @@ struct SidebarView: View {
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .frame(height: Self.emptyLineHeight)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, rowMargin.leading + 8)
+                        .padding(.horizontal, sidebarEdge)
                         .padding(.vertical, 6 + rowGap / 2)
                 case .newThread:
                     NewThreadRow()
@@ -491,7 +493,7 @@ struct DraftRows: View {
                     #endif
             }
             ThemeDivider()
-                .padding(.horizontal, rowMargin.leading + 8)
+                .padding(.horizontal, sidebarEdge)
                 .padding(.vertical, 4 + rowGap / 2)
         }
     }
@@ -585,12 +587,11 @@ struct UndoRow: View {
                     store.performUndo()
                 } label: {
                     HStack(spacing: 7) {
-                        Image(.undo2, size: 10)
-                            .frame(width: 14)
+                        SidebarMark(Image(.undo2, size: 10, trimmed: true))
                         Text("Undo")
                             .font(.ui(size: 12, weight: .medium))
                     }
-                    .padding(.leading, 18)
+                    .padding(.leading, sidebarEdge)
                     .padding(.trailing, 12)
                     .frame(maxHeight: .infinity)
                 }
@@ -603,7 +604,7 @@ struct UndoRow: View {
                         .lineLimit(1)
                 }
                 .foregroundStyle(Color.themeMutedForeground)
-                .padding(.trailing, 18)
+                .padding(.trailing, sidebarEdge)
             }
             .frame(height: doneRowHeight + 8)
         }
@@ -641,13 +642,10 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
                 expanded.toggle()
             } label: {
                 HStack(spacing: 7) {
-                    Image(.chevronRight, size: 10)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                        .frame(width: 14)
+                    SidebarChevron(expanded: expanded)
                     header()
                 }
-                .padding(.leading, 11)
-                .padding(.trailing, 18)
+                .padding(.horizontal, sidebarEdge)
                 .frame(height: Self.rowHeight)
                 .padding(.top, 3)
                 .padding(.bottom, expanded ? 3 - rowGap / 2 : 3)
@@ -739,7 +737,7 @@ private struct ServersShelf: View {
             VStack(spacing: 0) {
                 ThemeDivider()
                 ServerLine(server: servers[0])
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, sidebarEdge)
                     .frame(height: doneRowHeight)
                     .padding(.vertical, 3)
             }
@@ -931,6 +929,31 @@ struct ThreadStatus: View {
     }
 }
 
+/// What a sidebar line starts with, against its edge, in a column that lines up the words after it.
+struct SidebarMark<Mark: View>: View {
+    let mark: Mark
+
+    init(_ mark: Mark) {
+        self.mark = mark
+    }
+
+    var body: some View {
+        mark.frame(width: 14, alignment: .leading)
+    }
+}
+
+/// Opens or closes a sidebar line's list.
+struct SidebarChevron: View {
+    let expanded: Bool
+
+    var body: some View {
+        SidebarMark(
+            Image(.chevronRight, size: 10, trimmed: true)
+                .rotationEffect(.degrees(expanded ? 90 : 0))
+        )
+    }
+}
+
 /// Every server in one line, which opens into a line for each: the worst of their states, how
 /// they are reached and the slowest round trip.
 struct AllServersLine: View {
@@ -986,8 +1009,7 @@ struct ServerLine: View {
 
     var body: some View {
         HStack(spacing: 7) {
-            StateDot(tint: server.stateTint ?? .themeSuccess)
-                .frame(width: 14)
+            SidebarMark(StateDot(tint: server.stateTint ?? .themeSuccess))
             Text(server.name)
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)
@@ -1018,6 +1040,8 @@ struct ServerLine: View {
 /// The ways to the settings and the usage (or back from them) and a new version of the client.
 struct SidebarFooter: View {
     private static let reach = EdgeInsets(top: 4, leading: ToolbarButton.margin, bottom: 4, trailing: ToolbarButton.margin)
+    /// How far a button's symbol is from the button's sides.
+    private static let symbolInset = (ControlSize.regular.height - ControlSize.regular.symbol) / 2
 
     @Environment(AppStore.self) private var store
 
@@ -1049,12 +1073,11 @@ struct SidebarFooter: View {
                     store.updater.check(asked: true)
                 }
             }
-            .padding(.horizontal, -(ControlSize.regular.height - ControlSize.regular.symbol) / 2 - Self.reach.leading)
+            .padding(.horizontal, -Self.symbolInset - Self.reach.leading)
             .padding(.vertical, -Self.reach.top)
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 10)
-        .padding(.bottom, 11)
+        .padding(.horizontal, sidebarEdge)
+        .padding(.vertical, sidebarEdge - Self.symbolInset)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
