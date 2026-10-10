@@ -9,9 +9,6 @@ struct FadingScroll<Content: View>: View {
     @ViewBuilder let content: Content
 
     @State private var contentHeight: CGFloat = 0
-    @State private var hidden = HiddenEdges()
-
-    private static var fade: CGFloat { scaled(24) }
 
     var body: some View {
         ScrollView {
@@ -24,36 +21,31 @@ struct FadingScroll<Content: View>: View {
         .contentMargins(padding, for: .scrollContent)
         .scrollBounceBehavior(.basedOnSize)
         .defaultScrollAnchor(anchor)
-        .modifier(TracksHiddenEdges(hidden: $hidden))
-        .mask { mask }
+        .fadesHiddenEdges()
         .frame(height: min(contentHeight + padding * 2, maxHeight))
     }
-
-    private var mask: some View {
-        VStack(spacing: 0) {
-            LinearGradient(colors: [hidden.top ? .clear : .black, .black], startPoint: .top, endPoint: .bottom)
-                .frame(height: Self.fade)
-            Color.black
-            LinearGradient(colors: [.black, hidden.bottom ? .clear : .black], startPoint: .top, endPoint: .bottom)
-                .frame(height: Self.fade)
-        }
-    }
 }
 
+/// How much of a scroll view's content is hidden past its top and its bottom.
 private struct HiddenEdges: Equatable {
-    var top = false
-    var bottom = false
+    var above: CGFloat = 0
+    var below: CGFloat = 0
 }
 
-private struct TracksHiddenEdges: ViewModifier {
-    @Binding var hidden: HiddenEdges
+private struct FadesHiddenEdges: ViewModifier {
+    @State private var hidden = HiddenEdges()
 
     func body(content: Content) -> some View {
+        tracked(content).mask { mask }
+    }
+
+    @ViewBuilder
+    private func tracked(_ content: Content) -> some View {
         if #available(macOS 15, *) {
             content.onScrollGeometryChange(for: HiddenEdges.self) { geometry in
-                let offset = geometry.contentOffset.y + geometry.contentInsets.top
-                let below = geometry.contentSize.height - offset - geometry.containerSize.height
-                return HiddenEdges(top: offset > 0.5, bottom: below > 0.5)
+                let above = geometry.contentOffset.y + geometry.contentInsets.top
+                let below = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.contentOffset.y - geometry.containerSize.height
+                return HiddenEdges(above: min(EdgeFade.length, max(0, above)), below: min(EdgeFade.length, max(0, below)))
             } action: { _, edges in
                 hidden = edges
             }
@@ -61,9 +53,24 @@ private struct TracksHiddenEdges: ViewModifier {
             content
         }
     }
+
+    private var mask: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.black.opacity(1 - hidden.above / EdgeFade.length), .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: EdgeFade.length)
+            Color.black
+            LinearGradient(colors: [.black, .black.opacity(1 - hidden.below / EdgeFade.length)], startPoint: .top, endPoint: .bottom)
+                .frame(height: EdgeFade.length)
+        }
+    }
 }
 
 extension View {
+    /// Fades a scroll view's content out at an edge with more behind it, as a recycled list does.
+    func fadesHiddenEdges() -> some View {
+        modifier(FadesHiddenEdges())
+    }
+
     /// Fades a scroll view's content out under the window's top bar, as the transcript does.
     func fadesUnderTopBar() -> some View {
         mask {

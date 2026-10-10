@@ -55,7 +55,7 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         }
         table.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: table))
 
-        let scroll = NSScrollView()
+        let scroll = FadingScrollView()
         scroll.documentView = table
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
@@ -506,6 +506,36 @@ private final class RowLift {
         animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
         layer.setValue(value, forKeyPath: keyPath)
         layer.add(animation, forKey: keyPath)
+    }
+}
+
+/// Fades its rows out at an edge with more of them behind it.
+private final class FadingScrollView: NSScrollView {
+    private let fade = EdgeFade()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.mask = fade
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layout() {
+        super.layout()
+        updateFade()
+    }
+
+    override func reflectScrolledClipView(_ clip: NSClipView) {
+        super.reflectScrolledClipView(clip)
+        updateFade()
+    }
+
+    private func updateFade() {
+        let visible = contentView.bounds
+        let above = visible.minY + contentInsets.top
+        let below = (documentView?.frame.height ?? 0) + contentInsets.bottom - visible.maxY
+        fade.update(frame: bounds, above: above, below: below)
     }
 }
 

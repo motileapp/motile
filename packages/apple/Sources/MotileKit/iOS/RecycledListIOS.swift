@@ -31,7 +31,7 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         var layout = UICollectionLayoutListConfiguration(appearance: .plain)
         layout.showsSeparators = false
         layout.backgroundColor = .clear
-        let view = UICollectionView(frame: .zero, collectionViewLayout: UICollectionViewCompositionalLayout.list(using: layout))
+        let view = FadingCollectionView(frame: .zero, collectionViewLayout: UICollectionViewCompositionalLayout.list(using: layout))
         view.backgroundColor = .clear
         view.allowsSelection = false
         view.keyboardDismissMode = .onDrag
@@ -276,6 +276,25 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             guard let cell = view.cellForItem(at: indexPath), let parameters = lifted(view, at: indexPath, UIPreviewParameters()) else { return nil }
             return UITargetedPreview(view: cell, parameters: parameters)
         }
+    }
+}
+
+/// Fades its rows out at an edge with more of them behind it.
+private final class FadingCollectionView: UICollectionView {
+    private let fade = EdgeFade()
+
+    override init(frame: CGRect, collectionViewLayout layout: UICollectionViewLayout) {
+        super.init(frame: frame, collectionViewLayout: layout)
+        layer.mask = fade
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let above = contentOffset.y + adjustedContentInset.top
+        let below = contentSize.height + adjustedContentInset.bottom - bounds.maxY
+        fade.update(frame: bounds, above: above, below: below)
     }
 }
 
