@@ -142,6 +142,7 @@ struct SettingsPage: View {
             Text("Messages")
         } footer: {
             Text(AppStore.steersDescription(steers))
+                .foregroundStyle(Color.themeMutedForeground)
         }
         .id("messages")
 
@@ -154,6 +155,7 @@ struct SettingsPage: View {
             Text("Storage")
         } footer: {
             Text("Kept on this \(Platform.device) so threads open with them. Your servers keep them all.")
+                .foregroundStyle(Color.themeMutedForeground)
         }
         .id("storage")
 
@@ -214,9 +216,8 @@ struct SettingsPage: View {
                 } header: {
                     Label(server.name, symbol: .server, size: 12)
                 } footer: {
-                    if server.id == store.servers.last?.id {
-                        Text("Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.")
-                    }
+                    Text("Each account keeps its sign-in in a folder of its own. A thread works with one and can move to another.")
+                        .foregroundStyle(Color.themeMutedForeground)
                 }
             }
             .id("agent-accounts")
@@ -302,6 +303,7 @@ struct SettingsPage: View {
                 if servers.count > 1 { Text("Model") }
             } footer: {
                 Text("The model that writes thread titles, branch names, commit messages and pull requests.")
+                    .foregroundStyle(Color.themeMutedForeground)
             }
             .id("text-model")
             let naming = servers.filter { $0.protocolVersion >= 6 }
@@ -320,6 +322,7 @@ struct SettingsPage: View {
                     if naming.count > 1 { Text("Branch names") }
                 } footer: {
                     Text("How the writer is told to name the branches it makes.")
+                        .foregroundStyle(Color.themeMutedForeground)
                 }
                 .id("branch-names")
             }
@@ -492,6 +495,7 @@ private struct WorktreeSetupPage: View {
                 SettingsTextEditor(placeholder: "cp \"$MOTILE_PROJECT/.env\" . && pnpm install", text: $script, monospaced: true)
             } footer: {
                 Text("Runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder.")
+                    .foregroundStyle(Color.themeMutedForeground)
             }
         }
         .navigationTitle("Worktree Setup")
@@ -523,6 +527,7 @@ private struct BranchNamesPage: View {
                     SettingsTextEditor(placeholder: "How to name a branch", text: $text)
                 } footer: {
                     Text("How the writer on \(server.name) is told to name the branches it makes.")
+                        .foregroundStyle(Color.themeMutedForeground)
                 }
                 Section {
                     Button("Reset to Default") {
@@ -665,7 +670,7 @@ private struct SettingsToggles: View {
         } header: {
             if servers.count > 1 { Text(title) }
         } footer: {
-            if let caption { Text(caption) }
+            if let caption { Text(caption).foregroundStyle(Color.themeMutedForeground) }
         }
     }
 }

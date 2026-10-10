@@ -107,12 +107,14 @@ struct AgentAccountSheet: View {
                 Text("Folder")
             } footer: {
                 Text("Where its sign-in is kept, as \(account.folderVariable)")
+                    .foregroundStyle(Color.themeMutedForeground)
             }
             if account.agent == .codex {
                 Section {
                     Toggle("Share sessions with the default account", isOn: $account.sharesSessions)
                 } footer: {
                     Text("The folder keeps only the sign-in. Threads move between the two and go on where they were.")
+                        .foregroundStyle(Color.themeMutedForeground)
                 }
             }
         }
@@ -130,6 +132,7 @@ struct AgentAccountSheet: View {
             Text("Variables")
         } footer: {
             Text("Given to its agent: an API key or a router. A sensitive value stays on \(server.name) and is never shown again.")
+                .foregroundStyle(Color.themeMutedForeground)
         }
         Section {
             Text(account.signInCommand)
@@ -154,6 +157,7 @@ struct AgentAccountSheet: View {
             Text("Sign In")
         } footer: {
             Text("Run it in a terminal on \(server.name). Who is signed in shows in the list once the agent says.")
+                .foregroundStyle(Color.themeMutedForeground)
         }
     }
 
