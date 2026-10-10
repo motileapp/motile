@@ -244,7 +244,7 @@ function Changes({
           type="button"
           key={file.path}
           onClick={onOpenDiff}
-          className="mx-1.5 flex h-[26px] w-[calc(100%-12px)] items-center gap-2 rounded-md px-1.5 text-left text-[12.5px] hover:bg-background-secondary-accent"
+          className="mx-1.5 flex h-7 w-[calc(100%-12px)] items-center gap-2 rounded-md px-1.5 text-left text-[12.5px] hover:bg-background-secondary-accent active:bg-background-secondary-accent"
         >
           <FileTextIcon className="size-3 shrink-0 text-muted-foreground" />
           <span className="truncate text-foreground">

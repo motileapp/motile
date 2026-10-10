@@ -512,6 +512,8 @@ final class TranscriptScroller: UIView, UIScrollViewDelegate, UIGestureRecognize
         scrollView.alwaysBounceVertical = true
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.keyboardDismissMode = .interactive
+        // A press lights what it lands on at once, so that a quick tap shows as the pointer does.
+        scrollView.delaysContentTouches = false
         scrollView.delegate = self
         // Sized with the view at once, so the transcript knows how much of it shows when it is laid out.
         scrollView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
