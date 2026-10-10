@@ -35,12 +35,33 @@
   initial-value: 1;
 }
 
+.demo-shimmer {
+  --band: color-mix(in srgb, var(--emphasized-foreground) var(--opacity-shimmer-band-middle), transparent);
+  --band-edge: color-mix(in srgb, var(--emphasized-foreground) var(--opacity-shimmer-band-edge), transparent);
+  color: transparent;
+  background-color: var(--muted-stronger-foreground);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--band-edge) 15%,
+    var(--band) 35%,
+    var(--emphasized-foreground) 50%,
+    var(--band) 65%,
+    var(--band-edge) 85%,
+    transparent
+  );
+  background-size: 72px 100%;
+  background-repeat: no-repeat;
+  background-clip: text;
+  animation: demo-shimmer 2.2s linear infinite;
+}
+
 @keyframes demo-shimmer {
   from {
-    background-position: 100% 0;
+    background-position: -72px 0;
   }
   to {
-    background-position: -100% 0;
+    background-position: calc(100% + 72px) 0;
   }
 }
 
