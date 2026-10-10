@@ -10,7 +10,7 @@ import UIKit
 /// the viewer, and the others by name under them. The tiles are all one size, so the row knows
 /// its height before any picture is on this device.
 final class AttachedFilesView: FlippedView {
-    private static let tile = CGSize(width: 104, height: 78)
+    private static let tile = CGSize(width: 96, height: 96)
     private static let gap: CGFloat = 6
     private static let namesHeight: CGFloat = scaled(16)
 
@@ -88,7 +88,7 @@ final class AttachedFilesView: FlippedView {
         names.frame = CGRect(x: 0, y: tilesBottom, width: width, height: Self.namesHeight)
     }
 
-    /// One image or video: its picture, cut to the tile, with a play sign on a video.
+    /// One image or video: all of its picture, fitted in the tile, with a play sign on a video.
     private final class TileView: FlippedView {
         private let picture = PictureView()
         private var playButton: OverlayButton!
@@ -96,7 +96,6 @@ final class AttachedFilesView: FlippedView {
 
         override init(frame: CGRect) {
             super.init(frame: frame)
-            picture.fills = true
             addSubview(picture)
             playButton = OverlayButton(.play, size: .regular, tooltip: "Play") { [weak self] in self?.onPress?(.zero) }
             addSubview(playButton)

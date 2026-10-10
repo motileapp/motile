@@ -16,7 +16,7 @@ struct AttachmentTile: View {
             if let picture {
                 Image(decorative: picture, scale: 1)
                     .resizable()
-                    .scaledToFill()
+                    .scaledToFit()
                     .frame(width: Self.side, height: Self.side)
             }
             if attachment.video {

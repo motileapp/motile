@@ -178,12 +178,10 @@ final class PictureView: LayerView {
     static let radius = Radius.lg
 
     var picture: CGImage? { didSet { repaint() } }
-    /// Fills the box with the picture, cutting off what doesn't fit, instead of showing all of it.
-    var fills = false { didSet { repaint() } }
 
     override func paint(_ layer: CALayer) {
         layer.contents = picture
-        layer.contentsGravity = fills ? .resizeAspectFill : .resizeAspect
+        layer.contentsGravity = .resizeAspect
         layer.backgroundColor = resolved(Theme.backgroundSecondary)
         layer.cornerRadius = Self.radius
         layer.cornerCurve = .continuous
