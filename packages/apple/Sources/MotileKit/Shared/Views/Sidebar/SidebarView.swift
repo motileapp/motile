@@ -641,7 +641,8 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
                         .frame(width: 14)
                     header()
                 }
-                .padding(.horizontal, 18)
+                .padding(.leading, 11)
+                .padding(.trailing, 18)
                 .frame(height: Self.rowHeight)
                 .padding(.top, 3)
                 .padding(.bottom, expanded ? 3 - rowGap / 2 : 3)
@@ -933,7 +934,7 @@ struct AllServersLine: View {
     var body: some View {
         HStack(spacing: 7) {
             StateDot(tint: servers.worstTint)
-            Text("All servers")
+            Text("Servers")
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)
             Spacer(minLength: 4)
@@ -964,11 +965,11 @@ extension [Server] {
         return .themeSuccess
     }
 
-    /// How the connected ones are reached, "mixed" if not all alike, and their slowest round trip.
+    /// How the connected ones are reached, "Mixed" if not all alike, and their slowest round trip.
     var reach: String {
         let connected = filter { $0.state == .connected }
         let paths = Set(connected.compactMap(\.path))
-        let path = paths.count > 1 ? "mixed" : paths.first
+        let path = paths.count > 1 ? "Mixed" : paths.first?.capitalized
         let slowest = connected.compactMap(\.rttMs).max().map { "\($0) ms" }
         return [path, slowest].compactMap { $0 }.joined(separator: " · ")
     }
@@ -999,11 +1000,11 @@ struct ServerLine: View {
     private var detail: String {
         switch server.state {
         case .connected:
-            let path = server.path ?? "connected"
+            let path = server.path?.capitalized ?? "Connected"
             return server.rttMs.map { "\(path) · \($0) ms" } ?? path
-        case .connecting: return "connecting…"
-        case .disconnected: return "offline"
-        case .refused: return "refused"
+        case .connecting: return "Connecting…"
+        case .disconnected: return "Offline"
+        case .refused: return "Refused"
         }
     }
 }
