@@ -65,6 +65,7 @@ struct ConnectServerView: View {
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, maxHeight: centred ? .infinity : nil)
+        .background(Color.themeBackground.ignoresSafeArea())
         .onAppear { store.prepareToAddServer() }
         .onDisappear { store.stopAddingServer() }
     }
