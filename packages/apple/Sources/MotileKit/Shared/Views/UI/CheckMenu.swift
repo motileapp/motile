@@ -9,8 +9,7 @@ struct Check: Identifiable {
 }
 
 /// A menu of things to turn on and off. It stays open while they are picked, which no system
-/// menu does on the Mac, so it is drawn by the view with `dropdowns()` around it. A line parts
-/// its `groups`.
+/// menu does on the Mac, so it is drawn by the view with `dropdowns()` around it.
 struct CheckMenu: View {
     private static let padding: CGFloat = 4
 
@@ -20,12 +19,12 @@ struct CheckMenu: View {
     private let variant: ButtonVariant
     private let size: ControlSize
     private let tint: Color?
-    private let groups: [[Check]]
+    private let checks: [Check]
     @State private var open = false
 
     init(
         _ title: String, icon: Symbol? = nil, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular,
-        tint: Color? = nil, groups: [[Check]]
+        tint: Color? = nil, checks: [Check]
     ) {
         self.title = title
         self.icon = icon
@@ -33,7 +32,7 @@ struct CheckMenu: View {
         self.variant = variant
         self.size = size
         self.tint = tint
-        self.groups = groups
+        self.checks = checks
     }
 
     var body: some View {
@@ -62,16 +61,9 @@ struct CheckMenu: View {
 
     private var list: some View {
         VStack(spacing: 0) {
-            ForEach(groups.indices, id: \.self) { index in
-                if index > 0 {
-                    ThemeDivider()
-                        .padding(.horizontal, -Self.padding)
-                        .padding(.vertical, Self.padding)
-                }
-                ForEach(groups[index]) { check in
-                    row(check)
-                        .button(.highlight(radius: Radius.sm)) { check.toggle() }
-                }
+            ForEach(checks) { check in
+                row(check)
+                    .button(.highlight(radius: Radius.sm)) { check.toggle() }
             }
         }
         .padding(Self.padding)

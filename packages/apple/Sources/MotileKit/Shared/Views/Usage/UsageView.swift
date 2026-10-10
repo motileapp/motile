@@ -64,10 +64,10 @@ final class UsageModel {
         }
     }
 
-    /// The servers counted, all of them when `nil`.
-    var servers = UserDefaults.standard.stringArray(forKey: serversKey).map(Set.init) {
+    /// The servers picked. None picked counts all of them, as does every one.
+    var servers = Set(UserDefaults.standard.stringArray(forKey: serversKey) ?? []) {
         didSet {
-            UserDefaults.standard.set(servers.map(Array.init), forKey: Self.serversKey)
+            UserDefaults.standard.set(Array(servers), forKey: Self.serversKey)
             load()
         }
     }
@@ -89,23 +89,17 @@ final class UsageModel {
         load(refresh: true)
     }
 
-    /// The servers counted among these, or nil for all of them, also when none of those picked
-    /// is one of them any more.
+    /// The servers counted among these, or nil for all of them.
     private func picked(among all: [Server]) -> Set<String>? {
-        guard let servers else { return nil }
         let picked = servers.intersection(all.map(\.id))
         guard !picked.isEmpty, picked.count < all.count else { return nil }
         return picked
     }
 
-    /// Counts the server or leaves it out. Counting every server is counting all of them, and the
-    /// last one counted stays.
-    func set(_ server: Server, counted: Bool, among all: [Server]) {
-        let everyone = Set(all.map(\.id))
-        var chosen = picked(among: all) ?? everyone
-        if counted { chosen.insert(server.id) } else { chosen.remove(server.id) }
-        guard !chosen.isEmpty else { return }
-        servers = chosen == everyone ? nil : chosen
+    func toggle(_ server: Server, among all: [Server]) {
+        var picked = servers.intersection(all.map(\.id))
+        if picked.remove(server.id) == nil { picked.insert(server.id) }
+        servers = picked
     }
 
     /// "All servers", the one server's name, or how many.
@@ -115,17 +109,12 @@ final class UsageModel {
         return named.count == 1 ? named[0].name : "\(named.count) servers"
     }
 
-    /// All of them, then each on its own.
-    func serverChecks(among all: [Server]) -> [[Check]] {
-        let chosen = picked(among: all)
-        let everyone = Check(id: "all", title: "All servers", checked: chosen == nil) { [weak self] in self?.servers = nil }
-        let each = all.map { server in
-            let counted = chosen?.contains(server.id) ?? true
-            return Check(id: server.id, title: server.name, checked: counted) { [weak self] in
-                self?.set(server, counted: !counted, among: all)
+    func serverChecks(among all: [Server]) -> [Check] {
+        all.map { server in
+            Check(id: server.id, title: server.name, checked: servers.contains(server.id)) { [weak self] in
+                self?.toggle(server, among: all)
             }
         }
-        return [[everyone], each]
     }
 
     private func load(refresh: Bool = false) {
@@ -133,9 +122,9 @@ final class UsageModel {
         asked += 1
         let number = asked
         refreshing = true
-        let picked = servers.map { $0.intersection(store.servers.map(\.id)) }.flatMap { $0.isEmpty ? nil : $0 }
+        let counted = picked(among: store.servers)
         if tab == .limits {
-            store.loadLimits(refresh: refresh, kept: !refresh, servers: picked) { [weak self] result in
+            store.loadLimits(refresh: refresh, kept: !refresh, servers: counted) { [weak self] result in
                 guard let self, number == asked else { return }
                 guard case .success(let report) = result, report.stale else {
                     refreshing = false
@@ -143,7 +132,7 @@ final class UsageModel {
                     return
                 }
                 if !report.sections.isEmpty { limits = .ready(report) }
-                store.loadLimits(refresh: false, kept: false, servers: picked) { [weak self] result in
+                store.loadLimits(refresh: false, kept: false, servers: counted) { [weak self] result in
                     guard let self, number == asked else { return }
                     refreshing = false
                     limits = Self.loaded(result, over: limits)
@@ -151,10 +140,10 @@ final class UsageModel {
             }
         } else {
             let (seconds, buckets) = (period.bucketSeconds, period.buckets)
-            store.loadUsage(bucketSeconds: seconds, buckets: buckets, kept: true, servers: picked) { [weak self] kept in
+            store.loadUsage(bucketSeconds: seconds, buckets: buckets, kept: true, servers: counted) { [weak self] kept in
                 guard let self, number == asked else { return }
                 if case .success(let report) = kept { spending = .ready(report) }
-                store.loadUsage(bucketSeconds: seconds, buckets: buckets, kept: false, servers: picked) { [weak self] result in
+                store.loadUsage(bucketSeconds: seconds, buckets: buckets, kept: false, servers: counted) { [weak self] result in
                     guard let self, number == asked else { return }
                     refreshing = false
                     spending = Self.loaded(result, over: spending)
@@ -188,7 +177,7 @@ struct UsageTitle: View {
                 .foregroundStyle(Color.themeMutedStrongerForeground)
             CheckMenu(
                 model.serversLabel(among: store.servers), help: "The servers counted", size: Self.size, tint: .themeForeground,
-                groups: model.serverChecks(among: store.servers)
+                checks: model.serverChecks(among: store.servers)
             )
             .padding(.leading, -Self.size.padding)
         }
@@ -205,7 +194,7 @@ struct UsageServersMenu: View {
     var body: some View {
         CheckMenu(
             model.serversLabel(among: store.servers), icon: .server, help: "The servers counted", variant: .secondary,
-            groups: model.serverChecks(among: store.servers)
+            checks: model.serverChecks(among: store.servers)
         )
     }
 }
