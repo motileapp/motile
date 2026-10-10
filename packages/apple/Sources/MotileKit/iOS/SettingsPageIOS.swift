@@ -174,7 +174,11 @@ struct SettingsPage: View {
                     }
                 }
             }
-            Button { store.showsAddServer = true } label: { SettingsActionLabel("Add a Server", symbol: .plus) }
+            NavigationLink {
+                AddServerPage()
+            } label: {
+                SettingsActionLabel("Add a Server", symbol: .plus)
+            }
         }
         .id("servers")
         let continuing = store.servers.filter { $0.state == .connected && store.canChooseRestart($0) }
@@ -267,9 +271,8 @@ struct SettingsPage: View {
                     }
                 }
             }
-            Button {
-                store.closeSettings()
-                store.addProject()
+            NavigationLink {
+                CommandPanel(start: store.addProjectPage, inStack: true)
             } label: {
                 SettingsActionLabel("Add a Project", symbol: .plus)
             }
@@ -397,6 +400,22 @@ private struct ServerSettingsPage: View {
     }
 }
 
+/// The command that links a new server, until that server shows up.
+private struct AddServerPage: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ConnectServerView(isFirst: false)
+            .navigationTitle("Add a Server")
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: store.servers.count) { old, new in
+                guard new > old else { return }
+                dismiss()
+            }
+    }
+}
+
 /// A project's page: where it is, its icon, the script its new worktrees run, and the way to
 /// remove it.
 private struct ProjectSettingsPage: View {
@@ -431,7 +450,11 @@ private struct ProjectSettingsPage: View {
                     }
                 }
                 Section {
-                    Button { store.openPanel(.icon(project.id)) } label: { SettingsActionLabel("Choose an Icon", symbol: .image) }
+                    NavigationLink {
+                        CommandPanel(start: .icon(project.id), inStack: true)
+                    } label: {
+                        SettingsActionLabel("Choose an Icon", symbol: .image)
+                    }
                     if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
                         NavigationLink {
                             WorktreeSetupPage(project: project)

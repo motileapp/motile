@@ -1648,6 +1648,10 @@ final class AppStore {
     func openPanel(_ page: PanelPage) {
         guard account.signedIn, !servers.isEmpty else { return }
         panel = page
+        readGitHubOfServers()
+    }
+
+    func readGitHubOfServers() {
         for server in servers where server.state == .connected && startsProjects(server) {
             if github[server.id] == nil {
                 github[server.id] = defaults.string(forKey: "github-\(server.id)").flatMap(GitHubState.init)
