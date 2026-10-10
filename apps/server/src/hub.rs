@@ -18,10 +18,10 @@ use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
-    Activity, Agent, AgentAccount, AgentLimits, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings,
-    DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media,
-    MergeMethod, Message, ModelInfo, NewThread, Project, PullRequest, PullRequestAction, Queued, ServerInfo,
-    ServerUpdate, Subagent, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    Activity, Agent, AgentAccount, AgentLimits, Approval, BranchInstructions, CONTINUE_PROMPT, ChangedFile,
+    ContinueSettings, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item,
+    ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread, Project, PullRequest, PullRequestAction, Queued,
+    ServerInfo, ServerUpdate, Subagent, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -923,6 +923,7 @@ impl Hub {
             running: false,
             monitoring: false,
             needs_approval: false,
+            asking: None,
             agents: 0,
             turn_ended_at: None,
             pull_request: None,
@@ -1131,6 +1132,7 @@ impl Hub {
 
     fn announce_approvals(&self, live: &mut Live) -> anyhow::Result<()> {
         live.stored.thread.needs_approval = !live.activity.approvals.is_empty();
+        live.stored.thread.asking = live.activity.approvals.first().map(Approval::ask);
         self.store.save_thread(&live.stored)?;
         live.send_activity();
         self.announce(&live.stored.thread);
@@ -2586,6 +2588,7 @@ impl Hub {
         thread.running = true;
         thread.monitoring = false;
         thread.needs_approval = false;
+        thread.asking = None;
         thread.interruption = None;
         thread.updated_at = now();
         // New activity brings a done thread back, to the top of the list.
@@ -2850,6 +2853,7 @@ impl Hub {
                 }
                 live.activity.approvals.clear();
                 live.stored.thread.needs_approval = false;
+                live.stored.thread.asking = None;
                 summary.cost_usd = live.cost_usd.take();
                 live.end_turn(store, summary)?;
                 self.note_seen(live)?;
@@ -2996,6 +3000,7 @@ impl Hub {
         thread.running = false;
         thread.monitoring = false;
         thread.needs_approval = false;
+        thread.asking = None;
         thread.agents = 0;
         thread.updated_at = now();
         live.activity = Activity::default();
@@ -3195,6 +3200,7 @@ impl Live {
         thread.running = false;
         thread.monitoring = false;
         thread.needs_approval = false;
+        thread.asking = None;
         thread.interruption = Some(Interruption::Restart);
         if running {
             thread.turn_ended_at = Some(now());

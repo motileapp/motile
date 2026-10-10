@@ -867,9 +867,9 @@ struct ThreadStatus: View {
     let thread: ThreadInfo
 
     var body: some View {
-        if thread.needsApproval {
-            label("Approval", Color.themeWarning) {
-                symbol(.circleQuestionMark)
+        if let asking = thread.asking {
+            label(asking.word, Color.themeWarning) {
+                symbol(asking.symbol)
             }
         } else if thread.running {
             HStack(spacing: 9) {

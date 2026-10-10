@@ -2253,6 +2253,7 @@ mod tests {
             running,
             monitoring,
             needs_approval,
+            asking: None,
             agents: 0,
             turn_ended_at: None,
             pull_request: None,

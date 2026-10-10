@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Approval, Subagent, Tokens, ToolCall, ToolStatus, TurnSummary};
+use motile_protocol::wire::{Access, Approval, QUESTION_TOOL, Subagent, Tokens, ToolCall, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
 
 use super::{AgentEvent, ModelUsage, PLAN_TOOL, Settings, Turn};
@@ -19,7 +19,6 @@ const INJECT: u64 = 3;
 const FIRST_TURN: u64 = 4;
 /// What a Codex too old to take messages before a turn answers `thread/inject_items` with.
 const METHOD_NOT_FOUND: i64 = -32601;
-const QUESTION_TOOL: &str = "AskUserQuestion";
 
 pub fn arguments() -> Vec<String> {
     vec!["app-server".to_string()]

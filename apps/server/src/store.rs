@@ -203,6 +203,7 @@ impl Store {
                     running: row.get(23)?,
                     monitoring: row.get(24)?,
                     needs_approval: row.get(14)?,
+                    asking: None,
                     agents: 0,
                     turn_ended_at: row.get(15)?,
                     pull_request: pull_request.and_then(|json| serde_json::from_str(&json).ok()),

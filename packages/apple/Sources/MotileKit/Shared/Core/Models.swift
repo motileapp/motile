@@ -678,6 +678,8 @@ struct ThreadInfo: Equatable, Identifiable {
     /// The turn is over, but the agent still watches something it left running.
     let monitoring: Bool
     let needsApproval: Bool
+    /// What the tool call that waits for the user asks of them.
+    let asking: Ask?
     /// How many agents the thread's agent has started that still work.
     let agents: Int
     let turnEndedAt: Double?
@@ -712,6 +714,8 @@ struct ThreadInfo: Equatable, Identifiable {
         running = json.bool("running")
         monitoring = json.bool("monitoring")
         needsApproval = json.bool("needs_approval")
+        // A server from before `asking` only says that something waits.
+        asking = needsApproval ? Ask(rawValue: json.string("asking")) ?? .approval : nil
         agents = json.int("agents")
         turnEndedAt = json.optionalDouble("turn_ended_at")
         pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
@@ -755,6 +759,47 @@ extension [ThreadInfo] {
 }
 
 /// Why a thread's agent stopped before it finished.
+/// What a tool call that waits for the user asks of them.
+enum Ask: String {
+    case approval
+    case question
+    case plan
+
+    var word: String {
+        switch self {
+        case .approval: "Approval"
+        case .question: "Question"
+        case .plan: "Plan"
+        }
+    }
+
+    /// What a thread is said to do while it waits.
+    var phrase: String {
+        switch self {
+        case .approval: "needs approval"
+        case .question: "has a question"
+        case .plan: "has a plan"
+        }
+    }
+
+    var symbol: Symbol {
+        switch self {
+        case .approval: .shield
+        case .question: .messageCircleQuestionMark
+        case .plan: .clipboardList
+        }
+    }
+
+    /// What the transcript says while the agent waits for it.
+    var waiting: String {
+        switch self {
+        case .approval: "Waiting for your approval"
+        case .question: "Waiting for your answer"
+        case .plan: "Waiting for you to review the plan"
+        }
+    }
+}
+
 enum Interruption: Equatable {
     /// The agent reached its usage limit. `resetsAt` is when it resets, when the agent said; with
     /// `continues` the thread goes on by itself then.
@@ -1012,6 +1057,7 @@ struct Approval: Equatable, Identifiable {
     /// The target set in its colours.
     let typesetTarget: NSAttributedString
     let symbol: Symbol
+    let ask: Ask
     /// What the buttons that allow and refuse it say.
     let allowLabel: String
     let refuseLabel: String
@@ -1024,6 +1070,7 @@ struct Approval: Equatable, Identifiable {
         target = json.string("target")
         typesetTarget = Typesetter.command(target, spans: json["spans"] as? [NSNumber] ?? [])
         symbol = ToolContent.symbol(for: json.string("icon"))
+        ask = Ask(rawValue: json.string("ask")) ?? .approval
         allowLabel = json.string("allow")
         refuseLabel = json.string("refuse")
         questions = json.objects("questions").map { Question(json: $0) }
@@ -1038,6 +1085,8 @@ struct Question: Equatable, Identifiable {
         var id: String { label }
     }
 
+    /// A word or two that says what it is about.
+    let header: String
     let text: String
     let options: [Choice]
     /// More than one option can be chosen.
@@ -1046,6 +1095,7 @@ struct Question: Equatable, Identifiable {
     var id: String { text }
 
     init(json: JSON) {
+        header = json.string("header")
         text = json.string("text")
         options = json.objects("options").map { Choice(label: $0.string("label"), detail: $0.string("detail")) }
         multiple = json.bool("multiple")

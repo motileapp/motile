@@ -52,6 +52,7 @@
   --color-border-popover: var(--border-popover);
   --color-input: var(--input);
   --color-composer: var(--composer);
+  --color-border-composer: var(--border-composer);
   --color-ring: var(--ring);
   --color-overlay: var(--overlay);
   --color-shadow: var(--shadow);

@@ -75,12 +75,12 @@ export function Composer({
               Allow
             </button>
           </div>
-          <p className="mt-2 rounded-md bg-border-input p-2.5 font-mono text-[12.5px] break-words">
+          <p className="mt-2 rounded-md bg-border-composer p-2.5 font-mono text-[12.5px] break-words">
             <Command text={thread.approval.target} />
           </p>
         </Strip>
       )}
-      <div className="relative z-10 rounded-2xl border border-border-input bg-composer">
+      <div className="relative z-10 rounded-2xl border border-border-composer bg-composer">
         <textarea
           ref={input}
           value={text}
@@ -106,9 +106,9 @@ export function Composer({
           <Control icon={<AgentIcon agent={thread.agent} size={14} />}>
             <Dotted text={thread.model} />
           </Control>
-          <span className="mx-1 h-3.5 w-px bg-border-input" />
+          <span className="mx-1 h-3.5 w-px bg-border-composer" />
           <Control>High</Control>
-          <span className="mx-1 h-3.5 w-px bg-border-input" />
+          <span className="mx-1 h-3.5 w-px bg-border-composer" />
           <Control
             icon={
               thread.approval ? (
@@ -141,7 +141,7 @@ export function Composer({
           <ServerIcon className="size-[11px]" />
           {thread.server.name}
         </span>
-        <span className="mx-2.5 h-3 w-px bg-border-input" />
+        <span className="mx-2.5 h-3 w-px bg-border-composer" />
         <span className="flex items-center gap-1.5">
           <ProjectIcon project={thread.project} size={13} />
           {thread.project.name}
@@ -154,7 +154,7 @@ export function Composer({
           )}
           {thread.worktree ? "Worktree" : "Local checkout"}
         </span>
-        <span className="ml-2.5 h-3 w-px bg-border-input" />
+        <span className="ml-2.5 h-3 w-px bg-border-composer" />
         <span className="mr-2 flex items-center">
           <Control icon={<GitBranchIcon className="size-3.5" />} plain={!!thread.worktree}>
             {thread.branch}
@@ -206,7 +206,7 @@ function Strip({
   return (
     <div
       className={cn(
-        "mx-[22px] border border-border-input bg-composer text-[12px] text-muted-foreground",
+        "mx-[22px] border border-border-composer bg-composer text-[12px] text-muted-foreground",
         tall
           ? "p-3 text-[12.5px]"
           : "flex h-[35px] items-center",

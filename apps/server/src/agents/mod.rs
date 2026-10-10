@@ -41,8 +41,7 @@ pub fn instructions(turn: &Turn) -> String {
     text + ". No need to mention this otherwise. " + SHOWING_MEDIA
 }
 
-/// The agents present a plan with this tool call; allowing it has the plan carried out.
-pub const PLAN_TOOL: &str = "ExitPlanMode";
+pub use motile_protocol::wire::PLAN_TOOL;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentEvent {

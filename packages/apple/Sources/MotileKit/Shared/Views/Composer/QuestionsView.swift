@@ -8,23 +8,26 @@ struct QuestionsView: View {
     @State private var index = 0
     @State private var chosen: [String: Set<String>] = [:]
     @State private var typed: [String: String] = [:]
+    @FocusState private var typing: Bool
 
     /// How far past its text an option's light and the room to press it reach.
     private static let optionReach: CGFloat = 8
+    private static let markGap: CGFloat = 10
 
     private var question: Question { approval.questions[min(index, approval.questions.count - 1)] }
     private var isLast: Bool { index >= approval.questions.count - 1 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            WaitingTitle(
-                approval.title, symbol: .messageCircleQuestionMark,
-                place: approval.questions.count > 1 ? "\(index + 1) of \(approval.questions.count)" : nil
-            )
-            .foregroundStyle(Color.themeMutedForeground)
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                WaitingTitle(
+                    question.header.isEmpty ? approval.title : question.header, symbol: .messageCircleQuestionMark,
+                    place: approval.questions.count > 1 ? "\(index + 1) of \(approval.questions.count)" : nil
+                )
+                .foregroundStyle(Color.themeWarning)
                 Text(question.text)
-                    .font(.ui(size: 13, weight: .medium))
+                    .font(.ui(size: 13.5, weight: .medium))
+                    .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
                 if question.multiple {
                     Text("Choose any that apply")
@@ -35,22 +38,17 @@ struct QuestionsView: View {
                 ForEach(question.options) { option in
                     row(option)
                 }
+                somethingElse
             }
             .padding(.horizontal, -Self.optionReach)
-            InputField("Something else", text: typedAnswer, size: .small)
             HStack(spacing: 8) {
                 if index > 0 {
                     ActionButton("Back", icon: .chevronLeft, variant: .ghost, size: .small) { index -= 1 }
                 }
                 Spacer()
                 ActionButton(approval.refuseLabel, size: .small) { store.answer(approval, allow: false) }
-                if isLast {
-                    ActionButton(approval.allowLabel, variant: .primary, size: .small) { store.answer(approval, allow: true, answers: answers) }
-                        .disabled(answers.count < approval.questions.count)
-                } else {
-                    ActionButton("Next", variant: .primary, size: .small) { index += 1 }
-                        .disabled(answers[question.text] == nil)
-                }
+                ActionButton(isLast ? approval.allowLabel : "Next", variant: .primary, size: .small, action: goOn)
+                    .disabled(!canGoOn)
             }
         }
     }
@@ -60,27 +58,59 @@ struct QuestionsView: View {
         return Button {
             choose(option)
         } label: {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: Self.markGap) {
+                PickMark(picked: picked, multiple: question.multiple)
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
+                VStack(alignment: .leading, spacing: 2) {
                     Text(option.label)
-                        .fontWeight(.medium)
+                        .font(.ui(size: 13, weight: .medium))
+                        .foregroundStyle(Color.themeForeground)
                     if !option.detail.isEmpty {
                         Text(option.detail)
-                            .font(.ui(size: 11.5))
+                            .font(.ui(size: 12))
                             .foregroundStyle(Color.themeMutedForeground)
+                            .lineSpacing(1.5)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                Spacer(minLength: 8)
-                Image(.check, size: 13)
-                    .foregroundStyle(Color.themePrimary)
-                    .opacity(picked ? 1 : 0)
+                Spacer(minLength: 0)
             }
             .multilineTextAlignment(.leading)
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
             .padding(.horizontal, Self.optionReach)
         }
-        .buttonStyle(.highlight(radius: Radius.md, lit: picked))
+        .buttonStyle(.highlight(radius: Radius.md, lit: picked, fill: .themeBorderComposer))
+    }
+
+    /// The last row, which takes an answer typed in place of the options.
+    private var somethingElse: some View {
+        let written = !(typed[question.id] ?? "").isEmpty
+        return HStack(spacing: Self.markGap) {
+            PickMark(picked: written, multiple: question.multiple)
+            InputField("Something else", text: typedAnswer, variant: .bare, size: .large, focus: $typing)
+                .padding(.leading, -(ControlSize.large.padding - 2))
+                .fixedSize(horizontal: false, vertical: true)
+                .onSubmit(goOn)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, Self.optionReach)
+        .contentShape(Rectangle())
+        .onTapGesture { typing = true }
+        .hoverHighlight(radius: Radius.md, lit: written || typing, fill: .themeBorderComposer)
+    }
+
+    private var canGoOn: Bool {
+        isLast ? answers.count == approval.questions.count : answers[question.text] != nil
+    }
+
+    /// Answers the questions after the last, or else goes on to the next.
+    private func goOn() {
+        guard canGoOn else { return }
+        guard isLast else {
+            index += 1
+            return
+        }
+        store.answer(approval, allow: true, answers: answers)
     }
 
     /// What was typed for a question, or else the options chosen for it, in their order.
@@ -103,6 +133,7 @@ struct QuestionsView: View {
 
     private func choose(_ option: Question.Choice) {
         typed[question.id] = nil
+        typing = false
         guard question.multiple else {
             chosen[question.id] = [option.label]
             showNext(after: index)

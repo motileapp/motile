@@ -9,7 +9,8 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use motile_protocol::wire::{
-    Agent, Approval, Change, ChangedFile, HandoffEnd, Item, ItemKind, Media, Queued, ToolCall, ToolStatus, TurnChanges,
+    Agent, Approval, Ask, Change, ChangedFile, HandoffEnd, Item, ItemKind, Media, PLAN_TOOL, QUESTION_TOOL, Queued,
+    ToolCall, ToolStatus, TurnChanges,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -262,15 +263,11 @@ pub struct Tool {
     pub progress: Option<String>,
 }
 
-/// The tool call Claude Code presents its plan with. Allowing it lets the agent carry the plan out.
-const PLAN_TOOL: &str = "ExitPlanMode";
-/// The tool call Claude Code asks the user questions with.
-const QUESTION_TOOL: &str = "AskUserQuestion";
-
 /// A tool call the turn waits with until the user has answered it.
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct Waiting {
     pub id: String,
+    pub ask: Ask,
     pub icon: &'static str,
     /// What is asked for: the tool, or what to do with a plan.
     pub title: String,
@@ -287,6 +284,8 @@ pub struct Waiting {
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct Question {
+    /// A word or two that says what it is about.
+    pub header: String,
     pub text: String,
     pub options: Vec<Choice>,
     /// More than one option can be chosen.
@@ -364,14 +363,13 @@ impl Transcript {
             agent: None,
         };
         let tool = describe(&call, &self.cwd, 0.0);
-        let (title, target, spans, allow, refuse) = match approval.tool_name.as_str() {
-            PLAN_TOOL => {
+        let ask = approval.ask();
+        let (title, target, spans, allow, refuse) = match ask {
+            Ask::Plan => {
                 ("The plan is ready".to_string(), String::new(), Spans::default(), "Implement", "Keep planning")
             }
-            QUESTION_TOOL => {
-                ("The agent has a question".to_string(), String::new(), Spans::default(), "Answer", "Skip")
-            }
-            _ if tool.input_language == "bash" => {
+            Ask::Question => ("Question".to_string(), String::new(), Spans::default(), "Answer", "Skip"),
+            Ask::Approval if tool.input_language == "bash" => {
                 let spans = highlight::highlight("bash", &tool.input);
                 (tool.name, tool.input, spans, "Allow", "Refuse")
             }
@@ -380,6 +378,7 @@ impl Transcript {
         let input: Value = serde_json::from_str(&approval.input).unwrap_or_default();
         Waiting {
             id: approval.id.clone(),
+            ask,
             icon: tool.icon,
             title,
             target,
@@ -845,6 +844,7 @@ fn questions(input: &Value) -> Vec<Question> {
                 .map(|option| Choice { label: text(&option["label"]), detail: text(&option["description"]) })
                 .collect();
             Question {
+                header: text(&question["header"]),
                 text: text(&question["question"]),
                 options,
                 multiple: question["multiSelect"].as_bool().unwrap_or(false),
