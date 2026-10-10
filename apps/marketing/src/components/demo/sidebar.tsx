@@ -90,7 +90,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setDoneOpen(!doneOpen)}
-            className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-accent-larger"
+            className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
           >
             <ChevronRightIcon
               className={cn(
@@ -130,7 +130,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={() => setServersOpen(!serversOpen)}
-          className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left hover:bg-background-accent-larger"
+          className="flex h-[36px] w-full items-center gap-[7px] px-[18px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
         >
           <ChevronRightIcon
             className={cn(
@@ -163,7 +163,7 @@ export function Sidebar({
           </div>
         )}
       </div>
-      <div className="flex flex-col border-t px-[18px] pt-2.5 pb-2">
+      <div className="flex flex-col border-t px-[18px] py-2.5">
         <div className="-mx-[7px] flex items-center gap-1">
           <button
             type="button"
