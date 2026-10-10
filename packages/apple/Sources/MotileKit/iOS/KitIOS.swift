@@ -185,6 +185,10 @@ class LayerView: FlippedView {
         repaint()
     }
 
+    /// UIKit redisplays the layer when the view is resized: painting it keeps what `paint` set,
+    /// where a backing store of UIKit's own would cover a picture with nothing.
+    override func display(_ layer: CALayer) { paint(layer) }
+
     func paint(_ layer: CALayer) {}
 
     func repaint() { paint(layer) }
