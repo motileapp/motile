@@ -25,6 +25,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0013_agent_accounts.sql"),
     include_str!("../migrations/0014_thread_positions.sql"),
     include_str!("../migrations/0015_thread_sessions.sql"),
+    include_str!("../migrations/0016_session_accounts.sql"),
 ];
 
 pub struct Store {
@@ -113,6 +114,8 @@ pub struct Session {
     pub context_window: Option<u64>,
     /// When it last took a turn.
     pub last_turn_at: Option<f64>,
+    /// The id of the account it last took a turn with.
+    pub account: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -284,7 +287,7 @@ impl Store {
         let connection = self.connection();
         let mut statement = connection.prepare(
             "SELECT agent, sessions_folder, session_id, model, seen_through_seq, pending_through_seq, context_used,
-                    context_window, last_turn_at
+                    context_window, last_turn_at, account
              FROM thread_sessions WHERE thread_id = ?1",
         )?;
         let count = |row: &rusqlite::Row, index| row.get::<_, Option<i64>>(index).map(|count| count.map(|n| n as u64));
@@ -301,6 +304,7 @@ impl Store {
                 context_used: count(row, 6)?,
                 context_window: count(row, 7)?,
                 last_turn_at: row.get(8)?,
+                account: row.get(9)?,
             };
             Ok((continuation, session))
         })?;
@@ -320,8 +324,8 @@ impl Store {
     ) -> rusqlite::Result<()> {
         self.connection().execute(
             "INSERT OR REPLACE INTO thread_sessions (thread_id, agent, sessions_folder, session_id, model,
-                 seen_through_seq, pending_through_seq, context_used, context_window, last_turn_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                 seen_through_seq, pending_through_seq, context_used, context_window, last_turn_at, account)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 thread_id,
                 as_text(&continuation.agent),
@@ -333,6 +337,7 @@ impl Store {
                 session.context_used.map(|count| count as i64),
                 session.context_window.map(|count| count as i64),
                 session.last_turn_at,
+                session.account,
             ],
         )?;
         Ok(())

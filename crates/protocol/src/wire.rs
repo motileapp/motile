@@ -168,6 +168,9 @@ pub struct HandoffEnd {
     pub model: Option<String>,
     /// The model's name as the picker lists it, e.g. "Claude Opus 5.5" or "GPT-6.1-Sol".
     pub name: Option<String>,
+    /// The account's name, when its agent has more than one.
+    #[serde(default)]
+    pub account: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]

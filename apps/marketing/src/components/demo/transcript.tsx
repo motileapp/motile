@@ -134,7 +134,7 @@ function Handoff({ end }: { end: HandoffEnd }) {
   return (
     <span className="flex items-center gap-1.5">
       <AgentIcon agent={end.agent} size={14} />
-      {end.label}
+      <span className="text-foreground">{end.label}</span>
     </span>
   )
 }

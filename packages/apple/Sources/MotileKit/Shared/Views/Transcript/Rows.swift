@@ -380,10 +380,12 @@ struct HandoffContent {
     struct End {
         let agent: Agent
         let label: String
+        let account: String?
 
         init(json: JSON?) {
             agent = Agent(rawValue: json?.string("agent") ?? "") ?? .claude
             label = json?.string("label") ?? ""
+            account = json?.optionalString("account")
         }
     }
 
