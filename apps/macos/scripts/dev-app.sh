@@ -21,16 +21,16 @@ if [ "${1:-}" = "--stop" ]; then
 fi
 
 start_stack
-scripts/build-app.sh
+MOTILE_DEV_BUILD=1 scripts/build-app.sh
 
 # The dev app is a copy with its own identifier, so it keeps its preferences apart from an
 # installed Motile's. Signing changes the copy, so the version is that of what was built.
-BUILT="$(swift build -c release --show-bin-path)/Motile"
+BUILT="$(swift build -c debug -Xswiftc -O --scratch-path .build/dev --show-bin-path)/Motile"
 if ! current app "$BUILT"; then
     echo "▸ Opening the client…"
     stop app
     rm -rf "$APP"
-    cp -R build/Motile.app "$APP"
+    cp -R "build/Motile Dev.app" "$APP"
     plutil -replace CFBundleIdentifier -string app.motile.mac.dev "$APP/Contents/Info.plist"
     codesign --force --deep --sign - "$APP" >/dev/null 2>&1
     MOTILE_DATA_DIR="$DEV/app" nohup "$APP/Contents/MacOS/Motile" > "$DEV/app.log" 2>&1 &
