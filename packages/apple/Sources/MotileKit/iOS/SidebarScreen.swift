@@ -61,6 +61,7 @@ struct SidebarScreen: View {
         .contentShape(Rectangle())
         .onTapGesture { Platform.endEditing() }
         .animation(.easeOut(duration: 0.15), value: store.undo)
+        .transaction(value: serversExpanded) { $0.animation = nil }
         .onChange(of: store.threadsShown) {
             ThreadPeek.shared.hide()
             guard underThread else { return }
