@@ -400,18 +400,4 @@ private struct WindowTitleHider: NSViewRepresentable {
         DispatchQueue.main.async { view.window?.titleVisibility = .hidden }
     }
 }
-
-/// The client's icon. Its tile is 824 of the image's 1024 points; the frame makes the tile `size`
-/// wide.
-struct LogoView: View {
-    let size: CGFloat
-
-    var body: some View {
-        Image(nsImage: NSApp.applicationIconImage)
-            .resizable()
-            .interpolation(.high)
-            .frame(width: size * 1024 / 824, height: size * 1024 / 824)
-            .frame(width: size, height: size)
-    }
-}
 #endif
