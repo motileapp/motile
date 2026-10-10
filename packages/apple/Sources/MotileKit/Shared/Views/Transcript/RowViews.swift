@@ -782,7 +782,11 @@ final class ErrorRowView: RowView {
 /// a file opens what the turn changed in it in a tab of the panel.
 final class ChangesRowView: RowView {
     fileprivate static let headHeight: CGFloat = scaled(40)
-    fileprivate static let entryHeight: CGFloat = scaled(26)
+    #if os(macOS)
+    fileprivate static let entryHeight: CGFloat = 28
+    #else
+    fileprivate static let entryHeight: CGFloat = 36
+    #endif
     private static let topMargin: CGFloat = 12
     private static let bottomPadding: CGFloat = 6
     private static let radius = Radius.lg
@@ -880,7 +884,7 @@ final class ChangesRowView: RowView {
                 guard row.intersects(dirtyRect) else { continue }
                 if hovered == index {
                     Theme.backgroundSecondaryAccent.setFill()
-                    RoundedBox.fill(row.insetBy(dx: 6, dy: 1), radius: Radius.sm)
+                    RoundedBox.fill(row.insetBy(dx: 6, dy: 0), radius: Radius.sm)
                 }
                 var x = 12 + CGFloat(entry.depth) * 16
                 if entry.folder {
