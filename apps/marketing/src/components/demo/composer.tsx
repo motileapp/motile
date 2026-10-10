@@ -211,8 +211,8 @@ function Strip({
           ? "p-3 text-[12.5px]"
           : "flex h-[35px] items-center",
         edge === "top"
-          ? "-mb-px rounded-t-lg pb-px text-foreground"
-          : "-mt-px rounded-b-lg pt-px"
+          ? cn("-mb-px rounded-t-lg text-foreground", tall ? "pb-[13px]" : "pb-px")
+          : cn("-mt-px rounded-b-lg", tall ? "pt-[13px]" : "pt-px")
       )}
     >
       {children}
