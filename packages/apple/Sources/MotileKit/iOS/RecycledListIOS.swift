@@ -20,6 +20,8 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
     var moved: (Item, Int) -> Void = { _, _ in }
     /// What a hold on the row offers, in groups a line divides.
     var menu: (Item) -> [[RowAction]] = { _ in [] }
+    /// A pointer came to rest on a row, its rect in the view given, or left the rows.
+    var pointed: (Item?, CGRect, UIView) -> Void = { _, _, _ in }
     @ViewBuilder let row: (Item) -> Row
     @Environment(AppStore.self) private var store
 
@@ -37,6 +39,7 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         view.dragDelegate = context.coordinator
         view.dropDelegate = context.coordinator
         view.dragInteractionEnabled = true
+        view.addGestureRecognizer(UIHoverGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.hovered(_:))))
         context.coordinator.attach(view)
         context.coordinator.scrollTarget = scrollTarget
         return view
@@ -69,6 +72,8 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
         /// The row being dragged, and the rows it can land among.
         private var dragged: Item.ID?
         private var landing: ClosedRange<Int>?
+        /// The row a pointer is on.
+        private var pointedRow: Item.ID?
 
         func attach(_ view: UICollectionView) {
             let registration = UICollectionView.CellRegistration<RecycledCell, Item.ID> { [weak self] cell, indexPath, _ in
@@ -106,6 +111,25 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             list?.scrolled()
+            point(at: nil, in: scrollView)
+        }
+
+        @objc func hovered(_ hover: UIHoverGestureRecognizer) {
+            guard let view = hover.view as? UICollectionView else { return }
+            let hovering = hover.state == .began || hover.state == .changed
+            point(at: hovering ? view.indexPathForItem(at: hover.location(in: view)) : nil, in: view)
+        }
+
+        private func point(at indexPath: IndexPath?, in view: UIScrollView) {
+            guard let list, let view = view as? UICollectionView else { return }
+            let item = indexPath.flatMap { list.items[safe: $0.item] }
+            guard item?.id != pointedRow else { return }
+            pointedRow = item?.id
+            guard let item, let indexPath, let frame = view.layoutAttributesForItem(at: indexPath)?.frame else {
+                list.pointed(nil, .zero, view)
+                return
+            }
+            list.pointed(item, frame, view)
         }
 
         /// Brings the target's row into sight once it is in the list.

@@ -120,9 +120,9 @@ extension View {
         }
     }
 
-    /// The look of what drops from a button: the popover's colour, a line around it and a faint
-    /// shadow under it.
-    fileprivate func dropdownCard() -> some View {
+    /// The look of what drops from a button or lies over the window: the popover's colour, a line
+    /// around it and a faint shadow under it.
+    func dropdownCard() -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
         return clipShape(shape)
             .background {

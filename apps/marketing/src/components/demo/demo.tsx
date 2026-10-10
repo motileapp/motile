@@ -8,12 +8,13 @@ import {
   SquarePenIcon,
   type LucideIcon,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Composer } from "./composer"
 import { DiffPanel } from "./diff-panel"
 import { Glow } from "./glow"
 import { MenuChevron, ProjectIcon, TrafficLights } from "./icons"
 import { Sidebar } from "./sidebar"
+import { ThreadCardLayer, useThreadPeek } from "./thread-card"
 import { threads as startingThreads, type Item, type Thread } from "./threads"
 import { Transcript } from "./transcript"
 import { cn } from "@/lib/utils"
@@ -28,6 +29,8 @@ export function Demo() {
   const [selectedId, setSelectedId] = useState(startingThreads[0].id)
   const [panel, setPanel] = useState<Panel>("closed")
   const [sidebarShown, setSidebarShown] = useState(true)
+  const demoWindow = useRef<HTMLDivElement>(null)
+  const { peek, point } = useThreadPeek(demoWindow)
   const seconds = useSeconds()
 
   const thread = threads.find((one) => one.id === selectedId) ?? threads[0]
@@ -71,7 +74,10 @@ export function Demo() {
     <div className="@container relative isolate w-full">
       <Glow />
       <div className="h-[calc(760px*var(--demo-scale))] [--demo-scale:var(--demo-fit,min(1,tan(atan2(100cqw,1200px))))]">
-        <div className="relative flex h-[760px] w-[1200px] origin-top-left scale-(--demo-scale) overflow-hidden rounded-xl bg-background text-[13px] text-foreground ring-1 ring-border select-none">
+        <div
+          ref={demoWindow}
+          className="relative flex h-[760px] w-[1200px] origin-top-left scale-(--demo-scale) overflow-hidden rounded-xl bg-background text-[13px] text-foreground ring-1 ring-border select-none"
+        >
           <div className="absolute top-5 left-5 z-20">
             <TrafficLights />
           </div>
@@ -109,6 +115,7 @@ export function Demo() {
                   selectedId={thread.id}
                   elapsed={elapsed}
                   onSelect={setSelectedId}
+                  onPoint={point}
                 />
               </div>
             </aside>
@@ -207,6 +214,7 @@ export function Demo() {
               />
             </section>
           )}
+          <ThreadCardLayer peek={peek} />
         </div>
       </div>
     </div>

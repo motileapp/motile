@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { AgentIcon, ProjectIcon } from "./icons"
-import { doneThreads, servers, type Thread } from "./threads"
+import { doneThreads, servers, type DoneThread, type Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
 export function Sidebar({
@@ -23,12 +23,15 @@ export function Sidebar({
   selectedId,
   elapsed,
   onSelect,
+  onPoint,
 }: {
   actions: ReactNode
   threads: Thread[]
   selectedId: string
   elapsed: (since: number) => string
   onSelect: (id: string) => void
+  /** The pointer is on a thread's row, or on none. */
+  onPoint: (thread: Thread | DoneThread | null, row?: HTMLElement) => void
 }) {
   const [search, setSearch] = useState("")
   const [doneOpen, setDoneOpen] = useState(false)
@@ -55,14 +58,21 @@ export function Sidebar({
         </label>
         <div className="flex">{actions}</div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto py-[3px]">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto py-[3px]"
+        onScroll={() => onPoint(null)}
+      >
         {active.map((thread) => (
           <ThreadRow
             key={thread.id}
             thread={thread}
             selected={thread.id === selectedId}
             elapsed={elapsed}
-            onSelect={() => onSelect(thread.id)}
+            onSelect={() => {
+              onPoint(null)
+              onSelect(thread.id)
+            }}
+            onPoint={onPoint}
           />
         ))}
         {active.length === 0 && (
@@ -93,6 +103,8 @@ export function Sidebar({
             done.map((thread) => (
               <div
                 key={thread.title}
+                onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
+                onPointerLeave={() => onPoint(null)}
                 className="mx-2.5 flex h-[30px] items-center gap-[7px] rounded-md px-2 hover:bg-background-accent-larger"
               >
                 <ProjectIcon project={thread.project} />
@@ -101,7 +113,7 @@ export function Sidebar({
                 </span>
                 <span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-stronger-foreground">
                   {thread.pullRequest && (
-                    <PullRequest number={thread.pullRequest} quiet />
+                    <PullRequest number={thread.pullRequest.number} quiet />
                   )}
                   {thread.ago}
                 </span>
@@ -159,16 +171,20 @@ function ThreadRow({
   selected,
   elapsed,
   onSelect,
+  onPoint,
 }: {
   thread: Thread
   selected: boolean
   elapsed: (since: number) => string
   onSelect: () => void
+  onPoint: (thread: Thread | null, row?: HTMLElement) => void
 }) {
   return (
     <button
       type="button"
       onClick={onSelect}
+      onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
+      onPointerLeave={() => onPoint(null)}
       className={cn(
         "group mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
         selected ? "bg-background-accent-larger-stronger" : "hover:bg-background-accent-larger"
@@ -195,7 +211,9 @@ function ThreadRow({
           <span className="truncate">{thread.branch}</span>
         </span>
         <span className="ml-auto flex items-center gap-1.5">
-          {thread.pullRequest && <PullRequest number={thread.pullRequest} />}
+          {thread.pullRequest && (
+            <PullRequest number={thread.pullRequest.number} />
+          )}
           <span className="ml-px flex items-center gap-[3px] text-[11px]">
             <ServerIcon className="size-[10px]" />
             {thread.server.name}

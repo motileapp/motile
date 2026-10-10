@@ -756,10 +756,7 @@ final class AppStore {
         let id = selectedThread.map { $0.model } ?? selectedDraft?.model
         let agent = selectedThread?.agent
         let accountID = selectedThread.map { $0.agentAccount } ?? selectedDraft?.agentAccount
-        let offered = composerModels.filter { agent == nil || $0.agent == agent }
-        let named = offered.filter { $0.id == id }
-        let listedByAccount = { (model: ModelInfo) in model.account.isEmpty || model.account == accountID }
-        return named.first(where: listedByAccount) ?? named.first ?? offered.first(where: listedByAccount) ?? offered.first
+        return Server.model(id, account: accountID, among: composerModels.filter { agent == nil || $0.agent == agent })
     }
 
     /// The agent a draft starts with: its model's, or its server's first model's.
@@ -784,8 +781,18 @@ final class AppStore {
     /// The model the composer shows, with the account when its agent has more than one.
     var composerModelLabel: String {
         guard let model = composerModel else { return "No agent" }
-        guard let account = composerAccount, (composerServer?.accounts(of: account.agent).count ?? 0) > 1 else { return model.shortName }
-        return "\(model.shortName) · \(account.name)"
+        let accountID = selectedThread.map { $0.agentAccount } ?? selectedDraft?.agentAccount
+        return composerServer?.label(of: model, account: accountID) ?? model.shortName
+    }
+
+    /// The thread's model as the composer shows it, with the account when its agent has more than one.
+    func modelLabel(of thread: ThreadInfo) -> String {
+        let server = self.server(thread.serverID)
+        let offered = server?.models.filter { $0.agent == thread.agent } ?? []
+        guard let server, let model = Server.model(thread.model, account: thread.agentAccount, among: offered) else {
+            return thread.model ?? thread.agent.name
+        }
+        return server.label(of: model, account: thread.agentAccount)
     }
 
     /// What the composer's model menu lists: each account with its agent's models, titled with

@@ -94,7 +94,8 @@ struct SidebarView: View {
                 moved: { item, index in
                     guard case .active(let thread) = item else { return }
                     store.move(thread, to: index, among: items.map(\.activeThread))
-                }
+                },
+                pointed: { item, row, view in ThreadPeek.shared.point(at: item?.activeThread, row: row, in: view, store: store) }
             ) { item in
                 switch item {
                 case .drafts:
@@ -406,16 +407,16 @@ private struct ThreadPullRequestLabel: View {
 
 /// The folder a thread works in, with its server's home as `~`. It is its own view so that news
 /// of a server only redraws this.
-private struct ThreadFolderLabel: View {
+struct ThreadFolderLabel: View {
     @Environment(AppStore.self) private var store
     let serverID: String
     let folder: String
 
     var body: some View {
-        CheckoutLabel(symbol: .folder, text: shortened(folder, home: store.server(serverID)?.home ?? ""))
+        CheckoutLabel(symbol: .folder, text: Self.shortened(folder, home: store.server(serverID)?.home ?? ""))
     }
 
-    private func shortened(_ path: String, home: String) -> String {
+    static func shortened(_ path: String, home: String) -> String {
         guard !home.isEmpty, path.hasPrefix(home) else { return path }
         let rest = path.dropFirst(home.count)
         guard rest.isEmpty || rest.hasPrefix("/") else { return path }
@@ -439,7 +440,7 @@ private struct CheckoutLabel: View {
     }
 }
 
-private extension Project {
+extension Project {
     var checkoutSymbol: Symbol {
         if let git, git.branch == nil { return .gitCommitHorizontal }
         return worktree == nil ? .gitBranch : .folderGit2
@@ -650,7 +651,8 @@ private struct DoneShelf: View {
 
             if expanded {
                 RecycledList(
-                    items: threads, height: { _ in Self.rowHeight + rowGap }, bottomInset: 4 - rowGap / 2, scrollTarget: store.settledThreadID
+                    items: threads, height: { _ in Self.rowHeight + rowGap }, bottomInset: 4 - rowGap / 2, scrollTarget: store.settledThreadID,
+                    pointed: { thread, row, view in ThreadPeek.shared.point(at: thread, row: row, in: view, store: store) }
                 ) { thread in
                     DoneRow(
                         thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),

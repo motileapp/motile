@@ -42,7 +42,8 @@ struct SidebarScreen: View {
                 menu: { item in
                     guard let thread = item.thread else { return [] }
                     return store.rowActions(for: thread, rename: beginRename, delete: { deleting = $0 })
-                }
+                },
+                pointed: { item, row, view in ThreadPeek.shared.point(at: item?.thread, row: row, in: view, store: store) }
             ) { item in
                 row(item, done: done, expanded: expanded, shown: shown)
             }
@@ -60,6 +61,7 @@ struct SidebarScreen: View {
         .onTapGesture { Platform.endEditing() }
         .animation(.easeOut(duration: 0.15), value: store.undo)
         .onChange(of: store.threadsShown) {
+            ThreadPeek.shared.hide()
             guard underThread else { return }
             drawer.isOpen = false
         }
