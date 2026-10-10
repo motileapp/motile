@@ -389,7 +389,12 @@ app. A change to a view both clients share is then looked at in both.
 Both are signed in as `demo@motile.app` on an auth server with the dev login, never a real
 account. Their server, `studio`, runs `scripts/fake-agent` and starts with a project and three
 finished threads. All of it lives in `apps/macos/build/dev` and keeps running until you stop it,
-which you do when your task is done; its ports are in `build/dev/ports`. On the Mac, type with `osascript` (System Events
+which you do when your task is done; its ports are in `build/dev/ports`. Other sessions run
+their own dev apps from other trees at the same time: each tree claims its ports in
+`~/Library/Caches/motile-dev/ports` (`apps/macos/scripts/claims.sh`), and `dev-app.sh` moves off
+ports another tree claimed on its own. `ci-demo.sh` claims its ports too and waits for another
+tree's demo to finish. Never pick ports by hand, delete another tree's claims, or stop or kill a process that isn't
+in your tree's `build/dev`. On the Mac, type with `osascript` (System Events
 `keystroke`, which needs Accessibility; pictures need Screen Recording) and address the client by
 the pid in `build/dev/app.pid`. The Mac's dev app is built without whole-module optimization, so
 that it builds fast; judge speed with the demo (`scripts/ci-demo.sh`), and use it only for that.
