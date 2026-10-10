@@ -28,6 +28,7 @@ final class RowModel {
         case tool(ToolContent)
         case thinking(NSAttributedString)
         case media(MediaContent)
+        case file(SentFile)
         case group(GroupContent)
         case fold(FoldContent)
         case error(NSAttributedString)
@@ -75,6 +76,8 @@ final class RowModel {
             kind = .thinking(Typesetter.plain(json.string("text"), color: Theme.mutedForeground, size: 13 * Platform.scale))
         case "media":
             kind = .media(MediaContent(json: json))
+        case "file":
+            kind = .file(SentFile(json: json))
         case "group":
             kind = .group(GroupContent(json: json))
         case "fold":

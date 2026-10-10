@@ -551,6 +551,7 @@ extension RowModel {
         case .tool: "tool"
         case .thinking: "thinking"
         case .media: "media"
+        case .file: "file"
         case .group: "group"
         case .fold: "fold"
         case .error: "error"

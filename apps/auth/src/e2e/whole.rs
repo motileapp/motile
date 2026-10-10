@@ -186,6 +186,7 @@ fn kinds(client: &Client) -> Vec<&'static str> {
         RowKind::Tool { .. } => "tool",
         RowKind::Thinking { .. } => "thinking",
         RowKind::Media { .. } => "media",
+        RowKind::File { .. } => "file",
         RowKind::Group { .. } => "group",
         RowKind::Fold { .. } => "fold",
         RowKind::Error { .. } => "error",

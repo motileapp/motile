@@ -2884,6 +2884,25 @@ async fn an_image_the_agent_shows_is_kept_as_it_was_and_goes_with_its_thread() {
 }
 
 #[tokio::test]
+async fn a_file_the_agent_sends_is_kept_to_download() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Send the report").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    let report = std::fs::read(PathBuf::from(harness.folder("project")).join("signups.csv")).unwrap();
+    let reply = transcript.items.iter().find(|item| !item.media.is_empty()).unwrap();
+    let [media] = &reply.media[..] else { panic!("the reply sends one file: {:?}", reply.media) };
+    assert_eq!((media.file, media.video, media.size), (true, false, report.len() as u64));
+    assert!(media.id.ends_with(".csv"));
+
+    let fetched = harness.dir.path().join("fetched.csv");
+    connection.media(&media.id, &fetched, |_, _| {}).await.unwrap();
+    assert_eq!(std::fs::read(&fetched).unwrap(), report);
+}
+
+#[tokio::test]
 async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thread() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;

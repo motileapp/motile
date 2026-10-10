@@ -89,6 +89,18 @@ pub enum RowKind {
         alt: String,
         /// The file's name where the agent made it.
         name: String,
+        /// The image that stands for a video until it plays.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        poster: Option<String>,
+    },
+    /// Any other file the reply sends, which the client offers to download. The client asks the
+    /// core for the file `media` names.
+    File {
+        media: String,
+        size: u64,
+        /// What the agent said it is.
+        alt: String,
+        name: String,
     },
     /// Tool calls that followed one another, as one row.
     Group {
@@ -198,7 +210,7 @@ impl After {
                 _ => Self::Prose,
             }),
             RowKind::Code { .. } => Some(Self::Code),
-            RowKind::Media { .. } => Some(Self::Media),
+            RowKind::Media { .. } | RowKind::File { .. } => Some(Self::Media),
             RowKind::Tool { .. } | RowKind::Thinking { .. } | RowKind::Group { .. } | RowKind::Fold { .. } => {
                 Some(Self::Work)
             }
@@ -961,14 +973,20 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
             }
             Block::Image { src, alt } => {
                 let Some(media) = item.media.iter().find(|media| media.src == src) else { continue };
-                RowKind::Media {
-                    media: media.id.clone(),
-                    video: media.video,
-                    width: media.width,
-                    height: media.height,
-                    size: media.size,
-                    alt,
-                    name: file_name(&src).to_string(),
+                let name = file_name(&src).to_string();
+                if media.file {
+                    RowKind::File { media: media.id.clone(), size: media.size, alt, name }
+                } else {
+                    RowKind::Media {
+                        media: media.id.clone(),
+                        video: media.video,
+                        width: media.width,
+                        height: media.height,
+                        size: media.size,
+                        alt,
+                        name,
+                        poster: media.poster.clone(),
+                    }
                 }
             }
         };
@@ -1159,6 +1177,7 @@ mod tests {
             id: id.into(),
             src: src.into(),
             video,
+            file: false,
             size: 10,
             width: None,
             height: None,
@@ -1191,6 +1210,7 @@ mod tests {
             id: "abc.png".into(),
             src: "/tmp/shots/page.png".into(),
             video: false,
+            file: false,
             size: 2048,
             width: Some(640),
             height: Some(400),
@@ -1212,12 +1232,38 @@ mod tests {
                 size: 2048,
                 alt: "The page".into(),
                 name: "page.png".into(),
+                poster: None,
             }
         );
         assert!(
             matches!(&rows[2].kind, RowKind::Prose { prose, .. } if prose.text == "Gone" && prose.links.len() == 1)
         );
         assert_eq!(serde_json::to_value(&rows[1]).unwrap()["kind"], "media");
+    }
+
+    #[test]
+    fn a_file_the_reply_sends_is_a_row_to_download_it_from() {
+        use motile_protocol::wire::Media;
+        let mut reply = assistant("a", 0, "Here it is: ![The report](/tmp/out/report.pdf)");
+        reply.media = vec![Media {
+            id: "abc.pdf".into(),
+            src: "/tmp/out/report.pdf".into(),
+            video: false,
+            file: true,
+            size: 4096,
+            width: None,
+            height: None,
+            poster: None,
+        }];
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![reply]);
+
+        let rows = transcript.rows();
+        assert_eq!(
+            rows[1].kind,
+            RowKind::File { media: "abc.pdf".into(), size: 4096, alt: "The report".into(), name: "report.pdf".into() }
+        );
+        assert_eq!(serde_json::to_value(&rows[1]).unwrap()["kind"], "file");
     }
 
     #[test]

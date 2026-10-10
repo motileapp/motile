@@ -44,7 +44,7 @@ What the programs agree on.
   client or server could no longer understand the other.
 - `auth_api.rs`, `auth_client.rs`: the auth server's JSON and the client for it.
 - `identity.rs`: the device key and request signing.
-- `media.rs`: names an image or a video by its contents.
+- `media.rs`: names an image, a video or a file an agent sends by its contents.
 
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
@@ -129,7 +129,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   request for its agent and settles the thread once it merges.
 - `files.rs`: browses the server's folders, takes uploads, and reads the files of a thread's
   folder, never outside it.
-- `media.rs`: keeps the images and videos threads show, named by their contents.
+- `media.rs`: keeps the images and videos threads show and the files agents send, named by their
+  contents. An agent sends any file as a Markdown image of its path, and gives a video its
+  preview image as the image's title.
 - `title.rs`, `drafts.rs`: have an agent write titles, commit messages, pull request texts and
   branch names, through `generate.rs`, which also says what each answer took so that it is kept
   with the usage. A title is told what the pull requests and issues its message links to are
@@ -404,6 +406,8 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "watch the deploy" | Stays after its turn, as Claude Code does while it monitors |
 | "run greet.py" | Under supervised access, asks before each tool call |
 | "show the screenshot" | Makes an image and shows it |
+| "show the recording" | Shows a video with its preview image |
+| "send the report" | Sends a file to download |
 | "greet by name" | Really changes files in its folder |
 | "ask two agents" (Claude Code), "ask an agent" (Codex) | Starts agents that say what they do and report |
 | "which color" | Asks the user a question |

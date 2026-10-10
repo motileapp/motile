@@ -326,16 +326,17 @@ pub enum Command {
         #[serde(default)]
         path: Option<String>,
     },
-    /// Answers with the `path` of an image or a video on this device, once it is here: one that
-    /// isn't is fetched from the server, and `media_progress` events say how far that is.
+    /// Answers with the `path` of an image, a video or a file an agent sent on this device, once it
+    /// is here: one that isn't is fetched from the server, and `media_progress` events say how far
+    /// that is.
     Media {
         server_id: String,
         media_id: String,
     },
-    /// Answers with `media_bytes`, what the fetched images and videos take on this device, and
-    /// `media_limit`, what they may take.
+    /// Answers with `media_bytes`, what the fetched images, videos and files take on this device,
+    /// and `media_limit`, what they may take.
     Storage,
-    /// Removes the fetched images and videos. The servers still have them.
+    /// Removes the fetched images, videos and files. The servers still have them.
     ClearMedia,
     /// Asks for the highlighting of the code in rows that came without it.
     Highlight {
@@ -409,7 +410,7 @@ pub enum Event {
         thread_id: Option<String>,
         stage: GitStage,
     },
-    /// How much of an image or a video has arrived from its server.
+    /// How much of an image, a video or a file an agent sent has arrived from its server.
     MediaProgress {
         id: String,
         received: u64,

@@ -101,7 +101,7 @@ pub struct Item {
     /// The transcript revision that last changed the item.
     pub rev: u64,
     pub created_at: f64,
-    /// The images and videos the item shows.
+    /// The images, videos and other files the item shows.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<Media>,
     /// The tool call that started the agent which said or did this. Such an item belongs to
@@ -112,8 +112,9 @@ pub struct Item {
     pub kind: ItemKind,
 }
 
-/// An image or a video an agent showed or the user attached. The server keeps the copy it took
-/// then, so the thread shows the same thing after the file has changed or gone.
+/// An image or a video an agent showed or the user attached, or any other file an agent sent. The
+/// server keeps the copy it took then, so the thread shows the same thing after the file has
+/// changed or gone.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Media {
     /// Names the contents, and ends in the file's extension.
@@ -121,6 +122,9 @@ pub struct Media {
     /// The file as the agent wrote it in its reply, or the attachment's path.
     pub src: String,
     pub video: bool,
+    /// Neither an image nor a video: the client offers it to download.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub file: bool,
     pub size: u64,
     /// In pixels, for an image, and for a video that has a poster.
     pub width: Option<u32>,
@@ -605,8 +609,8 @@ pub enum Request {
         #[serde(default)]
         poster_of: Option<String>,
     },
-    /// The copy the server keeps of an image or a video. `Media` answers, and the bytes follow on
-    /// the same stream.
+    /// The copy the server keeps of an image, a video or a file an agent sent. `Media` answers, and
+    /// the bytes follow on the same stream.
     Media {
         id: String,
     },
@@ -1734,7 +1738,7 @@ pub enum Message {
     },
     /// The update is installed, and the server restarts once its agents have finished.
     UpdateWaiting,
-    /// `size` bytes of an image or a video follow.
+    /// `size` bytes of an image, a video or a file an agent sent follow.
     Media {
         size: u64,
     },

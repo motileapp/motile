@@ -841,7 +841,8 @@ impl Core {
         });
     }
 
-    /// Answers with where the image or video is on this device, fetching it first if it isn't.
+    /// Answers with where the image, the video or the file is on this device, fetching it first if
+    /// it isn't.
     fn find_media(&mut self, id: u64, server_id: &str, media_id: String) {
         if let Some(file) = self.media.get(&media_id) {
             return self.reply(id, Ok(json!({ "path": file.to_string_lossy() })));
@@ -850,7 +851,7 @@ impl Core {
             return waiting.push(id);
         }
         let Some(unfinished) = self.media.unfinished(&media_id) else {
-            return self.reply(id, Err("That isn't the name of an image or a video.".to_string()));
+            return self.reply(id, Err("That isn't the name of a file your server keeps.".to_string()));
         };
         let link = match self.link(server_id) {
             Ok(link) => link,

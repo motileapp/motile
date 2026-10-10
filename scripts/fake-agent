@@ -24,6 +24,9 @@ made up on the spot instead:
 - "which color": a turn that asks the user a question and goes on with the answer.
 - "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
 - "show the screenshot": a turn that writes `screenshot.png` in its folder and shows it in the reply.
+- "send the report": a turn that writes `signups.csv` in its folder and sends it in the reply.
+- "show the recording": a turn that writes `recording.mp4`, which isn't really a video, and its
+  preview `recording.png` in its folder and shows the video with the preview in the reply.
 - "greet by name": a turn that really changes its folder: it rewrites `greet.py` and adds
   `docs/greeting.md`.
 - "hit the limit": a turn that reads a file and is stopped by the usage limit, which resets
@@ -276,6 +279,10 @@ def title_answer():
         title = "Watch the Deploy"
     if "show the screenshot" in message:
         title = "Screenshot of the Landing Page"
+    if "send the report" in message:
+        title = "Weekly Signups Report"
+    if "show the recording" in message:
+        title = "Recording of the Sign-Up Flow"
     if "greet by name" in message:
         title = "Greet by Name"
     return {"title": os.environ.get("FAKE_AGENT_TITLE", title), "needsRefinement": "fix this" in message}
@@ -697,6 +704,34 @@ def show_screenshot():
     turn.done()
 
 
+SIGNUPS = "week,signups\n2026-09-14,184\n2026-09-21,203\n2026-09-28,251\n2026-10-05,262\n"
+
+
+def send_the_report():
+    turn = Turn("00000000-0000-4000-8000-00000000f11e")
+    path = os.path.join(os.getcwd(), "signups.csv")
+    with open(path, "w") as f:
+        f.write(SIGNUPS)
+    command = "psql -c \"\\copy (select week, count(*) from signups group by week) to signups.csv csv header\""
+    turn.tool("Bash", {"command": command, "description": "Export the weekly signups"}, "COPY 4", seconds=0.1)
+    turn.text(f"Signups grew every week of the last four:\n\n![Weekly signups]({path})")
+    turn.done()
+
+
+def show_the_recording():
+    turn = Turn("00000000-0000-4000-8000-0000000f11e5")
+    video = os.path.join(os.getcwd(), "recording.mp4")
+    preview = os.path.join(os.getcwd(), "recording.png")
+    with open(video, "wb") as f:
+        f.write(b"not really a video")
+    with open(preview, "wb") as f:
+        f.write(png(1280, 720))
+    command = "npx playwright test signup.spec.ts --video=on"
+    turn.tool("Bash", {"command": command, "description": "Record the sign-up flow"}, "1 passed", seconds=0.1)
+    turn.text(f"Here is the sign-up flow from start to finish:\n\n![The sign-up flow]({video} \"{preview}\")")
+    turn.done()
+
+
 GREET_BY_NAME = 'def greet(name):\n    return f"Hello, {name}!"\n\n\nprint(greet("world"))\n'
 GREETING_NOTES = "# Greeting\n\n`greet(name)` returns the greeting for `name`.\n"
 
@@ -1018,6 +1053,8 @@ if APP_SERVER:
 
 SCRIPTED = {
     "show the screenshot": show_screenshot,
+    "send the report": send_the_report,
+    "show the recording": show_the_recording,
     "greet by name": greet_by_name,
     "ask two agents": ask_two_agents,
     "run greet.py": run_greet,

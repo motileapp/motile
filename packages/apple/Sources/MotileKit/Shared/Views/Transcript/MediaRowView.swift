@@ -20,6 +20,8 @@ struct MediaContent {
     let bytes: Int64
     let alt: String
     let name: String
+    /// The image that stands for a video until it plays.
+    let poster: String?
 
     init(json: JSON) {
         id = json.string("media")
@@ -29,7 +31,11 @@ struct MediaContent {
         bytes = (json["size"] as? NSNumber)?.int64Value ?? 0
         alt = json.string("alt")
         name = json.string("name")
+        poster = json.optionalString("poster")
     }
+
+    /// The image the box shows: the image itself, or a video's poster.
+    var picture: String? { video ? poster : id }
 
     /// The box it is shown in, in a column `width` wide: its own size, or smaller to fit.
     func box(width: CGFloat) -> CGSize {
@@ -215,26 +221,32 @@ final class MediaRowView: RowView {
         tip = media.alt.isEmpty ? nil : media.alt
         describe(media.alt.isEmpty ? media.name : media.alt)
         playButton.isHidden = !media.video
-        picture.picture = media.video ? nil : Pictures.cached(media.id)
-        caption.string = media.video ? "\(media.name) · \(ByteCountFormatter.string(fromByteCount: media.bytes, countStyle: .file))" : ""
+        picture.picture = media.picture.flatMap(Pictures.cached)
+        let unpictured = media.video && media.poster == nil
+        caption.string = unpictured ? "\(media.name) · \(ByteCountFormatter.string(fromByteCount: media.bytes, countStyle: .file))" : ""
         state = .shown
-        guard !media.video, picture.picture == nil else { return }
+        guard media.picture != nil, picture.picture == nil else { return }
         loadPicture(media)
     }
 
+    /// Shows the image, or the video's poster. A video whose poster can't be had stays a box to play.
     private func loadPicture(_ media: MediaContent) {
+        guard let pictureID = media.picture else { return }
         let box = media.box(width: Theme.contentWidth)
         let maxPixels = max(box.width, box.height) * Platform.pixelsPerPoint
         state = .loading(fraction: nil)
-        fetch { [weak self] file in
+        let decode = { [weak self] (file: URL?) in
             guard let self, self.content?.id == media.id else { return }
-            guard let file else { return self.state = .failed("This image couldn't be loaded.") }
-            Pictures.decode(file, id: media.id, maxPixels: maxPixels) { image in
+            guard let file else { return self.state = media.video ? .shown : .failed("This image couldn't be loaded.") }
+            Pictures.decode(file, id: pictureID, maxPixels: maxPixels) { image in
                 guard self.content?.id == media.id else { return }
                 self.picture.picture = image
-                self.state = image == nil ? .failed("This image couldn't be shown.") : .shown
+                self.state = image == nil && !media.video ? .failed("This image couldn't be shown.") : .shown
             }
         }
+        guard media.video else { return fetch(decode) }
+        guard let owner else { return decode(nil) }
+        owner.media(id: pictureID, done: decode)
     }
 
     private func retry() {
