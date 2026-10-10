@@ -147,6 +147,9 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     if hub.models().is_empty() {
         hub.refresh_models().await;
     }
+    if let Err(error) = hub.serve_mcp().await {
+        tracing::warn!("the agents can't read threads: {error:#}");
+    }
     hub.refresh_models_soon();
     hub.keep_uploads_swept();
     hub.keep_pull_requests_current(PULL_REQUEST_FRESH);

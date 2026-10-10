@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use motile_protocol::wire::{
-    Approval, Change, ChangedFile, Item, ItemKind, Media, Queued, ToolCall, ToolStatus, TurnChanges,
+    Agent, Approval, Change, ChangedFile, HandoffEnd, Item, ItemKind, Media, Queued, ToolCall, ToolStatus, TurnChanges,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -135,6 +135,11 @@ pub enum RowKind {
         /// When the turn ended.
         at: f64,
     },
+    /// The thread went on with another agent or account from the next turn.
+    Handoff {
+        from: HandoffLabel,
+        to: HandoffLabel,
+    },
     /// A message that waits to be given to the agent. The row's item is the message.
     Queued {
         text: String,
@@ -142,6 +147,33 @@ pub enum RowKind {
         /// How it waits: queued or held.
         status: &'static str,
     },
+}
+
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct HandoffLabel {
+    pub agent: Agent,
+    /// The model's short name, "Opus 5.5", or else its id, or else the agent's name.
+    pub label: String,
+}
+
+impl HandoffLabel {
+    fn new(end: &HandoffEnd) -> Self {
+        let agent_name = match end.agent {
+            Agent::Claude => "Claude Code",
+            Agent::Codex => "Codex",
+        };
+        let label = match (&end.name, &end.model) {
+            (Some(name), _) => short_model_name(name).unwrap_or(name),
+            (None, Some(model)) => model,
+            (None, None) => agent_name,
+        };
+        Self { agent: end.agent, label: label.to_string() }
+    }
+}
+
+/// A model's name without its maker: "Opus 5.5" for "Claude Opus 5.5", "6.1-Sol" for "GPT-6.1-Sol".
+pub fn short_model_name(name: &str) -> Option<&str> {
+    name.strip_prefix("Claude ").or_else(|| name.strip_prefix("GPT-"))
 }
 
 #[derive(Serialize, Clone, Copy, PartialEq, Debug)]
@@ -537,19 +569,27 @@ fn present<'a>(
 ) -> Vec<Cow<'a, Row>> {
     let mut shown = Vec::new();
     let mut start = 0;
+    let is_turn_end = |item: &Item| matches!(item.kind, ItemKind::TurnEnd { .. });
+    let is_handoff = |item: &Item| matches!(item.kind, ItemKind::Handoff { .. });
     while start < items.len() {
+        if is_handoff(&items[start]) {
+            shown.extend(rendered[start].iter().map(Cow::Borrowed));
+            start += 1;
+            continue;
+        }
         let next_turn = (start + 1..items.len()).find(|&index| {
-            matches!(items[index].kind, ItemKind::User { .. })
-                || matches!(items[index - 1].kind, ItemKind::TurnEnd { .. })
+            matches!(items[index].kind, ItemKind::User { .. } | ItemKind::Handoff { .. })
+                || is_turn_end(&items[index - 1])
         });
         let end = next_turn.unwrap_or(items.len());
-        let is_turn_end = |item: &Item| matches!(item.kind, ItemKind::TurnEnd { .. });
         let went_on = !items[start..end].iter().any(is_turn_end);
         let part = Part {
-            took_message: start > 0 && !is_turn_end(&items[start - 1]),
+            took_message: start > 0 && !is_turn_end(&items[start - 1]) && !is_handoff(&items[start - 1]),
             last: end == items.len() && !settled,
             // The user said more while the agent worked, and the turn has ended since.
-            ended_after: items[end..].first().filter(|_| went_on && items[end..].iter().any(is_turn_end)),
+            ended_after: items[end..]
+                .first()
+                .filter(|next| went_on && !is_handoff(next) && items[end..].iter().any(is_turn_end)),
         };
         present_turn(&items[start..end], &rendered[start..end], part, opened, &mut shown);
         start = end;
@@ -893,6 +933,9 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
                 at: item.created_at,
             },
         )],
+        ItemKind::Handoff { from, to } => {
+            vec![row(0, RowKind::Handoff { from: HandoffLabel::new(from), to: HandoffLabel::new(to) })]
+        }
     }
 }
 
@@ -1370,6 +1413,7 @@ mod tests {
             }
             RowKind::Fold { open, .. } => format!("fold{}", if *open { " open" } else { "" }),
             RowKind::TurnEnd { folded, .. } => format!("end{}", if *folded { " folded" } else { "" }),
+            RowKind::Handoff { from, to } => format!("{} -> {}", from.label, to.label),
             _ => "other".to_string(),
         });
         rows.collect()
@@ -1589,6 +1633,42 @@ mod tests {
             listed(&transcript),
             ["apps/server/src +50", "crates/core/src/render +5", "  rows.rs +5", "README.md +1"]
         );
+    }
+
+    #[test]
+    fn a_handoff_is_a_row_of_its_own_between_two_turns() {
+        use motile_protocol::wire::{Agent, HandoffEnd, TurnSummary};
+        let end = |agent, model: Option<&str>, name: Option<&str>| HandoffEnd {
+            agent,
+            model: model.map(str::to_string),
+            name: name.map(str::to_string),
+        };
+        let user = |id: &str, seq| item(id, seq, ItemKind::User { text: "Go".into(), attachments: Vec::new() });
+        let read = call("t1", 2, "Read", serde_json::json!({"file_path": "/srv/api/a.rs"}), ToolStatus::Succeeded);
+        let from = end(Agent::Claude, Some("claude-opus-5-5"), Some("Claude Opus 5.5"));
+        let to = end(Agent::Codex, Some("gpt-6.1-sol"), Some("GPT-6.1-Sol"));
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![
+            user("u1", 0),
+            assistant("a1", 1, "Looking."),
+            read,
+            assistant("a2", 3, "Done."),
+            item("e1", 4, ItemKind::TurnEnd { summary: TurnSummary::default() }),
+            item("h", 5, ItemKind::Handoff { from, to }),
+            user("u2", 6),
+            assistant("b1", 7, "Sure."),
+            item("e2", 8, ItemKind::TurnEnd { summary: TurnSummary::default() }),
+        ]);
+        assert_eq!(
+            outline(&transcript),
+            ["user", "fold", "Done.", "end folded", "Opus 5.5 -> 6.1-Sol", "user", "Sure.", "end"]
+        );
+
+        let label = |end: HandoffEnd| HandoffLabel::new(&end).label;
+        assert_eq!(label(end(Agent::Codex, Some("codex-auto-review"), Some("Codex Auto Review"))), "Codex Auto Review");
+        assert_eq!(label(end(Agent::Codex, Some("gpt-6.1-sol"), None)), "gpt-6.1-sol");
+        assert_eq!(label(end(Agent::Claude, None, None)), "Claude Code");
+        assert_eq!(label(end(Agent::Codex, None, None)), "Codex");
     }
 
     #[test]

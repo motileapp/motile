@@ -33,6 +33,7 @@ final class RowModel {
         case error(NSAttributedString)
         case changes(ChangesContent)
         case turnEnd(TurnEnd)
+        case handoff(HandoffContent)
         case queued(QueuedContent)
     }
 
@@ -84,6 +85,8 @@ final class RowModel {
             kind = .changes(ChangesContent(json: json))
         case "turn_end":
             kind = .turnEnd(TurnEnd(json: json))
+        case "handoff":
+            kind = .handoff(HandoffContent(json: json))
         case "queued":
             kind = .queued(QueuedContent(json: json))
         default:
@@ -369,6 +372,27 @@ struct TurnEnd {
         case (false, let duration?): return "Worked for \(duration)"
         case (false, nil): return "Done"
         }
+    }
+}
+
+/// The thread went on with another agent or account: the model before and the one after.
+struct HandoffContent {
+    struct End {
+        let agent: Agent
+        let label: String
+
+        init(json: JSON?) {
+            agent = Agent(rawValue: json?.string("agent") ?? "") ?? .claude
+            label = json?.string("label") ?? ""
+        }
+    }
+
+    let from: End
+    let to: End
+
+    init(json: JSON) {
+        from = End(json: json.object("from"))
+        to = End(json: json.object("to"))
     }
 }
 

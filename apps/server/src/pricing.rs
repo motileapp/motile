@@ -21,6 +21,9 @@ pub struct Rates {
     pub cache_read: f64,
     pub cache_write: f64,
     pub output: f64,
+    /// How many tokens the model reads at most.
+    #[serde(default)]
+    pub context_window: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
@@ -39,6 +42,7 @@ impl Prices {
                 cache_read: entry["cache_read_input_token_cost"].as_f64().unwrap_or(input),
                 cache_write: entry["cache_creation_input_token_cost"].as_f64().unwrap_or(input),
                 output: entry["output_cost_per_token"].as_f64()?,
+                context_window: entry["max_input_tokens"].as_u64(),
             };
             Some((model.to_lowercase(), rates))
         };
@@ -54,6 +58,14 @@ impl Prices {
         // Claude Code names a model with a larger context as `claude-…[1m]`.
         let model = model.split('[').next().unwrap_or_default();
         self.0.get(model).copied()
+    }
+
+    /// How many tokens the model reads at most, as the list says.
+    pub fn context_window(&self, model: &str) -> Option<u64> {
+        if model.to_lowercase().ends_with("[1m]") {
+            return Some(1_000_000);
+        }
+        self.rates(model)?.context_window
     }
 
     /// Fills in what the bucket's tokens cost. What the agent said they cost stands, and is
@@ -125,7 +137,7 @@ mod tests {
             "azure/gpt-6": {"litellm_provider": "azure", "input_cost_per_token": 3e-6, "output_cost_per_token": 1e-5},
             "claude-haiku-4-5": {"litellm_provider": "anthropic", "input_cost_per_token": 1e-6,
                 "output_cost_per_token": 5e-6, "cache_read_input_token_cost": 1e-7,
-                "cache_creation_input_token_cost": 1.25e-6},
+                "cache_creation_input_token_cost": 1.25e-6, "max_input_tokens": 200000},
         }))
     }
 
@@ -150,6 +162,14 @@ mod tests {
         let costs = spent.costs.unwrap();
         assert_eq!(spent.cost_usd, Some(5.0));
         assert!((costs.cache_write - 2.5).abs() < 1e-9 && (costs.output - 2.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_models_context_window_is_what_the_list_says_it_reads_at_most() {
+        assert_eq!(prices().context_window("claude-haiku-4-5"), Some(200_000));
+        assert_eq!(prices().context_window("claude-haiku-4-5[1m]"), Some(1_000_000));
+        assert_eq!(prices().context_window("gpt-6"), None);
+        assert_eq!(prices().context_window("gpt-fake"), None);
     }
 
     #[test]

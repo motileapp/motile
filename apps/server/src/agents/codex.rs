@@ -11,11 +11,14 @@ use std::collections::HashMap;
 use motile_protocol::wire::{Access, Approval, Subagent, Tokens, ToolCall, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
 
-use super::{AgentEvent, ModelUsage, PLAN_TOOL, Turn};
+use super::{AgentEvent, ModelUsage, PLAN_TOOL, Settings, Turn};
 
 const INITIALIZE: u64 = 1;
 const THREAD: u64 = 2;
-const FIRST_TURN: u64 = 3;
+const INJECT: u64 = 3;
+const FIRST_TURN: u64 = 4;
+/// What a Codex too old to take messages before a turn answers `thread/inject_items` with.
+const METHOD_NOT_FOUND: i64 = -32601;
 const QUESTION_TOOL: &str = "AskUserQuestion";
 
 pub fn arguments() -> Vec<String> {
@@ -37,9 +40,21 @@ fn turn_params(thread_id: &str, prompt: &str, id: &str) -> Value {
     json!({"threadId": thread_id, "input": [{"type": "text", "text": prompt}], "clientUserMessageId": id})
 }
 
-/// A prompt for a process whose turn has ended; it starts the next one.
-pub fn input(thread_id: &str, prompt: &str, id: &str) -> String {
-    line(json!({"id": format!("message:{id}"), "method": "turn/start", "params": turn_params(thread_id, prompt, id)}))
+/// A prompt for a process whose turn has ended; it starts the next one with the thread's settings.
+pub fn input(thread_id: &str, prompt: &str, id: &str, settings: Settings) -> String {
+    let mut params = turn_params(thread_id, prompt, id);
+    with_settings(&mut params, settings);
+    line(json!({"id": format!("message:{id}"), "method": "turn/start", "params": params}))
+}
+
+fn with_settings(params: &mut Value, settings: Settings) {
+    if let Some(model) = settings.model {
+        params["model"] = json!(model);
+        params["collaborationMode"] = collaboration_mode(settings.plan, model, settings.effort);
+    }
+    if let Some(effort) = settings.effort {
+        params["effort"] = json!(effort);
+    }
 }
 
 /// A prompt for the turn that runs, which takes it after its next tool call.
@@ -138,6 +153,10 @@ pub struct Parser {
     resumes: bool,
     prompt: String,
     prompt_id: String,
+    /// What the thread said before, given as messages once the thread is there.
+    inject: Option<Vec<Value>>,
+    /// The prompt with what the thread said before, for a Codex that takes no messages.
+    inline_prompt: Option<String>,
     model: Option<String>,
     effort: Option<String>,
     plan: bool,
@@ -179,11 +198,18 @@ impl Parser {
             thread["threadId"] = json!(session_id);
             thread["excludeTurns"] = json!(true);
         }
+        if let Some(mcp) = turn.mcp {
+            let headers = json!({"Authorization": format!("Bearer {}", mcp.token)});
+            let server = json!({"url": mcp.url, "http_headers": headers});
+            thread["config"] = json!({"mcp_servers": {crate::mcp::SERVER_NAME: server}});
+        }
         Self {
             thread,
             resumes: turn.session_id.is_some(),
             prompt: prompt.to_string(),
             prompt_id: prompt_id.to_string(),
+            inject: turn.handoff.map(|handoff| handoff.codex_items()),
+            inline_prompt: turn.handoff.map(|handoff| handoff.inline(prompt)),
             model: turn.model.map(String::from),
             effort: turn.effort.map(String::from),
             plan: turn.plan,
@@ -214,7 +240,7 @@ impl Parser {
     fn parse_answer(&mut self, id: &Value, message: &Value) -> Vec<AgentEvent> {
         let Some(id) = id.as_u64() else { return vec![] };
         if let Some(error) = message["error"]["message"].as_str() {
-            return vec![AgentEvent::Failed { message: error.to_string() }];
+            return self.refused(id, &message["error"], error);
         }
         match id {
             INITIALIZE => {
@@ -226,21 +252,42 @@ impl Parser {
                 let result = &message["result"];
                 let Some(thread_id) = result["thread"]["id"].as_str() else { return vec![] };
                 self.thread_id = Some(thread_id.to_string());
-                let model = self.model.take().or_else(|| result["model"].as_str().map(String::from));
-                let mut params = turn_params(thread_id, &self.prompt, &self.prompt_id);
-                if let Some(model) = &model {
-                    params["model"] = json!(model);
-                    params["collaborationMode"] = collaboration_mode(self.plan, model, self.effort.as_deref());
-                }
-                if let Some(effort) = &self.effort {
-                    params["effort"] = json!(effort);
-                }
-                self.model = model;
-                let request = json!({"id": FIRST_TURN, "method": "turn/start", "params": params});
-                vec![AgentEvent::Session { id: thread_id.to_string() }, AgentEvent::Write(line(request))]
+                self.model = self.model.take().or_else(|| result["model"].as_str().map(String::from));
+                let session = AgentEvent::Session { id: thread_id.to_string(), model: self.model.clone() };
+                let next = match self.inject.take() {
+                    Some(items) => {
+                        let params = json!({"threadId": thread_id, "items": items});
+                        line(json!({"id": INJECT, "method": "thread/inject_items", "params": params}))
+                    }
+                    None => self.first_turn(&self.prompt),
+                };
+                vec![session, AgentEvent::Write(next)]
             }
+            INJECT => vec![AgentEvent::Accepted, AgentEvent::Write(self.first_turn(&self.prompt))],
+            FIRST_TURN => vec![AgentEvent::Accepted],
             _ => vec![],
         }
+    }
+
+    /// What follows a request Codex refused: a thread to resume that isn't there is said so, and
+    /// one too old to take messages is told the thread before the prompt.
+    fn refused(&mut self, id: u64, error: &Value, message: &str) -> Vec<AgentEvent> {
+        match id {
+            THREAD if self.resumes => vec![AgentEvent::SessionMissing],
+            INJECT if error["code"].as_i64() == Some(METHOD_NOT_FOUND) => {
+                let prompt = self.inline_prompt.take().unwrap_or_else(|| self.prompt.clone());
+                vec![AgentEvent::Write(self.first_turn(&prompt))]
+            }
+            _ => vec![AgentEvent::Failed { message: message.to_string() }],
+        }
+    }
+
+    fn first_turn(&self, prompt: &str) -> String {
+        let Some(thread_id) = self.thread_id.as_deref() else { return String::new() };
+        let mut params = turn_params(thread_id, prompt, &self.prompt_id);
+        let settings = Settings { model: self.model.as_deref(), effort: self.effort.as_deref(), plan: self.plan };
+        with_settings(&mut params, settings);
+        line(json!({"id": FIRST_TURN, "method": "turn/start", "params": params}))
     }
 
     fn parse_notification(&mut self, method: &str, params: &Value) -> Vec<AgentEvent> {
@@ -331,7 +378,11 @@ impl Parser {
                 .map(|name| counts[name].as_u64().unwrap_or_default())
         };
         let (total, last) = (counts(&usage["total"]), counts(&usage["last"]));
-        let known = self.spent.insert(params["threadId"].as_str()?.to_string(), total);
+        let thread_id = params["threadId"].as_str()?;
+        let own = self.thread_id.as_deref().is_none_or(|own| own == thread_id);
+        let context_window = usage["modelContextWindow"].as_u64().filter(|_| own);
+        let context_used = usage["last"]["inputTokens"].as_u64().filter(|_| own);
+        let known = self.spent.insert(thread_id.to_string(), total);
         let [input, cache_read, cache_write, output] = match known {
             Some(known) if (0..4).all(|index| total[index] >= known[index]) => {
                 [0, 1, 2, 3].map(|index| total[index] - known[index])
@@ -345,7 +396,7 @@ impl Parser {
             return None;
         }
         let spent = ModelUsage { model: self.model.clone().unwrap_or_default(), tokens, cost_usd: None };
-        Some(AgentEvent::Usage { spent: vec![spent], total: false })
+        Some(AgentEvent::Usage { spent: vec![spent], total: false, context_window, context_used })
     }
 
     /// Keeps when the limits that ran out reset. Only the account's own limits count, not a
@@ -525,6 +576,10 @@ impl Parser {
                 let questions: Vec<Value> = asked.iter().map(question).collect();
                 ("questions", QUESTION_TOOL, json!({ "questions": questions }))
             }
+            // Reading the thread through Motile's own tool needs nobody to allow it.
+            "mcpServer/elicitation/request" if params["serverName"] == crate::mcp::SERVER_NAME => {
+                return vec![AgentEvent::Write(line(json!({"id": id, "result": {"action": "accept", "content": {}}})))];
+            }
             "mcpServer/elicitation/request" => {
                 return vec![AgentEvent::Write(line(json!({"id": id, "result": {"action": "decline"}})))];
             }
@@ -600,6 +655,8 @@ mod tests {
             access,
             plan,
             session_id: None,
+            handoff: None,
+            mcp: None,
         }
     }
 
@@ -656,7 +713,7 @@ mod tests {
                 .to_string()
         };
         let spent = |events: Vec<AgentEvent>| match &events[..] {
-            [AgentEvent::Usage { spent, total: false }] => (spent[0].model.clone(), spent[0].tokens),
+            [AgentEvent::Usage { spent, total: false, .. }] => (spent[0].model.clone(), spent[0].tokens),
             other => panic!("expected what it spent, got {other:?}"),
         };
         let mut parser = parser(turn(Access::Full, false));
@@ -698,7 +755,7 @@ mod tests {
         );
 
         let events = parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);
-        assert_eq!(events[0], AgentEvent::Session { id: "t1".to_string() });
+        assert_eq!(events[0], AgentEvent::Session { id: "t1".to_string(), model: Some("gpt-6".to_string()) });
         let first_turn = &written(&events)[0];
         assert_eq!(first_turn["method"], "turn/start");
         let params = &first_turn["params"];
@@ -717,10 +774,78 @@ mod tests {
     }
 
     #[test]
-    fn a_start_that_is_refused_fails_the_turn() {
+    fn a_start_that_is_refused_fails_the_turn_and_a_resume_says_the_session_is_missing() {
         let mut parser = parser(turn(Access::Full, false));
         let refused = parser.parse(r#"{"id":2,"error":{"code":-32600,"message":"no rollout found"}}"#);
         assert_eq!(refused, vec![AgentEvent::Failed { message: "no rollout found".to_string() }]);
+
+        let mut parser = self::parser(Turn { session_id: Some("t0"), ..turn(Access::Full, false) });
+        let refused = parser.parse(r#"{"id":2,"error":{"code":-32600,"message":"no rollout found"}}"#);
+        assert_eq!(refused, vec![AgentEvent::SessionMissing]);
+    }
+
+    fn handoff() -> crate::handoff::Handoff {
+        let item = motile_protocol::wire::Item {
+            id: "i0".into(),
+            seq: 0,
+            rev: 0,
+            created_at: 0.0,
+            media: vec![],
+            parent: None,
+            kind: motile_protocol::wire::ItemKind::User { text: "Earlier".into(), attachments: vec![] },
+        };
+        let range = crate::handoff::Range::Full;
+        crate::handoff::build("t", &[item], range, 1, crate::handoff::HANDOFF_CAP).unwrap().unwrap()
+    }
+
+    #[test]
+    fn what_the_thread_said_before_is_injected_before_the_first_turn() {
+        let handoff = handoff();
+        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into() };
+        let mut parser = parser(Turn { handoff: Some(&handoff), mcp: Some(&mcp), ..turn(Access::Full, false) });
+        let asked = written(&parser.parse(r#"{"id":1,"result":{}}"#));
+        let server = &asked[1]["params"]["config"]["mcp_servers"]["motile"];
+        assert_eq!(
+            server,
+            &json!({"url": "http://127.0.0.1:9/mcp", "http_headers": {"Authorization": "Bearer secret"}})
+        );
+
+        let events = parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);
+        let inject = &written(&events)[0];
+        assert_eq!((&inject["method"], &inject["id"]), (&json!("thread/inject_items"), &json!(3)));
+        assert_eq!(inject["params"]["threadId"], "t1");
+        assert_eq!(inject["params"]["items"], json!(handoff.codex_items()));
+
+        let events = parser.parse(r#"{"id":3,"result":{}}"#);
+        assert_eq!(events[0], AgentEvent::Accepted);
+        let first_turn = &written(&events)[0];
+        assert_eq!(first_turn["params"]["input"][0]["text"], "Fix it", "the turn has the user's message alone");
+        assert_eq!(parser.parse(r#"{"id":4,"result":{"turn":{"id":"u1"}}}"#), vec![AgentEvent::Accepted]);
+    }
+
+    #[test]
+    fn a_codex_that_takes_no_messages_is_told_the_thread_before_the_prompt() {
+        let handoff = handoff();
+        let mut parser = parser(Turn { handoff: Some(&handoff), ..turn(Access::Full, false) });
+        parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
+        let events = parser.parse(r#"{"id":3,"error":{"code":-32601,"message":"unknown method"}}"#);
+        let text = written(&events)[0]["params"]["input"][0]["text"].as_str().unwrap().to_string();
+        assert!(text.starts_with(&handoff.header) && text.ends_with("User message:\nFix it"), "{text}");
+
+        let mut parser = self::parser(Turn { handoff: Some(&handoff), ..turn(Access::Full, false) });
+        parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
+        let failed = parser.parse(r#"{"id":3,"error":{"code":-32000,"message":"too many items"}}"#);
+        assert_eq!(failed, vec![AgentEvent::Failed { message: "too many items".to_string() }]);
+    }
+
+    #[test]
+    fn every_turn_of_a_process_that_runs_takes_the_threads_model_and_effort() {
+        let settings = Settings { model: Some("gpt-6.1-sol"), effort: Some("low"), plan: true };
+        let request: Value = serde_json::from_str(&input("t1", "Next", "m3", settings)).unwrap();
+        let params = &request["params"];
+        assert_eq!((&params["model"], &params["effort"]), (&json!("gpt-6.1-sol"), &json!("low")));
+        assert_eq!(params["collaborationMode"]["mode"], "plan");
+        assert_eq!(params["collaborationMode"]["settings"]["reasoning_effort"], "low");
     }
 
     #[test]

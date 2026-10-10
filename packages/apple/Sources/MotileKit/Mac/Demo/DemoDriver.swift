@@ -556,6 +556,7 @@ extension RowModel {
         case .error: "error"
         case .changes: "changes"
         case .turnEnd: "turn_end"
+        case .handoff: "handoff"
         case .queued: "queued"
         }
     }

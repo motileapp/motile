@@ -92,13 +92,20 @@ shadcn's own colours, opacities and radii are gone from the theme.
 
 - `agent_accounts.rs`: the agents' accounts. Each is the folder its CLI keeps the sign-in in
   (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`) and the variables its agent is given; every agent has a
-  default one. A Codex account can share the default one's folder but for its sign-in. A thread works with one account and can move to another; one without its
-  session starts a new one that is told what was said.
+  default one. A Codex account can share the default one's folder but for its sign-in. A thread
+  works with one account and can move to another.
 - `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
   worktrees, snapshots and the agents an agent starts. It continues a thread once its usage limit
   resets, and after a restart that cut its agent off, where the server's settings say so. Every
   server has a "No project" project, whose threads each work in a folder of their own under
   `no-project` in its data folder, out of reach of any git repository above it.
+- `handoff.rs`: what an agent is told of a thread that went on without it. A thread keeps a
+  session for each agent and sessions folder it ran in (`thread_sessions`); going back to one
+  resumes it with what it missed, a new one is told everything before. Items are told whole, as
+  many as the model's context has room for, Codex's as messages (`thread/inject_items`). The
+  transcript shows the switch as a `Handoff` item.
+- `mcp.rs`: the `read_thread` tool, an MCP server on the loopback interface that the agents read
+  any thread of the server with, by the token of their own thread, for what a handoff left out.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `models.rs` asks each account's CLI what its picker lists and the
@@ -400,6 +407,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "which color" | Asks the user a question |
 | "plan the hello" | Presents a plan to approve |
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
+| "crash before taking this" | Exits before it takes the prompt (Claude Code) |
 
 A message sent now while it works is read after its next tool call, or stops a reply that
 streams (Claude Code). Asked for a title, a commit message, a pull request's text or a branch's

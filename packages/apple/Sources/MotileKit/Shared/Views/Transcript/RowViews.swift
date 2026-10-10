@@ -64,7 +64,7 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width) + ProseRowView.gap + row.above
         case .error(let text):
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
-        case .code, .tool, .thinking, .group, .fold, .media, .changes, .turnEnd, .queued:
+        case .code, .tool, .thinking, .group, .fold, .media, .changes, .turnEnd, .handoff, .queued:
             return estimatedHeight(row, width: width)
         }
     }
@@ -88,6 +88,8 @@ class RowView: FlippedView {
             return ChangesRowView.height(entries: content.entries.count)
         case .turnEnd:
             return TurnEndRowView.height
+        case .handoff:
+            return HandoffRowView.height
         case .queued(let content):
             let attachments = AttachedFilesView.height(content.attachments, width: width)
             return estimatedTextHeight(content.text.length, width: width * 0.75) + 48 + QueuedRowView.footHeight + attachments
@@ -109,6 +111,7 @@ class RowView: FlippedView {
         case .error: return ErrorRowView()
         case .changes: return ChangesRowView()
         case .turnEnd: return TurnEndRowView()
+        case .handoff: return HandoffRowView()
         case .queued: return QueuedRowView()
         }
     }
@@ -123,6 +126,7 @@ class RowView: FlippedView {
         case .error: return "error"
         case .changes: return "changes"
         case .turnEnd: return "turnEnd"
+        case .handoff: return "handoff"
         case .queued: return "queued"
         }
     }
@@ -914,6 +918,70 @@ final class TurnEndRowView: RowView {
     override func layout(width: CGFloat) -> CGFloat {
         meta.frame = CGRect(x: 0, y: 0, width: width, height: MessageMeta.height)
         return Self.height
+    }
+}
+
+/// Where the thread went on with another agent or account: a line across, broken by the model it
+/// left and the one it went on with.
+final class HandoffRowView: RowView {
+    static let height = ControlSize.large.height
+
+    private static let logoSide = ControlSize.regular.symbol
+    private static let arrowSize = ControlSize.regular.smallSymbol
+    private static let labelGap = ControlSize.regular.gap
+    private static let arrowGap = ControlSize.small.padding
+    private static let lineGap = ControlSize.regular.padding
+    private static let logos: [Agent: PlatformImage] = Dictionary(uniqueKeysWithValues: Agent.allCases.compactMap { agent in
+        agent.logo.map { (agent, ImageFiles.tinted(ImageFiles.sized($0, logoSide), agent.platformColor)) }
+    })
+
+    private var content: HandoffContent?
+
+    override func configure(_ row: RowModel) {
+        super.configure(row)
+        guard case .handoff(let content) = row.kind else { return }
+        self.content = content
+        redraw()
+    }
+
+    override func layout(width: CGFloat) -> CGFloat { Self.height }
+
+    private static func label(_ end: HandoffContent.End) -> NSAttributedString {
+        NSAttributedString(string: end.label, attributes: [.font: Theme.smallFont, .foregroundColor: Theme.mutedStrongerForeground])
+    }
+
+    override func draw(_ dirtyRect: CGRect) {
+        guard let content else { return }
+        let from = Self.label(content.from)
+        let to = Self.label(content.to)
+        let arrowSide = PlatformImage.symbolSide(Self.arrowSize)
+        let endWidth = { (label: NSAttributedString) in Self.logoSide + Self.labelGap + ceil(label.size().width) }
+        let middle = endWidth(from) + Self.arrowGap * 2 + arrowSide + endWidth(to)
+        let midY = bounds.height / 2
+        var x = ((bounds.width - middle) / 2).rounded()
+
+        Theme.border.setFill()
+        let lineY = midY.rounded()
+        CGRect(x: 0, y: lineY, width: max(0, x - Self.lineGap), height: 1).fillCurrent()
+        let rightLine = x + middle + Self.lineGap
+        CGRect(x: rightLine, y: lineY, width: max(0, bounds.width - rightLine), height: 1).fillCurrent()
+
+        let drawEnd = { (end: HandoffContent.End, label: NSAttributedString) in
+            if let logo = Self.logos[end.agent] {
+                let side = Self.logoSide
+                logo.drawUpright(in: CGRect(x: x, y: (midY - side / 2).rounded(), width: side, height: side))
+            }
+            x += Self.logoSide + Self.labelGap
+            let size = label.size()
+            label.draw(at: CGPoint(x: x, y: (midY - size.height / 2).rounded()))
+            x += ceil(size.width)
+        }
+        drawEnd(content.from, from)
+        x += Self.arrowGap
+        let arrow = CGRect(x: x, y: 0, width: arrowSide, height: bounds.height)
+        TintedSymbol.draw(.arrowRight, size: Self.arrowSize, color: Theme.mutedStrongerForeground, in: arrow)
+        x += arrowSide + Self.arrowGap
+        drawEnd(content.to, to)
     }
 }
 

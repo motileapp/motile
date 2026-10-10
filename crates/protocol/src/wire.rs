@@ -133,12 +133,41 @@ pub struct Media {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ItemKind {
-    User { text: String, attachments: Vec<String> },
-    Assistant { text: String },
-    Thinking { text: String },
-    Tool { call: ToolCall },
-    TurnEnd { summary: TurnSummary },
-    Error { message: String },
+    User {
+        text: String,
+        attachments: Vec<String>,
+    },
+    Assistant {
+        text: String,
+    },
+    Thinking {
+        text: String,
+    },
+    Tool {
+        call: ToolCall,
+    },
+    TurnEnd {
+        summary: TurnSummary,
+    },
+    Error {
+        message: String,
+    },
+    /// The thread went on with another agent, or with an account whose sessions are elsewhere,
+    /// from the turn after this.
+    Handoff {
+        from: HandoffEnd,
+        to: HandoffEnd,
+    },
+}
+
+/// One side of a handoff.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct HandoffEnd {
+    pub agent: Agent,
+    /// The model's id, when known.
+    pub model: Option<String>,
+    /// The model's name as the picker lists it, e.g. "Claude Opus 5.5" or "GPT-6.1-Sol".
+    pub name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]

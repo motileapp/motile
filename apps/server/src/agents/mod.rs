@@ -11,7 +11,10 @@ pub mod models;
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Agent, Approval, Item, ItemKind, Subagent, Tokens, ToolCall, TurnSummary};
+use motile_protocol::wire::{Access, Agent, Approval, Subagent, Tokens, ToolCall, TurnSummary};
+
+use crate::handoff::Handoff;
+use crate::mcp::McpAccess;
 
 const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedding it in your reply as a \
      Markdown image with the absolute path of the file, like ![what it shows](/path/to/file.png).";
@@ -35,54 +38,20 @@ pub fn instructions(turn: &Turn) -> String {
     text + ". No need to mention this otherwise. " + SHOWING_MEDIA
 }
 
-/// How much of what was said before a session's first prompt is told, from the latest back.
-const EARLIER_CONVERSATION_CHARS: usize = 60_000;
-const TOOL_INPUT_CHARS: usize = 300;
-
-/// The prompt that starts a new session of a thread, with what was said in the thread before
-/// its last message, which is the prompt's. A thread that moved to an account without its
-/// session goes on from there.
-pub fn with_earlier_conversation(items: &[Item], prompt: String) -> String {
-    let last_message = items.iter().rposition(|item| matches!(item.kind, ItemKind::User { .. }));
-    let earlier = &items[..last_message.unwrap_or_default()];
-    let mut told: Vec<String> = Vec::new();
-    let mut length = 0;
-    for item in earlier.iter().rev().filter(|item| item.parent.is_none()) {
-        let said = match &item.kind {
-            ItemKind::User { text, .. } if !text.is_empty() => format!("User:\n{text}"),
-            ItemKind::Assistant { text } if !text.is_empty() => format!("You:\n{text}"),
-            ItemKind::Tool { call } => {
-                let input: String = call.input.chars().take(TOOL_INPUT_CHARS).collect();
-                format!("You used {}: {input}", call.name)
-            }
-            _ => continue,
-        };
-        length += said.len();
-        if length > EARLIER_CONVERSATION_CHARS {
-            told.push("(What was said before this is left out.)".to_string());
-            break;
-        }
-        told.push(said);
-    }
-    if told.is_empty() {
-        return prompt;
-    }
-    told.reverse();
-    format!(
-        "This thread went on in another session, which you can't see. Here is what was said there, \
-         oldest first:\n\n<earlier_conversation>\n{}\n</earlier_conversation>\n\nThe user's new message:\n\n{prompt}",
-        told.join("\n\n")
-    )
-}
-
 /// The agents present a plan with this tool call; allowing it has the plan carried out.
 pub const PLAN_TOOL: &str = "ExitPlanMode";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AgentEvent {
+    /// The agent's own session, and the model it runs.
     Session {
         id: String,
+        model: Option<String>,
     },
+    /// The agent has taken the turn it was started for, with what it was told of the thread.
+    Accepted,
+    /// The session the agent was told to resume isn't there; nothing of the turn was done.
+    SessionMissing,
     TextStarted {
         id: String,
     },
@@ -131,6 +100,9 @@ pub enum AgentEvent {
     Usage {
         spent: Vec<ModelUsage>,
         total: bool,
+        /// How large the model's context is, and how much of it the session's last request took.
+        context_window: Option<u64>,
+        context_used: Option<u64>,
     },
     /// A tool call the turn waits with until the user has allowed or refused it.
     Approval(Approval),
@@ -211,6 +183,18 @@ pub struct Turn<'a> {
     pub access: Access,
     pub plan: bool,
     pub session_id: Option<&'a str>,
+    /// What the agent is told of the thread before the prompt, which Codex is given as messages.
+    pub handoff: Option<&'a Handoff>,
+    /// Where the agent reads the thread from.
+    pub mcp: Option<&'a McpAccess>,
+}
+
+/// What a turn of a process that runs already is started with.
+#[derive(Clone, Copy, Default)]
+pub struct Settings<'a> {
+    pub model: Option<&'a str>,
+    pub effort: Option<&'a str>,
+    pub plan: bool,
 }
 
 impl Turn<'_> {
@@ -232,12 +216,13 @@ pub fn opening(agent: Agent, prompt: &str, id: &str) -> String {
     }
 }
 
-/// A prompt for a process whose turn has ended; it starts the next one. `id` comes back in
-/// `Taken`. `None` while the agent's own session isn't known yet.
-pub fn input(agent: Agent, session_id: Option<&str>, prompt: &str, id: &str) -> Option<String> {
+/// A prompt for a process whose turn has ended; it starts the next one with `settings`, which
+/// Claude Code is told apart. `id` comes back in `Taken`. `None` while the agent's own session
+/// isn't known yet.
+pub fn input(agent: Agent, session_id: Option<&str>, prompt: &str, id: &str, settings: Settings) -> Option<String> {
     match agent {
         Agent::Claude => Some(claude::input(prompt, id)),
-        Agent::Codex => Some(codex::input(session_id?, prompt, id)),
+        Agent::Codex => Some(codex::input(session_id?, prompt, id, settings)),
     }
 }
 
@@ -275,7 +260,7 @@ pub fn stop(agent: Agent, session_id: Option<&str>, turn_id: Option<&str>) -> Op
 }
 
 pub enum Parser {
-    Claude(claude::Parser),
+    Claude(Box<claude::Parser>),
     Codex(Box<codex::Parser>),
 }
 
@@ -283,7 +268,7 @@ impl Parser {
     /// Reads the output of the process started for `turn` with this prompt.
     pub fn new(turn: &Turn, cwd: &str, prompt: &str, prompt_id: &str) -> Self {
         match turn.agent {
-            Agent::Claude => Self::Claude(claude::Parser::default()),
+            Agent::Claude => Self::Claude(Box::default()),
             Agent::Codex => Self::Codex(Box::new(codex::Parser::new(turn, cwd, prompt, prompt_id))),
         }
     }
@@ -300,57 +285,5 @@ pub fn executable_name(agent: Agent) -> &'static str {
     match agent {
         Agent::Claude => "claude",
         Agent::Codex => "codex",
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use motile_protocol::wire::ToolStatus;
-
-    use super::*;
-
-    fn item(kind: ItemKind) -> Item {
-        Item { id: String::new(), seq: 0, rev: 0, created_at: 0.0, media: vec![], parent: None, kind }
-    }
-
-    fn user(text: &str) -> Item {
-        item(ItemKind::User { text: text.into(), attachments: vec![] })
-    }
-
-    #[test]
-    fn a_new_session_is_told_what_was_said_before_the_last_message() {
-        let call = ToolCall {
-            id: "t".into(),
-            name: "Bash".into(),
-            input: r#"{"command":"ls"}"#.into(),
-            output: Some("a lot".into()),
-            status: ToolStatus::Succeeded,
-            agent: None,
-        };
-        let items = [
-            user("Fix the login"),
-            item(ItemKind::Thinking { text: "hmm".into() }),
-            item(ItemKind::Tool { call }),
-            item(ItemKind::Assistant { text: "Fixed it.".into() }),
-            user("Now the tests"),
-        ];
-        let prompt = with_earlier_conversation(&items, "Now the tests".into());
-        let told = "User:\nFix the login\n\nYou used Bash: {\"command\":\"ls\"}\n\nYou:\nFixed it.";
-        assert!(prompt.contains(told), "{prompt}");
-        assert!(prompt.ends_with("The user's new message:\n\nNow the tests"));
-        assert!(!prompt.contains("hmm") && !prompt.contains("a lot"));
-    }
-
-    #[test]
-    fn a_thread_with_nothing_said_before_starts_with_the_prompt_alone() {
-        assert_eq!(with_earlier_conversation(&[user("Hello")], "Hello".into()), "Hello");
-    }
-
-    #[test]
-    fn only_the_latest_of_a_long_conversation_is_told() {
-        let long = "x".repeat(EARLIER_CONVERSATION_CHARS / 2);
-        let items = [user("opening"), user(&long), user(&long), user("last")];
-        let prompt = with_earlier_conversation(&items, "last".into());
-        assert!(prompt.contains("left out") && !prompt.contains("opening"));
     }
 }

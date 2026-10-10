@@ -24,6 +24,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0012_interruptions.sql"),
     include_str!("../migrations/0013_agent_accounts.sql"),
     include_str!("../migrations/0014_thread_positions.sql"),
+    include_str!("../migrations/0015_thread_sessions.sql"),
 ];
 
 pub struct Store {
@@ -82,12 +83,36 @@ impl Purpose {
 #[derive(Clone, Debug)]
 pub struct StoredThread {
     pub thread: Thread,
-    /// The agent's session to resume, known once the first turn starts.
+    /// The session of the thread's continuation to resume, known once its first turn starts.
     pub session_id: Option<String>,
     pub title_source: TitleSource,
     pub next_seq: u64,
     /// Set when the thread works in a worktree of its own, which is its `cwd`.
     pub worktree: Option<StoredWorktree>,
+}
+
+/// An agent and the folder it keeps its sessions in. Accounts that share one take over each
+/// other's sessions.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Continuation {
+    pub agent: Agent,
+    pub folder: String,
+}
+
+/// What the server knows of a thread's native session in one continuation.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Session {
+    pub session_id: Option<String>,
+    /// The model it last ran.
+    pub model: Option<String>,
+    /// The position of the last item it has seen.
+    pub seen_through: u64,
+    /// Set while it was given what it missed up to this position and hasn't taken it yet.
+    pub pending_through: Option<u64>,
+    pub context_used: Option<u64>,
+    pub context_window: Option<u64>,
+    /// When it last took a turn.
+    pub last_turn_at: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -109,6 +134,13 @@ pub struct StoredProject {
     pub icon_chosen: bool,
     /// The shell script that runs in every new worktree.
     pub setup: Option<String>,
+}
+
+pub struct ThreadSummary {
+    pub title: String,
+    pub project: String,
+    pub agent: Agent,
+    pub model: Option<String>,
 }
 
 fn as_text<T: serde::Serialize>(value: &T) -> String {
@@ -192,11 +224,11 @@ impl Store {
         let thread = &stored.thread;
         self.connection().execute(
             "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access, plan,
-                                  session_id, created_at, updated_at, done_at, needs_approval, turn_ended_at, position,
+                                  created_at, updated_at, done_at, needs_approval, turn_ended_at, position,
                                   worktree_branch, worktree_base, pull_request, watching, running, monitoring,
                                   interruption, agent_account)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-                     ?23, ?24, ?25)
+                     ?23, ?24)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
@@ -206,7 +238,6 @@ impl Store {
                  effort = excluded.effort,
                  access = excluded.access,
                  plan = excluded.plan,
-                 session_id = excluded.session_id,
                  updated_at = excluded.updated_at,
                  done_at = excluded.done_at,
                  needs_approval = excluded.needs_approval,
@@ -229,7 +260,6 @@ impl Store {
                 thread.effort,
                 as_text(&thread.access),
                 thread.plan,
-                stored.session_id,
                 thread.created_at,
                 thread.updated_at,
                 thread.done_at,
@@ -247,6 +277,106 @@ impl Store {
             ],
         )?;
         Ok(())
+    }
+
+    /// The thread's sessions, in each continuation it has run in.
+    pub fn sessions(&self, thread_id: &str) -> rusqlite::Result<Vec<(Continuation, Session)>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT agent, sessions_folder, session_id, model, seen_through_seq, pending_through_seq, context_used,
+                    context_window, last_turn_at
+             FROM thread_sessions WHERE thread_id = ?1",
+        )?;
+        let count = |row: &rusqlite::Row, index| row.get::<_, Option<i64>>(index).map(|count| count.map(|n| n as u64));
+        let sessions = statement.query_map([thread_id], |row| {
+            let continuation = Continuation {
+                agent: from_text(&row.get::<_, String>(0)?).unwrap_or(Agent::Claude),
+                folder: row.get(1)?,
+            };
+            let session = Session {
+                session_id: row.get(2)?,
+                model: row.get(3)?,
+                seen_through: row.get::<_, i64>(4)? as u64,
+                pending_through: count(row, 5)?,
+                context_used: count(row, 6)?,
+                context_window: count(row, 7)?,
+                last_turn_at: row.get(8)?,
+            };
+            Ok((continuation, session))
+        })?;
+        sessions.collect()
+    }
+
+    pub fn session(&self, thread_id: &str, continuation: &Continuation) -> rusqlite::Result<Option<Session>> {
+        let sessions = self.sessions(thread_id)?;
+        Ok(sessions.into_iter().find(|(kept, _)| kept == continuation).map(|(_, session)| session))
+    }
+
+    pub fn save_session(
+        &self,
+        thread_id: &str,
+        continuation: &Continuation,
+        session: &Session,
+    ) -> rusqlite::Result<()> {
+        self.connection().execute(
+            "INSERT OR REPLACE INTO thread_sessions (thread_id, agent, sessions_folder, session_id, model,
+                 seen_through_seq, pending_through_seq, context_used, context_window, last_turn_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                thread_id,
+                as_text(&continuation.agent),
+                continuation.folder,
+                session.session_id,
+                session.model,
+                session.seen_through as i64,
+                session.pending_through.map(|seq| seq as i64),
+                session.context_used.map(|count| count as i64),
+                session.context_window.map(|count| count as i64),
+                session.last_turn_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Moves the session a thread kept from before continuations into the one it works in, as
+    /// having seen everything up to `seen_through`.
+    pub fn adopt_session(
+        &self,
+        thread_id: &str,
+        continuation: &Continuation,
+        session_id: &str,
+        seen_through: u64,
+    ) -> rusqlite::Result<()> {
+        if self.session(thread_id, continuation)?.is_none() {
+            let session = Session {
+                session_id: Some(session_id.to_string()),
+                seen_through,
+                last_turn_at: Some(motile_protocol::now()),
+                ..Session::default()
+            };
+            self.save_session(thread_id, continuation, &session)?;
+        }
+        self.connection().execute("UPDATE threads SET session_id = NULL WHERE id = ?1", [thread_id])?;
+        Ok(())
+    }
+
+    /// The thread's title, its project's folder, its agent and its model, for an agent that reads it.
+    pub fn thread_summary(&self, thread_id: &str) -> rusqlite::Result<Option<ThreadSummary>> {
+        let connection = self.connection();
+        let summary = connection.query_row(
+            "SELECT t.title, COALESCE(p.path, ''), t.agent, t.model
+             FROM threads t LEFT JOIN projects p ON p.id = t.project_id WHERE t.id = ?1",
+            [thread_id],
+            |row| {
+                Ok(ThreadSummary {
+                    title: row.get(0)?,
+                    project: row.get(1)?,
+                    agent: from_text(&row.get::<_, String>(2)?).unwrap_or(Agent::Claude),
+                    model: row.get(3)?,
+                })
+            },
+        );
+        summary.optional()
     }
 
     pub fn delete_thread(&self, thread_id: &str) -> rusqlite::Result<()> {
