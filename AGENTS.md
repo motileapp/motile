@@ -314,9 +314,7 @@ Mac app.
   introduce a library. If you are solving a complex but common problem, there is likely a
   modern library for it, if so, use it.
 - Do not start editing code in response to a question. We'll tell you when to edit code.
-- Do not open a dev app or a simulator, or take screenshots or videos, unless we ask for it or
-  the change is to layout or behaviour you can't judge from the code. A colour, a token, a
-  string, a font size or a padding is edited and reported, nothing more.
+- Do not open a dev app or a simulator unless we ask for it or it's necessary for your work.
 - The app's screenshots and videos you show us should be in dark mode unless we say otherwise.
 - If we are missing a glaring issue when we ask you to do something, do not hesitate to
   point it out.
