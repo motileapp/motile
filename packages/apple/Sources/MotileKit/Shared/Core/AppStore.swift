@@ -256,6 +256,8 @@ final class AppStore {
     @ObservationIgnored private let defaults = UserDefaults.standard
     /// The thread that was open when the client was last closed, until it has been opened again.
     @ObservationIgnored private var lastSelection: String?
+    /// The draft whose server wasn't known yet when it was given its server's last choices.
+    @ObservationIgnored private var draftAwaitingServer: String?
 
     init() {
         loadPreferences()
@@ -841,8 +843,9 @@ final class AppStore {
         drafts = defaults.dictionary(forKey: "drafts") as? [String: String] ?? [:]
         lastSelection = defaults.string(forKey: "selection")
         let saved = defaults.data(forKey: "threadDrafts").flatMap { try? JSONDecoder().decode([ThreadDraft].self, from: $0) }
-        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil }
+        threadDrafts = (saved ?? []).filter { preview(of: $0) != nil || $0.id == lastSelection }
         let opened = threadDrafts.first { $0.id == lastSelection } ?? emptyDraft()
+        if opened.model == nil, opened.agentAccount == nil, opened.effort == nil { draftAwaitingServer = opened.id }
         selection = .draft(opened.id)
         openedDraftPreview = preview(of: opened)
     }
@@ -867,7 +870,11 @@ final class AppStore {
     private func applyLastSettings(to draft: inout ThreadDraft) {
         draft.access = Access(rawValue: defaults.string(forKey: "new.access") ?? "") ?? .full
         draft.base = nil
-        guard let server = server(of: draft) else { return }
+        guard let server = server(of: draft) else {
+            draftAwaitingServer = draft.id
+            return
+        }
+        if draftAwaitingServer == draft.id { draftAwaitingServer = nil }
         draft.model = defaults.string(forKey: "new.model-\(server.id)")
         draft.agentAccount = defaults.string(forKey: "new.agentAccount-\(server.id)")
         draft.effort = defaults.string(forKey: "new.effort-\(server.id)")
@@ -914,10 +921,21 @@ final class AppStore {
 
     /// Keeps the open draft pointing at a project that exists, once the projects are known.
     private func ensureDraftProject() {
+        defer { applyLastSettingsOnceServerKnown() }
         guard ready, let draft = selectedDraft, project(draft.projectID) == nil, let first = projects.first ?? noProjects.first else {
             return
         }
         moveDraft(to: first.id)
+    }
+
+    /// Gives the draft opened at launch without choices of its own its server's last ones, once
+    /// the cache has said which server that is.
+    private func applyLastSettingsOnceServerKnown() {
+        guard let index = threadDrafts.firstIndex(where: { $0.id == draftAwaitingServer && selection == .draft($0.id) }) else { return }
+        let draft = threadDrafts[index]
+        guard draft.projectID == nil ? !servers.isEmpty : project(draft.projectID) != nil else { return }
+        applyLastSettings(to: &threadDrafts[index])
+        saveThreadDrafts()
     }
 
     /// Puts the open draft in a project. On another server, it starts with that server's last
