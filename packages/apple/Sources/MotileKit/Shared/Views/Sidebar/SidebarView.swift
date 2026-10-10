@@ -580,27 +580,32 @@ struct UndoRow: View {
     var body: some View {
         VStack(spacing: 0) {
             ThemeDivider()
-            Button {
-                store.performUndo()
-            } label: {
-                HStack(spacing: 7) {
-                    Image(.undo2, size: 10)
-                        .frame(width: 14)
-                    Text("Undo")
-                        .font(.ui(size: 12, weight: .medium))
-                    Spacer()
-                    HStack(spacing: 3) {
-                        Image(.check, size: 9)
-                        Text(notice.text)
-                            .font(.ui(size: 11))
-                            .lineLimit(1)
+            HStack(spacing: 0) {
+                Button {
+                    store.performUndo()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(.undo2, size: 10)
+                            .frame(width: 14)
+                        Text("Undo")
+                            .font(.ui(size: 12, weight: .medium))
                     }
+                    .padding(.leading, 18)
+                    .padding(.trailing, 12)
+                    .frame(maxHeight: .infinity)
                 }
-                .padding(.horizontal, 18)
-                .frame(height: doneRowHeight)
-                .padding(.vertical, 4)
+                .buttonStyle(.highlight(radius: 0, faded: true))
+                Spacer()
+                HStack(spacing: 3) {
+                    Image(.check, size: 9)
+                    Text(notice.text)
+                        .font(.ui(size: 11))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Color.themeMutedForeground)
+                .padding(.trailing, 18)
             }
-            .buttonStyle(.highlight(radius: 0, faded: true))
+            .frame(height: doneRowHeight + 8)
         }
     }
 }
