@@ -80,6 +80,7 @@ struct ContextStrip: View {
             if let server {
                 part(server.shortName) {
                     Image(.server, size: 11)
+                        .foregroundStyle(server.stateTint ?? .themeMutedForeground)
                 }
                 .padding(.leading, 14)
                 .help("On \(server.name)")

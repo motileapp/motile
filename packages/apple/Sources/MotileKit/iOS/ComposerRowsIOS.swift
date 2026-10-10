@@ -48,7 +48,7 @@ struct ComposerTouchControls: View {
         HStack(spacing: 0) {
             AttachMenu()
             if !collapsed, let server = store.composerServer {
-                ServerLabel(server: server, weight: .medium)
+                ServerLabel(server: server, weight: .medium, showsState: true)
                     .padding(.leading, 4)
                     .appearing()
             }
