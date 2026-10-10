@@ -67,6 +67,6 @@ private struct Segment: View {
             .frame(maxWidth: fills ? .infinity : nil)
             .frame(height: size.height)
             .padding(margin)
-            .button(.highlight(radius: size.radius, selected: selected, inset: margin, faded: true), action: action)
+            .button(.highlight(radius: size.radius, selected: selected, inset: margin, faded: true, small: true), action: action)
     }
 }
