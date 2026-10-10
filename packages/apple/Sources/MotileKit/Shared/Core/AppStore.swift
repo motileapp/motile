@@ -199,7 +199,9 @@ final class AppStore {
 
     // The open thread
     /// Always a draft or a thread; `loadPreferences` opens the first draft.
-    private(set) var selection: Selection = .draft("")
+    private(set) var selection: Selection = .draft("") {
+        didSet { defaults.set(draftKey, forKey: "selection") }
+    }
     private(set) var activity = Activity()
     private(set) var transcriptIsEmpty = true
     /// The agents the open thread's agent has started, in the order it started them.
@@ -227,7 +229,9 @@ final class AppStore {
     private(set) var threadDrafts: [ThreadDraft] = []
     /// What the open draft said when it was opened, if it said anything. Its row in the sidebar
     /// shows this, so the sidebar doesn't change while the draft is being written.
-    private(set) var openedDraftPreview: String?
+    private(set) var openedDraftPreview: String? {
+        didSet { defaults.set(openedDraftPreview, forKey: "openedDraftPreview") }
+    }
     private(set) var undo: UndoNotice?
     /// The thread its pull request's end last marked done, which the sidebar then shows.
     private(set) var settledThreadID: String?
@@ -457,7 +461,12 @@ final class AppStore {
     }
 
     private func apply(servers: [Server]) {
+        let composerWasConnected = composerServer?.state == .connected
         self.servers = servers
+        if !composerWasConnected, composerServer?.state == .connected {
+            readGit(fetch: true)
+            readWorktreeStart(fetch: true)
+        }
         let known = Set(servers.map(\.id))
         if projects.contains(where: { !known.contains($0.serverID) }) {
             projects.removeAll { !known.contains($0.serverID) }
@@ -844,10 +853,12 @@ final class AppStore {
         lastSelection = defaults.string(forKey: "selection")
         let saved = defaults.data(forKey: "threadDrafts").flatMap { try? JSONDecoder().decode([ThreadDraft].self, from: $0) }
         threadDrafts = (saved ?? []).filter { preview(of: $0) != nil || $0.id == lastSelection }
-        let opened = threadDrafts.first { $0.id == lastSelection } ?? emptyDraft()
+        let restored = threadDrafts.first { $0.id == lastSelection }
+        let restoredPreview = defaults.string(forKey: "openedDraftPreview")
+        let opened = restored ?? emptyDraft()
         if opened.model == nil, opened.agentAccount == nil, opened.effort == nil { draftAwaitingServer = opened.id }
         selection = .draft(opened.id)
-        openedDraftPreview = preview(of: opened)
+        openedDraftPreview = restored == nil ? nil : restoredPreview
     }
 
     private func saveThreadDrafts() {
@@ -1674,7 +1685,6 @@ final class AppStore {
         agents = []
         guard case .thread(let id) = new, let thread = threads[id] else {
             transcript.begin(threadID: nil)
-            defaults.set(draftKey, forKey: "selection")
             ensureDraftProject()
             readGit(fetch: true)
             refreshComposerModels()
@@ -1687,7 +1697,6 @@ final class AppStore {
         openThreadID = thread.id
         activity = Activity(thread: thread)
         transcript.begin(threadID: thread.id, keepingRows: true)
-        defaults.set(thread.id, forKey: "selection")
         core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id]) { [weak self] result in
             guard case .failure = result, let self, self.transcript.threadID == thread.id else { return }
             self.transcript.dropKeptRows()
@@ -1830,7 +1839,6 @@ final class AppStore {
         guard wasOpen else { return }
         selection = .thread(id)
         openThreadID = id
-        defaults.set(id, forKey: "selection")
         transcript.adopt(threadID: id)
         core.send("open_thread", ["server_id": serverID, "thread_id": id])
         core.send("mark_seen", ["thread_id": id])
