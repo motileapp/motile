@@ -13,32 +13,11 @@ struct SettingsSheet: View {
     var body: some View {
         GeometryReader { sheet in
             let wide = sheet.size.width >= Self.wide
-            NavigationStack(path: $path) {
-                Group {
-                    if wide {
-                        SettingsSplit(sidebarWidth: MainScreen.sidebarWidth) { MainScreen.line }
-                    } else {
-                        SettingsSidebar(pushes: true) { section in
-                            store.openSettings(section, target: store.settingsTarget)
-                            path = [section]
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .onTapGesture { Platform.endEditing() }
-                .navigationTitle(wide ? store.settings?.title ?? "Settings" : "Settings")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
-                }
-                .navigationDestination(for: SettingsSection.self) { section in
-                    SettingsPage(section: section)
-                        .contentShape(Rectangle())
-                        .onTapGesture { Platform.endEditing() }
-                        .background(Color.themeBackground.ignoresSafeArea())
-                        .navigationTitle(section.title)
-                        .navigationBarTitleDisplayMode(.inline)
+            Group {
+                if wide {
+                    split
+                } else {
+                    stack
                 }
             }
             .onAppear { follow(wide: wide) }
@@ -48,6 +27,49 @@ struct SettingsSheet: View {
         }
         .presentationSizing(.page)
         .presentationDragIndicator(.visible)
+    }
+
+    private var stack: some View {
+        NavigationStack(path: $path) {
+            SettingsSections { path = [$0] }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                }
+                .navigationDestination(for: SettingsSection.self) { section in
+                    page(section)
+                }
+        }
+        .onChange(of: path) {
+            guard let section = path.last, section != store.settings else { return }
+            store.openSettings(section, target: store.settingsTarget)
+        }
+    }
+
+    private var split: some View {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
+            SettingsSections(selected: store.settings ?? .general) { store.openSettings($0, target: store.settingsTarget) }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationSplitViewColumnWidth(MainScreen.sidebarWidth)
+                .toolbar(removing: .sidebarToggle)
+        } detail: {
+            NavigationStack {
+                page(store.settings ?? .general)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                    }
+            }
+            .id(store.settings)
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+
+    private func page(_ section: SettingsSection) -> some View {
+        SettingsPage(section: section)
+            .navigationTitle(section.title)
+            .navigationBarTitleDisplayMode(.inline)
     }
 
     /// A narrow sheet opens the section the store was pointed at, unless that is only the list's

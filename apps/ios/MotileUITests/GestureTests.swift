@@ -17,7 +17,8 @@ final class GestureTests: XCTestCase {
     private var newThread: XCUIElement { app.buttons["New thread"] }
 
     private func shown(_ element: XCUIElement) -> Bool {
-        element.waitForExistence(timeout: 3) && element.isHittable
+        let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND hittable == true"), object: element)
+        return XCTWaiter().wait(for: [hittable], timeout: 3) == .completed
     }
 
     /// The thread's row in the sidebar, not its title on the thread that is off the screen.
@@ -142,8 +143,8 @@ final class GestureTests: XCTestCase {
         app.buttons["Settings"].tap()
         let title = app.navigationBars["Settings"]
         XCTAssertTrue(shown(title))
-        app.buttons["Usage"].tap()
-        XCTAssertTrue(shown(app.navigationBars["Usage"]))
+        app.buttons["Servers"].tap()
+        XCTAssertTrue(shown(app.navigationBars["Servers"]))
         swipeFromTheEdge()
         XCTAssertTrue(shown(title))
         app.buttons["Close"].tap()

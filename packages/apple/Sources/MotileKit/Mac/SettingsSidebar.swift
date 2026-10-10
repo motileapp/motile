@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 /// The settings' sections under a search for one of them. While something is typed, the groups
@@ -6,8 +7,6 @@ struct SettingsSidebar: View {
     @Environment(AppStore.self) private var store
     /// The section whose page is shown beside the list, lit in it.
     var selected: SettingsSection?
-    /// The sections open as pages of their own, so each row points on.
-    var pushes = false
     let choose: (SettingsSection) -> Void
 
     private static let rowMargin = EdgeInsets(top: 1, leading: sidebarRowInset, bottom: 1, trailing: sidebarRowInset)
@@ -15,12 +14,10 @@ struct SettingsSidebar: View {
     var body: some View {
         @Bindable var store = store
         VStack(spacing: 0) {
-            #if os(macOS)
             SearchField(text: $store.settingsQuery)
                 .padding(.horizontal, 10)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
-            #endif
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if store.settingsQuery.isEmpty {
@@ -31,36 +28,13 @@ struct SettingsSidebar: View {
                         results
                     }
                 }
-                .padding(.bottom, Platform.scale > 1 ? 36 : 12)
+                .padding(.bottom, 12)
             }
             .scrollDismissesKeyboard(.immediately)
-            #if os(iOS)
-            footer
-            #else
             ThemeDivider()
             SidebarFooter()
-            #endif
         }
     }
-
-    #if os(iOS)
-    /// The search at the bottom, on glass as the sidebar's is.
-    private var footer: some View {
-        @Bindable var store = store
-        return SearchField(text: $store.settingsQuery, bare: true)
-            .padding(.horizontal, 6)
-            .frame(height: 46)
-            .glassButton(in: Capsule())
-            .padding(.horizontal, sidebarRowInset + 8)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
-            .background(alignment: .top) {
-                Rectangle()
-                    .fill(Color.themeBorder)
-                    .frame(height: 1)
-            }
-    }
-    #endif
 
     private func row(_ section: SettingsSection) -> some View {
         HStack(spacing: 8) {
@@ -68,10 +42,6 @@ struct SettingsSidebar: View {
             Text(section.title)
                 .font(.ui(size: 13))
             Spacer(minLength: 0)
-            if pushes {
-                Image(.chevronRight, size: 13)
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
-            }
         }
         .padding(.horizontal, 9)
         .frame(height: pressable(32))
@@ -135,3 +105,4 @@ struct SettingsSplit<Divider: View>: View {
         }
     }
 }
+#endif
