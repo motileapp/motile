@@ -19,7 +19,7 @@ struct ActivityRow: View {
                     commits
                 }
                 if let thread = entry.thread {
-                    ThreadCard(thread: thread, actions: actions)
+                    ConversationCard(thread: thread, actions: actions)
                 } else if !entry.body.isEmpty {
                     PullRequestTextView(blocks: entry.body)
                         .padding(12)
@@ -104,7 +104,7 @@ struct ActivityRow: View {
 
 /// A conversation on a line: the line it is on, what was said, and a reply. A resolved one is
 /// folded until it is opened.
-struct ThreadCard: View {
+struct ConversationCard: View {
     let thread: PullRequestPage.Thread
     let actions: PullRequestActions
     @State private var open: Bool?
