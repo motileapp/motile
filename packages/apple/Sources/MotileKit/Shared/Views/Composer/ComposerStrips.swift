@@ -281,7 +281,8 @@ struct BranchPicker: View {
             HStack(spacing: 8) {
                 Image(.search, size: 12)
                     .foregroundStyle(Color.themeMutedStrongerForeground)
-                TextField("", text: $query, prompt: .placeholder(prompt))
+                TextField("", text: $query)
+                    .placeholder(prompt, shown: query.isEmpty)
                     .textFieldStyle(.plain)
                     .font(.ui(size: 13))
                     .focused($searching)
