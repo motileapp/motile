@@ -9,6 +9,7 @@ struct SidebarScreen: View {
     /// The sidebar lies under the thread, which comes back over it when something is opened.
     var underThread = true
     @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
+    @AppStorage("sidebar.serversExpanded") private var serversExpanded = false
     @State private var renaming: ThreadInfo?
     @State private var newTitle = ""
     @State private var deleting: ThreadInfo?
@@ -211,7 +212,7 @@ struct SidebarScreen: View {
     /// settings and the usage, the search and the way to a new thread.
     private var footer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(store.servers) { ServerLine(server: $0) }
+            servers
             HStack(spacing: 8) {
                 AccountMenu()
                 SearchField(text: $search, bare: true)
@@ -224,12 +225,40 @@ struct SidebarScreen: View {
             .padding(.top, 6)
         }
         .padding(.horizontal, sidebarRowInset + 8)
-        .padding(.top, 10)
+        .padding(.top, store.servers.isEmpty ? 10 : 0)
         .padding(.bottom, 8)
         .background(alignment: .top) {
             Rectangle()
                 .fill(Color.themeBorder)
                 .frame(height: 1)
+        }
+    }
+
+    /// One line for every server that opens into a line for each, or the one server's line.
+    @ViewBuilder
+    private var servers: some View {
+        let servers = store.servers
+        if servers.count == 1 {
+            ServerLine(server: servers[0])
+                .frame(height: 44)
+        } else if servers.count > 1 {
+            Button {
+                serversExpanded.toggle()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(.chevronRight, size: 10)
+                        .rotationEffect(.degrees(serversExpanded ? 90 : 0))
+                        .frame(width: 14)
+                    AllServersLine(servers: servers)
+                }
+                .foregroundStyle(Color.themeMutedForeground)
+                .frame(height: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if serversExpanded {
+                ServerLines(servers: servers)
+            }
         }
     }
 
@@ -275,6 +304,27 @@ struct SidebarScreen: View {
     private func beginRename(_ thread: ThreadInfo) {
         newTitle = thread.title
         renaming = thread
+    }
+}
+
+/// A line for each server, under the line of them all, tall enough for a small button with room
+/// around it. A long list scrolls, and rests between two lines.
+private struct ServerLines: View {
+    private static let lineHeight = ControlSize.small.height + 8
+    private static let mostShown = 5
+
+    let servers: [Server]
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(servers) { ServerLine(server: $0).frame(height: Self.lineHeight) }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: CGFloat(min(servers.count, Self.mostShown)) * Self.lineHeight)
     }
 }
 
