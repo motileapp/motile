@@ -253,10 +253,20 @@ final class SpinnerView: LayerView {
 final class ProgressRingView: LayerView {
     private static let line: CGFloat = 2
     private let track = CAShapeLayer()
-    private let arc = CAShapeLayer()
+    private let arc: CAShapeLayer = {
+        let arc = CAShapeLayer()
+        arc.strokeEnd = 0
+        return arc
+    }()
 
+    /// Grows smoothly but goes back at once, so a ring shown again does not unwind.
     var fraction: Double = 0 {
-        didSet { arc.strokeEnd = min(max(fraction, 0), 1) }
+        didSet {
+            CATransaction.begin()
+            CATransaction.setDisableActions(fraction < oldValue)
+            arc.strokeEnd = min(max(fraction, 0), 1)
+            CATransaction.commit()
+        }
     }
 
     override func layoutNow() {

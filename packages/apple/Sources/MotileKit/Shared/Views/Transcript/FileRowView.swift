@@ -160,7 +160,7 @@ final class FileRowView: RowView {
     private let ring = ProgressRingView()
     private let icon = SymbolView(.file, size: ControlSize.large.symbol, tint: Theme.mutedForeground)
     private let name = TextLabel(font: .ui(13, weight: .medium), color: Theme.foreground)
-    private let detail = TextLabel(font: Theme.smallFont, color: Theme.mutedForeground)
+    private let detail = TextLabel(font: .uiDigits(12), color: Theme.mutedForeground)
     private var revealButton: RowButton!
     private var content: SentFile?
     private var state = FileDownloads.State.remote
