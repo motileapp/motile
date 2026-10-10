@@ -18,6 +18,8 @@ struct AgentAccountSheet: View {
     @State private var variables: [EditedVariable]
     @State private var saving = false
     @State private var suggestedFolder = ""
+    @State private var copied = false
+    @State private var copies = 0
 
     init(server: Server, account: AgentAccount) {
         self.server = server
@@ -136,8 +138,14 @@ struct AgentAccountSheet: View {
                 .textSelection(.enabled)
             Button {
                 Platform.copy(account.signInCommand)
+                copied = true
+                copies += 1
             } label: {
-                SettingsActionLabel("Copy Command", symbol: .copy)
+                SettingsActionLabel(copied ? "Copied" : "Copy Command", symbol: copied ? .check : .copy)
+            }
+            .task(id: copies) {
+                guard copied, (try? await Task.sleep(for: .seconds(1.2))) != nil else { return }
+                copied = false
             }
             ShareLink(item: account.signInCommand) {
                 SettingsActionLabel("Share Command", symbol: .share)
