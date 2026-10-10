@@ -166,12 +166,11 @@ struct AgentAccountSheet: View {
                 TextField("NAME", text: edited.variable.name)
                     .font(.system(.footnote, design: .monospaced, weight: .medium))
                     .foregroundStyle(Color.themeMutedForeground)
-                Group {
-                    if variable.sensitive {
-                        SecureField(kept ? "••••••••" : "value", text: edited.variable.value)
-                    } else {
-                        TextField("value", text: edited.variable.value)
-                    }
+                ZStack(alignment: .leading) {
+                    SecureField(kept ? "••••••••" : "value", text: edited.variable.value)
+                        .shown(variable.sensitive)
+                    TextField("value", text: edited.variable.value)
+                        .shown(!variable.sensitive)
                 }
                 .font(.system(.subheadline, design: .monospaced))
             }
@@ -301,3 +300,14 @@ private struct EditedVariable: Identifiable {
     let id = UUID()
     var variable: AgentAccount.Variable
 }
+
+#if os(iOS)
+extension View {
+    /// Keeps its place in the layout while hidden, so that swapping it for another doesn't move what is around it.
+    fileprivate func shown(_ shown: Bool) -> some View {
+        opacity(shown ? 1 : 0)
+            .allowsHitTesting(shown)
+            .accessibilityHidden(!shown)
+    }
+}
+#endif
