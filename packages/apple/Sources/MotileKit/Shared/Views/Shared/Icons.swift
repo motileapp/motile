@@ -248,17 +248,30 @@ struct ServerLabel: View {
     let server: Server
     var size: CGFloat = 11
     var weight: Font.Weight = .regular
+    var showsState = false
 
     var body: some View {
         HStack(spacing: 3) {
             // Lucide's server fills more of its square than the icons beside it.
             Image(.server, size: size - 1)
+                .foregroundStyle(showsState ? server.stateTint ?? .themeMutedStrongerForeground : .themeMutedStrongerForeground)
             Text(server.shortName)
                 .font(.ui(size: size, weight: weight))
                 .lineLimit(1)
         }
         .foregroundStyle(Color.themeMutedStrongerForeground)
         .help("On \(server.name)")
+    }
+}
+
+extension Server {
+    /// The colour of the server's state while it isn't connected.
+    var stateTint: Color? {
+        switch state {
+        case .connected: nil
+        case .connecting: .themePending
+        case .disconnected, .refused: .themeDestructive
+        }
     }
 }
 

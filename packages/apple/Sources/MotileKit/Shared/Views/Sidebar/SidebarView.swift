@@ -876,7 +876,7 @@ struct ServerLine: View {
     var body: some View {
         HStack(spacing: 7) {
             Circle()
-                .fill(color)
+                .fill(server.stateTint ?? .themeSuccess)
                 .frame(width: 7, height: 7)
             Text(server.name)
                 .font(.ui(size: 12, weight: .medium))
@@ -891,14 +891,6 @@ struct ServerLine: View {
         }
         .frame(height: scaled(20))
         .help(server.error ?? detail)
-    }
-
-    private var color: Color {
-        switch server.state {
-        case .connected: return Color.themeSuccess
-        case .connecting: return Color.themeWarning
-        case .disconnected, .refused: return Color.themeDestructive
-        }
     }
 
     private var detail: String {
