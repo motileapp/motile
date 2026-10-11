@@ -126,7 +126,8 @@ shadcn's own colours, opacities and radii are gone from the theme.
 - `pull_requests.rs`: what GitHub says of a pull request (one `gh api graphql` read), the
   repository's list of them, and what the pull request tab does to one: merge, auto-merge, update
   its branch, close, revert, review its lines, edit, react. `hub.rs` watches a thread's pull
-  request for its agent and settles the thread once it merges.
+  request for its agent and settles the thread once it merges. Where the server's settings say
+  so, it fast-forwards a project's folder on its default branch after each fetch and each merge.
 - `files.rs`: browses the server's folders, takes uploads, and reads the files of a thread's
   folder, never outside it.
 - `media.rs`: keeps the images and videos threads show and the files agents send, named by their

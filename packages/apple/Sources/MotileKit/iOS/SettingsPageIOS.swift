@@ -333,14 +333,18 @@ struct SettingsPage: View {
         } else {
             let doneOnMerge = { (server: Server) in
                 Binding { server.doneOnMerge } set: {
-                    store.setPullRequestSettings(doneOnMerge: $0, removeMergedWorktrees: server.removeMergedWorktrees, on: server)
+                    store.setPullRequestSettings(doneOnMerge: $0, on: server)
                 }
             }
             let removesWorktrees = { (server: Server) in
                 Binding { server.removeMergedWorktrees } set: {
-                    store.setPullRequestSettings(doneOnMerge: server.doneOnMerge, removeMergedWorktrees: $0, on: server)
+                    store.setPullRequestSettings(removeMergedWorktrees: $0, on: server)
                 }
             }
+            let pullsDefaultBranch = { (server: Server) in
+                Binding { server.pullDefaultBranch } set: { store.setPullRequestSettings(pullDefaultBranch: $0, on: server) }
+            }
+            let pulling = servers.filter(\.pullsDefaultBranch)
             if servers.count == 1, let server = servers.first {
                 Section {
                     Toggle("Mark the thread done after merge or close", isOn: doneOnMerge(server))
@@ -348,11 +352,23 @@ struct SettingsPage: View {
                     Toggle("Remove the thread's worktree after merge", isOn: removesWorktrees(server))
                         .id("worktrees")
                 }
+                if server.pullsDefaultBranch {
+                    Section {
+                        Toggle("Automatically pull", isOn: pullsDefaultBranch(server))
+                    } footer: {
+                        Text(pullDefaultBranchCaption).foregroundStyle(Color.themeMutedForeground)
+                    }
+                    .id("pull")
+                }
             } else {
                 SettingsToggles("Mark the thread done after merge or close", servers: servers, isOn: doneOnMerge)
                     .id("merged")
                 SettingsToggles("Remove the thread's worktree after merge", servers: servers, isOn: removesWorktrees)
                     .id("worktrees")
+                if !pulling.isEmpty {
+                    SettingsToggles("Automatically pull", servers: pulling, caption: pullDefaultBranchCaption, isOn: pullsDefaultBranch)
+                        .id("pull")
+                }
             }
         }
     }

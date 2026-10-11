@@ -191,6 +191,7 @@ struct Server: Equatable, Identifiable {
     /// What the server does with pull requests by itself.
     let doneOnMerge: Bool
     let removeMergedWorktrees: Bool
+    let pullDefaultBranch: Bool
     /// What the server goes on with by itself: threads whose usage limit reset, and threads whose
     /// agents worked when it restarted.
     let continueAfterLimits: Bool
@@ -228,6 +229,7 @@ struct Server: Equatable, Identifiable {
         let settings = info?.object("pull_request_settings")
         doneOnMerge = settings?.bool("done_on_merge") ?? false
         removeMergedWorktrees = settings?.bool("remove_merged_worktrees") ?? false
+        pullDefaultBranch = settings?.bool("pull_default_branch") ?? false
         let continues = info?.object("continue_settings")
         continueAfterLimits = continues?.bool("after_limits") ?? false
         continueAfterRestarts = continues?.bool("after_restarts") ?? false
@@ -260,6 +262,9 @@ struct Server: Equatable, Identifiable {
 
     /// Whether the server asks its agents for their models when asked to.
     var refreshesModels: Bool { protocolVersion >= 23 }
+
+    /// Whether the server can keep its projects' folders pulled on their default branch.
+    var pullsDefaultBranch: Bool { protocolVersion >= 25 }
 
     func accounts(of agent: Agent) -> [AgentAccount] {
         agentAccounts.filter { $0.agent == agent }

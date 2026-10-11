@@ -588,6 +588,8 @@ pub enum Request {
         done_on_merge: Option<bool>,
         #[serde(default)]
         remove_merged_worktrees: Option<bool>,
+        #[serde(default)]
+        pull_default_branch: Option<bool>,
     },
     /// The changes in the folder the thread works in, or in the project's folder, as a patch.
     /// `Diff` answers.
@@ -1221,6 +1223,10 @@ pub struct PullRequestSettings {
     pub done_on_merge: bool,
     /// A thread's worktree is removed once its pull request merges, when nothing in it is lost.
     pub remove_merged_worktrees: bool,
+    /// A project's folder on its default branch, with nothing of its own, is fast-forwarded to
+    /// the remote's after a fetch and once a thread's pull request merges.
+    #[serde(default)]
+    pub pull_default_branch: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
