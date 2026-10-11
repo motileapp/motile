@@ -41,6 +41,7 @@
   --input: #eaecf2;
   --composer: #ffffff;
   --border-composer: #eceef4;
+  --border-accent: #d9dce5;
   --ring: #22242b;
   --overlay: #000000;
   --shadow: #000000;
@@ -125,6 +126,7 @@
   --input: #14151a;
   --composer: #111217;
   --border-composer: #1a1b21;
+  --border-accent: #25262c;
   --ring: #d0d2d9;
   --overlay: #000000;
   --shadow: #000000;
