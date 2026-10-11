@@ -35,7 +35,7 @@ struct SettingsSheet: View {
                 .navigationTitle("Settings")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                    ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
                 }
                 .navigationDestination(for: SettingsSection.self) { section in
                     page(section)
@@ -54,12 +54,12 @@ struct SettingsSheet: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .navigationSplitViewColumnWidth(MainScreen.sidebarWidth)
                 .toolbar(removing: .sidebarToggle)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                }
         } detail: {
             NavigationStack {
                 page(store.settings ?? .general)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
-                    }
             }
             .id(store.settings)
         }

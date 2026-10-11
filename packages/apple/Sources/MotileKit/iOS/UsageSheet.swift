@@ -37,7 +37,8 @@ struct UsageSheet: View {
             .navigationTitle("Usage")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         model.refresh()
                     } label: {
@@ -46,7 +47,6 @@ struct UsageSheet: View {
                     .disabled(model.refreshing)
                     .accessibilityLabel("Refresh")
                 }
-                ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
             }
         }
         .presentationSizing(.page)
