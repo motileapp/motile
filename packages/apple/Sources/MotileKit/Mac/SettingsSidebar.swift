@@ -21,7 +21,7 @@ struct SettingsSidebar: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if store.settingsQuery.isEmpty {
-                        ForEach(SettingsSection.allCases) { section in
+                        ForEach(SettingsSection.shown) { section in
                             row(section)
                         }
                     } else {
@@ -51,7 +51,7 @@ struct SettingsSidebar: View {
     }
 
     @ViewBuilder private var results: some View {
-        let found = SettingsEntry.matching(store.settingsQuery)
+        let found = SettingsEntry.matching(store.settingsQuery, shortcuts: store.shortcuts)
         ForEach(found) { entry in
             HStack(spacing: 8) {
                 Image(entry.section.symbol, size: 14)

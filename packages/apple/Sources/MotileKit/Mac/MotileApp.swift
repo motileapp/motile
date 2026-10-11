@@ -25,6 +25,7 @@ struct MotileApp: App {
                     delegate.started = true
                     appearance.apply()
                     store.start()
+                    ShortcutMonitor.shared.start(store)
                     DemoDriver.startIfRequested(store: store)
                 }
                 .onChange(of: appearance) { appearance.apply() }
@@ -32,68 +33,79 @@ struct MotileApp: App {
         .defaultSize(width: 1180, height: 780)
         .windowToolbarStyle(.unified)
         .commands {
+            let keys = store.shortcuts
             CommandGroup(replacing: .sidebar) {
                 Button(sidebarHidden ? "Show Sidebar" : "Hide Sidebar") { sidebarHidden.toggle() }
-                    .keyboardShortcut("s", modifiers: [.command, .control])
+                    .shortcut("sidebar.toggle", in: keys)
                 Button(store.sidePanel.isOpen ? "Hide Side Panel" : "Show Side Panel") { store.sidePanel.isOpen.toggle() }
-                    .keyboardShortcut("b", modifiers: [.command, .option])
+                    .shortcut("rightPanel.toggle", in: keys)
                 Button(store.sidePanel.isMaximized ? "Restore Side Panel" : "Maximize Side Panel") { store.sidePanel.toggleMaximized() }
-                    .keyboardShortcut("b", modifiers: [.command, .option, .shift])
+                    .shortcut("rightPanel.toggleMaximized", in: keys)
                     .disabled(!store.sidePanel.canMaximize)
                 Button("Show Changes") { store.sidePanel.showDiff() }
-                    .keyboardShortcut("d")
+                    .shortcut("rightPanel.diff", in: keys)
                     .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
                 Button("Show Files") { store.sidePanel.open(.files) }
-                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .shortcut("rightPanel.files", in: keys)
                     .disabled(store.panelUnavailable != nil)
                 Button("Show Agents") { store.sidePanel.open(.agents) }
-                    .keyboardShortcut("a", modifiers: [.command, .shift])
+                    .shortcut("rightPanel.agents", in: keys)
                     .disabled(store.panelUnavailable != nil)
                 Button("Show Pull Request") { store.sidePanel.open(.pullRequest) }
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .shortcut("rightPanel.pullRequest", in: keys)
                     .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil)
                 Button("Show All Pull Requests") { store.sidePanel.open(.pullRequests) }
-                    .keyboardShortcut("r", modifiers: [.command, .option, .shift])
+                    .shortcut("rightPanel.pullRequests", in: keys)
                     .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil || !store.pullRequestsExtended)
+                Button("Show Linear") { store.sidePanel.open(.linear) }
+                    .shortcut("rightPanel.linear", in: keys)
+                    .disabled(store.panelUnavailable != nil || store.linearUnavailable != nil)
                 PanelTabCommands(store: store)
                 Divider()
             }
             CommandGroup(replacing: .saveItem) {
-                Button("Close") {
-                    if store.settings != nil || store.showsUsage { return store.closeRoute() }
-                    if !store.sidePanel.closeActive() { NSApp.keyWindow?.performClose(nil) }
-                }
-                .keyboardShortcut("w")
+                Button("Close") { _ = store.perform("rightPanel.close") }
+                    .shortcut("rightPanel.close", in: keys)
             }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates") { store.updater.check(asked: true) }
             }
             CommandGroup(replacing: .appSettings) {
                 Button("Settings") { store.openSettings() }
-                    .keyboardShortcut(",")
+                    .shortcut("settings.open", in: keys)
                 Button("Usage") { store.openUsage() }
+                    .shortcut("usage.open", in: keys)
                     .disabled(!store.account.signedIn)
             }
             CommandGroup(replacing: .newItem) {
                 Button("New Thread") { store.newThread() }
-                    .keyboardShortcut("n")
+                    .shortcut("chat.new", in: keys)
                 Button(store.composerProject.map { $0.noProject ? "New Thread Without a Project" : "New Thread in “\($0.name)”" } ?? "New Thread in This Project") {
                     store.startNewThread(in: store.composerProject)
                 }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .shortcut("chat.newLocal", in: keys)
                 .disabled(store.composerProject == nil)
+                Button("New Thread Without a Project") { _ = store.perform("chat.newWithoutProject") }
+                    .shortcut("chat.newWithoutProject", in: keys)
+                    .disabled(store.noProjects.isEmpty)
                 Button("Go to Thread") { store.openPanel(.threads) }
-                    .keyboardShortcut("p")
+                    .shortcut("threadPicker.toggle", in: keys)
                 Button("Commands") { store.openPanel(.commands) }
-                    .keyboardShortcut("k")
+                    .shortcut("commandPalette.toggle", in: keys)
             }
             CommandMenu("Thread") {
                 Button(store.selectedThread?.isDone == true ? "Mark Undone" : "Mark Done") { store.toggleDone() }
-                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                    .shortcut("thread.done", in: keys)
                     .disabled(store.selectedThread == nil)
                 Button("Stop") { store.stop() }
-                    .keyboardShortcut(".")
+                    .shortcut("thread.stop", in: keys)
                     .disabled(!store.activity.busy)
+                Button("Previous Thread") { _ = store.perform("thread.previous") }
+                    .shortcut("thread.previous", in: keys)
+                    .disabled(store.jumpThreads.isEmpty)
+                Button("Next Thread") { _ = store.perform("thread.next") }
+                    .shortcut("thread.next", in: keys)
+                    .disabled(store.jumpThreads.isEmpty)
                 Divider()
                 Button("Add a Project") { store.addProject() }
                     .disabled(store.servers.isEmpty)
@@ -285,7 +297,7 @@ struct MainView: View {
             .toolbar {
                 if store.settings == nil {
                     ToolbarItem(placement: .navigation) {
-                        ToolbarButton(symbol: .panelLeft, help: sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)") {
+                        ToolbarButton(symbol: .panelLeft, help: store.shortcuts.help(sidebarHidden ? "Show the sidebar" : "Hide the sidebar", "sidebar.toggle")) {
                             sidebarHidden.toggle()
                         }
                     }
@@ -304,13 +316,13 @@ struct MainView: View {
             if open {
                 ToolbarButton(
                     symbol: maximized ? .minimize2 : .maximize2,
-                    help: maximized ? "Restore the side panel (Esc)" : "Maximize the side panel (⇧⌥⌘B)"
+                    help: maximized ? "Restore the side panel (Esc)" : store.shortcuts.help("Maximize the side panel", "rightPanel.toggleMaximized")
                 ) {
                     store.sidePanel.toggleMaximized()
                 }
                 .disabled(!store.sidePanel.canMaximize)
             }
-            ToolbarButton(symbol: .panelRight, help: open ? "Hide the side panel (⌥⌘B)" : "Show the side panel (⌥⌘B)") {
+            ToolbarButton(symbol: .panelRight, help: store.shortcuts.help(open ? "Hide the side panel" : "Show the side panel", "rightPanel.toggle")) {
                 store.sidePanel.isOpen.toggle()
             }
         }

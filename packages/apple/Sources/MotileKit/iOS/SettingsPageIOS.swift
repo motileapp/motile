@@ -96,6 +96,7 @@ struct SettingsPage: View {
                 case .projects: projects
                 case .textGeneration: textGeneration
                 case .pullRequests: pullRequests
+                case .keyboard: EmptyView()
                 }
             }
             .onChange(of: store.settingsTarget, initial: true) {

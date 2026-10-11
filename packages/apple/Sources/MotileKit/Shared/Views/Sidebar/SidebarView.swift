@@ -30,16 +30,17 @@ struct SidebarView: View {
     @State private var renaming: ThreadInfo?
     @State private var newTitle = ""
     @State private var deleting: ThreadInfo?
-    @State private var search = ""
+    private var search: String { store.threadSearch }
 
     var body: some View {
+        @Bindable var store = store
         let active = store.searched(store.activeThreads, for: search)
         let done = store.searched(store.doneThreads, for: search)
         let projects = store.projectsByID
         let selection = store.selection
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                SearchField(text: $search)
+                SearchField(text: $store.threadSearch)
                 ProjectButtons()
             }
             .padding(.horizontal, 10)
@@ -79,6 +80,7 @@ struct SidebarView: View {
     ) -> some View {
         let drafts = store.searched(store.listedDrafts, for: search)
         let items = items(drafts: drafts, active: active)
+        let places = store.showsJumpHints ? Dictionary(active.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }) : [:]
         return VStack(spacing: 0) {
             // A table, which picks its rows up and moves them itself.
             RecycledList(
@@ -107,8 +109,9 @@ struct SidebarView: View {
                 case .active(let thread):
                     ThreadRow(
                         thread: thread, project: projects[thread.projectID]?.seen(from: thread),
-                        selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 }
-                    ) { store.select($0) }
+                        selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 },
+                        jump: places[thread.id].flatMap(store.jumpHint), open: { store.select($0) }
+                    )
                     .equatable()
                 case .empty:
                     Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
@@ -227,7 +230,7 @@ struct ProjectButtons: View {
     var body: some View {
         HStack(spacing: 0) {
             ActionButton(icon: .folderPlus, help: "Add a project") { store.addProject() }
-            ActionButton(icon: .squarePen, help: "New thread (⌘N). ⇧-click starts one in this project") {
+            ActionButton(icon: .squarePen, help: "\(store.shortcuts.help("New thread", "chat.new")). ⇧-click starts one in this project") {
                 guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true else { return store.newThread() }
                 store.startNewThread(in: store.composerProject)
             }
@@ -310,6 +313,8 @@ struct ThreadRow: View, Equatable {
     let selected: Bool
     let rename: (ThreadInfo) -> Void
     let delete: (ThreadInfo) -> Void
+    /// The keys that open it, while they are held.
+    var jump: String?
     /// Opens what the row stands for. The sidebar it is in may have more to do then.
     var open: (Selection) -> Void = { _ in }
     @State private var hovering = false
@@ -324,7 +329,7 @@ struct ThreadRow: View, Equatable {
     static let height = topPadding + scaled(22) + 1 + titleHeight + 5 + scaled(16) + bottomPadding
 
     static func == (one: ThreadRow, other: ThreadRow) -> Bool {
-        one.thread == other.thread && one.project == other.project && one.selected == other.selected
+        one.thread == other.thread && one.project == other.project && one.selected == other.selected && one.jump == other.jump
     }
 
     var body: some View {
@@ -337,7 +342,11 @@ struct ThreadRow: View, Equatable {
                     .layoutPriority(1)
                 Spacer(minLength: 6)
                 #if os(macOS)
-                if hovering && !thread.busy {
+                if let jump {
+                    KeyCaps([jump])
+                        .foregroundStyle(Color.themeForeground)
+                        .padding(.trailing, Self.buttonInset - Self.sidePadding)
+                } else if hovering && !thread.busy {
                     MarkDoneButton { store.setDone([thread.id], done: true, fromSidebar: true) }
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
                 } else {
@@ -1076,7 +1085,7 @@ struct SidebarFooter: View {
                         store.closeRoute()
                     }
                 } else {
-                    ActionButton(icon: .settings, help: "Settings (⌘,)", margin: Self.reach) { store.openSettings() }
+                    ActionButton(icon: .settings, help: store.shortcuts.help("Settings", "settings.open"), margin: Self.reach) { store.openSettings() }
                     ActionButton(icon: .chartColumn, help: "Usage: what the agents spent and what is left of their plans", margin: Self.reach) {
                         store.openUsage()
                     }

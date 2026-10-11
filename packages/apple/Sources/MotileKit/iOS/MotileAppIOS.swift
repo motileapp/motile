@@ -70,57 +70,67 @@ final class BackgroundTime {
     }
 }
 
-/// What a keyboard with keys can do, on an iPad.
+/// What a keyboard with keys can do, on an iPad, on the keys the shortcuts give them.
 struct MotileCommands: Commands {
     let store: AppStore
     let drawer: Drawer
 
     var body: some Commands {
+        let keys = store.shortcuts
         CommandGroup(replacing: .newItem) {
             Button("New Thread") { store.newThread() }
-                .keyboardShortcut("n")
+                .shortcut("chat.new", in: keys)
             Button("New Thread in This Project") { store.startNewThread(in: store.composerProject) }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .shortcut("chat.newLocal", in: keys)
                 .disabled(store.composerProject == nil)
             Button("Go to Thread") { store.openPanel(.threads) }
-                .keyboardShortcut("p")
+                .shortcut("threadPicker.toggle", in: keys)
             Button("Commands") { store.openPanel(.commands) }
-                .keyboardShortcut("k")
+                .shortcut("commandPalette.toggle", in: keys)
         }
         CommandGroup(replacing: .sidebar) {
             Button(drawer.isOpen ? "Hide Sidebar" : "Show Sidebar") { drawer.isOpen.toggle() }
-                .keyboardShortcut("s", modifiers: [.command, .control])
+                .shortcut("sidebar.toggle", in: keys)
             Button(store.sidePanel.isOpen ? "Hide Side Panel" : "Show Side Panel") { store.sidePanel.isOpen.toggle() }
-                .keyboardShortcut("b", modifiers: [.command, .option])
+                .shortcut("rightPanel.toggle", in: keys)
             Button(store.sidePanel.isMaximized ? "Restore Side Panel" : "Maximize Side Panel") { store.sidePanel.toggleMaximized() }
-                .keyboardShortcut("b", modifiers: [.command, .option, .shift])
+                .shortcut("rightPanel.toggleMaximized", in: keys)
                 .disabled(!store.sidePanel.canMaximize)
             Button("Show Changes") { store.sidePanel.showDiff() }
-                .keyboardShortcut("d")
+                .shortcut("rightPanel.diff", in: keys)
                 .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
             Button("Show Files") { store.sidePanel.open(.files) }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .shortcut("rightPanel.files", in: keys)
                 .disabled(store.panelUnavailable != nil)
             Button("Show Agents") { store.sidePanel.open(.agents) }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .shortcut("rightPanel.agents", in: keys)
                 .disabled(store.panelUnavailable != nil)
             Button("Show Pull Request") { store.sidePanel.open(.pullRequest) }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .shortcut("rightPanel.pullRequest", in: keys)
                 .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil)
             Button("Show All Pull Requests") { store.sidePanel.open(.pullRequests) }
-                .keyboardShortcut("r", modifiers: [.command, .option, .shift])
+                .shortcut("rightPanel.pullRequests", in: keys)
                 .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil || !store.pullRequestsExtended)
+            Button("Show Linear") { store.sidePanel.open(.linear) }
+                .shortcut("rightPanel.linear", in: keys)
+                .disabled(store.panelUnavailable != nil || store.linearUnavailable != nil)
             PanelTabCommands(store: store)
         }
         CommandMenu("Thread") {
             Button(store.selectedThread?.isDone == true ? "Mark Undone" : "Mark Done") { store.toggleDone() }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .shortcut("thread.done", in: keys)
                 .disabled(store.selectedThread == nil)
             Button("Stop") { store.stop() }
-                .keyboardShortcut(".")
+                .shortcut("thread.stop", in: keys)
                 .disabled(!store.activity.busy)
+            Button("Previous Thread") { _ = store.perform("thread.previous") }
+                .shortcut("thread.previous", in: keys)
+                .disabled(store.jumpThreads.isEmpty)
+            Button("Next Thread") { _ = store.perform("thread.next") }
+                .shortcut("thread.next", in: keys)
+                .disabled(store.jumpThreads.isEmpty)
             Button("Close Tab") { _ = store.sidePanel.closeActive() }
-                .keyboardShortcut("w")
+                .shortcut("rightPanel.close", in: keys)
                 .disabled(!store.sidePanel.isOpen)
             Divider()
             Button("Add a Project") { store.addProject() }
@@ -128,10 +138,18 @@ struct MotileCommands: Commands {
             Button("Add a Server") { store.showsAddServer = true }
                 .disabled(!store.account.signedIn)
             Button("Settings") { store.openSettings() }
-                .keyboardShortcut(",")
+                .shortcut("settings.open", in: keys)
             Button("Usage") { store.openUsage() }
+                .shortcut("usage.open", in: keys)
                 .disabled(!store.account.signedIn)
         }
+    }
+}
+
+extension AppStore {
+    /// An iPad's menus run the commands of its keys themselves.
+    func performOnThisSystem(_ command: String) -> Bool {
+        false
     }
 }
 

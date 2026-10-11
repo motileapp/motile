@@ -29,6 +29,7 @@ use crate::cache::{Cache, Page};
 use crate::connection::{ServerAddr, bind};
 use crate::follow::{self, Followed};
 use crate::git;
+use crate::keybindings::Keybindings;
 use crate::limits;
 use crate::linear;
 use crate::link::{Link, LinkEvent, State, Status};
@@ -217,6 +218,7 @@ struct Core {
     /// The folders and images last listed for `browse`: of which server and directory, and
     /// whether with the hidden ones and the images.
     browsed: Browsed,
+    keybindings: Keybindings,
 }
 
 type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool, bool), (Vec<String>, Vec<String>))>>>;
@@ -258,6 +260,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         media_waiting: HashMap::new(),
         uploads: HashMap::new(),
         browsed: Browsed::default(),
+        keybindings: Keybindings::load(&config.data_dir, &config.platform),
         config,
         sink,
         inputs: inputs.clone(),
@@ -315,6 +318,7 @@ impl Core {
 
     /// Shows what is known from last time, then goes to find out what is true now.
     fn begin(&mut self) {
+        self.emit_keybindings();
         self.emit_account();
         self.sync_servers();
         self.emit(Event::Restored);
@@ -442,6 +446,17 @@ impl Core {
 
     fn signed_in_now(&self) -> bool {
         self.me.user.is_some()
+    }
+
+    fn emit_keybindings(&self) {
+        self.emit(Event::Keybindings { keybindings: self.keybindings.view() });
+    }
+
+    fn keybindings_changed(&self, id: u64, result: Result<(), String>) {
+        if result.is_ok() {
+            self.emit_keybindings();
+        }
+        self.reply(id, result.map(|()| json!({})));
     }
 
     fn emit_account(&self) {
@@ -1885,6 +1900,32 @@ impl Core {
             Command::ClearMedia => {
                 self.media.clear();
                 self.reply(id, Ok(json!({})));
+            }
+            Command::ReloadKeybindings => {
+                if self.keybindings.reload() {
+                    self.emit_keybindings();
+                }
+                self.reply(id, Ok(json!({})));
+            }
+            Command::SetKeybinding { command, key, when, replace } => {
+                let result = self.keybindings.set(&command, &key, when.as_deref(), replace.as_ref());
+                self.keybindings_changed(id, result);
+            }
+            Command::RemoveKeybinding { rule } => {
+                let result = self.keybindings.remove(&rule);
+                self.keybindings_changed(id, result);
+            }
+            Command::ResetKeybinding { command } => {
+                let result = self.keybindings.reset(&command);
+                self.keybindings_changed(id, result);
+            }
+            Command::CheckKeybinding { key, when, row } => {
+                let check = self.keybindings.check(&key, when.as_deref(), row.as_ref());
+                self.reply(id, Ok(check));
+            }
+            Command::KeybindingsFile => {
+                let path = self.keybindings.file().map(|path| json!({ "path": path }));
+                self.reply(id, path);
             }
             Command::Highlight { thread_id, row_ids } => {
                 self.highlight(&thread_id, &row_ids);

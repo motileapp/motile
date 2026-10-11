@@ -126,7 +126,7 @@ struct ComposerView: View {
                     .foregroundStyle(Color.themeForeground)
             }
             Spacer(minLength: 8)
-            ActionButton("Stop", help: "Stop monitoring (⌘.)", variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
+            ActionButton("Stop", help: store.shortcuts.help("Stop monitoring", "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
         }
         .modifier(ComposerStrip(edge: .top))
     }
@@ -228,8 +228,8 @@ struct ComposerView: View {
         let margin = Self.margin(leading: 8, trailing: 4)
         let logo = current.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         ActionMenu(
-            compact && current != nil ? nil : name, picture: logo, help: current?.name ?? name, symbolSize: ControlSize.regular.symbol,
-            gap: 5, margin: margin
+            compact && current != nil ? nil : name, picture: logo, help: store.shortcuts.help(current?.name ?? name, "modelPicker.toggle"),
+            symbolSize: ControlSize.regular.symbol, gap: 5, margin: margin
         ) {
             ForEach(store.composerChoices, id: \.account.id) { choices in
                 Section(choices.title) {
@@ -243,17 +243,22 @@ struct ComposerView: View {
             }
         }
         .disabled(store.composerModels.isEmpty)
+        .shortcutTarget("modelPicker.toggle")
     }
 
     @ViewBuilder private var effortMenu: some View {
         if let model = store.composerModel, !model.efforts.isEmpty {
-            ActionMenu(Self.effortLabel(store.composerEffort ?? ""), margin: Self.margin(leading: 4, trailing: 4)) {
+            ActionMenu(
+                Self.effortLabel(store.composerEffort ?? ""), help: store.shortcuts.help("Reasoning effort", "composer.effort"),
+                margin: Self.margin(leading: 4, trailing: 4)
+            ) {
                 ForEach(model.effortChoices, id: \.self) { effort in
                     choice(Self.effortLabel(effort), chosen: effort == store.composerEffort) {
                         store.setEffort(effort)
                     }
                 }
             }
+            .shortcutTarget("composer.effort")
             ComposerDivider()
         }
     }
@@ -262,7 +267,7 @@ struct ComposerView: View {
         let label = store.composerPlan ? "Plan" : store.composerAccess.label
         return ActionMenu(
             compact ? nil : label, icon: store.composerPlan ? .clipboardList : store.composerAccess.symbol,
-            help: store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail,
+            help: store.shortcuts.help(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail, "composer.access"),
             symbolSize: ControlSize.small.symbol, gap: 5, margin: Self.margin(leading: 4)
         ) {
             ForEach(Access.allCases) { access in
@@ -274,6 +279,7 @@ struct ComposerView: View {
             Divider()
             Toggle("Plan mode", isOn: Binding(get: { store.composerPlan }, set: { store.setPlan($0) }))
         }
+        .shortcutTarget("composer.access")
     }
 
     private func chooseFiles() {
@@ -286,9 +292,10 @@ struct ComposerView: View {
     #endif
 }
 
-/// Stops the turn that runs, and sends what is written or queues it behind that turn.
+/// Stops the turn that runs, and sends what is written: into that turn, or queued behind it.
 struct ComposerSendButtons: View {
     @Environment(AppStore.self) private var store
+    @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
 
     var body: some View {
         let running = store.activity.running && store.selectedThread != nil
@@ -296,8 +303,9 @@ struct ComposerSendButtons: View {
         HStack(spacing: 0) {
             if running {
                 ActionButton(
-                    "", picture: AnyView(RoundedRectangle(cornerRadius: 2.5).frame(width: 10, height: 10)), help: "Stop (⌘.)", variant: .danger,
-                    round: true, margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : 8)
+                    "", picture: AnyView(RoundedRectangle(cornerRadius: 2.5).frame(width: 10, height: 10)),
+                    help: store.shortcuts.help("Stop", "thread.stop"), variant: .danger, round: true,
+                    margin: ComposerView.margin(leading: 4, trailing: sends ? 4 : 8)
                 ) {
                     store.stop()
                 }
@@ -305,7 +313,7 @@ struct ComposerSendButtons: View {
             }
             if sends {
                 ActionButton(
-                    icon: .arrowUp, help: store.attachmentsHold ?? (running ? "Queue message" : "Send"), variant: .primary, round: true,
+                    icon: .arrowUp, help: store.attachmentsHold ?? (running ? whileRunning : "Send"), variant: .primary, round: true,
                     margin: ComposerView.margin(leading: 4, trailing: 8)
                 ) {
                     store.send()
@@ -314,6 +322,18 @@ struct ComposerSendButtons: View {
                 .accessibilityLabel("Send")
             }
         }
+    }
+
+    /// What sending does while the agent works, and the keys that do the other.
+    private var whileRunning: String {
+        let what = steers ? "Steer" : "Queue"
+        #if os(macOS)
+        let context: Set<String> = ["composerFocus", "threadOpen", "turnRunning"]
+        if let keys = store.shortcuts.label("composer.sendAlternate", in: context) {
+            return "\(what) (\(keys) \(steers ? "queues" : "steers"))"
+        }
+        #endif
+        return what
     }
 }
 

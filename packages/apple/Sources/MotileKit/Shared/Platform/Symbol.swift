@@ -59,8 +59,10 @@ enum Symbol: String {
     case gitPullRequestDraft = "\u{e35b}"
     case globe = "\u{e0e8}"
     case hourglass = "\u{e296}"
+    case fileBraces = "\u{e36b}"
     case image = "\u{e0f6}"
     case images = "\u{e5c4}"
+    case keyboard = "\u{e284}"
     case layers = "\u{e529}"
     /// Linear's logo, which Lucide doesn't have.
     case linear = "linear"

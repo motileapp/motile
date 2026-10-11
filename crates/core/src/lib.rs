@@ -9,6 +9,7 @@ pub mod core;
 pub mod ffi;
 pub mod follow;
 pub mod git;
+pub mod keybindings;
 pub mod limits;
 pub mod linear;
 pub mod link;

@@ -245,6 +245,12 @@ final class AppStore {
     /// Counts up when the folder the open thread works in may have changed: a turn ended there,
     /// or git did something.
     private(set) var workspaceVersion = 0
+    /// The keyboard shortcuts, as the core read them from `keybindings.json` and the defaults.
+    private(set) var shortcuts = Shortcuts()
+    /// The keys that open the sidebar's first threads are held, so their rows show them.
+    var showsJumpHints = false
+    /// What the sidebar's threads are searched for.
+    var threadSearch = ""
 
     let updater = AppUpdater()
     let sidePanel = SidePanel()
@@ -297,6 +303,7 @@ final class AppStore {
         lifecycle.start(self)
         NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { [weak self] _ in
             self?.markOpenThreadSeen()
+            self?.core.send("reload_keybindings")
             self?.readGit(fetch: true)
             self?.readWorktreeStart(fetch: true)
         }
@@ -322,6 +329,12 @@ final class AppStore {
     /// Runs off the main thread: reads the event and returns what to do with it on the main thread.
     private func decode(_ event: JSON) -> (() -> Void)? {
         switch event.string("type") {
+        case "keybindings":
+            let shortcuts = Shortcuts(json: event.object("keybindings") ?? [:])
+            return { [weak self] in
+                guard let self, self.shortcuts != shortcuts else { return }
+                self.shortcuts = shortcuts
+            }
         case "account":
             let account = Account(json: event.object("account") ?? [:])
             return { [weak self] in self?.apply(account) }
@@ -1781,14 +1794,16 @@ final class AppStore {
     /// It steers until the setting says otherwise.
     static let steersByDefault = true
 
-    func send() {
+    /// Sends what is written. While the agent works, an `alternate` message steers when the
+    /// setting queues, and queues when it steers.
+    func send(alternate: Bool = false) {
         guard canSend else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let attached = attachments
         let key = draftKey
         var command: JSON = ["text": text, "attachments": attached.compactMap(\.path)]
         let existing = selectedThread
-        let steers = existing != nil && (defaults.object(forKey: AppStore.steersKey) as? Bool ?? AppStore.steersByDefault)
+        let steers = existing != nil && (defaults.object(forKey: AppStore.steersKey) as? Bool ?? AppStore.steersByDefault) != alternate
         if let thread = existing {
             command["server_id"] = thread.serverID
             command["thread_id"] = thread.id

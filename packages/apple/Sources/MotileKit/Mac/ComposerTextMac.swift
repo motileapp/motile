@@ -166,6 +166,8 @@ final class ComposerNSTextView: NSTextView {
     var onFiles: (([URL]) -> Void)?
     var onFileDrag: ((Bool) -> Void)?
     var placeholder = ""
+    /// Return sends what is written: the composer's text, not a `TextArea`.
+    var sends: Bool { onSubmit != nil }
 
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76

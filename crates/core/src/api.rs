@@ -14,6 +14,7 @@ use serde_json::Value;
 
 use crate::connection::PathKind;
 use crate::git::Control;
+use crate::keybindings::{Rule, View as KeybindingsView};
 use crate::link::State;
 use crate::render::agents::AgentView;
 use crate::render::highlight::Spans;
@@ -372,11 +373,45 @@ pub enum Command {
         thread_id: String,
         keep_rows: usize,
     },
+    /// Reads `keybindings.json` again, and sends `keybindings` if it changed.
+    ReloadKeybindings,
+    /// Gives the command the key, in place of `replace` when that is one of its rules.
+    SetKeybinding {
+        command: String,
+        key: String,
+        #[serde(default)]
+        when: Option<String>,
+        #[serde(default)]
+        replace: Option<Rule>,
+    },
+    RemoveKeybinding {
+        rule: Rule,
+    },
+    /// Gives the command its default keys back.
+    ResetKeybinding {
+        command: String,
+    },
+    /// Answers with how a key being chosen reads (`caps`), the commands it clashes with
+    /// (`conflicts`), the condition's unknown names (`unknown`) and what is wrong with it
+    /// (`when_error`). `row` is the rule it takes the place of.
+    CheckKeybinding {
+        key: String,
+        #[serde(default)]
+        when: Option<String>,
+        #[serde(default)]
+        row: Option<Rule>,
+    },
+    /// Answers with the `path` of `keybindings.json`, made if there was none.
+    KeybindingsFile,
 }
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
+    /// The keyboard shortcuts, at start and whenever they change.
+    Keybindings {
+        keybindings: KeybindingsView,
+    },
     Account {
         account: AccountView,
     },
