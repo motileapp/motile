@@ -374,7 +374,7 @@ struct GitNoticeView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .box(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous), bordered: true)
+        .box(in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous), bordered: true)
         .padding(.top, 4)
         .padding(.trailing, Self.padding - Self.trailing)
     }
