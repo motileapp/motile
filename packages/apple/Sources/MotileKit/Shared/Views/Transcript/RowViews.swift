@@ -860,6 +860,7 @@ final class ChangesRowView: RowView {
         private var hovered: Int?
         private let headHeight = ChangesRowView.headHeight
         private let entryHeight = ChangesRowView.entryHeight
+        private let highlightHeight = ControlSize.small.height
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -882,11 +883,13 @@ final class ChangesRowView: RowView {
             for (index, entry) in content.entries.enumerated() {
                 let row = CGRect(x: 0, y: headHeight + CGFloat(index) * entryHeight, width: bounds.width, height: entryHeight)
                 guard row.intersects(dirtyRect) else { continue }
-                if hovered == index {
-                    Theme.backgroundSecondaryAccent.setFill()
-                    RoundedBox.fill(row.insetBy(dx: 6, dy: 0), radius: Radius.sm)
-                }
                 var x = 12 + CGFloat(entry.depth) * 16
+                if hovered == index {
+                    let start = (entry.folder ? x : x + 16) - 6
+                    let highlight = CGRect(x: start, y: row.midY - highlightHeight / 2, width: row.maxX - 6 - start, height: highlightHeight)
+                    Theme.backgroundSecondaryAccent.setFill()
+                    RoundedBox.fill(highlight, radius: Radius.sm)
+                }
                 if entry.folder {
                     let chevron = CGRect(x: x, y: row.minY, width: 12, height: row.height)
                     TintedSymbol.draw(entry.open ? .chevronDown : .chevronRight, size: 8, color: Theme.mutedStrongerForeground, in: chevron)
