@@ -58,6 +58,7 @@ pub const LIMITS_CHECK: Duration = Duration::from_secs(30);
 const MODELS_FRESH: Duration = Duration::from_secs(60);
 const DONE_ON_MERGE: &str = "done_on_merge";
 const REMOVE_MERGED_WORKTREES: &str = "remove_merged_worktrees";
+const PULL_DEFAULT_BRANCH: &str = "pull_default_branch";
 const TEXT_MODEL: &str = "text_model";
 const AGENT_ACCOUNTS: &str = "agent_accounts";
 /// The models the agents' accounts last listed, served until they are asked again.
@@ -324,6 +325,7 @@ impl Hub {
             pull_request_settings: std::sync::Mutex::new(PullRequestSettings {
                 done_on_merge: store.setting(DONE_ON_MERGE).is_some_and(|value| value == "true"),
                 remove_merged_worktrees: store.setting(REMOVE_MERGED_WORKTREES).is_some_and(|value| value == "true"),
+                pull_default_branch: store.setting(PULL_DEFAULT_BRANCH).is_some_and(|value| value == "true"),
             }),
             continue_settings: std::sync::Mutex::new(continue_settings),
             to_continue: std::sync::Mutex::new(to_continue),
@@ -724,9 +726,10 @@ impl Hub {
     }
 
     pub fn set_pull_request_settings(
-        &self,
+        self: &Arc<Self>,
         done_on_merge: Option<bool>,
         remove_merged_worktrees: Option<bool>,
+        pull_default_branch: Option<bool>,
     ) -> anyhow::Result<()> {
         let mut settings = self.pull_request_settings();
         if let Some(on) = done_on_merge {
@@ -737,7 +740,14 @@ impl Hub {
             self.store.set_setting(REMOVE_MERGED_WORKTREES, Some(if on { "true" } else { "false" }))?;
             settings.remove_merged_worktrees = on;
         }
+        if let Some(on) = pull_default_branch {
+            self.store.set_setting(PULL_DEFAULT_BRANCH, Some(if on { "true" } else { "false" }))?;
+            settings.pull_default_branch = on;
+        }
         *self.pull_request_settings.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = settings;
+        if pull_default_branch == Some(true) {
+            self.pull_default_branches();
+        }
         Ok(())
     }
 
@@ -1461,6 +1471,9 @@ impl Hub {
     pub async fn worktree_start(&self, project_id: &str, base: &str, fetch: bool) -> anyhow::Result<Message> {
         let path = self.project_path(project_id).await?;
         let start = git::start(&path, &self.environment, base, fetch).await;
+        if fetch {
+            self.pull_default_branch(project_id).await;
+        }
         Ok(Message::WorktreeStart { start: start.name().to_string(), problem: start.problem })
     }
 
@@ -1545,6 +1558,9 @@ impl Hub {
             true => git::fetch(&path, &self.environment).await,
             false => None,
         };
+        if fetch {
+            self.pull_default_branch(project_id).await;
+        }
         let (status, files) = self.read_git(&path, fetch).await;
         Ok(Message::GitStatus { status, files, problem })
     }
@@ -1943,6 +1959,54 @@ impl Hub {
         if removes {
             self.remove_merged_worktree(&cwd, &project_id).await;
         }
+        if merged && settings.pull_default_branch {
+            self.fetch_default_branch(&project_id).await;
+        }
+    }
+
+    /// Fetches every project's folder and pulls its default branch, when the setting says so.
+    pub fn pull_default_branches(self: &Arc<Self>) {
+        if !self.pull_request_settings().pull_default_branch {
+            return;
+        }
+        let hub = self.clone();
+        tokio::spawn(async move {
+            let projects: Vec<String> = hub.projects.lock().await.iter().map(|project| project.id.clone()).collect();
+            for project_id in projects {
+                hub.fetch_default_branch(&project_id).await;
+            }
+        });
+    }
+
+    async fn fetch_default_branch(&self, project_id: &str) {
+        let Ok(path) = self.project_path(project_id).await else { return };
+        if !git::in_repository(&path) {
+            return;
+        }
+        if let Some(problem) = git::fetch(&path, &self.environment).await {
+            tracing::warn!(path, "couldn't fetch to pull the default branch: {problem}");
+            return;
+        }
+        self.pull_default_branch(project_id).await;
+    }
+
+    /// Fast-forwards the project's folder to its remote when the setting says so and it is on the
+    /// default branch, behind, with no changes or commits of its own and no agent at work there.
+    async fn pull_default_branch(&self, project_id: &str) {
+        if !self.pull_request_settings().pull_default_branch {
+            return;
+        }
+        let Ok(path) = self.project_path(project_id).await else { return };
+        let Some((status, _, _)) = git::status(&path, &self.environment).await else { return };
+        let behind = status.default && status.upstream && status.behind > 0;
+        if !behind || status.ahead > 0 || status.changed > 0 || self.refuse_while_working(&path).await.is_err() {
+            return;
+        }
+        if let Err(error) = git::fast_forward(&path, &self.environment).await {
+            tracing::warn!(path, "couldn't pull the default branch: {error:#}");
+            return;
+        }
+        Box::pin(self.read_git(&path, false)).await;
     }
 
     /// Removes the worktree of a thread whose pull request merged, when all it has is pushed and

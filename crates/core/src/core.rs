@@ -1517,6 +1517,7 @@ impl Core {
                     let request = Request::SetPullRequestSettings {
                         done_on_merge: Some(settings.done_on_merge),
                         remove_merged_worktrees: Some(settings.remove_merged_worktrees),
+                        pull_default_branch: Some(settings.pull_default_branch),
                     };
                     let set = link.request(&request).await;
                     if set.is_ok() {

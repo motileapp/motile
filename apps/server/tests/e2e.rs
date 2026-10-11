@@ -2230,7 +2230,11 @@ async fn a_linked_pull_request_is_watched_for_the_agent_until_it_merges_and_sett
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     next(&mut list).await;
 
-    let settings = Request::SetPullRequestSettings { done_on_merge: Some(true), remove_merged_worktrees: None };
+    let settings = Request::SetPullRequestSettings {
+        done_on_merge: Some(true),
+        remove_merged_worktrees: None,
+        pull_default_branch: None,
+    };
     assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
     let refused = Request::WatchPullRequest { thread_id: thread_id.clone(), watch: true };
     assert!(matches!(connection.request(&refused).await.unwrap(), Message::Error { .. }));
@@ -2275,7 +2279,11 @@ async fn a_linked_pull_request_is_watched_for_the_agent_until_it_merges_and_sett
     assert_eq!(connection.request(&unlink).await.unwrap(), Message::Ok);
     assert!(thread_where(&mut list, |thread| thread.pull_request.is_none()).await.pull_request.is_none());
 
-    let settings = Request::SetPullRequestSettings { done_on_merge: Some(false), remove_merged_worktrees: Some(true) };
+    let settings = Request::SetPullRequestSettings {
+        done_on_merge: Some(false),
+        remove_merged_worktrees: Some(true),
+        pull_default_branch: None,
+    };
     assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
@@ -2353,7 +2361,11 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
     git(&repository, &["config", "user.name", "Test"]);
     git(&repository, &["config", "user.email", "test@example.com"]);
     git(&repository, &["switch", "-q", "main"]);
-    let settings = Request::SetPullRequestSettings { done_on_merge: None, remove_merged_worktrees: Some(true) };
+    let settings = Request::SetPullRequestSettings {
+        done_on_merge: None,
+        remove_merged_worktrees: Some(true),
+        pull_default_branch: None,
+    };
     assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
 
     let new_thread = NewThread {
@@ -2425,6 +2437,57 @@ fn change_pull_request(bin: &Path, change: serde_json::Value) {
 fn git_says(folder: &Path, arguments: &[&str]) -> String {
     let output = std::process::Command::new("git").args(arguments).current_dir(folder).output().unwrap();
     String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+#[tokio::test]
+async fn the_default_branch_is_pulled_when_asked_and_only_when_nothing_of_its_own_is_there() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let (project, _) = project_with_a_branch(&harness, &connection).await;
+    let root = harness.dir.path();
+    let repository = root.join("repository");
+    git(&repository, &["switch", "-q", "main"]);
+    git(root, &["clone", "-q", "origin.git", "other"]);
+    let other = root.join("other");
+    let push = |subject: &str| {
+        std::fs::write(other.join("notes.txt"), subject).unwrap();
+        git(&other, &["add", "."]);
+        git(&other, &["commit", "-q", "-m", subject]);
+        git(&other, &["push", "-q"]);
+    };
+    let head = || git_says(&repository, &["log", "-1", "--format=%s"]);
+    let fetch = async || {
+        let status = Request::GitStatus { project_id: project.id.clone(), thread_id: None, fetch: true };
+        assert!(matches!(connection.request(&status).await.unwrap(), Message::GitStatus { problem: None, .. }));
+        head()
+    };
+
+    push("First");
+    assert_eq!(fetch().await, "Add the greeting");
+
+    // Turning it on pulls at once.
+    let on = Some(true);
+    let settings =
+        Request::SetPullRequestSettings { done_on_merge: None, remove_merged_worktrees: None, pull_default_branch: on };
+    assert_eq!(connection.request(&settings).await.unwrap(), Message::Ok);
+    for _ in 0..50 {
+        if head() == "First" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(head(), "First");
+
+    // A change of its own keeps the folder where it is, and so does another branch.
+    push("Second");
+    std::fs::write(repository.join("greet.py"), "print('changed')\n").unwrap();
+    assert_eq!(fetch().await, "First");
+    git(&repository, &["checkout", "-q", "--", "greet.py"]);
+    assert_eq!(fetch().await, "Second");
+    push("Third");
+    git(&repository, &["switch", "-q", "greet"]);
+    assert_eq!(fetch().await, "Greet you");
+    assert_eq!(git_says(&repository, &["log", "-1", "--format=%s", "main"]), "Second");
 }
 
 #[tokio::test]

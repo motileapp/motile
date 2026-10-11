@@ -36,6 +36,9 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+/// What automatically pulling does, said under its switch.
+let pullDefaultBranchCaption = "Keeps each project's folder current while it is on its default branch with no changes or commits of its own."
+
 /// One group of settings, as the settings' search finds it. Its `id` is the group's on its page.
 struct SettingsEntry: Identifiable, Hashable {
     let id: String
@@ -60,6 +63,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "branch-names", title: "Branch names", section: .textGeneration, keywords: "instructions prefix naming"),
         SettingsEntry(id: "merged", title: "Mark the thread done after merge or close", section: .pullRequests, keywords: "merge close finished"),
         SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),
+        SettingsEntry(id: "pull", title: "Automatically pull", section: .pullRequests, keywords: "default branch main merge sync fetch fast-forward"),
     ]
 
     /// The groups every word of the query is found in, by title, section or keywords, and the

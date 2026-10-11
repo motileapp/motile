@@ -733,6 +733,11 @@ pub async fn pull(folder: &str, environment: &Environment) -> anyhow::Result<()>
     bail!("Your commits and the remote's change the same lines. Ask the agent to rebase the branch.");
 }
 
+/// Moves the branch up to its upstream, as last fetched, when it has no commits of its own.
+pub async fn fast_forward(folder: &str, environment: &Environment) -> anyhow::Result<()> {
+    git(folder, environment, &["merge", "--ff-only", "--quiet", "@{upstream}"]).await.map(|_| ())
+}
+
 async fn rebasing(folder: &str, environment: &Environment) -> bool {
     for state in ["rebase-merge", "rebase-apply"] {
         let Ok(path) = git(folder, environment, &["rev-parse", "--git-path", state]).await else {

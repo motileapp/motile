@@ -217,7 +217,7 @@ struct SettingsPage: View {
                         serverName(server)
                     } trailing: {
                         Switch(isOn: Binding { server.doneOnMerge } set: {
-                            store.setPullRequestSettings(doneOnMerge: $0, removeMergedWorktrees: server.removeMergedWorktrees, on: server)
+                            store.setPullRequestSettings(doneOnMerge: $0, on: server)
                         })
                     }
                     if server.id != servers.last?.id { ThemeDivider() }
@@ -229,10 +229,25 @@ struct SettingsPage: View {
                         serverName(server)
                     } trailing: {
                         Switch(isOn: Binding { server.removeMergedWorktrees } set: {
-                            store.setPullRequestSettings(doneOnMerge: server.doneOnMerge, removeMergedWorktrees: $0, on: server)
+                            store.setPullRequestSettings(removeMergedWorktrees: $0, on: server)
                         })
                     }
                     if server.id != servers.last?.id { ThemeDivider() }
+                }
+            }
+            let pulling = servers.filter(\.pullsDefaultBranch)
+            if !pulling.isEmpty {
+                SettingsGroup("pull", "Automatically pull", caption: pullDefaultBranchCaption) {
+                    ForEach(pulling) { server in
+                        SettingsRow {
+                            serverName(server)
+                        } trailing: {
+                            Switch(isOn: Binding { server.pullDefaultBranch } set: {
+                                store.setPullRequestSettings(pullDefaultBranch: $0, on: server)
+                            })
+                        }
+                        if server.id != pulling.last?.id { ThemeDivider() }
+                    }
                 }
             }
         }

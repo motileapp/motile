@@ -183,9 +183,9 @@ impl Server {
             Request::WatchPullRequest { thread_id, watch } => {
                 hub.watch_pull_request(&thread_id, watch).await.map(|_| Message::Ok)
             }
-            Request::SetPullRequestSettings { done_on_merge, remove_merged_worktrees } => {
-                hub.set_pull_request_settings(done_on_merge, remove_merged_worktrees).map(|_| Message::Ok)
-            }
+            Request::SetPullRequestSettings { done_on_merge, remove_merged_worktrees, pull_default_branch } => hub
+                .set_pull_request_settings(done_on_merge, remove_merged_worktrees, pull_default_branch)
+                .map(|_| Message::Ok),
             Request::PullRequestAction { project_id, thread_id, number, action, method, text } => {
                 hub.pull_request_action(&project_id, thread_id.as_deref(), number, action, method, text.as_deref())
                     .await

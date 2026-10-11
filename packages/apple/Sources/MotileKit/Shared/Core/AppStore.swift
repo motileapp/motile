@@ -716,8 +716,14 @@ final class AppStore {
     }
 
     /// What the server does with pull requests by itself.
-    func setPullRequestSettings(doneOnMerge: Bool, removeMergedWorktrees: Bool, on server: Server) {
-        let settings: JSON = ["done_on_merge": doneOnMerge, "remove_merged_worktrees": removeMergedWorktrees]
+    func setPullRequestSettings(
+        doneOnMerge: Bool? = nil, removeMergedWorktrees: Bool? = nil, pullDefaultBranch: Bool? = nil, on server: Server
+    ) {
+        let settings: JSON = [
+            "done_on_merge": doneOnMerge ?? server.doneOnMerge,
+            "remove_merged_worktrees": removeMergedWorktrees ?? server.removeMergedWorktrees,
+            "pull_default_branch": pullDefaultBranch ?? server.pullDefaultBranch,
+        ]
         core.send("set_pull_request_settings", ["server_id": server.id, "settings": settings]) { [weak self] result in
             if case .failure(let error) = result { self?.errorMessage = error.message }
         }
