@@ -112,7 +112,7 @@ struct SettingsPage: View {
         SettingsGroup("servers", "Servers") {
             ForEach(store.servers) { server in
                 SettingsRow {
-                    SettingsLabel(server.name, description: server.settingsDescription, truncates: .tail)
+                    SettingsLabel(server.name, description: server.settingsDescription, icon: .server, truncates: .tail)
                 } trailing: {
                     ServerUpdateStatus(server: server, variant: .outline, size: .large) { EmptyView() }
                     more("What to do with \(server.name)") {
