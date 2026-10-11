@@ -16,7 +16,7 @@ struct AppUpdateRow: View {
             line("Checking for updates", symbol: .refreshCw, turning: true)
         case .upToDate:
             HStack {
-                UpdateLabel.upToDate(updater.current)
+                UpdateLabel.upToDate
                 Spacer(minLength: 4)
             }
             .frame(minHeight: ControlSize.small.height)
@@ -78,31 +78,23 @@ struct AppUpdateRow: View {
     }
 }
 
-/// What an update is at, after its symbol, with the version muted.
+/// What an update is at, after its symbol.
 struct UpdateLabel: View {
     let text: String
-    var detail: String?
     let symbol: Symbol
     var tint = Color.themeMutedForeground
     var turning = false
 
-    static func upToDate(_ version: String) -> UpdateLabel {
-        UpdateLabel(text: "Up to date", detail: "(\(version))", symbol: .circleCheck, tint: .themeSuccess)
-    }
+    static var upToDate: UpdateLabel { UpdateLabel(text: "Up to date", symbol: .circleCheck, tint: .themeSuccess) }
 
     var body: some View {
         HStack(spacing: 5) {
             TurningSymbol(symbol: symbol, size: 12, turning: turning)
                 .foregroundStyle(tint)
-            label
+            Text(text)
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)
         }
-    }
-
-    private var label: Text {
-        guard let detail else { return Text(text) }
-        return Text("\(text) \(Text(detail).foregroundStyle(Color.themeMutedForeground))")
     }
 }
 
