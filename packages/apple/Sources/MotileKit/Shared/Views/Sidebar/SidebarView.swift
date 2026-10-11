@@ -1093,7 +1093,7 @@ struct SidebarFooter: View {
             .padding(.vertical, -Self.reach.top)
         }
         .padding(.horizontal, sidebarEdge)
-        .padding(.vertical, sidebarEdge - Self.symbolInset)
+        .padding(.vertical, sidebarEdge - 2 - Self.symbolInset)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
