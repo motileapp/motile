@@ -251,7 +251,7 @@ struct SidebarScreen: View {
             } label: {
                 HStack(spacing: 7) {
                     SidebarChevron(expanded: serversExpanded)
-                    AllServersLine(servers: servers)
+                    AllServersLine(servers: servers, expanded: serversExpanded)
                 }
                 .padding(.horizontal, sidebarEdge)
                 .frame(height: ServerLines.lineHeight)

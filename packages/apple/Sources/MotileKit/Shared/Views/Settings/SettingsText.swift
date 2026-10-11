@@ -10,7 +10,7 @@ extension Server {
     var stateLabel: String {
         switch state {
         case .connected: "Connected"
-        case .connecting: "Connecting…"
+        case .connecting: "Connecting"
         case .disconnected: "Offline"
         case .refused: "This server no longer accepts this \(Platform.device)"
         }

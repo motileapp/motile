@@ -743,7 +743,7 @@ private struct ServersShelf: View {
             }
         } else {
             Shelf(items: servers, maxHeight: maxHeight, expanded: $expanded, height: $height) {
-                AllServersLine(servers: servers)
+                AllServersLine(servers: servers, expanded: expanded)
             } row: { server in
                 ServerLine(server: server)
                     .padding(.horizontal, 8)
@@ -955,9 +955,10 @@ struct SidebarChevron: View {
 }
 
 /// Every server in one line, which opens into a line for each: the worst of their states, how
-/// they are reached and the slowest round trip.
+/// they are reached and the slowest round trip. Open, its name is in the foreground colour.
 struct AllServersLine: View {
     let servers: [Server]
+    let expanded: Bool
 
     var body: some View {
         HStack(spacing: 7) {
@@ -965,6 +966,7 @@ struct AllServersLine: View {
             Text("Servers")
                 .font(.ui(size: 12, weight: .medium))
                 .lineLimit(1)
+                .foregroundStyle(expanded ? AnyShapeStyle(Color.themeForeground) : AnyShapeStyle(.foreground))
             Spacer(minLength: 4)
             Text(servers.reach)
                 .font(.ui(size: 11))
@@ -1029,7 +1031,7 @@ struct ServerLine: View {
         case .connected:
             let path = server.path?.capitalized ?? "Connected"
             return server.rttMs.map { "\(path) · \($0) ms" } ?? path
-        case .connecting: return "Connecting…"
+        case .connecting: return "Connecting"
         case .disconnected: return "Offline"
         case .refused: return "Refused"
         }
