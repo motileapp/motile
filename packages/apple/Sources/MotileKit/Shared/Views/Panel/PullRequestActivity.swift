@@ -25,6 +25,7 @@ struct ActivityRow: View {
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .box(in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+                        .padding(.top, 1)
                         .padding(.bottom, 2)
                 }
                 if let subject = entry.subject, entry.thread == nil, !entry.reactions.isEmpty {
