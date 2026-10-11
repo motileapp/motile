@@ -101,7 +101,7 @@ struct CommandPanel: View {
         NavigationStack(path: pushed) {
             screen(pages[0])
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) { SheetCloseButton() }
+                    ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
                 }
                 .navigationDestination(for: PanelPage.self) { screen($0) }
         }

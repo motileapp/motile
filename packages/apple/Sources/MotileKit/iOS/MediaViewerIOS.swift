@@ -3,14 +3,20 @@ import AVKit
 import SwiftUI
 import UIKit
 
-/// The images and videos of a message or of the composer, one at a time over the whole screen.
-/// A swipe goes through them, a pinch or a double tap zooms an image, and a pull down closes it.
+/// The images and videos of a message or of the composer, one at a time over the whole screen,
+/// with its name and a close button on glass at the top left and copy and share at the bottom right. A
+/// swipe goes through them, a pinch or a double tap zooms an image, a tap hides or shows the
+/// buttons, and a pull down closes it.
 struct MediaViewer: View {
+    private static let barGap: CGFloat = 6
+
     @Environment(AppStore.self) private var store
     let viewing: Viewing
     @State private var pulled: CGFloat = 0
     @State private var zoomed = false
     @State private var shared: URL?
+    @State private var chrome = true
+    @State private var copied = false
 
     var body: some View {
         let item = viewing.item
@@ -20,18 +26,27 @@ struct MediaViewer: View {
                 .ignoresSafeArea()
             TabView(selection: index) {
                 ForEach(Array(viewing.items.enumerated()), id: \.offset) { position, item in
-                    MediaPage(item: item, shown: position == viewing.index, zoomed: $zoomed, file: position == viewing.index ? $shared : .constant(nil))
-                        .tag(position)
+                    MediaPage(
+                        item: item, shown: position == viewing.index, zoomed: $zoomed,
+                        file: position == viewing.index ? $shared : .constant(nil), room: room, tapped: toggleChrome
+                    )
+                    .tag(position)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
             .offset(y: pulled)
         }
-        .overlay(alignment: .top) { bar(item) }
+        .overlay(alignment: .top) { top(item) }
+        .overlay(alignment: .bottomTrailing) { bottom(item) }
         .simultaneousGesture(pull)
-        .statusBarHidden()
+        .environment(\.colorScheme, .dark)
+        .statusBarHidden(!buttonsShown(item))
         .persistentSystemOverlays(.hidden)
+        .task(id: copied) {
+            guard copied, (try? await Task.sleep(for: .seconds(1.2))) != nil else { return }
+            copied = false
+        }
     }
 
     private var index: Binding<Int> {
@@ -41,6 +56,16 @@ struct MediaViewer: View {
             shared = nil
             store.viewNext(new - viewing.index)
         }
+    }
+
+    /// What a video keeps clear of, inside the safe area: the buttons.
+    private var room: CGFloat { GlassButtonStyle.side + Self.barGap }
+
+    /// The system's player draws its own controls, so a video keeps the buttons.
+    private func buttonsShown(_ item: ViewedMedia) -> Bool { chrome || item.video }
+
+    private func toggleChrome() {
+        withAnimation(.easeInOut(duration: 0.3)) { chrome.toggle() }
     }
 
     /// Pulling the picture down closes the viewer, unless the picture is zoomed and the pull moves it.
@@ -58,46 +83,72 @@ struct MediaViewer: View {
             }
     }
 
-    private func bar(_ item: ViewedMedia) -> some View {
-        HStack(spacing: 8) {
-            ActionButton(
-                icon: .x, help: "Close", variant: .overlay, size: .large, symbolSize: ControlSize.large.smallSymbol, round: true
-            ) { store.closeViewer() }
-            Color.clear.frame(width: side, height: side)
-            Spacer(minLength: 8)
-            VStack(spacing: 1) {
-                Text(item.name)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                if viewing.items.count > 1 {
-                    Text("\(viewing.index + 1) of \(viewing.items.count)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.themeMutedForegroundOverPicture)
-                }
-            }
-            .foregroundStyle(Color.themeForegroundOverPicture)
-            Spacer(minLength: 8)
-            if let shared {
-                CopyButton(
-                    help: item.video ? "Copy Video" : "Copy Image", variant: .overlay, size: .large,
-                    symbolSize: ControlSize.large.smallSymbol, round: true
-                ) {
-                    MediaFiles.copy(shared, video: item.video, named: item.name)
-                }
-                ShareLink(item: shared) { ControlLabel(title: nil, icon: .symbol(.share), size: .large, symbolSize: ControlSize.large.smallSymbol) }
-                    .buttonStyle(.control(.overlay, size: .large, round: true))
-                    .accessibilityLabel("Share")
-            } else {
-                Color.clear.frame(width: side * 2 + 8, height: side)
-            }
+    private func top(_ item: ViewedMedia) -> some View {
+        ZStack {
+            title(item)
+                .padding(.horizontal, GlassButtonStyle.side + 8)
+            Button { store.closeViewer() } label: { Image(.x, size: 17) }
+                .buttonStyle(.glassSymbol)
+                .glassButton(in: Circle())
+                .accessibilityLabel("Close")
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
-        .opacity(pulled > 0 ? 0 : 1)
+        .padding(.horizontal, 16)
+        .padding(.top, Self.barGap)
+        .shown(pulled == 0 && buttonsShown(item), edge: .top)
     }
 
-    private var side: CGFloat { ControlSize.large.height }
+    @ViewBuilder private func bottom(_ item: ViewedMedia) -> some View {
+        if let shared {
+            HStack(spacing: 0) {
+                Button {
+                    MediaFiles.copy(shared, video: item.video, named: item.name)
+                    copied = true
+                } label: {
+                    Image(copied ? .check : .copy, size: 17)
+                }
+                .accessibilityLabel(item.video ? "Copy Video" : "Copy Image")
+                ShareLink(item: shared) { Image(.share, size: 17) }
+                    .accessibilityLabel("Share")
+            }
+            .buttonStyle(.glassSymbol)
+            .padding(.horizontal, 4)
+            .glassButton(in: Capsule())
+            .padding(.trailing, 16)
+            .padding(.bottom, Self.barGap)
+            .shown(pulled == 0 && buttonsShown(item), edge: .bottom)
+        }
+    }
+
+    private func title(_ item: ViewedMedia) -> some View {
+        VStack(spacing: 1) {
+            Text(item.name)
+                .font(.system(size: 15, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if viewing.items.count > 1 {
+                Text("\(viewing.index + 1) of \(viewing.items.count)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.themeMutedForegroundOverPicture)
+            }
+        }
+        .foregroundStyle(Color.themeForegroundOverPicture)
+    }
+}
+
+private extension View {
+    /// Hidden, the buttons fade as they slide off their edge on a spring, as Telegram's do: those on
+    /// top out of the screen, those at the bottom by their own height.
+    func shown(_ shown: Bool, edge: VerticalEdge) -> some View {
+        animation(.easeInOut(duration: 0.3)) { $0.opacity(shown ? 1 : 0) }
+            .animation(.spring(duration: 0.4)) {
+                $0.visualEffect { content, proxy in
+                    let away = edge == .top ? -proxy.frame(in: .global).maxY : proxy.size.height
+                    return content.offset(y: shown ? 0 : away)
+                }
+            }
+            .allowsHitTesting(shown)
+    }
 }
 
 /// One image or video of the viewer, fetched when it is the one shown.
@@ -110,6 +161,9 @@ private struct MediaPage: View {
     @Binding var zoomed: Bool
     /// The file, once it is here, for the viewer to share.
     @Binding var file: URL?
+    /// What the viewer's buttons take above and below, for a video to stay clear of.
+    let room: CGFloat
+    let tapped: () -> Void
     @State private var loaded: Loaded?
     @State private var failed = false
     @State private var fraction: Double?
@@ -143,12 +197,13 @@ private struct MediaPage: View {
                 image: image,
                 size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
                 margin: .zero,
-                onZoom: { zoomed = $0 }
-            ) { store.closeViewer() }
+                onZoom: { zoomed = $0 },
+                tapped: tapped
+            )
             .ignoresSafeArea()
         case .video(let player):
             PlayerView(player: player)
-                .padding(.top, 60)
+                .padding(.vertical, room)
         case .other(let url):
             VStack(spacing: 14) {
                 Text("This video can't be played here.")
@@ -159,6 +214,7 @@ private struct MediaPage: View {
             }
             .font(.system(size: 15))
             .foregroundStyle(Color.themeForegroundOverPicture)
+            .tappable(tapped)
         case nil:
             Group {
                 if failed {
@@ -171,6 +227,7 @@ private struct MediaPage: View {
             }
             .font(.system(size: 15))
             .foregroundStyle(Color.themeMutedForegroundOverPicture)
+            .tappable(tapped)
         }
     }
 
@@ -217,7 +274,7 @@ struct ZoomableImage: UIViewRepresentable {
     /// The Mac's zoom keys. A screen is zoomed with fingers.
     var keys = true
     var onZoom: (Bool) -> Void = { _ in }
-    var clickedBeside: () -> Void = {}
+    var tapped: () -> Void = {}
 
     func makeUIView(context: Context) -> ZoomingScrollView {
         ZoomingScrollView(margin: margin, radius: radius)
@@ -225,7 +282,7 @@ struct ZoomableImage: UIViewRepresentable {
 
     func updateUIView(_ view: ZoomingScrollView, context: Context) {
         view.onZoom = onZoom
-        view.tappedBeside = clickedBeside
+        view.tapped = tapped
         view.show(image, size: size)
     }
 }
@@ -234,7 +291,7 @@ struct ZoomableImage: UIViewRepresentable {
 /// moved by dragging.
 final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
     var onZoom: (Bool) -> Void = { _ in }
-    var tappedBeside: () -> Void = {}
+    var tapped: () -> Void = {}
     private let margin: CGSize
     private let picture = UIImageView()
     private var shown: AnyObject?
@@ -256,7 +313,7 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
         let double = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
         double.numberOfTapsRequired = 2
         addGestureRecognizer(double)
-        let single = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+        let single = UITapGestureRecognizer(target: self, action: #selector(singleTapped))
         single.require(toFail: double)
         addGestureRecognizer(single)
     }
@@ -320,9 +377,16 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate {
         zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height), animated: true)
     }
 
-    @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
-        guard !picture.frame.contains(recognizer.location(in: self)) else { return }
-        tappedBeside()
+    @objc private func singleTapped() {
+        tapped()
+    }
+}
+
+private extension View {
+    func tappable(_ tapped: @escaping () -> Void) -> some View {
+        frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: tapped)
     }
 }
 

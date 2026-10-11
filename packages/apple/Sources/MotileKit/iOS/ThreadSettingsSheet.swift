@@ -5,7 +5,6 @@ import SwiftUI
 /// the agent may do without asking, and where the thread works.
 struct ThreadSettingsSheet: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.surface) private var surface
     /// The accounts whose models are listed. The others are only their names until they are tapped.
     @State private var listed: Set<String> = []
@@ -25,9 +24,7 @@ struct ThreadSettingsSheet: View {
             .navigationTitle("Thread Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
+                ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
             }
             .navigationDestination(isPresented: $store.showsBranches) {
                 if let project = store.composerProject {
