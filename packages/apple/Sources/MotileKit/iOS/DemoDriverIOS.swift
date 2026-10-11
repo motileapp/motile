@@ -21,6 +21,7 @@ import UIKit
 ///     branches                          opens the branch picker in the thread's settings
 ///     top                               scrolls the transcript to its start
 ///     focus | blur                      gives the composer the keyboard, or takes it away
+///     search [text]                     gives the front field the keyboard, and types in it
 ///     access <supervised|…>             sets how much the agent may do without asking
 enum DemoDriver {
     private static var watcher: Timer?
@@ -144,7 +145,11 @@ enum DemoDriver {
             UIView.first(ComposerUITextView.self, in: window)?.becomeFirstResponder()
         case "search":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
-            UIView.first(UITextField.self, in: window)?.becomeFirstResponder()
+            var top = window?.rootViewController
+            while let presented = top?.presentedViewController { top = presented }
+            let field = UIView.first(UITextField.self, in: top?.view ?? window)
+            field?.becomeFirstResponder()
+            if !rest.isEmpty { field?.insertText(rest) }
         case "blur": Platform.endEditing()
         case "access": store.setAccess(Access(rawValue: rest) ?? .full)
         case "view":

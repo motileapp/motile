@@ -4,7 +4,8 @@ import SwiftUI
 enum InputVariant {
     /// A fill alone.
     case filled
-    /// No background or height of its own, for a field that lies on glass.
+    /// No background or height of its own, for a field that lies on glass, with its symbol in the
+    /// foreground as the system's glass fields have.
     case bare
 }
 
@@ -54,7 +55,7 @@ struct InputField: View {
         HStack(spacing: size.gap) {
             if let icon {
                 Image(icon, size: size.smallSymbol)
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                    .foregroundStyle(bare ? Color.themeForeground : Color.themeMutedStrongerForeground)
                     .allowsHitTesting(false)
             }
             field
