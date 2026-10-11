@@ -2,13 +2,19 @@ import Foundation
 
 /// A page of the settings, listed in the settings' sidebar.
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case general, servers, agents, projects, textGeneration, pullRequests
+    case general, keyboard, servers, agents, projects, textGeneration, pullRequests
 
     var id: String { rawValue }
+
+    /// The sections this client has: the keyboard's only where there is one to set.
+    static var shown: [SettingsSection] {
+        Platform.name == "macos" ? allCases : allCases.filter { $0 != .keyboard }
+    }
 
     var title: String {
         switch self {
         case .general: "General"
+        case .keyboard: "Keyboard Shortcuts"
         case .servers: "Servers"
         case .agents: "Agents"
         case .projects: "Projects"
@@ -20,6 +26,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     var symbol: Symbol {
         switch self {
         case .general: .slidersHorizontal
+        case .keyboard: .keyboard
         case .servers: .server
         case .agents: .circleUser
         case .projects: .folder
@@ -43,6 +50,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "appearance", title: "Theme", section: .general, keywords: "appearance light dark system mode"),
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
+        SettingsEntry(id: "shortcuts", title: "Keyboard shortcuts", section: .keyboard, keywords: "keys keybindings hotkeys commands record keybindings.json"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove machine agents connected"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
@@ -54,13 +62,17 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),
     ]
 
-    /// The groups every word of the query is found in, by title, section or keywords.
-    static func matching(_ query: String) -> [SettingsEntry] {
+    /// The groups every word of the query is found in, by title, section or keywords, and the
+    /// shortcuts' commands it finds by name.
+    static func matching(_ query: String, shortcuts: Shortcuts = Shortcuts()) -> [SettingsEntry] {
         let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !words.isEmpty else { return [] }
-        return all.filter { entry in
+        let commands = SettingsSection.shown.contains(.keyboard)
+            ? shortcuts.commands.map { SettingsEntry(id: "shortcut-\($0.id)", title: $0.label, section: .keyboard, keywords: "shortcut keys") }
+            : []
+        return (all + commands).filter { entry in
             let text = "\(entry.title) \(entry.section.title) \(entry.keywords)"
-            return words.allSatisfy { text.localizedCaseInsensitiveContains($0) }
+            return SettingsSection.shown.contains(entry.section) && words.allSatisfy { text.localizedCaseInsensitiveContains($0) }
         }
     }
 }

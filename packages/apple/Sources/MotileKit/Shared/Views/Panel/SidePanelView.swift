@@ -195,7 +195,7 @@ struct PanelTabStrip: View {
     }
 }
 
-/// The menu items that open and switch the panel's tabs, on the keys Safari and Chrome use.
+/// The menu items that open and switch the panel's tabs.
 struct PanelTabCommands: View {
     let store: AppStore
 
@@ -203,19 +203,13 @@ struct PanelTabCommands: View {
         let panel = store.sidePanel
         let switchable = panel.isOpen && panel.tabs.tabs.count > 1
         Button("New Tab") { panel.openBlank() }
-            .keyboardShortcut("t")
+            .shortcut("rightPanel.new", in: store.shortcuts)
             .disabled(store.panelUnavailable != nil)
         Button("Show Next Tab") { panel.activate(offset: 1) }
-            .keyboardShortcut(.tab, modifiers: .control)
+            .shortcut("rightPanel.nextTab", in: store.shortcuts)
             .disabled(!switchable)
         Button("Show Previous Tab") { panel.activate(offset: -1) }
-            .keyboardShortcut(.tab, modifiers: [.control, .shift])
-            .disabled(!switchable)
-        Button("Show Next Tab") { panel.activate(offset: 1) }
-            .keyboardShortcut("]", modifiers: [.command, .shift])
-            .disabled(!switchable)
-        Button("Show Previous Tab") { panel.activate(offset: -1) }
-            .keyboardShortcut("[", modifiers: [.command, .shift])
+            .shortcut("rightPanel.previousTab", in: store.shortcuts)
             .disabled(!switchable)
     }
 }
@@ -261,7 +255,7 @@ struct PanelTabChip: View {
                 small: true)
         ) { panel.activate(tab) }
         .overlay(alignment: .trailing) {
-            ActionButton(icon: .x, help: "Close (⌘W)", size: .small, symbolSize: 11) { panel.close(tab) }
+            ActionButton(icon: .x, help: store.shortcuts.help("Close", "rightPanel.close"), size: .small, symbolSize: 11) { panel.close(tab) }
                 .environment(\.row, active ? .controlLit : .control)
                 .padding(.trailing, Self.closeMargin + Self.margin)
                 .opacity(hovering || active ? 1 : 0)
@@ -292,20 +286,20 @@ private struct PanelLauncher: View {
                 .font(.ui(size: 13, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 2) {
-                row(.folder, "Files", keys: "⇧⌘E", reason: nil) { store.sidePanel.open(.files) }
-                row(.diff, "Diff", keys: "⌘D", reason: target.repository ? nil : "Available in git repositories.") {
+                row(.folder, "Files", command: "rightPanel.files", reason: nil) { store.sidePanel.open(.files) }
+                row(.diff, "Diff", command: "rightPanel.diff", reason: target.repository ? nil : "Available in git repositories.") {
                     store.sidePanel.showDiff()
                 }
-                row(.users, "Agents", keys: "⇧⌘A", reason: nil) { store.sidePanel.open(.agents) }
-                row(.gitPullRequest, "Pull Request", keys: "⇧⌘R", reason: store.pullRequestsUnavailable) {
+                row(.users, "Agents", command: "rightPanel.agents", reason: nil) { store.sidePanel.open(.agents) }
+                row(.gitPullRequest, "Pull Request", command: "rightPanel.pullRequest", reason: store.pullRequestsUnavailable) {
                     store.sidePanel.open(.pullRequest)
                 }
                 if store.pullRequestsExtended {
-                    row(.list, "All Pull Requests", keys: "⌥⇧⌘R", reason: store.pullRequestsUnavailable) {
+                    row(.list, "All Pull Requests", command: "rightPanel.pullRequests", reason: store.pullRequestsUnavailable) {
                         store.sidePanel.open(.pullRequests)
                     }
                 }
-                row(.linear, store.linear.connected(target.serverID).isEmpty ? "Connect Linear" : "Linear", keys: nil, reason: store.linearUnavailable) {
+                row(.linear, store.linear.connected(target.serverID).isEmpty ? "Connect Linear" : "Linear", command: "rightPanel.linear", reason: store.linearUnavailable) {
                     store.sidePanel.open(.linear)
                 }
             }
@@ -315,7 +309,7 @@ private struct PanelLauncher: View {
         .task(id: target.serverID) { store.linear.read(target.serverID) }
     }
 
-    private func row(_ symbol: Symbol, _ title: String, keys: String?, reason: String?, action: @escaping () -> Void) -> some View {
+    private func row(_ symbol: Symbol, _ title: String, command: String, reason: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(symbol, size: 13)
@@ -324,13 +318,9 @@ private struct PanelLauncher: View {
                     .font(.ui(size: 13))
                 Spacer()
                 #if os(macOS)
-                if let keys {
-                    Text(keys)
-                        .font(.ui(size: 11, weight: .medium))
+                if let caps = store.shortcuts.effective(command).first?.caps {
+                    KeyCaps(caps, joined: true)
                         .foregroundStyle(Color.themeMutedForeground)
-                        .padding(.horizontal, 6)
-                        .frame(height: 20)
-                        .background(Color.themeBackgroundAccent, in: RoundedRectangle(cornerRadius: Radius.xs, style: .continuous))
                 }
                 #endif
             }

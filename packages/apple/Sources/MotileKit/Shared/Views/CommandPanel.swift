@@ -342,9 +342,7 @@ struct CommandPanel: View {
 
     private func hint(_ keys: [String], _ text: String) -> some View {
         HStack(spacing: 5) {
-            ForEach(keys, id: \.self) { key in
-                KeyCap(key: key)
-            }
+            KeyCaps(keys)
             Text(text)
                 .font(.ui(size: 12))
         }
@@ -623,17 +621,19 @@ struct CommandPanel: View {
         guard let thread = store.selectedThread else { return [] }
         var items: [PanelItem] = []
         if thread.busy {
-            items.append(PanelItem(id: "stop", title: "Stop the agent", detail: thread.title, icon: .symbol(.circleStop)) { store.stop() })
+            var stop = PanelItem(id: "stop", title: "Stop the agent", detail: thread.title, icon: .symbol(.circleStop)) { store.stop() }
+            stop.keys = store.shortcuts.label("thread.stop")
+            items.append(stop)
         } else {
             if thread.interruption != nil {
                 items.append(PanelItem(id: "continue", title: "Continue the agent", detail: thread.title, icon: .symbol(.play)) { store.continueThread() })
             }
             let done = thread.isDone
-            items.append(
-                PanelItem(id: "done", title: done ? "Mark undone" : "Mark done", detail: thread.title, icon: .symbol(done ? .undo2 : .circleCheck)) {
-                    store.toggleDone()
-                }
-            )
+            var mark = PanelItem(id: "done", title: done ? "Mark undone" : "Mark done", detail: thread.title, icon: .symbol(done ? .undo2 : .circleCheck)) {
+                store.toggleDone()
+            }
+            mark.keys = store.shortcuts.label("thread.done")
+            items.append(mark)
         }
         return items
     }
@@ -658,25 +658,39 @@ struct CommandPanel: View {
     }
 
     private var commands: [PanelItem] {
+        let keyed = { (item: PanelItem, command: String) -> PanelItem in
+            var item = item
+            item.keys = store.shortcuts.label(command)
+            return item
+        }
         let always: [PanelItem] = [
-            PanelItem(id: "new-thread", title: "New thread", detail: "Choose a project to start in", icon: .symbol(.squarePen), keepsOpen: true) {
+            keyed(PanelItem(id: "new-thread", title: "New thread", detail: "Choose a project to start in", icon: .symbol(.squarePen), keepsOpen: true) {
                 open(.projects)
-            },
-            PanelItem(id: "go-to-thread", title: "Go to thread", detail: "\(store.threads.count) threads", icon: .symbol(.messageSquareText), keepsOpen: true) {
+            }, "chat.new"),
+            keyed(PanelItem(id: "go-to-thread", title: "Go to thread", detail: "\(store.threads.count) threads", icon: .symbol(.messageSquareText), keepsOpen: true) {
                 open(.threads)
-            },
+            }, "threadPicker.toggle"),
             addProject,
             PanelItem(id: "add-server", title: "Add a server", detail: "A machine that runs your agents", icon: .symbol(.server)) {
                 store.showsAddServer = true
             },
         ]
-        let settings = PanelItem(id: "settings", title: "Settings", detail: "Appearance, servers and projects", icon: .symbol(.settings)) {
+        let settings = keyed(PanelItem(id: "settings", title: "Settings", detail: "Appearance, servers and projects", icon: .symbol(.settings)) {
             store.openSettings()
-        }
-        let usage = PanelItem(id: "usage", title: "Usage", detail: "Limits, cost and tokens", icon: .symbol(.chartColumn)) {
+        }, "settings.open")
+        let usage = keyed(PanelItem(id: "usage", title: "Usage", detail: "Limits, cost and tokens", icon: .symbol(.chartColumn)) {
             store.openUsage()
-        }
-        return serverUpdates + always + appUpdate + [settings, usage]
+        }, "usage.open")
+        #if os(macOS)
+        let shortcuts = [
+            PanelItem(id: "shortcuts", title: "Keyboard shortcuts", detail: "Change the keys of every command", icon: .symbol(.keyboard)) {
+                store.openSettings(.keyboard)
+            }
+        ]
+        #else
+        let shortcuts: [PanelItem] = []
+        #endif
+        return serverUpdates + always + appUpdate + [settings] + shortcuts + [usage]
     }
 
     /// The Mac app updates itself; the others are updated by where they came from.
@@ -829,19 +843,6 @@ private extension PanelPage {
     }
 }
 
-private struct KeyCap: View {
-    let key: String
-    @Environment(\.surface) private var surface
-
-    var body: some View {
-        Text(key)
-            .font(.ui(size: 11, weight: .medium))
-            .padding(.horizontal, 6)
-            .frame(minWidth: 22, minHeight: 20)
-            .background(surface.color(.control), in: RoundedRectangle(cornerRadius: Radius.xs, style: .continuous))
-    }
-}
-
 private struct PanelSection: Identifiable {
     let title: String
     let items: [PanelItem]
@@ -864,6 +865,8 @@ private struct PanelItem: Identifiable {
     let icon: Icon
     /// The digit that runs it with ⌘.
     var shortcut: Int?
+    /// The keys of the command it runs, as the shortcuts have them.
+    var keys: String?
     /// It leads to another page of the panel.
     var keepsOpen = false
     /// Its place among what can be selected, for moving through with the arrow keys.
@@ -1002,8 +1005,8 @@ private struct PanelRow: View {
                 .padding(.horizontal, item.warns ? 8 : 0)
                 .padding(.vertical, item.warns ? 3 : 0)
                 .background(item.warns ? AnyShapeStyle(Color.themeWarning.wash()) : AnyShapeStyle(Color.clear), in: Capsule())
-        } else if let shortcut = item.shortcut {
-            Text("⌘\(shortcut)")
+        } else if let keys = item.keys ?? item.shortcut.map({ "⌘\($0)" }) {
+            Text(keys)
                 .font(.ui(size: 12, weight: .medium))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
                 .monospacedDigit()

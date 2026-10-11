@@ -122,7 +122,7 @@ struct ContextStrip: View {
             } else if store.canSwitchBranches(of: project) {
                 ActionButton(
                     startsInWorktree ? "From \(store.draftStart ?? branch)" : branch, icon: .gitBranch,
-                    help: startsInWorktree ? startHelp(base: branch) : "Switch the branch of \(project.name)",
+                    help: store.shortcuts.help(startsInWorktree ? startHelp(base: branch) : "Switch the branch of \(project.name)", "composer.branch"),
                     variant: .ghost, opens: true, margin: ComposerStrip.margin
                 ) {
                     store.showBranches(of: project)
@@ -157,7 +157,9 @@ struct ContextStrip: View {
             let margin = EdgeInsets(top: ComposerStrip.inset, leading: 4, bottom: ComposerStrip.inset, trailing: 4)
             ActionMenu(
                 inWorktree ? "New worktree" : "Current checkout", icon: inWorktree ? .folderGit2 : .folder,
-                help: inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder",
+                help: store.shortcuts.help(
+                    inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder", "composer.workspace"
+                ),
                 margin: margin
             ) {
                 Section("Workspace") {
@@ -169,6 +171,7 @@ struct ContextStrip: View {
                     }
                 }
             }
+            .shortcutTarget("composer.workspace")
         }
     }
 

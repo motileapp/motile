@@ -108,6 +108,7 @@ impl Client {
             Event::Live { live, .. } => self.live = live,
             Event::ThreadError { message, .. } => panic!("a thread couldn't be opened: {message}"),
             Event::Restored
+            | Event::Keybindings { .. }
             | Event::Reply { .. }
             | Event::ServerUpdate { .. }
             | Event::GitProgress { .. }

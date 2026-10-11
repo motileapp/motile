@@ -25,6 +25,7 @@ struct SettingsPage: View {
                     case .projects: projects
                     case .textGeneration: textGeneration
                     case .pullRequests: pullRequests
+                    case .keyboard: ShortcutSettings()
                     }
                 }
                 .frame(maxWidth: Self.contentWidth)
@@ -349,11 +350,11 @@ struct SettingsPage: View {
     }
 }
 
-private let settingsInset: CGFloat = 14
-private let settingsRowHeight: CGFloat = scaled(48)
+let settingsInset: CGFloat = 14
+let settingsRowHeight: CGFloat = scaled(48)
 
 /// What stands a control this tall as far from its row's right as from its top and bottom.
-private func rowOutset(for height: CGFloat) -> CGFloat {
+func rowOutset(for height: CGFloat) -> CGFloat {
     settingsInset - (settingsRowHeight - height) / 2
 }
 
@@ -425,7 +426,7 @@ private struct SetupSheet: View {
     }
 }
 
-private struct SettingsGroup<Content: View>: View {
+struct SettingsGroup<Content: View>: View {
     private let id: String
     private let title: String
     private let caption: String?
@@ -471,7 +472,7 @@ private struct SettingsGroup<Content: View>: View {
 }
 
 /// What a row is about: its name, and under it what it does.
-private struct SettingsLabel: View {
+struct SettingsLabel: View {
     let title: String
     var description: String?
     var icon: Symbol?
@@ -509,7 +510,7 @@ private struct SettingsLabel: View {
 
 /// What the row is about on the left, its controls on the right. Every row is as tall as the
 /// tallest, with the same room above and below.
-private struct SettingsRow<Leading: View, Trailing: View>: View {
+struct SettingsRow<Leading: View, Trailing: View>: View {
     @ViewBuilder let leading: Leading
     @ViewBuilder let trailing: Trailing
 
@@ -527,7 +528,7 @@ private struct SettingsRow<Leading: View, Trailing: View>: View {
 }
 
 /// Said on a page with nothing to set yet.
-private struct SettingsNote: View {
+struct SettingsNote: View {
     let text: String
 
     init(_ text: String) {
