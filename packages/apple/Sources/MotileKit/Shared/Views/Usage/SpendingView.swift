@@ -157,7 +157,6 @@ struct SpendingView: View {
                 HStack(spacing: 6) {
                     Circle()
                         .fill(series.agent.color)
-                        .opacity(.colorTintChart)
                         .frame(width: 8, height: 8)
                     Text(series.agent.name)
                         .foregroundStyle(Color.themeForeground)
