@@ -188,9 +188,7 @@ struct SidebarScreen: View {
             doneExpanded.toggle()
         } label: {
             HStack(spacing: 7) {
-                Image(.chevronRight, size: 10)
-                    .rotationEffect(.degrees(expanded ? 90 : 0))
-                    .frame(width: 14)
+                SidebarChevron(expanded: expanded)
                 ShelfTitle("Done", expanded: expanded)
                 Spacer()
                 Text("\(count)")
@@ -198,7 +196,6 @@ struct SidebarScreen: View {
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .monospacedDigit()
             }
-            .foregroundStyle(Color.themeMutedForeground)
             .padding(.horizontal, sidebarEdge)
             .frame(height: 44)
             .contentShape(Rectangle())
@@ -255,7 +252,7 @@ struct SidebarScreen: View {
                 .padding(.horizontal, sidebarEdge)
                 .frame(height: ServerLines.lineHeight)
             }
-            .buttonStyle(.highlight(radius: 0, faded: true))
+            .buttonStyle(.highlight(radius: 0))
             if serversExpanded {
                 ServerLines(servers: servers)
             }

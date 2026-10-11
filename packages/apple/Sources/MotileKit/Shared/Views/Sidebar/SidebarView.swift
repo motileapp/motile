@@ -591,31 +591,25 @@ struct UndoRow: View {
     var body: some View {
         VStack(spacing: 0) {
             ThemeDivider()
-            HStack(spacing: 0) {
-                Button {
-                    store.performUndo()
-                } label: {
-                    HStack(spacing: 7) {
-                        SidebarMark(Image(.undo2, size: 10, trimmed: true))
-                        Text("Undo")
-                            .font(.ui(size: 12, weight: .medium))
+            Button {
+                store.performUndo()
+            } label: {
+                HStack(spacing: 7) {
+                    ShelfMark(lit: false) { Image(.undo2, size: 10, trimmed: true) }
+                    ShelfTitle("Undo", expanded: false)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(.check, size: 10)
+                        Text(notice.text)
+                            .font(.ui(size: 11))
+                            .lineLimit(1)
                     }
-                    .padding(.leading, sidebarEdge)
-                    .padding(.trailing, 12)
-                    .frame(maxHeight: .infinity)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
                 }
-                .buttonStyle(.highlight(radius: 0, faded: true))
-                Spacer()
-                HStack(spacing: 4) {
-                    Image(.check, size: 10)
-                    Text(notice.text)
-                        .font(.ui(size: 11))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(Color.themeMutedStrongerForeground)
-                .padding(.trailing, sidebarEdge)
+                .padding(.horizontal, sidebarEdge)
+                .frame(height: doneRowHeight + 8)
             }
-            .frame(height: doneRowHeight + 8)
+            .buttonStyle(.highlight(radius: 0))
         }
     }
 }
@@ -659,7 +653,7 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
                 .padding(.top, 3)
                 .padding(.bottom, expanded ? 3 - rowGap / 2 : 3)
             }
-            .buttonStyle(.highlight(radius: 0, faded: true))
+            .buttonStyle(.highlight(radius: 0))
 
             if expanded {
                 RecycledList(
@@ -950,22 +944,35 @@ struct SidebarMark<Mark: View>: View {
     }
 }
 
+/// The mark of a sidebar line like Done's, a step quieter than its `ShelfTitle`.
+struct ShelfMark<Mark: View>: View {
+    let lit: Bool
+    @ViewBuilder let mark: () -> Mark
+    @Environment(\.row) private var row
+
+    var body: some View {
+        SidebarMark(mark())
+            .foregroundStyle(lit || row != nil ? Color.themeMutedForeground : Color.themeMutedStrongerForeground)
+    }
+}
+
 /// Opens or closes a sidebar line's list.
 struct SidebarChevron: View {
     let expanded: Bool
 
     var body: some View {
-        SidebarMark(
+        ShelfMark(lit: expanded) {
             Image(.chevronRight, size: 10, trimmed: true)
                 .rotationEffect(.degrees(expanded ? 90 : 0))
-        )
+        }
     }
 }
 
-/// The name of a sidebar line that opens into a list, in the foreground colour while it is open.
+/// The name of a sidebar line like Done's: muted while it is closed and not lit.
 struct ShelfTitle: View {
     let title: String
     let expanded: Bool
+    @Environment(\.row) private var row
 
     init(_ title: String, expanded: Bool) {
         self.title = title
@@ -976,7 +983,7 @@ struct ShelfTitle: View {
         Text(title)
             .font(.ui(size: 12, weight: .medium))
             .lineLimit(1)
-            .foregroundStyle(expanded ? AnyShapeStyle(Color.themeForeground) : AnyShapeStyle(.foreground))
+            .foregroundStyle(expanded || row != nil ? Color.themeForeground : Color.themeMutedForeground)
     }
 }
 
