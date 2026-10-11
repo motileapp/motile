@@ -41,13 +41,6 @@ struct InputField: View {
     /// A button inside the field is as far from its top and bottom as from its side.
     private var bare: Bool { variant == .bare }
 
-    private var fill: Color {
-        switch variant {
-        case .filled: .themeInput
-        case .bare: .clear
-        }
-    }
-
     private var clearInset: CGFloat { (size.height - ControlSize.small.height) / 2 }
 
     var body: some View {
@@ -76,7 +69,7 @@ struct InputField: View {
                 .onTapGesture { (focus ?? $ownFocus).wrappedValue = true }
                 .textPointer()
         }
-        .fieldFrame(size, fill: fill)
+        .fieldFrame(size, filled: !bare)
     }
 }
 
@@ -107,10 +100,26 @@ extension View {
     }
 }
 
+/// The fill of a field of the size, with no border, focused or not. On a card, which is as dark
+/// as input, it takes the card's accent.
+private struct FieldFrame: ViewModifier {
+    let size: ControlSize
+    let filled: Bool
+    @Environment(\.surface) private var surface
+
+    private var fill: Color {
+        guard filled else { return .clear }
+        return surface == .card ? surface.color(.box) : .themeInput
+    }
+
+    func body(content: Content) -> some View {
+        content.background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
+    }
+}
+
 extension View {
-    /// The fill of a field of the size: input, with no border, focused or not.
-    func fieldFrame(_ size: ControlSize, fill: Color = .themeInput) -> some View {
-        background(fill, in: RoundedRectangle(cornerRadius: size.radius, style: .continuous))
+    func fieldFrame(_ size: ControlSize, filled: Bool = true) -> some View {
+        modifier(FieldFrame(size: size, filled: filled))
     }
 }
 
