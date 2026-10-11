@@ -98,7 +98,14 @@ export function Sidebar({
                 doneOpen && "rotate-90"
               )}
             />
-            <span className="text-[12px] font-medium">Done</span>
+            <span
+              className={cn(
+                "text-[12px] font-medium",
+                doneOpen && "text-foreground"
+              )}
+            >
+              Done
+            </span>
             <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
               {done.length}
             </span>
@@ -139,7 +146,14 @@ export function Sidebar({
             )}
           />
           <span className="size-[7px] rounded-full bg-success" />
-          <span className="text-[12px] font-medium">Servers</span>
+          <span
+            className={cn(
+              "text-[12px] font-medium",
+              serversOpen && "text-foreground"
+            )}
+          >
+            Servers
+          </span>
           <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
             {serversReach}
           </span>

@@ -707,8 +707,7 @@ private struct DoneShelf: View {
             items: threads, maxHeight: maxHeight, expanded: $expanded, height: $height, scrollTarget: store.settledThreadID,
             pointed: { thread, row, view in ThreadPeek.shared.point(at: thread, row: row, in: view, store: store) }
         ) {
-            Text("Done")
-                .font(.ui(size: 12, weight: .medium))
+            ShelfTitle("Done", expanded: expanded)
             Spacer()
             Text("\(threads.count)")
                 .font(.ui(size: 11))
@@ -743,7 +742,7 @@ private struct ServersShelf: View {
             }
         } else {
             Shelf(items: servers, maxHeight: maxHeight, expanded: $expanded, height: $height) {
-                AllServersLine(servers: servers)
+                AllServersLine(servers: servers, expanded: expanded)
             } row: { server in
                 ServerLine(server: server)
                     .padding(.horizontal, 8)
@@ -954,17 +953,34 @@ struct SidebarChevron: View {
     }
 }
 
+/// The name of a sidebar line that opens into a list, in the foreground colour while it is open.
+struct ShelfTitle: View {
+    let title: String
+    let expanded: Bool
+
+    init(_ title: String, expanded: Bool) {
+        self.title = title
+        self.expanded = expanded
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.ui(size: 12, weight: .medium))
+            .lineLimit(1)
+            .foregroundStyle(expanded ? AnyShapeStyle(Color.themeForeground) : AnyShapeStyle(.foreground))
+    }
+}
+
 /// Every server in one line, which opens into a line for each: the worst of their states, how
 /// they are reached and the slowest round trip.
 struct AllServersLine: View {
     let servers: [Server]
+    let expanded: Bool
 
     var body: some View {
         HStack(spacing: 7) {
             StateDot(tint: servers.worstTint)
-            Text("Servers")
-                .font(.ui(size: 12, weight: .medium))
-                .lineLimit(1)
+            ShelfTitle("Servers", expanded: expanded)
             Spacer(minLength: 4)
             Text(servers.reach)
                 .font(.ui(size: 11))
@@ -1029,7 +1045,7 @@ struct ServerLine: View {
         case .connected:
             let path = server.path?.capitalized ?? "Connected"
             return server.rttMs.map { "\(path) · \($0) ms" } ?? path
-        case .connecting: return "Connecting…"
+        case .connecting: return "Connecting"
         case .disconnected: return "Offline"
         case .refused: return "Refused"
         }

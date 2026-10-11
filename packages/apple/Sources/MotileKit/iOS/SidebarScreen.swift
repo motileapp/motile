@@ -191,8 +191,7 @@ struct SidebarScreen: View {
                 Image(.chevronRight, size: 10)
                     .rotationEffect(.degrees(expanded ? 90 : 0))
                     .frame(width: 14)
-                Text("Done")
-                    .font(.ui(size: 12, weight: .medium))
+                ShelfTitle("Done", expanded: expanded)
                 Spacer()
                 Text("\(count)")
                     .font(.ui(size: 11))
@@ -251,7 +250,7 @@ struct SidebarScreen: View {
             } label: {
                 HStack(spacing: 7) {
                     SidebarChevron(expanded: serversExpanded)
-                    AllServersLine(servers: servers)
+                    AllServersLine(servers: servers, expanded: serversExpanded)
                 }
                 .padding(.horizontal, sidebarEdge)
                 .frame(height: ServerLines.lineHeight)
