@@ -220,7 +220,7 @@ struct SidebarScreen: View {
                     AccountMenu()
                         .appearing(.scale.combined(with: .opacity))
                 }
-                SearchField(text: $search, bare: true, focus: $searchFocused)
+                SearchField(text: $search, bare: true, clearable: false, focus: $searchFocused)
                     .padding(.horizontal, 6)
                     .frame(height: 46)
                     .glassButton(in: Capsule())
