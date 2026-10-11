@@ -405,7 +405,7 @@ private final class LinearIssueCell: LinearCell {
     /// Lights the row under the pointer, and the control under it a layer further.
     private func light(at point: CGPoint?) {
         let over = point != nil
-        light.fill = over ? Theme.backgroundSecondary : .clear
+        light.fill = over ? Theme.backgroundAccentLarger : .clear
         priority.lit = point.map { priority.frame.contains($0) } ?? false
         status.lit = point.map { status.frame.contains($0) } ?? false
         for chip in chips { chip.lit = over }
@@ -426,7 +426,7 @@ private final class LinearRowButton: LayerView {
     var lit = false {
         didSet {
             guard lit != oldValue else { return }
-            highlight.fill = lit ? Theme.backgroundAccentLarger : .clear
+            highlight.fill = lit ? Theme.backgroundAccentLargerStronger : .clear
             colorSymbol()
         }
     }
