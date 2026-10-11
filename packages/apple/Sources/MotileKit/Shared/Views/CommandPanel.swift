@@ -683,7 +683,7 @@ struct CommandPanel: View {
         }, "usage.open")
         #if os(macOS)
         let shortcuts = [
-            PanelItem(id: "shortcuts", title: "Keyboard shortcuts", detail: "Change the keys of every command", icon: .symbol(.keyboard)) {
+            PanelItem(id: "shortcuts", title: "Keybindings", detail: "Change the keys of every command", icon: .symbol(.keyboard)) {
                 store.openSettings(.keyboard)
             }
         ]

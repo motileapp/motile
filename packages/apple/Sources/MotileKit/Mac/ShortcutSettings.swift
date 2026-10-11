@@ -12,7 +12,7 @@ struct ShortcutSettings: View {
     var body: some View {
         let shortcuts = store.shortcuts
         SettingsGroup(
-            "shortcuts", "Keyboard Shortcuts",
+            "shortcuts", "Keybindings",
             caption: "Click a shortcut to record new keys. Where two take the same keys, the one added last wins.", carded: false
         ) {
             HStack(spacing: 8) {
@@ -116,24 +116,30 @@ private struct ShortcutRowView: View {
             }
         } trailing: {
             ConflictMark(conflicts: row.conflicts)
-            ShortcutField(row.caps) { key in
-                store.setShortcut(row.command, key: key, when: row.when, replacing: row)
+            HStack(spacing: 0) {
+                ShortcutField(row.caps, margin: halfGap(trailing: true)) { key in
+                    store.setShortcut(row.command, key: key, when: row.when, replacing: row)
+                }
+                menu
             }
-            ActionMenu(icon: .ellipsis, help: "What to do with the shortcut", size: .large) {
-                if !row.key.isEmpty {
-                    menuItem(row.when.isEmpty ? "Add a Condition…" : "Edit the Condition…", symbol: .pencil) { editingCondition = true }
-                    menuItem("Add Another Shortcut", symbol: .plus) { addAnother(row.command) }
-                }
-                if row.resettable {
-                    menuItem("Reset to Default", symbol: .undo2) { store.resetShortcut(row.command) }
-                }
-                if !row.key.isEmpty {
-                    Divider()
-                    menuItem("Remove", symbol: .trash2, role: .destructive) { store.removeShortcut(row) }
-                }
-            }
-            .disabled(row.key.isEmpty && !row.resettable)
         }
+    }
+
+    private var menu: some View {
+        ActionMenu(icon: .ellipsis, help: "What to do with the shortcut", size: .large, margin: halfGap(leading: true)) {
+            if !row.key.isEmpty {
+                menuItem(row.when.isEmpty ? "Add a Condition…" : "Edit the Condition…", symbol: .pencil) { editingCondition = true }
+                menuItem("Add Another Shortcut", symbol: .plus) { addAnother(row.command) }
+            }
+            if row.resettable {
+                menuItem("Reset to Default", symbol: .undo2) { store.resetShortcut(row.command) }
+            }
+            if !row.key.isEmpty {
+                Divider()
+                menuItem("Remove", symbol: .trash2, role: .destructive) { store.removeShortcut(row) }
+            }
+        }
+        .disabled(row.key.isEmpty && !row.resettable)
     }
 }
 
@@ -176,14 +182,16 @@ private struct NewShortcutRow: View {
             }
         } trailing: {
             ConflictMark(conflicts: check.conflicts)
-            ShortcutField(check.caps, placeholder: "Record Keys") { key = $0 }
-            ActionButton("Add", variant: .primary, size: .large) {
-                guard let command else { return }
-                store.setShortcut(command, key: key, when: when)
-                done()
+            HStack(spacing: 0) {
+                ShortcutField(check.caps, placeholder: "Record Keys", margin: halfGap(trailing: true)) { key = $0 }
+                ActionButton("Add", variant: .primary, size: .large, margin: halfGap(leading: true, trailing: true)) {
+                    guard let command else { return }
+                    store.setShortcut(command, key: key, when: when)
+                    done()
+                }
+                .disabled(command == nil || key.isEmpty || check.whenError != nil)
+                ActionButton(icon: .x, help: "Cancel", size: .large, margin: halfGap(leading: true), action: done)
             }
-            .disabled(command == nil || key.isEmpty || check.whenError != nil)
-            ActionButton(icon: .x, help: "Cancel", size: .large, action: done)
         }
         .task(id: "\(key)\u{0}\(when)") {
             guard !key.isEmpty else { return }
@@ -296,6 +304,13 @@ private struct ConditionEditor: View {
         .font(.ui(size: 11.5))
         .foregroundStyle(color)
     }
+}
+
+/// Half the room between a row's buttons, which is as wide as the room between them and the row's
+/// edge. Each button takes its half, so that a click between them still lands on one.
+private func halfGap(leading: Bool = false, trailing: Bool = false) -> EdgeInsets {
+    let half = (settingsRowHeight - ControlSize.large.height) / 4
+    return EdgeInsets(top: 0, leading: leading ? half : 0, bottom: 0, trailing: trailing ? half : 0)
 }
 
 private func menuItem(_ title: String, symbol: Symbol, role: ButtonRole? = nil, action: @escaping () -> Void) -> some View {

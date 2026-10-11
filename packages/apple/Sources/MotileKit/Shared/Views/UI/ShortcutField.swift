@@ -3,19 +3,25 @@ import AppKit
 import SwiftUI
 
 /// The keys of a shortcut, on a button that records new ones: pressed, it takes the next keys
-/// pressed with their modifiers. Esc or a click elsewhere stops it without a change.
+/// pressed with their modifiers. Esc or a click elsewhere stops it without a change. `margin` is
+/// room around it that is its own, as a button's.
 struct ShortcutField: View {
     private let caps: [String]
     private let placeholder: String
     private let size: ControlSize
+    private let margin: EdgeInsets
     private let record: (String) -> Void
     @State private var recording = false
     @State private var monitors: [Any] = []
 
-    init(_ caps: [String], placeholder: String = "Record Shortcut", size: ControlSize = .large, record: @escaping (String) -> Void) {
+    init(
+        _ caps: [String], placeholder: String = "Record Shortcut", size: ControlSize = .large, margin: EdgeInsets = EdgeInsets(),
+        record: @escaping (String) -> Void
+    ) {
         self.caps = caps
         self.placeholder = placeholder
         self.size = size
+        self.margin = margin
         self.record = record
     }
 
@@ -24,8 +30,9 @@ struct ShortcutField: View {
             label
                 .padding(.horizontal, recording || caps.isEmpty ? size.padding : (size.height - KeyCaps.height) / 2)
                 .frame(minWidth: size.height, minHeight: size.height)
+                .padding(margin)
         }
-        .buttonStyle(ControlButtonStyle(look: ControlLook(variant: .outline, size: size, selected: recording)))
+        .buttonStyle(ControlButtonStyle(look: ControlLook(variant: .outline, size: size, selected: recording), margin: margin))
         .help(recording ? "Press the keys, or Esc to stop" : "Record new keys")
         .onDisappear(perform: stop)
     }
