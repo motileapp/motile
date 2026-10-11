@@ -24,7 +24,7 @@ struct PanelScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
-        .onTapGesture { Platform.endEditing() }
+        .gesture(KeyboardTap())
         .scrollDismissesKeyboard(.immediately)
         .background(Color.themeBackground.ignoresSafeArea())
         .navigationTitle(store.panelTarget?.name ?? "Files")
@@ -55,6 +55,21 @@ struct PanelScreen: View {
             ActionButton(icon: .x, help: "Close the side panel", size: .large) { store.sidePanel.isOpen = false }
         }
         .padding(.trailing, 6)
+    }
+}
+
+/// A tap that puts the keyboard away and still reaches the views under it, which a SwiftUI tap
+/// would take from the panel's lists.
+private struct KeyboardTap: UIGestureRecognizerRepresentable {
+    func makeUIGestureRecognizer(context: Context) -> UITapGestureRecognizer {
+        let tap = UITapGestureRecognizer()
+        tap.cancelsTouchesInView = false
+        return tap
+    }
+
+    func handleUIGestureRecognizerAction(_ tap: UITapGestureRecognizer, context: Context) {
+        guard tap.state == .ended else { return }
+        Platform.endEditing()
     }
 }
 #endif

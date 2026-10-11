@@ -66,6 +66,25 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(app.buttons["Threads"].isHittable)
     }
 
+    func testATapOnALinearIssueOpensIt() {
+        app.swipeRight()
+        guard let thread = row("Add API Rate Limiting") else { return XCTFail("no row") }
+        thread.tap()
+        app.buttons["Files and changes"].tap()
+        XCTAssertTrue(shown(app.navigationBars.buttons["Back"]))
+        let linear = app.buttons["Linear"].firstMatch
+        XCTAssertTrue(linear.waitForExistence(timeout: 5))
+        linear.tap()
+        let issue = app.buttons["ENG-1 Greet by name"]
+        XCTAssertTrue(issue.waitForExistence(timeout: 10))
+        app.textFields["Search"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        issue.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Work on Issue"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons["Back"].tap()
+    }
+
     func testASwipeToTheRightOnAThreadInTheSidebarMarksItDone() {
         app.swipeRight()
         guard let thread = row("Use an F-String in Greet") else { return XCTFail("no row") }
