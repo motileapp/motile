@@ -16,6 +16,17 @@ extension View {
 }
 
 extension View {
+    /// Glass shapes side by side that melt into each other as they come and go, where the system
+    /// has it.
+    @ViewBuilder
+    func glassGroup(spacing: CGFloat) -> some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) { self }
+        } else {
+            self
+        }
+    }
+
     /// The search field in the bottom bar, in glass, where the system has it there.
     @ViewBuilder
     func searchAtBottom() -> some View {
@@ -26,15 +37,16 @@ extension View {
         }
     }
 
-    /// The system's search field with its placeholder in the colour every field's has. The field
-    /// ignores the colour of its prompt, so it is set on the field once it is in the window.
+    /// The system's search field with its symbol in the foreground and its placeholder in the
+    /// colour every field's has. The field ignores both colours of SwiftUI, so they are set on the
+    /// field once it is in the window.
     func searchField(text: Binding<String>, prompt: String) -> some View {
         searchable(text: text, prompt: prompt)
-            .background(SearchPlaceholderColor(prompt: prompt))
+            .background(SearchFieldColors(prompt: prompt))
     }
 }
 
-private struct SearchPlaceholderColor: UIViewRepresentable {
+private struct SearchFieldColors: UIViewRepresentable {
     let prompt: String
 
     func makeUIView(context: Context) -> Finder { Finder() }
@@ -55,11 +67,17 @@ private struct SearchPlaceholderColor: UIViewRepresentable {
 
         private func color(attempt: Int = 0) {
             guard attempt < 10 else { return }
-            guard let field = UIView.first(UISearchTextField.self, in: window) else {
+            guard let field = UIView.first(UISearchTextField.self, in: stack ?? window) else {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.color(attempt: attempt + 1) }
                 return
             }
             field.attributedPlaceholder = NSAttributedString(string: prompt, attributes: [.foregroundColor: Theme.mutedStrongerForeground])
+            field.leftView?.tintColor = Theme.foreground
+        }
+
+        /// The navigation stack the field belongs to, where another sheet's field can't be found.
+        private var stack: UIView? {
+            sequence(first: self as UIResponder, next: \.next).lazy.compactMap { $0 as? UINavigationController }.first?.view
         }
     }
 }
@@ -78,7 +96,13 @@ struct SheetCloseButton: View {
 
     var body: some View {
         if #available(iOS 26, *) {
-            Button(role: .close) { dismiss() }
+            Button(role: .close) {
+                dismiss()
+            } label: {
+                Image(.x, size: 16)
+                    .foregroundStyle(Color.themeForeground)
+            }
+            .accessibilityLabel("Close")
         } else {
             Button("Done") { dismiss() }
         }

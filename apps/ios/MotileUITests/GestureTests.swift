@@ -212,6 +212,20 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(newThread.isHittable)
     }
 
+    func testTheSidebarsSearchTakesItsLineUntilItIsClosed() {
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        app.textFields["Search"].tap()
+        app.typeText("api")
+        let close = app.buttons["Close search"]
+        XCTAssertTrue(shown(close))
+        XCTAssertFalse(newThread.exists)
+        close.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(shown(newThread))
+        XCTAssertEqual(app.textFields["Search"].value as? String ?? "", "")
+    }
+
     func testATapBesideTheComposersTextBringsTheKeyboard() {
         let text = app.textViews.firstMatch
         XCTAssertTrue(text.waitForExistence(timeout: 10))

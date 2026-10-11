@@ -14,6 +14,7 @@ struct SidebarScreen: View {
     @State private var newTitle = ""
     @State private var deleting: ThreadInfo?
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
     /// The row a swipe has slid aside, by its id in the list.
     @State private var swiped: String?
     /// Why a swipe couldn't mark a thread done: its agent is still at it.
@@ -205,22 +206,38 @@ struct SidebarScreen: View {
     }
 
     /// The servers and how the client reaches them, and under them the account, which leads to the
-    /// settings and the usage, the search and the way to a new thread.
+    /// settings and the usage, the search and the way to a new thread. While it searches, the
+    /// search takes the line with a button that closes it, as the system's search does.
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let searching = searchFocused || !search.isEmpty
+        return VStack(alignment: .leading, spacing: 0) {
             if !store.servers.isEmpty {
                 servers
                 ThemeDivider()
             }
             HStack(spacing: 8) {
-                AccountMenu()
-                SearchField(text: $search, bare: true)
+                if !searching {
+                    AccountMenu()
+                        .appearing(.scale.combined(with: .opacity))
+                }
+                SearchField(text: $search, bare: true, focus: $searchFocused)
                     .padding(.horizontal, 6)
                     .frame(height: 46)
                     .glassButton(in: Capsule())
-                circleButton(.squarePen, label: "New thread") { store.newThread() }
-                    .disabled(store.projects.isEmpty && store.noProjects.isEmpty)
+                if searching {
+                    circleButton(.x, label: "Close search") {
+                        search = ""
+                        searchFocused = false
+                    }
+                    .appearing(.scale.combined(with: .opacity))
+                } else {
+                    circleButton(.squarePen, label: "New thread") { store.newThread() }
+                        .disabled(store.projects.isEmpty && store.noProjects.isEmpty)
+                        .appearing(.scale.combined(with: .opacity))
+                }
             }
+            .glassGroup(spacing: 8)
+            .animation(.smooth(duration: 0.3), value: searching)
             .padding(.horizontal, sidebarEdge)
             .padding(.top, 16)
         }
