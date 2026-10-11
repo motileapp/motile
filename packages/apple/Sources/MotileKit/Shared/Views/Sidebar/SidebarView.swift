@@ -707,8 +707,7 @@ private struct DoneShelf: View {
             items: threads, maxHeight: maxHeight, expanded: $expanded, height: $height, scrollTarget: store.settledThreadID,
             pointed: { thread, row, view in ThreadPeek.shared.point(at: thread, row: row, in: view, store: store) }
         ) {
-            Text("Done")
-                .font(.ui(size: 12, weight: .medium))
+            ShelfTitle("Done", expanded: expanded)
             Spacer()
             Text("\(threads.count)")
                 .font(.ui(size: 11))
@@ -954,8 +953,26 @@ struct SidebarChevron: View {
     }
 }
 
+/// The name of a sidebar line that opens into a list, in the foreground colour while it is open.
+struct ShelfTitle: View {
+    let title: String
+    let expanded: Bool
+
+    init(_ title: String, expanded: Bool) {
+        self.title = title
+        self.expanded = expanded
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.ui(size: 12, weight: .medium))
+            .lineLimit(1)
+            .foregroundStyle(expanded ? AnyShapeStyle(Color.themeForeground) : AnyShapeStyle(.foreground))
+    }
+}
+
 /// Every server in one line, which opens into a line for each: the worst of their states, how
-/// they are reached and the slowest round trip. Open, its name is in the foreground colour.
+/// they are reached and the slowest round trip.
 struct AllServersLine: View {
     let servers: [Server]
     let expanded: Bool
@@ -963,10 +980,7 @@ struct AllServersLine: View {
     var body: some View {
         HStack(spacing: 7) {
             StateDot(tint: servers.worstTint)
-            Text("Servers")
-                .font(.ui(size: 12, weight: .medium))
-                .lineLimit(1)
-                .foregroundStyle(expanded ? AnyShapeStyle(Color.themeForeground) : AnyShapeStyle(.foreground))
+            ShelfTitle("Servers", expanded: expanded)
             Spacer(minLength: 4)
             Text(servers.reach)
                 .font(.ui(size: 11))
