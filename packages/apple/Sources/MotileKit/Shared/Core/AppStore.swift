@@ -33,8 +33,21 @@ struct ThreadDraft: Identifiable, Equatable, Codable {
 struct ListedDraft: Identifiable {
     let draft: ThreadDraft
     let preview: String
+    /// Its first message is on its way to the server.
+    var sending = false
 
     var id: String { draft.id }
+}
+
+/// The first message of a draft, on its way to the server.
+struct SendingDraft {
+    let text: String
+    let attachments: [AttachedFile]
+    let activity: Activity
+    /// The client has gone elsewhere since, so the sidebar lists the draft.
+    var left = false
+
+    var preview: String { AppStore.preview(text: text, attachments: attachments.count) ?? "" }
 }
 
 /// Where the command panel opens.
@@ -206,8 +219,8 @@ final class AppStore {
     private(set) var transcriptIsEmpty = true
     /// The agents the open thread's agent has started, in the order it started them.
     private(set) var agents: [AgentInfo] = []
-    /// The drafts whose first message is on its way to the server.
-    private(set) var sendingDraftIDs: Set<String> = []
+    /// The drafts whose first message is on its way to the server, by draft.
+    private(set) var sendingDrafts: [String: SendingDraft] = [:]
     var errorMessage: String?
     /// What deleting a thread takes with it.
     func deletionNote(_ thread: ThreadInfo?) -> String {
@@ -605,11 +618,13 @@ final class AppStore {
         return threadDrafts.first { $0.id == id }
     }
 
-    /// Every draft with something written in it that isn't being sent, newest first. The open
-    /// one is listed as it was when it was opened.
+    /// Every draft with something written in it, newest first. The open one is listed as it was
+    /// when it was opened, and one being sent once it has been left.
     var listedDrafts: [ListedDraft] {
         threadDrafts.reversed().compactMap { draft -> ListedDraft? in
-            guard !sendingDraftIDs.contains(draft.id) else { return nil }
+            if let sending = sendingDrafts[draft.id] {
+                return sending.left ? ListedDraft(draft: draft, preview: sending.preview, sending: true) : nil
+            }
             let written = selection == .draft(draft.id) ? openedDraftPreview : preview(of: draft)
             return written.map { ListedDraft(draft: draft, preview: $0) }
         }
@@ -618,10 +633,18 @@ final class AppStore {
     /// The first line of what was written in a draft, or what is attached to it. Nothing for a
     /// draft that is still empty.
     private func preview(of draft: ThreadDraft) -> String? {
-        let text = (drafts[draft.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        Self.preview(text: drafts[draft.id] ?? "", attachments: attachmentsByKey[draft.id]?.count ?? 0)
+    }
+
+    static func preview(text: String, attachments: Int) -> String? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let line = text.split(separator: "\n").first { return String(line) }
-        guard let files = attachmentsByKey[draft.id] else { return nil }
-        return files.count == 1 ? "1 attachment" : "\(files.count) attachments"
+        guard attachments > 0 else { return nil }
+        return attachments == 1 ? "1 attachment" : "\(attachments) attachments"
+    }
+
+    func isSending(_ draft: ThreadDraft) -> Bool {
+        sendingDrafts[draft.id] != nil
     }
 
     func project(_ id: String?) -> Project? {
@@ -925,7 +948,7 @@ final class AppStore {
 
     /// A draft with nothing in it: the one that is already there, or a new one.
     private func emptyDraft() -> ThreadDraft {
-        if let index = threadDrafts.lastIndex(where: { preview(of: $0) == nil && !sendingDraftIDs.contains($0.id) }) {
+        if let index = threadDrafts.lastIndex(where: { preview(of: $0) == nil && !isSending($0) }) {
             var empty = threadDrafts[index]
             applyLastSettings(to: &empty)
             threadDrafts[index] = empty
@@ -994,7 +1017,7 @@ final class AppStore {
     private func restoreSelection() {
         guard let wanted = lastSelection, threads[wanted] != nil else { return }
         lastSelection = nil
-        guard let draft = selectedDraft, preview(of: draft) == nil else { return }
+        guard let draft = selectedDraft, preview(of: draft) == nil, !isSending(draft) else { return }
         select(.thread(wanted))
     }
 
@@ -1710,7 +1733,8 @@ final class AppStore {
         }
         let left = selectedDraft
         selection = new
-        if let left, preview(of: left) == nil, !sendingDraftIDs.contains(left.id) { removeDraft(left.id) }
+        if let left, isSending(left) { sendingDrafts[left.id]?.left = true }
+        if let left, preview(of: left) == nil, !isSending(left) { removeDraft(left.id) }
         openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
         activity = Activity()
         transcriptIsEmpty = true
@@ -1719,12 +1743,22 @@ final class AppStore {
         agents = []
         guard case .thread(let id) = new, let thread = threads[id] else {
             transcript.begin(threadID: nil)
+            showSendingMessage()
             ensureDraftProject()
             readGit(fetch: true)
             refreshComposerModels()
             return
         }
         open(thread)
+    }
+
+    /// A draft whose first message is still on its way shows it as it was sent.
+    private func showSendingMessage() {
+        guard let sending = selectedDraft.flatMap({ sendingDrafts[$0.id] }) else { return }
+        activity = sending.activity
+        transcript.setActivity(activity)
+        transcript.setPending(sending.text, attachments: sending.attachments)
+        transcriptIsEmpty = false
     }
 
     private func open(_ thread: ThreadInfo) {
@@ -1772,16 +1806,17 @@ final class AppStore {
     }
 
     func discard(_ draft: ThreadDraft) {
+        guard !isSending(draft) else { return }
         let wasOpen = selection == .draft(draft.id)
         removeDraft(draft.id)
         guard wasOpen else { return }
-        if let next = threadDrafts.last(where: { !sendingDraftIDs.contains($0.id) }) { return select(.draft(next.id)) }
+        if let next = threadDrafts.last(where: { !isSending($0) }) { return select(.draft(next.id)) }
         if let next = activeThreads.first { return select(.thread(next.id)) }
         openEmptyDraft()
     }
 
     var canSend: Bool {
-        guard !sendingDraftIDs.contains(draftKey), let server = composerServer, server.state == .connected else { return false }
+        guard sendingDrafts[draftKey] == nil, let server = composerServer, server.state == .connected else { return false }
         if selectedThread == nil && project(selectedDraft?.projectID) == nil { return false }
         guard attachments.allSatisfy({ $0.state == .ready && $0.serverID == server.id }) else { return false }
         return !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
@@ -1834,9 +1869,9 @@ final class AppStore {
             }
             command["server_id"] = project.serverID
             command["new_thread"] = settings
-            sendingDraftIDs.insert(draft.id)
             activity = Activity.starting
             transcript.setActivity(activity)
+            sendingDrafts[draft.id] = SendingDraft(text: text, attachments: attached.map(\.attached), activity: activity)
         }
         let serverID = command.string("server_id")
         draft = ""
@@ -1847,7 +1882,7 @@ final class AppStore {
 
         core.send("send", command) { [weak self] result in
             guard let self else { return }
-            if existing == nil { self.sendingDraftIDs.remove(key) }
+            if existing == nil { self.sendingDrafts[key] = nil }
             switch result {
             case .failure(let error):
                 // The message goes back to where it was written, wherever the client is now.

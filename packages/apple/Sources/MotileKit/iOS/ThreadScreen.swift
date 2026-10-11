@@ -14,7 +14,7 @@ struct ThreadScreen: View {
 
     private var isStart: Bool {
         guard let draft = store.selectedDraft else { return false }
-        return store.transcriptIsEmpty && !store.sendingDraftIDs.contains(draft.id)
+        return store.transcriptIsEmpty && !store.isSending(draft)
     }
 
     var body: some View {

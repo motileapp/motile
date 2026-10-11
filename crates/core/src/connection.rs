@@ -1,11 +1,12 @@
 //! One connection to a server, and how long it took to get.
 
+use std::io;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use iroh::endpoint::{ConnectionError, RecvStream, presets};
 use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use motile_protocol::frame::{read_frame, write_frame};
@@ -17,6 +18,16 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// More than a server sends of any file.
 const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+const CONNECTION_LOST: &str = "The connection to your server was lost. Try again when it is back.";
+
+/// The connection failing, worded for a person. A malformed message keeps its own error.
+fn lost_on_the_way(error: io::Error) -> anyhow::Error {
+    if error.kind() == io::ErrorKind::InvalidData {
+        return error.into();
+    }
+    anyhow!(CONNECTION_LOST)
+}
 
 /// A server's key, optionally with an address to reach it at directly: `key` or `key@ip:port`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -121,10 +132,10 @@ impl Connection {
     }
 
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
-        let (mut send, mut recv) = self.inner.open_bi().await?;
-        write_frame(&mut send, request).await?;
-        send.finish()?;
-        read_frame(&mut recv).await?.context("Your server didn't answer. Try again.")
+        let (mut send, mut recv) = self.inner.open_bi().await.map_err(|_| anyhow!(CONNECTION_LOST))?;
+        write_frame(&mut send, request).await.map_err(lost_on_the_way)?;
+        send.finish().map_err(|_| anyhow!(CONNECTION_LOST))?;
+        read_frame(&mut recv).await.map_err(lost_on_the_way)?.context("Your server didn't answer. Try again.")
     }
 
     /// For `Subscribe` and `Open`: every message until the stream is dropped.

@@ -496,12 +496,18 @@ struct DraftRows: View {
         let listed = store.searched(store.listedDrafts, for: search)
         if !listed.isEmpty {
             ForEach(listed) { listed in
+                #if os(iOS)
+                if listed.sending {
+                    DraftRow(listed: listed, open: open)
+                } else {
+                    DraftRow(listed: listed, open: open)
+                        .rowSwipe(.trash2, "Discard Draft", tint: .themeDestructive, size: 36, isOpen: swiped(listed.id)) {
+                            store.discard(listed.draft)
+                        }
+                }
+                #else
                 DraftRow(listed: listed, open: open)
-                    #if os(iOS)
-                    .rowSwipe(.trash2, "Discard Draft", tint: .themeDestructive, size: 36, isOpen: swiped(listed.id)) {
-                        store.discard(listed.draft)
-                    }
-                    #endif
+                #endif
             }
             ThemeDivider()
                 .padding(.horizontal, sidebarEdge)
@@ -510,8 +516,9 @@ struct DraftRows: View {
     }
 }
 
-/// A draft, laid out like a thread's row: its project and "Draft" on the first line, what was
-/// written in it on the second, where it will work, its server and its agent on the third.
+/// A draft, laid out like a thread's row: its project and "Draft", or "Sending" while its first
+/// message is on its way, on the first line, what was written in it on the second, where it will
+/// work, its server and its agent on the third.
 private struct DraftRow: View {
     @Environment(AppStore.self) private var store
     let listed: ListedDraft
@@ -531,7 +538,13 @@ private struct DraftRow: View {
                     .lineLimit(1)
                     .layoutPriority(1)
                 Spacer(minLength: 6)
-                if hovering {
+                if listed.sending {
+                    HStack(spacing: 3) {
+                        Spinner(size: 11)
+                        Text("Sending")
+                            .font(.ui(size: 11, weight: .medium))
+                    }
+                } else if hovering {
                     ActionButton(icon: .x, help: "Discard draft", size: .small) { store.discard(listed.draft) }
                         .padding(.trailing, ThreadRow.buttonInset - ThreadRow.sidePadding)
                 } else {
@@ -580,7 +593,9 @@ private struct DraftRow: View {
         }
         .onHover { hovering = $0 }
         .contextMenu {
-            Button("Discard Draft", role: .destructive) { store.discard(listed.draft) }
+            if !listed.sending {
+                Button("Discard Draft", role: .destructive) { store.discard(listed.draft) }
+            }
         }
     }
 }
