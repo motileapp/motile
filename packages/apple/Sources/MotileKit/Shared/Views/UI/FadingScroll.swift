@@ -8,21 +8,30 @@ struct FadingScroll<Content: View>: View {
     var padding: CGFloat = 0
     @ViewBuilder let content: Content
 
-    @State private var contentHeight: CGFloat = 0
-
     var body: some View {
-        ScrollView {
-            content.background {
-                GeometryReader { proxy in
-                    Color.clear.onChange(of: proxy.size.height, initial: true) { contentHeight = proxy.size.height }
-                }
+        AtMost(height: maxHeight) {
+            ViewThatFits(in: .vertical) {
+                content.padding(padding)
+                ScrollView { content }
+                    .contentMargins(padding, for: .scrollContent)
+                    .defaultScrollAnchor(anchor)
+                    .fadesHiddenEdges()
             }
         }
-        .contentMargins(padding, for: .scrollContent)
-        .scrollBounceBehavior(.basedOnSize)
-        .defaultScrollAnchor(anchor)
-        .fadesHiddenEdges()
-        .frame(height: min(contentHeight + padding * 2, maxHeight))
+    }
+}
+
+/// Offers its content no more than `height` and is as tall as the content takes.
+private struct AtMost: Layout {
+    let height: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let content = subviews.first else { return .zero }
+        return content.sizeThatFits(ProposedViewSize(width: proposal.width, height: min(proposal.height ?? height, height)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }
 
