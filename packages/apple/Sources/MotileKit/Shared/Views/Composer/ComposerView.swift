@@ -84,7 +84,7 @@ struct ComposerView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { pressed += 1 }
         }
-        .composerSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous), shadow: .sm)
+        .composerSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous), shadow: .md)
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
     }
 
