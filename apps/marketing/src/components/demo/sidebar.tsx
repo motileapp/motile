@@ -90,12 +90,12 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => setDoneOpen(!doneOpen)}
-            className="flex h-[36px] w-full items-center gap-[7px] pr-[18px] pl-[11px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
+            className="group flex h-[36px] w-full items-center gap-[7px] pr-[18px] pl-[11px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
           >
             <ChevronRightIcon
               className={cn(
-                "size-2.5 w-3.5 transition-transform",
-                doneOpen && "rotate-90"
+                "size-2.5 w-3.5 text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
+                doneOpen && "rotate-90 text-muted-foreground"
               )}
             />
             <span
@@ -137,12 +137,12 @@ export function Sidebar({
         <button
           type="button"
           onClick={() => setServersOpen(!serversOpen)}
-          className="flex h-[36px] w-full items-center gap-[7px] pr-[18px] pl-[11px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
+          className="group flex h-[36px] w-full items-center gap-[7px] pr-[18px] pl-[11px] text-left text-muted-foreground hover:bg-background-accent-larger hover:text-foreground"
         >
           <ChevronRightIcon
             className={cn(
-              "size-2.5 w-3.5 transition-transform",
-              serversOpen && "rotate-90"
+              "size-2.5 w-3.5 text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
+              serversOpen && "rotate-90 text-muted-foreground"
             )}
           />
           <span className="size-[7px] rounded-full bg-success" />
