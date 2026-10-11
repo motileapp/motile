@@ -66,7 +66,9 @@ pub enum Pace {
 pub fn sections(reads: Vec<Read>, now: f64) -> Vec<Section> {
     let mut sections: Vec<Section> = Vec::new();
     let mut reads = reads;
-    reads.sort_by_key(|read| (read.limits.agent != Agent::Claude, read.limits.error.is_some()));
+    reads.sort_by_key(|read| {
+        (read.limits.agent != Agent::Claude, read.limits.error.is_some(), read.limits.windows.is_empty())
+    });
     for Read { server, limits } in reads {
         let known = limits.account.as_ref().and_then(|account| {
             sections
@@ -83,11 +85,7 @@ pub fn sections(reads: Vec<Read>, now: f64) -> Vec<Section> {
 }
 
 fn section(server: String, limits: AgentLimits, now: f64) -> Section {
-    let note = match (&limits.error, limits.windows.is_empty()) {
-        (Some(error), _) => Some(format!("Couldn't read the limits on {server}. {error}")),
-        (None, true) => Some("Signed in with an API key, which has no plan limits.".to_string()),
-        (None, false) => None,
-    };
+    let note = note(&server, &limits);
     let windows = limits.windows.iter().map(|window| row(window, limits.reset_credits, now)).collect();
     let name = Some(limits.account_name).filter(|name| !name.is_empty());
     Section {
@@ -98,6 +96,19 @@ fn section(server: String, limits: AgentLimits, now: f64) -> Section {
         servers: vec![server],
         windows,
         note,
+    }
+}
+
+fn note(server: &str, limits: &AgentLimits) -> Option<String> {
+    if let Some(error) = &limits.error {
+        return Some(format!("Couldn't read the limits on {server}. {error}"));
+    }
+    if !limits.windows.is_empty() {
+        return None;
+    }
+    match limits.plan {
+        Some(_) => Some(format!("Couldn't read the limits on {server}.")),
+        None => Some("Not signed in to a plan.".to_string()),
     }
 }
 
@@ -251,15 +262,30 @@ mod tests {
     fn a_login_without_windows_says_why() {
         let mut failed = read("studio", Agent::Codex, None, vec![]);
         failed.limits.error = Some("It didn't answer in time.".into());
-        let shown = sections(vec![failed, read("studio", Agent::Claude, Some("a"), vec![])], 1000.0);
+        let mut no_plan = read("box", Agent::Claude, Some("b"), vec![]);
+        no_plan.limits.plan = None;
+        let reads = vec![failed, read("studio", Agent::Claude, Some("a"), vec![]), no_plan];
+        let shown = sections(reads, 1000.0);
         let notes: Vec<_> = shown.iter().map(|section| section.note.as_deref().unwrap()).collect();
         assert_eq!(
             notes,
             [
-                "Signed in with an API key, which has no plan limits.",
+                "Couldn't read the limits on studio.",
+                "Not signed in to a plan.",
                 "Couldn't read the limits on studio. It didn't answer in time.",
             ]
         );
+    }
+
+    #[test]
+    fn a_login_on_several_servers_shows_the_windows_one_of_them_read() {
+        let reads = vec![
+            read("laptop", Agent::Claude, Some("a"), vec![]),
+            read("studio", Agent::Claude, Some("a"), vec![window("Session", 24.0, 60.0, 18000)]),
+        ];
+        let [section] = &sections(reads, 1000.0)[..] else { panic!("one section") };
+        assert_eq!((section.windows.len(), section.note.as_deref()), (1, None));
+        assert_eq!(section.servers, ["studio", "laptop"]);
     }
 
     #[test]

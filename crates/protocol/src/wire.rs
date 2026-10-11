@@ -1514,8 +1514,7 @@ pub struct UsageBucket {
     pub writing: bool,
 }
 
-/// What an agent's CLI says its login has used of its plan. No windows and no error: the login
-/// has no plan limits, as with an API key.
+/// What an agent's CLI says its login has used of its plan.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct AgentLimits {
     pub agent: Agent,
