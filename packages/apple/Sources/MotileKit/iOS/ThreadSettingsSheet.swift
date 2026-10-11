@@ -118,6 +118,7 @@ struct ThreadSettingsSheet: View {
                     Text("Current checkout").tag(false)
                     Text("New worktree").tag(true)
                 }
+                .tint(Color.themePrimary)
             }
             let startsInWorktree = store.draftUsesWorktree
             if let branch = startsInWorktree ? store.draftBase : project.branch {

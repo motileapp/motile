@@ -91,7 +91,6 @@ struct AgentAccountSheet: View {
                 Picker("Agent", selection: $account.agent) {
                     ForEach(installed, id: \.self) { Text($0.name).tag($0) }
                 }
-                .tint(Color.themeForeground)
             }
         }
         Section("Name") {

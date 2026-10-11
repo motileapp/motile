@@ -129,7 +129,6 @@ struct SettingsPage: View {
             Picker("Theme", selection: $appearance) {
                 ForEach(Appearance.allCases) { Text($0.label).tag($0) }
             }
-            .tint(Color.themeForeground)
         }
         .id("appearance")
 
@@ -138,7 +137,6 @@ struct SettingsPage: View {
                 Text("Queue").tag(false)
                 Text("Steer").tag(true)
             }
-            .tint(Color.themeForeground)
         } header: {
             Text("Messages")
         } footer: {
@@ -298,7 +296,6 @@ struct SettingsPage: View {
                     } label: {
                         Text(servers.count > 1 ? server.name : "Model")
                     }
-                    .tint(Color.themeForeground)
                 }
             } header: {
                 if servers.count > 1 { Text("Model") }
