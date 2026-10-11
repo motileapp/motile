@@ -7,7 +7,6 @@ struct SettingsSections: View {
     private static let groups: [[SettingsSection]] = [[.general], [.servers, .agents, .projects], [.textGeneration, .pullRequests]]
 
     @Environment(AppStore.self) private var store
-    @Environment(\.surface) private var surface
     /// The section shown beside the list, on a wide sheet, lit in it. Without one, each pushes.
     var selected: SettingsSection?
     let choose: (SettingsSection) -> Void
@@ -26,7 +25,7 @@ struct SettingsSections: View {
                         if let selected {
                             Button { choose(section) } label: { row(section) }
                                 .foregroundStyle(Color.themeForeground)
-                                .listRowBackground(surface.color(selected == section ? .rowSelected : .box))
+                                .listRowBackground(selected == section ? Surface.card.color(.rowSelected) : Surface.card.color)
                         } else {
                             NavigationLink(value: section) { row(section) }
                         }
@@ -558,7 +557,6 @@ private struct BranchNamesPage: View {
 
 /// The settings' list: the system's inset groups, drawn on the theme's colours.
 struct SettingsList<Content: View>: View {
-    @Environment(\.surface) private var surface
     private let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -568,8 +566,9 @@ struct SettingsList<Content: View>: View {
     var body: some View {
         List {
             content
-                .listRowBackground(surface.color(.box))
-                .listRowSeparatorTint(Color.themeBorder)
+                .listRowBackground(Surface.card.color)
+                .environment(\.surface, .card)
+                .listRowSeparatorTint(Surface.card.border)
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
