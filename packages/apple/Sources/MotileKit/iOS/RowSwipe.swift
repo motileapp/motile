@@ -33,7 +33,7 @@ private struct RowSwipe: ViewModifier {
     /// How far the row rests aside while its button shows.
     private var openWidth: Double { size + 20 }
     /// From here on, letting go does what the button does.
-    private var fullSwipe: Double { max(openWidth + 44, width * 0.58) }
+    private var fullSwipe: Double { max(openWidth + 44, width * 0.4) }
     private var armed: Bool { offset >= fullSwipe }
 
     func body(content: Content) -> some View {
