@@ -65,7 +65,9 @@ struct AttachmentTile: View {
 /// its way to the server.
 struct AttachmentChip: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.surface) private var surface
     let attachment: Attachment
+    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -78,12 +80,17 @@ struct AttachmentChip: View {
             }
             AttachmentProgress(attachment: attachment, onPicture: false)
             ActionButton(icon: .x, help: "Remove", size: .small, round: true) { store.removeAttachment(attachment.id) }
+                .environment(\.row, layer)
         }
         .font(.ui(size: 12))
         .padding(.leading, 9)
         .padding([.vertical, .trailing], 2)
-        .box(in: Capsule())
+        .background(surface.color(layer), in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.themeBorderAccent, lineWidth: 1))
+        .onHover { hovering = $0 }
     }
+
+    private var layer: Surface.Layer { hovering ? .controlLit : .control }
 }
 
 /// How far an attachment is on its way to the server, or the button that tries again when it
