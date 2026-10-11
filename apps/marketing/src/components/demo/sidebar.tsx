@@ -177,7 +177,7 @@ export function Sidebar({
           </div>
         )}
       </div>
-      <div className="flex flex-col border-t px-[18px] py-2.5">
+      <div className="flex flex-col border-t px-[18px] py-[9px]">
         <div className="-mx-[7px] flex items-center gap-1">
           <button
             type="button"
