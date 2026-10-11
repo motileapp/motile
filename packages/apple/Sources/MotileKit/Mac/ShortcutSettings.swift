@@ -104,6 +104,7 @@ private struct ShortcutRowView: View {
                 }
                 if !row.when.isEmpty {
                     ConditionButton(when: row.when) { editingCondition = true }
+                        .padding(.leading, -ControlSize.small.padding)
                 }
             }
             .popover(isPresented: $editingCondition, arrowEdge: .bottom) {
@@ -160,7 +161,10 @@ private struct NewShortcutRow: View {
     var body: some View {
         SettingsRow {
             VStack(alignment: .leading, spacing: 2) {
-                ActionMenu(label ?? "Choose a Command", variant: .ghost, size: .large, tint: label == nil ? nil : .themeForeground) {
+                ActionMenu(
+                    label ?? "Choose a Command", variant: .ghost, size: .large, padding: commandPadding,
+                    tint: label == nil ? nil : .themeForeground
+                ) {
                     ForEach(store.shortcuts.groups) { group in
                         Section(group.title) {
                             ForEach(commands(of: group), id: \.id) { choice in
@@ -169,9 +173,9 @@ private struct NewShortcutRow: View {
                         }
                     }
                 }
-                .padding(.leading, -ControlSize.large.padding)
-                ConditionButton(when: when) { editingCondition = true }
+                ConditionButton(when: when, padding: commandPadding) { editingCondition = true }
             }
+            .padding(.leading, scaled(8) - settingsInset)
             .popover(isPresented: $editingCondition, arrowEdge: .bottom) {
                 ConditionEditor(key: key, row: nil, when: when) { changed in
                     when = changed
@@ -199,6 +203,8 @@ private struct NewShortcutRow: View {
         }
     }
 
+    private let commandPadding: CGFloat = 10
+
     private func commands(of group: ShortcutGroup) -> [(id: String, label: String)] {
         var seen: Set<String> = []
         return group.rows.compactMap { row in
@@ -210,12 +216,12 @@ private struct NewShortcutRow: View {
 /// The condition under a shortcut's name, which opens it to edit.
 private struct ConditionButton: View {
     let when: String
+    var padding: CGFloat?
     let edit: () -> Void
 
     var body: some View {
-        ActionButton(when.isEmpty ? "Always" : "When \(when)", variant: .ghost, size: .small, opens: true, action: edit)
+        ActionButton(when.isEmpty ? "Always" : "When \(when)", variant: .ghost, size: .small, padding: padding, opens: true, action: edit)
             .truncationMode(.tail)
-            .padding(.leading, -ControlSize.small.padding)
             .help(when.isEmpty ? "Runs wherever the keys are pressed. Click to add a condition." : "Runs only while this holds. Click to edit it.")
     }
 }

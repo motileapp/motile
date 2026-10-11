@@ -120,6 +120,8 @@ struct ControlLabel: View {
     var symbolSize: CGFloat?
     /// The room between its symbol and its words where it isn't the one that goes with `size`.
     var gap: CGFloat?
+    /// The room between its words and its sides where it isn't the one that goes with `size`.
+    var padding: CGFloat?
 
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: CGFloat { symbolSize ?? size.symbol }
@@ -140,14 +142,16 @@ struct ControlLabel: View {
             }
         }
         .frame(maxWidth: fills ? .infinity : nil, alignment: Alignment(horizontal: alignment, vertical: .center))
-        .padding(.leading, wordless ? 0 : size.padding - (icon == nil ? 0 : size.symbolOutset) + pictureInset)
-        .padding(.trailing, wordless ? 0 : size.padding - (chevron ? size.chevronOutset : 0))
+        .padding(.leading, wordless ? 0 : sidePadding - (icon == nil ? 0 : size.symbolOutset) + pictureInset)
+        .padding(.trailing, wordless ? 0 : sidePadding - (chevron ? size.chevronOutset : 0))
         .frame(minWidth: size.height)
         .frame(height: size.height)
         .overlay {
             if pending, icon == nil, waitingTitle == nil { Spinner(size: markSize) }
         }
     }
+
+    private var sidePadding: CGFloat { padding ?? size.padding }
 
     /// A picture smaller than the square stays centred where the square would be.
     private var pictureInset: CGFloat {
@@ -271,12 +275,14 @@ struct ActionButton: View {
     private var alignment = HorizontalAlignment.center
     private let symbolSize: CGFloat?
     private var gap: CGFloat?
+    private var padding: CGFloat?
     private let margin: EdgeInsets
     private let action: () -> Void
 
     init(
         _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .secondary,
-        size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
+        size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil, padding: CGFloat? = nil, pending: Bool = false,
+        pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
         fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, joined: HorizontalEdge.Set = [],
         tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
@@ -292,6 +298,7 @@ struct ActionButton: View {
         self.alignment = alignment
         self.symbolSize = symbolSize
         self.gap = gap
+        self.padding = padding
         self.margin = margin
         self.action = action
     }
@@ -332,7 +339,7 @@ struct ActionButton: View {
         Button(action: action) {
             ControlLabel(
                 title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, pendingTitle: pendingTitle, fills: fills,
-                alignment: alignment, symbolSize: symbolSize, gap: gap
+                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding
             )
             .padding(reach.around)
         }
@@ -354,6 +361,7 @@ struct ActionMenu<Content: View>: View {
     private let pending: Bool
     private let symbolSize: CGFloat?
     private var gap: CGFloat?
+    private var padding: CGFloat?
     private let margin: EdgeInsets
     private let content: Content
     @State private var hovering = false
@@ -364,8 +372,8 @@ struct ActionMenu<Content: View>: View {
     /// A menu with words shows what is chosen, and a chevron after it.
     init(
         _ title: String?, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .ghost,
-        size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil, pending: Bool = false, round: Bool = false,
-        joined: HorizontalEdge.Set = [], tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
+        size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil, padding: CGFloat? = nil, pending: Bool = false,
+        round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture)
@@ -375,6 +383,7 @@ struct ActionMenu<Content: View>: View {
         self.pending = pending
         self.symbolSize = symbolSize
         self.gap = gap
+        self.padding = padding
         self.margin = margin
         self.content = content()
     }
@@ -405,7 +414,8 @@ struct ActionMenu<Content: View>: View {
         return Menu {
             content
         } label: {
-            ControlLabel(title: title, icon: icon, size: look.size, chevron: chevron, pending: pending, symbolSize: symbolSize, gap: gap)
+            ControlLabel(title: title, icon: icon, size: look.size, chevron: chevron, pending: pending, symbolSize: symbolSize, gap: gap,
+                padding: padding)
                 .foregroundStyle(look.foreground)
                 .padding(reach.around)
                 .contentShape(Rectangle())
