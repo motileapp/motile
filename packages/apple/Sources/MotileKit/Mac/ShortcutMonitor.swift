@@ -34,7 +34,7 @@ final class ShortcutMonitor {
     }
 
     private func handle(_ event: NSEvent) -> Bool {
-        guard let store, !recording, store.viewing == nil, NSApp.modalWindow == nil else { return false }
+        guard let store, !recording, store.viewing == nil, Modals.shared.isEmpty, NSApp.modalWindow == nil else { return false }
         guard let window = event.window, !(window is NSPanel), window.attachedSheet == nil, window.sheetParent == nil else { return false }
         let responder = window.firstResponder
         let editing = (responder as? NSTextView)?.isEditable == true

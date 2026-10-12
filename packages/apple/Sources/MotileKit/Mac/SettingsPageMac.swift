@@ -43,13 +43,11 @@ struct SettingsPage: View {
         }
         .onAppear { store.refreshMediaStorage() }
         .confirmsRemoval($removal)
-        .sheet(item: $setupProject) { project in
+        .modal(item: $setupProject) { project in
             SetupSheet(project: project)
-                .sheetSurface()
         }
-        .sheet(item: $editedAccount) { edited in
+        .modal(item: $editedAccount) { edited in
             AgentAccountSheet(server: edited.server, account: edited.account)
-                .sheetSurface()
         }
     }
 
@@ -409,14 +407,14 @@ private struct BranchInstructionsEditor: View {
 /// The shell script that runs in each new worktree of a project before the agent starts there.
 private struct SetupSheet: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeModal) private var close
     let project: Project
     @State private var script = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Worktree Setup for \(project.name)")
-                .font(.ui(size: 13, weight: .semibold))
+                .font(.ui(size: 15, weight: .semibold))
             Text("A shell script that runs in each new worktree before the agent starts there, to install what the work needs. $MOTILE_PROJECT is the project's folder, as in: cp \"$MOTILE_PROJECT/.env\" . && pnpm install")
                 .font(.caption)
                 .foregroundStyle(Color.themeMutedForeground)
@@ -424,16 +422,16 @@ private struct SetupSheet: View {
             TextArea("cp \"$MOTILE_PROJECT/.env\" . && pnpm install", text: $script, monospaced: true, lines: 5, maxLines: 14)
             HStack {
                 Spacer()
-                ActionButton("Cancel") { dismiss() }
+                ActionButton("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary) {
                     store.setSetup(of: project, to: script)
-                    dismiss()
+                    close()
                 }
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(16)
+        .padding(20)
         .frame(width: 440)
         .onAppear { script = project.setup ?? "" }
     }

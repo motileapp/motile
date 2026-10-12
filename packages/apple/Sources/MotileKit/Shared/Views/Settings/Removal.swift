@@ -54,6 +54,11 @@ private struct RemovalConfirmation: ViewModifier {
     @Binding var removal: Removal?
 
     func body(content: Content) -> some View {
+        #if os(macOS)
+        content.asking($removal) { removal in
+            Confirmation(title: removal.title, message: removal.message(store), answers: [Answer(title: "Remove", variant: .danger) { removal.run(store) }])
+        }
+        #else
         content.confirmationDialog(
             removal?.title ?? "", isPresented: Binding { removal != nil } set: { if !$0 { removal = nil } }, presenting: removal
         ) { removal in
@@ -61,5 +66,6 @@ private struct RemovalConfirmation: ViewModifier {
         } message: { removal in
             Text(removal.message(store))
         }
+        #endif
     }
 }

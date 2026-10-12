@@ -16,7 +16,7 @@ struct CommentedLine: Identifiable {
 /// to keep for the review or to hand to the agent.
 struct LineCommentSheet: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeModal) private var close
     let target: PanelTarget
     let page: PullRequestPage
     let commented: CommentedLine
@@ -78,7 +78,7 @@ struct LineCommentSheet: View {
                 ActionButton("Ask the Agent", help: "Put this line and what you wrote in the composer", action: askAgent)
                     .disabled(written.isEmpty)
                 Spacer()
-                ActionButton("Cancel") { dismiss() }
+                ActionButton("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
                 if let thread = threads.last {
                     ActionButton("Reply") { replyTo(thread) }
@@ -98,7 +98,7 @@ struct LineCommentSheet: View {
                 }
                 ActionButton("Ask the Agent", size: .large, fills: true, action: askAgent)
                     .disabled(written.isEmpty)
-                ActionButton("Cancel", variant: .ghost, size: .large, fills: true) { dismiss() }
+                ActionButton("Cancel", variant: .ghost, size: .large, fills: true) { close() }
             }
             #endif
         }
@@ -115,13 +115,13 @@ struct LineCommentSheet: View {
     private func addToReview() {
         let comment = PendingLineComment(path: commented.path, line: commented.line, side: commented.side, body: written)
         store.sidePanel.addPending(comment, to: page.number)
-        dismiss()
+        close()
     }
 
     private func replyTo(_ thread: PullRequestPage.Thread) {
         let edit: JSON = ["kind": "reply", "thread": thread.id, "body": written]
         store.sidePanel.edit(edit, on: target, number: page.number)
-        dismiss()
+        close()
     }
 
     private func askAgent() {
@@ -133,6 +133,6 @@ struct LineCommentSheet: View {
             guard case .success(let answer) = result else { return }
             store.handOff(answer.string("prompt"))
         }
-        dismiss()
+        close()
     }
 }

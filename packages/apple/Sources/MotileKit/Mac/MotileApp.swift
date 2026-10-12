@@ -191,20 +191,19 @@ struct RootView: View {
                 MediaViewer(viewing: viewing)
             }
         }
-        .sheet(isPresented: $store.showsAddServer) {
+        .modal(isPresented: $store.showsAddServer) {
             ConnectServerView(isFirst: false)
                 .frame(width: 620)
-                .sheetSurface()
         }
-        .alert(
-            store.errorAlert.title,
-            isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(store.errorAlert.detail)
+        .asking(Binding { store.errorMessage.map(ShownError.init) } set: { store.errorMessage = $0?.id }) { _ in
+            Confirmation(title: store.errorAlert.title, message: store.errorAlert.detail, dismissal: "OK")
         }
+        .overlay { ModalLayer() }
     }
+}
+
+private struct ShownError: Identifiable {
+    let id: String
 }
 
 /// The sidebar and the open thread, side by side on the window's one surface.

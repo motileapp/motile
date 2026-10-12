@@ -28,7 +28,6 @@ struct SidebarView: View {
     @Environment(AppStore.self) private var store
     @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
     @State private var renaming: ThreadInfo?
-    @State private var newTitle = ""
     @State private var deleting: ThreadInfo?
     private var search: String { store.threadSearch }
 
@@ -54,24 +53,14 @@ struct SidebarView: View {
             guard settled != nil else { return }
             doneExpanded = true
         }
-        .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-            TextField("Title", text: $newTitle)
-            Button("Rename") {
-                if let thread = renaming { store.rename(thread, to: newTitle) }
-                renaming = nil
-            }
-            Button("Cancel", role: .cancel) { renaming = nil }
+        .modal(item: $renaming) { thread in
+            RenameThread(thread: thread)
         }
-        .confirmationDialog(
-            "Delete “\(deleting?.title ?? "")”?",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
-        ) {
-            Button("Delete", role: .destructive) {
-                if let thread = deleting { store.delete(thread) }
-                deleting = nil
-            }
-        } message: {
-            Text(store.deletionNote(deleting))
+        .asking($deleting) { thread in
+            Confirmation(
+                title: "Delete “\(thread.title)”?", message: store.deletionNote(thread),
+                answers: [Answer(title: "Delete", variant: .danger) { store.delete(thread) }]
+            )
         }
     }
 
@@ -173,8 +162,39 @@ struct SidebarView: View {
     }
 
     private func beginRename(_ thread: ThreadInfo) {
-        newTitle = thread.title
         renaming = thread
+    }
+}
+
+private struct RenameThread: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.closeModal) private var close
+    let thread: ThreadInfo
+    @State private var title: String
+
+    init(thread: ThreadInfo) {
+        self.thread = thread
+        _title = State(initialValue: thread.title)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Rename Thread")
+                .font(.ui(size: 15, weight: .semibold))
+            InputField("Title", text: $title)
+            HStack(spacing: 8) {
+                Spacer()
+                ActionButton("Cancel") { close() }
+                ActionButton("Rename", variant: .primary) {
+                    store.rename(thread, to: title)
+                    close()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 400)
     }
 }
 

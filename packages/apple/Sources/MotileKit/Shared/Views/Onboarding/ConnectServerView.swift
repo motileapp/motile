@@ -4,7 +4,7 @@ import SwiftUI
 /// and as a sheet when adding another, centred in it on iOS.
 struct ConnectServerView: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeModal) private var close
     let isFirst: Bool
 
     private var centred: Bool {
@@ -60,14 +60,16 @@ struct ConnectServerView: View {
                 Spacer()
                 lift
             } else {
-                ActionButton("Done") { dismiss() }
+                ActionButton("Done") { close() }
                     .keyboardShortcut(.cancelAction)
                     .padding(.vertical, 26)
             }
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, maxHeight: centred ? .infinity : nil)
-        .background(Color.themeBackground.ignoresSafeArea())
+        .background {
+            if centred { Color.themeBackground.ignoresSafeArea() }
+        }
         .onAppear { store.prepareToAddServer() }
         .onDisappear { store.stopAddingServer() }
     }
