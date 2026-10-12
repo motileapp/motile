@@ -554,7 +554,8 @@ private final class LinearInitialsView: FlippedView {
 
     override func layoutNow() {
         disc.frame = bounds
-        let height = letters.natural.height
-        letters.frame = CGRect(x: 0, y: ((bounds.height - height) / 2).rounded(), width: bounds.width, height: height)
+        let size = letters.natural
+        let width = max(bounds.width, size.width)
+        letters.frame = CGRect(x: ((bounds.width - width) / 2).rounded(), y: ((bounds.height - size.height) / 2).rounded(), width: width, height: size.height)
     }
 }
