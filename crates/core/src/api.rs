@@ -517,7 +517,7 @@ pub enum Event {
     Reply {
         id: u64,
         ok: bool,
-        /// The answer, or `{"error": …}`.
+        /// The answer, or `{"error": …, "offline": …}`, `offline` when the server couldn't be reached.
         value: Value,
     },
 }

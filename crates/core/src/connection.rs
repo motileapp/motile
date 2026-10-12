@@ -20,13 +20,23 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
 const CONNECTION_LOST: &str = "The connection to your server was lost. Try again when it is back.";
+pub const NOT_CONNECTED: &str = "Your server isn't connected. Try again when it is back.";
+
+/// Whether an error only says the server can't be reached, which its state already shows.
+pub fn offline(error: &str) -> bool {
+    error.ends_with(CONNECTION_LOST) || error.ends_with(NOT_CONNECTED)
+}
+
+fn lost(_: impl std::error::Error) -> anyhow::Error {
+    anyhow!(CONNECTION_LOST)
+}
 
 /// The connection failing, worded for a person. A malformed message keeps its own error.
 fn lost_on_the_way(error: io::Error) -> anyhow::Error {
     if error.kind() == io::ErrorKind::InvalidData {
         return error.into();
     }
-    anyhow!(CONNECTION_LOST)
+    lost(error)
 }
 
 /// A server's key, optionally with an address to reach it at directly: `key` or `key@ip:port`.
@@ -132,17 +142,17 @@ impl Connection {
     }
 
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
-        let (mut send, mut recv) = self.inner.open_bi().await.map_err(|_| anyhow!(CONNECTION_LOST))?;
+        let (mut send, mut recv) = self.inner.open_bi().await.map_err(lost)?;
         write_frame(&mut send, request).await.map_err(lost_on_the_way)?;
-        send.finish().map_err(|_| anyhow!(CONNECTION_LOST))?;
+        send.finish().map_err(lost)?;
         read_frame(&mut recv).await.map_err(lost_on_the_way)?.context("Your server didn't answer. Try again.")
     }
 
     /// For `Subscribe` and `Open`: every message until the stream is dropped.
     pub async fn follow(&self, request: &Request) -> anyhow::Result<Follow> {
-        let (mut send, recv) = self.inner.open_bi().await?;
-        write_frame(&mut send, request).await?;
-        send.finish()?;
+        let (mut send, recv) = self.inner.open_bi().await.map_err(lost)?;
+        write_frame(&mut send, request).await.map_err(lost_on_the_way)?;
+        send.finish().map_err(lost)?;
         Ok(Follow { recv })
     }
 
@@ -162,8 +172,10 @@ impl Connection {
         let poster = poster_of.as_ref().map(|_| ("jpg".to_string(), false));
         let shown = poster.or_else(|| media::kind(path)).filter(|_| size > 0 && size <= media::MAX_SIZE);
 
-        let (mut send, mut recv) = self.inner.open_bi().await?;
-        write_frame(&mut send, &Request::Upload { name: name.to_string(), size, poster_of }).await?;
+        let (mut send, mut recv) = self.inner.open_bi().await.map_err(lost)?;
+        write_frame(&mut send, &Request::Upload { name: name.to_string(), size, poster_of })
+            .await
+            .map_err(lost_on_the_way)?;
         let mut namer = media::Namer::default();
         let mut buffer = vec![0u8; 64 * 1024];
         let mut sent = 0;
@@ -172,16 +184,16 @@ impl Connection {
             if read == 0 {
                 bail!("{} changed while it was sent.", path.display());
             }
-            send.write_all(&buffer[..read]).await?;
+            send.write_all(&buffer[..read]).await.map_err(lost)?;
             if shown.is_some() {
                 namer.update(&buffer[..read]);
             }
             sent += read as u64;
             progress(sent, size);
         }
-        send.finish()?;
+        send.finish().map_err(lost)?;
         let media_id = shown.map(|(extension, _)| namer.id(&extension));
-        match read_frame(&mut recv).await?.context("Your server didn't answer. Try again.")? {
+        match read_frame(&mut recv).await.map_err(lost_on_the_way)?.context("Your server didn't answer. Try again.")? {
             Message::Uploaded { path } => Ok((path, media_id)),
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to an upload: {other:?}"),
@@ -191,10 +203,14 @@ impl Connection {
     /// A file in a folder threads work in: what kind it is, its size, and the bytes the server
     /// sends of a text. Those of an image or a video are written to `shown`.
     pub async fn file(&self, request: &Request, shown: &Path) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
-        let (mut send, mut recv) = self.inner.open_bi().await?;
-        write_frame(&mut send, request).await?;
-        send.finish()?;
-        let (kind, size, sent) = match read_frame(&mut recv).await?.context("Your server didn't answer. Try again.")? {
+        let (mut send, mut recv) = self.inner.open_bi().await.map_err(lost)?;
+        write_frame(&mut send, request).await.map_err(lost_on_the_way)?;
+        send.finish().map_err(lost)?;
+        let (kind, size, sent) = match read_frame(&mut recv)
+            .await
+            .map_err(lost_on_the_way)?
+            .context("Your server didn't answer. Try again.")?
+        {
             Message::File { kind, size, sent } => (kind, size, sent),
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to a file request: {other:?}"),
@@ -214,10 +230,14 @@ impl Connection {
     /// Fetches the server's copy of an image, a video or a file an agent sent into `file`, telling
     /// `progress` how many of its bytes have arrived.
     pub async fn media(&self, id: &str, file: &Path, progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {
-        let (mut send, mut recv) = self.inner.open_bi().await?;
-        write_frame(&mut send, &Request::Media { id: id.to_string() }).await?;
-        send.finish()?;
-        let size = match read_frame(&mut recv).await?.context("Your server didn't answer. Try again.")? {
+        let (mut send, mut recv) = self.inner.open_bi().await.map_err(lost)?;
+        write_frame(&mut send, &Request::Media { id: id.to_string() }).await.map_err(lost_on_the_way)?;
+        send.finish().map_err(lost)?;
+        let size = match read_frame(&mut recv)
+            .await
+            .map_err(lost_on_the_way)?
+            .context("Your server didn't answer. Try again.")?
+        {
             Message::Media { size } => size,
             Message::Error { message } => bail!("{message}"),
             other => bail!("Unexpected answer to a media request: {other:?}"),
@@ -238,7 +258,8 @@ async fn receive(
     let mut received = 0;
     while received < size {
         let wanted = buffer.len().min((size - received) as usize);
-        let read = recv.read(&mut buffer[..wanted]).await?.context("The download was cut off. Try again.")?;
+        let read =
+            recv.read(&mut buffer[..wanted]).await.map_err(lost)?.context("The download was cut off. Try again.")?;
         output.write_all(&buffer[..read]).await?;
         received += read as u64;
         progress(received, size);
@@ -254,6 +275,6 @@ pub struct Follow {
 impl Follow {
     /// `None` when the server ended the stream.
     pub async fn next(&mut self) -> anyhow::Result<Option<Message>> {
-        Ok(read_frame(&mut self.recv).await?)
+        read_frame(&mut self.recv).await.map_err(lost_on_the_way)
     }
 }

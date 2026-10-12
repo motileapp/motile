@@ -229,6 +229,10 @@ final class AppStore {
             ? "Its worktree and the uncommitted changes there are deleted too. Its branch stays."
             : "The files the agent changed stay as they are."
     }
+    func alert(_ error: CoreBridge.CoreError) {
+        guard !error.offline else { return }
+        errorMessage = error.message
+    }
     /// The error's first sentence as the alert's title, and the rest below it.
     var errorAlert: (title: String, detail: String) {
         let message = errorMessage ?? ""
@@ -749,7 +753,7 @@ final class AppStore {
             "pull_default_branch": pullDefaultBranch ?? server.pullDefaultBranch,
         ]
         core.send("set_pull_request_settings", ["server_id": server.id, "settings": settings]) { [weak self] result in
-            if case .failure(let error) = result { self?.errorMessage = error.message }
+            if case .failure(let error) = result { self?.alert(error) }
         }
     }
 
@@ -1093,7 +1097,7 @@ final class AppStore {
             self?.enrollTokenPending = false
             switch result {
             case .success(let value): self?.enrollToken = EnrollToken(json: value)
-            case .failure(let error): self?.errorMessage = error.message
+            case .failure(let error): self?.alert(error)
             }
         }
     }
@@ -1152,7 +1156,7 @@ final class AppStore {
                 }
             case .failure(let error):
                 self.serverUpdates[server.id] = nil
-                self.errorMessage = error.message
+                self.alert(error)
             }
         }
     }
@@ -1167,20 +1171,20 @@ final class AppStore {
     /// that started the update answers once it restarts.
     private func restartNow(_ server: Server) {
         core.send("update_server", ["server_id": server.id, "when": RestartWhen.now.rawValue]) { [weak self] result in
-            if case .failure(let error) = result { self?.errorMessage = error.message }
+            if case .failure(let error) = result { self?.alert(error) }
         }
     }
 
     func setContinueSettings(afterLimits: Bool, afterRestarts: Bool, on server: Server) {
         let settings: JSON = ["after_limits": afterLimits, "after_restarts": afterRestarts]
         core.send("set_continue_settings", ["server_id": server.id, "settings": settings]) { [weak self] result in
-            if case .failure(let error) = result { self?.errorMessage = error.message }
+            if case .failure(let error) = result { self?.alert(error) }
         }
     }
 
     func removeServer(_ server: Server) {
         core.send("remove_server", ["server_id": server.id]) { [weak self] result in
-            if case .failure(let error) = result { self?.errorMessage = error.message }
+            if case .failure(let error) = result { self?.alert(error) }
         }
     }
 
@@ -1291,7 +1295,7 @@ final class AppStore {
             case .failure(let error) where panel != nil:
                 panelNotice = error.message
             case .failure(let error):
-                errorMessage = error.message
+                alert(error)
             }
         }
     }
@@ -1463,7 +1467,7 @@ final class AppStore {
         core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
             self?.initializingGit.remove(project.id)
             guard case .failure(let error) = result else { return }
-            self?.errorMessage = error.message
+            self?.alert(error)
         }
     }
 
@@ -1483,7 +1487,7 @@ final class AppStore {
                 }
                 done?(answer.objects("files").map { ChangedFile(json: $0) })
             // Only said when the user is waiting for the answer.
-            case .failure(let error): if done != nil { self?.errorMessage = error.message }
+            case .failure(let error): if done != nil { self?.alert(error) }
             }
         }
     }
@@ -1624,7 +1628,7 @@ final class AppStore {
         var command: JSON = ["server_id": server.id]
         if let model { command["model"] = model }
         core.send("set_text_model", command) { [weak self] result in
-            if case .failure(let error) = result { self?.errorMessage = error.message }
+            if case .failure(let error) = result { self?.alert(error) }
         }
     }
 
@@ -1634,7 +1638,7 @@ final class AppStore {
         var command: JSON = ["server_id": server.id]
         if let instructions { command["instructions"] = instructions }
         core.send("set_branch_instructions", command) { [weak self] result in
-            if case .failure(let error) = result { self?.errorMessage = error.message }
+            if case .failure(let error) = result { self?.alert(error) }
         }
     }
 
@@ -1655,7 +1659,7 @@ final class AppStore {
         var command: JSON = ["server_id": project.serverID, "project_id": project.id]
         if let path { command["path"] = path }
         core.send("set_project_icon", command) { [weak self] result in
-            if case .failure(let error) = result { self?.errorMessage = error.message }
+            if case .failure(let error) = result { self?.alert(error) }
         }
     }
 
@@ -1889,7 +1893,7 @@ final class AppStore {
                 // The message goes back to where it was written, wherever the client is now.
                 self.setText(text, for: key)
                 self.attachmentsByKey[key] = attached.isEmpty ? nil : attached
-                self.errorMessage = error.message
+                self.alert(error)
                 guard self.draftKey == key else { return }
                 self.transcript.setPending(nil)
                 self.transcriptIsEmpty = self.transcript.isEmpty
@@ -2162,7 +2166,7 @@ final class AppStore {
             case .success: done?()
             case .failure(let error):
                 failed?()
-                self?.errorMessage = error.message
+                self?.alert(error)
             }
         }
     }

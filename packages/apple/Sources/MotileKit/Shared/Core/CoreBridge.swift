@@ -8,6 +8,8 @@ final class CoreBridge {
 
     struct CoreError: Error, LocalizedError {
         let message: String
+        /// The server couldn't be reached, which its state in the sidebar already shows.
+        var offline = false
         var errorDescription: String? { message }
     }
 
@@ -78,7 +80,7 @@ final class CoreBridge {
     }
 
     private func answer(id: UInt64, ok: Bool, value: [String: Any], read: Any?) {
-        let failure = CoreError(message: value["error"] as? String ?? "Something went wrong.")
+        let failure = CoreError(message: value["error"] as? String ?? "Something went wrong.", offline: value["offline"] as? Bool == true)
         if let reply = readReplies.removeValue(forKey: id) {
             reply(read.map { .success($0) } ?? .failure(failure))
             return
