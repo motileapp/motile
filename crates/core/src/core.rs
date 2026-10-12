@@ -26,7 +26,7 @@ use tokio::task::AbortHandle;
 use crate::api::{AccountView, Command, Config, Event, ProjectView, ServerView, ThreadView};
 use crate::browse;
 use crate::cache::{Cache, Page};
-use crate::connection::{ServerAddr, bind};
+use crate::connection::{NOT_CONNECTED, ServerAddr, bind, offline};
 use crate::follow::{self, Followed};
 use crate::git;
 use crate::keybindings::Keybindings;
@@ -799,9 +799,7 @@ impl Core {
 
     fn link(&self, server_id: &str) -> Result<Arc<Link>, String> {
         let server = self.servers.iter().find(|server| server.device.public_key == server_id);
-        server
-            .and_then(|server| server.link.clone())
-            .ok_or_else(|| "That server isn't connected. Try again when it is back.".to_string())
+        server.and_then(|server| server.link.clone()).ok_or_else(|| NOT_CONNECTED.to_string())
     }
 
     /// Tells the client about a server's projects, each with its icon if this device has the file.
@@ -2177,7 +2175,7 @@ fn usage_key(bucket_secs: u32, buckets: u32, servers: Option<&Vec<String>>) -> S
 fn reply(sink: &EventSink, id: u64, result: Result<Value, String>) {
     let (ok, value) = match result {
         Ok(value) => (true, value),
-        Err(error) => (false, json!({ "error": error })),
+        Err(error) => (false, json!({ "offline": offline(&error), "error": error })),
     };
     sink(Event::Reply { id, ok, value });
 }

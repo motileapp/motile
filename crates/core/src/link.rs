@@ -15,7 +15,7 @@ use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
 
-use crate::connection::{Closed, Connection, PathKind, ServerAddr};
+use crate::connection::{Closed, Connection, NOT_CONNECTED, PathKind, ServerAddr};
 
 const RETRY_DELAYS: [Duration; 4] =
     [Duration::from_millis(300), Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(5)];
@@ -336,7 +336,7 @@ impl Link {
 
     fn connection(&self) -> anyhow::Result<Connection> {
         let connection = self.lock().connection.clone();
-        connection.ok_or_else(|| anyhow::anyhow!("Your server isn't connected. Try again when it is back."))
+        connection.ok_or_else(|| anyhow::anyhow!(NOT_CONNECTED))
     }
 
     pub async fn request(&self, request: &Request) -> anyhow::Result<Message> {
