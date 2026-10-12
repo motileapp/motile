@@ -65,7 +65,7 @@ struct MediaViewer: View {
                         help: item.video ? "Copy Video (⌘C)" : "Copy Image (⌘C)", variant: .overlay, size: .large,
                         symbolSize: ControlSize.large.smallSymbol, round: true, copies: copies
                     ) { MediaFiles.copy(file, video: item.video, named: item.name) }
-                    roundButton(.download, help: "Save As… (⌘S)") { MediaFiles.save(file, named: item.name) }
+                    roundButton(.download, help: "Save As (⌘S)") { MediaFiles.save(file, named: item.name) }
                 }
                 roundButton(.x, help: "Close (Esc)") { store.closeViewer() }
             }

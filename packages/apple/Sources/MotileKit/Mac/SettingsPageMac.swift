@@ -83,8 +83,11 @@ struct SettingsPage: View {
             SettingsRow {
                 SettingsLabel("Theme")
             } trailing: {
-                Segmented(Appearance.allCases.map { ($0.label, $0) }, selection: $appearance)
-                    .padding(.trailing, -segmentedOutset)
+                ActionMenu(appearance.label, variant: .outline, size: .large) {
+                    ForEach(Appearance.allCases) { option in
+                        Button(option.label) { appearance = option }
+                    }
+                }
             }
         }
 
@@ -94,8 +97,10 @@ struct SettingsPage: View {
                     "Sent while the agent works",
                     description: AppStore.steersDescription(steers))
             } trailing: {
-                Segmented([("Queue", false), ("Steer", true)], selection: $steers)
-                    .padding(.trailing, -segmentedOutset)
+                ActionMenu(steers ? "Steer" : "Queue", variant: .outline, size: .large) {
+                    Button("Queue") { steers = false }
+                    Button("Steer") { steers = true }
+                }
             }
         }
 
@@ -117,7 +122,7 @@ struct SettingsPage: View {
                 } trailing: {
                     ServerUpdateStatus(server: server, variant: .outline, size: .large) { EmptyView() }
                     more("What to do with \(server.name)") {
-                        item("Remove Server…", symbol: .trash2, role: .destructive) { removal = .server(server) }
+                        item("Remove Server", symbol: .trash2, role: .destructive) { removal = .server(server) }
                     }
                 }
                 ThemeDivider()
@@ -293,10 +298,10 @@ struct SettingsPage: View {
                     SettingsLabel("\(account.agent.name) · \(account.name)", description: account.settingsDescription)
                 } trailing: {
                     more("What to do with the account") {
-                        item("Edit…", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
+                        item("Edit", symbol: .pencil) { editedAccount = EditedAccount(server: server, account: account) }
                         if !account.isDefault {
                             Divider()
-                            item("Remove Account…", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
+                            item("Remove Account", symbol: .trash2, role: .destructive) { removal = .account(account, on: server) }
                         }
                     }
                 }
@@ -326,12 +331,12 @@ struct SettingsPage: View {
                     SettingsLabel(project.name, description: project.path, truncates: .head)
                 } trailing: {
                     more("What to do with \(project.name)") {
-                        item("Choose an Icon…", symbol: .image) { store.openPanel(.icon(project.id)) }
+                        item("Choose an Icon", symbol: .image) { store.openPanel(.icon(project.id)) }
                         if (store.server(project.serverID)?.protocolVersion ?? 0) >= 6 {
-                            item("Worktree Setup…", symbol: .terminal) { setupProject = project }
+                            item("Worktree Setup", symbol: .terminal) { setupProject = project }
                         }
                         Divider()
-                        item("Remove Project…", symbol: .trash2, role: .destructive) { removal = .project(project) }
+                        item("Remove Project", symbol: .trash2, role: .destructive) { removal = .project(project) }
                     }
                 }
                 ThemeDivider()
@@ -371,13 +376,6 @@ let settingsRowHeight: CGFloat = scaled(48)
 /// What stands a control this tall as far from its row's right as from its top and bottom.
 func rowOutset(for height: CGFloat) -> CGFloat {
     settingsInset - (settingsRowHeight - height) / 2
-}
-
-/// A row's controls are large; a segmented picker is a little taller than one, so it reaches a
-/// little further.
-private var segmentedOutset: CGFloat {
-    let track = Segmented<Bool>.inset + Segmented<Bool>.border
-    return rowOutset(for: ControlSize.regular.height + 2 * track) - rowOutset(for: ControlSize.large.height)
 }
 
 /// How a server's writer is told to name the branches it makes, to change and to put back.

@@ -150,7 +150,7 @@ struct ThreadPane: View {
                 Button("Add Project") { store.addProject() }
                 if let project = selected, !project.noProject {
                     Button("Choose an Icon for “\(project.name)”") { store.openPanel(.icon(project.id)) }
-                    Button("Remove “\(project.name)” from Projects…") { removal = .project(project) }
+                    Button("Remove “\(project.name)” from Projects") { removal = .project(project) }
                 }
             } label: {
                 HStack(spacing: 8) {

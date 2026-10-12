@@ -129,7 +129,7 @@ private struct ShortcutRowView: View {
     private var menu: some View {
         ActionMenu(icon: .ellipsis, help: "What to do with the shortcut", size: .large, margin: halfGap(leading: true)) {
             if !row.key.isEmpty {
-                menuItem(row.when.isEmpty ? "Add a Condition…" : "Edit the Condition…", symbol: .pencil) { editingCondition = true }
+                menuItem(row.when.isEmpty ? "Add a Condition" : "Edit the Condition", symbol: .pencil) { editingCondition = true }
                 menuItem("Add Another Shortcut", symbol: .plus) { addAnother(row.command) }
             }
             if row.resettable {

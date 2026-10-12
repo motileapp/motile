@@ -134,7 +134,7 @@ struct ComposerView: View {
     private var placeholder: String {
         guard let server = store.composerServer else { return "Ask anything" }
         if store.selectedThread?.isDone == true { return "Message to bring it back" }
-        if server.state != .connected { return "Waiting for \(server.name)…" }
+        if server.state != .connected { return "Waiting for \(server.name)" }
         if server.models.isEmpty && server.known { return "Install Claude Code or Codex" }
         if store.activity.running { return "Send a follow-up" }
         return "Ask anything"
