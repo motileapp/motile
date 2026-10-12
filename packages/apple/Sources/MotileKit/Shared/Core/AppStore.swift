@@ -1313,7 +1313,7 @@ final class AppStore {
 
     /// Whether the project's server is new enough to start threads in worktrees of their own.
     func canUseWorktrees(of project: Project) -> Bool {
-        project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 6
+        project.branch != nil && project.git?.hasCommit != false && (server(project.serverID)?.protocolVersion ?? 0) >= 6
     }
 
     /// Whether the open draft starts its thread in a new worktree.

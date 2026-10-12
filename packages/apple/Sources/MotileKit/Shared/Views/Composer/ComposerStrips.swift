@@ -110,6 +110,7 @@ struct ContextStrip: View {
         project.worktree != nil
             || (store.selectedThread != nil && project.branch != nil)
             || (store.selectedThread == nil && store.canUseWorktrees(of: project))
+            || (store.selectedThread == nil && project.git?.hasCommit == false)
     }
 
     @ViewBuilder private var branchPart: some View {
@@ -172,6 +173,9 @@ struct ContextStrip: View {
                 }
             }
             .shortcutTarget("composer.workspace")
+        } else if store.selectedThread == nil, let branch = project.branch, project.git?.hasCommit == false {
+            working(in: "Current checkout", symbol: .folder)
+                .help("A worktree can start once \(branch) has a commit")
         }
     }
 

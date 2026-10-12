@@ -921,6 +921,9 @@ pub struct GitStatus {
     /// The branch new work starts from: the remote's, or `main` or `master` without one.
     #[serde(default)]
     pub default_branch: Option<String>,
+    /// The checked-out branch has no commit yet, so no worktree can start from it.
+    #[serde(default)]
+    pub no_commit: bool,
     pub remote: bool,
     pub upstream: bool,
     /// Commits that aren't on the remote yet.
