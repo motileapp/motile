@@ -195,19 +195,16 @@ private struct PullRequestPageView: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .alert(
-            confirming?.confirm?.title ?? "", isPresented: confirmingShown, presenting: confirming
-        ) { button in
-            Button(button.confirm?.button ?? button.label, role: button.style == "danger" ? .destructive : nil) { perform(button) }
-            Button("Cancel", role: .cancel) {}
-        } message: { button in
-            Text(button.confirm?.message ?? "")
+        .asking($confirming) { button in
+            Confirmation(
+                title: button.confirm?.title ?? "", message: button.confirm?.message ?? "",
+                answers: [Answer(title: button.confirm?.button ?? button.label, variant: button.style == "danger" ? .danger : .primary) { perform(button) }]
+            )
         }
-        .sheet(isPresented: $describing) {
+        .modal(isPresented: $describing) {
             DescriptionEditor(original: page.body) { body in
                 panel.edit(["kind": "body", "body": body], key: "menu:body", on: target, number: number)
             }
-            .sheetSurface()
         }
     }
 
@@ -481,12 +478,6 @@ private struct PullRequestPageView: View {
     private func perform(_ button: PullRequestButton) {
         guard let action = button.action else { return }
         panel.act(action, method: button.method, key: button.key, on: target, number: number)
-    }
-
-    private var confirmingShown: Binding<Bool> {
-        Binding { confirming != nil } set: { shown in
-            if !shown { confirming = nil }
-        }
     }
 }
 

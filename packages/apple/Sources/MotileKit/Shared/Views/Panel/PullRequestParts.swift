@@ -129,7 +129,7 @@ struct PullRequestTextView: View {
 /// The sheet that edits the description, with how it will look.
 struct DescriptionEditor: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeModal) private var close
     let original: String
     let save: (String) -> Void
     @State private var text = ""
@@ -164,11 +164,11 @@ struct DescriptionEditor: View {
             }
             HStack(spacing: 8) {
                 Spacer()
-                ActionButton("Cancel") { dismiss() }
+                ActionButton("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary) {
                     save(text)
-                    dismiss()
+                    close()
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(text == original)

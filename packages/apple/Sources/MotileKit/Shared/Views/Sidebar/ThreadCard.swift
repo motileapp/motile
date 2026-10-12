@@ -89,10 +89,18 @@ final class ThreadPeek {
 
     private init() {}
 
+    private static var behindModal: Bool {
+        #if os(macOS)
+        !Modals.shared.isEmpty
+        #else
+        false
+        #endif
+    }
+
     /// The pointer is on the thread's row, `row` in `view`, or on no thread's.
     func point(at thread: ThreadInfo?, row: CGRect, in view: PlatformView, store: AppStore) {
         waiting?.invalidate()
-        guard let thread else {
+        guard let thread, !Self.behindModal else {
             hide()
             return
         }

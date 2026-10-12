@@ -12,7 +12,7 @@ struct EditedAccount: Identifiable {
 /// variables its agent is given, with the command that signs it in.
 struct AgentAccountSheet: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeModal) private var close
     let server: Server
     @State private var account: AgentAccount
     @State private var variables: [EditedVariable]
@@ -48,18 +48,18 @@ struct AgentAccountSheet: View {
         #if os(macOS)
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .font(.ui(size: 13, weight: .semibold))
+                .font(.ui(size: 15, weight: .semibold))
             form
             HStack {
                 Spacer()
-                ActionButton("Cancel") { dismiss() }
+                ActionButton("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary, pending: saving) { save() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSave)
             }
         }
-        .padding(16)
+        .padding(20)
         .frame(width: 460)
         #else
         NavigationStack {
@@ -293,7 +293,7 @@ struct AgentAccountSheet: View {
         saving = true
         store.saveAgentAccount(saved, on: server) { kept in
             saving = false
-            if kept { dismiss() }
+            if kept { close() }
         }
     }
 }

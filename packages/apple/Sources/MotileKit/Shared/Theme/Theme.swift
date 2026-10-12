@@ -345,18 +345,28 @@ extension View {
     func box(in shape: some InsettableShape, bordered: Bool = false) -> some View {
         modifier(Box(shape: shape, bordered: bordered))
     }
+}
 
-    /// A sheet's content: on the background, with what lies on it filled from there.
+#if os(iOS)
+extension View {
+    /// A sheet's content: on the background, with what lies on it filled from there, and closed by
+    /// `closeModal`.
     func sheetSurface() -> some View {
-        self
-            #if os(macOS)
-            .background(Color.themeBackground)
-            #else
-            .presentationBackground(Color.themeBackground)
-            #endif
-            .environment(\.surface, .background)
+        modifier(SheetSurface())
     }
 }
+
+private struct SheetSurface: ViewModifier {
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content
+            .presentationBackground(Color.themeBackground)
+            .environment(\.surface, .background)
+            .environment(\.closeModal, CloseModal { dismiss() })
+    }
+}
+#endif
 
 extension Color {
     static let themeForegroundOverPicture = Color(platform: Theme.foregroundOverPicture)

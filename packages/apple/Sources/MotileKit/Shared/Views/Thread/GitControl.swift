@@ -20,12 +20,14 @@ struct GitButton: View {
 
     var body: some View {
         content
-            .alert(store.pendingGit?.confirm.title ?? "", isPresented: confirming, presenting: store.pendingGit) { pending in
-                Button(pending.confirm.proceed) { store.confirmGit(pending, onNewBranch: false) }
-                Button(pending.confirm.branchOff) { store.confirmGit(pending, onNewBranch: true) }
-                Button("Cancel", role: .cancel) {}
-            } message: { pending in
-                Text(pending.confirm.description)
+            .asking(Binding { store.pendingGit } set: { store.pendingGit = $0 }) { pending in
+                Confirmation(
+                    title: pending.confirm.title, message: pending.confirm.description,
+                    answers: [
+                        Answer(title: pending.confirm.branchOff, variant: .secondary) { store.confirmGit(pending, onNewBranch: true) },
+                        Answer(title: pending.confirm.proceed) { store.confirmGit(pending, onNewBranch: false) },
+                    ]
+                )
             }
     }
 
@@ -167,12 +169,6 @@ struct GitButton: View {
         store.runQuickGit(in: project)
     }
     #endif
-
-    private var confirming: Binding<Bool> {
-        Binding { store.pendingGit != nil } set: { shown in
-            if !shown { store.pendingGit = nil }
-        }
-    }
 }
 
 #if os(macOS)
@@ -384,7 +380,7 @@ struct GitNoticeView: View {
 /// and a message that is written for the user when they leave it empty.
 struct CommitSheet: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeModal) private var close
     let project: Project
     @State private var message = ""
     @State private var excluded: Set<String> = []
@@ -425,7 +421,7 @@ struct CommitSheet: View {
             #if os(macOS)
             HStack(spacing: 8) {
                 Spacer()
-                ActionButton("Cancel") { dismiss() }
+                ActionButton("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Commit on New Branch") { commit(onNewBranch: true) }
                     .disabled(included.isEmpty)
@@ -440,7 +436,7 @@ struct CommitSheet: View {
                     .disabled(included.isEmpty)
                 ActionButton("Commit on New Branch", size: .large, fills: true) { commit(onNewBranch: true) }
                     .disabled(included.isEmpty)
-                ActionButton("Cancel", variant: .ghost, size: .large, fills: true) { dismiss() }
+                ActionButton("Cancel", variant: .ghost, size: .large, fills: true) { close() }
             }
             #endif
         }
@@ -539,7 +535,7 @@ struct CommitSheet: View {
     private func commit(onNewBranch: Bool) {
         let paths = excluded.isEmpty ? [] : included
         let written = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        dismiss()
+        close()
         store.runGit("commit", in: project, message: written, paths: paths, newBranch: onNewBranch)
     }
 }

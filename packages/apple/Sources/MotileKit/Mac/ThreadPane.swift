@@ -39,9 +39,8 @@ struct ThreadPane: View {
         .takingDroppedFiles()
         .overlay(alignment: .topLeading) { topBar }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
-        .sheet(item: $store.committingProject) { project in
+        .modal(item: $store.committingProject) { project in
             CommitSheet(project: project)
-                .sheetSurface()
         }
         .overlay(alignment: .topTrailing) {
             if let notice = store.openGitNotice {

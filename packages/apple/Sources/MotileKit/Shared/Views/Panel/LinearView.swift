@@ -121,10 +121,9 @@ private struct LinearIssues: View {
                 }
         }
         .onGeometryChange(for: Bool.self) { $0.size.width < Self.wraps } action: { tight = $0 }
-        .sheet(isPresented: $filing) {
+        .modal(isPresented: $filing) {
             if let workspace = choice.workspace {
                 LinearNewIssue(target: target, workspace: workspace, team: choice.team)
-                    .sheetSurface()
             }
         }
     }
@@ -385,7 +384,7 @@ struct LinearIssueSurface: View {
 /// The sheet that files an issue.
 private struct LinearNewIssue: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.closeModal) private var close
     let target: PanelTarget
     let workspace: String
     /// The team the list shows, when it shows one.
@@ -417,7 +416,7 @@ private struct LinearNewIssue: View {
             }
             HStack(spacing: 8) {
                 Spacer()
-                ActionButton("Cancel") { dismiss() }
+                ActionButton("Cancel") { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Create Issue", variant: .primary, pending: linear.working.contains("create")) {
                     guard let picked else { return }
@@ -425,7 +424,7 @@ private struct LinearNewIssue: View {
                     if let state { issue["state"] = state.id }
                     if let assigneeID { issue["assignee"] = assigneeID }
                     linear.create(issue, in: workspace, on: target.serverID) { id, identifier in
-                        dismiss()
+                        close()
                         store.sidePanel.open(.linearIssue(workspace: workspace, id: id, identifier: identifier))
                     }
                 }

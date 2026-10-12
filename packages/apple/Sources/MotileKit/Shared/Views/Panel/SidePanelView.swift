@@ -438,10 +438,9 @@ struct DiffSurface: View {
             }
             panel.loadDiff(of: target, scope: scope)
         }
-        .sheet(item: $commenting) { line in
+        .modal(item: $commenting) { line in
             if let page = page(for: scope) {
                 LineCommentSheet(target: target, page: page, commented: line)
-                    .sheetSurface()
             }
         }
     }
