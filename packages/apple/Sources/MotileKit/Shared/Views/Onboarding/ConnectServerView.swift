@@ -48,6 +48,7 @@ struct ConnectServerView: View {
 
             if isFirst {
                 Spacer()
+                lift
                 HStack(spacing: 0) {
                     Text("Signed in as \(store.account.email)")
                     ActionButton("Sign out", variant: .link, size: .small) { store.signOut() }
@@ -57,6 +58,7 @@ struct ConnectServerView: View {
                 .padding(.bottom, 20)
             } else if centred {
                 Spacer()
+                lift
             } else {
                 ActionButton("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -68,6 +70,11 @@ struct ConnectServerView: View {
         .background(Color.themeBackground.ignoresSafeArea())
         .onAppear { store.prepareToAddServer() }
         .onDisappear { store.stopAddingServer() }
+    }
+
+    /// Raises the centred content a little above the middle.
+    private var lift: some View {
+        Color.clear.containerRelativeFrame(.vertical) { height, _ in height * 0.08 }
     }
 
     /// The spinner and the time the command has left, or that it has run out and a way to a new one.
