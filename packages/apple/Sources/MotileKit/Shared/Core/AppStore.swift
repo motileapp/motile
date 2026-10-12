@@ -275,6 +275,7 @@ final class AppStore {
     @ObservationIgnored private var signInSession: SignInSession?
     @ObservationIgnored private let lifecycle = Lifecycle()
     @ObservationIgnored private var undoTimer: Timer?
+    @ObservationIgnored private var undoHeld = false
     @ObservationIgnored private var openThreadID: String?
     @ObservationIgnored private let defaults = UserDefaults.standard
     /// The thread that was open when the client was last closed, until it has been opened again.
@@ -2123,7 +2124,19 @@ final class AppStore {
 
     private func showUndo(_ notice: UndoNotice) {
         undo = notice
+        scheduleUndoDismissal()
+    }
+
+    /// Keeps the offer to undo while the pointer is on it, and gives it its full time again once
+    /// the pointer leaves.
+    func holdUndo(_ held: Bool) {
+        undoHeld = held
+        scheduleUndoDismissal()
+    }
+
+    private func scheduleUndoDismissal() {
         undoTimer?.invalidate()
+        guard undo != nil, !undoHeld else { return }
         undoTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in self?.undo = nil }
     }
 
