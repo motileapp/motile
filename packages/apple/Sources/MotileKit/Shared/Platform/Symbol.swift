@@ -8,6 +8,7 @@ enum Symbol: String {
     case arrowRight = "\u{e049}"
     case arrowUp = "\u{e04a}"
     case bookMarked = "\u{e3f1}"
+    case bot = "\u{e1bb}"
     case braces = "\u{e36a}"
     case brain = "\u{e3c6}"
     case camera = "\u{e064}"

@@ -28,7 +28,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: .slidersHorizontal
         case .keyboard: .keyboard
         case .servers: .server
-        case .agents: .circleUser
+        case .agents: .bot
         case .projects: .folder
         case .textGeneration: .pencilLine
         case .pullRequests: .gitPullRequest
