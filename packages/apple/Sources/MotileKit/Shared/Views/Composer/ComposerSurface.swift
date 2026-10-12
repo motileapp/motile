@@ -51,17 +51,33 @@ extension View {
         }
         .overlay { shape.stroke(Color.themeBorderComposer, lineWidth: 1) }
         #else
-        if #available(iOS 26.0, *) {
-            background(Color.themeComposer.at(.inputGlassTint), in: shape)
-                .glassEffect(.regular, in: shape)
-        } else {
-            background(Color.themeComposer.at(.inputGlassTint), in: shape)
-                .background(.regularMaterial, in: shape)
-                .overlay { shape.stroke(Color.themeBorderComposer, lineWidth: 1) }
-        }
+        modifier(ComposerGlass(shape: shape))
         #endif
     }
 }
+
+#if os(iOS)
+/// Liquid Glass gives what lies on it the light or dark of what is behind it, and can keep that
+/// after the client's appearance changes. The composer is tinted for the client's appearance, so
+/// it keeps that one.
+private struct ComposerGlass<S: Shape>: ViewModifier {
+    let shape: S
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        let tinted = content
+            .background(Color.themeComposer.at(.inputGlassTint), in: shape)
+            .environment(\.colorScheme, scheme)
+        if #available(iOS 26.0, *) {
+            tinted.glassEffect(.regular, in: shape)
+        } else {
+            tinted
+                .background(.regularMaterial, in: shape)
+                .overlay { shape.stroke(Color.themeBorderComposer, lineWidth: 1) }
+        }
+    }
+}
+#endif
 
 #if os(macOS)
 /// The surfaces of the composer and its strips, where they are and their outlines.
@@ -79,13 +95,14 @@ struct ComposerSilhouette: PreferenceKey {
 }
 #endif
 
-/// Draws the glass surfaces inside it as one piece of glass.
+/// Draws the glass surfaces inside it as one piece of glass, in the client's appearance.
 struct GlassGroup<Content: View>: View {
     @ViewBuilder let content: Content
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         if #available(iOS 26.0, macOS 26.0, *) {
-            GlassEffectContainer(spacing: 0) { content }
+            GlassEffectContainer(spacing: 0) { content.environment(\.colorScheme, scheme) }
         } else {
             content
         }
