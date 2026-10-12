@@ -629,6 +629,8 @@ struct UndoRow: View {
             }
             .buttonStyle(.highlight(radius: 0))
         }
+        .onHover { store.holdUndo($0) }
+        .onDisappear { store.holdUndo(false) }
     }
 }
 
