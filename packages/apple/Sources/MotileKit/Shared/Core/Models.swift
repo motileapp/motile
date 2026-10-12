@@ -322,6 +322,8 @@ struct GitStatus: Equatable {
     let isDefault: Bool
     /// The branch new work starts from. `nil` from a server that doesn't say yet.
     let defaultBranch: String?
+    /// The checked-out branch has a commit a worktree can start from.
+    let hasCommit: Bool
     let remote: Bool
     let added: Int
     let removed: Int
@@ -331,6 +333,7 @@ struct GitStatus: Equatable {
         branch = json.optionalString("branch")
         isDefault = json.bool("default")
         defaultBranch = json.optionalString("default_branch")
+        hasCommit = !json.bool("no_commit")
         remote = json.bool("remote")
         added = json.int("added")
         removed = json.int("removed")

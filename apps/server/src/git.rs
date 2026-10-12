@@ -177,6 +177,7 @@ pub async fn status(folder: &str, environment: &Environment) -> Option<(GitStatu
         ..GitStatus::default()
     };
     let committed = !read.head.is_empty();
+    status.no_commit = !committed;
     if committed && remote.is_some() && !status.upstream {
         status.ahead = count(folder, environment, &["HEAD", "--not", "--remotes"]).await;
     }
@@ -1135,6 +1136,19 @@ mod tests {
         commit(folder, &environment, "Everything", &[]).await.unwrap();
         assert_eq!(files_of(folder, &environment, "HEAD").await, "notes/new.txt\ntracked.txt\n");
         assert_eq!(status(folder, &environment).await.unwrap().1, []);
+    }
+
+    #[tokio::test]
+    async fn a_new_repository_has_no_commit_until_its_first() {
+        let environment = test_environment();
+        let folder = tempfile::tempdir().unwrap();
+        let folder = folder.path().to_str().unwrap();
+        init(folder, &environment).await.unwrap();
+
+        assert!(status(folder, &environment).await.unwrap().0.no_commit);
+
+        git(folder, &environment, &["commit", "--quiet", "--allow-empty", "-m", "Start"]).await.unwrap();
+        assert!(!status(folder, &environment).await.unwrap().0.no_commit);
     }
 
     #[tokio::test]

@@ -104,7 +104,7 @@ struct ThreadSettingsSheet: View {
     /// Where the thread works: the server, the folder or a worktree of its own, and the branch
     /// checked out there. A thread that starts in a new worktree picks the branch it starts from.
     private func workspace(_ project: Project) -> some View {
-        Section("Workspace") {
+        Section {
             if let server = store.server(project.serverID) {
                 LabeledContent("Server", value: server.name)
             }
@@ -119,6 +119,8 @@ struct ThreadSettingsSheet: View {
                     Text("New worktree").tag(true)
                 }
                 .tint(Color.themePrimary)
+            } else if store.selectedThread == nil, project.branch != nil, project.git?.hasCommit == false {
+                LabeledContent("Works in", value: "Current checkout")
             }
             let startsInWorktree = store.draftUsesWorktree
             if let branch = startsInWorktree ? store.draftBase : project.branch {
@@ -138,6 +140,13 @@ struct ThreadSettingsSheet: View {
                 } else {
                     LabeledContent(title, value: value)
                 }
+            }
+        } header: {
+            Text("Workspace")
+        } footer: {
+            if store.selectedThread == nil, let branch = project.branch, project.git?.hasCommit == false {
+                Text("A worktree can start once \(branch) has a commit.")
+                    .foregroundStyle(Color.themeMutedForeground)
             }
         }
         .listRowBackground(surface.color(.box))
