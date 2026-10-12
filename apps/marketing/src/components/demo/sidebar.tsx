@@ -94,7 +94,7 @@ export function Sidebar({
           >
             <ChevronRightIcon
               className={cn(
-                "size-2.5 w-3.5 text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
+                "size-2.5 w-[9px] text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
                 doneOpen && "rotate-90 text-muted-foreground"
               )}
             />
@@ -141,7 +141,7 @@ export function Sidebar({
         >
           <ChevronRightIcon
             className={cn(
-              "size-2.5 w-3.5 text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
+              "size-2.5 w-[9px] text-muted-stronger-foreground transition-transform group-hover:text-muted-foreground",
               serversOpen && "rotate-90 text-muted-foreground"
             )}
           />
@@ -165,7 +165,7 @@ export function Sidebar({
                 key={server.name}
                 className="mx-2.5 flex h-[30px] items-center gap-[7px] px-2"
               >
-                <span className="flex w-3.5 justify-center">
+                <span className="flex w-[9px] justify-center">
                   <span className="size-[7px] rounded-full bg-success" />
                 </span>
                 <span className="text-[12px] font-medium">{server.name}</span>

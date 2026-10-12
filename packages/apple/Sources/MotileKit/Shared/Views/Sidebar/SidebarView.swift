@@ -613,7 +613,7 @@ struct UndoRow: View {
                 store.performUndo()
             } label: {
                 HStack(spacing: 7) {
-                    ShelfMark(lit: false) { Image(.undo2, size: 10, trimmed: true) }
+                    ShelfMark(lit: false) { Image(.undo2, size: 10, trimmed: true).offset(x: -2) }
                     ShelfTitle("Undo", expanded: false)
                     Spacer()
                     HStack(spacing: 4) {
@@ -960,7 +960,7 @@ struct SidebarMark<Mark: View>: View {
     }
 
     var body: some View {
-        mark.frame(width: 14, alignment: .leading)
+        mark.frame(width: 9, alignment: .leading)
     }
 }
 
