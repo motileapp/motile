@@ -711,7 +711,6 @@ struct ThreadInfo: Equatable, Identifiable {
         model = json.optionalString("model")
         effort = json.optionalString("effort")
         access = Access(rawValue: json.string("access")) ?? .full
-        plan = json.bool("plan")
         createdAt = json.double("created_at")
         updatedAt = json.double("updated_at")
         doneAt = json.optionalDouble("done_at")
