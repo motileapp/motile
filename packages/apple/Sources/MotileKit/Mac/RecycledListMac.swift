@@ -61,7 +61,6 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.automaticallyAdjustsContentInsets = false
-        context.coordinator.scrollTarget = scrollTarget
         return scroll
     }
 
@@ -162,16 +161,29 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             }
         }
 
-        /// Brings the target's row into sight once it is in the list.
+        /// Brings the target's row into sight once it is in the list. A list only just made is
+        /// laid out first.
         func scroll(_ scroll: NSScrollView, table: NSTableView, to target: Item.ID?) {
             guard target != scrollTarget else { return }
             guard let target else {
                 scrollTarget = nil
                 return
             }
-            guard let row = list?.items.firstIndex(where: { $0.id == target }) else { return }
+            guard list?.items.contains(where: { $0.id == target }) == true else { return }
             scrollTarget = target
+            guard scroll.contentView.bounds.height > 0 else {
+                DispatchQueue.main.async { [weak self, weak scroll, weak table] in
+                    guard let self, let scroll, let table, self.scrollTarget == target else { return }
+                    self.bringIntoSight(target, scroll: scroll, table: table)
+                }
+                return
+            }
+            bringIntoSight(target, scroll: scroll, table: table)
+        }
+
+        private func bringIntoSight(_ target: Item.ID, scroll: NSScrollView, table: NSTableView) {
             let clip = scroll.contentView
+            guard clip.bounds.height > 0, let row = list?.items.firstIndex(where: { $0.id == target }) else { return }
             let rect = table.rect(ofRow: row)
             var origin = clip.bounds.origin
             if rect.minY < clip.bounds.minY {

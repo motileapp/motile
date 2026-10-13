@@ -45,15 +45,30 @@ extension AppStore {
             + byMessage.map { .thread($0, found[$0.id]) }
     }
 
-    /// Opens what the search found, and ends the search.
+    /// Opens what the search found and ends the search, then shows it in the sidebar.
     func openSearchResult(_ result: SearchResult) {
         select(result.selection)
         threadSearch = ""
+        revealedThreadID = result.thread?.id
     }
+}
 
-    /// The line the search shows when it found nothing, in the place of its first row.
-    var searchEmptyText: String {
-        messageSearch.searching ? "Searching messages" : "No threads found"
+/// The line the search shows when it found nothing, in the place of its first row.
+struct SearchEmptyLine: View {
+    @Environment(AppStore.self) private var store
+    let size: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if store.messageSearch.searching {
+                Spinner(size: size)
+                Text("Searching messages")
+            } else {
+                Text("No threads found")
+            }
+        }
+        .font(.ui(size: size))
+        .foregroundStyle(Color.themeMutedStrongerForeground)
     }
 }
 
@@ -83,7 +98,10 @@ struct SearchResultRow: View {
                     .foregroundStyle(isDone ? Color.themeMutedStrongerForeground : highlighted ? Color.themeForeground : Color.themeMutedForeground)
                     .layoutPriority(1)
                 Spacer(minLength: 6)
-                status(project: project)
+                HStack(spacing: 6) {
+                    status(project: project)
+                }
+                .fixedSize()
             }
             .frame(height: scaled(22))
             detail(project: project)

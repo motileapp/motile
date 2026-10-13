@@ -29,7 +29,8 @@ struct SidebarScreen: View {
         VStack(spacing: 0) {
             header
             RecycledList(
-                items: items, bottomInset: 12, scrollTarget: store.settledThreadID.map(SidebarItem.doneID), scrolled: { self.swiped = nil },
+                items: items, bottomInset: 12, scrollTarget: searching ? nil : items.first { $0.thread?.id == store.revealedThreadID }?.id,
+                scrolled: { self.swiped = nil },
                 rowInset: UIEdgeInsets(top: rowMargin.top, left: rowMargin.leading, bottom: rowMargin.bottom, right: rowMargin.trailing),
                 rowRadius: 8,
                 movable: { item in
@@ -48,8 +49,8 @@ struct SidebarScreen: View {
             ) { item in
                 row(item, done: done, expanded: doneExpanded, shown: shown)
             }
-            .onChange(of: store.settledThreadID) { _, settled in
-                guard settled != nil else { return }
+            .onChange(of: store.revealedThreadID) { _, revealed in
+                guard let revealed, store.doneThreads.contains(where: { $0.id == revealed }) else { return }
                 doneExpanded = true
             }
             if let undo = store.undo {
@@ -167,12 +168,18 @@ struct SidebarScreen: View {
         case .result(let result):
             SearchResultRow(result: result, highlighted: selection == result.selection, open: openSearchResult)
         case .empty:
-            Text(store.isSearchingThreads ? store.searchEmptyText : done.isEmpty ? "No threads yet" : "No active threads")
-                .font(.ui(size: 13))
-                .foregroundStyle(Color.themeMutedStrongerForeground)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, sidebarEdge)
-                .padding(.vertical, 10)
+            Group {
+                if store.isSearchingThreads {
+                    SearchEmptyLine(size: 13)
+                } else {
+                    Text(done.isEmpty ? "No threads yet" : "No active threads")
+                        .font(.ui(size: 13))
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, sidebarEdge)
+            .padding(.vertical, 10)
         case .newThread:
             NewThreadRow()
                 .frame(height: 44)
@@ -370,9 +377,6 @@ private enum SidebarItem: Identifiable {
     case doneHeader
     case done(ThreadInfo)
 
-    /// A done thread's row has an id of its own, or the list keeps its active row for it.
-    static func doneID(_ threadID: String) -> String { "done:\(threadID)" }
-
     var id: String {
         switch self {
         case .drafts: "drafts"
@@ -381,7 +385,8 @@ private enum SidebarItem: Identifiable {
         case .empty: "empty"
         case .newThread: "newThread"
         case .doneHeader: "done"
-        case .done(let thread): Self.doneID(thread.id)
+        // A done thread's row has an id of its own, or the list keeps its active row for it.
+        case .done(let thread): "done:\(thread.id)"
         }
     }
 
