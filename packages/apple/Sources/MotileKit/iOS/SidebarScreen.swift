@@ -19,17 +19,24 @@ struct SidebarScreen: View {
     /// Why a swipe couldn't mark a thread done: its agent is still at it.
     @State private var busy = ""
     @State private var showsBusy = false
+    /// The search's result the arrow keys are on, which return opens.
+    @State private var highlighted = 0
 
     var body: some View {
         let searching = store.isSearchingThreads
         let active = searching ? [] : store.activeThreads
         let done = searching ? [] : store.doneThreads
-        let shown = Shown(projects: store.projectsByID, selection: store.selection, swiped: swiped)
-        let items = searching ? searchItems() : items(active: active, done: done, expanded: doneExpanded)
+        let results = store.searchResults
+        let highlightedID = results.indices.contains(highlighted) ? results[highlighted].id : nil
+        let shown = Shown(projects: store.projectsByID, selection: store.selection, swiped: swiped, highlighted: highlightedID)
+        let items = searching ? searchItems(results) : items(active: active, done: done, expanded: doneExpanded)
         VStack(spacing: 0) {
             header
             RecycledList(
-                items: items, bottomInset: 12, scrollTarget: searching ? nil : items.first { $0.thread?.id == store.revealedThreadID }?.id,
+                items: items, bottomInset: 12,
+                scrollTarget: searching
+                    ? highlightedID.map { "result:\($0)" } : items.first { $0.thread?.id == store.revealedThreadID }?.id,
+                scrollsTargetToTop: done.contains { $0.id == store.revealedThreadID },
                 scrolled: { self.swiped = nil },
                 rowInset: UIEdgeInsets(top: rowMargin.top, left: rowMargin.leading, bottom: rowMargin.bottom, right: rowMargin.trailing),
                 rowRadius: 8,
@@ -45,7 +52,10 @@ struct SidebarScreen: View {
                     guard let thread = item.thread else { return [] }
                     return store.rowActions(for: thread, rename: beginRename, delete: { deleting = $0 })
                 },
-                pointed: { item, row, view in ThreadPeek.shared.point(at: item?.thread, row: row, in: view, store: store) }
+                pointed: { item, row, view in
+                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted = index }
+                    ThreadPeek.shared.point(at: item?.thread, row: row, in: view, store: store)
+                }
             ) { item in
                 row(item, done: done, expanded: doneExpanded, shown: shown)
             }
@@ -57,7 +67,7 @@ struct SidebarScreen: View {
                 UndoRow(notice: undo)
                     .appearing()
             }
-            footer
+            footer(results)
         }
         .contentShape(Rectangle())
         .onTapGesture { Platform.endEditing() }
@@ -134,9 +144,8 @@ struct SidebarScreen: View {
     }
 
     /// What the search found, or the line that says it found nothing.
-    private func searchItems() -> [SidebarItem] {
-        let results = store.searchResults
-        return results.isEmpty ? [.empty] : results.map(SidebarItem.result)
+    private func searchItems(_ results: [SearchResult]) -> [SidebarItem] {
+        results.isEmpty ? [.empty] : results.map(SidebarItem.result)
     }
 
     /// What the rows show as the list was last drawn. They are drawn outside this view, so they
@@ -145,6 +154,7 @@ struct SidebarScreen: View {
         let projects: [String: Project]
         let selection: Selection
         let swiped: String?
+        let highlighted: String?
     }
 
     @ViewBuilder
@@ -166,7 +176,7 @@ struct SidebarScreen: View {
                 markDone(thread)
             }
         case .result(let result):
-            SearchResultRow(result: result, highlighted: selection == result.selection, open: openSearchResult)
+            SearchResultRow(result: result, highlighted: result.id == shown.highlighted, open: openSearchResult)
         case .empty:
             Group {
                 if store.isSearchingThreads {
@@ -222,7 +232,7 @@ struct SidebarScreen: View {
     /// The servers and how the client reaches them, and under them the account, which leads to the
     /// settings and the usage, the search and the way to a new thread. While it searches, the
     /// search takes the line with a button that closes it, as the system's search does.
-    private var footer: some View {
+    private func footer(_ results: [SearchResult]) -> some View {
         @Bindable var store = store
         let searching = searchFocused || !store.threadSearch.isEmpty
         return VStack(alignment: .leading, spacing: 0) {
@@ -236,6 +246,7 @@ struct SidebarScreen: View {
                         .appearing(.scale.combined(with: .opacity))
                 }
                 SearchField(text: $store.threadSearch, bare: true, clearable: false, focus: $searchFocused)
+                    .steersSearch(results, highlighted: $highlighted, open: openSearchResult)
                     .padding(.horizontal, 6)
                     .frame(height: 46)
                     .glassButton(in: Capsule())

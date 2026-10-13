@@ -11,6 +11,8 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
     var bottomInset: CGFloat = 0
     /// When it changes, the list scrolls to its row.
     var scrollTarget: Item.ID?
+    /// Whether the target's row is scrolled to the top, clear of the fade, or only into sight.
+    var scrollsTargetToTop = false
     /// A click on a row that doesn't take it itself.
     var clicked: (Item) -> Void = { _ in }
     /// The shape a row lifts in when it is dragged: its light, inset from the row's edges.
@@ -185,14 +187,18 @@ struct RecycledList<Item: Identifiable, Row: View>: NSViewRepresentable {
             let clip = scroll.contentView
             guard clip.bounds.height > 0, let row = list?.items.firstIndex(where: { $0.id == target }) else { return }
             let rect = table.rect(ofRow: row)
-            var origin = clip.bounds.origin
-            if rect.minY < clip.bounds.minY {
-                origin.y = rect.minY
-            } else if rect.maxY > clip.bounds.maxY {
-                origin.y = rect.maxY - clip.bounds.height
+            var bounds = clip.bounds
+            if list?.scrollsTargetToTop == true {
+                bounds.origin.y = rect.minY - EdgeFade.length
+            } else if rect.minY < bounds.minY {
+                bounds.origin.y = rect.minY
+            } else if rect.maxY > bounds.maxY {
+                bounds.origin.y = rect.maxY - bounds.height
             } else {
                 return
             }
+            let origin = clip.constrainBoundsRect(bounds).origin
+            guard origin != clip.bounds.origin else { return }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.15
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)

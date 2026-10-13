@@ -9,6 +9,8 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
     var bottomInset: CGFloat = 0
     /// When it changes, the list scrolls to its row.
     var scrollTarget: Item.ID?
+    /// Whether the target's row is scrolled to the top, clear of the fade, or only into sight.
+    var scrollsTargetToTop = false
     /// A finger has started to scroll the list, or to drag a row.
     var scrolled: () -> Void = {}
     /// The shape a row lifts in when it is held: its light, inset from the row's edges.
@@ -143,7 +145,13 @@ struct RecycledList<Item: Identifiable, Row: View>: UIViewRepresentable {
             scrollTarget = target
             view.layoutIfNeeded()
             guard let frame = view.layoutAttributesForItem(at: IndexPath(item: index, section: 0))?.frame else { return }
-            view.scrollRectToVisible(frame, animated: true)
+            guard list?.scrollsTargetToTop == true else {
+                view.scrollRectToVisible(frame, animated: true)
+                return
+            }
+            let top = -view.adjustedContentInset.top
+            let bottom = max(top, view.contentSize.height + view.adjustedContentInset.bottom - view.bounds.height)
+            view.setContentOffset(CGPoint(x: view.contentOffset.x, y: min(bottom, max(top, frame.minY - EdgeFade.length))), animated: true)
         }
 
         private func configure(_ cell: RecycledCell, at index: Int) {

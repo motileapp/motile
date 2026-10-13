@@ -388,16 +388,18 @@ function ResultRow({
       )}
     >
       <span className="flex h-[22px] w-full items-center gap-1.5">
-        <span className={cn(done && "opacity-(--opacity-disabled)")}>
+        <span
+          className={cn(done && !highlighted && "opacity-(--opacity-disabled)")}
+        >
           <ProjectIcon project={thread.project} />
         </span>
         <span
           className={cn(
             "truncate text-[13px] font-medium",
-            done
-              ? "text-muted-stronger-foreground"
-              : highlighted
-                ? "text-foreground"
+            highlighted
+              ? "text-foreground"
+              : done
+                ? "text-muted-stronger-foreground"
                 : "text-muted-foreground"
           )}
         >
