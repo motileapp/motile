@@ -2367,7 +2367,6 @@ mod tests {
             model: None,
             effort: None,
             access: motile_protocol::wire::Access::Full,
-            plan: false,
             created_at: 1.0,
             updated_at: 2.0,
             done_at: None,

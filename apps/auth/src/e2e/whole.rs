@@ -279,7 +279,6 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: None,
     };
     let send = Command::Send {

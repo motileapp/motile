@@ -124,7 +124,6 @@ impl Harness {
             model: None,
             effort: None,
             access: AgentAccess::Supervised,
-            plan: false,
             worktree: None,
         })
     }
@@ -758,7 +757,7 @@ async fn an_approved_plan_is_carried_out_with_the_threads_access() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, Agent::Claude).await.unwrap();
-    let new_thread = NewThread { plan: true, access: AgentAccess::AcceptEdits, ..new_thread };
+    let new_thread = NewThread { access: AgentAccess::AcceptEdits, ..new_thread };
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     next(&mut list).await;
     let thread_id = send(&connection, None, Some(new_thread), "Plan the hello function").await;
@@ -768,7 +767,6 @@ async fn an_approved_plan_is_carried_out_with_the_threads_access() {
     let plan = first_approval(&mut transcript, &mut follow).await;
     assert_eq!(plan.tool_name, "ExitPlanMode");
     let waiting = thread_where(&mut list, |thread| thread.needs_approval).await;
-    assert!(waiting.plan);
     assert_eq!(waiting.asking, Some(Ask::Plan));
     let approve =
         Request::Answer { thread_id: thread_id.clone(), approval_id: plan.id, allow: true, answers: HashMap::new() };
@@ -776,7 +774,7 @@ async fn an_approved_plan_is_carried_out_with_the_threads_access() {
 
     transcript.follow_until_idle(&mut follow).await;
     assert_eq!(transcript.texts(), vec!["`hello()` is in place. I worked in acceptEdits mode."]);
-    assert!(!thread_where(&mut list, |thread| !thread.running).await.plan, "the thread has left plan mode");
+    thread_where(&mut list, |thread| !thread.running).await;
 }
 
 #[tokio::test]
@@ -784,7 +782,7 @@ async fn a_plan_codex_presents_is_carried_out_in_a_turn_of_its_own_or_left() {
     let harness = Harness::start(fixture(Agent::Codex), "0").await;
     let connection = harness.connect().await;
     let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
-    let new_thread = NewThread { plan: true, access: AgentAccess::AcceptEdits, ..new_thread };
+    let new_thread = NewThread { access: AgentAccess::AcceptEdits, ..new_thread };
     let mut list = connection.follow(&Request::Subscribe).await.unwrap();
     next(&mut list).await;
     let answer = |thread_id: &str, approval_id, allow| {
@@ -801,7 +799,7 @@ async fn a_plan_codex_presents_is_carried_out_in_a_turn_of_its_own_or_left() {
     assert_eq!(transcript.turn_ends().len(), 1, "Codex presents its plan when the turn has ended");
     assert_eq!(answer(&left, plan.id, false).await, Message::Ok);
     transcript.follow_until_idle(&mut follow).await;
-    assert!(thread_where(&mut list, |thread| thread.id == left && !thread.running).await.plan);
+    thread_where(&mut list, |thread| thread.id == left && !thread.running).await;
     assert_eq!(transcript.turn_ends().len(), 1);
     assert!(transcript.errors().is_empty());
 
@@ -815,8 +813,7 @@ async fn a_plan_codex_presents_is_carried_out_in_a_turn_of_its_own_or_left() {
     }
     assert_eq!(transcript.texts(), vec!["`hello()` is in place. I worked in default mode."]);
     assert_eq!(transcript.user_texts(), vec!["Plan the hello function"]);
-    let ended = thread_where(&mut list, |thread| thread.id == carried_out && !thread.running).await;
-    assert!(!ended.plan, "the thread has left plan mode");
+    thread_where(&mut list, |thread| thread.id == carried_out && !thread.running).await;
     assert_eq!(harness.recorded_turns().len(), 2, "the process that planned carries the plan out");
 }
 
@@ -1402,7 +1399,6 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
         model: Some(opus.id.clone()),
         effort: Some("xhigh".to_string()),
         access: AgentAccess::Full,
-        plan: false,
         worktree: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "What is in README.md?").await;
@@ -1420,12 +1416,13 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
         "{first}"
     );
 
-    let change = ThreadChange { effort: Some("low".to_string()), plan: Some(true), ..Default::default() };
+    let change =
+        ThreadChange { effort: Some("low".to_string()), access: Some(AgentAccess::AcceptEdits), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, change).await, Message::Ok);
     send(&connection, Some(thread_id.clone()), None, "And in LICENSE?").await;
     finished_transcript(&connection, &thread_id).await;
     let second = &harness.recorded_turns()[1];
-    assert!(second.contains("--permission-mode\nplan\n--model\nclaude-opus-5-5\n--effort\nlow"), "{second}");
+    assert!(second.contains("--permission-mode\nacceptEdits\n--model\nclaude-opus-5-5\n--effort\nlow"), "{second}");
 
     let odd = ThreadChange { effort: Some("low\" sandbox".to_string()), ..Default::default() };
     assert!(matches!(update(&connection, &thread_id, odd).await, Message::Error { .. }));
@@ -1474,7 +1471,6 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "What is in README.md?").await;
@@ -1606,7 +1602,6 @@ async fn a_project_is_started_from_a_name_or_cloned_from_github() {
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
@@ -1732,7 +1727,6 @@ async fn a_projects_branches_are_listed_switched_and_created() {
         model: None,
         effort: None,
         access: AgentAccess::Supervised,
-        plan: false,
         worktree: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Look at the README").await;
@@ -2321,7 +2315,6 @@ async fn a_worktree_asked_for_with_a_branch_is_made_on_it() {
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: Some("ada/eng-7-greet-by-name".to_string()) }),
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
@@ -2347,7 +2340,6 @@ async fn a_branch_a_threads_worktree_took_is_given_back_when_the_project_switche
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: Some("ada/checkout-main".to_string()) }),
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
@@ -2394,7 +2386,6 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
@@ -2561,7 +2552,6 @@ async fn where_a_new_worktree_starts_is_said_and_so_is_a_remote_that_cannot_be_f
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
     };
     let thread_id = send(&connection, None, Some(new_thread), "Show the screenshot").await;
@@ -2609,7 +2599,6 @@ async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
     };
     let thread_id = send(&connection, None, Some(new_thread), "Show the screenshot").await;
@@ -2731,7 +2720,6 @@ async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
         model: None,
         effort: None,
         access: AgentAccess::Full,
-        plan: false,
         worktree: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
@@ -3184,7 +3172,6 @@ async fn a_thread_without_a_project_works_in_a_folder_of_its_own() {
         model: None,
         effort: None,
         access: AgentAccess::Supervised,
-        plan: false,
         worktree: None,
     };
     let first_id = send(&connection, None, Some(new_thread.clone()), "Sketch a parser, for JSON").await;

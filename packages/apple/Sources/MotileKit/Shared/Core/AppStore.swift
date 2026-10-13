@@ -23,7 +23,6 @@ struct ThreadDraft: Identifiable, Equatable, Codable {
     var agentAccount: String?
     var effort: String?
     var access: Access = .full
-    var plan = false
     /// The thread starts in a new worktree, on a branch that starts from `base`.
     var worktree: Bool?
     var base: String?
@@ -888,7 +887,6 @@ final class AppStore {
     }
 
     var composerAccess: Access { selectedThread?.access ?? selectedDraft?.access ?? .full }
-    var composerPlan: Bool { selectedThread?.plan ?? selectedDraft?.plan ?? false }
 
     /// What the composer's text and attachments are kept under: the open draft or thread.
     var draftKey: String {
@@ -1880,7 +1878,6 @@ final class AppStore {
                 "model": model.id,
                 "agent_account": composerAccount?.id ?? model.agent.rawValue,
                 "access": draft.access.rawValue,
-                "plan": draft.plan,
             ]
             if let effort = composerEffort { settings["effort"] = effort }
             if draftUsesWorktree, let base = draftBase {
@@ -2062,14 +2059,6 @@ final class AppStore {
             return
         }
         update(thread, ["access": access.rawValue]) { $0.access = access }
-    }
-
-    func setPlan(_ plan: Bool) {
-        guard let thread = selectedThread else {
-            updateDraft { $0.plan = plan }
-            return
-        }
-        update(thread, ["plan": plan]) { $0.plan = plan }
     }
 
     /// Marks threads done or brings them back. A thread that is working or monitoring can't be

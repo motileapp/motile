@@ -30,7 +30,7 @@ use tokio::sync::{Mutex, broadcast, mpsc};
 use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
-use crate::agents::{self, AgentEvent, Background, PLAN_TOOL, Parser, Settings, Turn, claude, executable_name, models};
+use crate::agents::{self, AgentEvent, Background, Parser, Settings, Turn, claude, executable_name, models};
 use crate::files::FileBytes;
 use crate::generate::{self, Writer};
 use crate::handoff::{self, Range};
@@ -928,7 +928,6 @@ impl Hub {
             model: checked("model", new_thread.model)?,
             effort: checked("effort", new_thread.effort)?,
             access: new_thread.access,
-            plan: new_thread.plan,
             created_at,
             updated_at: created_at,
             done_at: None,
@@ -1088,9 +1087,6 @@ impl Hub {
         if line.is_some_and(|line| !live.write(line)) {
             bail!("The agent is no longer running.");
         }
-        if allow && approval.tool_name == PLAN_TOOL {
-            live.stored.thread.plan = false;
-        }
         // Codex presents its plan when the turn has ended: it carries the plan out in a new
         // turn, and has nothing left to do when the plan is refused.
         let ended = live.run.as_ref().is_some_and(|run| run.received_result);
@@ -1222,11 +1218,9 @@ impl Hub {
             thread.effort = checked("effort", Some(effort))?;
             told.push(claude::effort_line(thread.effort.as_deref()));
         }
-        let mode_changed = change.access.is_some() || change.plan.is_some();
-        thread.access = change.access.unwrap_or(thread.access);
-        thread.plan = change.plan.unwrap_or(thread.plan);
-        if mode_changed {
-            told.push(claude::access_line(thread.plan, thread.access));
+        if let Some(access) = change.access {
+            thread.access = access;
+            told.push(claude::access_line(access));
         }
         if let Some(on) = change.continues {
             let Some(Interruption::Limit { resets_at, continues }) = &mut thread.interruption else {
@@ -2593,7 +2587,6 @@ impl Hub {
             model: thread.model.as_deref(),
             effort: thread.effort.as_deref(),
             access: thread.access,
-            plan: thread.plan,
             session_id: live.stored.session_id.as_deref(),
             handoff: handoff.as_ref(),
             mcp: mcp.as_ref(),
@@ -3301,7 +3294,10 @@ impl Live {
     fn write_prompt(&self, prompt: &str, id: &str) -> bool {
         let thread = &self.stored.thread;
         let model = thread.model.as_deref().or(self.session_model.as_deref());
-        let settings = Settings { model, effort: thread.effort.as_deref(), plan: thread.plan };
+        let settings = Settings { model, effort: thread.effort.as_deref() };
+        if thread.agent == Agent::Claude && !self.write(claude::access_line(thread.access)) {
+            return false;
+        }
         let line = agents::input(thread.agent, self.stored.session_id.as_deref(), prompt, id, settings);
         line.is_some_and(|line| self.write(line))
     }

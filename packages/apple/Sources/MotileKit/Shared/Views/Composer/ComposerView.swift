@@ -264,10 +264,9 @@ struct ComposerView: View {
     }
 
     private func accessMenu(compact: Bool) -> some View {
-        let label = store.composerPlan ? "Plan" : store.composerAccess.label
-        return ActionMenu(
-            compact ? nil : label, icon: store.composerPlan ? .clipboardList : store.composerAccess.symbol,
-            help: store.shortcuts.help(store.composerPlan ? "The agent only reads and proposes." : store.composerAccess.detail, "composer.access"),
+        ActionMenu(
+            compact ? nil : store.composerAccess.label, icon: store.composerAccess.symbol,
+            help: store.shortcuts.help(store.composerAccess.detail, "composer.access"),
             symbolSize: ControlSize.small.symbol, gap: 5, margin: Self.margin(leading: 4)
         ) {
             ForEach(Access.allCases) { access in
@@ -276,8 +275,6 @@ struct ComposerView: View {
                 }
                 .help(access.detail)
             }
-            Divider()
-            Toggle("Plan mode", isOn: Binding(get: { store.composerPlan }, set: { store.setPlan($0) }))
         }
         .shortcutTarget("composer.access")
     }

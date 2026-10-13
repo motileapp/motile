@@ -40,8 +40,6 @@ pub struct Thread {
     /// Reasoning effort; `None` uses the model's default.
     pub effort: Option<String>,
     pub access: Access,
-    /// The agent only reads and proposes; it changes nothing.
-    pub plan: bool,
     pub created_at: f64,
     /// When something last happened in the thread.
     pub updated_at: f64,
@@ -285,7 +283,6 @@ pub struct NewThread {
     pub model: Option<String>,
     pub effort: Option<String>,
     pub access: Access,
-    pub plan: bool,
     /// The thread works in a git worktree of its own, on a branch of its own. Without it, it
     /// works in the project's folder, or in a folder of its own in the server's "No project".
     #[serde(default)]
@@ -311,7 +308,6 @@ pub struct ThreadChange {
     /// An empty effort means the model's default.
     pub effort: Option<String>,
     pub access: Option<Access>,
-    pub plan: Option<bool>,
     pub done: Option<bool>,
     /// Where the sidebar lists the thread among the active ones, as the user moved it.
     #[serde(default)]
