@@ -306,11 +306,11 @@ private final class Demo {
             await shoot("07-git-button")
             store.runQuickGit(in: project)
             await expect("one click commits with a written message") {
-                store.gitNotice?.title.hasPrefix("Committed") == true
+                store.notice?.title.hasPrefix("Committed") == true
                     && store.project(project.id)?.gitControl?.quick.action == nil
             }
             await shoot("07-committed")
-            store.dismissGitNotice()
+            store.dismissNotice()
         }
 
         // What a turn changed in its folder is listed under its reply, and opens beside the
@@ -438,6 +438,15 @@ private final class Demo {
         await expect("the draft opens with what was written in it") { store.draft.hasPrefix("Why is the sync slow") && store.attachments.count == 1 }
         for listed in store.listedDrafts { store.discard(listed.draft) }
         await expect("discarded drafts are gone, and a thread is open instead") { store.listedDrafts.isEmpty && store.selectedThread != nil }
+
+        // A folder added while a thread is open becomes a project with a new thread open in it.
+        let src = (environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory()) + "/src"
+        store.addProject(serverID: server.id, path: src)
+        await expect("adding a project opens a new thread in it") {
+            store.selectedThread == nil && store.project(store.selectedDraft?.projectID)?.path == src
+        }
+        if let added = store.projects.first(where: { $0.path == src }) { store.removeProject(added) }
+        await expect("the project added for the check is removed again") { !store.projects.contains { $0.path == src } }
 
         // The smallest window with the widest sidebar: the sidebar gives way to the thread.
         UserDefaults.standard.set(420.0, forKey: "sidebar.width")
