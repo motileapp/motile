@@ -691,6 +691,29 @@ pub enum Request {
     RemoveAgentAccount {
         id: String,
     },
+    /// The threads whose messages, the user's or the agent's, have `query` in them, the last
+    /// updated first, at most `limit` of them. `ThreadMatches` answers.
+    SearchThreads {
+        query: String,
+        limit: u32,
+    },
+}
+
+/// Who wrote the message a search found in a thread.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Speaker {
+    User,
+    Agent,
+}
+
+/// A thread a search found by its messages: the best of them, the user's before the agent's and
+/// then the latest, cut to the part around what was searched for.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ThreadMatch {
+    pub thread_id: String,
+    pub speaker: Speaker,
+    pub excerpt: String,
 }
 
 /// One of an agent's accounts on a server: the folder its CLI keeps the sign-in in.
@@ -1805,6 +1828,9 @@ pub enum Message {
     },
     Limits {
         agents: Vec<AgentLimits>,
+    },
+    ThreadMatches {
+        matches: Vec<ThreadMatch>,
     },
     Error {
         message: String,

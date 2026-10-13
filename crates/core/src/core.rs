@@ -39,6 +39,7 @@ use crate::render::agents;
 use crate::render::diff;
 use crate::render::highlight::{self, Spans};
 use crate::render::rows::{Splice, Transcript, Uncoloured, short_model_name};
+use crate::search;
 use crate::usage;
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
@@ -61,6 +62,12 @@ const LIMITS_CHECK_TICKS: u64 = 30;
 const USAGE_PROTOCOL: u32 = 10;
 /// The servers before this one can't say what the agents' logins have used of their plans.
 const LIMITS_PROTOCOL: u32 = 17;
+/// The servers before this one can't search their threads' messages.
+const SEARCH_PROTOCOL: u32 = 26;
+/// How long the search has to stay as it is before the servers are asked.
+const SEARCH_DELAY: Duration = Duration::from_millis(200);
+/// How long a search waits for a server.
+const SEARCH_TIMEOUT: Duration = Duration::from_secs(5);
 /// What a server said of its agents' logins is read again once it is this old.
 const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 /// An endpoint that didn't run for this long isn't trusted to reach anything anymore.
@@ -137,6 +144,11 @@ enum Input {
     MediaFetched {
         id: String,
         result: Result<String, String>,
+    },
+    /// What the servers found for the search.
+    Searched {
+        query: String,
+        found: Vec<search::Found>,
     },
     Uploaded {
         key: String,
@@ -219,6 +231,15 @@ struct Core {
     /// whether with the hidden ones and the images.
     browsed: Browsed,
     keybindings: Keybindings,
+    search: Search,
+}
+
+/// The sidebar's search through the messages.
+#[derive(Default)]
+struct Search {
+    query: String,
+    found: Vec<search::Found>,
+    asking: Option<AbortHandle>,
 }
 
 type Browsed = Arc<std::sync::Mutex<Option<((String, String, bool, bool), (Vec<String>, Vec<String>))>>>;
@@ -279,6 +300,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         render_scheduled: false,
         ticks: 0,
         icons_asked: HashSet::new(),
+        search: Search::default(),
     };
     // Loading the syntax definitions takes a moment; better now than at the first code block.
     tokio::task::spawn_blocking(|| highlight::highlight("rust", "fn main() {}"));
@@ -399,6 +421,14 @@ impl Core {
             Input::Uploaded { key, result } => {
                 let Some((id, _)) = self.uploads.remove(&key) else { return };
                 self.reply(id, result);
+            }
+            Input::Searched { query, found } => {
+                if self.search.query != query {
+                    return;
+                }
+                self.search.found = found;
+                self.search.asking = None;
+                self.emit_search(false);
             }
             Input::Keep { key, value } => self.cache.keep(&key, &value),
             Input::Render => self.render(),
@@ -1368,6 +1398,7 @@ impl Core {
                 self.close_thread(&thread_id);
                 self.reply(id, Ok(json!({})));
             }
+            Command::SearchThreads { query } => self.search_threads(&query),
             Command::MarkSeen { thread_id } => {
                 self.mark_seen(&thread_id);
                 self.reply(id, Ok(json!({})));
@@ -1963,6 +1994,57 @@ impl Core {
     }
 
     /// The turns let go stay in the cache, once their streamed text is there.
+    /// Keeps what was found that still fits the search, and asks the servers again once it has
+    /// stayed as it is for a moment.
+    fn search_threads(&mut self, query: &str) {
+        let query = search::normalized(query);
+        if query == self.search.query {
+            return;
+        }
+        if let Some(asking) = self.search.asking.take() {
+            asking.abort();
+        }
+        self.search.found.retain(|found| search::contains(&found.thread.excerpt, &query));
+        self.search.query = query.clone();
+        let links: Vec<(String, Arc<Link>)> = self
+            .servers
+            .iter()
+            .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= SEARCH_PROTOCOL))
+            .filter_map(|server| Some((server.device.public_key.clone(), server.link.clone()?)))
+            .collect();
+        if query.chars().count() < search::MIN_QUERY || links.is_empty() {
+            self.search.found.clear();
+            return self.emit_search(false);
+        }
+        self.emit_search(true);
+        let inputs = self.inputs.clone();
+        let asking = tokio::spawn(async move {
+            tokio::time::sleep(SEARCH_DELAY).await;
+            let request = Request::SearchThreads { query: query.clone(), limit: search::LIMIT };
+            let mut asked = tokio::task::JoinSet::new();
+            for (server_id, link) in links {
+                let request = request.clone();
+                asked.spawn(async move {
+                    let answer = tokio::time::timeout(SEARCH_TIMEOUT, link.request(&request)).await;
+                    let Ok(Ok(Message::ThreadMatches { matches })) = answer else { return Vec::new() };
+                    matches.into_iter().map(|thread| search::Found { server_id: server_id.clone(), thread }).collect()
+                });
+            }
+            let mut found = Vec::new();
+            while let Some(answer) = asked.join_next().await {
+                found.extend(answer.unwrap_or_default());
+            }
+            let _ = inputs.send(Input::Searched { query, found });
+        });
+        self.search.asking = Some(asking.abort_handle());
+    }
+
+    fn emit_search(&self, searching: bool) {
+        let query = &self.search.query;
+        let matches = self.search.found.iter().map(|found| search::view(found, query)).collect();
+        self.emit(Event::ThreadSearch { query: query.clone(), searching, matches });
+    }
+
     fn trim_earlier(&mut self, thread_id: &str, keep_rows: usize) {
         let Some(open) = self.open.get_mut(thread_id) else { return };
         save_streamed(&self.cache, thread_id, open);

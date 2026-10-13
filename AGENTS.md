@@ -115,7 +115,8 @@ shadcn's own colours, opacities and radii are gone from the theme.
   (`rev`); a client asks for what changed after the revision it has. It also keeps what the
   agents spend, by model and by what it was spent on (a turn, or writing a title, a branch's
   name, a commit message or a pull request): Claude Code reports a session's total with each
-  result and Codex what each answer took.
+  result and Codex what each answer took. The sidebar's search finds threads by their messages
+  here, each by its best one, cut to the part around the match.
 - `pricing.rs`: what the models cost at the API's prices, fetched from LiteLLM's list once a day,
   to say what the tokens Codex spent would have cost. Claude Code says what its own cost.
 - `limits.rs`: how much of their plans the agents' accounts have used, as their CLIs say without
@@ -169,6 +170,9 @@ for tests.
 - `linear.rs`: the Linear tabs: issues under their statuses, as Linear lists them, one issue
   with its description and comments set, and the prompt that hands it to an agent.
 - `browse.rs`: browsing a server's folders by typing a path.
+- `search.rs`: the sidebar's search through every server's messages, asked a moment after the
+  search stops changing. What was found stays while it still fits the search, so the list never
+  empties and fills again, and its excerpts come in parts that set off the match.
 - `usage.rs`: what the agents spent on every server, added up for the usage view: a series for
   each agent, and the models, projects and kinds of token.
 - `limits.rs`: the Limits tab of the usage view: a section for each login, shown once however
@@ -196,7 +200,9 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
   rows on screen, `Rows.swift` builds their text and measures them off the main thread,
   `RowViews.swift` are the rows.
-- `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI.
+- `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI. While the sidebar
+  searches it is one flat list (`SearchResults.swift`): the threads found by their title, project
+  or pull request, then the ones found by a message, each row as tall whatever it shows.
 - `Shared/Views/UI`: the components every view is made of. `ActionButton` and `ActionMenu` (a
   variant, one of three sizes, an optional symbol, a pending state), `Spinner`, `Chip`,
   `InputField`. Their sizes are `ControlSize` and their corners `Radius`, in `Theme.swift`.

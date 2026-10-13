@@ -1365,3 +1365,37 @@ struct LimitsReport {
         stale = json.bool("stale")
     }
 }
+
+/// What the servers found in the threads' messages for the sidebar's search, by thread.
+struct MessageSearch: Equatable {
+    var query = ""
+    /// Some server may still answer.
+    var searching = false
+    var matches: [String: MessageMatch] = [:]
+}
+
+extension MessageSearch {
+    init(json: JSON) {
+        query = json.string("query")
+        searching = json.bool("searching")
+        let found = json.objects("matches").map { ($0.string("thread_id"), MessageMatch(json: $0)) }
+        matches = Dictionary(found, uniquingKeysWith: { first, _ in first })
+    }
+}
+
+/// The message a search found a thread by, in parts that set off what was searched for.
+struct MessageMatch: Equatable {
+    struct Part: Equatable {
+        let text: String
+        let matched: Bool
+    }
+
+    /// The user wrote it, or else the agent.
+    let byUser: Bool
+    let parts: [Part]
+
+    init(json: JSON) {
+        byUser = json.string("speaker") == "user"
+        parts = json.objects("parts").map { Part(text: $0.string("text"), matched: $0.bool("matched")) }
+    }
+}

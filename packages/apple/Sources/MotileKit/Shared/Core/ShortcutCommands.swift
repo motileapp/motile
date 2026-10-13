@@ -19,9 +19,9 @@ extension AppStore {
     }
 
     /// The threads ⌘1 to ⌘9 and the next and previous thread go through: the sidebar's, as it
-    /// lists them.
+    /// lists them, or what its search found.
     var jumpThreads: [ThreadInfo] {
-        searched(activeThreads, for: threadSearch)
+        isSearchingThreads ? searchResults.compactMap(\.thread) : activeThreads
     }
 
     /// The keys that open the thread at `index` among `jumpThreads`, drawn on its row while they are held.
