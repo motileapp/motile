@@ -896,6 +896,9 @@ impl Hub {
         let no_project = self.is_no_project(project);
         let worktree = match new_thread.worktree {
             Some(_) if no_project => bail!("A thread without a project can't have a worktree."),
+            // A repository without a commit has nothing for a worktree to start from, so the thread
+            // works in the project's folder, as it would have been offered had the client known.
+            Some(_) if !git::has_commit(&project.path, &self.environment).await => None,
             Some(new) if new.base.is_empty() || new.base.starts_with('-') => {
                 bail!("{} isn't a branch to start from.", new.base)
             }
@@ -1342,7 +1345,11 @@ impl Hub {
         let id = project.id.clone();
         self.store.add_project(&project)?;
         projects.push(project);
-        self.announce_projects(&projects);
+        drop(projects);
+        // The project arrives with what git says of it, so a client knows at once whether a
+        // worktree can start there.
+        self.read_git(path, false).await;
+        self.announce_projects(&self.projects.lock().await);
         Ok(id)
     }
 
