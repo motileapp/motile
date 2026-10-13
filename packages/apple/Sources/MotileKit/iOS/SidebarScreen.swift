@@ -20,14 +20,14 @@ struct SidebarScreen: View {
     @State private var busy = ""
     @State private var showsBusy = false
     /// The search's result the arrow keys are on, which return opens.
-    @State private var highlighted = 0
+    @State private var highlighted = Highlight()
 
     var body: some View {
         let searching = store.isSearchingThreads
         let active = searching ? [] : store.activeThreads
         let done = searching ? [] : store.doneThreads
         let results = store.searchResults
-        let highlightedID = results.indices.contains(highlighted) ? results[highlighted].id : nil
+        let highlightedID = results.indices.contains(highlighted.index) ? results[highlighted.index].id : nil
         let shown = Shown(projects: store.projectsByID, selection: store.selection, swiped: swiped, highlighted: highlightedID)
         let items = searching ? searchItems(results) : items(active: active, done: done, expanded: doneExpanded)
         VStack(spacing: 0) {
@@ -53,7 +53,7 @@ struct SidebarScreen: View {
                     return store.rowActions(for: thread, rename: beginRename, delete: { deleting = $0 })
                 },
                 pointed: { item, row, view in
-                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted = index }
+                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.index = index }
                     ThreadPeek.shared.point(at: item?.thread, row: row, in: view, store: store)
                 }
             ) { item in
@@ -246,7 +246,7 @@ struct SidebarScreen: View {
                         .appearing(.scale.combined(with: .opacity))
                 }
                 SearchField(text: $store.threadSearch, bare: true, clearable: false, focus: $searchFocused)
-                    .steersSearch(highlighted: $highlighted, open: openSearchResult)
+                    .steersSearch(highlighted: highlighted, open: openSearchResult)
                     .padding(.horizontal, 6)
                     .frame(height: 46)
                     .glassButton(in: Capsule())
