@@ -56,15 +56,16 @@ extension AppStore {
 extension View {
     /// The arrow keys move the highlight through what the search found, round from either end,
     /// and return opens it. It stays on its row while what is found later comes in below. The
-    /// keys read what is found as they are pressed: the field keeps an older closure at times.
-    func steersSearch(highlighted: Binding<Int>, open: @escaping (SearchResult) -> Void) -> some View {
+    /// keys read what is found and the row as they are pressed: the field keeps an older
+    /// closure at times.
+    func steersSearch(highlighted: Highlight, open: @escaping (SearchResult) -> Void) -> some View {
         modifier(SearchKeys(highlighted: highlighted, open: open))
     }
 }
 
 private struct SearchKeys: ViewModifier {
     @Environment(AppStore.self) private var store
-    @Binding var highlighted: Int
+    let highlighted: Highlight
     let open: (SearchResult) -> Void
 
     func body(content: Content) -> some View {
@@ -73,19 +74,19 @@ private struct SearchKeys: ViewModifier {
             .onKeyPress(.upArrow) { steer(-1) }
             .onSubmit {
                 let results = store.searchResults
-                guard results.indices.contains(highlighted) else { return }
-                open(results[highlighted])
+                guard results.indices.contains(highlighted.index) else { return }
+                open(results[highlighted.index])
             }
             .onChange(of: store.searchResults.map(\.id)) { old, new in
-                let kept = old.prefix(highlighted + 1)
-                highlighted = new.prefix(kept.count).elementsEqual(kept) ? highlighted : 0
+                let kept = old.prefix(highlighted.index + 1)
+                highlighted.index = new.prefix(kept.count).elementsEqual(kept) ? highlighted.index : 0
             }
     }
 
     private func steer(_ step: Int) -> KeyPress.Result {
         let count = store.searchResults.count
         guard count > 0 else { return .ignored }
-        highlighted = (highlighted + step + count) % count
+        highlighted.index = (highlighted.index + step + count) % count
         return .handled
     }
 }

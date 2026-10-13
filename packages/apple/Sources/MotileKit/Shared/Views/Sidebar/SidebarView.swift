@@ -30,7 +30,7 @@ struct SidebarView: View {
     @State private var renaming: ThreadInfo?
     @State private var deleting: ThreadInfo?
     /// The search's result the arrow keys are on.
-    @State private var highlighted = 0
+    @State private var highlighted = Highlight()
 
     var body: some View {
         @Bindable var store = store
@@ -42,7 +42,7 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 SearchField(text: $store.threadSearch)
-                    .steersSearch(highlighted: $highlighted, open: store.openSearchResult)
+                    .steersSearch(highlighted: highlighted, open: store.openSearchResult)
                 ProjectButtons()
             }
             .padding(.horizontal, 10)
@@ -82,7 +82,7 @@ struct SidebarView: View {
             // A table, which picks its rows up and moves them itself.
             RecycledList(
                 items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2, bottomInset: 4 - rowGap / 2,
-                scrollTarget: searching ? (results.indices.contains(highlighted) ? results[highlighted].id : nil) : store.revealedThreadID,
+                scrollTarget: searching ? (results.indices.contains(highlighted.index) ? results[highlighted.index].id : nil) : store.revealedThreadID,
                 clicked: { item in
                     switch item {
                     case .active(let thread): store.select(.thread(thread.id))
@@ -101,7 +101,7 @@ struct SidebarView: View {
                     store.move(thread, to: index, among: items.map(\.activeThread))
                 },
                 pointed: { item, row, view in
-                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted = index }
+                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted.index = index }
                     ThreadPeek.shared.point(at: item?.activeThread, row: row, in: view, store: store)
                 }
             ) { item in
@@ -119,7 +119,7 @@ struct SidebarView: View {
                     .equatable()
                 case .result(let result):
                     let index = results.firstIndex { $0.id == result.id } ?? 0
-                    SearchResultRow(result: result, highlighted: index == highlighted, jump: places[result.id].flatMap(store.jumpHint))
+                    SearchResultRow(result: result, highlighted: index == highlighted.index, jump: places[result.id].flatMap(store.jumpHint))
                     .contextMenu {
                         if let thread = result.thread { ThreadMenu(thread: thread, rename: beginRename, delete: { deleting = $0 }) }
                     }

@@ -13,7 +13,7 @@ struct CommandPanel: View {
     @State private var next: PanelPage?
     @State private var pages: [PanelPage]
     @State private var query = ""
-    @State private var highlighted = 0
+    @State private var highlighted = Highlight()
     /// Whether the keys have moved the highlight. A finger picks without one.
     @State private var steered = Platform.name == "macos"
     @State private var keys: Any?
@@ -39,7 +39,7 @@ struct CommandPanel: View {
     var body: some View {
         panel
             .onChange(of: query) {
-                highlighted = 0
+                highlighted.index = 0
                 if store.panelNotice != nil { store.panelNotice = nil }
                 browse()
             }
@@ -177,7 +177,7 @@ struct CommandPanel: View {
 
     private func steer(_ step: Int) -> KeyPress.Result {
         let count = sections(page).flatMap(\.items).filter(\.selectable).count
-        highlighted = steered ? min(max(highlighted + step, 0), max(0, count - 1)) : 0
+        highlighted.index = steered ? min(max(highlighted.index + step, 0), max(0, count - 1)) : 0
         steered = true
         return .handled
     }
@@ -216,7 +216,7 @@ struct CommandPanel: View {
     }
     #else
     private func runHighlighted() {
-        guard let item = sections(page).flatMap(\.items).first(where: { $0.index == highlighted }) else { return }
+        guard let item = sections(page).flatMap(\.items).first(where: { $0.index == highlighted.index }) else { return }
         run(item)
     }
     #endif
@@ -263,9 +263,9 @@ struct CommandPanel: View {
                         ForEach(section.items) { item in
                             PanelRow(item: item)
                                 .button(.highlight(
-                                    radius: PanelRow.radius, lit: steered && item.selectable && item.index == highlighted, inset: PanelRow.margin
+                                    radius: PanelRow.radius, lit: steered && item.selectable && item.index == highlighted.index, inset: PanelRow.margin
                                 )) { run(item) }
-                                .onHover { if $0, item.index >= 0 { highlighted = item.index } }
+                                .onHover { if $0, item.index >= 0 { highlighted.index = item.index } }
                         }
                     }
                     if let refused {
@@ -285,8 +285,8 @@ struct CommandPanel: View {
             .frame(maxHeight: .infinity)
             .scrollDismissesKeyboard(.interactively)
             #endif
-            .onChange(of: highlighted) {
-                guard let item = sections.flatMap(\.items).first(where: { $0.index == highlighted }) else { return }
+            .onChange(of: highlighted.index) {
+                guard let item = sections.flatMap(\.items).first(where: { $0.index == highlighted.index }) else { return }
                 scroller.scrollTo(item.id)
             }
         }
@@ -736,7 +736,7 @@ struct CommandPanel: View {
     }
 
     private func arrive() {
-        highlighted = 0
+        highlighted.index = 0
         store.panelNotice = nil
         copied = false
         listing = nil
@@ -800,11 +800,11 @@ struct CommandPanel: View {
         case 53:
             close()
         case 125:
-            highlighted = min(highlighted + 1, max(0, items.filter(\.selectable).count - 1))
+            highlighted.index = min(highlighted.index + 1, max(0, items.filter(\.selectable).count - 1))
         case 126:
-            highlighted = max(highlighted - 1, 0)
+            highlighted.index = max(highlighted.index - 1, 0)
         case 36, 76:
-            guard let item = items.first(where: { $0.index == highlighted }) else { return true }
+            guard let item = items.first(where: { $0.index == highlighted.index }) else { return true }
             guard command, let alternate = item.alternate else {
                 run(item)
                 return true

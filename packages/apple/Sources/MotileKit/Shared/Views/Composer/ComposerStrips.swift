@@ -231,7 +231,7 @@ struct BranchPicker: View {
     var base: String?
     @State private var query = ""
     @State private var problem: String?
-    @State private var highlighted = 0
+    @State private var highlighted = Highlight()
     @State private var switching = false
     @FocusState private var searching: Bool
 
@@ -293,13 +293,13 @@ struct BranchPicker: View {
                     .textFieldStyle(.plain)
                     .font(.ui(size: 13))
                     .focused($searching)
-                    .onSubmit { choose(choices, at: highlighted) }
+                    .onSubmit { choose(choices, at: highlighted.index) }
                     .onKeyPress(.downArrow) {
-                        highlighted = min(highlighted + 1, max(0, choices.count - 1))
+                        highlighted.index = min(highlighted.index + 1, max(0, choices.count - 1))
                         return .handled
                     }
                     .onKeyPress(.upArrow) {
-                        highlighted = max(highlighted - 1, 0)
+                        highlighted.index = max(highlighted.index - 1, 0)
                         return .handled
                     }
                     .onKeyPress(.escape) {
@@ -342,9 +342,9 @@ struct BranchPicker: View {
         .searchAtBottom()
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
-        .onSubmit(of: .search) { choose(choices, at: highlighted) }
+        .onSubmit(of: .search) { choose(choices, at: highlighted.index) }
         #endif
-        .onChange(of: query) { highlighted = 0 }
+        .onChange(of: query) { highlighted.index = 0 }
     }
 
     @ViewBuilder private func list(_ choices: [Choice]) -> some View {
@@ -377,8 +377,8 @@ struct BranchPicker: View {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(choices.enumerated()), id: \.element.id) { index, choice in
                             row(choice, index: index)
-                                .button(.highlight(radius: Radius.md, lit: index == highlighted)) { choose(choices, at: index) }
-                                .onHover { if $0 { highlighted = index } }
+                                .button(.highlight(radius: Radius.md, lit: index == highlighted.index)) { choose(choices, at: index) }
+                                .onHover { if $0 { highlighted.index = index } }
                                 .id(choice.id)
                         }
                     }
@@ -388,9 +388,9 @@ struct BranchPicker: View {
                 #if os(macOS)
                 .frame(height: listHeight)
                 #endif
-                .onChange(of: highlighted) {
-                    guard choices.indices.contains(highlighted) else { return }
-                    proxy.scrollTo(choices[highlighted].id)
+                .onChange(of: highlighted.index) {
+                    guard choices.indices.contains(highlighted.index) else { return }
+                    proxy.scrollTo(choices[highlighted.index].id)
                 }
             }
         }
