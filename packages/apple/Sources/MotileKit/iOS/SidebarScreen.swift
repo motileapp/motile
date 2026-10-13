@@ -246,7 +246,7 @@ struct SidebarScreen: View {
                         .appearing(.scale.combined(with: .opacity))
                 }
                 SearchField(text: $store.threadSearch, bare: true, clearable: false, focus: $searchFocused)
-                    .steersSearch(results, highlighted: $highlighted, open: openSearchResult)
+                    .steersSearch(highlighted: $highlighted, open: openSearchResult)
                     .padding(.horizontal, 6)
                     .frame(height: 46)
                     .glassButton(in: Capsule())

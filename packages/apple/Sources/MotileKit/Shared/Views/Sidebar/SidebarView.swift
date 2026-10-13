@@ -42,7 +42,7 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 SearchField(text: $store.threadSearch)
-                    .steersSearch(results, highlighted: $highlighted, open: store.openSearchResult)
+                    .steersSearch(highlighted: $highlighted, open: store.openSearchResult)
                 ProjectButtons()
             }
             .padding(.horizontal, 10)
