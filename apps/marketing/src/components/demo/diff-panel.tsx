@@ -17,7 +17,7 @@ import { MenuChevron } from "./icons"
 import { folderOf, LineCounts, nameOf } from "./transcript"
 import { cn } from "@/lib/utils"
 
-/** The side panel with one tab open, the thread's uncommitted changes. */
+/** The right panel with one tab open, the thread's uncommitted changes. */
 export function DiffPanel({
   diff,
   pastWindowButtons,

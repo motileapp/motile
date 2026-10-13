@@ -35,7 +35,7 @@ struct TranscriptRepresentable {
         view.onViewMedia = { media, index in store.view(media, at: index) }
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
-        view.onOpenAgent = { itemID in store.sidePanel.showAgent(itemID) }
+        view.onOpenAgent = { itemID in store.rightPanel.showAgent(itemID) }
         if !ofAgent {
             view.onNeedEarlier = { done in
                 guard let threadID = model.threadID else { return done() }
@@ -46,8 +46,8 @@ struct TranscriptRepresentable {
                 store.core.send("trim_earlier", ["thread_id": threadID, "keep_rows": keepRows]) { _ in done() }
             }
             view.onOpenDiff = { itemID, path in
-                guard let path else { return store.sidePanel.showDiff(.turn(itemID)) }
-                store.sidePanel.showChange(turn: itemID, path: path)
+                guard let path else { return store.rightPanel.showDiff(.turn(itemID)) }
+                store.rightPanel.showChange(turn: itemID, path: path)
             }
         }
         let hooks = TranscriptModel.Hooks(

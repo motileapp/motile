@@ -92,7 +92,7 @@ export function Demo() {
             {panel !== "closed" && (
               <WindowButton
                 icon={panel === "maximized" ? Minimize2Icon : Maximize2Icon}
-                label="Maximize or restore the side panel"
+                label="Maximize or restore the right panel"
                 onClick={() =>
                   setPanel(panel === "maximized" ? "open" : "maximized")
                 }
@@ -100,7 +100,7 @@ export function Demo() {
             )}
             <WindowButton
               icon={PanelRightIcon}
-              label="Show or hide the side panel"
+              label="Show or hide the right panel"
               onClick={togglePanel}
             />
           </div>

@@ -14,7 +14,7 @@ const MAX_WHEN: usize = 256;
 const MAX_DEPTH: usize = 64;
 
 /// The sections of the settings page, in order.
-const GROUPS: [&str; 5] = ["Navigation", "Threads", "Composer", "Side Panel", "Usage"];
+const GROUPS: [&str; 5] = ["Navigation", "Threads", "Composer", "Right Panel", "Usage"];
 
 /// What the conditions can ask about the client. Any other name is false.
 pub const CONDITIONS: [&str; 7] =
@@ -56,8 +56,8 @@ const COMMANDS: &[(&str, &str, usize)] = &[
     ("composer.project", "Choose the Project", 2),
     ("composer.workspace", "Choose the Workspace", 2),
     ("composer.branch", "Choose the Branch", 2),
-    ("rightPanel.toggle", "Show or Hide the Side Panel", 3),
-    ("rightPanel.toggleMaximized", "Maximize or Restore the Side Panel", 3),
+    ("rightPanel.toggle", "Show or Hide the Right Panel", 3),
+    ("rightPanel.toggleMaximized", "Maximize or Restore the Right Panel", 3),
     ("rightPanel.new", "New Tab", 3),
     ("rightPanel.close", "Close", 3),
     ("rightPanel.nextTab", "Next Tab", 3),

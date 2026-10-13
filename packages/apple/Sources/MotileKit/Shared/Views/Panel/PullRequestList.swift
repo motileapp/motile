@@ -13,7 +13,7 @@ struct PullRequestListSurface: View {
     private static let states = [("open", "Open"), ("merged", "Merged"), ("closed", "Closed"), ("all", "All")]
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         VStack(spacing: 0) {
             PanelBar { bar }
             if let notice = panel.pullRequestNotice {
@@ -48,7 +48,7 @@ struct PullRequestListSurface: View {
 
     @ViewBuilder
     private var content: some View {
-        switch store.sidePanel.pullRequestList {
+        switch store.rightPanel.pullRequestList {
         case .loading:
             PanelLoading()
         case .failed(let message):
@@ -59,7 +59,7 @@ struct PullRequestListSurface: View {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     if let thread = store.selectedThread {
                         LinkPullRequestField(text: $linking) { number in
-                            store.sidePanel.link(number, thread: thread.id, serverID: thread.serverID)
+                            store.rightPanel.link(number, thread: thread.id, serverID: thread.serverID)
                         }
                         .frame(maxWidth: 380, alignment: .leading)
                         .padding(.horizontal, 6)
@@ -99,7 +99,7 @@ private struct PullRequestListRow: View {
 
     var body: some View {
         Button {
-            store.sidePanel.showPullRequest(row.number, of: target)
+            store.rightPanel.showPullRequest(row.number, of: target)
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 Image(row.state.symbol, size: 13)
@@ -133,7 +133,7 @@ private struct PullRequestListRow: View {
         .buttonStyle(.highlight())
         .contextMenu {
             if let thread = store.selectedThread, !linked {
-                Button("Link to This Thread") { store.sidePanel.link(row.number, thread: thread.id, serverID: thread.serverID) }
+                Button("Link to This Thread") { store.rightPanel.link(row.number, thread: thread.id, serverID: thread.serverID) }
             }
             if let url = row.url {
                 Button("Open on GitHub") { Platform.open(url) }

@@ -114,13 +114,13 @@ struct LineCommentSheet: View {
 
     private func addToReview() {
         let comment = PendingLineComment(path: commented.path, line: commented.line, side: commented.side, body: written)
-        store.sidePanel.addPending(comment, to: page.number)
+        store.rightPanel.addPending(comment, to: page.number)
         close()
     }
 
     private func replyTo(_ thread: PullRequestPage.Thread) {
         let edit: JSON = ["kind": "reply", "thread": thread.id, "body": written]
-        store.sidePanel.edit(edit, on: target, number: page.number)
+        store.rightPanel.edit(edit, on: target, number: page.number)
         close()
     }
 

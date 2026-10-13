@@ -75,7 +75,7 @@ struct ThreadScreen: View {
                 PullBaseButton(base: base)
             }
             Button {
-                store.sidePanel.isOpen.toggle()
+                store.rightPanel.isOpen.toggle()
             } label: {
                 Image(.panelRight, size: 16)
             }

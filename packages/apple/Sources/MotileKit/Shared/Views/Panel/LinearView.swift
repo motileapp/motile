@@ -203,7 +203,7 @@ private struct LinearIssues: View {
             }
             LinearList(
                 entries: entries, pending: linear.working, narrow: narrow, users: linear.users[workspace] ?? [], offered: $offered,
-                open: { row in store.sidePanel.open(.linearIssue(workspace: workspace, id: row.id, identifier: row.identifier)) },
+                open: { row in store.rightPanel.open(.linearIssue(workspace: workspace, id: row.id, identifier: row.identifier)) },
                 fold: { id in if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) } },
                 change: { row, change in linear.change(row.id, change, of: workspace, on: target.serverID) }
             )
@@ -425,7 +425,7 @@ private struct LinearNewIssue: View {
                     if let assigneeID { issue["assignee"] = assigneeID }
                     linear.create(issue, in: workspace, on: target.serverID) { id, identifier in
                         close()
-                        store.sidePanel.open(.linearIssue(workspace: workspace, id: id, identifier: identifier))
+                        store.rightPanel.open(.linearIssue(workspace: workspace, id: id, identifier: identifier))
                     }
                 }
                 .keyboardShortcut(.defaultAction)

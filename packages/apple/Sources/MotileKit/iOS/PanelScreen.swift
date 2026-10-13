@@ -10,7 +10,7 @@ struct PanelScreen: View {
     var beside = false
 
     var body: some View {
-        let tabs = store.sidePanel.tabs
+        let tabs = store.rightPanel.tabs
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 PanelTabStrip(tabs: tabs)
@@ -33,7 +33,7 @@ struct PanelScreen: View {
             if !beside {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        store.sidePanel.isOpen = false
+                        store.rightPanel.isOpen = false
                     } label: {
                         Image(.chevronLeft, size: 16)
                     }
@@ -45,14 +45,14 @@ struct PanelScreen: View {
 
     private var paneButtons: some View {
         HStack(spacing: 0) {
-            let maximized = store.sidePanel.isMaximized
+            let maximized = store.rightPanel.isMaximized
             ActionButton(
-                icon: maximized ? .minimize2 : .maximize2, help: maximized ? "Restore the side panel" : "Maximize the side panel", size: .large
+                icon: maximized ? .minimize2 : .maximize2, help: maximized ? "Restore the right panel" : "Maximize the right panel", size: .large
             ) {
-                store.sidePanel.toggleMaximized()
+                store.rightPanel.toggleMaximized()
             }
-            .disabled(!store.sidePanel.canMaximize)
-            ActionButton(icon: .x, help: "Close the side panel", size: .large) { store.sidePanel.isOpen = false }
+            .disabled(!store.rightPanel.canMaximize)
+            ActionButton(icon: .x, help: "Close the right panel", size: .large) { store.rightPanel.isOpen = false }
         }
         .padding(.trailing, 6)
     }

@@ -13,7 +13,7 @@ struct PullRequestSurface: View {
     private var shown: Int? { number ?? target.pullRequest }
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         VStack(spacing: 0) {
             PanelBar { bar(panel.pullRequest.value.flatMap { $0.number == shown ? $0 : nil }) }
             if let notice = panel.pullRequestNotice {
@@ -71,7 +71,7 @@ struct PullRequestSurface: View {
 
     @ViewBuilder
     private func content(_ number: Int) -> some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         switch panel.pullRequest {
         case .ready(let page) where page.number == number:
             PullRequestPageView(page: page, target: target, number: number)
@@ -103,12 +103,12 @@ private struct NoPullRequest: View {
                     ActionButton("Create PR", variant: .primary) { store.chooseGit(create, in: project) }
                 }
                 if store.pullRequestsExtended {
-                    ActionButton("Show All Pull Requests") { store.sidePanel.open(.pullRequests) }
+                    ActionButton("Show All Pull Requests") { store.rightPanel.open(.pullRequests) }
                 }
             }
             if store.pullRequestsExtended, let thread = store.selectedThread {
                 LinkPullRequestField(text: $linking) { number in
-                    store.sidePanel.link(number, thread: thread.id, serverID: thread.serverID)
+                    store.rightPanel.link(number, thread: thread.id, serverID: thread.serverID)
                 }
                 .frame(maxWidth: 300)
             }
@@ -169,7 +169,7 @@ private struct PullRequestPageView: View {
     @FocusState private var titleFocused: Bool
     @State private var describing = false
 
-    private var panel: SidePanel { store.sidePanel }
+    private var panel: RightPanel { store.rightPanel }
     private var extended: Bool { store.pullRequestsExtended }
 
     var body: some View {
@@ -727,7 +727,7 @@ private struct MergeBox: View {
             ForEach(page.methods) { choice in
                 Toggle(choice.label, isOn: Binding { choice.method == page.method } set: { _ in
                     guard let method = choice.method, let target = store.panelTarget else { return }
-                    store.sidePanel.chooseMethod(method, for: target, number: page.number)
+                    store.rightPanel.chooseMethod(method, for: target, number: page.number)
                 })
             }
         }

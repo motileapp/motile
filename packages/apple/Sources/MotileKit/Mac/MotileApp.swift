@@ -37,27 +37,27 @@ struct MotileApp: App {
             CommandGroup(replacing: .sidebar) {
                 Button(sidebarHidden ? "Show Sidebar" : "Hide Sidebar") { sidebarHidden.toggle() }
                     .shortcut("sidebar.toggle", in: keys)
-                Button(store.sidePanel.isOpen ? "Hide Side Panel" : "Show Side Panel") { store.sidePanel.isOpen.toggle() }
+                Button(store.rightPanel.isOpen ? "Hide Right Panel" : "Show Right Panel") { store.rightPanel.isOpen.toggle() }
                     .shortcut("rightPanel.toggle", in: keys)
-                Button(store.sidePanel.isMaximized ? "Restore Side Panel" : "Maximize Side Panel") { store.sidePanel.toggleMaximized() }
+                Button(store.rightPanel.isMaximized ? "Restore Right Panel" : "Maximize Right Panel") { store.rightPanel.toggleMaximized() }
                     .shortcut("rightPanel.toggleMaximized", in: keys)
-                    .disabled(!store.sidePanel.canMaximize)
-                Button("Show Changes") { store.sidePanel.showDiff() }
+                    .disabled(!store.rightPanel.canMaximize)
+                Button("Show Changes") { store.rightPanel.showDiff() }
                     .shortcut("rightPanel.diff", in: keys)
                     .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
-                Button("Show Files") { store.sidePanel.open(.files) }
+                Button("Show Files") { store.rightPanel.open(.files) }
                     .shortcut("rightPanel.files", in: keys)
                     .disabled(store.panelUnavailable != nil)
-                Button("Show Agents") { store.sidePanel.open(.agents) }
+                Button("Show Agents") { store.rightPanel.open(.agents) }
                     .shortcut("rightPanel.agents", in: keys)
                     .disabled(store.panelUnavailable != nil)
-                Button("Show Pull Request") { store.sidePanel.open(.pullRequest) }
+                Button("Show Pull Request") { store.rightPanel.open(.pullRequest) }
                     .shortcut("rightPanel.pullRequest", in: keys)
                     .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil)
-                Button("Show All Pull Requests") { store.sidePanel.open(.pullRequests) }
+                Button("Show All Pull Requests") { store.rightPanel.open(.pullRequests) }
                     .shortcut("rightPanel.pullRequests", in: keys)
                     .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil || !store.pullRequestsExtended)
-                Button("Show Linear") { store.sidePanel.open(.linear) }
+                Button("Show Linear") { store.rightPanel.open(.linear) }
                     .shortcut("rightPanel.linear", in: keys)
                     .disabled(store.panelUnavailable != nil || store.linearUnavailable != nil)
                 PanelTabCommands(store: store)
@@ -220,7 +220,7 @@ struct MainView: View {
         let widest = min(sidebarWidths.upperBound, windowWidth - 1 - threadMinWidth)
         return sidebarWidths.lowerBound...max(sidebarWidths.lowerBound, widest)
     }
-    /// What the side panel leaves to the thread. Without that much room, it lies over the thread.
+    /// What the right panel leaves to the thread. Without that much room, it lies over the thread.
     private static let threadBesidePanel = 400.0
     /// How far the top bar's content starts from the window's left edge while the sidebar is
     /// hidden: past the window's buttons and the sidebar's.
@@ -236,12 +236,12 @@ struct MainView: View {
         GeometryReader { window in
             let widths = Self.sidebarWidths(in: Double(window.size.width))
             let shownWidth = min(widths.upperBound, max(widths.lowerBound, sidebarWidth))
-            let panelOpen = store.sidePanel.isOpen
+            let panelOpen = store.rightPanel.isOpen
             let rest = Double(window.size.width) - (sidebarHidden ? 0 : shownWidth + 1)
-            let maximized = store.sidePanel.isMaximized
-            let fits = panelOpen && rest - 1 - Self.threadBesidePanel >= SidePanel.widths.lowerBound
+            let maximized = store.rightPanel.isMaximized
+            let fits = panelOpen && rest - 1 - Self.threadBesidePanel >= RightPanel.widths.lowerBound
             let beside = fits && !maximized
-            let panelWidths = SidePanel.widths.lowerBound...max(SidePanel.widths.lowerBound, fits ? rest - 1 - Self.threadBesidePanel : rest - 1)
+            let panelWidths = RightPanel.widths.lowerBound...max(RightPanel.widths.lowerBound, fits ? rest - 1 - Self.threadBesidePanel : rest - 1)
             let shownPanel = min(panelWidths.upperBound, max(panelWidths.lowerBound, panelWidth))
             HStack(spacing: 0) {
                 SidebarView()
@@ -265,7 +265,7 @@ struct MainView: View {
                                 PaneDivider(width: $panelWidth, widths: panelWidths, growsLeft: true)
                                     .zIndex(1)
                             }
-                            SidePanelView(topInset: window.safeAreaInsets.top, tabInset: maximized && sidebarHidden ? Self.pastWindowButtons : nil)
+                            RightPanelView(topInset: window.safeAreaInsets.top, tabInset: maximized && sidebarHidden ? Self.pastWindowButtons : nil)
                                 .frame(width: maximized ? rest : shownPanel)
                         }
                         .background {
@@ -307,22 +307,22 @@ struct MainView: View {
     }
 
     /// Drawn over the top bar, not as a toolbar item: the system places an item by its width, which
-    /// moved the side panel's button when the one beside it came and went.
+    /// moved the right panel's button when the one beside it came and went.
     private var panelButtons: some View {
-        let open = store.sidePanel.isOpen
-        let maximized = store.sidePanel.isMaximized
+        let open = store.rightPanel.isOpen
+        let maximized = store.rightPanel.isMaximized
         return HStack(spacing: 0) {
             if open {
                 ToolbarButton(
                     symbol: maximized ? .minimize2 : .maximize2,
-                    help: maximized ? "Restore the side panel (Esc)" : store.shortcuts.help("Maximize the side panel", "rightPanel.toggleMaximized")
+                    help: maximized ? "Restore the right panel (Esc)" : store.shortcuts.help("Maximize the right panel", "rightPanel.toggleMaximized")
                 ) {
-                    store.sidePanel.toggleMaximized()
+                    store.rightPanel.toggleMaximized()
                 }
-                .disabled(!store.sidePanel.canMaximize)
+                .disabled(!store.rightPanel.canMaximize)
             }
-            ToolbarButton(symbol: .panelRight, help: store.shortcuts.help(open ? "Hide the side panel" : "Show the side panel", "rightPanel.toggle")) {
-                store.sidePanel.isOpen.toggle()
+            ToolbarButton(symbol: .panelRight, help: store.shortcuts.help(open ? "Hide the right panel" : "Show the right panel", "rightPanel.toggle")) {
+                store.rightPanel.isOpen.toggle()
             }
         }
     }
