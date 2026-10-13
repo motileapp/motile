@@ -900,11 +900,10 @@ struct NewThreadRow: View {
                 .lineLimit(1)
             Spacer(minLength: 6)
         }
-        .foregroundStyle(Color.themeMutedForeground)
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: Radius.md, inset: rowMargin)) { store.newThread() }
+        .button(.highlight(radius: Radius.md, inset: rowMargin, faded: true)) { store.newThread() }
     }
 }
 
