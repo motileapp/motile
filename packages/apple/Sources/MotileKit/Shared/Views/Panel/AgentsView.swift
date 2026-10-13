@@ -6,7 +6,7 @@ struct AgentsSurface: View {
 
     var body: some View {
         let agents = store.agents
-        if let agent = agents.first(where: { $0.id == store.sidePanel.shownAgent }) {
+        if let agent = agents.first(where: { $0.id == store.rightPanel.shownAgent }) {
             AgentTranscript(agent: agent)
         } else if agents.isEmpty {
             PanelMessage(text: "The agents this thread starts show up here.")
@@ -45,7 +45,7 @@ private struct AgentRow: View {
 
     var body: some View {
         Button {
-            store.sidePanel.showAgent(agent.id)
+            store.rightPanel.showAgent(agent.id)
         } label: {
             HStack(alignment: .top, spacing: 9) {
                 AgentStatusIcon(status: agent.status)
@@ -137,7 +137,7 @@ private struct AgentTranscript: View {
     var body: some View {
         VStack(spacing: 0) {
             PanelBar {
-                ActionButton(icon: .chevronLeft, help: "All agents") { store.sidePanel.showAgents() }
+                ActionButton(icon: .chevronLeft, help: "All agents") { store.rightPanel.showAgents() }
                     .padding(.leading, -8)
                 AgentStatusIcon(status: agent.status)
                     .frame(width: 16)

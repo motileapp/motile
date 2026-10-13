@@ -12,7 +12,7 @@ extension AppStore {
             context.insert("threadOpen")
             if activity.running { context.insert("turnRunning") }
         }
-        if sidePanel.isOpen { context.insert("rightPanelOpen") }
+        if rightPanel.isOpen { context.insert("rightPanelOpen") }
         if settings != nil { context.insert("settingsOpen") }
         if showsUsage { context.insert("usagePageOpen") }
         return context
@@ -96,29 +96,29 @@ extension AppStore {
         case "composer.branch":
             guard let project = composerProject, canSwitchBranches(of: project) else { return false }
             showBranches(of: project)
-        case "rightPanel.toggle": sidePanel.isOpen.toggle()
+        case "rightPanel.toggle": rightPanel.isOpen.toggle()
         case "rightPanel.toggleMaximized":
-            guard sidePanel.canMaximize else { return false }
-            sidePanel.toggleMaximized()
+            guard rightPanel.canMaximize else { return false }
+            rightPanel.toggleMaximized()
         case "rightPanel.new":
             guard panelUnavailable == nil else { return false }
-            sidePanel.openBlank()
+            rightPanel.openBlank()
         case "rightPanel.nextTab", "rightPanel.previousTab":
-            guard sidePanel.isOpen, sidePanel.tabs.tabs.count > 1 else { return false }
-            sidePanel.activate(offset: command == "rightPanel.nextTab" ? 1 : -1)
+            guard rightPanel.isOpen, rightPanel.tabs.tabs.count > 1 else { return false }
+            rightPanel.activate(offset: command == "rightPanel.nextTab" ? 1 : -1)
         case "rightPanel.diff":
             guard panelUnavailable == nil, panelTarget?.repository == true else { return false }
-            sidePanel.showDiff()
+            rightPanel.showDiff()
         case "rightPanel.files", "rightPanel.agents":
             guard panelUnavailable == nil else { return false }
-            sidePanel.open(command == "rightPanel.files" ? .files : .agents)
+            rightPanel.open(command == "rightPanel.files" ? .files : .agents)
         case "rightPanel.pullRequest", "rightPanel.pullRequests":
             let all = command == "rightPanel.pullRequests"
             guard panelUnavailable == nil, pullRequestsUnavailable == nil, !all || pullRequestsExtended else { return false }
-            sidePanel.open(all ? .pullRequests : .pullRequest)
+            rightPanel.open(all ? .pullRequests : .pullRequest)
         case "rightPanel.linear":
             guard panelUnavailable == nil, linearUnavailable == nil else { return false }
-            sidePanel.open(.linear)
+            rightPanel.open(.linear)
         default: return performOnThisSystem(command)
         }
         return true
@@ -165,11 +165,11 @@ extension AppStore {
         return showThread(at: min(max(index + offset, 0), threads.count - 1))
     }
 
-    /// The pull request the side panel shows, while its tab is the one in front.
+    /// The pull request the right panel shows, while its tab is the one in front.
     private var shownPullRequest: PullRequestPage? {
-        guard sidePanel.isOpen else { return nil }
-        switch sidePanel.tabs.active {
-        case .pullRequest, .pullRequestNumber: return sidePanel.pullRequest.value
+        guard rightPanel.isOpen else { return nil }
+        switch rightPanel.tabs.active {
+        case .pullRequest, .pullRequestNumber: return rightPanel.pullRequest.value
         default: return nil
         }
     }

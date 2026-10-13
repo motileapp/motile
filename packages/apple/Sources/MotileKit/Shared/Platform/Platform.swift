@@ -44,7 +44,7 @@ enum Platform {
         #endif
     }
 
-    /// The side panel is a screen of its own over the thread, as on a phone.
+    /// The right panel is a screen of its own over the thread, as on a phone.
     static var panelCoversThread: Bool {
         #if os(macOS)
         false

@@ -67,25 +67,25 @@ enum DemoDriver {
         case "stop": store.stop()
         case "panel":
             switch rest {
-            case "diff": store.sidePanel.showDiff()
-            case "files": store.sidePanel.open(.files)
-            case "agents": store.sidePanel.open(.agents)
-            case "pull request": store.sidePanel.open(.pullRequest)
-            case "pull requests": store.sidePanel.open(.pullRequests)
-            case "linear": store.sidePanel.open(.linear)
-            case "max": store.sidePanel.toggleMaximized()
-            case "open": store.sidePanel.isOpen = true
-            default: store.sidePanel.isOpen = false
+            case "diff": store.rightPanel.showDiff()
+            case "files": store.rightPanel.open(.files)
+            case "agents": store.rightPanel.open(.agents)
+            case "pull request": store.rightPanel.open(.pullRequest)
+            case "pull requests": store.rightPanel.open(.pullRequests)
+            case "linear": store.rightPanel.open(.linear)
+            case "max": store.rightPanel.toggleMaximized()
+            case "open": store.rightPanel.isOpen = true
+            default: store.rightPanel.isOpen = false
             }
-        case "file": store.sidePanel.open(.file(rest))
+        case "file": store.rightPanel.open(.file(rest))
         case "issue":
             // "issue motile issue-1 ENG-1": the workspace, the issue's id and its identifier.
             let named = rest.split(separator: " ").map(String.init)
             guard named.count == 3 else { return }
-            store.sidePanel.open(.linearIssue(workspace: named[0], id: named[1], identifier: named[2]))
+            store.rightPanel.open(.linearIssue(workspace: named[0], id: named[1], identifier: named[2]))
         case "change":
-            guard let turn = store.sidePanel.turns.last else { return }
-            store.sidePanel.showChange(turn: turn.id, path: rest)
+            guard let turn = store.rightPanel.turns.last else { return }
+            store.rightPanel.showChange(turn: turn.id, path: rest)
         case "sheet":
             switch rest {
             case "commands": store.openPanel(.commands)

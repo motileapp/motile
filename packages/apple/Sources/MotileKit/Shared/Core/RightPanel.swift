@@ -200,7 +200,7 @@ extension Notification.Name {
 /// The panel beside the thread: whether it is open, the tabs each thread has in it, and what the
 /// tabs of the open thread show. All of it is used on the main thread.
 @Observable
-final class SidePanel {
+final class RightPanel {
     static let widths: ClosedRange<Double> = 340...900
 
     @ObservationIgnored weak var store: AppStore?

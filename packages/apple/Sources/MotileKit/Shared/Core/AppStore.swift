@@ -278,11 +278,11 @@ final class AppStore {
     private(set) var messageSearch = MessageSearch()
 
     let updater = AppUpdater()
-    let sidePanel = SidePanel()
+    let rightPanel = RightPanel()
     let linear = Linear()
     @ObservationIgnored let core = CoreBridge()
     @ObservationIgnored let transcript = TranscriptModel()
-    /// What the agent did that the side panel shows.
+    /// What the agent did that the right panel shows.
     @ObservationIgnored let agentTranscript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
     @ObservationIgnored private let lifecycle = Lifecycle()
@@ -297,7 +297,7 @@ final class AppStore {
 
     init() {
         loadPreferences()
-        sidePanel.store = self
+        rightPanel.store = self
         linear.store = self
         updater.onFound = { [weak self] asked in self?.showServerUpdates(asked: asked) }
     }
@@ -441,7 +441,7 @@ final class AppStore {
                 let isEmpty = self.transcript.isEmpty
                 if self.transcriptIsEmpty != isEmpty { self.transcriptIsEmpty = isEmpty }
                 let turns = self.transcript.turns
-                if self.sidePanel.turns != turns { self.sidePanel.turns = turns }
+                if self.rightPanel.turns != turns { self.rightPanel.turns = turns }
             }
         case "agents":
             let threadID = event.string("thread_id")
@@ -449,21 +449,21 @@ final class AppStore {
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
                 if self.agents != agents { self.agents = agents }
-                self.sidePanel.agentsChanged()
+                self.rightPanel.agentsChanged()
             }
         case "agent_rows":
             let (threadID, agentID) = (event.string("thread_id"), event.string("agent_id"))
             let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
             let rows = event.objects("rows").compactMap { RowModel(json: $0) }
             return { [weak self] in
-                guard let self, self.transcript.threadID == threadID, self.sidePanel.shownAgent == agentID else { return }
+                guard let self, self.transcript.threadID == threadID, self.rightPanel.shownAgent == agentID else { return }
                 self.agentTranscript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: false)
             }
         case "code_spans":
             let request = (event["id"] as? NSNumber)?.uint64Value ?? 0
             let lines = (event["lines"] as? [[NSNumber]] ?? []).map { $0.map(\.int32Value) }
             let file = event.int("file")
-            return { [weak self] in self?.sidePanel.colour(request: request, file: file, lines: lines) }
+            return { [weak self] in self?.rightPanel.colour(request: request, file: file, lines: lines) }
         case "spans":
             let (threadID, rowID) = (event.string("thread_id"), event.string("row_id"))
             let spans = event["spans"] as? [NSNumber] ?? []
@@ -566,7 +566,7 @@ final class AppStore {
 
     private func removeThread(_ id: String) {
         setThread(nil, id: id)
-        sidePanel.forget(id)
+        rightPanel.forget(id)
         if selection == .thread(id) { openEmptyDraft() }
     }
 
@@ -723,7 +723,7 @@ final class AppStore {
         return notice
     }
 
-    /// The folder the side panel looks into: the one the open thread works in, or the project's
+    /// The folder the right panel looks into: the one the open thread works in, or the project's
     /// for the open draft.
     var panelTarget: PanelTarget? {
         guard let project = threadProject ?? project(selectedDraft?.projectID) else { return nil }
@@ -775,7 +775,7 @@ final class AppStore {
     func showPullRequest(_ url: URL) {
         notice = nil
         guard panelUnavailable == nil, pullRequestUnavailable == nil else { return Platform.open(url) }
-        sidePanel.open(.pullRequest)
+        rightPanel.open(.pullRequest)
     }
 
     /// Puts a prompt that a pull request's tab wrote in the composer, under what is there, for
@@ -783,8 +783,8 @@ final class AppStore {
     func handOff(_ prompt: String) {
         let written = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         draft = written.isEmpty ? prompt : "\(written)\n\n\(prompt)"
-        if sidePanel.isMaximized { sidePanel.toggleMaximized() }
-        if Platform.panelCoversThread { sidePanel.isOpen = false }
+        if rightPanel.isMaximized { rightPanel.toggleMaximized() }
+        if Platform.panelCoversThread { rightPanel.isOpen = false }
         composerFocus += 1
     }
 
@@ -793,13 +793,13 @@ final class AppStore {
     func startWork(_ prompt: String, in projectID: String) {
         guard selectedDraft == nil else { return handOff(prompt) }
         guard let project = project(projectID) else { return }
-        let tab = sidePanel.tabs.active
+        let tab = rightPanel.tabs.active
         startNewThread(in: project)
-        if let tab, tab.blankNumber == nil { sidePanel.open(tab) }
+        if let tab, tab.blankNumber == nil { rightPanel.open(tab) }
         handOff(prompt)
     }
 
-    /// Why the side panel has nothing to show here, when it hasn't.
+    /// Why the right panel has nothing to show here, when it hasn't.
     var panelUnavailable: String? {
         guard let target = panelTarget else { return "Add a project to see its files." }
         guard let server = server(target.serverID), server.state == .connected else { return "Your server isn't connected." }
@@ -1752,13 +1752,13 @@ final class AppStore {
     }
 
     /// What Esc does when the focused view claims nothing: leaves a route, restores the
-    /// maximized side panel, or hides a side panel that only has its blank tab. Nothing while
+    /// maximized right panel, or hides a right panel that only has its blank tab. Nothing while
     /// the command panel, the viewer or the branches have it.
     var escapes: (() -> Void)? {
         guard panel == nil, viewing == nil, !showsBranches else { return nil }
         if settings != nil || showsUsage { return { [self] in closeRoute() } }
-        if sidePanel.isMaximized { return { [self] in sidePanel.toggleMaximized() } }
-        if sidePanel.isOpen, sidePanel.tabs.isBlank { return { [self] in sidePanel.isOpen = false } }
+        if rightPanel.isMaximized { return { [self] in rightPanel.toggleMaximized() } }
+        if rightPanel.isOpen, rightPanel.tabs.isBlank { return { [self] in rightPanel.isOpen = false } }
         return nil
     }
 
@@ -1811,8 +1811,8 @@ final class AppStore {
         openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
         activity = Activity()
         transcriptIsEmpty = true
-        sidePanel.turns = []
-        sidePanel.showAgents()
+        rightPanel.turns = []
+        rightPanel.showAgents()
         agents = []
         guard case .thread(let id) = new, let thread = threads[id] else {
             transcript.begin(threadID: nil)
@@ -1978,7 +1978,7 @@ final class AppStore {
     private func openNewThread(id: String, serverID: String, draftID: String) {
         let wasOpen = selection == .draft(draftID)
         removeDraft(draftID)
-        sidePanel.move(from: draftID, to: id)
+        rightPanel.move(from: draftID, to: id)
         guard wasOpen else { return }
         selection = .thread(id)
         openThreadID = id

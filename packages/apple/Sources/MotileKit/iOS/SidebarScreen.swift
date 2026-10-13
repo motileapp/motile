@@ -329,7 +329,7 @@ struct SidebarScreen: View {
 
     private func showThread() {
         guard underThread else { return }
-        store.sidePanel.isOpen = false
+        store.rightPanel.isOpen = false
         drawer.isOpen = false
     }
 

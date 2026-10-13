@@ -143,7 +143,7 @@ extension AppStore {
         case "rightPanel.close":
             if settings != nil || showsUsage {
                 closeRoute()
-            } else if !sidePanel.closeActive() {
+            } else if !rightPanel.closeActive() {
                 NSApp.keyWindow?.performClose(nil)
             }
             return true
