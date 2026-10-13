@@ -935,6 +935,12 @@ pub async fn init(folder: &str, environment: &Environment) -> anyhow::Result<()>
     git(folder, environment, &["init", "--quiet"]).await.map(|_| ())
 }
 
+/// Whether a commit is checked out in the folder, for a worktree to start from. A new
+/// repository has none until its first.
+pub async fn has_commit(folder: &str, environment: &Environment) -> bool {
+    git(folder, environment, &["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]).await.is_ok()
+}
+
 /// Where the folder's repository was cloned from.
 pub async fn origin(folder: &str, environment: &Environment) -> Option<String> {
     git(folder, environment, &["remote", "get-url", "origin"]).await.ok().map(|url| url.trim().to_string())
@@ -1146,9 +1152,11 @@ mod tests {
         init(folder, &environment).await.unwrap();
 
         assert!(status(folder, &environment).await.unwrap().0.no_commit);
+        assert!(!has_commit(folder, &environment).await);
 
         git(folder, &environment, &["commit", "--quiet", "--allow-empty", "-m", "Start"]).await.unwrap();
         assert!(!status(folder, &environment).await.unwrap().0.no_commit);
+        assert!(has_commit(folder, &environment).await);
     }
 
     #[tokio::test]

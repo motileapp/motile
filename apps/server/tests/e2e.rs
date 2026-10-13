@@ -1592,8 +1592,27 @@ async fn a_project_is_started_from_a_name_or_cloned_from_github() {
 
     let named = added(connection.request(&Request::NewProject { name: "My App!".to_string() }).await.unwrap());
     let folder = projects.join("my-app");
-    assert_eq!(path_of(projects_now(&connection).await, &named), folder.to_string_lossy());
+    let listed = projects_now(&connection).await;
+    assert_eq!(path_of(listed.clone(), &named), folder.to_string_lossy());
     assert!(folder.join(".git").is_dir());
+    // The project arrives knowing its branch has no commit yet, so no client offers a worktree.
+    let project = listed.into_iter().find(|project| project.id == named).unwrap();
+    assert!(project.git.as_ref().is_some_and(|git| git.no_commit), "{:?}", project.git);
+    // A thread asked to start in a worktree anyway works in the project's folder.
+    let new_thread = NewThread {
+        project_id: named.clone(),
+        agent: Agent::Claude,
+        agent_account: None,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        plan: false,
+        worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
+    };
+    let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
+    finished_transcript(&connection, &thread_id).await;
+    assert_eq!(thread_now(&connection, &thread_id).await.cwd, folder.to_string_lossy());
+    assert!(folder.join("greet.py").is_file());
     let again = connection.request(&Request::NewProject { name: "my app".to_string() }).await.unwrap();
     assert!(matches!(again, Message::Error { message } if message.contains("already exists")));
 
