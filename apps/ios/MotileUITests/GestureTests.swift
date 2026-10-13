@@ -226,6 +226,22 @@ final class GestureTests: XCTestCase {
         XCTAssertEqual(app.textFields["Search"].value as? String ?? "", "")
     }
 
+    func testTheSidebarsSearchFindsAThreadByItsMessagesAndOpensIt() {
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        app.textFields["Search"].tap()
+        app.typeText("handlers")
+        let found = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "reach the handlers"))
+        XCTAssertTrue(found.firstMatch.waitForExistence(timeout: 5))
+        guard let result = found.allElementsBoundByIndex.first(where: { $0.isHittable }) else { return XCTFail("no result") }
+        XCTAssertTrue(result.label.contains("Add API Rate Limiting"))
+        result.tap()
+        XCTAssertTrue(newThread.waitForNonExistence(timeout: 3) || !newThread.isHittable)
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        XCTAssertEqual(app.textFields["Search"].value as? String ?? "", "")
+    }
+
     func testATapBesideTheComposersTextBringsTheKeyboard() {
         let text = app.textViews.firstMatch
         XCTAssertTrue(text.waitForExistence(timeout: 10))

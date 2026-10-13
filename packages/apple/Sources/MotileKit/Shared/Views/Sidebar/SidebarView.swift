@@ -29,26 +29,37 @@ struct SidebarView: View {
     @AppStorage("sidebar.doneExpanded") private var doneExpanded = false
     @State private var renaming: ThreadInfo?
     @State private var deleting: ThreadInfo?
-    private var search: String { store.threadSearch }
+    /// The search's result the arrow keys are on.
+    @State private var highlighted = 0
 
     var body: some View {
         @Bindable var store = store
-        let active = store.searched(store.activeThreads, for: search)
-        let done = store.searched(store.doneThreads, for: search)
+        let results = store.searchResults
+        let active = store.isSearchingThreads ? [] : store.activeThreads
+        let done = store.isSearchingThreads ? [] : store.doneThreads
         let projects = store.projectsByID
         let selection = store.selection
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 SearchField(text: $store.threadSearch)
+                    .onKeyPress(.downArrow) { steer(1, among: results) }
+                    .onKeyPress(.upArrow) { steer(-1, among: results) }
+                    .onSubmit {
+                        guard results.indices.contains(highlighted) else { return }
+                        store.openSearchResult(results[highlighted])
+                    }
                 ProjectButtons()
             }
             .padding(.horizontal, 10)
                 .padding(.top, 2)
                 .padding(.bottom, 6)
             GeometryReader { list in
-                threads(active: active, done: done, projects: projects, selection: selection, sidebarHeight: list.size.height)
+                threads(
+                    active: active, done: done, results: results, projects: projects, selection: selection, sidebarHeight: list.size.height
+                )
             }
         }
+        .onChange(of: results.map(\.id)) { highlighted = 0 }
         .onChange(of: store.settledThreadID) { _, settled in
             guard settled != nil else { return }
             doneExpanded = true
@@ -65,23 +76,30 @@ struct SidebarView: View {
     }
 
     private func threads(
-        active: [ThreadInfo], done: [ThreadInfo], projects: [String: Project], selection: Selection, sidebarHeight: Double
+        active: [ThreadInfo], done: [ThreadInfo], results: [SearchResult], projects: [String: Project], selection: Selection,
+        sidebarHeight: Double
     ) -> some View {
-        let drafts = store.searched(store.listedDrafts, for: search)
-        let items = items(drafts: drafts, active: active)
-        let places = store.showsJumpHints ? Dictionary(active.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }) : [:]
+        let searching = store.isSearchingThreads
+        let drafts = searching ? [] : store.listedDrafts
+        let items = searching ? searchItems(results) : items(drafts: drafts, active: active)
+        let jumps = store.jumpThreads
+        let places = store.showsJumpHints ? Dictionary(jumps.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }) : [:]
         return VStack(spacing: 0) {
             // A table, which picks its rows up and moves them itself.
             RecycledList(
                 items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2, bottomInset: 4 - rowGap / 2,
+                scrollTarget: searching && results.indices.contains(highlighted) ? results[highlighted].id : nil,
                 clicked: { item in
-                    guard case .active(let thread) = item else { return }
-                    store.select(.thread(thread.id))
+                    switch item {
+                    case .active(let thread): store.select(.thread(thread.id))
+                    case .result(let result): store.openSearchResult(result)
+                    default: break
+                    }
                 },
                 rowInset: NSEdgeInsets(top: rowMargin.top, left: rowMargin.leading, bottom: rowMargin.bottom, right: rowMargin.trailing),
                 rowRadius: 8,
                 movable: { item in
-                    guard search.isEmpty, active.count > 1, case .active(let thread) = item else { return false }
+                    guard !searching, active.count > 1, case .active(let thread) = item else { return false }
                     return store.moves(thread)
                 },
                 moved: { item, index in
@@ -93,7 +111,7 @@ struct SidebarView: View {
                 switch item {
                 case .drafts:
                     VStack(spacing: 0) {
-                        DraftRows(search: search) { store.select($0) }
+                        DraftRows { store.select($0) }
                     }
                 case .active(let thread):
                     ThreadRow(
@@ -102,8 +120,17 @@ struct SidebarView: View {
                         jump: places[thread.id].flatMap(store.jumpHint), open: { store.select($0) }
                     )
                     .equatable()
+                case .result(let result):
+                    let index = results.firstIndex { $0.id == result.id } ?? 0
+                    SearchResultRow(
+                        result: result, highlighted: index == highlighted, jump: places[result.id].flatMap(store.jumpHint),
+                        pointed: { highlighted = index }
+                    )
+                    .contextMenu {
+                        if let thread = result.thread { ThreadMenu(thread: thread, rename: beginRename, delete: { deleting = $0 }) }
+                    }
                 case .empty:
-                    Text(!search.isEmpty ? "No threads found" : done.isEmpty ? "No threads yet" : "No active threads")
+                    Text(searching ? store.searchEmptyText : store.doneThreads.isEmpty ? "No threads yet" : "No active threads")
                         .font(.ui(size: 12))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .frame(height: Self.emptyLineHeight)
@@ -124,7 +151,7 @@ struct SidebarView: View {
                     projects: projects,
                     selection: selection,
                     maxHeight: sidebarHeight * 0.5,
-                    expanded: search.isEmpty ? $doneExpanded : .constant(true),
+                    expanded: $doneExpanded,
                     rename: beginRename,
                     delete: { deleting = $0 }
                 )
@@ -148,14 +175,27 @@ struct SidebarView: View {
         var items: [SidebarItem] = drafts.isEmpty ? [] : [.drafts]
         items += active.map(SidebarItem.active)
         if active.isEmpty { items.append(.empty) }
-        if store.offersNewThread(drafts: drafts, active: active, search: search) { items.append(.newThread) }
+        if store.offersNewThread(drafts: drafts, active: active) { items.append(.newThread) }
         return items
+    }
+
+    /// What the search found, or the line that says it found nothing.
+    private func searchItems(_ results: [SearchResult]) -> [SidebarItem] {
+        results.isEmpty ? [.empty] : results.map(SidebarItem.result)
+    }
+
+    /// Moves the arrow keys' result, round from either end.
+    private func steer(_ step: Int, among results: [SearchResult]) -> KeyPress.Result {
+        guard !results.isEmpty else { return .ignored }
+        highlighted = (highlighted + step + results.count) % results.count
+        return .handled
     }
 
     private func height(of item: SidebarItem, drafts: Int) -> CGFloat {
         switch item {
         case .drafts: CGFloat(drafts) * (DraftRow.height + rowGap) + DraftRows.dividerHeight
         case .active: ThreadRow.height + rowGap
+        case .result: SearchResultRow.height + rowGap
         case .empty: Self.emptyLineHeight + 2 * (6 + rowGap / 2)
         case .newThread: doneRowHeight + rowGap
         }
@@ -201,6 +241,7 @@ private struct RenameThread: View {
 private enum SidebarItem: Identifiable {
     case drafts
     case active(ThreadInfo)
+    case result(SearchResult)
     case empty
     case newThread
 
@@ -208,6 +249,7 @@ private enum SidebarItem: Identifiable {
         switch self {
         case .drafts: "drafts"
         case .active(let thread): thread.id
+        case .result(let result): result.id
         case .empty: "empty"
         case .newThread: "newThread"
         }
@@ -220,16 +262,14 @@ private enum SidebarItem: Identifiable {
 }
 #endif
 
-/// Whether a thread's title or project matches what is being searched for.
+/// Whether a thread's title, project or pull request matches what is being searched for.
 extension AppStore {
     func matches(_ thread: ThreadInfo, search: String) -> Bool {
         guard !search.isEmpty else { return true }
-        let project = project(thread.projectID)?.name ?? ""
-        return thread.title.localizedCaseInsensitiveContains(search) || project.localizedCaseInsensitiveContains(search)
-    }
-
-    func searched(_ threads: [ThreadInfo], for search: String) -> [ThreadInfo] {
-        search.isEmpty ? threads : threads.filter { matches($0, search: search) }
+        let project = project(thread.projectID)
+        let pullRequest = project?.pullRequest(of: thread)
+        let names = [thread.title, project?.name, pullRequest.map { "#\($0.number)" }, pullRequest?.title, pullRequest?.url]
+        return names.contains { $0?.localizedCaseInsensitiveContains(search) == true }
     }
 
     /// The drafts whose text or project matches what is being searched for.
@@ -505,7 +545,6 @@ private struct ThreadServerLabel: View {
 /// typing only redraws them.
 struct DraftRows: View {
     @Environment(AppStore.self) private var store
-    let search: String
     /// Whether a draft's row is slid aside to show its discard button, by the draft's id.
     var swiped: (String) -> Binding<Bool> = { _ in .constant(false) }
     var open: (Selection) -> Void = { _ in }
@@ -514,7 +553,7 @@ struct DraftRows: View {
     static let dividerHeight = 1 + 2 * (4 + rowGap / 2)
 
     var body: some View {
-        let listed = store.searched(store.listedDrafts, for: search)
+        let listed = store.listedDrafts
         if !listed.isEmpty {
             ForEach(listed) { listed in
                 #if os(iOS)
@@ -879,8 +918,8 @@ struct NewThreadRow: View {
 extension AppStore {
     /// Whether the sidebar offers to start a thread: there is somewhere to start it, and nothing
     /// above the offer.
-    func offersNewThread(drafts: [ListedDraft], active: [ThreadInfo], search: String) -> Bool {
-        guard search.isEmpty, drafts.isEmpty, active.isEmpty else { return false }
+    func offersNewThread(drafts: [ListedDraft], active: [ThreadInfo]) -> Bool {
+        guard !isSearchingThreads, drafts.isEmpty, active.isEmpty else { return false }
         return !projects.isEmpty || !noProjects.isEmpty
     }
 }

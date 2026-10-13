@@ -12,7 +12,7 @@ import {
   ShieldIcon,
   type LucideIcon,
 } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { AgentIcon, ProjectIcon } from "./icons"
 import { doneThreads, servers, type DoneThread, type Thread } from "./threads"
 import { cn } from "@/lib/utils"
@@ -39,14 +39,39 @@ export function Sidebar({
   const [search, setSearch] = useState("")
   const [doneOpen, setDoneOpen] = useState(false)
   const [serversOpen, setServersOpen] = useState(false)
-  const matches = (title: string, project: string) =>
-    `${title} ${project}`.toLowerCase().includes(search.toLowerCase())
-  const active = threads.filter((thread) =>
-    matches(thread.title, thread.project.name)
-  )
-  const done = doneThreads.filter((thread) =>
-    matches(thread.title, thread.project.name)
-  )
+  const [found, setFound] = useState<Found[]>([])
+  const [searching, setSearching] = useState(false)
+  const [highlighted, setHighlighted] = useState(0)
+  const query = normalized(search)
+  const results = searchResults(threads, query, found)
+
+  // What was found for the search before stays while it fits, until the messages are searched.
+  const changeSearch = (text: string) => {
+    setSearch(text)
+    const next = normalized(text)
+    if (next === query) return
+    setHighlighted(0)
+    setFound((found) =>
+      next.length < 2 ? [] : found.filter((one) => contains(one.excerpt, next))
+    )
+    setSearching(next.length >= 2)
+  }
+
+  // As the server would: a moment after the search stops changing, the messages are searched.
+  useEffect(() => {
+    if (query.length < 2) return
+    const timer = setTimeout(() => {
+      setFound(searchMessages(threads, query))
+      setSearching(false)
+    }, 450)
+    return () => clearTimeout(timer)
+  }, [query, threads])
+
+  const open = (result: Result) => {
+    onPoint(null)
+    if (result.kind === "active") onSelect(result.thread.id)
+    changeSearch("")
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -55,7 +80,19 @@ export function Sidebar({
           <SearchIcon className="size-3 text-muted-stronger-foreground" />
           <input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => changeSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") changeSearch("")
+              if (results.length === 0) return
+              const step = { ArrowDown: 1, ArrowUp: -1 }[event.key]
+              if (step) {
+                event.preventDefault()
+                setHighlighted(
+                  (highlighted + step + results.length) % results.length
+                )
+              }
+              if (event.key === "Enter") open(results[highlighted])
+            }}
             placeholder="Search"
             className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-muted-stronger-foreground pointer-coarse:text-[16px]"
           />
@@ -66,26 +103,42 @@ export function Sidebar({
         className="min-h-0 flex-1 overflow-y-auto py-[3px]"
         onScroll={() => onPoint(null)}
       >
-        {active.map((thread) => (
-          <ThreadRow
-            key={thread.id}
-            thread={thread}
-            selected={thread.id === selectedId}
-            elapsed={elapsed}
-            onSelect={() => {
-              onPoint(null)
-              onSelect(thread.id)
-            }}
-            onPoint={onPoint}
-          />
-        ))}
-        {active.length === 0 && (
+        {query &&
+          results.map((result, index) => (
+            <ResultRow
+              key={result.thread.title}
+              result={result}
+              query={query}
+              highlighted={index === highlighted}
+              elapsed={elapsed}
+              onOpen={() => open(result)}
+              onPoint={(row) => {
+                setHighlighted(index)
+                onPoint(row ? result.thread : null, row)
+              }}
+            />
+          ))}
+        {query && results.length === 0 && (
           <p className="px-[18px] py-[7px] text-[12px] text-muted-stronger-foreground">
-            No threads found
+            {searching ? "Searching messages" : "No threads found"}
           </p>
         )}
+        {!query &&
+          threads.map((thread) => (
+            <ThreadRow
+              key={thread.id}
+              thread={thread}
+              selected={thread.id === selectedId}
+              elapsed={elapsed}
+              onSelect={() => {
+                onPoint(null)
+                onSelect(thread.id)
+              }}
+              onPoint={onPoint}
+            />
+          ))}
       </div>
-      {done.length > 0 && (
+      {!query && (
         <div className="border-t">
           <button
             type="button"
@@ -107,11 +160,11 @@ export function Sidebar({
               Done
             </span>
             <span className="ml-auto text-[11px] text-muted-stronger-foreground tabular-nums">
-              {done.length}
+              {doneThreads.length}
             </span>
           </button>
           {doneOpen &&
-            done.map((thread) => (
+            doneThreads.map((thread) => (
               <div
                 key={thread.title}
                 onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
@@ -199,7 +252,181 @@ export function Sidebar({
   )
 }
 
-function FooterButton({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+/** A message the search found a thread by, cut a little before what was searched for. */
+type Found = { threadId: string; byUser: boolean; excerpt: string }
+
+type Result =
+  | { kind: "active"; thread: Thread; found?: Found }
+  | { kind: "done"; thread: DoneThread }
+
+const normalized = (search: string) => search.trim().split(/\s+/).join(" ")
+
+const contains = (text: string, query: string) =>
+  query !== "" && text.toLowerCase().includes(query.toLowerCase())
+
+/** The threads found by their title, project or pull request, active before done, then the ones
+ * found by a message. */
+function searchResults(
+  threads: Thread[],
+  query: string,
+  found: Found[]
+): Result[] {
+  if (!query) return []
+  const named = (thread: Thread | DoneThread) =>
+    [
+      thread.title,
+      thread.project.name,
+      thread.pullRequest && `#${thread.pullRequest.number}`,
+      thread.pullRequest?.title,
+    ].some((name) => name && contains(name, query))
+  const byMessage = threads.flatMap((thread) => {
+    const message = found.find((one) => one.threadId === thread.id)
+    return !named(thread) && message
+      ? [{ kind: "active" as const, thread, found: message }]
+      : []
+  })
+  return [
+    ...threads
+      .filter(named)
+      .map((thread) => ({ kind: "active" as const, thread })),
+    ...doneThreads
+      .filter(named)
+      .map((thread) => ({ kind: "done" as const, thread })),
+    ...byMessage,
+  ]
+}
+
+/** Each thread's best message with the search in it: the user's before the agent's, then the latest. */
+function searchMessages(threads: Thread[], query: string): Found[] {
+  return threads.flatMap((thread) => {
+    const messages = thread.items.flatMap((item) =>
+      (item.kind === "user" || item.kind === "text") &&
+      contains(item.text, query)
+        ? [{ byUser: item.kind === "user", text: item.text }]
+        : []
+    )
+    const best =
+      messages.findLast((message) => message.byUser) ?? messages.at(-1)
+    if (!best) return []
+    return [
+      {
+        threadId: thread.id,
+        byUser: best.byUser,
+        excerpt: excerpt(best.text, query),
+      },
+    ]
+  })
+}
+
+function excerpt(text: string, query: string) {
+  const line = text.split(/\s+/).join(" ").trim()
+  const found = Math.max(0, line.toLowerCase().indexOf(query.toLowerCase()))
+  let start = Math.max(0, found - 24)
+  if (start > 0) {
+    const space = line.slice(start, found).indexOf(" ")
+    if (space >= 0) start += space + 1
+  }
+  return (start > 0 ? "…" : "") + line.slice(start)
+}
+
+/** The excerpt with each match set off. */
+function Excerpt({ text, query }: { text: string; query: string }) {
+  const pieces = text.split(
+    new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "i")
+  )
+  return pieces.map((piece, index) =>
+    index % 2 === 1 ? (
+      <span key={index} className="font-semibold text-foreground">
+        {piece}
+      </span>
+    ) : (
+      piece
+    )
+  )
+}
+
+/** What the search found, on two lines as tall whatever was found. */
+function ResultRow({
+  result,
+  query,
+  highlighted,
+  elapsed,
+  onOpen,
+  onPoint,
+}: {
+  result: Result
+  query: string
+  highlighted: boolean
+  elapsed: (since: number) => string
+  onOpen: () => void
+  onPoint: (row?: HTMLElement) => void
+}) {
+  const { thread } = result
+  const done = result.kind === "done"
+  const found = result.kind === "active" ? result.found : undefined
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      onPointerEnter={(event) => onPoint(event.currentTarget)}
+      onPointerLeave={() => onPoint()}
+      className={cn(
+        "mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
+        highlighted && "bg-background-accent-larger"
+      )}
+    >
+      <span className="flex h-[22px] w-full items-center gap-1.5">
+        <span className={cn(done && "opacity-(--opacity-disabled)")}>
+          <ProjectIcon project={thread.project} />
+        </span>
+        <span
+          className={cn(
+            "truncate text-[13px] font-medium",
+            done
+              ? "text-muted-stronger-foreground"
+              : highlighted
+                ? "text-foreground"
+                : "text-muted-foreground"
+          )}
+        >
+          {thread.title}
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {thread.pullRequest && (
+            <PullRequest number={thread.pullRequest.number} quiet={done} />
+          )}
+          {result.kind === "done" ? (
+            <span className="text-[11px] text-muted-stronger-foreground">
+              {result.thread.ago}
+            </span>
+          ) : (
+            <ThreadStatus thread={result.thread} elapsed={elapsed} />
+          )}
+        </span>
+      </span>
+      <span className="h-[18px] w-full truncate text-[12px] leading-[18px] text-muted-stronger-foreground">
+        {found ? (
+          <>
+            <span className="font-medium text-muted-foreground">
+              {found.byUser ? "You: " : "Agent: "}
+            </span>
+            <Excerpt text={found.excerpt} query={query} />
+          </>
+        ) : (
+          thread.project.name
+        )}
+      </span>
+    </button>
+  )
+}
+
+function FooterButton({
+  icon: Icon,
+  label,
+}: {
+  icon: LucideIcon
+  label: string
+}) {
   return (
     <button
       type="button"
@@ -233,7 +460,9 @@ function ThreadRow({
       onPointerLeave={() => onPoint(null)}
       className={cn(
         "group mx-2.5 my-px flex w-[calc(100%-20px)] flex-col rounded-md px-2 pt-[5px] pb-[7px] text-left",
-        selected ? "bg-background-accent-larger-stronger" : "hover:bg-background-accent-larger"
+        selected
+          ? "bg-background-accent-larger-stronger"
+          : "hover:bg-background-accent-larger"
       )}
     >
       <span className="flex h-5 w-full items-center gap-1.5 text-muted-foreground">
@@ -304,7 +533,9 @@ function ThreadStatus({
       )
     case "idle":
       return (
-        <span className="text-[11px] text-muted-stronger-foreground">{thread.status.ago}</span>
+        <span className="text-[11px] text-muted-stronger-foreground">
+          {thread.status.ago}
+        </span>
       )
   }
 }

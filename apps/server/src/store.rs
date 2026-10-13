@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
-use motile_protocol::wire::{Access, Agent, Item, Queued, Thread, Tokens, UsageBucket};
+use motile_protocol::wire::{Access, Agent, Item, Queued, Speaker, Thread, ThreadMatch, Tokens, UsageBucket};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::agents::ModelUsage;
@@ -637,6 +637,50 @@ impl Store {
         Ok(payload.and_then(|payload| serde_json::from_str(&payload).ok()))
     }
 
+    /// The threads with `query` in a message of the user's or of the agent's, not of an agent it
+    /// started, the last updated first. Each comes with its best message: the user's before the
+    /// agent's, then the latest. Letters match whatever their case, as SQLite's `LIKE` has it.
+    pub fn search_threads(&self, query: &str, limit: u32) -> rusqlite::Result<Vec<ThreadMatch>> {
+        let query = query.split_whitespace().collect::<Vec<_>>().join(" ");
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let pattern = format!("%{}%", query.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+        // The stored JSON has the text as it is unless it needs escaping, so most items are passed
+        // over before their JSON is read.
+        let raw = if query.contains(['"', '\\']) { "%".to_string() } else { pattern.clone() };
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT thread_id, kind, text FROM (
+                SELECT items.thread_id, json_extract(items.payload, '$.type') AS kind,
+                       json_extract(items.payload, '$.text') AS text, threads.updated_at,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY items.thread_id
+                           ORDER BY json_extract(items.payload, '$.type') = 'user' DESC, items.seq DESC
+                       ) AS rank
+                FROM items JOIN threads ON threads.id = items.thread_id
+                WHERE items.payload LIKE ?2 ESCAPE '\\'
+                  AND json_valid(items.payload)
+                  AND json_extract(items.payload, '$.type') IN ('user', 'assistant')
+                  AND json_extract(items.payload, '$.parent') IS NULL
+                  AND json_extract(items.payload, '$.text') LIKE ?1 ESCAPE '\\'
+             )
+             WHERE rank = 1
+             ORDER BY updated_at DESC
+             LIMIT ?3",
+        )?;
+        let rows = statement.query_map(params![pattern, raw, limit], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        })?;
+        let mut matches = Vec::new();
+        for row in rows {
+            let (thread_id, kind, text) = row?;
+            let speaker = if kind == "user" { Speaker::User } else { Speaker::Agent };
+            matches.push(ThreadMatch { thread_id, speaker, excerpt: excerpt(&text, &query) });
+        }
+        Ok(matches)
+    }
+
     /// The messages that wait, by thread, in their order.
     pub fn load_queued(&self) -> rusqlite::Result<HashMap<String, Vec<Queued>>> {
         let connection = self.connection();
@@ -679,6 +723,36 @@ impl Store {
         )?;
         Ok(())
     }
+}
+
+/// How much of a message comes before what was searched for in its excerpt, at most.
+const EXCERPT_LEAD: usize = 24;
+const EXCERPT_LENGTH: usize = 240;
+
+/// The message on one line, from a little before the first `query` in it: at a word's start, after
+/// "…" when the message started earlier.
+fn excerpt(text: &str, query: &str) -> String {
+    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let found = find_ignoring_case(&line, query).unwrap_or(0);
+    let before: Vec<(usize, char)> = line[..found].char_indices().collect();
+    let mut start = before.len().checked_sub(EXCERPT_LEAD).map_or(0, |first| before[first].0);
+    if start > 0 {
+        start = line[start..found].find(' ').map_or(start, |space| start + space + 1);
+    }
+    let rest = &line[start..];
+    let cut = rest.char_indices().nth(EXCERPT_LENGTH).map_or(rest.len(), |(end, _)| end);
+    let lead = if start > 0 { "…" } else { "" };
+    let tail = if cut < rest.len() { "…" } else { "" };
+    format!("{lead}{}{tail}", rest[..cut].trim_end())
+}
+
+/// Where `query` first is in `text`, as SQLite's `LIKE` finds it: letters of any case.
+fn find_ignoring_case(text: &str, query: &str) -> Option<usize> {
+    let (text, query) = (text.as_bytes(), query.as_bytes());
+    if query.is_empty() || query.len() > text.len() {
+        return None;
+    }
+    text.windows(query.len()).position(|window| window.eq_ignore_ascii_case(query))
 }
 
 fn insert_usage(
@@ -779,6 +853,74 @@ fn renumber_agent_accounts(connection: &Connection) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn store_with_threads(items: &[(&str, u64, serde_json::Value)]) -> (tempfile::TempDir, Store) {
+        let folder = tempfile::tempdir().unwrap();
+        let store = Store::open(&folder.path().join("motile.db")).unwrap();
+        store
+            .connection()
+            .execute_batch(
+                "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, access, created_at, updated_at)
+                 VALUES ('old', 'Old', 'user', 'p', '/tmp', 'claude', 'full', 0, 1),
+                        ('new', 'New', 'user', 'p', '/tmp', 'claude', 'full', 0, 2);",
+            )
+            .unwrap();
+        for (thread_id, seq, payload) in items {
+            let mut payload = payload.clone();
+            payload["id"] = format!("{thread_id}-{seq}").into();
+            payload["seq"] = (*seq).into();
+            payload["rev"] = (*seq).into();
+            payload["created_at"] = 0.0.into();
+            let item: Item = serde_json::from_value(payload).unwrap();
+            store.save_item(thread_id, &item).unwrap();
+        }
+        (folder, store)
+    }
+
+    #[test]
+    fn a_search_finds_each_thread_once_by_its_users_message_first_the_last_updated_first() {
+        let (_folder, store) = store_with_threads(&[
+            ("old", 1, serde_json::json!({"type": "assistant", "text": "The DEPLOY failed"})),
+            ("new", 1, serde_json::json!({"type": "user", "text": "Watch the deploy", "attachments": []})),
+            ("new", 2, serde_json::json!({"type": "assistant", "text": "The deploy is green"})),
+            ("new", 3, serde_json::json!({"type": "user", "text": "Deploy again", "attachments": []})),
+            ("new", 4, serde_json::json!({"type": "thinking", "text": "deploy"})),
+        ]);
+
+        let found = store.search_threads("deploy", 50).unwrap();
+
+        assert_eq!(
+            found,
+            [
+                ThreadMatch { thread_id: "new".into(), speaker: Speaker::User, excerpt: "Deploy again".into() },
+                ThreadMatch { thread_id: "old".into(), speaker: Speaker::Agent, excerpt: "The DEPLOY failed".into() },
+            ]
+        );
+        assert_eq!(store.search_threads("deploy", 1).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_search_passes_over_the_agents_an_agent_started_and_takes_wildcards_as_they_are() {
+        let (_folder, store) = store_with_threads(&[
+            ("old", 1, serde_json::json!({"type": "assistant", "text": "100% done", "parent": "tool"})),
+            ("new", 1, serde_json::json!({"type": "user", "text": "Say \"100_ok\"", "attachments": []})),
+        ]);
+
+        assert!(store.search_threads("100%", 50).unwrap().is_empty());
+        assert_eq!(store.search_threads(" 100 ", 50).unwrap().len(), 1);
+        assert_eq!(store.search_threads("\"100_ok\"", 50).unwrap()[0].thread_id, "new");
+        assert!(store.search_threads("100_o!", 50).unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_excerpt_is_one_line_from_the_word_a_little_before_the_match() {
+        let text = "First line\n\nthen a much longer second line that goes on and on until the word needle shows up";
+
+        assert_eq!(excerpt(text, "NEEDLE"), "…and on until the word needle shows up");
+        assert_eq!(excerpt("Find the needle", "needle"), "Find the needle");
+        let long = excerpt(&"word ".repeat(100), "word");
+        assert!(long.ends_with("word…") && long.chars().count() <= EXCERPT_LENGTH + 1, "{long}");
+    }
 
     #[test]
     fn threads_and_usage_from_before_accounts_belong_to_their_agents_default_account() {

@@ -266,8 +266,14 @@ final class AppStore {
     private(set) var shortcuts = Shortcuts()
     /// The keys that open the sidebar's first threads are held, so their rows show them.
     var showsJumpHints = false
-    /// What the sidebar's threads are searched for.
-    var threadSearch = ""
+    /// What the sidebar's threads are searched for. Their messages are searched on the servers.
+    var threadSearch = "" {
+        didSet {
+            guard threadSearch != oldValue else { return }
+            core.send("search_threads", ["query": threadSearch])
+        }
+    }
+    private(set) var messageSearch = MessageSearch()
 
     let updater = AppUpdater()
     let sidePanel = SidePanel()
@@ -352,6 +358,12 @@ final class AppStore {
             return { [weak self] in
                 guard let self, self.shortcuts != shortcuts else { return }
                 self.shortcuts = shortcuts
+            }
+        case "thread_search":
+            let search = MessageSearch(json: event)
+            return { [weak self] in
+                guard let self, self.messageSearch != search else { return }
+                self.messageSearch = search
             }
         case "account":
             let account = Account(json: event.object("account") ?? [:])

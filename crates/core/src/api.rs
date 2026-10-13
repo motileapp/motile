@@ -19,6 +19,7 @@ use crate::link::State;
 use crate::render::agents::AgentView;
 use crate::render::highlight::Spans;
 use crate::render::rows::{Row, Waiting};
+use crate::search::MatchView;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
@@ -264,6 +265,11 @@ pub enum Command {
         #[serde(default)]
         servers: Option<Vec<String>>,
     },
+    /// Searches the messages of every connected server's threads for `query`, a little after the
+    /// last time it changed. `thread_search` events tell what was found; there is no reply.
+    SearchThreads {
+        query: String,
+    },
     /// Markdown set for drawing, as `blocks`: what a description looks like before it is saved.
     Markdown {
         text: String,
@@ -408,6 +414,13 @@ pub enum Command {
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
+    /// The threads whose messages have `query` in them, as far as the servers have answered:
+    /// `searching` while some still may. What was found for a shorter search stays while it fits.
+    ThreadSearch {
+        query: String,
+        searching: bool,
+        matches: Vec<MatchView>,
+    },
     /// The keyboard shortcuts, at start and whenever they change.
     Keybindings {
         keybindings: KeybindingsView,

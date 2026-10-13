@@ -11,8 +11,9 @@ use motile_core::api::{AccountView, Command, Config, Event, ProjectView, ServerV
 use motile_core::core::{Handle, start};
 use motile_core::link::State;
 use motile_core::render::rows::{Row, RowKind};
+use motile_core::search::{MatchView, Part};
 use motile_protocol::identity::DeviceKey;
-use motile_protocol::wire::{Access as AgentAccess, Agent, NewThread, Request, ToolStatus};
+use motile_protocol::wire::{Access as AgentAccess, Agent, NewThread, Request, Speaker, ToolStatus};
 use motile_server::access::{Access, AccountSource};
 use motile_server::agents::environment::Environment;
 use motile_server::config::DataDir;
@@ -44,6 +45,9 @@ struct Client {
     rows: Vec<Row>,
     running: bool,
     live: bool,
+    /// The search through the messages: what was searched for, whether servers may still answer,
+    /// and what they found.
+    search: (String, bool, Vec<MatchView>),
 }
 
 impl Client {
@@ -72,6 +76,7 @@ impl Client {
             rows: Vec::new(),
             running: false,
             live: false,
+            search: Default::default(),
         }
     }
 
@@ -107,6 +112,7 @@ impl Client {
             Event::Activity { activity, .. } => self.running = activity.running,
             Event::Live { live, .. } => self.live = live,
             Event::ThreadError { message, .. } => panic!("a thread couldn't be opened: {message}"),
+            Event::ThreadSearch { query, searching, matches } => self.search = (query, searching, matches),
             Event::Restored
             | Event::Keybindings { .. }
             | Event::Reply { .. }
@@ -332,6 +338,25 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         .await;
     client.until("the thread is at rest", |client| !client.threads[&thread_id].thread.running).await;
     assert!(client.threads[&thread_id].thread.turn_ended_at.is_some());
+
+    // The search finds the thread by the user's message, with what was searched for set off.
+    client.handle.send(0, Command::SearchThreads { query: "  RATE limiter ".into() });
+    client.until("the search is asked", |client| client.search == ("RATE limiter".into(), true, Vec::new())).await;
+    client.until("the server has answered", |client| !client.search.1).await;
+    let part = |text: &str, matched| Part { text: text.into(), matched };
+    let found = MatchView {
+        server_id: server.id.clone(),
+        thread_id: thread_id.clone(),
+        speaker: Speaker::User,
+        parts: vec![part("Add a ", false), part("rate limiter", true), part(" to the API", false)],
+    };
+    assert_eq!(client.search.2, [found]);
+    // A longer search keeps what still fits until the server answers it.
+    client.handle.send(0, Command::SearchThreads { query: "rate limiter to".into() });
+    client.until("the search is longer", |client| client.search.0 == "rate limiter to").await;
+    assert_eq!(client.search.2[0].parts[1], part("rate limiter to", true));
+    client.handle.send(0, Command::SearchThreads { query: "x".into() });
+    client.until("a search too short is left alone", |client| client.search == ("x".into(), false, Vec::new())).await;
 
     // Closed and opened again with the server gone: everything is there from the cache, folded as
     // a finished turn is.

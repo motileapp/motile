@@ -177,6 +177,11 @@ impl Server {
             }
             Request::SaveAgentAccount { account } => hub.save_agent_account(account).await.map(|_| Message::Ok),
             Request::RemoveAgentAccount { id } => hub.remove_agent_account(&id).await.map(|_| Message::Ok),
+            Request::SearchThreads { query, limit } => {
+                let store = hub.clone();
+                let found = tokio::task::spawn_blocking(move || store.store().search_threads(&query, limit)).await?;
+                found.map(|matches| Message::ThreadMatches { matches }).map_err(Into::into)
+            }
             Request::LinkPullRequest { thread_id, number } => {
                 hub.link_pull_request(&thread_id, number).await.map(|_| Message::Ok)
             }
