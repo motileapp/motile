@@ -26,6 +26,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0014_thread_positions.sql"),
     include_str!("../migrations/0015_thread_sessions.sql"),
     include_str!("../migrations/0016_session_accounts.sql"),
+    include_str!("../migrations/0017_drop_plan.sql"),
 ];
 
 pub struct Store {
@@ -171,7 +172,7 @@ impl Store {
     pub fn load_threads(&self) -> rusqlite::Result<Vec<StoredThread>> {
         let connection = self.connection();
         let mut statement = connection.prepare(
-            "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access, t.plan,
+            "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access,
                     t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.position,
                     COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
                     t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account
@@ -179,11 +180,11 @@ impl Store {
              GROUP BY t.id",
         )?;
         let threads = statement.query_map([], |row| {
-            let rev: i64 = row.get(17)?;
-            let next_seq: i64 = row.get(18)?;
-            let worktree: (Option<String>, Option<String>) = (row.get(19)?, row.get(20)?);
-            let pull_request: Option<String> = row.get(21)?;
-            let interruption: Option<String> = row.get(25)?;
+            let rev: i64 = row.get(16)?;
+            let next_seq: i64 = row.get(17)?;
+            let worktree: (Option<String>, Option<String>) = (row.get(18)?, row.get(19)?);
+            let pull_request: Option<String> = row.get(20)?;
+            let interruption: Option<String> = row.get(24)?;
             Ok(StoredThread {
                 thread: Thread {
                     id: row.get(0)?,
@@ -191,28 +192,27 @@ impl Store {
                     project_id: row.get(3)?,
                     cwd: row.get(4)?,
                     agent: from_text(&row.get::<_, String>(5)?).unwrap_or(Agent::Claude),
-                    agent_account: row.get(26)?,
+                    agent_account: row.get(25)?,
                     model: row.get(6)?,
                     effort: row.get(7)?,
                     access: from_text(&row.get::<_, String>(8)?).unwrap_or(Access::Full),
-                    plan: row.get(9)?,
-                    created_at: row.get(11)?,
-                    updated_at: row.get(12)?,
-                    done_at: row.get(13)?,
-                    position: row.get(16)?,
-                    running: row.get(23)?,
-                    monitoring: row.get(24)?,
-                    needs_approval: row.get(14)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
+                    done_at: row.get(12)?,
+                    position: row.get(15)?,
+                    running: row.get(22)?,
+                    monitoring: row.get(23)?,
+                    needs_approval: row.get(13)?,
                     asking: None,
                     agents: 0,
-                    turn_ended_at: row.get(15)?,
+                    turn_ended_at: row.get(14)?,
                     pull_request: pull_request.and_then(|json| serde_json::from_str(&json).ok()),
-                    watching: row.get(22)?,
+                    watching: row.get(21)?,
                     git_stage: None,
                     interruption: interruption.and_then(|json| serde_json::from_str(&json).ok()),
                     rev: rev as u64,
                 },
-                session_id: row.get(10)?,
+                session_id: row.get(9)?,
                 title_source: TitleSource::parse(&row.get::<_, String>(2)?),
                 next_seq: next_seq as u64,
                 worktree: match worktree {
@@ -227,12 +227,12 @@ impl Store {
     pub fn save_thread(&self, stored: &StoredThread) -> rusqlite::Result<()> {
         let thread = &stored.thread;
         self.connection().execute(
-            "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access, plan,
+            "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access,
                                   created_at, updated_at, done_at, needs_approval, turn_ended_at, position,
                                   worktree_branch, worktree_base, pull_request, watching, running, monitoring,
                                   interruption, agent_account)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-                     ?23, ?24)
+                     ?23)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
@@ -241,7 +241,6 @@ impl Store {
                  model = excluded.model,
                  effort = excluded.effort,
                  access = excluded.access,
-                 plan = excluded.plan,
                  updated_at = excluded.updated_at,
                  done_at = excluded.done_at,
                  needs_approval = excluded.needs_approval,
@@ -263,7 +262,6 @@ impl Store {
                 thread.model,
                 thread.effort,
                 as_text(&thread.access),
-                thread.plan,
                 thread.created_at,
                 thread.updated_at,
                 thread.done_at,

@@ -258,7 +258,6 @@ mod tests {
             model: Some("gpt-6.1-sol".into()),
             effort: None,
             access: Default::default(),
-            plan: false,
             created_at: 0.0,
             updated_at: 0.0,
             done_at: None,

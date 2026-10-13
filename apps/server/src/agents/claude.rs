@@ -21,13 +21,12 @@ const IDLE_TASKS: [&str; 2] = ["plan", "dream"];
 /// What Claude Code says when the session it was told to resume isn't in its folder.
 pub const NO_CONVERSATION: &str = "No conversation found";
 
-fn permission_mode(plan: bool, access: Access) -> &'static str {
-    match (plan, access) {
-        (true, _) => "plan",
-        (false, Access::Supervised) => "default",
-        (false, Access::AcceptEdits) => "acceptEdits",
-        (false, Access::Auto) => "auto",
-        (false, Access::Full) => "bypassPermissions",
+fn permission_mode(access: Access) -> &'static str {
+    match access {
+        Access::Supervised => "default",
+        Access::AcceptEdits => "acceptEdits",
+        Access::Auto => "auto",
+        Access::Full => "bypassPermissions",
     }
 }
 
@@ -62,7 +61,7 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
             // Lets a thread be given full access while its process runs.
             "--allow-dangerously-skip-permissions",
             "--permission-mode",
-            permission_mode(turn.plan, turn.access),
+            permission_mode(turn.access),
         ]
         .map(String::from),
     );
@@ -106,7 +105,7 @@ pub fn answer(approval: &Approval, allow: bool, answers: &HashMap<String, String
         decision = json!({"behavior": "allow", "updatedInput": input});
     }
     if allow && leaves_plan_mode(approval) {
-        let mode = json!({"type": "setMode", "mode": permission_mode(false, access), "destination": "session"});
+        let mode = json!({"type": "setMode", "mode": permission_mode(access), "destination": "session"});
         decision["updatedPermissions"] = json!([mode]);
     }
     let response = json!({"subtype": "success", "request_id": approval.id, "response": decision});
@@ -133,8 +132,10 @@ pub fn effort_line(effort: Option<&str>) -> String {
     control(json!({"subtype": "apply_flag_settings", "settings": settings}))
 }
 
-pub fn access_line(plan: bool, access: Access) -> String {
-    control(json!({"subtype": "set_permission_mode", "mode": permission_mode(plan, access)}))
+/// The line that puts the process in the thread's mode: as its access changes, and before each
+/// prompt, since Claude Code leaves a process it entered plan mode with by itself in that mode.
+pub fn access_line(access: Access) -> String {
+    control(json!({"subtype": "set_permission_mode", "mode": permission_mode(access)}))
 }
 
 #[derive(Default)]
@@ -812,7 +813,6 @@ mod tests {
             model: None,
             effort: None,
             access: Access::Supervised,
-            plan: false,
             session_id: None,
             handoff: None,
             mcp: Some(&mcp),

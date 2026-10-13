@@ -49,7 +49,7 @@ pub fn input(thread_id: &str, prompt: &str, id: &str, settings: Settings) -> Str
 fn with_settings(params: &mut Value, settings: Settings) {
     if let Some(model) = settings.model {
         params["model"] = json!(model);
-        params["collaborationMode"] = collaboration_mode(settings.plan, model, settings.effort);
+        params["collaborationMode"] = collaboration_mode(model, settings.effort);
     }
     if let Some(effort) = settings.effort {
         params["effort"] = json!(effort);
@@ -68,9 +68,9 @@ pub fn stop(thread_id: &str, turn_id: &str) -> String {
     line(json!({"id": "stop", "method": "turn/interrupt", "params": params}))
 }
 
-fn collaboration_mode(plan: bool, model: &str, effort: Option<&str>) -> Value {
+fn collaboration_mode(model: &str, effort: Option<&str>) -> Value {
     let settings = json!({"model": model, "reasoning_effort": effort, "developer_instructions": null});
-    json!({"mode": if plan { "plan" } else { "default" }, "settings": settings})
+    json!({"mode": "default", "settings": settings})
 }
 
 /// What Codex asks about, how its sandbox is set, and who answers what it asks.
@@ -102,7 +102,7 @@ pub fn answer(approval: &Approval, allow: bool, answers: &HashMap<String, String
         "plan" if allow => {
             let codex = &input["codex"];
             let mut params = turn_params(codex["thread_id"].as_str()?, "Implement the plan.", "implement");
-            params["collaborationMode"] = collaboration_mode(false, codex["model"].as_str()?, codex["effort"].as_str());
+            params["collaborationMode"] = collaboration_mode(codex["model"].as_str()?, codex["effort"].as_str());
             return Some(line(json!({"id": "implement", "method": "turn/start", "params": params})));
         }
         _ => return None,
@@ -158,7 +158,6 @@ pub struct Parser {
     inline_prompt: Option<String>,
     model: Option<String>,
     effort: Option<String>,
-    plan: bool,
     thread_id: Option<String>,
     /// The turn has ended; the next one starts in the same process.
     ended: bool,
@@ -211,7 +210,6 @@ impl Parser {
             inline_prompt: turn.handoff.map(|handoff| handoff.inline(prompt)),
             model: turn.model.map(String::from),
             effort: turn.effort.map(String::from),
-            plan: turn.plan,
             thread_id: None,
             ended: false,
             presented: None,
@@ -284,7 +282,7 @@ impl Parser {
     fn first_turn(&self, prompt: &str) -> String {
         let Some(thread_id) = self.thread_id.as_deref() else { return String::new() };
         let mut params = turn_params(thread_id, prompt, &self.prompt_id);
-        let settings = Settings { model: self.model.as_deref(), effort: self.effort.as_deref(), plan: self.plan };
+        let settings = Settings { model: self.model.as_deref(), effort: self.effort.as_deref() };
         with_settings(&mut params, settings);
         line(json!({"id": FIRST_TURN, "method": "turn/start", "params": params}))
     }
@@ -536,7 +534,7 @@ impl Parser {
                 };
                 vec![AgentEvent::Thinking { active: false }, AgentEvent::Tool { call }]
             }
-            Some("plan") if completed && self.plan => {
+            Some("plan") if completed => {
                 let plan = item["text"].as_str().unwrap_or_default();
                 self.presented = Some(plan.to_string());
                 tool(PLAN_TOOL, json!({ "plan": plan }), None)
@@ -646,13 +644,12 @@ mod tests {
         Parser::new(&turn, "/srv/api", "Fix it", "m1")
     }
 
-    fn turn(access: Access, plan: bool) -> Turn<'static> {
+    fn turn(access: Access) -> Turn<'static> {
         Turn {
             agent: motile_protocol::wire::Agent::Codex,
             model: None,
             effort: Some("high"),
             access,
-            plan,
             session_id: None,
             handoff: None,
             mcp: None,
@@ -669,7 +666,7 @@ mod tests {
 
     #[test]
     fn what_an_agent_it_started_does_stays_out_of_its_own_turn() {
-        let mut parser = parser(turn(Access::Full, false));
+        let mut parser = parser(turn(Access::Full));
         parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
         let started = parser.parse(
             r#"{"method":"item/started","params":{"threadId":"t1","item":{"type":"subAgentActivity","id":"c1",
@@ -715,7 +712,7 @@ mod tests {
             [AgentEvent::Usage { spent, total: false, .. }] => (spent[0].model.clone(), spent[0].tokens),
             other => panic!("expected what it spent, got {other:?}"),
         };
-        let mut parser = parser(turn(Access::Full, false));
+        let mut parser = parser(turn(Access::Full));
         parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);
 
         // A resumed thread's total counts what was spent before: only its last answer is new.
@@ -743,7 +740,7 @@ mod tests {
 
     #[test]
     fn the_thread_and_its_first_turn_are_asked_for_as_the_answers_arrive() {
-        let mut parser = parser(turn(Access::Supervised, true));
+        let mut parser = parser(turn(Access::Supervised));
         let asked = written(&parser.parse(r#"{"id":1,"result":{}}"#));
         assert_eq!(asked[0], json!({"method": "initialized"}));
         assert_eq!(asked[1]["method"], "thread/start");
@@ -763,10 +760,10 @@ mod tests {
             (&params["threadId"], &params["clientUserMessageId"], &params["effort"]),
             (&json!("t1"), &json!("m1"), &json!("high"))
         );
-        assert_eq!(params["collaborationMode"]["mode"], "plan");
+        assert_eq!(params["collaborationMode"]["mode"], "default");
         assert_eq!(params["collaborationMode"]["settings"]["model"], "gpt-6", "the model Codex chose is named");
 
-        let resumed = Turn { session_id: Some("t0"), ..turn(Access::Full, false) };
+        let resumed = Turn { session_id: Some("t0"), ..turn(Access::Full) };
         let asked = written(&self::parser(resumed).parse(r#"{"id":1,"result":{}}"#));
         assert_eq!((&asked[1]["method"], &asked[1]["params"]["threadId"]), (&json!("thread/resume"), &json!("t0")));
         assert_eq!(asked[1]["params"]["sandbox"], "danger-full-access");
@@ -774,11 +771,11 @@ mod tests {
 
     #[test]
     fn a_start_that_is_refused_fails_the_turn_and_a_resume_says_the_session_is_missing() {
-        let mut parser = parser(turn(Access::Full, false));
+        let mut parser = parser(turn(Access::Full));
         let refused = parser.parse(r#"{"id":2,"error":{"code":-32600,"message":"no rollout found"}}"#);
         assert_eq!(refused, vec![AgentEvent::Failed { message: "no rollout found".to_string() }]);
 
-        let mut parser = self::parser(Turn { session_id: Some("t0"), ..turn(Access::Full, false) });
+        let mut parser = self::parser(Turn { session_id: Some("t0"), ..turn(Access::Full) });
         let refused = parser.parse(r#"{"id":2,"error":{"code":-32600,"message":"no rollout found"}}"#);
         assert_eq!(refused, vec![AgentEvent::SessionMissing]);
     }
@@ -801,7 +798,7 @@ mod tests {
     fn what_the_thread_said_before_is_injected_before_the_first_turn() {
         let handoff = handoff();
         let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into() };
-        let mut parser = parser(Turn { handoff: Some(&handoff), mcp: Some(&mcp), ..turn(Access::Full, false) });
+        let mut parser = parser(Turn { handoff: Some(&handoff), mcp: Some(&mcp), ..turn(Access::Full) });
         let asked = written(&parser.parse(r#"{"id":1,"result":{}}"#));
         let server = &asked[1]["params"]["config"]["mcp_servers"]["motile"];
         assert_eq!(
@@ -825,13 +822,13 @@ mod tests {
     #[test]
     fn a_codex_that_takes_no_messages_is_told_the_thread_before_the_prompt() {
         let handoff = handoff();
-        let mut parser = parser(Turn { handoff: Some(&handoff), ..turn(Access::Full, false) });
+        let mut parser = parser(Turn { handoff: Some(&handoff), ..turn(Access::Full) });
         parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
         let events = parser.parse(r#"{"id":3,"error":{"code":-32601,"message":"unknown method"}}"#);
         let text = written(&events)[0]["params"]["input"][0]["text"].as_str().unwrap().to_string();
         assert!(text.starts_with(&handoff.header) && text.ends_with("User message:\nFix it"), "{text}");
 
-        let mut parser = self::parser(Turn { handoff: Some(&handoff), ..turn(Access::Full, false) });
+        let mut parser = self::parser(Turn { handoff: Some(&handoff), ..turn(Access::Full) });
         parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
         let failed = parser.parse(r#"{"id":3,"error":{"code":-32000,"message":"too many items"}}"#);
         assert_eq!(failed, vec![AgentEvent::Failed { message: "too many items".to_string() }]);
@@ -839,11 +836,11 @@ mod tests {
 
     #[test]
     fn every_turn_of_a_process_that_runs_takes_the_threads_model_and_effort() {
-        let settings = Settings { model: Some("gpt-6.1-sol"), effort: Some("low"), plan: true };
+        let settings = Settings { model: Some("gpt-6.1-sol"), effort: Some("low") };
         let request: Value = serde_json::from_str(&input("t1", "Next", "m3", settings)).unwrap();
         let params = &request["params"];
         assert_eq!((&params["model"], &params["effort"]), (&json!("gpt-6.1-sol"), &json!("low")));
-        assert_eq!(params["collaborationMode"]["mode"], "plan");
+        assert_eq!(params["collaborationMode"]["mode"], "default");
         assert_eq!(params["collaborationMode"]["settings"]["reasoning_effort"], "low");
     }
 
@@ -859,7 +856,7 @@ mod tests {
 
     #[test]
     fn a_prompt_the_turn_took_and_a_turn_that_follows_are_reported() {
-        let mut parser = parser(turn(Access::Full, false));
+        let mut parser = parser(turn(Access::Full));
         let taken = r#"{"method":"item/started","params":{"item":{"type":"userMessage","id":"u","clientId":"m2"}}}"#;
         assert_eq!(parser.parse(taken), vec![AgentEvent::Taken { id: "m2".to_string() }]);
 
@@ -876,7 +873,7 @@ mod tests {
 
     #[test]
     fn a_turn_the_usage_limit_ends_says_when_the_limit_resets() {
-        let mut parser = parser(turn(Access::Full, false));
+        let mut parser = parser(turn(Access::Full));
         parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"}}}"#);
         let limits = r#"{"method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":"codex",
             "primary":{"usedPercent":100,"resetsAt":1800000000},"secondary":{"usedPercent":40,"resetsAt":1800500000}}}}"#;
@@ -902,7 +899,7 @@ mod tests {
 
     #[test]
     fn a_command_and_an_edit_that_need_approval_are_asked_about_and_answered() {
-        let mut parser = parser(turn(Access::Supervised, false));
+        let mut parser = parser(turn(Access::Supervised));
         let asked = parser.parse(
             r#"{"id":0,"method":"item/commandExecution/requestApproval","params":{"itemId":"c","command":"/bin/bash -lc 'touch x'"}}"#,
         );
@@ -930,7 +927,7 @@ mod tests {
 
     #[test]
     fn questions_are_answered_by_their_ids() {
-        let mut parser = parser(turn(Access::Full, true));
+        let mut parser = parser(turn(Access::Full));
         let asked = parser.parse(
             r#"{"id":4,"method":"item/tool/requestUserInput","params":{"itemId":"q","questions":[{"id":"color",
             "header":"Color","question":"Which color?","options":[{"label":"Blue","description":"Calm"}]}]}}"#,
@@ -944,7 +941,7 @@ mod tests {
 
     #[test]
     fn a_plan_is_presented_when_its_turn_ends_and_carried_out_in_the_next() {
-        let mut parser = parser(turn(Access::AcceptEdits, true));
+        let mut parser = parser(turn(Access::AcceptEdits));
         parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);
         let plan = parser
             .parse(r###"{"method":"item/completed","params":{"item":{"type":"plan","id":"p","text":"## Do it"}}}"###);

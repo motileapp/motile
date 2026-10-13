@@ -94,7 +94,6 @@ struct ThreadSettingsSheet: View {
             } label: {
                 LabeledContent("Access", value: store.composerAccess.label)
             }
-            Toggle("Plan mode", isOn: Binding(get: { store.composerPlan }, set: { store.setPlan($0) }))
         } header: {
             Text("Options")
         }

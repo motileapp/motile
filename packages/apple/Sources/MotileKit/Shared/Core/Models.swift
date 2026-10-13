@@ -675,7 +675,6 @@ struct ThreadInfo: Equatable, Identifiable {
     var model: String?
     var effort: String?
     var access: Access
-    var plan: Bool
     let createdAt: Double
     let updatedAt: Double
     var doneAt: Double?

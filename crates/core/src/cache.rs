@@ -397,7 +397,7 @@ mod tests {
             r#"{"version": "0.1.6", "protocol": 1, "hostname": "box", "home": "/root", "agents": [], "models": []}"#;
         let project = r#"{"id": "p", "path": "/srv", "name": "srv", "branch": null, "created_at": 1.0}"#;
         let thread = r#"{"id": "t", "title": "T", "project_id": "p", "cwd": "/srv", "agent": "claude", "model": null,
-            "effort": null, "access": "full", "plan": false, "created_at": 1.0, "updated_at": 2.0, "done_at": null,
+            "effort": null, "access": "full", "created_at": 1.0, "updated_at": 2.0, "done_at": null,
             "undone_at": null, "running": false, "needs_approval": false, "turn_ended_at": null, "rev": 3}"#;
         let old = Connection::open(&path).unwrap();
         old.execute_batch(
@@ -444,7 +444,7 @@ mod tests {
         let cache = Cache::open(&dir.path().join("cache.sqlite")).unwrap();
         let mut thread: Thread = serde_json::from_str(
             r#"{"id": "t", "title": "T", "project_id": "p", "cwd": "/srv", "agent": "claude", "model": null,
-            "effort": null, "access": "full", "plan": false, "created_at": 1.0, "updated_at": 2.0, "done_at": null,
+            "effort": null, "access": "full", "created_at": 1.0, "updated_at": 2.0, "done_at": null,
             "undone_at": null, "running": false, "monitoring": true, "needs_approval": false, "turn_ended_at": null,
             "rev": 3}"#,
         )

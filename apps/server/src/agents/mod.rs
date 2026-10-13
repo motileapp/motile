@@ -183,7 +183,6 @@ pub struct Turn<'a> {
     pub model: Option<&'a str>,
     pub effort: Option<&'a str>,
     pub access: Access,
-    pub plan: bool,
     pub session_id: Option<&'a str>,
     /// What the agent is told of the thread before the prompt, which Codex is given as messages.
     pub handoff: Option<&'a Handoff>,
@@ -196,7 +195,6 @@ pub struct Turn<'a> {
 pub struct Settings<'a> {
     pub model: Option<&'a str>,
     pub effort: Option<&'a str>,
-    pub plan: bool,
 }
 
 impl Turn<'_> {

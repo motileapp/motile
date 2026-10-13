@@ -614,7 +614,7 @@ mod tests {
     fn a_thread_is_sent_flat_with_its_server() {
         let thread: Thread = serde_json::from_value(serde_json::json!({
             "id": "t", "title": "T", "project_id": "p", "cwd": "/srv", "agent": "claude", "model": null,
-            "effort": null, "access": "accept_edits", "plan": false, "created_at": 1.0, "updated_at": 2.0,
+            "effort": null, "access": "accept_edits", "created_at": 1.0, "updated_at": 2.0,
             "done_at": null, "undone_at": null, "running": true, "needs_approval": false, "turn_ended_at": null, "rev": 3,
         }))
         .unwrap();

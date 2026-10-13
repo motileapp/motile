@@ -114,7 +114,6 @@ async fn main() -> anyhow::Result<()> {
             model: None,
             effort: None,
             access: Access::Full,
-            plan: false,
             worktree: None,
         };
         let sent = seed

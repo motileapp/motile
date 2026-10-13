@@ -250,23 +250,19 @@ private final class Demo {
         }
         await expect("the agent goes on with the answer") { turnEnded }
 
-        // A plan is approved in place: the thread leaves plan mode and the agent carries it out.
+        // A plan the agent proposes is approved in place, and the agent carries it out.
         store.startNewThread()
         store.setAccess(.full)
-        store.setPlan(true)
         send("Plan the hello function.")
         await expect("a finished plan waits to be implemented") { store.activity.approvals.first?.allowLabel == "Implement" }
         await shoot("07-plan")
         if let plan = store.activity.approvals.first { store.answer(plan, allow: true) }
-        await expect("an approved plan is carried out, and the thread leaves plan mode") {
-            turnEnded && store.selectedThread?.plan == false
-        }
+        await expect("an approved plan is carried out") { turnEnded }
 
         // An agent that keeps watching after its turn: it takes a message meanwhile, and says by
         // itself what it saw.
         store.startNewThread()
         store.setAccess(.full)
-        store.setPlan(false)
         send("Watch the deploy and tell me when it is healthy.")
         await expect("an agent that watches something is shown as monitoring") {
             store.selectedThread?.monitoring == true && store.activity.monitoring
