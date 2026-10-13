@@ -53,6 +53,40 @@ extension AppStore {
     }
 }
 
+extension View {
+    /// The arrow keys move the highlight through what the search found, round from either end,
+    /// and return opens it. It stays on its row while what is found later comes in below.
+    func steersSearch(_ results: [SearchResult], highlighted: Binding<Int>, open: @escaping (SearchResult) -> Void) -> some View {
+        modifier(SearchKeys(results: results, highlighted: highlighted, open: open))
+    }
+}
+
+private struct SearchKeys: ViewModifier {
+    let results: [SearchResult]
+    @Binding var highlighted: Int
+    let open: (SearchResult) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onKeyPress(.downArrow) { steer(1) }
+            .onKeyPress(.upArrow) { steer(-1) }
+            .onSubmit {
+                guard results.indices.contains(highlighted) else { return }
+                open(results[highlighted])
+            }
+            .onChange(of: results.map(\.id)) { old, new in
+                let kept = old.prefix(highlighted + 1)
+                highlighted = new.prefix(kept.count).elementsEqual(kept) ? highlighted : 0
+            }
+    }
+
+    private func steer(_ step: Int) -> KeyPress.Result {
+        guard !results.isEmpty else { return .ignored }
+        highlighted = (highlighted + step + results.count) % results.count
+        return .handled
+    }
+}
+
 /// The line the search shows when it found nothing, in the place of its first row.
 struct SearchEmptyLine: View {
     @Environment(AppStore.self) private var store
@@ -77,11 +111,10 @@ struct SearchEmptyLine: View {
 struct SearchResultRow: View {
     @Environment(AppStore.self) private var store
     let result: SearchResult
-    /// The arrow keys are on it, or on iOS it is open.
+    /// The arrow keys or the pointer are on it.
     let highlighted: Bool
     /// The keys that open it, while they are held.
     var jump: String?
-    var pointed: () -> Void = {}
     var open: (SearchResult) -> Void = { _ in }
 
     static let height = ThreadRow.topPadding + scaled(22) + scaled(18) + ThreadRow.bottomPadding
@@ -91,11 +124,11 @@ struct SearchResultRow: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 ProjectIcon(project: project, size: 14)
-                    .opacity(.disabled, when: isDone)
+                    .opacity(.disabled, when: isDone && !highlighted)
                 Text(title)
                     .font(.ui(size: 13, weight: .medium))
                     .lineLimit(1)
-                    .foregroundStyle(isDone ? Color.themeMutedStrongerForeground : highlighted ? Color.themeForeground : Color.themeMutedForeground)
+                    .foregroundStyle(highlighted ? Color.themeForeground : isDone ? Color.themeMutedStrongerForeground : Color.themeMutedForeground)
                     .layoutPriority(1)
                 Spacer(minLength: 6)
                 HStack(spacing: 6) {
@@ -120,12 +153,8 @@ struct SearchResultRow: View {
         // The table the row is in takes the click.
         .contentShape(Rectangle())
         .hoverHighlight(radius: Radius.md, inset: rowMargin, hovered: highlighted)
-        .onHover { inside in
-            guard inside else { return }
-            pointed()
-        }
         #else
-        .button(.highlight(radius: Radius.md, selected: highlighted, inset: rowMargin)) { open(result) }
+        .button(.highlight(radius: Radius.md, lit: highlighted, inset: rowMargin)) { open(result) }
         #endif
     }
 

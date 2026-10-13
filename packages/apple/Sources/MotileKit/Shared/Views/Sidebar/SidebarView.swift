@@ -42,12 +42,7 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 SearchField(text: $store.threadSearch)
-                    .onKeyPress(.downArrow) { steer(1, among: results) }
-                    .onKeyPress(.upArrow) { steer(-1, among: results) }
-                    .onSubmit {
-                        guard results.indices.contains(highlighted) else { return }
-                        store.openSearchResult(results[highlighted])
-                    }
+                    .steersSearch(results, highlighted: $highlighted, open: store.openSearchResult)
                 ProjectButtons()
             }
             .padding(.horizontal, 10)
@@ -59,7 +54,6 @@ struct SidebarView: View {
                 )
             }
         }
-        .onChange(of: results.map(\.id)) { highlighted = 0 }
         .onChange(of: store.revealedThreadID) { _, revealed in
             guard let revealed, store.doneThreads.contains(where: { $0.id == revealed }) else { return }
             doneExpanded = true
@@ -106,7 +100,10 @@ struct SidebarView: View {
                     guard case .active(let thread) = item else { return }
                     store.move(thread, to: index, among: items.map(\.activeThread))
                 },
-                pointed: { item, row, view in ThreadPeek.shared.point(at: item?.activeThread, row: row, in: view, store: store) }
+                pointed: { item, row, view in
+                    if case .result(let result) = item, let index = results.firstIndex(where: { $0.id == result.id }) { highlighted = index }
+                    ThreadPeek.shared.point(at: item?.activeThread, row: row, in: view, store: store)
+                }
             ) { item in
                 switch item {
                 case .drafts:
@@ -122,10 +119,7 @@ struct SidebarView: View {
                     .equatable()
                 case .result(let result):
                     let index = results.firstIndex { $0.id == result.id } ?? 0
-                    SearchResultRow(
-                        result: result, highlighted: index == highlighted, jump: places[result.id].flatMap(store.jumpHint),
-                        pointed: { highlighted = index }
-                    )
+                    SearchResultRow(result: result, highlighted: index == highlighted, jump: places[result.id].flatMap(store.jumpHint))
                     .contextMenu {
                         if let thread = result.thread { ThreadMenu(thread: thread, rename: beginRename, delete: { deleting = $0 }) }
                     }
@@ -188,13 +182,6 @@ struct SidebarView: View {
     /// What the search found, or the line that says it found nothing.
     private func searchItems(_ results: [SearchResult]) -> [SidebarItem] {
         results.isEmpty ? [.empty] : results.map(SidebarItem.result)
-    }
-
-    /// Moves the arrow keys' result, round from either end.
-    private func steer(_ step: Int, among results: [SearchResult]) -> KeyPress.Result {
-        guard !results.isEmpty else { return .ignored }
-        highlighted = (highlighted + step + results.count) % results.count
-        return .handled
     }
 
     private func height(of item: SidebarItem, drafts: Int) -> CGFloat {
@@ -743,7 +730,7 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
             if expanded {
                 RecycledList(
                     items: items, height: { _ in Self.rowHeight + rowGap }, bottomInset: 4 - rowGap / 2, scrollTarget: scrollTarget,
-                    pointed: pointed, row: row
+                    scrollsTargetToTop: true, pointed: pointed, row: row
                 )
                 .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
             }
