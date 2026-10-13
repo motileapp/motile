@@ -498,11 +498,9 @@ struct CommandPanel: View {
             return store.repoErrors[id] == nil ? (0..<8).map { .placeholder($0, lines: 2) } : []
         }
         let clone = { (name: String, title: String, detail: String, symbol: Symbol) in
-            var item = PanelItem(id: "repo-\(name)", title: title, detail: detail, icon: .symbol(symbol), keepsOpen: true) {
+            PanelItem(id: "repo-\(name)", title: title, detail: detail, icon: .symbol(symbol)) {
                 store.clone(name, on: id)
             }
-            item.busy = store.addingProject == AddingProject(serverID: id, name: name)
-            return item
         }
         let typed = query.trimmingCharacters(in: .whitespaces)
         var items = found(repos, typed.lowercased()).map { repo in

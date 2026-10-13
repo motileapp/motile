@@ -500,16 +500,21 @@ enum GitStage: String {
     }
 }
 
-/// What a git action did, or why it couldn't, shown under the button until it is dismissed.
-struct GitNotice: Equatable {
-    let checkoutID: String
+/// What a git action or a project add did, or why it couldn't, shown at the top of the thread
+/// until it is dismissed. A git notice belongs to its checkout; a project's shows anywhere.
+struct Notice: Equatable {
+    var checkoutID: String?
     let title: String
     var description: String?
     var failed = false
+    /// Still under way, like a clone.
+    var pending = false
     /// The pull request to open.
     var url: String?
     /// The action that follows, like a push after a commit.
     var next: String?
+    /// The project to open a thread in.
+    var projectID: String?
 
     var nextLabel: String? {
         switch next {
