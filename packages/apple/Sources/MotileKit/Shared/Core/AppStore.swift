@@ -250,8 +250,10 @@ final class AppStore {
         didSet { defaults.set(openedDraftPreview, forKey: "openedDraftPreview") }
     }
     private(set) var undo: UndoNotice?
-    /// The thread its pull request's end last marked done, which the sidebar then shows.
-    private(set) var settledThreadID: String?
+    /// The thread the sidebar brings into sight, opening Done if it is there: the one its pull
+    /// request's end last marked done, or the one opened from the search. It stays until another
+    /// is opened.
+    var revealedThreadID: String?
     /// Unknown until Settings asks for it.
     private(set) var mediaStorage: MediaStorage?
     private var drafts: [String: String] = [:]
@@ -551,7 +553,7 @@ final class AppStore {
         setThread(thread, id: thread.id)
         markOpenThreadSeen()
         guard let before else { return }
-        if !before.isDone, thread.isDone, before.pullRequest != thread.pullRequest { settledThreadID = thread.id }
+        if !before.isDone, thread.isDone, before.pullRequest != thread.pullRequest { revealedThreadID = thread.id }
         guard selection == .thread(thread.id) else { return }
         if before.turnEndedAt != thread.turnEndedAt || (before.running && !thread.running) { workspaceVersion += 1 }
     }
@@ -1750,6 +1752,7 @@ final class AppStore {
         }
         let left = selectedDraft
         selection = new
+        if new != revealedThreadID.map(Selection.thread) { revealedThreadID = nil }
         if let left, isSending(left) { sendingDrafts[left.id]?.left = true }
         if let left, preview(of: left) == nil, !isSending(left) { removeDraft(left.id) }
         openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }

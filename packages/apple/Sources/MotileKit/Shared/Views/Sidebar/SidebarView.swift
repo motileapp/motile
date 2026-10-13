@@ -60,8 +60,8 @@ struct SidebarView: View {
             }
         }
         .onChange(of: results.map(\.id)) { highlighted = 0 }
-        .onChange(of: store.settledThreadID) { _, settled in
-            guard settled != nil else { return }
+        .onChange(of: store.revealedThreadID) { _, revealed in
+            guard let revealed, store.doneThreads.contains(where: { $0.id == revealed }) else { return }
             doneExpanded = true
         }
         .modal(item: $renaming) { thread in
@@ -88,7 +88,7 @@ struct SidebarView: View {
             // A table, which picks its rows up and moves them itself.
             RecycledList(
                 items: items, height: { height(of: $0, drafts: drafts.count) }, topInset: 4 - rowGap / 2, bottomInset: 4 - rowGap / 2,
-                scrollTarget: searching && results.indices.contains(highlighted) ? results[highlighted].id : nil,
+                scrollTarget: searching ? (results.indices.contains(highlighted) ? results[highlighted].id : nil) : store.revealedThreadID,
                 clicked: { item in
                     switch item {
                     case .active(let thread): store.select(.thread(thread.id))
@@ -130,13 +130,19 @@ struct SidebarView: View {
                         if let thread = result.thread { ThreadMenu(thread: thread, rename: beginRename, delete: { deleting = $0 }) }
                     }
                 case .empty:
-                    Text(searching ? store.searchEmptyText : store.doneThreads.isEmpty ? "No threads yet" : "No active threads")
-                        .font(.ui(size: 12))
-                        .foregroundStyle(Color.themeMutedStrongerForeground)
-                        .frame(height: Self.emptyLineHeight)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, sidebarEdge)
-                        .padding(.vertical, 6 + rowGap / 2)
+                    Group {
+                        if searching {
+                            SearchEmptyLine(size: 12)
+                        } else {
+                            Text(store.doneThreads.isEmpty ? "No threads yet" : "No active threads")
+                                .font(.ui(size: 12))
+                                .foregroundStyle(Color.themeMutedStrongerForeground)
+                        }
+                    }
+                    .frame(height: Self.emptyLineHeight)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, sidebarEdge)
+                    .padding(.vertical, 6 + rowGap / 2)
                 case .newThread:
                     NewThreadRow()
                 }
@@ -786,7 +792,7 @@ private struct DoneShelf: View {
 
     var body: some View {
         Shelf(
-            items: threads, maxHeight: maxHeight, expanded: $expanded, height: $height, scrollTarget: store.settledThreadID,
+            items: threads, maxHeight: maxHeight, expanded: $expanded, height: $height, scrollTarget: store.revealedThreadID,
             pointed: { thread, row, view in ThreadPeek.shared.point(at: thread, row: row, in: view, store: store) }
         ) {
             ShelfTitle("Done", expanded: expanded)

@@ -5,6 +5,7 @@ import {
   EyeIcon,
   GitBranchIcon,
   GitPullRequestIcon,
+  LoaderIcon,
   RefreshCwIcon,
   SearchIcon,
   ServerIcon,
@@ -42,6 +43,8 @@ export function Sidebar({
   const [found, setFound] = useState<Found[]>([])
   const [searching, setSearching] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
+  /** The done thread opened from the search, which the Done shelf shows. */
+  const [revealed, setRevealed] = useState<string | null>(null)
   const query = normalized(search)
   const results = searchResults(threads, query, found)
 
@@ -70,6 +73,8 @@ export function Sidebar({
   const open = (result: Result) => {
     onPoint(null)
     if (result.kind === "active") onSelect(result.thread.id)
+    if (result.kind === "done") setDoneOpen(true)
+    setRevealed(result.kind === "done" ? result.thread.title : null)
     changeSearch("")
   }
 
@@ -119,7 +124,8 @@ export function Sidebar({
             />
           ))}
         {query && results.length === 0 && (
-          <p className="px-[18px] py-[7px] text-[12px] text-muted-stronger-foreground">
+          <p className="flex items-center gap-1.5 px-[18px] py-[7px] text-[12px] text-muted-stronger-foreground">
+            {searching && <LoaderIcon className="size-3 animate-spin" />}
             {searching ? "Searching messages" : "No threads found"}
           </p>
         )}
@@ -132,6 +138,7 @@ export function Sidebar({
               elapsed={elapsed}
               onSelect={() => {
                 onPoint(null)
+                setRevealed(null)
                 onSelect(thread.id)
               }}
               onPoint={onPoint}
@@ -169,7 +176,12 @@ export function Sidebar({
                 key={thread.title}
                 onPointerEnter={(event) => onPoint(thread, event.currentTarget)}
                 onPointerLeave={() => onPoint(null)}
-                className="mx-2.5 flex h-[30px] items-center gap-[7px] rounded-md px-2 hover:bg-background-accent-larger"
+                className={cn(
+                  "mx-2.5 flex h-[30px] items-center gap-[7px] rounded-md px-2",
+                  thread.title === revealed
+                    ? "bg-background-accent-larger-stronger"
+                    : "hover:bg-background-accent-larger"
+                )}
               >
                 <ProjectIcon project={thread.project} />
                 <span className="truncate text-[13px] text-muted-foreground">
