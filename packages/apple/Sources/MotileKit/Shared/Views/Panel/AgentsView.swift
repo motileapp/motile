@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// The space between the right panel's list rows, split around each: it looks empty but is the row's.
+let panelRowMargin = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
+
 /// The agents the thread's agent has started, and what one of them did once it is opened.
 struct AgentsSurface: View {
     @Environment(AppStore.self) private var store
@@ -19,10 +22,11 @@ struct AgentsSurface: View {
                     Spacer()
                 }
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: 0) {
                         ForEach(agents) { AgentRow(agent: $0) }
                     }
-                    .padding(8)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8 - panelRowMargin.top)
                 }
             }
         }
@@ -87,8 +91,9 @@ private struct AgentRow: View {
             // An agent that another agent started stands in from it.
             .padding(.leading, agent.parent == nil ? 0 : 18)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(panelRowMargin)
         }
-        .buttonStyle(.highlight())
+        .buttonStyle(.highlight(inset: panelRowMargin))
     }
 }
 
