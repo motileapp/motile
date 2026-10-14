@@ -53,6 +53,28 @@ function useCopied() {
   return { copied, copy }
 }
 
+/** A shell command's words, coloured as programs, flags, addresses and pipes. */
+function highlightShell(command: string) {
+  return command.split(" ").map((word, index, words) => {
+    const program = index === 0 || words[index - 1] === "|"
+    const className = program
+      ? "text-syntax-function"
+      : word === "|"
+        ? "text-muted-foreground"
+        : word.startsWith("-")
+          ? "text-syntax-keyword"
+          : /^https?:/.test(word)
+            ? "text-syntax-string"
+            : undefined
+    return (
+      <Fragment key={index}>
+        {index > 0 && " "}
+        <span className={className}>{word}</span>
+      </Fragment>
+    )
+  })
+}
+
 /** The install command in a field of its own, copied by the button at its end. */
 function CommandField({
   command,
@@ -67,7 +89,7 @@ function CommandField({
     <div className="flex items-center gap-3 rounded-full border border-border bg-background-accent py-1.5 pr-1.5 pl-5">
       <code className="font-mono text-sm">
         <span className="text-muted-foreground select-none">$ </span>
-        {command}
+        {highlightShell(command)}
       </code>
       <button
         type="button"
