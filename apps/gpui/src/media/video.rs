@@ -9,14 +9,15 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use core_foundation::base::TCFType;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{AnyThread, MainThreadMarker};
 use objc2_av_foundation::{AVPlayer, AVPlayerItem, AVPlayerItemOutput, AVPlayerItemVideoOutput};
+use objc2_core_foundation::CFRetained;
 use objc2_core_media::{CMTime, kCMTimeZero};
+use objc2_core_video::CVPixelBuffer;
 use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
 
 use crate::theme::{Radius, colors};
@@ -38,7 +39,7 @@ pub struct VideoPlayer {
     player: Retained<AVPlayer>,
     item: Retained<AVPlayerItem>,
     output: Retained<AVPlayerItemVideoOutput>,
-    frame: Option<core_video::pixel_buffer::CVPixelBuffer>,
+    frame: Option<CFRetained<CVPixelBuffer>>,
     playing: bool,
     /// Where the video is and how long it is, in seconds.
     position: f64,
@@ -128,14 +129,12 @@ impl VideoPlayer {
         if unsafe { self.output.hasNewPixelBufferForItemTime(time) } {
             let mut shown = time;
             let buffer = unsafe { self.output.copyPixelBufferForItemTime_itemTimeForDisplay(time, &mut shown) };
-            if let Some(buffer) = buffer {
-                let raw = Retained::into_raw(buffer) as *mut _ as core_video::pixel_buffer::CVPixelBufferRef;
-                if let Some(raw) = NonNull::new(raw) {
-                    // The copy is ours to release, which the wrapper does when it goes.
-                    self.frame =
-                        Some(unsafe { core_video::pixel_buffer::CVPixelBuffer::wrap_under_create_rule(raw.as_ptr()) });
-                    changed = true;
-                }
+            if let Some(buffer) = buffer
+                && let Some(raw) = NonNull::new(Retained::into_raw(buffer))
+            {
+                // The copy is ours to release, which the wrapper does when it goes.
+                self.frame = Some(unsafe { CFRetained::from_raw(raw) });
+                changed = true;
             }
         }
         if changed {

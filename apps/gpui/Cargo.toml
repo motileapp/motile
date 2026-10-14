@@ -14,7 +14,7 @@ path = "src/main.rs"
 [dependencies]
 motile-core = { path = "../../crates/core" }
 motile-protocol = { path = "../../crates/protocol" }
-gpui-kit = "0.7"
+gpui-kit = "0.7.3"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -39,7 +39,6 @@ objc2-core-foundation = { version = "0.3", default-features = false, features = 
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGImage", "CGContext", "CGBitmapContext", "CGColorSpace"] }
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMTime"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVPixelBuffer", "CVBuffer", "CVImageBuffer", "CVReturn"] }
-core-video = "0.5"
 core-foundation = "0.10"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
