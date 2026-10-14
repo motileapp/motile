@@ -77,7 +77,8 @@ struct PullRequestListSurface: View {
                     }
                 }
                 .padding(.horizontal, 8)
-                .padding(.vertical, 8 - panelRowMargin.top)
+                .padding(.top, 8 - panelRowMargin.top)
+                .padding(.bottom, panelEndRoom - panelRowMargin.bottom)
             }
         }
     }

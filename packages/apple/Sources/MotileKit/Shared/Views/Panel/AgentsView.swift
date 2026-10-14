@@ -3,6 +3,13 @@ import SwiftUI
 /// The space between the right panel's list rows, split around each: it looks empty but is the row's.
 let panelRowMargin = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
 
+/// The room under the end of what the right panel scrolls through, so that it never ends on the window's edge.
+#if os(macOS)
+let panelEndRoom: CGFloat = 64
+#else
+let panelEndRoom: CGFloat = 48
+#endif
+
 /// The agents the thread's agent has started, and what one of them did once it is opened.
 struct AgentsSurface: View {
     @Environment(AppStore.self) private var store
@@ -26,7 +33,8 @@ struct AgentsSurface: View {
                         ForEach(agents) { AgentRow(agent: $0) }
                     }
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 8 - panelRowMargin.top)
+                    .padding(.top, 8 - panelRowMargin.top)
+                    .padding(.bottom, panelEndRoom - panelRowMargin.bottom)
                 }
             }
         }
@@ -156,7 +164,7 @@ private struct AgentTranscript: View {
                 AgentTime(agent: agent)
                     .padding(.trailing, 6)
             }
-            TranscriptRepresentable(store: store, ofAgent: true, bottomInset: 64)
+            TranscriptRepresentable(store: store, ofAgent: true, bottomInset: panelEndRoom)
         }
     }
 }

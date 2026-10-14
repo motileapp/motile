@@ -103,7 +103,7 @@ export function DiffPanel({
           Everything is committed.
         </p>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto pb-16">
           {files.map((file, index) => (
             <File
               key={file.path}

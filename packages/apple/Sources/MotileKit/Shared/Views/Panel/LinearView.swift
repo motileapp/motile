@@ -343,7 +343,8 @@ struct LinearIssueSurface: View {
                     writing
                 }
             }
-            .padding(16)
+            .padding([.horizontal, .top], 16)
+            .padding(.bottom, panelEndRoom)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

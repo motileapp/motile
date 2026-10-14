@@ -192,7 +192,8 @@ private struct PullRequestPageView: View {
                     }
                 }
             }
-            .padding(14)
+            .padding([.horizontal, .top], 14)
+            .padding(.bottom, panelEndRoom)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .asking($confirming) { button in

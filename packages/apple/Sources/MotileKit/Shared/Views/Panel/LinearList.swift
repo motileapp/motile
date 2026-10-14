@@ -132,7 +132,7 @@ final class LinearListView: FlippedView {
 
     override func layoutNow() {
         scroller.frame = bounds
-        scroller.setDocument(width: bounds.width, height: (tops.last ?? 0) + Self.padding * 2)
+        scroller.setDocument(width: bounds.width, height: Self.padding + (tops.last ?? 0) + panelEndRoom)
         for (index, cell) in shown { place(cell, at: index) }
         updateVisible()
     }
