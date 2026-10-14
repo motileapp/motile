@@ -36,8 +36,7 @@ const features = [
         Run Claude Code and Codex on your own servers. Steer every thread from
         a native Mac app: opens in under a second, connects in 1/10th.
       </p>
-      <div class="mt-8 flex flex-wrap justify-center gap-3">
-        <DownloadButton client:load />
+      <DownloadButton client:load>
         <LinkButton
           target="_blank"
           rel="noreferrer"
@@ -48,7 +47,7 @@ const features = [
           <GithubIcon />
           View the source
         </LinkButton>
-      </div>
+      </DownloadButton>
     </section>
 
     <section class="mx-auto mt-8 max-w-[1248px] px-3 sm:mt-10 sm:px-6">

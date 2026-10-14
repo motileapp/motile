@@ -81,7 +81,8 @@ shadcn's own colours, opacities and radii are gone from the theme.
 - `apps/marketing` ships no JavaScript but the theme switch, the download button and the demo.
   The download button (`src/components/download-button.tsx`) offers the client for the reader's
   system and every other one behind its chevron, from `DOWNLOADS` in `src/lib/links.ts`.
-  `src/components/demo` is the Mac app's window in React, with made-up threads. `public/i` is the installer, and `public/install.sh` its old address.
+  `src/components/demo` is the Mac app's window in React, with made-up threads. `public/i` is the server's installer, and `public/install.sh` its old address.
+  `public/linux` installs the GPUI app on Linux, which the download button copies as a command.
   `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
   `scripts/preview.mjs` draws the link preview image of both from the `/preview/` page, the
   tagline over the demo: `pnpm --filter motile-marketing preview-image`. Run it when the demo

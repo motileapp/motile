@@ -45,6 +45,11 @@ use crate::store::Store;
 
 fn main() {
     bridge::init_logging();
+    #[cfg(target_os = "linux")]
+    if std::env::args().skip(1).any(|arg| arg == instance::REGISTER) {
+        instance::register_scheme();
+        return;
+    }
     #[cfg(not(target_os = "macos"))]
     if !updater::relaunched() && instance::hand_over(&instance::opened_urls()) {
         return;

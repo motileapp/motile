@@ -19,8 +19,11 @@ export type Download = {
   arch?: "x86_64" | "arm64"
   title: string
   detail: string
-  url: string
-}
+} & (
+  | { url: string; command?: never }
+  /** Copied, to run in a terminal. */
+  | { command: string; url?: never }
+)
 
 /** Every client a release carries; the first of a system is the one it is offered. */
 export const DOWNLOADS: Download[] = [
@@ -32,17 +35,9 @@ export const DOWNLOADS: Download[] = [
   },
   {
     platform: "linux",
-    arch: "x86_64",
-    title: "Intel and AMD",
-    detail: "Most Linux PCs",
-    url: `${LATEST_RELEASE}/Motile-GPUI-linux-x86_64.tar.gz`,
-  },
-  {
-    platform: "linux",
-    arch: "arm64",
-    title: "ARM",
-    detail: "Raspberry Pi and others",
-    url: `${LATEST_RELEASE}/Motile-GPUI-linux-aarch64.tar.gz`,
+    title: "Copy the install command",
+    detail: "Intel, AMD and ARM",
+    command: "curl -fsSL https://motile.app/linux | sh",
   },
   {
     platform: "windows",

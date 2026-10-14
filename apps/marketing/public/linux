@@ -1,0 +1,56 @@
+#!/bin/sh
+# Installs the Motile client on this Linux machine, for this user:
+#
+#   curl -fsSL https://motile.app/linux | sh
+#
+# The program goes to ~/.local/bin/motile-gpui, where it updates itself, and Motile to the
+# desktop's apps. MOTILE_DOWNLOAD_URL downloads it from another place than the latest release.
+set -eu
+
+DOWNLOAD_URL="${MOTILE_DOWNLOAD_URL:-https://github.com/motileapp/motile/releases/latest/download}"
+BINARY="$HOME/.local/bin/motile-gpui"
+
+fail() {
+    echo "motile: $1" >&2
+    exit 1
+}
+
+download() {
+    if command -v curl >/dev/null 2>&1; then
+        curl -fSL --progress-bar "$1" -o "$2"
+        return
+    fi
+    command -v wget >/dev/null 2>&1 || fail "curl or wget is needed"
+    wget -qO "$2" "$1"
+}
+
+main() {
+    case "$(uname -s)-$(uname -m)" in
+        Linux-x86_64 | Linux-amd64) asset=Motile-GPUI-linux-x86_64.tar.gz ;;
+        Linux-aarch64 | Linux-arm64) asset=Motile-GPUI-linux-aarch64.tar.gz ;;
+        Darwin-*) fail "on a Mac, download the Mac app from https://motile.app" ;;
+        *) fail "unsupported machine: $(uname -s) $(uname -m)" ;;
+    esac
+
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+
+    echo "Downloading Motile…"
+    download "$DOWNLOAD_URL/$asset" "$tmp/motile.tar.gz" || fail "the download failed"
+    tar -xzf "$tmp/motile.tar.gz" -C "$tmp"
+    [ -f "$tmp/motile-gpui/motile-gpui" ] || fail "the download isn't a copy of Motile"
+
+    # Put in place in one step, so a running client is replaced, not overwritten.
+    mkdir -p "$(dirname "$BINARY")"
+    cp "$tmp/motile-gpui/motile-gpui" "$BINARY.new"
+    chmod 755 "$BINARY.new"
+    mv -f "$BINARY.new" "$BINARY"
+
+    if "$BINARY" --register; then
+        echo "Motile is installed. Open it from your apps, or run $BINARY."
+        return
+    fi
+    echo "Motile is installed at $BINARY, but couldn't start to add itself to your apps."
+}
+
+main "$@"

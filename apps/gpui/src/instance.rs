@@ -58,6 +58,10 @@ fn socket() -> PathBuf {
     crate::store::data_dir().join("instance.sock")
 }
 
+/// Registers the program and quits, for the installer (`apps/marketing/public/linux`).
+#[cfg(target_os = "linux")]
+pub const REGISTER: &str = "--register";
+
 /// Has the desktop open `motile://` addresses with this program, and list it with its icon.
 #[cfg(target_os = "linux")]
 pub fn register_scheme() {
