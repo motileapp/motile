@@ -60,11 +60,8 @@ private struct LinearConnect: View {
 private struct LinearIssues: View {
     @Environment(AppStore.self) private var store
     let target: PanelTarget
-    @State private var search = ""
     @State private var asked = 0
     @State private var filing = false
-    /// The statuses folded up, by id.
-    @State private var collapsed: Set<String> = []
     @State private var offered: [Choice] = []
     /// The panel is under the width the bar and the labels beside the titles need.
     @State private var tight = false
@@ -84,6 +81,12 @@ private struct LinearIssues: View {
         return tight
     }
 
+    private var search: Binding<String> {
+        let linear = store.linear
+        let project = target.projectID
+        return Binding { linear.searches[project] ?? "" } set: { linear.searches[project] = $0 }
+    }
+
     private struct Trigger: Equatable {
         let target: PanelTarget
         let choice: LinearChoice
@@ -94,6 +97,7 @@ private struct LinearIssues: View {
     var body: some View {
         let linear = store.linear
         let choice = linear.choice(for: target)
+        let search = self.search.wrappedValue
         VStack(spacing: 0) {
             if narrow {
                 PanelBar {
@@ -112,7 +116,7 @@ private struct LinearIssues: View {
             if let error = linear.error {
                 PanelNote(text: error)
             }
-            content(choice)
+            content(choice, search: search)
                 .panelTask(id: Trigger(target: target, choice: choice, search: search, asked: asked)) {
                     // Linear is asked once the typing has stopped.
                     if !search.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
@@ -137,10 +141,7 @@ private struct LinearIssues: View {
         ActionMenu(workspace?.workspace ?? "Linear", help: "Which workspace to show") {
             ForEach(connected) { connection in
                 Toggle(connection.workspace, isOn: Binding { connection.id == choice.workspace } set: { _ in
-                    linear.choose(for: target) { choice in
-                        choice.workspace = connection.id
-                        choice.team = nil
-                    }
+                    linear.pick(connection.id, for: target)
                 })
             }
             Divider()
@@ -151,9 +152,11 @@ private struct LinearIssues: View {
         }
         .padding(.leading, -8)
         ActionMenu(teams.first { $0.id == choice.team }?.name ?? "All Teams", help: "Which team's issues to show") {
-            Toggle("All Teams", isOn: Binding { choice.team == nil } set: { _ in linear.choose(for: target) { $0.team = nil } })
+            Toggle("All Teams", isOn: Binding { choice.team == nil } set: { _ in linear.pick(choice.workspace, for: target) })
             ForEach(teams) { team in
-                Toggle(team.name, isOn: Binding { choice.team == team.id } set: { _ in linear.choose(for: target) { $0.team = team.id } })
+                Toggle(team.name, isOn: Binding { choice.team == team.id } set: { _ in
+                    linear.pick(choice.workspace, team: team.id, for: target)
+                })
             }
         }
     }
@@ -161,16 +164,16 @@ private struct LinearIssues: View {
     @ViewBuilder
     private func tools(_ choice: LinearChoice) -> some View {
         let linear = store.linear
-        InputField("Search", text: $search, icon: .search, clearable: true)
+        InputField("Search", text: search, icon: .search, clearable: true)
             .frame(maxWidth: narrow ? .infinity : 180)
         ActionMenu(icon: .listFilter, help: "Which issues to show") {
-            Toggle("Assigned to Me", isOn: Binding { choice.mine } set: { mine in linear.choose(for: target) { $0.mine = mine } })
+            Toggle("Assigned to Me", isOn: Binding { choice.mine } set: { mine in linear.changeFilter { $0.mine = mine } })
             Divider()
             ForEach(LinearState.kinds, id: \.kind) { kind in
                 Toggle(kind.name, isOn: Binding { choice.states.contains(kind.kind) } set: { listed in
-                    linear.choose(for: target) { choice in
-                        choice.states.removeAll { $0 == kind.kind }
-                        if listed { choice.states.append(kind.kind) }
+                    linear.changeFilter { filter in
+                        filter.states.removeAll { $0 == kind.kind }
+                        if listed { filter.states.append(kind.kind) }
                     }
                 })
             }
@@ -180,7 +183,7 @@ private struct LinearIssues: View {
     }
 
     @ViewBuilder
-    private func content(_ choice: LinearChoice) -> some View {
+    private func content(_ choice: LinearChoice, search: String) -> some View {
         let workspace = choice.workspace ?? ""
         let teams = store.linear.teams[workspace] ?? []
         switch store.linear.issues {
@@ -194,7 +197,7 @@ private struct LinearIssues: View {
         case .ready(let groups):
             let linear = store.linear
             let entries = groups.flatMap { group -> [LinearListEntry] in
-                let folded = collapsed.contains(group.state.id)
+                let folded = store.linear.filter.folded.contains(group.state.id)
                 let header = LinearListEntry.header(state: group.state, count: group.rows.count, folded: folded)
                 guard !folded else { return [header] }
                 return [header] + group.rows.map { row in
@@ -204,7 +207,7 @@ private struct LinearIssues: View {
             LinearList(
                 entries: entries, pending: linear.working, narrow: narrow, users: linear.users[workspace] ?? [], offered: $offered,
                 open: { row in store.rightPanel.open(.linearIssue(workspace: workspace, id: row.id, identifier: row.identifier)) },
-                fold: { id in if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) } },
+                fold: { linear.fold($0) },
                 change: { row, change in linear.change(row.id, change, of: workspace, on: target.serverID) }
             )
             .choices($offered)

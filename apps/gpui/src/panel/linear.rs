@@ -17,7 +17,7 @@ use super::state::{Loaded, PanelTarget};
 use crate::models::ago;
 use crate::store::Store;
 use crate::store::linear::{
-    Group, KINDS, LinearChoice, PRIORITIES, Page, Row, priority_name, priority_symbol, state_symbol,
+    Group, KINDS, LinearChoice, LinearFilter, PRIORITIES, Page, Row, priority_name, priority_symbol, state_symbol,
 };
 use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
 use crate::ui::control::turning_symbol;
@@ -37,12 +37,12 @@ pub struct LinearView {
     store: Entity<Store>,
     workspace: String,
     issue: Option<String>,
+    /// The project whose search the field shows.
+    project: String,
     search: Entity<InputState>,
     comment: Entity<TextareaState>,
     /// Counts up when the user asks for the issues again.
     asked: u64,
-    /// The statuses folded up, by id.
-    collapsed: HashSet<String>,
     /// How wide the tab was last drawn.
     width: Rc<Cell<f32>>,
     filing: Option<Entity<NewIssue>>,
@@ -65,17 +65,22 @@ impl LinearView {
         store: Entity<Store>,
         workspace: String,
         issue: Option<String>,
+        project: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
+        let searched = store.read(cx).linear.searches.get(&project).cloned().unwrap_or_default();
+        let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search").default_value(searched));
         let comment = text_area_state("Leave a comment", 4, 12, window, cx);
         let subscriptions = vec![
             cx.observe(&store, |_, _, cx| cx.notify()),
-            cx.subscribe(&search, |_, _, event: &InputEvent, cx| {
-                if matches!(event, InputEvent::Change) {
-                    cx.notify();
+            cx.subscribe(&search, |this, search, event: &InputEvent, cx| {
+                if !matches!(event, InputEvent::Change) {
+                    return;
                 }
+                let (project, text) = (this.project.clone(), search.read(cx).value().to_string());
+                this.store.update(cx, |store, _| store.linear.searches.insert(project, text));
+                cx.notify();
             }),
             cx.subscribe(&comment, |_, _, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -87,10 +92,10 @@ impl LinearView {
             store,
             workspace,
             issue,
+            project,
             search,
             comment,
             asked: 0,
-            collapsed: HashSet::new(),
             width: Rc::new(Cell::new(f32::MAX)),
             filing: None,
             filing_watch: None,
@@ -233,10 +238,7 @@ impl LinearView {
                         move |_, cx| {
                             let id = id.clone();
                             store.update(cx, |store, cx| {
-                                store.linear_choose(&target, |choice| {
-                                    choice.workspace = Some(id);
-                                    choice.team = None;
-                                });
+                                store.linear_pick(&target, Some(id), None);
                                 cx.notify();
                             });
                         },
@@ -270,13 +272,14 @@ impl LinearView {
             .unwrap_or_else(|| "All Teams".into());
         let team_menu = ActionMenu::new("linear-team", team_title, {
             let (store, target, chosen) = (self.store.clone(), target.clone(), choice.team.clone());
+            let workspace = choice.workspace.clone();
             move |_, _| {
                 let pick = |store: &Entity<Store>, target: &PanelTarget, team: Option<String>| {
-                    let (store, target) = (store.clone(), target.clone());
+                    let (store, target, workspace) = (store.clone(), target.clone(), workspace.clone());
                     move |_: &mut Window, cx: &mut App| {
-                        let team = team.clone();
+                        let (workspace, team) = (workspace.clone(), team.clone());
                         store.update(cx, |store, cx| {
-                            store.linear_choose(&target, |choice| choice.team = team);
+                            store.linear_pick(&target, workspace, team);
                             cx.notify();
                         });
                     }
@@ -302,30 +305,30 @@ impl LinearView {
             .when(!narrow, |field| field.w(px(180.)))
             .child(InputField::new(&self.search).icon("search").clearable(true));
         let filter = ActionMenu::icon("linear-filter", "list-filter", "Which issues to show", {
-            let (store, target, choice) = (self.store.clone(), target.clone(), choice.clone());
+            let (store, choice) = (self.store.clone(), choice.clone());
             move |_, _| {
-                let choose = |change: Box<dyn Fn(&mut LinearChoice)>| {
-                    let (store, target) = (store.clone(), target.clone());
+                let choose = |change: Box<dyn Fn(&mut LinearFilter)>| {
+                    let store = store.clone();
                     move |_: &mut Window, cx: &mut App| {
                         store.update(cx, |store, cx| {
-                            store.linear_choose(&target, |choice| change(choice));
+                            store.linear_change_filter(|filter| change(filter));
                             cx.notify();
                         });
                     }
                 };
                 let mine = choice.mine;
                 let mut menu = Menu::new()
-                    .checked(mine, "Assigned to Me", choose(Box::new(move |choice| choice.mine = !mine)))
+                    .checked(mine, "Assigned to Me", choose(Box::new(move |filter| filter.mine = !mine)))
                     .separator();
                 for (_, kind, name) in KINDS {
                     let listed = choice.states.iter().any(|state| state == kind);
                     menu = menu.checked(
                         listed,
                         name,
-                        choose(Box::new(move |choice| {
-                            choice.states.retain(|state| state != kind);
+                        choose(Box::new(move |filter| {
+                            filter.states.retain(|state| state != kind);
                             if !listed {
-                                choice.states.push(kind.to_string());
+                                filter.states.push(kind.to_string());
                             }
                         })),
                     );
@@ -450,18 +453,19 @@ impl LinearView {
     fn entries(&mut self, workspace: &str, groups: &Rc<Vec<Group>>, cx: &App) -> Rc<Vec<Entry>> {
         let store = self.store.read(cx);
         let teams = store.linear.teams.contains_key(workspace);
+        let folded = &store.linear.filter.folded;
         if let Some(lines) = &self.entries
             && Rc::ptr_eq(&lines.made_of, groups)
-            && lines.folded == self.collapsed
+            && lines.folded == *folded
             && lines.teams == teams
         {
             return lines.entries.clone();
         }
         let mut entries = Vec::new();
         for group in groups.iter() {
-            let folded = self.collapsed.contains(&group.state.id);
-            entries.push(Entry::Header { state: group.state.clone(), count: group.rows.len(), folded });
-            if folded {
+            let shut = folded.contains(&group.state.id);
+            entries.push(Entry::Header { state: group.state.clone(), count: group.rows.len(), folded: shut });
+            if shut {
                 continue;
             }
             for row in &group.rows {
@@ -471,7 +475,7 @@ impl LinearView {
         }
         let entries = Rc::new(entries);
         let made_of = groups.clone();
-        self.entries = Some(Lines { made_of, folded: self.collapsed.clone(), teams, entries: entries.clone() });
+        self.entries = Some(Lines { made_of, folded: folded.clone(), teams, entries: entries.clone() });
         entries
     }
 
@@ -1185,10 +1189,9 @@ fn header(state: &LinearState, count: usize, folded: bool, place: &ListPlace, cx
         )
         .on_click(move |_, _, cx| {
             let id = id.clone();
-            let _ = view.update(cx, |view, cx| {
-                if !view.collapsed.remove(&id) {
-                    view.collapsed.insert(id);
-                }
+            let Some(store) = view.upgrade().map(|view| view.read(cx).store.clone()) else { return };
+            store.update(cx, |store, cx| {
+                store.linear_fold(&id);
                 cx.notify();
             });
         })

@@ -16,6 +16,7 @@ use serde_json::Value;
 use super::Store;
 use super::pull_requests::{Text, read_text};
 use crate::panel::state::{Loaded, PanelTab, PanelTarget};
+use crate::prefs::Prefs;
 
 /// The issues of one status, as the core groups them.
 #[derive(Deserialize, Clone, Debug)]
@@ -107,17 +108,34 @@ pub fn priority_symbol(priority: u8) -> &'static str {
     }
 }
 
-/// What the Linear tab lists for a project, kept so that it opens as it was left.
+/// The workspace and team the Linear tab lists for a project.
+#[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
+struct LinearPick {
+    #[serde(default)]
+    workspace: Option<String>,
+    #[serde(default)]
+    team: Option<String>,
+}
+
+/// How the Linear tab lists issues, the same in every project.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
-pub struct LinearChoice {
-    #[serde(default)]
-    pub workspace: Option<String>,
-    #[serde(default)]
-    pub team: Option<String>,
+pub struct LinearFilter {
     #[serde(default = "yes")]
     pub mine: bool,
     /// The kinds of status listed, by name, or none for all of them.
     #[serde(default = "default_states")]
+    pub states: Vec<String>,
+    /// The statuses folded up, by id.
+    #[serde(default)]
+    pub folded: HashSet<String>,
+}
+
+/// What the Linear tab lists for a project.
+#[derive(Clone, PartialEq, Debug)]
+pub struct LinearChoice {
+    pub workspace: Option<String>,
+    pub team: Option<String>,
+    pub mine: bool,
     pub states: Vec<String>,
 }
 
@@ -129,9 +147,9 @@ fn default_states() -> Vec<String> {
     vec!["unstarted".into(), "started".into()]
 }
 
-impl Default for LinearChoice {
+impl Default for LinearFilter {
     fn default() -> Self {
-        Self { workspace: None, team: None, mine: true, states: default_states() }
+        Self { mine: true, states: default_states(), folded: HashSet::new() }
     }
 }
 
@@ -165,15 +183,28 @@ pub struct Linear {
     /// read as `read:` and their id, `issues` while the list is read and `create` while one is
     /// filed.
     pub working: HashSet<String>,
-    /// By project, once read from the preferences.
-    choices: HashMap<String, LinearChoice>,
-    choices_loaded: bool,
+    /// By project.
+    picks: HashMap<String, LinearPick>,
+    /// What was picked last, which a project that has none of its own starts from.
+    last_pick: Option<LinearPick>,
+    pub filter: LinearFilter,
+    /// What the tab searches for, by project, while the app runs.
+    pub searches: HashMap<String, String>,
     /// What the tab lists now.
     listed: Option<Query>,
     session: Option<crate::sign_in::Session>,
 }
 
 impl Linear {
+    pub fn kept(prefs: &Prefs) -> Self {
+        Self {
+            picks: prefs.get("linear.choices").unwrap_or_default(),
+            last_pick: prefs.get("linear.last"),
+            filter: prefs.get("linear.filter").unwrap_or_default(),
+            ..Self::default()
+        }
+    }
+
     pub fn connected(&self, server_id: &str) -> &[LinearConnection] {
         self.connections.get(server_id).map(Vec::as_slice).unwrap_or_default()
     }
@@ -212,42 +243,46 @@ impl Store {
         !self.linear.connected(&target.server_id).is_empty()
     }
 
-    /// What the tab lists for the project: what was chosen there last, in a workspace that is
-    /// still connected.
     pub fn linear_choice(&self, target: &PanelTarget) -> LinearChoice {
-        let kept = match self.linear.choices_loaded {
-            true => self.linear.choices.get(&target.project_id).cloned(),
-            false => self.kept_linear_choices().remove(&target.project_id),
-        };
-        let mut choice = kept.unwrap_or_default();
+        let pick = self.linear_picked(target);
+        let filter = &self.linear.filter;
+        LinearChoice { workspace: pick.workspace, team: pick.team, mine: filter.mine, states: filter.states.clone() }
+    }
+
+    /// What was picked for the project last, or else for any project, in a workspace the server
+    /// is still connected to.
+    fn linear_picked(&self, target: &PanelTarget) -> LinearPick {
         let connected = self.linear.connected(&target.server_id);
-        if connected.iter().any(|connection| Some(&connection.id) == choice.workspace.as_ref()) {
-            return choice;
-        }
-        choice.workspace = connected.first().map(|connection| connection.id.clone());
-        choice.team = None;
-        choice
+        let kept = [self.linear.picks.get(&target.project_id), self.linear.last_pick.as_ref()];
+        let still = kept
+            .into_iter()
+            .flatten()
+            .find(|pick| connected.iter().any(|connection| Some(&connection.id) == pick.workspace.as_ref()));
+        let Some(pick) = still else {
+            return LinearPick { workspace: connected.first().map(|connection| connection.id.clone()), team: None };
+        };
+        pick.clone()
     }
 
-    fn kept_linear_choices(&self) -> HashMap<String, LinearChoice> {
-        self.prefs.get("linear.choices").unwrap_or_default()
+    pub fn linear_pick(&mut self, target: &PanelTarget, workspace: Option<String>, team: Option<String>) {
+        let pick = LinearPick { workspace, team };
+        self.linear.picks.insert(target.project_id.clone(), pick.clone());
+        self.linear.last_pick = Some(pick.clone());
+        self.prefs.set("linear.choices", self.linear.picks.clone());
+        self.prefs.set("linear.last", pick);
     }
 
-    fn load_linear_choices(&mut self) {
-        if self.linear.choices_loaded {
-            return;
-        }
-        self.linear.choices = self.kept_linear_choices();
-        self.linear.choices_loaded = true;
+    pub fn linear_change_filter(&mut self, change: impl FnOnce(&mut LinearFilter)) {
+        change(&mut self.linear.filter);
+        self.prefs.set("linear.filter", self.linear.filter.clone());
     }
 
-    pub fn linear_choose(&mut self, target: &PanelTarget, change: impl FnOnce(&mut LinearChoice)) {
-        self.load_linear_choices();
-        let mut choice = self.linear_choice(target);
-        change(&mut choice);
-        self.linear.choices.insert(target.project_id.clone(), choice);
-        let choices = self.linear.choices.clone();
-        self.prefs.set("linear.choices", choices);
+    pub fn linear_fold(&mut self, state: &str) {
+        self.linear_change_filter(|filter| {
+            if !filter.folded.remove(state) {
+                filter.folded.insert(state.to_string());
+            }
+        });
     }
 
     /// Asks the server which workspaces it is connected to, showing the ones it had last time
@@ -362,10 +397,7 @@ impl Store {
             let Some(target) = store.panel_target() else { return };
             let added = store.linear.connected(&server).iter().find(|connection| !before.contains(&connection.id));
             let Some(added) = added.map(|connection| connection.id.clone()) else { return };
-            store.linear_choose(&target, |choice| {
-                choice.workspace = Some(added);
-                choice.team = None;
-            });
+            store.linear_pick(&target, Some(added), None);
         });
     }
 
@@ -373,7 +405,6 @@ impl Store {
     /// words of `search`, and for the workspace's teams and users when they aren't known yet. A
     /// list read before shows at once while it is read again.
     pub fn linear_load(&mut self, target: &PanelTarget, search: &str) {
-        self.load_linear_choices();
         let choice = self.linear_choice(target);
         let Some(workspace) = choice.workspace else { return };
         let query = Query {

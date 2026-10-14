@@ -1221,15 +1221,15 @@ impl RightPanelView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(key) = self.store.read(cx).panel_target().map(|target| target.key) else {
+        let Some(target) = self.store.read(cx).panel_target() else {
             return div().into_any_element();
         };
-        let wanted = (key, tab);
+        let wanted = (target.key, tab);
         let view = match &self.linear {
             Some((shown, view)) if *shown == wanted => view.clone(),
             _ => {
                 let store = self.store.clone();
-                let view = cx.new(|cx| LinearView::new(store, workspace, issue, window, cx));
+                let view = cx.new(|cx| LinearView::new(store, workspace, issue, target.project_id, window, cx));
                 self.linear = Some((wanted, view.clone()));
                 view
             }
