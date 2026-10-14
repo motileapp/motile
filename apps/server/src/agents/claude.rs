@@ -6,8 +6,10 @@
 //! moves to the background, or the turn is stopped, with a result that says so, and the prompt is
 //! answered next. It repeats a prompt on stdout when it takes it. It asks on stdout before a tool
 //! call that needs approval and reads the answer from stdin, where it also takes changed settings.
+//! It says which MCP servers have connected when asked, before its first turn too.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use motile_protocol::wire::{Access, Approval, SkillMention, Subagent, Tokens, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
@@ -20,6 +22,10 @@ const WATCH_TASKS: [&str; 4] = ["local_bash", "shell", "monitor", "monitor_mcp"]
 const IDLE_TASKS: [&str; 2] = ["plan", "dream"];
 /// What Claude Code says when the session it was told to resume isn't in its folder.
 pub const NO_CONVERSATION: &str = "No conversation found";
+/// How claude.ai's connectors are named among the MCP servers.
+const CONNECTOR: &str = "claude.ai ";
+/// How long Claude Code may take to list claude.ai's connectors once it has started.
+const CONNECTORS_LISTED_WITHIN: Duration = Duration::from_secs(2);
 
 fn permission_mode(access: Access) -> &'static str {
     match access {
@@ -138,6 +144,27 @@ pub fn effort_line(effort: Option<&str>) -> String {
 /// prompt, since Claude Code leaves a process it entered plan mode with by itself in that mode.
 pub fn access_line(access: Access) -> String {
     control(json!({"subtype": "set_permission_mode", "mode": permission_mode(access)}))
+}
+
+/// Asks which MCP servers are connected, which Claude Code answers before its first turn too.
+pub fn mcp_status_line() -> String {
+    control(json!({"subtype": "mcp_status"}))
+}
+
+/// Whether the answer to `mcp_status_line` says the MCP servers are ready for a turn, `waited`
+/// after the process started: none still connects, and claude.ai's connectors, which it fetches
+/// as it starts, are listed, unless they had the time to be. `None` for any other line.
+pub fn mcp_ready(line: &str, waited: Duration) -> Option<bool> {
+    let object: Value = serde_json::from_str(line).ok()?;
+    if object["type"] != "control_response" {
+        return None;
+    }
+    let servers = object["response"]["response"]["mcpServers"].as_array()?;
+    if servers.iter().any(|server| server["status"] == "pending") {
+        return Some(false);
+    }
+    let listed = servers.iter().any(|server| server["name"].as_str().is_some_and(|name| name.starts_with(CONNECTOR)));
+    Some(listed || waited >= CONNECTORS_LISTED_WITHIN)
 }
 
 #[derive(Default)]
@@ -834,5 +861,26 @@ mod tests {
         let mut parser = Parser::default();
         let repeated = r#"{"type":"user","uuid":"m1","isReplay":true,"message":{"role":"user","content":"Also this"}}"#;
         assert_eq!(parser.parse(repeated), vec![AgentEvent::Taken { id: "m1".to_string() }]);
+    }
+
+    #[test]
+    fn mcp_servers_are_ready_once_none_connects_and_the_connectors_are_listed() {
+        let status = |servers: Value| {
+            let response = json!({"subtype": "success", "request_id": "r1", "response": {"mcpServers": servers}});
+            json!({"type": "control_response", "response": response}).to_string()
+        };
+        let early = Duration::from_millis(300);
+        let motile = json!({"name": "motile", "status": "connected"});
+        let connecting = json!([motile, {"name": "claude.ai Compend", "status": "pending"}]);
+        let connected = json!([motile, {"name": "claude.ai Compend", "status": "connected"}]);
+        assert_eq!(mcp_ready(&status(connecting), early), Some(false));
+        assert_eq!(mcp_ready(&status(connected), early), Some(true));
+        assert_eq!(mcp_ready(&status(json!([motile])), early), Some(false));
+        assert_eq!(mcp_ready(&status(json!([motile])), Duration::from_secs(3)), Some(true));
+        assert_eq!(
+            mcp_ready(r#"{"type":"control_response","response":{"subtype":"success","request_id":"r2"}}"#, early),
+            None
+        );
+        assert_eq!(mcp_ready(r#"{"type":"system","subtype":"init"}"#, early), None);
     }
 }

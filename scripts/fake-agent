@@ -221,6 +221,8 @@ def answer_control(message):
         answer = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {"limits": limits}}
     elif subtype == "list_models":
         answer = {"models": claude_models()}
+    elif subtype == "mcp_status":
+        answer = {"mcpServers": [{"name": "claude.ai Linear", "status": "connected"}]}
     elif subtype == "get_settings":
         model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "claude-opus-5-5"
         effort = "high" if "fable" in model else "medium"

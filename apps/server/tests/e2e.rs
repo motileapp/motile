@@ -156,12 +156,13 @@ impl Harness {
         self.recorded_changes().into_iter().filter_map(|line| line.get(method).cloned()).collect()
     }
 
-    /// The settings a running agent was told to change, leaving out what it was asked about its models.
+    /// The settings a running agent was told to change, leaving out what it was asked about its models
+    /// and MCP servers.
     fn recorded_changes(&self) -> Vec<serde_json::Value> {
         let recorded = std::fs::read_to_string(self.dir.path().join("arguments.txt")).unwrap_or_default();
         let lines = recorded.lines().filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok());
         let asked = |line: &serde_json::Value| {
-            ["list_models", "get_settings"].iter().any(|subtype| line["subtype"] == *subtype)
+            ["list_models", "get_settings", "mcp_status"].iter().any(|subtype| line["subtype"] == *subtype)
         };
         lines.filter(|line| line.is_object() && !asked(line)).collect()
     }
@@ -1483,13 +1484,25 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
         "{first}"
     );
 
+    // The process that rests is told what changed, and takes the next message.
     let change =
         ThreadChange { effort: Some("low".to_string()), access: Some(AgentAccess::AcceptEdits), ..Default::default() };
     assert_eq!(update(&connection, &thread_id, change).await, Message::Ok);
-    send(&connection, Some(thread_id.clone()), None, "And in LICENSE?").await;
-    finished_transcript(&connection, &thread_id).await;
+    turn(&connection, &thread_id, "And in LICENSE?").await;
+    assert_eq!(harness.recorded_turns().len(), 1);
+    let told = harness.recorded_changes();
+    assert!(
+        told.contains(
+            &json!({"subtype": "apply_flag_settings", "settings": {"effortLevel": "low", "ultracode": false}})
+        )
+    );
+    assert!(told.contains(&json!({"subtype": "set_permission_mode", "mode": "acceptEdits"})));
+    // A new one starts with it.
+    let_agent_go(&connection, &thread_id).await;
+    turn(&connection, &thread_id, "And in Cargo.toml?").await;
     let second = &harness.recorded_turns()[1];
     assert!(second.contains("--permission-mode\nacceptEdits\n--model\nclaude-opus-5-5\n--effort\nlow"), "{second}");
+    assert!(second.contains("--resume"), "{second}");
 
     let odd = ThreadChange { effort: Some("low\" sandbox".to_string()), ..Default::default() };
     assert!(matches!(update(&connection, &thread_id, odd).await, Message::Error { .. }));
@@ -1550,8 +1563,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
         turns.filter(|arguments| arguments.contains("--append-system-prompt")).collect()
     };
     let turns = turns_in("personal.txt");
-    assert_eq!(turns.len(), 2, "{turns:?}");
-    assert!(!turns[0].contains("--resume") && turns[1].contains("--resume"), "{turns:?}");
+    assert_eq!(turns.len(), 1, "the process that rests takes the second message: {turns:?}");
     assert!(turns_in("arguments.txt").is_empty());
 
     let change = ThreadChange { agent_account: Some("claude".into()), ..Default::default() };
@@ -3287,6 +3299,12 @@ async fn turn(connection: &Connection, thread_id: &str, text: &str) -> Transcrip
     finished_transcript(connection, thread_id).await
 }
 
+/// Marks the thread done, which lets the process of its agent that rests go.
+async fn let_agent_go(connection: &Connection, thread_id: &str) {
+    let done = ThreadChange { done: Some(true), ..Default::default() };
+    assert_eq!(update(connection, thread_id, done).await, Message::Ok);
+}
+
 /// The arguments of each of Claude Code's turns.
 fn claude_turns(harness: &Harness) -> Vec<String> {
     let turns = harness.recorded_turns().into_iter();
@@ -3390,8 +3408,8 @@ async fn another_model_of_the_same_agent_keeps_the_session_and_reaches_a_running
     assert_eq!(update(&connection, &thread_id, sonnet).await, Message::Ok);
     let second = turn(&connection, &thread_id, "And in LICENSE?").await;
     assert!(second.handoffs().is_empty());
-    let resumed = &claude_turns(&harness)[1];
-    assert!(resumed.contains("--model\nclaude-sonnet-5-5") && resumed.contains("--resume"), "{resumed}");
+    assert_eq!(claude_turns(&harness).len(), 1);
+    assert!(harness.recorded_changes().contains(&json!({"subtype": "set_model", "model": "claude-sonnet-5-5"})));
     assert_eq!(harness.recorded_prompts().last().unwrap(), "And in LICENSE?");
 
     let new_thread = harness.new_thread(&connection, Agent::Codex).await.unwrap();
@@ -3438,6 +3456,7 @@ async fn a_session_that_is_gone_is_started_again_once_with_what_was_said() {
     let new_thread = full_access(&harness, &connection, Agent::Claude).await;
     let thread_id = send(&connection, None, new_thread, "What is in README.md?").await;
     finished_transcript(&connection, &thread_id).await;
+    let_agent_go(&connection, &thread_id).await;
     std::fs::write(harness.dir.path().join("sessions.txt"), "").unwrap();
     let second = turn(&connection, &thread_id, "And in LICENSE?").await;
 
