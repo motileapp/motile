@@ -9,7 +9,7 @@ extension View {
     func composerSurface<S: Shape>(in shape: S, shadow: ShadowSize? = nil) -> some View {
         composerFill(in: shape, shadow: shadow)
             .composerSilhouette(shape)
-            .environment(\.surface, .background)
+            .environment(\.surface, .composer)
     }
 
     /// The wide shadow the composer and its strips cast together, from one silhouette of their

@@ -79,7 +79,7 @@ struct QuestionsView: View {
             .padding(.vertical, 8)
             .padding(.horizontal, Self.optionReach)
         }
-        .buttonStyle(.highlight(radius: Radius.md, lit: picked, fill: .themeBorderComposer))
+        .buttonStyle(.highlight(radius: Radius.md, lit: picked))
     }
 
     /// The last row, which takes an answer typed in place of the options.
@@ -96,7 +96,7 @@ struct QuestionsView: View {
         .padding(.horizontal, Self.optionReach)
         .contentShape(Rectangle())
         .onTapGesture { typing = true }
-        .hoverHighlight(radius: Radius.md, lit: written || typing, fill: .themeBorderComposer)
+        .hoverHighlight(radius: Radius.md, lit: written || typing)
     }
 
     private var canGoOn: Bool {

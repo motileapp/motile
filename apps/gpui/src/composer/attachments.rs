@@ -129,7 +129,7 @@ fn chip(attachment: &Attachment, store: &Entity<Store>, window: &mut Window, cx:
         .pr(px(2.))
         .py(px(2.))
         .rounded_full()
-        .bg(Surface::Background.layer(layer, c))
+        .bg(Surface::Composer.layer(layer, c))
         .border_1()
         .border_color(c.border_accent)
         .text_size(px(12.))
@@ -143,7 +143,7 @@ fn chip(attachment: &Attachment, store: &Entity<Store>, window: &mut Window, cx:
             ActionButton::icon(SharedString::from(format!("remove-chip-{}", attachment.id)), "x", "Remove")
                 .small()
                 .round(true)
-                .surface(Surface::Background)
+                .surface(Surface::Composer)
                 .row(Some(layer))
                 .on_click(move |_, _, cx| {
                     remove.update(cx, |store, cx| {

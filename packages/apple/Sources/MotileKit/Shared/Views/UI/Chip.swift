@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// A word or two that says what something is: a state, a label, a name. With a `tone` it is in
-/// that colour on a wash of it; without, it is bordered. With a `dot` the colour is the dot's and
-/// the words stay plain.
+/// that colour on a wash of it; without, it is bordered, a step above the row it lies on. With a
+/// `dot` the colour is the dot's and the words stay plain.
 struct Chip: View {
     static let height = scaled(20)
 
@@ -12,6 +12,7 @@ struct Chip: View {
     var tone: Color?
     var monospaced = false
     @Environment(\.surface) private var surface
+    @Environment(\.row) private var row
 
     init(_ title: String, icon: Symbol? = nil, dot: Color? = nil, tone: Color? = nil, monospaced: Bool = false) {
         self.title = title
@@ -38,11 +39,19 @@ struct Chip: View {
         .foregroundStyle(dot == nil ? tone ?? Color.themeForeground : Color.themeForeground)
         .padding(.horizontal, 7)
         .frame(height: Self.height)
-        .background(tone.map { AnyShapeStyle($0.wash()) } ?? AnyShapeStyle(surface.color(.control)), in: Capsule())
+        .background(tone.map { AnyShapeStyle($0.wash()) } ?? AnyShapeStyle(surface.color(layer)), in: Capsule())
         .overlay {
             if tone == nil {
                 Capsule().strokeBorder(surface.border, lineWidth: 1)
             }
+        }
+    }
+
+    private var layer: Surface.Layer {
+        switch row {
+        case .rowSelected, .controlLit, .controlLitOnSelected: .controlLitOnSelected
+        case .row, .control: .controlLit
+        case .box, nil: .control
         }
     }
 }

@@ -39,7 +39,7 @@ struct SkillMenuStrip: View {
                 VStack(spacing: 0) {
                     ForEach(Array(menu.rows.enumerated()), id: \.element.id) { index, row in
                         SkillMenuRow(row: row)
-                            .button(.highlight(radius: Radius.md, lit: index == store.skillHighlight, inset: Self.rowInset, fill: .themeBorderComposer)) {
+                            .button(.highlight(radius: Radius.md, lit: index == store.skillHighlight, inset: Self.rowInset)) {
                                 store.pickSkill(row)
                             }
                             .onHover { if $0 { store.skillHighlight = index } }

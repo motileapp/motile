@@ -836,6 +836,8 @@ pub struct Chip {
     tone: Option<Hsla>,
     monospaced: bool,
     surface: Surface,
+    /// The row it lies on, as it is lit, which it stands a step above.
+    row: Option<Layer>,
     /// Its words lose their middle when there is too little room, as a branch's name does.
     middle: bool,
     /// Its words can be selected and copied, as part of the window's selection.
@@ -853,6 +855,7 @@ impl Chip {
             tone: None,
             monospaced: false,
             surface: Surface::Background,
+            row: None,
             middle: false,
             selectable: None,
         }
@@ -891,6 +894,19 @@ impl Chip {
         self.surface = surface;
         self
     }
+
+    pub fn row(mut self, row: Option<Layer>) -> Self {
+        self.row = row;
+        self
+    }
+
+    fn layer(&self) -> Layer {
+        match self.row {
+            Some(Layer::RowSelected | Layer::ControlLit | Layer::ControlLitOnSelected) => Layer::ControlLitOnSelected,
+            Some(Layer::Row | Layer::Control) => Layer::ControlLit,
+            Some(Layer::Box) | None => Layer::Control,
+        }
+    }
 }
 
 impl RenderOnce for Chip {
@@ -899,7 +915,7 @@ impl RenderOnce for Chip {
         let foreground = if self.dot.is_some() { c.foreground } else { self.tone.unwrap_or(c.foreground) };
         let background = match self.tone {
             Some(tone) => c.wash(tone, false),
-            None => self.surface.layer(Layer::Control, c),
+            None => self.surface.layer(self.layer(), c),
         };
         let words: AnyElement = match self.selectable {
             Some(id) => crate::ui::rich_text::RichText::new(id, self.title).into_any_element(),
