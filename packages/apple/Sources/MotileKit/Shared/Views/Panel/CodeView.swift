@@ -270,7 +270,7 @@ final class CodeSheet {
         let digits = max(2, String(lastNumber).count)
         numberWidth = CGFloat(digits) * 6.8 + 12
         gutter = (document.headed ? 2 : 1) * numberWidth + 4
-        contentSize = CGSize(width: gutter + Self.textInset + CGFloat(columns) * Self.advance + 24, height: y + 8)
+        contentSize = CGSize(width: gutter + Self.textInset + CGFloat(columns) * Self.advance + 24, height: y + panelEndRoom)
     }
 
     /// Lays the document out again for a view `width` wide, when its images and videos take

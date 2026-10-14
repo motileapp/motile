@@ -586,7 +586,8 @@ struct FilesSurface: View {
                                 FileRow(node: node)
                             }
                         }
-                        .padding(.vertical, 6)
+                        .padding(.top, 6)
+                        .padding(.bottom, panelEndRoom)
                     }
                 }
             } else {
