@@ -125,6 +125,7 @@ const DEFAULTS: &[(&str, &str, Option<&str>)] = &[
     ("mod+alt+a", "rightPanel.agents", None),
     ("mod+shift+r", "rightPanel.pullRequest", None),
     ("mod+alt+shift+r", "rightPanel.pullRequests", None),
+    ("mod+alt+l", "rightPanel.linear", None),
     ("c", "usage.cost", Some("usagePageOpen")),
     ("t", "usage.tokens", Some("usagePageOpen")),
     ("l", "usage.limits", Some("usagePageOpen")),
@@ -915,7 +916,7 @@ mod tests {
         let (dir, keybindings) = loaded(None);
         let view = keybindings.view();
         assert_eq!(keys_of(&view, "chat.new"), vec!["mod+n", "mod+shift+o"]);
-        assert_eq!(keys_of(&view, "rightPanel.linear"), vec![""]);
+        assert_eq!(keys_of(&view, "rightPanel.linear"), vec!["mod+alt+l"]);
         assert_eq!(view.rules.len(), DEFAULTS.len());
         assert!(view.issues.is_empty());
         assert!(!dir.path().join(FILE).exists());
@@ -992,9 +993,10 @@ mod tests {
     }
 
     #[test]
-    fn a_key_for_a_command_without_defaults_is_kept_with_its_condition() {
+    fn a_key_is_kept_with_its_condition() {
         let (dir, mut keybindings) = loaded(None);
-        keybindings.set("rightPanel.linear", "mod+alt+l", Some(" rightPanelOpen&&!settingsOpen "), None).unwrap();
+        let old = Rule::new("mod+alt+l", "rightPanel.linear", None);
+        keybindings.set("rightPanel.linear", "mod+alt+l", Some(" rightPanelOpen&&!settingsOpen "), Some(&old)).unwrap();
         assert_eq!(
             saved(&dir),
             serde_json::json!([{"key": "mod+alt+l", "command": "rightPanel.linear", "when": "rightPanelOpen && !settingsOpen"}])

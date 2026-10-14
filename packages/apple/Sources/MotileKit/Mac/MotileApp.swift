@@ -59,7 +59,7 @@ struct MotileApp: App {
                     .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil || !store.pullRequestsExtended)
                 Button("Show Linear") { store.rightPanel.open(.linear) }
                     .shortcut("rightPanel.linear", in: keys)
-                    .disabled(store.panelUnavailable != nil || store.linearUnavailable != nil)
+                    .disabled(store.panelUnavailable != nil || !store.linearConnected)
                 PanelTabCommands(store: store)
                 Divider()
             }
