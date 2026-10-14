@@ -29,6 +29,8 @@ pub struct RichText {
     tint_glyphs: Option<Pixels>,
     /// The transcript row it is in.
     row: Option<u64>,
+    /// Where it comes in the window's text, which a copied selection keeps to.
+    order: u64,
 }
 
 /// The transcript row the last press fell in, if it fell in one.
@@ -41,6 +43,33 @@ impl Global for PressedRow {}
 /// every press before the row does.
 pub fn press_row(row: Option<u64>, cx: &mut App) {
     cx.default_global::<PressedRow>().0 = row;
+}
+
+/// What text takes the keys with once a drag starts in it, inside the window's root, whose copy
+/// shortcut then copies the selection.
+struct SelectionFocus(FocusHandle);
+
+impl Global for SelectionFocus {}
+
+pub fn selection_focus(cx: &mut App) -> FocusHandle {
+    if let Some(focus) = cx.try_global::<SelectionFocus>() {
+        return focus.0.clone();
+    }
+    let focus = cx.focus_handle();
+    cx.set_global(SelectionFocus(focus.clone()));
+    focus
+}
+
+thread_local! {
+    static PAINTED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The next place in the window's text: text is laid out in the order it reads.
+fn next_order() -> u64 {
+    PAINTED.with(|painted| {
+        painted.set(painted.get() + 1);
+        painted.get()
+    })
 }
 
 /// The scope text takes part in a selection with: the window's, unless it is in a transcript row
@@ -84,6 +113,7 @@ impl RichText {
             tint: Hsla::transparent_black(),
             tint_glyphs: None,
             row: None,
+            order: 0,
         }
     }
 
@@ -169,13 +199,14 @@ impl RichText {
         window: &mut Window,
     ) {
         if let Some(row) = self.row {
-            let (handle, registered) = (handle.clone(), hitbox.clone());
+            let (handle, registered, order) = (handle.clone(), hitbox.clone(), self.order);
             window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
                 if !phase.capture() || event.button != MouseButton::Left {
                     return;
                 }
                 let registration = TextSelectionRegistration::new(registered.clone(), bounds)
                     .with_scope(scope_of(Some(row), cx))
+                    .with_document_order(order)
                     .with_text_bounds(vec![bounds]);
                 handle.register(registration, window, cx);
             });
@@ -256,7 +287,7 @@ impl Element for RichText {
                     let handle = TextSelectionHandle::new(self.text.clone(), cx);
                     // Selecting takes the keys from a field, as a text view of the Mac's becomes the
                     // first responder, so that ⌘C copies the selection.
-                    handle.focus_with(|window, cx| window.blur(cx), cx);
+                    handle.focus_with(|window, cx| window.focus(&selection_focus(cx), cx), cx);
                     Kept { handle, text: self.text.clone() }
                 });
                 let changed = kept.text != self.text;
@@ -281,8 +312,10 @@ impl Element for RichText {
     ) -> Self::PrepaintState {
         self.styled.prepaint(global_id, inspector_id, bounds, &mut (), window, cx);
         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+        self.order = next_order();
         let registration = TextSelectionRegistration::new(hitbox.clone(), bounds)
             .with_scope(scope_of(self.row, cx))
+            .with_document_order(self.order)
             .with_text_bounds(vec![bounds])
             .with_rendered_element(handle, window, cx);
         handle.register(registration, window, cx);
@@ -300,13 +333,8 @@ impl Element for RichText {
         cx: &mut App,
     ) {
         let layout = self.styled.layout().clone();
-        // Only text the selection reaches changes what it copies, and needs drawing again then.
-        let selected = handle.snapshot(cx).is_some();
-        let selected_before = selected.then(|| TextSelection::selected_text(window, cx));
         let projection = handle.update_runs(&[TextSelectionRun::new(self.text.clone(), layout.clone(), bounds)], cx);
-        if selected_before.is_some_and(|before| before != TextSelection::selected_text(window, cx)) {
-            window.refresh();
-        }
+        window.set_cursor_style(CursorStyle::IBeam, hitbox);
         self.listen_for_presses(handle, hitbox, bounds, window);
         let glyphs =
             self.tint_glyphs.unwrap_or_else(|| window.text_style().font_size.to_pixels(window.rem_size()) * 1.22);
