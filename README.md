@@ -20,18 +20,21 @@ These are its programs:
 | --- | --- | --- |
 | Motile.app (`apps/macos`) | Your Mac | The interface |
 | Motile for iOS (`apps/ios`) | Your iPhone and iPad | The interface. In TestFlight for now |
+| Motile for Android (`apps/android`) | Your Android phone and tablet | The interface |
 | `motile` (`apps/server`) | Your Linux machines and Macs | Runs the agents, stores the threads, serves your clients |
 | Auth server (`apps/auth`) | auth.motile.app | Signs you in and records which devices are yours. It never sees a thread |
 | Web app (`apps/web`) | [app.motile.app](https://app.motile.app) | Lists your servers and clients, adds a server, removes a device |
 | Marketing site (`apps/marketing`) | [motile.app](https://motile.app) | The landing page, the download and the installer |
 
-Clients for Android, Windows and Linux are planned. They will share the Rust core the Mac and iOS apps are built on (`crates/core`).
+The clients share the Rust core they are all built on (`crates/core`).
 
 ## Getting started
 
 ### 1. Install the client
 
 Download **Motile.zip** from [motile.app](https://motile.app) or the [latest release](https://github.com/motileapp/motile/releases/latest), unzip it and move Motile to Applications. It needs an Apple silicon Mac with macOS 14 or later. The client is signed and notarized, and updates itself from then on.
+
+On Android (10 or later), install Motile from Google Play's testing track, or build it from `apps/android` (see AGENTS.md).
 
 ### 2. Sign in
 
@@ -130,6 +133,7 @@ apps/server      The server: agents, thread storage, the iroh endpoint, the inst
 apps/macos       The Mac app
 apps/gpui        The Mac app in Rust with GPUI
 apps/ios         The iOS app
+apps/android     The Android app, in Kotlin with Jetpack Compose
 packages/apple   The state and views the Mac and iOS apps share
 crates/protocol  Messages, device keys and request signing, shared by every program
 crates/core      What every client shares: account, connections, sync, cache, rendering

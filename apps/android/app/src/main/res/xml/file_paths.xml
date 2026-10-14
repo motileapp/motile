@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <cache-path name="attachments" path="attachments/" />
+    <files-path name="motile" path="Motile/" />
+    <cache-path name="shared" path="shared/" />
+</paths>

@@ -1,0 +1,19 @@
+[package]
+name = "motile-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# The Android app loads it as libmotile_android.so.
+crate-type = ["cdylib"]
+
+[dependencies]
+motile-core.workspace = true
+jni = "0.22"
+
+[target.'cfg(target_os = "android")'.dependencies]
+libc.workspace = true
+ndk-context = "0.1"
+rustls-platform-verifier = "0.7"
