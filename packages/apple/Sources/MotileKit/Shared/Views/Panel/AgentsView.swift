@@ -13,7 +13,7 @@ struct AgentsSurface: View {
         } else {
             VStack(spacing: 0) {
                 PanelBar {
-                    Text(Self.summary(of: agents))
+                    Text(dotted: Self.summary(of: agents))
                         .font(.ui(size: 12, weight: .medium))
                         .foregroundStyle(Color.themeMutedForeground)
                     Spacer()
@@ -28,14 +28,16 @@ struct AgentsSurface: View {
         }
     }
 
-    /// "2 working · 1 done · 1 failed", leaving out what there is none of.
+    /// "2 working · 1 done · 1 failed · 48k tokens", leaving out what there is none of.
     static func summary(of agents: [AgentInfo]) -> String {
         let counts: [(Int, String)] = [
             (agents.count { $0.status == .running }, "working"),
             (agents.count { $0.status == .succeeded }, "done"),
             (agents.count { $0.status == .failed }, "failed"),
         ]
-        return counts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
+        let spent = agents.compactMap(\.tokens)
+        let total = spent.isEmpty ? [] : [AgentInfo.tokens(spent.reduce(0, +))]
+        return (counts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" } + total).joined(separator: " · ")
     }
 }
 

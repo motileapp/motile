@@ -932,9 +932,13 @@ struct AgentInfo: Equatable, Identifiable {
     /// "3 tools · 21k tokens", as far as either is known.
     var usage: String? {
         let tools = toolUses.map { "\($0) \($0 == 1 ? "tool" : "tools")" }
-        let spent = tokens.map { $0 < 1000 ? "\($0) tokens" : "\($0 / 1000)k tokens" }
-        let parts = [tools, spent].compactMap { $0 }
+        let parts = [tools, tokens.map(Self.tokens)].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// "820 tokens", "21k tokens".
+    static func tokens(_ count: Int) -> String {
+        count < 1000 ? "\(count) tokens" : "\(count / 1000)k tokens"
     }
 }
 
