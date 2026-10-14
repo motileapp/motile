@@ -1,5 +1,11 @@
-import { Fragment, useSyncExternalStore } from "react"
-import { ChevronDownIcon } from "lucide-react"
+import {
+  Fragment,
+  type ReactNode,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
+import { CheckIcon, ChevronDownIcon, CopyIcon } from "lucide-react"
 import { OSIcon } from "@/components/os-icon"
 import { buttonVariants } from "@/components/ui/button"
 import {
@@ -34,61 +40,150 @@ function offered(): Download {
 /** The system never changes while the page is open. */
 const unchanging = () => () => {}
 
-/** Downloads the client for the reader's system, with every other one behind the chevron. */
-export function DownloadButton() {
+/** Whether the install command was just copied, for a moment. */
+function useCopied() {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const copy = async (command: string) => {
+    await navigator.clipboard.writeText(command)
+    setCopied(true)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setCopied(false), 2000)
+  }
+  return { copied, copy }
+}
+
+/** A shell command's words, coloured as programs, flags, addresses and pipes. */
+function highlightShell(command: string) {
+  return command.split(" ").map((word, index, words) => {
+    const program = index === 0 || words[index - 1] === "|"
+    const className = program
+      ? "text-syntax-function"
+      : word === "|"
+        ? "text-muted-foreground"
+        : word.startsWith("-")
+          ? "text-syntax-keyword"
+          : /^https?:/.test(word)
+            ? "text-syntax-string"
+            : undefined
+    return (
+      <Fragment key={index}>
+        {index > 0 && " "}
+        <span className={className}>{word}</span>
+      </Fragment>
+    )
+  })
+}
+
+/** The install command in a field of its own, copied by the button at its end. */
+function CommandField({
+  command,
+  copied,
+  copy,
+}: {
+  command: string
+  copied: boolean
+  copy: (command: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-full border border-border bg-background-accent py-1.5 pr-1.5 pl-5">
+      <code className="font-mono text-sm">
+        <span className="text-muted-foreground select-none">$ </span>
+        {highlightShell(command)}
+      </code>
+      <button
+        type="button"
+        aria-label="Copy the install command"
+        onClick={() => copy(command)}
+        className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Downloads the client for the reader's system, with every other one behind the chevron, beside
+ * what the page passes in. A client installed by a command shows it above, in a field.
+ */
+export function DownloadButton({ children }: { children?: ReactNode }) {
   const primary = useSyncExternalStore(unchanging, offered, () => DOWNLOADS[0])
   const system = PLATFORMS.find(({ platform }) => platform === primary.platform)
+  const { copied, copy } = useCopied()
   return (
-    <div className="flex">
-      <a
-        href={primary.url}
-        data-slot="button"
-        className={cn(
-          buttonVariants({ size: "lg" }),
-          "rounded-r-none border-r-0 bg-clip-border pr-3.5"
-        )}
-      >
-        <OSIcon os={primary.platform} />
-        Download for {system?.name}
-      </a>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label="Every download"
-          className={cn(
-            buttonVariants({ size: "icon-lg" }),
-            "w-9 rounded-l-none border-l-primary-foreground/(--opacity-color-tint-stronger) bg-clip-border aria-expanded:bg-primary/(--opacity-lit)"
+    <div className="mt-8 flex flex-col items-center gap-4">
+      {primary.command && (
+        <CommandField command={primary.command} copied={copied} copy={copy} />
+      )}
+      <div className="flex flex-wrap justify-center gap-3">
+        <div className="flex">
+          {primary.url && (
+            <a
+              href={primary.url}
+              data-slot="button"
+              className={cn(
+                buttonVariants({ size: "lg" }),
+                "rounded-r-none border-r-0 bg-clip-border pr-3.5"
+              )}
+            >
+              <OSIcon os={primary.platform} />
+              Download for {system?.name}
+            </a>
           )}
-        >
-          <ChevronDownIcon />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64">
-          {PLATFORMS.map(({ platform, name }, index) => (
-            <Fragment key={platform}>
-              {index > 0 && <DropdownMenuSeparator />}
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{name}</DropdownMenuLabel>
-                {DOWNLOADS.filter(
-                  (download) => download.platform === platform
-                ).map((download) => (
-                  <DropdownMenuItem
-                    key={download.url}
-                    render={<a href={download.url} />}
-                    className="items-start"
-                  >
-                    <OSIcon os={platform} className="mt-0.5" />
-                    <span className="flex flex-col gap-0.5">
-                      {download.title}
-                      <span className="text-xs font-normal text-muted-foreground">
-                        {download.detail}
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-            </Fragment>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Every download"
+              className={
+                primary.url
+                  ? cn(
+                      buttonVariants({ size: "icon-lg" }),
+                      "w-9 rounded-l-none border-l-primary-foreground/(--opacity-color-tint-stronger) bg-clip-border aria-expanded:bg-primary/(--opacity-lit)"
+                    )
+                  : cn(buttonVariants({ size: "lg", variant: "outline" }))
+              }
+            >
+              {!primary.url && "Other downloads"}
+              <ChevronDownIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {PLATFORMS.filter(
+                ({ platform }) =>
+                  !primary.command || platform !== primary.platform
+              ).map(({ platform, name }, index) => (
+                <Fragment key={platform}>
+                  {index > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>{name}</DropdownMenuLabel>
+                    {DOWNLOADS.filter(
+                      (download) => download.platform === platform
+                    ).map(({ title, detail, url, command }) => (
+                      <DropdownMenuItem
+                        key={title}
+                        render={command ? undefined : <a href={url} />}
+                        closeOnClick={!command}
+                        onClick={() => command && copy(command)}
+                        className="items-start"
+                      >
+                        <OSIcon os={platform} className="mt-0.5" />
+                        <span className="flex flex-col gap-0.5">
+                          {title}
+                          <span className="text-xs font-normal text-muted-foreground">
+                            {command && copied
+                              ? "Copied, paste it in a terminal"
+                              : detail}
+                          </span>
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
+                </Fragment>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        {children}
+      </div>
     </div>
   )
 }
