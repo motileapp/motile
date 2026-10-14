@@ -103,12 +103,14 @@ final class RowModel {
     /// A user message shown the moment it is sent, before the server has it.
     /// A message on its way to the server. One sent while the agent works will wait for it, so
     /// it shows as it will once the server has it.
-    static func pending(text: String, attachments: [AttachedFile], queued: Bool) -> RowModel {
+    static func pending(text: String, attachments: [AttachedFile], queued: Bool, skills: [SkillSpan] = []) -> RowModel {
+        let typeset = NSMutableAttributedString(attributedString: Typesetter.plain(text, color: queued ? Theme.mutedForeground : Theme.foreground))
+        SkillChip.set(skills, in: typeset)
         guard !queued else {
-            let content = QueuedContent(text: Typesetter.plain(text, color: Theme.mutedForeground), attachments: attachments, status: "Queued")
+            let content = QueuedContent(text: typeset, attachments: attachments, status: "Queued")
             return RowModel(id: pendingID, itemID: pendingID, kind: .queued(content))
         }
-        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: Typesetter.plain(text, color: Theme.foreground), attachments: attachments, at: Date().timeIntervalSince1970))
+        return RowModel(id: pendingID, itemID: pendingID, kind: .user(text: typeset, attachments: attachments, at: Date().timeIntervalSince1970))
     }
 
     static let pendingID = "pending"
@@ -335,7 +337,7 @@ struct QueuedContent {
     }
 
     init(json: JSON) {
-        text = Typesetter.plain(json.string("text"), color: Theme.mutedForeground)
+        text = Typesetter.message(json, color: Theme.mutedForeground)
         attachments = json.objects("attachments").map(AttachedFile.init(json:))
         status = json.string("status")
     }
@@ -486,11 +488,15 @@ enum Typesetter {
         )
     }
 
-    static func message(_ json: JSON) -> NSAttributedString {
-        let result = NSMutableAttributedString(attributedString: plain(json.string("text"), color: Theme.foreground))
+    static func message(_ json: JSON, color: PlatformColor = Theme.foreground) -> NSAttributedString {
+        let result = NSMutableAttributedString(attributedString: plain(json.string("text"), color: color))
         link(result, json)
+        SkillChip.set(json.objects("skills").map(SkillSpan.init(json:)), in: result)
         return result
     }
+
+    /// The font of a message's text, which its skills' chips are as tall as.
+    static let messageFont = PlatformFont.systemFont(ofSize: Theme.proseSize)
 
     private static func link(_ text: NSMutableAttributedString, _ json: JSON) {
         for link in json.objects("links") {

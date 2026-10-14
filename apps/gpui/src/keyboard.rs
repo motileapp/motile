@@ -11,6 +11,7 @@ use gpui_kit::*;
 use crate::panel::state::PanelTab;
 use crate::store::Store;
 use crate::store::shortcuts::KeyPress;
+use crate::store::skills::SkillKey;
 
 /// The commands that run again while their keys are held.
 const REPEATING: [&str; 4] = ["thread.previous", "thread.next", "rightPanel.nextTab", "rightPanel.previousTab"];
@@ -58,6 +59,10 @@ fn handle(store: &Entity<Store>, event: &KeystrokeEvent, window: &mut Window, cx
     let Some(press) = press_of(&event.keystroke) else { return false };
     let editing = event.context_stack.iter().any(|context| context.contains("Input"));
     let composing = editing && event.context_stack.iter().any(|context| context.contains("Composer"));
+    if let Some(key) = SkillKey::of(&event.keystroke).filter(|_| composing && state.skills.menu.is_some()) {
+        store.update(cx, |store, cx| store.skill_key(key, cx));
+        return true;
+    }
     let context = state.shortcut_context(composing, editing);
     let Some(command) = state.shortcuts.command_for(&press, &context).map(String::from) else {
         // ⌘+, ⌘−, ⌘0 and ⌘9 zoom the image file the right panel shows.

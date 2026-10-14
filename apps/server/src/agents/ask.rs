@@ -2,6 +2,7 @@
 //! requests and `codex app-server` JSON-RPC requests, one JSON object a line. Neither spends tokens.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -20,13 +21,23 @@ pub type Answers = HashMap<String, Result<Value, String>>;
 /// Claude Code's answers to the control requests of `subtypes`, each under its subtype, with
 /// `arguments` added to the ones that have it read them.
 pub async fn claude(environment: &Environment, arguments: &[&str], subtypes: &[&str]) -> anyhow::Result<Answers> {
+    claude_in(environment, &std::env::temp_dir(), arguments, subtypes).await
+}
+
+/// The same, asked in `folder`, which is what a project's skills are read from.
+pub async fn claude_in(
+    environment: &Environment,
+    folder: &Path,
+    arguments: &[&str],
+    subtypes: &[&str],
+) -> anyhow::Result<Answers> {
     let mut command = vec!["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
     command.extend(arguments);
     let requests: Vec<Value> = subtypes
         .iter()
         .map(|subtype| json!({"type": "control_request", "request_id": subtype, "request": {"subtype": subtype}}))
         .collect();
-    converse(environment, Agent::Claude, &command, &requests, |message| {
+    converse(environment, Agent::Claude, folder, &command, &requests, |message| {
         let response = &message["response"];
         let id = response["request_id"].as_str().filter(|_| message["type"] == "control_response")?;
         let answer = match response["subtype"].as_str() {
@@ -52,7 +63,7 @@ pub async fn codex(environment: &Environment, requests: &[(&str, Value)]) -> any
         }
         request
     }));
-    converse(environment, Agent::Codex, &["app-server"], &sent, |message| {
+    converse(environment, Agent::Codex, &std::env::temp_dir(), &["app-server"], &sent, |message| {
         let id = message["id"].as_str()?;
         let answer = match message["error"]["message"].as_str() {
             Some(error) => Err(error.to_string()),
@@ -68,6 +79,7 @@ pub async fn codex(environment: &Environment, requests: &[(&str, Value)]) -> any
 async fn converse(
     environment: &Environment,
     agent: Agent,
+    folder: &Path,
     arguments: &[&str],
     requests: &[Value],
     answer: impl Fn(&Value) -> Option<(String, Result<Value, String>)>,
@@ -75,7 +87,7 @@ async fn converse(
     let executable = environment.executable(agent).ok_or_else(|| anyhow::anyhow!("It isn't installed."))?;
     let mut child = Command::new(executable)
         .args(arguments)
-        .current_dir(std::env::temp_dir())
+        .current_dir(folder)
         .env_clear()
         .envs(&environment.variables)
         .stdin(Stdio::piped())

@@ -46,6 +46,7 @@
   --color-process-foreground: var(--process-foreground);
   --color-merged: var(--merged);
   --color-merged-foreground: var(--merged-foreground);
+  --color-skill: var(--skill);
   --color-border: var(--border);
   --color-border-card: var(--border-card);
   --color-border-input: var(--border-input);

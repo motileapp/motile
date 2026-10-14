@@ -261,7 +261,7 @@ mod tests {
     }
 
     fn user(seq: u64, text: &str) -> Item {
-        item(seq, ItemKind::User { text: text.into(), attachments: vec![] })
+        item(seq, ItemKind::User { text: text.into(), attachments: vec![], skills: Vec::new() })
     }
 
     fn reply(seq: u64, text: &str) -> Item {

@@ -41,6 +41,8 @@ struct ComposerTextView: NSViewRepresentable {
     var onFileDrag: (Bool) -> Void = { _ in }
     var font = Self.font
     var heights = Self.minimumHeight...Self.maximumHeight
+    /// What the text does with skills. Without it, a `$name` is only text.
+    var skills: SkillTyping?
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = ComposerScrollView()
@@ -86,9 +88,12 @@ struct ComposerTextView: NSViewRepresentable {
         view.onFiles = onFiles
         view.onFileDrag = onFileDrag
         view.placeholder = placeholder
+        view.skills = skills
         view.string = text
         scroll.documentView = view
         context.coordinator.textView = view
+        context.coordinator.picked = skills?.pick?.id
+        context.coordinator.chipify(atEnd: true)
         DispatchQueue.main.async {
             if focusKey != nil { view.window?.makeFirstResponder(view) }
             context.coordinator.measure()
@@ -103,13 +108,19 @@ struct ComposerTextView: NSViewRepresentable {
         view.onSubmit = onSubmit
         view.onFiles = onFiles
         view.onFileDrag = onFileDrag
+        view.skills = skills
         if view.placeholder != placeholder {
             view.placeholder = placeholder
             view.needsDisplay = true
         }
-        if view.string != text {
+        if view.text != text {
             view.string = text
+            context.coordinator.chipify(atEnd: true)
             context.coordinator.measure()
+        }
+        if let pick = skills?.pick, pick.id != context.coordinator.picked {
+            context.coordinator.picked = pick.id
+            context.coordinator.put(pick)
         }
         if context.coordinator.focusKey != focusKey {
             context.coordinator.focusKey = focusKey
@@ -123,6 +134,8 @@ struct ComposerTextView: NSViewRepresentable {
         var parent: ComposerTextView
         weak var textView: ComposerNSTextView?
         var focusKey: String?
+        /// The last skill picked from the menu that the text has put in.
+        var picked: Int?
 
         init(_ parent: ComposerTextView) {
             self.parent = parent
@@ -131,8 +144,64 @@ struct ComposerTextView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let view = textView else { return }
-            parent.text = view.string
+            parent.text = view.text
             measure(deferred: false)
+            let cursor = view.selectedRange().location
+            let before = cursor > 0 ? (view.string as NSString).character(at: cursor - 1) : 0
+            if let before = UnicodeScalar(before), CharacterSet.whitespacesAndNewlines.contains(before) {
+                chipify(atEnd: false)
+            }
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            report()
+        }
+
+        /// Tells what is typed before the cursor, for the skills that fit it.
+        func report() {
+            guard let view = textView, let skills = parent.skills else { return }
+            let selection = view.selectedRange()
+            let typing = view.window?.firstResponder === view && selection.length == 0
+            skills.typing(typing ? (view.string as NSString).substring(to: selection.location) : "")
+        }
+
+        /// Makes the text's `$name`s of skills chips: those a space or a line follows, and with
+        /// `atEnd` the one that ends the text too.
+        func chipify(atEnd: Bool) {
+            guard let view = textView, let skills = parent.skills, view.string.contains("$") else { return }
+            let asked = view.string
+            skills.spans(asked) { [weak self, weak view] spans in
+                guard let self, let view, view.string == asked else { return }
+                let text = asked as NSString
+                let ended = spans.filter { span in
+                    let end = NSMaxRange(span.range)
+                    guard end < text.length else { return atEnd }
+                    return UnicodeScalar(text.character(at: end)).map(CharacterSet.whitespacesAndNewlines.contains) ?? false
+                }
+                for span in ended.reversed() {
+                    self.replace(span.range, with: SkillChipAttachment(name: span.name, label: span.label, beside: self.parent.font), space: false)
+                }
+            }
+        }
+
+        /// Puts the picked skill in place of the word typed before the cursor.
+        func put(_ pick: SkillPick) {
+            guard let view = textView else { return }
+            guard let typed = (view.string as NSString).skillWord(endingAt: view.selectedRange().location) else { return }
+            replace(typed, with: SkillChipAttachment(name: pick.name, label: pick.label, beside: parent.font), space: true)
+        }
+
+        private func replace(_ range: NSRange, with chip: SkillChipAttachment, space: Bool) {
+            guard let view = textView, let storage = view.textStorage, view.shouldChangeText(in: range, replacementString: nil) else { return }
+            let chipped = NSMutableAttributedString(attachment: chip)
+            if space { chipped.append(NSAttributedString(string: " ")) }
+            chipped.addAttributes(view.typingAttributes, range: NSRange(location: 0, length: chipped.length))
+            let selection = view.selectedRange()
+            storage.replaceCharacters(in: range, with: chipped)
+            let shift = chipped.length - range.length
+            let cursor = selection.location >= NSMaxRange(range) ? selection.location + shift : NSMaxRange(range) + shift
+            view.setSelectedRange(NSRange(location: cursor, length: 0))
+            view.didChangeText()
         }
 
         /// Makes the composer as tall as its text, within limits. Typing grows it in the same
@@ -166,10 +235,18 @@ final class ComposerNSTextView: NSTextView {
     var onFiles: (([URL]) -> Void)?
     var onFileDrag: ((Bool) -> Void)?
     var placeholder = ""
+    var skills: SkillTyping?
     /// Return sends what is written: the composer's text, not a `TextArea`.
     var sends: Bool { onSubmit != nil }
 
+    /// What is written, with each skill's chip as its `$name`.
+    var text: String { textStorage?.withSkillNames ?? string }
+
     override func keyDown(with event: NSEvent) {
+        if let skills, skills.menuOpen, !hasMarkedText(), let key = SkillMenuKey(event) {
+            skills.key(key)
+            return
+        }
         let isReturn = event.keyCode == 36 || event.keyCode == 76
         let modifiers = event.modifierFlags.intersection([.shift, .option, .control])
         // Return sends; with Shift or Option it is a line break. While an input method is
@@ -189,6 +266,19 @@ final class ComposerNSTextView: NSTextView {
         (placeholder as NSString).draw(at: origin, withAttributes: attributes)
     }
 
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { skills?.typing("") }
+        return resigned
+    }
+
+    /// A skill's chip is copied as its `$name`.
+    override func writeSelection(to pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        guard type == .string, let storage = textStorage else { return super.writeSelection(to: pboard, type: type) }
+        let selected = storage.attributedSubstring(from: selectedRange())
+        return pboard.setString(selected.withSkillNames, forType: .string)
+    }
+
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
         super.readablePasteboardTypes + [.fileURL, .png, .tiff]
     }
@@ -204,6 +294,7 @@ final class ComposerNSTextView: NSTextView {
         }
         guard pasteboard.string(forType: .string) == nil, let image = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) else {
             pasteAsPlainText(sender)
+            (delegate as? ComposerTextView.Coordinator)?.chipify(atEnd: true)
             return
         }
         let isPNG = pasteboard.data(forType: .png) != nil
@@ -242,6 +333,19 @@ final class ComposerNSTextView: NSTextView {
         onFileDrag?(false)
         onFiles?(urls)
         return true
+    }
+}
+
+extension SkillMenuKey {
+    init?(_ event: NSEvent) {
+        guard event.modifierFlags.intersection([.shift, .option, .control, .command]).isEmpty else { return nil }
+        switch event.keyCode {
+        case 126: self = .up
+        case 125: self = .down
+        case 36, 76, 48: self = .pick
+        case 53: self = .dismiss
+        default: return nil
+        }
     }
 }
 #endif

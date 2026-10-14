@@ -146,6 +146,11 @@ start_stack() {
         echo "▸ Signing in and making the threads…"
         mkdir -p "$PROJECT"
         printf 'def greet(name):\n    print("Hello " + name)\n\ngreet("world")\n' > "$PROJECT/greet.py"
+        # Skills of the project's own, which Codex finds under .agents and Claude Code under .claude.
+        mkdir -p "$PROJECT/.claude/skills/ship-it" "$PROJECT/.claude/skills/release-notes" "$PROJECT/.agents"
+        printf -- '---\nname: ship-it\ndescription: Commit, push and open a pull request\n---\nCommit what changed, push it and open a pull request.\n' > "$PROJECT/.claude/skills/ship-it/SKILL.md"
+        printf -- '---\nname: release-notes\ndescription: Write the release notes since the last tag\n---\nWrite the release notes for what changed since the last tag.\n' > "$PROJECT/.claude/skills/release-notes/SKILL.md"
+        ln -s ../.claude/skills "$PROJECT/.agents/skills"
         # The project's icon, in the demo's project colour with the mark as in the dark.
         ICON_FILL="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["colors"]["dark"][sys.argv[2]])' "$ROOT/packages/theme/tokens.json" chart-2)"
         ICON_MARK="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["colors"]["dark"][sys.argv[2]])' "$ROOT/packages/theme/tokens.json" emphasized-foreground)"

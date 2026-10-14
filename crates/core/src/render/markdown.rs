@@ -178,7 +178,7 @@ pub fn links_in(text: &str) -> Vec<Link> {
     links
 }
 
-fn utf16_len(text: &str) -> u32 {
+pub fn utf16_len(text: &str) -> u32 {
     text.encode_utf16().count() as u32
 }
 

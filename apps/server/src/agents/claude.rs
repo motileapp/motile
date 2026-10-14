@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Approval, Subagent, Tokens, ToolStatus, TurnSummary};
+use motile_protocol::wire::{Access, Approval, SkillMention, Subagent, Tokens, ToolStatus, TurnSummary};
 use serde_json::{Value, json};
 
 use super::{AgentEvent, Background, ModelUsage, Turn};
@@ -78,12 +78,14 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
     arguments
 }
 
-pub fn input(prompt: &str, id: &str) -> String {
-    format!("{}\n", json!({"type": "user", "uuid": id, "message": {"role": "user", "content": prompt}}))
+/// The line that gives Claude Code `prompt`, where it runs the last of `skills` the prompt names.
+pub fn input(prompt: &str, skills: &[SkillMention], id: &str) -> String {
+    let content = super::skills::claude_content(prompt, skills);
+    format!("{}\n", json!({"type": "user", "uuid": id, "message": {"role": "user", "content": content}}))
 }
 
-pub fn steer(prompt: &str, id: &str) -> String {
-    let message = json!({"role": "user", "content": prompt});
+pub fn steer(prompt: &str, skills: &[SkillMention], id: &str) -> String {
+    let message = json!({"role": "user", "content": super::skills::claude_content(prompt, skills)});
     let line = json!({"type": "user", "uuid": id, "message": message, "priority": "now", "origin": {"kind": "human"}});
     format!("{line}\n")
 }
@@ -759,7 +761,7 @@ mod tests {
 
     #[test]
     fn a_prompt_is_one_line_of_json() {
-        let line = input("first\nsecond \"quoted\"", "m1");
+        let line = input("first\nsecond \"quoted\"", &[], "m1");
         assert_eq!(line.matches('\n').count(), 1);
         let message: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(message["message"]["content"], "first\nsecond \"quoted\"");
@@ -767,7 +769,7 @@ mod tests {
 
     #[test]
     fn a_prompt_sent_now_is_taken_at_once_and_a_reply_stopped_for_it_says_so() {
-        let line: Value = serde_json::from_str(&steer("Also this", "m1")).unwrap();
+        let line: Value = serde_json::from_str(&steer("Also this", &[], "m1")).unwrap();
         assert_eq!(
             (&line["uuid"], &line["priority"], &line["origin"]["kind"]),
             (&json!("m1"), &json!("now"), &json!("human"))

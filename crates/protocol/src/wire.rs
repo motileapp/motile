@@ -158,6 +158,9 @@ pub enum ItemKind {
     User {
         text: String,
         attachments: Vec<String>,
+        /// The skills the message starts, each written `$name` in `text`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        skills: Vec<SkillMention>,
     },
     Assistant {
         text: String,
@@ -494,6 +497,10 @@ pub enum Request {
         base: String,
         #[serde(default)]
         fetch: bool,
+    },
+    /// The skills each agent's account can run in the project. `Skills` answers.
+    Skills {
+        project_id: String,
     },
     /// Fast-forwards the local `base` to the remote's, for a new worktree to start from it.
     /// `WorktreeStart` answers.
@@ -1500,6 +1507,43 @@ pub struct ModelInfo {
     pub default_effort: Option<String>,
 }
 
+/// A skill an agent's account can run in a project: a folder with a `SKILL.md`, or a command,
+/// which a message starts by its `$name`.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Skill {
+    pub name: String,
+    /// What the agent calls it where it names it otherwise, or the name.
+    pub label: String,
+    pub description: String,
+    pub source: SkillSource,
+}
+
+/// Where a skill comes from.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillSource {
+    /// The account's own, in the agent's folder.
+    Personal,
+    /// The project's, in its folder.
+    Project,
+    Plugin,
+    /// The agent's own, or set by an administrator.
+    System,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct AccountSkills {
+    pub account: String,
+    pub skills: Vec<Skill>,
+}
+
+/// A skill a message starts, and what it is called.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct SkillMention {
+    pub name: String,
+    pub label: String,
+}
+
 /// Tokens by what each is billed as. `input` is what was neither read from the cache nor
 /// written to it, and `output` includes the reasoning.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Default)]
@@ -1648,6 +1692,8 @@ pub struct Queued {
     /// The images and videos among them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<Media>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<SkillMention>,
     /// The turn it waited for was stopped; it goes when the user sends it.
     pub held: bool,
     /// Always false: what the agent is given leaves the queue. Older clients still read it.
@@ -1751,6 +1797,9 @@ pub enum Message {
     WorktreeStart {
         start: String,
         problem: Option<String>,
+    },
+    Skills {
+        accounts: Vec<AccountSkills>,
     },
     /// `status` is missing when the folder is no repository. `problem` is what git said when the
     /// remote couldn't be fetched from.

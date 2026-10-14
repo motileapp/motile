@@ -9,6 +9,7 @@ pub mod modal;
 pub mod motion;
 pub mod parts;
 pub mod rich_text;
+pub mod skill_chip;
 
 use std::rc::Rc;
 

@@ -11,6 +11,7 @@ pub mod pull_requests;
 pub mod settings;
 pub mod shortcuts;
 mod sidebar;
+pub mod skills;
 mod threads;
 pub mod usage;
 
@@ -276,6 +277,8 @@ pub struct Store {
     pub workspace_version: u64,
     /// Counts up when the text of what is being written changed outside the composer.
     pub draft_version: u64,
+    /// The skills the composer offers for the word typed before its cursor.
+    pub skills: skills::Skills,
 
     pub updater: Updater,
     pub right_panel: RightPanel,
@@ -385,6 +388,7 @@ impl Store {
             media_progress: HashMap::new(),
             workspace_version: 0,
             draft_version: 0,
+            skills: skills::Skills::default(),
             updater: Updater::new(),
             right_panel,
             settings: SettingsState::default(),

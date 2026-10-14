@@ -18,10 +18,11 @@ use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
-    Activity, Agent, AgentAccount, AgentLimits, Approval, BranchInstructions, CONTINUE_PROMPT, ChangedFile,
-    ContinueSettings, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item,
-    ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread, Project, PullRequest, PullRequestAction, Queued,
-    ServerInfo, ServerUpdate, Subagent, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    AccountSkills, Activity, Agent, AgentAccount, AgentLimits, Approval, BranchInstructions, CONTINUE_PROMPT,
+    ChangedFile, ContinueSettings, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd,
+    Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread, Project, PullRequest,
+    PullRequestAction, Queued, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread, ThreadChange, ToolCall,
+    ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -30,7 +31,7 @@ use tokio::sync::{Mutex, broadcast, mpsc};
 use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
-use crate::agents::{self, AgentEvent, Background, Parser, Settings, Turn, claude, executable_name, models};
+use crate::agents::{self, AgentEvent, Background, Parser, Settings, Turn, claude, executable_name, models, skills};
 use crate::files::FileBytes;
 use crate::generate::{self, Writer};
 use crate::handoff::{self, Range};
@@ -56,6 +57,8 @@ pub const PULL_REQUEST_WATCH: Duration = Duration::from_secs(30);
 pub const LIMITS_CHECK: Duration = Duration::from_secs(30);
 /// How long what the agents last said of their models is taken as current when a client asks.
 const MODELS_FRESH: Duration = Duration::from_secs(60);
+/// How long the skills a project's agents listed are offered before they are asked again.
+const SKILLS_FRESH: Duration = Duration::from_secs(30);
 const DONE_ON_MERGE: &str = "done_on_merge";
 const REMOVE_MERGED_WORKTREES: &str = "remove_merged_worktrees";
 const PULL_DEFAULT_BRANCH: &str = "pull_default_branch";
@@ -122,6 +125,8 @@ pub struct Hub {
     models: std::sync::Mutex<Vec<ModelInfo>>,
     /// When the agents were last asked for their models, held while they are asked.
     models_asked: Mutex<Option<Instant>>,
+    /// The skills each account's agent listed in each project, by project, and when.
+    skills: std::sync::Mutex<HashMap<String, (Instant, Vec<AccountSkills>)>>,
     /// The model the user picked to write titles, commit messages and pull requests.
     text_model: std::sync::Mutex<Option<String>>,
     /// How the user wants branches named.
@@ -211,6 +216,8 @@ struct Live {
     session_model: Option<String>,
     /// The handoff that waits to be told the model the new session runs.
     handoff_item: Option<String>,
+    /// The skills the thread's messages started, which Claude Code is given as its commands.
+    skills: Vec<SkillMention>,
 }
 
 struct StartedTurn {
@@ -320,6 +327,7 @@ impl Hub {
                 store.setting(MODELS).and_then(|models| serde_json::from_str(&models).ok()).unwrap_or_default(),
             ),
             models_asked: Mutex::default(),
+            skills: std::sync::Mutex::default(),
             text_model: std::sync::Mutex::new(store.setting(TEXT_MODEL)),
             branch_instructions: std::sync::Mutex::new(store.setting(BRANCH_INSTRUCTIONS)),
             pull_request_settings: std::sync::Mutex::new(PullRequestSettings {
@@ -796,6 +804,9 @@ impl Hub {
         if let Some(gone) = attachments.iter().find(|path| !Path::new(path).is_file()) {
             bail!("{} is no longer on your server. Attach it again.", file_name(gone));
         }
+        if !motile_protocol::skills::mentions(&text).is_empty() {
+            self.list_skills_once(thread_id.as_deref(), new_thread.as_ref()).await;
+        }
         let mut threads = self.threads.lock().await;
         let (thread_id, is_new) = match (thread_id, new_thread) {
             (Some(thread_id), _) => (thread_id, false),
@@ -816,8 +827,9 @@ impl Hub {
         live.stored.thread.interruption = None;
         let media = self.keep_attached(&thread_id, &attachments)?;
         let prompt = prompt(&text, &attachments);
+        let skills = self.mentioned_skills(&live.stored.thread, &text);
         if live.preparing.is_some() {
-            live.queued.push(Queued { id: new_id(), text, attachments, media, held: false, sending: false });
+            live.queued.push(Queued { id: new_id(), text, attachments, media, skills, held: false, sending: false });
             live.save_queued(&self.store)?;
             live.send_activity();
             return Ok(thread_id);
@@ -825,8 +837,17 @@ impl Hub {
         if let Some(run) = &live.run {
             // An agent that is only monitoring takes the message right away.
             let idle = run.received_result;
+            live.note_skills(&skills);
             if !idle || !live.write_prompt(&prompt, &new_id()) {
-                live.queued.push(Queued { id: new_id(), text, attachments, media, held: false, sending: false });
+                live.queued.push(Queued {
+                    id: new_id(),
+                    text,
+                    attachments,
+                    media,
+                    skills,
+                    held: false,
+                    sending: false,
+                });
                 if now && !idle && live.steer(&self.store, live.queued.len() - 1)? {
                     return Ok(thread_id);
                 }
@@ -834,12 +855,12 @@ impl Hub {
                 live.send_activity();
                 return Ok(thread_id);
             }
-            live.append_message(&self.store, new_id(), text, attachments, media)?;
+            live.append_message(&self.store, new_id(), text, attachments, media, skills)?;
             self.resume(live)?;
             return Ok(thread_id);
         }
         self.note_handoff(live)?;
-        live.append_message(&self.store, new_id(), text.clone(), attachments, media)?;
+        live.append_message(&self.store, new_id(), text.clone(), attachments, media, skills)?;
         self.start_turn(live, prompt)?;
         if is_new {
             tokio::spawn(self.clone().title_from_first_message(thread_id.clone(), text));
@@ -1476,6 +1497,75 @@ impl Hub {
             self.pull_default_branch(project_id).await;
         }
         Ok(Message::WorktreeStart { start: start.name().to_string(), problem: start.problem })
+    }
+
+    /// The skills each account's agent can run in the project, as they listed them within
+    /// `SKILLS_FRESH`, or asked now. What an agent last listed stays while it doesn't answer.
+    pub async fn skills(&self, project_id: &str) -> anyhow::Result<Message> {
+        let path = PathBuf::from(self.project_path(project_id).await?);
+        let known = self.lock_skills().get(project_id).cloned();
+        if let Some((at, accounts)) = &known
+            && at.elapsed() < SKILLS_FRESH
+        {
+            return Ok(Message::Skills { accounts: accounts.clone() });
+        }
+        let asks: Vec<_> = self
+            .agent_accounts()
+            .into_iter()
+            .map(|account| {
+                let environment = self.account_environment(&account);
+                let path = path.clone();
+                tokio::spawn(async move {
+                    let skills = match (account.agent, environment.executable(account.agent)) {
+                        (_, None) => Some(Vec::new()),
+                        (Agent::Claude, Some(_)) => skills::claude_skills(&environment, &path).await,
+                        (Agent::Codex, Some(_)) => skills::codex_skills(&environment, &path).await,
+                    };
+                    (account.id, skills)
+                })
+            })
+            .collect();
+        let mut accounts = Vec::new();
+        for ask in asks {
+            let Ok((account, skills)) = ask.await else { continue };
+            let last = || {
+                let mut listed = known.iter().flat_map(|(_, accounts)| accounts);
+                listed.find(|listed| listed.account == account).map(|listed| listed.skills.clone()).unwrap_or_default()
+            };
+            let skills = skills.unwrap_or_else(last);
+            accounts.push(AccountSkills { account, skills });
+        }
+        self.lock_skills().insert(project_id.to_string(), (Instant::now(), accounts.clone()));
+        Ok(Message::Skills { accounts })
+    }
+
+    /// Asks the agents for the skills of the thread's project unless they were, for a message that
+    /// may start one.
+    async fn list_skills_once(&self, thread_id: Option<&str>, new_thread: Option<&NewThread>) {
+        let project_id = match (thread_id, new_thread) {
+            (Some(thread_id), _) => {
+                let threads = self.threads.lock().await;
+                threads.get(thread_id).map(|live| live.stored.thread.project_id.clone())
+            }
+            (None, new_thread) => new_thread.map(|new_thread| new_thread.project_id.clone()),
+        };
+        let Some(project_id) = project_id else { return };
+        if !self.lock_skills().contains_key(&project_id) {
+            let _ = self.skills(&project_id).await;
+        }
+    }
+
+    fn lock_skills(&self) -> std::sync::MutexGuard<'_, HashMap<String, (Instant, Vec<AccountSkills>)>> {
+        self.skills.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// The skills the thread's account listed in its project that `text` starts.
+    fn mentioned_skills(&self, thread: &Thread, text: &str) -> Vec<SkillMention> {
+        let account = self.account_of(thread).id;
+        let listed = self.lock_skills();
+        let accounts = listed.get(&thread.project_id).map(|(_, accounts)| accounts.as_slice()).unwrap_or_default();
+        let skills = accounts.iter().find(|listed| listed.account == account).map(|listed| listed.skills.as_slice());
+        skills::mentioned(text, skills.unwrap_or_default())
     }
 
     /// Brings the base a new worktree starts from up to the remote's, and says where it starts now.
@@ -2608,7 +2698,7 @@ impl Hub {
             (Agent::Claude, Some(handoff)) => handoff.inline(&prompt),
             _ => prompt.clone(),
         };
-        let _ = input.send(agents::opening(agent, &opening, &prompt_id));
+        let _ = input.send(agents::opening(agent, &opening, &live.skills, &prompt_id));
         let parser = Parser::new(&turn, &thread.cwd, &prompt, &prompt_id);
         live.turn = Some(StartedTurn { prompt_id, prompt, message_seq, retried, accepted: false });
         live.run = Some(Run {
@@ -2637,7 +2727,7 @@ impl Hub {
     ) -> usize {
         let message = items.iter().find(|item| item.seq == message_seq).map(|item| &item.kind);
         let cost = match message {
-            Some(ItemKind::User { text, attachments }) => handoff::message_cost(text, attachments),
+            Some(ItemKind::User { text, attachments, .. }) => handoff::message_cost(text, attachments),
             _ => prompt.len(),
         };
         let model = thread.model.as_deref().or(session.model.as_deref());
@@ -3107,7 +3197,7 @@ impl Hub {
         let prompt = prompt(&queued.text, &queued.attachments);
         live.save_queued(&self.store)?;
         self.note_handoff(live)?;
-        live.append_message(&self.store, queued.id, queued.text, queued.attachments, queued.media)?;
+        live.append_message(&self.store, queued.id, queued.text, queued.attachments, queued.media, queued.skills)?;
         self.start_turn(live, prompt)
     }
 
@@ -3204,6 +3294,7 @@ impl Live {
             mcp_token: None,
             session_model: None,
             handoff_item: None,
+            skills: Vec::new(),
         }
     }
 
@@ -3298,13 +3389,14 @@ impl Live {
         if thread.agent == Agent::Claude && !self.write(claude::access_line(thread.access)) {
             return false;
         }
-        let line = agents::input(thread.agent, self.stored.session_id.as_deref(), prompt, id, settings);
+        let line = agents::input(thread.agent, self.stored.session_id.as_deref(), prompt, &self.skills, id, settings);
         line.is_some_and(|line| self.write(line))
     }
 
     /// Writes the queued message to the idle process, which starts its next turn with it.
     /// `false` when it takes no more.
     fn give(&mut self, store: &Store, index: usize) -> anyhow::Result<bool> {
+        self.note_skills(&self.queued[index].skills.clone());
         let queued = &self.queued[index];
         if !self.write_prompt(&prompt(&queued.text, &queued.attachments), &queued.id) {
             return Ok(false);
@@ -3316,12 +3408,13 @@ impl Live {
     /// Writes the queued message to the turn that runs, which takes it at once. `false` when the
     /// agent can't take it.
     fn steer(&mut self, store: &Store, index: usize) -> anyhow::Result<bool> {
+        self.note_skills(&self.queued[index].skills.clone());
         let queued = &self.queued[index];
         let thread = &self.stored.thread;
         let turn_id = self.run.as_ref().and_then(|run| run.turn_id.as_deref());
         let session_id = self.stored.session_id.as_deref();
-        let line =
-            agents::steer(thread.agent, session_id, turn_id, &prompt(&queued.text, &queued.attachments), &queued.id);
+        let prompt = prompt(&queued.text, &queued.attachments);
+        let line = agents::steer(thread.agent, session_id, turn_id, &prompt, &self.skills, &queued.id);
         if !line.is_some_and(|line| self.write(line)) {
             return Ok(false);
         }
@@ -3333,8 +3426,8 @@ impl Live {
     fn note_given(&mut self, store: &Store, index: usize) -> anyhow::Result<()> {
         let queued = self.queued.remove(index);
         self.save_queued(store)?;
-        let Queued { id, text, attachments, media, .. } = queued.clone();
-        self.append_message(store, id, text, attachments, media)?;
+        let Queued { id, text, attachments, media, skills, .. } = queued.clone();
+        self.append_message(store, id, text, attachments, media, skills)?;
         self.given.push(queued);
         self.send_activity();
         Ok(())
@@ -3440,13 +3533,20 @@ impl Live {
         text: String,
         attachments: Vec<String>,
         media: Vec<Media>,
+        skills: Vec<SkillMention>,
     ) -> anyhow::Result<()> {
-        let mut item = self.new_item(id, ItemKind::User { text, attachments });
+        self.note_skills(&skills);
+        let mut item = self.new_item(id, ItemKind::User { text, attachments, skills });
         item.media = media;
         self.last_message_seq = Some(item.seq);
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
+    }
+
+    fn note_skills(&mut self, skills: &[SkillMention]) {
+        let new: Vec<SkillMention> = skills.iter().filter(|skill| !self.skills.contains(skill)).cloned().collect();
+        self.skills.extend(new);
     }
 
     fn new_item(&mut self, id: String, kind: ItemKind) -> Item {

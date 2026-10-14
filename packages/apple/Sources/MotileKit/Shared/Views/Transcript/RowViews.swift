@@ -184,7 +184,7 @@ final class UserRowView: RowView {
         addSubview(meta)
         meta.onCopy = { [weak self] in
             guard let self else { return }
-            Platform.copy(self.text.content.string)
+            Platform.copy(self.text.content.withSkillNames)
         }
         text.onSelect = { [weak self] in
             guard let self else { return }

@@ -326,7 +326,7 @@ mod tests {
     }
 
     fn user(text: String) -> Item {
-        said("u", ItemKind::User { text, attachments: Vec::new() })
+        said("u", ItemKind::User { text, attachments: Vec::new(), skills: Vec::new() })
     }
 
     fn assistant(text: String) -> Item {

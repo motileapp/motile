@@ -102,6 +102,23 @@ pub enum Command {
         #[serde(default)]
         icons: bool,
     },
+    /// The skills of the agent's `account` in the project that fit the word that ends
+    /// `before_cursor`, the composer's text up to its cursor, when it starts with `$` or `/`.
+    /// Answers with a `skills::Menu`, without rows when no skill fits.
+    SkillMenu {
+        server_id: String,
+        project_id: String,
+        account: String,
+        before_cursor: String,
+    },
+    /// The `$name`s of `text` that are skills of the agent's `account` in the project. Answers
+    /// with them as `chips`, each a `SkillChip`.
+    SkillChips {
+        server_id: String,
+        project_id: String,
+        account: String,
+        text: String,
+    },
     /// Sends the message with `attachments`, the paths `upload` answered with. Answers with
     /// `thread_id`. With `now`, a turn that runs takes the message at once instead of the next
     /// turn starting with it.

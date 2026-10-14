@@ -295,6 +295,14 @@ pub fn link_ranges(text: &str, links: &[motile_core::render::markdown::Link]) ->
     links.iter().filter_map(|link| piece.range(link.start, link.len).map(|range| (range, link.url.clone()))).collect()
 }
 
+/// The skills a message names, from the core's UTF-16 units to bytes of its text, with their
+/// labels.
+pub fn skill_ranges(text: &str, skills: &[motile_core::render::rows::SkillChip]) -> Vec<(Range<usize>, String)> {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let piece = Piece::new(&units);
+    skills.iter().filter_map(|skill| Some((piece.range(skill.start, skill.len)?, skill.label.clone()))).collect()
+}
+
 /// Spans of the core, `[start, length, colour]` in UTF-16 units of `code`, as byte ranges.
 pub fn code_spans(code: &str, spans: &[u32]) -> Vec<(Range<usize>, u32)> {
     let units: Vec<u16> = code.encode_utf16().collect();

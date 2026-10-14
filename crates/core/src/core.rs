@@ -16,8 +16,8 @@ use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Activity, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Message, Project, PullRequestSettings, Request,
-    ServerInfo, Thread, ToolStatus, Worktree,
+    AccountSkills, Activity, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Message, Project,
+    PullRequestSettings, Request, ServerInfo, Skill, Thread, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -40,6 +40,7 @@ use crate::render::diff;
 use crate::render::highlight::{self, Spans};
 use crate::render::rows::{Splice, Transcript, Uncoloured, short_model_name};
 use crate::search;
+use crate::skills;
 use crate::usage;
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
@@ -64,6 +65,10 @@ const USAGE_PROTOCOL: u32 = 10;
 const LIMITS_PROTOCOL: u32 = 17;
 /// The servers before this one can't search their threads' messages.
 const SEARCH_PROTOCOL: u32 = 26;
+/// The first protocol whose servers list the skills of their projects.
+const SKILLS_PROTOCOL: u32 = 28;
+/// How long the skills a server listed are offered before it is asked again.
+const SKILLS_FRESH: Duration = Duration::from_secs(30);
 /// How long the search has to stay as it is before the servers are asked.
 const SEARCH_DELAY: Duration = Duration::from_millis(200);
 /// How long a search waits for a server.
@@ -230,9 +235,14 @@ struct Core {
     /// The folders and images last listed for `browse`: of which server and directory, and
     /// whether with the hidden ones and the images.
     browsed: Browsed,
+    /// The skills each server's projects have, by server and project, and when they were listed.
+    /// Held while they are asked for, so that what is typed meanwhile waits for the answer.
+    skills: Skills,
     keybindings: Keybindings,
     search: Search,
 }
+
+type Skills = Arc<tokio::sync::Mutex<HashMap<(String, String), (Instant, Vec<AccountSkills>)>>>;
 
 /// The sidebar's search through the messages.
 #[derive(Default)]
@@ -281,6 +291,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         media_waiting: HashMap::new(),
         uploads: HashMap::new(),
         browsed: Browsed::default(),
+        skills: Skills::default(),
         keybindings: Keybindings::load(&config.data_dir, &config.platform),
         config,
         sink,
@@ -336,6 +347,46 @@ impl Core {
 
     fn reply(&self, id: u64, result: Result<Value, String>) {
         reply(&self.sink, id, result);
+    }
+
+    /// Answers with what `answer` makes of the skills of `account` in the project, which the
+    /// server is asked for unless it listed them within `SKILLS_FRESH`. A server too old to list
+    /// them has none.
+    fn answer_with_skills(
+        &self,
+        id: u64,
+        server_id: String,
+        project_id: String,
+        account: String,
+        answer: impl FnOnce(&[Skill]) -> Value + Send + 'static,
+    ) {
+        let server = self.servers.iter().find(|server| server.device.public_key == server_id);
+        let protocol = server.and_then(|server| server.info.as_ref()).map_or(0, |info| info.protocol);
+        let link = match self.link(&server_id) {
+            Ok(link) if protocol >= SKILLS_PROTOCOL => link,
+            Ok(_) => return self.reply(id, Ok(answer(&[]))),
+            Err(error) => return self.reply(id, Err(error)),
+        };
+        let (sink, listed) = (self.sink.clone(), self.skills.clone());
+        tokio::spawn(async move {
+            let mut listed = listed.lock().await;
+            let key = (server_id, project_id.clone());
+            let fresh = listed.get(&key).filter(|(at, _)| at.elapsed() < SKILLS_FRESH).is_some();
+            if !fresh {
+                match link.request(&Request::Skills { project_id }).await {
+                    Ok(Message::Skills { accounts }) => {
+                        listed.insert(key.clone(), (Instant::now(), accounts));
+                    }
+                    Ok(_) => {}
+                    Err(error) if !listed.contains_key(&key) => return reply(&sink, id, Err(error_text(error))),
+                    Err(_) => {}
+                }
+            }
+            let accounts = listed.get(&key).map(|(_, accounts)| accounts.as_slice()).unwrap_or_default();
+            let skills =
+                accounts.iter().find(|listed| listed.account == account).map(|listed| listed.skills.as_slice());
+            reply(&sink, id, Ok(answer(skills.unwrap_or_default())));
+        });
     }
 
     /// Shows what is known from last time, then goes to find out what is true now.
@@ -1276,7 +1327,7 @@ impl Core {
         if let (Some(call), Some(agent)) = (call, &started)
             && !agent.prompt.is_empty()
         {
-            let kind = ItemKind::User { text: agent.prompt.clone(), attachments: Vec::new() };
+            let kind = ItemKind::User { text: agent.prompt.clone(), attachments: Vec::new(), skills: Vec::new() };
             items.insert(0, Item { id: format!("{agent_id}/prompt"), kind, ..call.clone() });
         }
         let mut transcript = open.transcript.beside();
@@ -1452,6 +1503,26 @@ impl Core {
                     });
                     reply(&sink, id, listing.map(|listing| serde_json::to_value(listing).unwrap_or_default()));
                 });
+            }
+            Command::SkillMenu { server_id, project_id, account, before_cursor } => {
+                if skills::typed(&before_cursor).is_none() {
+                    return self.reply(id, Ok(serde_json::to_value(skills::Menu::default()).unwrap_or_default()));
+                }
+                self.answer_with_skills(id, server_id, project_id, account, move |skills| {
+                    serde_json::to_value(skills::menu(&before_cursor, skills).unwrap_or_default()).unwrap_or_default()
+                });
+            }
+            Command::SkillChips { server_id, project_id, account, text } => {
+                if motile_protocol::skills::mentions(&text).is_empty() {
+                    return self.reply(id, Ok(json!({ "chips": [] })));
+                }
+                self.answer_with_skills(
+                    id,
+                    server_id,
+                    project_id,
+                    account,
+                    move |skills| json!({ "chips": skills::chips(&text, skills) }),
+                );
             }
             Command::Send { server_id, thread_id, new_thread, text, attachments, now } => {
                 let link = match self.link(&server_id) {

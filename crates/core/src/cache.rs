@@ -496,7 +496,7 @@ mod tests {
             kind,
         };
         let items = [
-            item("u", 0, None, ItemKind::User { text: "Go".into(), attachments: Vec::new() }),
+            item("u", 0, None, ItemKind::User { text: "Go".into(), attachments: Vec::new(), skills: Vec::new() }),
             item("a", 1, None, ItemKind::Tool { call: call("a", Some(agent)) }),
             item("r", 2, Some("a"), ItemKind::Tool { call: call("r", None) }),
             item("s", 3, Some("a"), ItemKind::Assistant { text: "Found it".into() }),
@@ -519,7 +519,7 @@ mod tests {
         // Three turns of a message, 99 replies and an end.
         let item = |seq: u64| {
             let kind = match seq % 101 {
-                0 => ItemKind::User { text: "Go on".into(), attachments: Vec::new() },
+                0 => ItemKind::User { text: "Go on".into(), attachments: Vec::new(), skills: Vec::new() },
                 100 => ItemKind::TurnEnd { summary: TurnSummary::default() },
                 _ => ItemKind::Assistant { text: "Done".into() },
             };

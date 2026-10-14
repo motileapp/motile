@@ -286,7 +286,7 @@ mod tests {
             agent: None,
         };
         let kinds = [
-            ItemKind::User { text: "Fix the login".into(), attachments: vec![] },
+            ItemKind::User { text: "Fix the login".into(), attachments: vec![], skills: Vec::new() },
             ItemKind::Thinking { text: "hmm".into() },
             ItemKind::Tool { call: call("Bash", r#"{"command":"cargo test"}"#) },
             ItemKind::Tool { call: call("Read", r#"{"file_path":"/a"}"#) },
