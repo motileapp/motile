@@ -9,7 +9,7 @@ index 29a79af..2e29870 100644
 -pub use wgpu_renderer::{GpuContext, WgpuRenderer, WgpuSurfaceConfig};
 +pub use wgpu_renderer::{DrawOutcome, GpuContext, WgpuRenderer, WgpuSurfaceConfig};
 diff --git a/src/wgpu_renderer.rs b/src/wgpu_renderer.rs
-index 8387528..30528ac 100644
+index 8387528..5cef721 100644
 --- a/src/wgpu_renderer.rs
 +++ b/src/wgpu_renderer.rs
 @@ -4,7 +4,7 @@ use bytemuck::{Pod, Zeroable};
@@ -167,7 +167,7 @@ index 8387528..30528ac 100644
          let format = self.surface_config.format;
  
          let Some(core) = self.core_mut() else {
-@@ -1120,7 +1200,22 @@ impl WgpuRenderer {
+@@ -1120,7 +1200,23 @@ impl WgpuRenderer {
          self.max_texture_size
      }
  
@@ -185,12 +185,13 @@ index 8387528..30528ac 100644
 +        let damage = damage
 +            .filter(|_| self.damage_enabled)
 +            .unwrap_or(SceneDamage::Full);
-+        self.pending_damage = self.pending_damage.union(damage);
++        self.pending_damage =
++            std::mem::replace(&mut self.pending_damage, SceneDamage::Unchanged).union(damage);
 +
          #[cfg(target_family = "wasm")]
          if self.device_lost() {
              if matches!(self.state, RendererState::Ready { .. }) {
-@@ -1129,7 +1224,7 @@ impl WgpuRenderer {
+@@ -1129,7 +1225,7 @@ impl WgpuRenderer {
                  );
                  self.unconfigure_surface();
              }
@@ -199,7 +200,7 @@ index 8387528..30528ac 100644
          }
  
          // Bail out early if the surface has been unconfigured (e.g. during
-@@ -1137,7 +1232,7 @@ impl WgpuRenderer {
+@@ -1137,7 +1233,7 @@ impl WgpuRenderer {
          // a texture from an unconfigured surface can block indefinitely on
          // some drivers (Adreno).
          let RendererState::Ready { surface, core } = &mut self.state else {
@@ -208,7 +209,7 @@ index 8387528..30528ac 100644
          };
  
          if let Some(error) = self.last_surface_error.take().or_else(|| {
-@@ -1158,30 +1253,45 @@ impl WgpuRenderer {
+@@ -1158,30 +1254,47 @@ impl WgpuRenderer {
                  self.atlas.clear();
                  self.needs_redraw = true;
                  self.failed_frame_count = 0;
@@ -219,15 +220,17 @@ index 8387528..30528ac 100644
              self.failed_frame_count = 0;
          }
  
-+        let unchanged = match self.pending_damage {
++        let unchanged = match &self.pending_damage {
 +            SceneDamage::Unchanged => true,
 +            SceneDamage::Full => false,
-+            SceneDamage::Rect(bounds) => Region::covering(
-+                bounds,
-+                self.surface_config.width,
-+                self.surface_config.height,
-+            )
-+            .is_none(),
++            SceneDamage::Rects(rects) => rects.iter().all(|bounds| {
++                Region::covering(
++                    *bounds,
++                    self.surface_config.width,
++                    self.surface_config.height,
++                )
++                .is_none()
++            }),
 +        };
 +        if unchanged {
 +            self.pending_damage = SceneDamage::Unchanged;
@@ -259,7 +262,7 @@ index 8387528..30528ac 100644
              }
          };
  
-@@ -1196,19 +1306,45 @@ impl WgpuRenderer {
+@@ -1196,19 +1309,46 @@ impl WgpuRenderer {
              .create_view(&wgpu::TextureViewDescriptor::default());
          let premultiplied_alpha =
              self.surface_config.alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied;
@@ -280,7 +283,7 @@ index 8387528..30528ac 100644
 +                &frame_view,
 +                size,
 +                premultiplied_alpha,
-+                self.pending_damage,
++                &self.pending_damage,
 +            )
 +        } else {
 +            core.render_frame(
@@ -291,10 +294,10 @@ index 8387528..30528ac 100644
 +                wgpu::Color::TRANSPARENT,
 +                None,
 +            )
-+            .map(|_| None)
++            .map(|_| Vec::new())
 +        };
-+        let partial = match rendered {
-+            Ok(partial) => partial,
++        let damaged = match rendered {
++            Ok(damaged) => damaged,
 +            Err(error) => {
 +                log::error!("{error:#}");
 +                return DrawOutcome::Failed;
@@ -303,21 +306,22 @@ index 8387528..30528ac 100644
  
 -        frame.present();
 -        true
-+        match partial {
-+            Some(region) => frame.present_with_damage(&[wgpu::DamageRect {
++        let damage_rects: Vec<_> = damaged
++            .iter()
++            .map(|region| wgpu::DamageRect {
 +                x: region.x as i32,
 +                y: region.y as i32,
 +                width: region.width,
 +                height: region.height,
-+            }]),
-+            None => frame.present(),
-+        }
++            })
++            .collect();
++        frame.present_with_damage(&damage_rects);
 +        self.pending_damage = SceneDamage::Unchanged;
 +        DrawOutcome::Presented
      }
  }
  
-@@ -1353,6 +1489,7 @@ impl WgpuRendererCore {
+@@ -1353,6 +1493,7 @@ impl WgpuRendererCore {
                  path_intermediate_view: None,
                  path_msaa_texture: None,
                  path_msaa_view: None,
@@ -325,12 +329,12 @@ index 8387528..30528ac 100644
              },
              atlas,
              path_globals_offset,
-@@ -1414,6 +1551,110 @@ impl WgpuRendererCore {
+@@ -1414,6 +1555,127 @@ impl WgpuRendererCore {
          resources.path_msaa_view = path_msaa_view;
      }
  
-+    /// Draws only the damaged region when the last presented frame can fill in the rest,
-+    /// and returns that region, or `None` when it drew everything.
++    /// Draws only the damaged regions when the last presented frame can fill in the rest,
++    /// and returns them, or none when it drew everything.
 +    fn render_damaged_frame(
 +        &mut self,
 +        scene: &Scene,
@@ -338,70 +342,87 @@ index 8387528..30528ac 100644
 +        frame_view: &wgpu::TextureView,
 +        size: Size<DevicePixels>,
 +        premultiplied_alpha: bool,
-+        damage: SceneDamage,
-+    ) -> Result<Option<Region>> {
++        damage: &SceneDamage,
++    ) -> Result<Vec<Region>> {
 +        let whole = Region::whole(frame.width(), frame.height());
 +        let has_presented_frame = self.ensure_presented_frame(frame);
-+        let partial = match damage {
-+            SceneDamage::Rect(bounds) if has_presented_frame => {
-+                Region::covering(bounds, whole.width, whole.height)
-+                    .filter(|region| *region != whole)
-+            }
-+            _ => None,
++        let regions: Vec<Region> = match damage {
++            SceneDamage::Rects(rects) if has_presented_frame => rects
++                .iter()
++                .filter_map(|bounds| Region::covering(*bounds, whole.width, whole.height))
++                .collect(),
++            _ => Vec::new(),
 +        };
-+        self.render_frame(
-+            scene,
-+            frame_view,
-+            size,
-+            premultiplied_alpha,
-+            wgpu::Color::TRANSPARENT,
-+            partial,
-+        )?;
++        if regions.is_empty() || regions.contains(&whole) {
++            self.render_frame(
++                scene,
++                frame_view,
++                size,
++                premultiplied_alpha,
++                wgpu::Color::TRANSPARENT,
++                None,
++            )?;
++            self.copy_to_presented_frame(frame, whole, false)?;
++            return Ok(Vec::new());
++        }
 +
++        for region in &regions {
++            self.render_frame(
++                scene,
++                frame_view,
++                size,
++                premultiplied_alpha,
++                wgpu::Color::TRANSPARENT,
++                Some(*region),
++            )?;
++            self.copy_to_presented_frame(frame, *region, false)?;
++        }
++        self.copy_to_presented_frame(frame, whole, true)?;
++        Ok(regions)
++    }
++
++    /// Copies `region` of the frame into the presented frame, or back out of it.
++    fn copy_to_presented_frame(
++        &self,
++        frame: &wgpu::Texture,
++        region: Region,
++        back: bool,
++    ) -> Result<()> {
 +        let presented_frame = self
 +            .resources
 +            .presented_frame
 +            .as_ref()
 +            .context("the presented frame was just created")?;
++        let (source, destination) = if back {
++            (presented_frame, frame)
++        } else {
++            (frame, presented_frame)
++        };
 +        let mut encoder =
 +            self.resources
 +                .device
 +                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
 +                    label: Some("damage_encoder"),
 +                });
-+        let copy = |encoder: &mut wgpu::CommandEncoder,
-+                    source: &wgpu::Texture,
-+                    destination: &wgpu::Texture,
-+                    region: Region| {
-+            encoder.copy_texture_to_texture(
-+                wgpu::TexelCopyTextureInfo {
-+                    texture: source,
-+                    mip_level: 0,
-+                    origin: region.origin(),
-+                    aspect: wgpu::TextureAspect::All,
-+                },
-+                wgpu::TexelCopyTextureInfo {
-+                    texture: destination,
-+                    mip_level: 0,
-+                    origin: region.origin(),
-+                    aspect: wgpu::TextureAspect::All,
-+                },
-+                region.extent(),
-+            );
-+        };
-+        copy(
-+            &mut encoder,
-+            frame,
-+            presented_frame,
-+            partial.unwrap_or(whole),
++        encoder.copy_texture_to_texture(
++            wgpu::TexelCopyTextureInfo {
++                texture: source,
++                mip_level: 0,
++                origin: region.origin(),
++                aspect: wgpu::TextureAspect::All,
++            },
++            wgpu::TexelCopyTextureInfo {
++                texture: destination,
++                mip_level: 0,
++                origin: region.origin(),
++                aspect: wgpu::TextureAspect::All,
++            },
++            region.extent(),
 +        );
-+        if partial.is_some() {
-+            copy(&mut encoder, presented_frame, frame, whole);
-+        }
 +        self.resources
 +            .queue
 +            .submit(std::iter::once(encoder.finish()));
-+        Ok(partial)
++        Ok(())
 +    }
 +
 +    /// Returns whether the presented frame already held the last frame at this size.
@@ -436,7 +457,7 @@ index 8387528..30528ac 100644
      fn render_frame(
          &mut self,
          scene: &Scene,
-@@ -1421,6 +1662,7 @@ impl WgpuRendererCore {
+@@ -1421,6 +1683,7 @@ impl WgpuRendererCore {
          size: Size<DevicePixels>,
          premultiplied_alpha: bool,
          clear_color: wgpu::Color,
@@ -444,7 +465,7 @@ index 8387528..30528ac 100644
      ) -> Result<wgpu::SubmissionIndex> {
          anyhow::ensure!(
              size.width.0 > 0 && size.height.0 > 0,
-@@ -1468,7 +1710,7 @@ impl WgpuRendererCore {
+@@ -1468,7 +1731,7 @@ impl WgpuRendererCore {
              bytemuck::bytes_of(&gamma_params),
          );
  
@@ -453,7 +474,7 @@ index 8387528..30528ac 100644
              .inspect_err(|_| {
                  // Queue writes are staged before encoding; flush them even if the frame fails.
                  self.resources.queue.submit(std::iter::empty());
-@@ -1480,6 +1722,7 @@ impl WgpuRendererCore {
+@@ -1480,6 +1743,7 @@ impl WgpuRendererCore {
          scene: &Scene,
          frame_view: &wgpu::TextureView,
          clear_color: wgpu::Color,
@@ -461,7 +482,7 @@ index 8387528..30528ac 100644
      ) -> Result<wgpu::SubmissionIndex> {
          let mut instance_offset = 0;
          let instance_bindings = self
-@@ -1520,6 +1763,9 @@ impl WgpuRendererCore {
+@@ -1520,6 +1784,9 @@ impl WgpuRendererCore {
                  depth_stencil_attachment: None,
                  ..Default::default()
              });
@@ -471,7 +492,7 @@ index 8387528..30528ac 100644
  
              for batch in scene.batches() {
                  match batch {
-@@ -1562,6 +1808,9 @@ impl WgpuRendererCore {
+@@ -1562,6 +1829,9 @@ impl WgpuRendererCore {
                              depth_stencil_attachment: None,
                              ..Default::default()
                          });
@@ -481,7 +502,7 @@ index 8387528..30528ac 100644
  
                          if rasterized {
                              self.draw_paths_from_intermediate(
-@@ -2406,7 +2655,7 @@ impl WgpuHeadlessRenderer {
+@@ -2406,7 +2676,7 @@ impl WgpuHeadlessRenderer {
              .view
              .clone();
          self.core

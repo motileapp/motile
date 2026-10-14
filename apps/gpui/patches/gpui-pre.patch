@@ -38,63 +38,9 @@ index c08d964..5eba90a 100644
      fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas>;
      fn is_subpixel_rendering_supported(&self) -> bool;
 diff --git a/src/scene.rs b/src/scene.rs
-index be37813..03a0a8a 100644
+index be37813..7646a0c 100644
 --- a/src/scene.rs
 +++ b/src/scene.rs
-@@ -529,7 +529,7 @@ impl PrimitiveBatch {
-     }
- }
- 
--#[derive(Default, Debug, Copy, Clone)]
-+#[derive(Default, Debug, Copy, Clone, PartialEq)]
- #[repr(C)]
- #[expect(missing_docs)]
- pub struct Quad {
-@@ -549,7 +549,7 @@ impl From<Quad> for Primitive {
-     }
- }
- 
--#[derive(Debug, Copy, Clone)]
-+#[derive(Debug, Copy, Clone, PartialEq)]
- #[repr(C)]
- #[expect(missing_docs)]
- pub struct Underline {
-@@ -568,7 +568,7 @@ impl From<Underline> for Primitive {
-     }
- }
- 
--#[derive(Debug, Copy, Clone)]
-+#[derive(Debug, Copy, Clone, PartialEq)]
- #[repr(C)]
- #[expect(missing_docs)]
- pub struct Shadow {
-@@ -705,7 +705,7 @@ impl Default for TransformationMatrix {
-     }
- }
- 
--#[derive(Copy, Clone, Debug)]
-+#[derive(Copy, Clone, Debug, PartialEq)]
- #[repr(C)]
- #[expect(missing_docs)]
- pub struct MonochromeSprite {
-@@ -724,7 +724,7 @@ impl From<MonochromeSprite> for Primitive {
-     }
- }
- 
--#[derive(Copy, Clone, Debug)]
-+#[derive(Copy, Clone, Debug, PartialEq)]
- #[repr(C)]
- #[expect(missing_docs)]
- pub struct SubpixelSprite {
-@@ -743,7 +743,7 @@ impl From<SubpixelSprite> for Primitive {
-     }
- }
- 
--#[derive(Copy, Clone, Debug)]
-+#[derive(Copy, Clone, Debug, PartialEq)]
- #[repr(C)]
- #[expect(missing_docs)]
- pub struct PolychromeSprite {
 @@ -928,7 +928,7 @@ impl From<Path<ScaledPixels>> for Primitive {
      }
  }
@@ -106,19 +52,23 @@ index be37813..03a0a8a 100644
  pub struct PathVertex<P: Clone + Debug + Default + PartialEq> {
 diff --git a/src/scene_damage.rs b/src/scene_damage.rs
 new file mode 100644
-index 0000000..bade8ea
+index 0000000..b27121b
 --- /dev/null
 +++ b/src/scene_damage.rs
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,181 @@
 +use crate::{Bounds, Path, Point, ScaledPixels, Scene, Size, TransformationMatrix};
++use collections::FxHashMap;
++
++/// The most rectangles damage is kept in; more are merged into the nearest.
++pub const MAX_DAMAGE_RECTS: usize = 4;
 +
 +/// The part of the window that changed between two frames, in device pixels.
-+#[derive(Clone, Copy, Debug, PartialEq)]
++#[derive(Clone, Debug, PartialEq)]
 +pub enum SceneDamage {
 +    /// Everything must be redrawn.
 +    Full,
-+    /// Only this rectangle changed.
-+    Rect(Bounds<ScaledPixels>),
++    /// Only these rectangles changed, at most [`MAX_DAMAGE_RECTS`] of them.
++    Rects(Vec<Bounds<ScaledPixels>>),
 +    /// Nothing changed.
 +    Unchanged,
 +}
@@ -126,64 +76,47 @@ index 0000000..bade8ea
 +impl SceneDamage {
 +    /// Covers every pixel that differs between two finished scenes, and possibly more.
 +    pub fn between(prev: &Scene, next: &Scene) -> SceneDamage {
-+        let mut damage = None;
-+        diff(
-+            &prev.quads,
-+            &next.quads,
-+            PartialEq::eq,
-+            |q| q.bounds,
-+            &mut damage,
-+        );
++        if prev.surfaces.len() + next.surfaces.len() > 0 {
++            return SceneDamage::Full;
++        }
++        let mut damage = Vec::new();
++        diff(&prev.quads, &next.quads, |q| q.bounds, &mut damage);
 +        diff(
 +            &prev.shadows,
 +            &next.shadows,
-+            PartialEq::eq,
 +            |s| s.bounds.dilate(s.blur_radius * 3.0),
 +            &mut damage,
 +        );
 +        diff(
 +            &prev.underlines,
 +            &next.underlines,
-+            PartialEq::eq,
 +            |u| u.bounds,
 +            &mut damage,
 +        );
 +        diff(
 +            &prev.monochrome_sprites,
 +            &next.monochrome_sprites,
-+            PartialEq::eq,
 +            |s| transformed_bounds(s.bounds, &s.transformation),
 +            &mut damage,
 +        );
 +        diff(
 +            &prev.subpixel_sprites,
 +            &next.subpixel_sprites,
-+            PartialEq::eq,
 +            |s| transformed_bounds(s.bounds, &s.transformation),
 +            &mut damage,
 +        );
 +        diff(
 +            &prev.polychrome_sprites,
 +            &next.polychrome_sprites,
-+            PartialEq::eq,
 +            |s| s.bounds,
 +            &mut damage,
 +        );
-+        diff(
-+            &prev.paths,
-+            &next.paths,
-+            paths_equal,
-+            |p| p.bounds,
-+            &mut damage,
-+        );
-+        if prev.surfaces.len() + next.surfaces.len() > 0 {
-+            return SceneDamage::Full;
-+        }
++        diff_paths(&prev.paths, &next.paths, &mut damage);
 +
-+        match damage {
-+            Some(rect) => SceneDamage::Rect(rect),
-+            None => SceneDamage::Unchanged,
++        if damage.is_empty() {
++            return SceneDamage::Unchanged;
 +        }
++        SceneDamage::Rects(damage)
 +    }
 +
 +    /// Covers both, for frames drawn but not yet presented.
@@ -191,28 +124,74 @@ index 0000000..bade8ea
 +        match (self, other) {
 +            (SceneDamage::Full, _) | (_, SceneDamage::Full) => SceneDamage::Full,
 +            (SceneDamage::Unchanged, damage) | (damage, SceneDamage::Unchanged) => damage,
-+            (SceneDamage::Rect(a), SceneDamage::Rect(b)) => SceneDamage::Rect(a.union(&b)),
++            (SceneDamage::Rects(mut rects), SceneDamage::Rects(others)) => {
++                for rect in others {
++                    add(&mut rects, rect);
++                }
++                SceneDamage::Rects(rects)
++            }
 +        }
 +    }
 +}
 +
-+fn paths_equal(a: &Path<ScaledPixels>, b: &Path<ScaledPixels>) -> bool {
-+    a.order == b.order
-+        && a.bounds == b.bounds
-+        && a.content_mask == b.content_mask
-+        && a.color == b.color
-+        && a.vertices == b.vertices
++fn add(rects: &mut Vec<Bounds<ScaledPixels>>, bounds: Bounds<ScaledPixels>) {
++    let mut grown = bounds;
++    while let Some(index) = rects.iter().position(|rect| rect.intersects(&grown)) {
++        grown = grown.union(&rects.swap_remove(index));
++    }
++    if rects.len() < MAX_DAMAGE_RECTS {
++        rects.push(grown);
++        return;
++    }
++    let area = |rect: Bounds<ScaledPixels>| rect.size.width.0 * rect.size.height.0;
++    let growth = |rect: &Bounds<ScaledPixels>| area(rect.union(&grown)) - area(*rect);
++    let Some(nearest) =
++        (0..rects.len()).min_by(|&a, &b| growth(&rects[a]).total_cmp(&growth(&rects[b])))
++    else {
++        return;
++    };
++    let merged = rects.swap_remove(nearest).union(&grown);
++    add(rects, merged);
 +}
 +
-+// Matching the common prefix and suffix keeps one inserted primitive, like a caret, from
-+// damaging every primitive after it.
-+fn diff<T>(
++// The lists are sorted by draw order and then by atlas tile, not by position, so they are
++// compared as sets: a primitive changed if it is in one frame and not the other.
++fn diff<T: Copy>(
 +    prev: &[T],
 +    next: &[T],
-+    equal: impl Fn(&T, &T) -> bool,
 +    bounds_of: impl Fn(&T) -> Bounds<ScaledPixels>,
-+    damage: &mut Option<Bounds<ScaledPixels>>,
++    damage: &mut Vec<Bounds<ScaledPixels>>,
 +) {
++    let mut counts = FxHashMap::<&[u8], (isize, &T)>::default();
++    for (primitives, step) in [(prev, 1), (next, -1)] {
++        for primitive in primitives {
++            counts.entry(bytes(primitive)).or_insert((0, primitive)).0 += step;
++        }
++    }
++    for (count, primitive) in counts.into_values() {
++        if count != 0 {
++            add(damage, bounds_of(primitive));
++        }
++    }
++}
++
++// Primitives are uploaded to the GPU as these same bytes, so they hold no padding.
++fn bytes<T: Copy>(primitive: &T) -> &[u8] {
++    unsafe { std::slice::from_raw_parts((primitive as *const T).cast(), std::mem::size_of::<T>()) }
++}
++
++fn diff_paths(
++    prev: &[Path<ScaledPixels>],
++    next: &[Path<ScaledPixels>],
++    damage: &mut Vec<Bounds<ScaledPixels>>,
++) {
++    let equal = |a: &Path<ScaledPixels>, b: &Path<ScaledPixels>| {
++        a.order == b.order
++            && a.bounds == b.bounds
++            && a.content_mask == b.content_mask
++            && a.color == b.color
++            && a.vertices == b.vertices
++    };
 +    let common = prev.len().min(next.len());
 +    let prefix = (0..common)
 +        .find(|&i| !equal(&prev[i], &next[i]))
@@ -223,13 +202,11 @@ index 0000000..bade8ea
 +    let suffix = (0..common - prefix)
 +        .find(|&i| !equal(&prev[prev.len() - 1 - i], &next[next.len() - 1 - i]))
 +        .unwrap_or(common - prefix);
-+
-+    let changed = prev[prefix..prev.len() - suffix]
++    for path in prev[prefix..prev.len() - suffix]
 +        .iter()
-+        .chain(&next[prefix..next.len() - suffix]);
-+    for primitive in changed {
-+        let bounds = bounds_of(primitive);
-+        *damage = Some(damage.map_or(bounds, |damage| damage.union(&bounds)));
++        .chain(&next[prefix..next.len() - suffix])
++    {
++        add(damage, path.bounds);
 +    }
 +}
 +
@@ -261,7 +238,7 @@ index 0000000..bade8ea
 +    }
 +}
 diff --git a/src/window.rs b/src/window.rs
-index 1214b03..89fcb5b 100644
+index 1214b03..5e4bebe 100644
 --- a/src/window.rs
 +++ b/src/window.rs
 @@ -1249,6 +1249,7 @@ pub struct Window {
@@ -280,23 +257,22 @@ index 1214b03..89fcb5b 100644
              next_frame_callbacks,
              next_hitbox_id: HitboxId(0),
              next_tooltip_id: TooltipId::default(),
-@@ -3506,6 +3508,15 @@ impl Window {
+@@ -3506,6 +3508,14 @@ impl Window {
          self.layout_engine.as_mut().unwrap().clear();
          self.text_system().finish_frame();
          self.next_frame.finish(&mut self.rendered_frame);
 +        if self.platform_window.wants_render_damage() {
 +            let damage =
 +                crate::SceneDamage::between(&self.rendered_frame.scene, &self.next_frame.scene);
-+            self.render_damage = Some(
-+                self.render_damage
-+                    .take()
-+                    .map_or(damage, |unpresented| unpresented.union(damage)),
-+            );
++            self.render_damage = Some(match self.render_damage.take() {
++                Some(unpresented) => unpresented.union(damage),
++                None => damage,
++            });
 +        }
  
          self.invalidator.set_phase(DrawPhase::Focus);
          let previous_focus_path = self.rendered_frame.focus_path();
-@@ -3606,7 +3617,13 @@ impl Window {
+@@ -3606,7 +3616,13 @@ impl Window {
          let _foreground_turn = profiler::journal::foreground_turn();
          #[cfg(feature = "profiler")]
          let present_start = Instant::now();
