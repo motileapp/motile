@@ -346,7 +346,7 @@ fn part(title: String, icon: AnyElement, cx: &App) -> Div {
         .gap(px(5.))
         .text_color(colors(cx).muted_foreground)
         .child(div().flex_shrink_0().child(icon))
-        .child(div().whitespace_nowrap().text_size(px(12.)).child(title))
+        .when(!title.is_empty(), |part| part.child(div().whitespace_nowrap().text_size(px(12.)).child(title)))
 }
 
 /// The label of a branch that can't be switched from here.
@@ -467,8 +467,9 @@ impl Words {
 /// Where the composer's thread works: the server, the folder or a worktree of its own, and the
 /// branch checked out there, which opens the picker to switch. A thread that starts in a new
 /// worktree picks the branch it starts from there instead. Where it is too narrow for all of
-/// them, the room is shared as the Mac's `HStack` shares it: the menu of the workspace keeps its
-/// words, and the others are cut in their middles to an even share.
+/// them, the workspace is only its icon, as the Mac's `ViewThatFits` picks, and the room is shared
+/// as its `HStack` shares it: the menu of the workspace keeps its words, and the others are cut in
+/// their middles to an even share.
 #[allow(clippy::too_many_arguments)]
 pub fn context_strip(
     store: &Entity<Store>,
@@ -603,13 +604,20 @@ pub fn context_strip(
     let server_words = server.map(|server| Words::new(&server.short_name, FontWeight::NORMAL, 14. + mark + 5.));
     let project_words =
         Words::new(&project.name, FontWeight::NORMAL, if server.is_none() { 14. } else { 0. } + 13. + 5.);
-    let workspace_words = workspace.as_ref().map(|workspace| match workspace {
-        Workspace::Told(working) => Words::new(working.title, FontWeight::NORMAL, 26. + mark + 5.),
-        Workspace::Chosen => {
-            let title = if in_worktree { "New worktree" } else { "Current checkout" };
-            Words::of_control(title, workspace_menu(title.into()).natural_width(window, cx), window).fixed()
-        }
-    });
+    let words_of_workspace = |labeled: bool, window: &mut Window, cx: &mut App| {
+        workspace.as_ref().map(|workspace| match workspace {
+            Workspace::Told(working) if labeled => Words::new(working.title, FontWeight::NORMAL, 26. + mark + 5.),
+            Workspace::Told(_) => Words::new("", FontWeight::NORMAL, 26. + mark),
+            Workspace::Chosen => {
+                let title = match (labeled, in_worktree) {
+                    (false, _) => "",
+                    (true, true) => "New worktree",
+                    (true, false) => "Current checkout",
+                };
+                Words::of_control(title, workspace_menu(title.into()).natural_width(window, cx), window).fixed()
+            }
+        })
+    };
     let switches = branch.is_some() && project.worktree.is_none() && can_switch;
     let branch_words = branch.as_ref().map(|branch| {
         if switches {
@@ -623,6 +631,20 @@ pub fn context_strip(
     });
 
     let branch_margin = INSET - margin().right;
+    // The strip's sides, the divider after the server and the branch's margin take no part.
+    let fixed = 2. + if server.is_some() { 20. } else { 0. } + if branch.is_some() { branch_margin } else { 0. };
+    let room = width - 2. * RADIUS - fixed;
+    let labeled = words_of_workspace(true, window, cx);
+    let ideal: f32 = server_words
+        .iter()
+        .chain([&project_words])
+        .chain(labeled.iter())
+        .chain(branch_words.iter())
+        .map(|words| words.room(window).ideal)
+        .sum();
+    let workspace_words =
+        if ideal + Room::SPACER.least <= room { labeled } else { words_of_workspace(false, window, cx) };
+
     let mut rooms = Vec::new();
     rooms.extend(server_words.as_ref().map(|words| (words.room(window), 0)));
     rooms.push((project_words.room(window), 0));
@@ -630,9 +652,7 @@ pub fn context_strip(
     rooms.extend(workspace_words.as_ref().map(|words| (words.room(window), 0)));
     // The Mac means the branch to keep its room first, but the padding around it takes its priority.
     rooms.extend(branch_words.as_ref().map(|words| (words.room(window), 0)));
-    // The strip's sides, the divider after the server and the branch's margin take no part.
-    let fixed = 2. + if server.is_some() { 20. } else { 0. } + if branch.is_some() { branch_margin } else { 0. };
-    let mut widths = share(width - 2. * RADIUS - fixed, &rooms).into_iter();
+    let mut widths = share(room, &rooms).into_iter();
     let mut next = || widths.next().unwrap_or(f32::INFINITY);
     let server_title = server_words.as_ref().map(|words| words.fitted(next(), window, cx));
     let project_title = project_words.fitted(next(), window, cx);
