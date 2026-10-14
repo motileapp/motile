@@ -420,7 +420,7 @@ struct DiffSurface: View {
                         panel.setAllCollapsed(!allClosed)
                     }
                 }
-                ActionButton(icon: .rotateCw, help: "Read the changes again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the changes again", pending: panel.reading.contains(.diff)) { asked += 1 }
             }
             if !target.repository {
                 NoRepositoryMessage(projectID: target.projectID)
@@ -572,7 +572,7 @@ struct FilesSurface: View {
                     .lineLimit(1)
                     .padding(.leading, 3)
                 Spacer(minLength: 4)
-                ActionButton(icon: .rotateCw, help: "Read the folder again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the folder again", pending: panel.reading.contains(.files)) { asked += 1 }
             }
             if let error = panel.filesError {
                 PanelMessage(text: error, failed: true)
@@ -650,7 +650,7 @@ struct FileSurface: View {
                     .truncationMode(.head)
                 Spacer(minLength: 4)
                 CopyButton(help: "Copy the path") { Platform.copy(path) }
-                ActionButton(icon: .rotateCw, help: "Read the file again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the file again", pending: panel.reading.contains(.file(path))) { asked += 1 }
             }
             switch panel.contents[.file(path)] {
             case nil, .loading:

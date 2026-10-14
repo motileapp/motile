@@ -43,7 +43,7 @@ struct PullRequestListSurface: View {
         InputField("Search", text: $search, icon: .search, clearable: true)
             .frame(maxWidth: 220)
         Spacer(minLength: 4)
-        ActionButton(icon: .rotateCw, help: "Read the pull requests again") { asked += 1 }
+        ActionButton(icon: .rotateCw, help: "Read the pull requests again", pending: store.rightPanel.reading.contains(.pullRequests)) { asked += 1 }
     }
 
     @ViewBuilder

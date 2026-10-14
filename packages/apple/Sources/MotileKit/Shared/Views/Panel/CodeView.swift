@@ -227,6 +227,8 @@ final class CodeSheet {
     var wantsMedia: (CodeFile) -> Void = { _ in }
     /// The line under the pointer, which shows that a comment can be written on it.
     var hovered: (file: Int, line: Int)?
+    /// The file whose heading's open button is under the pointer or the finger.
+    var litOpen: Int?
     private(set) var blocks: [Block] = []
     private(set) var gutter: CGFloat = 0
     private var numberWidth: CGFloat = 0
@@ -514,7 +516,13 @@ final class CodeSheet {
         TintedSymbol.draw(FileSymbol.symbol(for: file.path), size: 11, color: Theme.mutedForeground, in: icon)
 
         let open = CGRect(x: rect.maxX - 34, y: rect.minY, width: 28, height: rect.height)
-        TintedSymbol.draw(.squareArrowOutUpRight, size: 12, color: Theme.mutedForeground, in: open)
+        let lit = litOpen == index
+        if lit {
+            let side = ControlSize.small.height
+            Surface.secondary.platform(.control).setFill()
+            RoundedBox.fill(CGRect(x: open.midX - side / 2, y: open.midY - side / 2, width: side, height: side), radius: ControlSize.small.radius)
+        }
+        TintedSymbol.draw(.squareArrowOutUpRight, size: 12, color: lit ? Theme.foreground : Theme.mutedForeground, in: open)
         let counts = LineCountText.text(added: file.added, removed: file.removed)
         let countsSize = counts.size()
         let countsX = open.minX - 4 - countsSize.width
