@@ -255,6 +255,13 @@ the Mac app is the client on a Mac. It uses `crates/core` as a Rust library. Its
 on a Mac, so it is a device of its own. On Linux and Windows it takes `motile://` links itself, and
 a second launch hands its link to the running one (`instance.rs`).
 
+It builds on GPUI and wgpu with patches of ours, so that Linux redraws and presents only what
+changed in a frame: `patches/` holds a `.patch` for each crate, and `scripts/patch-crates.sh`
+unpacks the crates with them into `patched/`, which `[patch.crates-io]` points at. Run it before
+`cargo`; the scripts and CI do. To change a patch, edit its crate in `patched/`, then run
+`scripts/patch-crates.sh --save`. A GPUI Kit on another GPUI needs the patches
+redone for its versions in `patches/crates`; the script refuses a patch that `Cargo.lock` left unused.
+
 - `bridge.rs`: runs the core and prepares a transcript's rows off the main thread. `store/` is
   the state the views show, as `AppStore.swift` is, a module per area (`threads.rs`, `git.rs`,
   `projects.rs`, `pull_requests.rs`, `linear.rs`, `settings.rs`, `sidebar.rs`).
@@ -386,7 +393,7 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
     packages/apple/scripts/check-ui.sh                    # after changing the clients' views
-    (cd apps/gpui && cargo fmt && cargo clippy --all-targets && cargo test)
+    (cd apps/gpui && scripts/patch-crates.sh && cargo fmt && cargo clippy --all-targets && cargo test)
                                                           # after changing the GPUI app, crates/core or crates/protocol
 
 The `Release` workflow runs the demo on every push to `main` that touches the client or the server:

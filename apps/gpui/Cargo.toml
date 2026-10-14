@@ -1,5 +1,6 @@
 # A workspace of its own, so that the repository's checks and workflows leave it alone.
 [workspace]
+exclude = ["patched"]
 
 [package]
 name = "motile-gpui"
@@ -54,3 +55,13 @@ raw-window-handle = "0.6"
 [profile.release]
 strip = true
 lto = "thin"
+
+# Partial redraws on Linux, presented with damage. Applied by scripts/patch-crates.sh.
+[patch.crates-io]
+gpui-pre = { path = "patched/gpui-pre" }
+gpui-pre-linux = { path = "patched/gpui-pre-linux" }
+gpui-pre-wgpu = { path = "patched/gpui-pre-wgpu" }
+wgpu = { path = "patched/wgpu" }
+wgpu-core = { path = "patched/wgpu-core" }
+wgpu-hal = { path = "patched/wgpu-hal" }
+wgpu-types = { path = "patched/wgpu-types" }

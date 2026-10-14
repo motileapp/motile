@@ -12,6 +12,7 @@ APP="build/Motile GPUI.app"
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' ../../Cargo.toml | head -1)"
 
 echo "▸ Building the app…"
+scripts/patch-crates.sh
 cargo build --release
 
 rm -rf "$APP"
