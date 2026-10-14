@@ -248,10 +248,10 @@ enum ControlSize {
     var symbolOutset: CGFloat { (symbolSide / 5 * 2).rounded() / 2 }
 }
 
-/// What a view lies on: the page, a box on it, a card or a popover. What is drawn on a surface
-/// takes the surface's accent.
+/// What a view lies on: the page, a box on it, a card, a popover or the composer. What is drawn
+/// on a surface takes the surface's accent.
 enum Surface {
-    case background, secondary, card, popover
+    case background, secondary, card, popover, composer
 
     /// What is drawn on a surface, each in the surface's own accent.
     enum Layer {
@@ -275,6 +275,7 @@ enum Surface {
         case .secondary: Theme.backgroundSecondary
         case .card: Theme.card
         case .popover: Theme.popover
+        case .composer: Theme.composer
         }
     }
 
@@ -286,6 +287,7 @@ enum Surface {
         case .background, .secondary: .themeBorder
         case .card: .themeBorderCard
         case .popover: .themeBorderPopover
+        case .composer: .themeBorderComposer
         }
     }
 
@@ -307,6 +309,7 @@ enum Surface {
             }
         case .card: Theme.cardAccent
         case .popover: Theme.popoverAccent
+        case .composer: Theme.borderComposer
         }
     }
 

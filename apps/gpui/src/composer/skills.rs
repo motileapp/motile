@@ -13,7 +13,7 @@ use gpui_kit::*;
 
 use super::{Composer, strips};
 use crate::store::skills::{SkillPick, SkillRow, SkillSpan, skill_word};
-use crate::theme::{self, Radius, colors};
+use crate::theme::{self, Layer, Radius, Surface, colors};
 use crate::ui::{Chip, Spinner, icons, skill_chip};
 
 const ROW_HEIGHT: f32 = 32.;
@@ -207,7 +207,7 @@ impl Composer {
                     .items_center()
                     .gap(px(8.))
                     .rounded(px(Radius::MD))
-                    .when(lit, |row| row.bg(c.border_composer))
+                    .when(lit, |row| row.bg(Surface::Composer.layer(Layer::Row, c)))
                     .text_size(px(skill_chip::TEXT_SIZE))
                     .child(icons::symbol(skill_chip::SYMBOL, skill_chip::TEXT_SIZE).text_color(c.skill))
                     .child(
@@ -227,7 +227,12 @@ impl Composer {
                             .child(row.description.clone()),
                     )
                     .child(div().w(px(8.)).flex_none())
-                    .child(Chip::new(row.source.clone()).icon(row.symbol.clone())),
+                    .child(
+                        Chip::new(row.source.clone())
+                            .icon(row.symbol.clone())
+                            .surface(Surface::Composer)
+                            .row(lit.then_some(Layer::Row)),
+                    ),
             )
     }
 }

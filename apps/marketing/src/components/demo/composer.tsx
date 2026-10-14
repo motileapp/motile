@@ -47,7 +47,7 @@ export function Composer({
           <button
             type="button"
             onClick={onStop}
-            className="mr-2 ml-auto h-7 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-background-accent hover:text-foreground"
+            className="mr-2 ml-auto h-7 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
           >
             Stop
           </button>
@@ -63,7 +63,7 @@ export function Composer({
             <button
               type="button"
               onClick={() => onAnswer(false)}
-              className="ml-auto h-6 rounded-sm bg-background-accent px-2 text-[11.5px] font-medium hover:bg-background-accent-stronger"
+              className="ml-auto h-6 rounded-sm bg-border-composer px-2 text-[11.5px] font-medium"
             >
               Refuse
             </button>
@@ -120,7 +120,7 @@ export function Composer({
           >
             {thread.approval ? "Supervised" : "Full access"}
           </Control>
-          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-background-accent hover:text-foreground">
+          <span className="ml-auto flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-border-composer hover:text-foreground">
             <PaperclipIcon className="size-3.5" />
           </span>
           <button
@@ -179,7 +179,7 @@ function Control({
     <span
       className={cn(
         "flex h-7 cursor-default items-center gap-1.5 rounded-md text-[12px] font-medium text-muted-foreground",
-        !plain && "hover:bg-background-accent hover:text-foreground",
+        !plain && "hover:bg-border-composer hover:text-foreground",
         icon ? "pl-[9px]" : "pl-[11px]",
         plain ? "pr-[11px]" : "pr-[9px]"
       )}

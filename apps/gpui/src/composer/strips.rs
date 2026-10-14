@@ -75,7 +75,7 @@ pub fn monitoring_strip(store: &Entity<Store>, thread: &ThreadInfo, cx: &App) ->
             ActionButton::new("stop-monitoring", "Stop")
                 .help(help)
                 .ghost()
-                .surface(Surface::Background)
+                .surface(Surface::Composer)
                 .margin(margin())
                 .on_click(move |_, _, cx| {
                     store.update(cx, |store, cx| {
@@ -96,7 +96,7 @@ pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx:
     let symbol = interruption_label(interruption).1;
     let button = |id: &'static str, title: &'static str, help: &'static str, run: fn(&mut Store)| {
         let store = store.clone();
-        ActionButton::new(id, title).help(help).ghost().surface(Surface::Background).margin(margin()).on_click(
+        ActionButton::new(id, title).help(help).ghost().surface(Surface::Composer).margin(margin()).on_click(
             move |_, _, cx| {
                 store.update(cx, |store, cx| {
                     run(store);
@@ -259,7 +259,7 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &Ap
                         .text_color(c.warning),
                 )
                 .child(div().flex_1().min_w(px(8.)))
-                .child(ActionButton::new("refuse", approval.refuse).small().surface(Surface::Background).on_click(
+                .child(ActionButton::new("refuse", approval.refuse).small().surface(Surface::Composer).on_click(
                     move |_, _, cx| {
                         refuse.update(cx, |store, cx| {
                             store.answer(&refuse_id, false, Default::default());
@@ -271,7 +271,7 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, cx: &Ap
                     ActionButton::new("allow", approval.allow)
                         .variant(Variant::Warning)
                         .small()
-                        .surface(Surface::Background)
+                        .surface(Surface::Composer)
                         .on_click(move |_, _, cx| {
                             allow.update(cx, |store, cx| {
                                 store.answer(&allow_id, true, Default::default());
@@ -576,7 +576,7 @@ pub fn context_strip(
                 })
         })
         .button(|button| {
-            button.symbol(symbol).help(help).surface(Surface::Background).margin(edges(INSET, 4., INSET, 4.))
+            button.symbol(symbol).help(help).surface(Surface::Composer).margin(edges(INSET, 4., INSET, 4.))
         })
         .shortcut("composer.workspace")
     };
@@ -587,7 +587,7 @@ pub fn context_strip(
             .help(branch_help.clone().unwrap_or_default())
             .ghost()
             .opens(true)
-            .surface(Surface::Background)
+            .surface(Surface::Composer)
             .margin(margin())
             .on_click(move |_, _, cx| {
                 open.update(cx, |store, cx| {

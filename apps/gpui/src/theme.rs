@@ -131,8 +131,8 @@ impl Colors {
 pub static LIGHT: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| Colors::new(Tokens::light(), false));
 pub static DARK: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| Colors::new(Tokens::dark(), true));
 
-/// What a view lies on: the page, a box on it, a card or a popover. What is drawn on a surface
-/// takes the surface's accent.
+/// What a view lies on: the page, a box on it, a card, a popover or the composer. What is drawn
+/// on a surface takes the surface's accent.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Surface {
     #[default]
@@ -140,6 +140,7 @@ pub enum Surface {
     Secondary,
     Card,
     Popover,
+    Composer,
 }
 
 /// What is drawn on a surface, each in the surface's own accent.
@@ -166,6 +167,7 @@ impl Surface {
             Surface::Secondary => c.background_secondary,
             Surface::Card => c.card,
             Surface::Popover => c.popover,
+            Surface::Composer => c.composer,
         }
     }
 
@@ -175,6 +177,7 @@ impl Surface {
             Surface::Background | Surface::Secondary => c.border,
             Surface::Card => c.border_card,
             Surface::Popover => c.border_popover,
+            Surface::Composer => c.border_composer,
         }
     }
 
@@ -196,6 +199,7 @@ impl Surface {
             },
             Surface::Card => c.card_accent,
             Surface::Popover => c.popover_accent,
+            Surface::Composer => c.border_composer,
         }
     }
 

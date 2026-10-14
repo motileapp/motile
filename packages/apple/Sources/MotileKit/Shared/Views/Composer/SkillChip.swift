@@ -16,7 +16,7 @@ enum SkillChip {
     static let gap: CGFloat = 4
     /// The room between the chip and the text on either side.
     static let margin: CGFloat = 1
-    static let radius = Radius.sm
+    static let radius = Radius.xs
     static let wash = tinted(.colorTint)
     static let edge = tinted(.colorTintChart)
 

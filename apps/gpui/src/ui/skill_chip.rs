@@ -37,7 +37,7 @@ pub fn chip(label: SharedString, selected: bool, height: Pixels, cx: &App) -> Di
         .items_center()
         .gap(px(GAP))
         .px(px(PADDING))
-        .rounded(px(Radius::SM))
+        .rounded(px(Radius::XS))
         .border_1()
         .border_color(c.at(c.skill, Opacity::ColorTintChart))
         .bg(c.wash(c.skill, selected))
@@ -60,7 +60,7 @@ pub fn paint_box(start: Point<Pixels>, end: Point<Pixels>, line_height: Pixels, 
     let top = start.y + (line_height - height) / 2.;
     let bounds = Bounds::from_corners(point(start.x - px(lead()), top), point(end.x + px(PADDING), top + height));
     let edge = c.at(c.skill, Opacity::ColorTintChart);
-    window.paint_quad(quad(bounds, px(Radius::SM), c.wash(c.skill, false), px(1.), edge, BorderStyle::Solid));
+    window.paint_quad(quad(bounds, px(Radius::XS), c.wash(c.skill, false), px(1.), edge, BorderStyle::Solid));
     let side = px(theme::symbol_side(SYMBOL_SIZE));
     let symbol = Bounds::new(point(bounds.left() + px(PADDING), top + (height - side) / 2.), size(side, side));
     let _ = window.paint_svg(symbol, icons::path(SYMBOL), None, TransformationMatrix::unit(), c.skill, cx);

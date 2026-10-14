@@ -367,7 +367,7 @@ impl Composer {
             .child(div().font_weight(FontWeight::MEDIUM).child("Done"))
             .child(div().flex_1())
             .child(div().my(px(-4.)).child(
-                ActionButton::new("mark-undone", "Mark Undone").link().small().surface(Surface::Background).on_click(
+                ActionButton::new("mark-undone", "Mark Undone").link().small().surface(Surface::Composer).on_click(
                     move |_, _, cx| {
                         store.update(cx, |store, cx| {
                             store.set_done(std::slice::from_ref(&id), false, false, cx);
@@ -449,7 +449,7 @@ impl Composer {
                     .when_some(logo, |button, logo| button.picture(logo))
                     .help(model_help)
                     .gap(MENU_GAP)
-                    .surface(Surface::Background)
+                    .surface(Surface::Composer)
                     .margin(margin(8., 4.))
                     .disabled(disabled)
             })
@@ -484,7 +484,7 @@ impl Composer {
                     .symbol_size(ControlSize::Small.symbol())
                     .gap(MENU_GAP)
                     .help(effort_help)
-                    .surface(Surface::Background)
+                    .surface(Surface::Composer)
                     .margin(margin(4., 4.))
             })
             .shortcut("composer.effort")
@@ -515,7 +515,7 @@ impl Composer {
                     .symbol_size(ControlSize::Small.symbol())
                     .gap(MENU_GAP)
                     .help(access_help)
-                    .surface(Surface::Background)
+                    .surface(Surface::Composer)
                     .margin(margin(4., 1.))
             })
             .shortcut("composer.access")
@@ -525,7 +525,7 @@ impl Composer {
             let store = self.store.clone();
             ActionButton::icon("attach", "paperclip", "Attach files")
                 .round(true)
-                .surface(Surface::Background)
+                .surface(Surface::Composer)
                 .margin(margin(1., 4.))
                 .on_click(move |_, _, cx| choose_files(store.clone(), cx))
         };
@@ -629,7 +629,7 @@ impl Composer {
                         .help(stop_help)
                         .danger()
                         .round(true)
-                        .surface(Surface::Background)
+                        .surface(Surface::Composer)
                         .margin(margin(4., if sends { 4. } else { 8. }))
                         .on_click(move |_, _, cx| {
                             stop.update(cx, |store, cx| {
@@ -644,7 +644,7 @@ impl Composer {
                     ActionButton::icon("send", "arrow-up", help)
                         .variant(Variant::Primary)
                         .round(true)
-                        .surface(Surface::Background)
+                        .surface(Surface::Composer)
                         .margin(margin(4., 8.))
                         .disabled(!can_send)
                         .on_click(move |_, _, cx| {

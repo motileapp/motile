@@ -11,7 +11,7 @@ use motile_core::render::rows::{Question, Waiting};
 
 use crate::composer::strips::waiting_title;
 use crate::store::Store;
-use crate::theme::{ControlSize, Radius, Surface, colors};
+use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
 use crate::ui::{ActionButton, InputField, InputVariant, PickMark, Variant};
 
 /// How far past its text an option's light and the room to press it reach.
@@ -152,7 +152,7 @@ impl Questions {
 
     /// The light of a row: under the pointer, and while it is the answer.
     fn light(id: SharedString, lit: bool, cx: &App) -> Stateful<Div> {
-        let fill = colors(cx).border_composer;
+        let fill = Surface::Composer.layer(Layer::Row, colors(cx));
         div()
             .id(id)
             .w_full()
@@ -225,7 +225,7 @@ impl Questions {
                         InputField::new(&field)
                             .variant(InputVariant::Bare)
                             .size(ControlSize::Large)
-                            .surface(Surface::Background),
+                            .surface(Surface::Composer),
                     ),
             )
             .on_click(move |_, window, cx| focus.update(cx, |field, cx| field.focus(window, cx)))
@@ -289,7 +289,7 @@ impl Render for Questions {
                                 .symbol("chevron-left")
                                 .ghost()
                                 .small()
-                                .surface(Surface::Background)
+                                .surface(Surface::Composer)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.index -= 1;
                                     cx.notify();
@@ -300,7 +300,7 @@ impl Render for Questions {
                     .child(
                         ActionButton::new("refuse-questions", self.approval.refuse)
                             .small()
-                            .surface(Surface::Background)
+                            .surface(Surface::Composer)
                             .on_click(move |_, _, cx| {
                                 refuse.update(cx, |store, cx| {
                                     store.answer(&refuse_id, false, HashMap::new());
@@ -312,7 +312,7 @@ impl Render for Questions {
                         ActionButton::new("go-on", go_on)
                             .variant(Variant::Primary)
                             .small()
-                            .surface(Surface::Background)
+                            .surface(Surface::Composer)
                             .disabled(!can_go_on)
                             .on_click(cx.listener(|this, _, _, cx| this.go_on(cx))),
                     ),
