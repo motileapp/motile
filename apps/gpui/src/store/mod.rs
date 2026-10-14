@@ -320,6 +320,7 @@ impl Store {
             prefs.bool("panel.open"),
             prefs.get::<BTreeMap<String, PanelTabs>>("panel.tabs").unwrap_or_default(),
         );
+        let linear = linear::Linear::kept(&prefs);
         let mut store = Self {
             bridge: None,
             answers: HashMap::new(),
@@ -387,7 +388,7 @@ impl Store {
             updater: Updater::new(),
             right_panel,
             settings: SettingsState::default(),
-            linear: linear::Linear::default(),
+            linear,
             pull_requests: PullRequests::default(),
             repo_listing: RepoListing::default(),
             sidebar: SidebarState::default(),

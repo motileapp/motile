@@ -166,13 +166,27 @@ struct LinearPage {
     }
 }
 
-/// What the Linear tab lists for a project, kept so that it opens as it was left.
-struct LinearChoice: Codable, Equatable {
+/// The workspace and team the Linear tab lists for a project.
+struct LinearPick: Codable, Equatable {
     var workspace: String?
     var team: String?
+}
+
+/// How the Linear tab lists issues, the same in every project.
+struct LinearFilter: Codable, Equatable {
     var mine = true
     /// The kinds of status listed, or none for all of them.
     var states = ["unstarted", "started"]
+    /// The statuses folded up, by id.
+    var folded: Set<String> = []
+}
+
+/// What the Linear tab lists for a project.
+struct LinearChoice: Equatable {
+    var workspace: String?
+    var team: String?
+    var mine: Bool
+    var states: [String]
 }
 
 /// The Linear workspaces the servers are connected to, and the issues the tab lists.
@@ -197,7 +211,12 @@ final class Linear {
     /// filed.
     private(set) var working: Set<String> = []
     /// By project.
-    private var choices: [String: LinearChoice]
+    private var picks: [String: LinearPick]
+    /// What was picked last, which a project that has none of its own starts from.
+    private var lastPick: LinearPick?
+    private(set) var filter: LinearFilter
+    /// What the tab searches for, by project, while the client runs.
+    var searches: [String: String] = [:]
 
     @ObservationIgnored private var session: SignInSession?
     /// What the tab lists now.
@@ -221,30 +240,57 @@ final class Linear {
     }
 
     init() {
-        let kept = defaults.data(forKey: "linear.choices").flatMap { try? JSONDecoder().decode([String: LinearChoice].self, from: $0) }
-        choices = kept ?? [:]
+        picks = Self.kept([String: LinearPick].self, "linear.choices") ?? [:]
+        lastPick = Self.kept(LinearPick.self, "linear.last")
+        filter = Self.kept(LinearFilter.self, "linear.filter") ?? LinearFilter()
+    }
+
+    private static func kept<Value: Decodable>(_ type: Value.Type, _ key: String) -> Value? {
+        UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(type, from: $0) }
+    }
+
+    private func keep(_ value: some Encodable, _ key: String) {
+        defaults.set(try? JSONEncoder().encode(value), forKey: key)
     }
 
     func connected(_ serverID: String) -> [LinearConnection] {
         connections[serverID] ?? []
     }
 
-    /// What the tab lists for the project: what was chosen there last, in a workspace that is
-    /// still connected.
     func choice(for target: PanelTarget) -> LinearChoice {
-        var choice = choices[target.projectID] ?? LinearChoice()
-        let connected = connected(target.serverID)
-        guard !connected.contains(where: { $0.id == choice.workspace }) else { return choice }
-        choice.workspace = connected.first?.id
-        choice.team = nil
-        return choice
+        let pick = pick(for: target)
+        return LinearChoice(workspace: pick.workspace, team: pick.team, mine: filter.mine, states: filter.states)
     }
 
-    func choose(for target: PanelTarget, _ change: (inout LinearChoice) -> Void) {
-        var choice = choice(for: target)
-        change(&choice)
-        choices[target.projectID] = choice
-        defaults.set(try? JSONEncoder().encode(choices), forKey: "linear.choices")
+    /// What was picked for the project last, or else for any project, in a workspace the server
+    /// is still connected to.
+    private func pick(for target: PanelTarget) -> LinearPick {
+        let connected = connected(target.serverID)
+        let kept = [picks[target.projectID], lastPick].compactMap { $0 }
+        guard let pick = kept.first(where: { pick in connected.contains { $0.id == pick.workspace } }) else {
+            return LinearPick(workspace: connected.first?.id)
+        }
+        return pick
+    }
+
+    func pick(_ workspace: String?, team: String? = nil, for target: PanelTarget) {
+        let pick = LinearPick(workspace: workspace, team: team)
+        picks[target.projectID] = pick
+        lastPick = pick
+        keep(picks, "linear.choices")
+        keep(pick, "linear.last")
+    }
+
+    func changeFilter(_ change: (inout LinearFilter) -> Void) {
+        change(&filter)
+        keep(filter, "linear.filter")
+    }
+
+    func fold(_ state: String) {
+        changeFilter { filter in
+            guard filter.folded.remove(state) == nil else { return }
+            filter.folded.insert(state)
+        }
     }
 
     func read(_ serverID: String) {
@@ -441,10 +487,7 @@ final class Linear {
                 guard finishing, let target = store?.panelTarget else { return }
                 let added = connected(serverID).first { !before.contains($0.id) }
                 guard let added else { return }
-                choose(for: target) { choice in
-                    choice.workspace = added.id
-                    choice.team = nil
-                }
+                pick(added.id, for: target)
             case .failure(let failure):
                 guard request.string("type") != "linear_status" else { return }
                 error = failure.message
