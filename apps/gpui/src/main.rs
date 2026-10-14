@@ -64,7 +64,9 @@ fn main() {
         if !opened.is_empty() {
             let _ = url_sender.unbounded_send(opened);
         }
-        std::thread::spawn(instance::register_scheme);
+        if option_env!("MOTILE_PACKAGED").is_none() {
+            std::thread::spawn(instance::register_scheme);
+        }
     }
     app.on_open_urls(move |urls| {
         let _ = url_sender.unbounded_send(urls);
