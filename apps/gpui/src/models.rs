@@ -649,15 +649,17 @@ impl AgentViewExt for AgentView {
         self.status == motile_protocol::wire::ToolStatus::Running
     }
 
-    /// "3 tools · 21k tokens", as far as either is known.
+    /// "3 tools · 21.4K tokens", as far as either is known.
     fn usage(&self) -> Option<String> {
         let tools = self.tool_uses.map(|count| format!("{count} {}", if count == 1 { "tool" } else { "tools" }));
-        let spent = self.tokens.map(|tokens| {
-            if tokens < 1000 { format!("{tokens} tokens") } else { format!("{}k tokens", tokens / 1000) }
-        });
-        let parts: Vec<String> = [tools, spent].into_iter().flatten().collect();
+        let parts: Vec<String> = [tools, self.tokens.map(tokens)].into_iter().flatten().collect();
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
+}
+
+/// "820 tokens", "21.4K tokens", "4.57M tokens".
+pub fn tokens(count: u64) -> String {
+    format!("{} tokens", crate::format::abbreviated(count))
 }
 
 /// A file attached to a message, as the transcript shows it. An image or a video names the file

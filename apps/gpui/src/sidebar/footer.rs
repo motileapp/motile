@@ -157,7 +157,7 @@ impl Render for SidebarFooter {
                 )
                 .child(div().flex_1())
             })
-            .when(state == UpdateState::UpToDate, |row| row.child(UpdateLabel::up_to_date(cx)))
+            .when(state == UpdateState::UpToDate, |row| row.child(div().pr(px(2.)).child(UpdateLabel::up_to_date(cx))))
             .child({
                 let store = handle.clone();
                 ActionButton::icon("check-updates", "refresh-cw", "Check for Updates")

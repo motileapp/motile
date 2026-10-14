@@ -44,13 +44,44 @@ const MENU_GAP: f32 = 5.;
 /// The least room between the menus and the buttons on the right.
 const SPACER: f32 = 10.;
 
+/// Which menus of the row under the text say what they are set to, the first of these that fits.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+enum Labels {
+    #[default]
+    All,
+    /// The effort and the access are only their icons.
+    Model,
+    /// The model is only its icon too.
+    None,
+}
+
+impl Labels {
+    /// The first that fits in `room`, for menus that were `menus` wide with `drawn`, whose words
+    /// take `settings` for the effort and the access and `model` for the model.
+    fn fitting(menus: f32, drawn: Labels, settings: f32, model: f32, room: f32) -> Self {
+        let hidden = match drawn {
+            Labels::All => 0.,
+            Labels::Model => settings,
+            Labels::None => settings + model,
+        };
+        let full = menus + hidden;
+        if full <= room {
+            return Labels::All;
+        }
+        if full - settings <= room {
+            return Labels::Model;
+        }
+        Labels::None
+    }
+}
+
 /// How wide the parts of the row under the text were last drawn, to tell whether the menus fit
 /// with their words.
 #[derive(Clone, Copy, Default)]
 struct RowWidths {
-    /// The menus, and whether they were drawn without their words.
+    /// The menus, and which of them were drawn with their words.
     menus: f32,
-    compact: bool,
+    labels: Labels,
     /// The buttons on the right.
     buttons: f32,
 }
@@ -319,28 +350,31 @@ impl Composer {
             ))
     }
 
-    /// Whether the row under the text is too narrow for the menus to say what they are set to,
-    /// as the Mac's `ViewThatFits` picks: from how wide they were last drawn, and how wide their
-    /// words are.
-    fn compact(&self, window: &mut Window, cx: &App) -> bool {
+    /// Which menus of the row under the text have room to say what they are set to, as the
+    /// Mac's `ViewThatFits` picks: from how wide they were last drawn, and how wide their words
+    /// are.
+    fn labels(&self, window: &mut Window, cx: &App) -> Labels {
         let store = self.store.read(cx);
         let words = |text: &str, window: &mut Window| {
-            text_width(text, ControlSize::Regular.text_size(), FontWeight::MEDIUM, window)
+            text_width(text, ControlSize::Regular.text_size(), FontWeight::MEDIUM, window) + MENU_GAP
         };
-        let mut said = words(access_label(store.composer_access()), window) + MENU_GAP;
-        if store.composer_model().is_some() {
-            let label = store.composer_model_label().unwrap_or_default();
-            said += words(&label, window) + MENU_GAP;
+        let mut settings = words(access_label(store.composer_access()), window);
+        let model = store.composer_model();
+        if model.as_ref().is_some_and(|model| !model.efforts.is_empty()) {
+            settings += words(&effort_label(&store.composer_effort().unwrap_or_default()), window);
         }
+        let model = match model {
+            Some(_) => words(&store.composer_model_label().unwrap_or_default(), window),
+            None => 0.,
+        };
         let row = self.row.get();
-        let full = if row.compact { row.menus + said } else { row.menus };
-        full + SPACER + row.buttons > self.width
+        Labels::fitting(row.menus, row.labels, settings, model, self.width - SPACER - row.buttons)
     }
 
-    /// The row under the text. When it is too narrow for all of it, the model and the access
-    /// are only their icons. The space between its controls and around them is their margins,
-    /// so each takes clicks up to the next one and to the composer's edges.
-    fn controls(&self, compact: bool, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The row under the text. When it is too narrow for all of it, the effort and the access
+    /// are only their icons, then the model too. The space between its controls and around them
+    /// is their margins, so each takes clicks up to the next one and to the composer's edges.
+    fn controls(&self, labels: Labels, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let choices = store.composer_choices();
@@ -359,7 +393,7 @@ impl Composer {
             let store = self.store.clone();
             let current_id = current.as_ref().map(|model| model.id.clone());
             let logo = current.as_ref().map(|model| logos::agent_icon(model.agent, ControlSize::Regular.symbol(), cx));
-            let title = if compact && current.is_some() { String::new() } else { name.clone() };
+            let title = if labels == Labels::None && current.is_some() { String::new() } else { name.clone() };
             ActionMenu::new("model", title, move |_, _| {
                 let mut menu = Menu::new();
                 for (title, account_choice, models) in &choices {
@@ -398,13 +432,16 @@ impl Composer {
             let store = self.store.clone();
             let efforts = model.effort_choices();
             let chosen = effort.clone();
-            ActionMenu::new("effort", effort_label(effort.as_deref().unwrap_or("")), move |_, _| {
+            let current = effort.clone().unwrap_or_default();
+            let title = if labels == Labels::All { effort_label(&current) } else { String::new() };
+            ActionMenu::new("effort", title, move |_, _| {
                 let mut menu = Menu::new();
                 for effort in &efforts {
                     let store = store.clone();
                     let value = effort.clone();
+                    let icon = Some(MenuIcon::Symbol(effort_symbol(effort)));
                     menu =
-                        menu.choice(Some(effort) == chosen.as_ref(), effort_label(effort), None, None, move |_, cx| {
+                        menu.choice(Some(effort) == chosen.as_ref(), effort_label(effort), icon, None, move |_, cx| {
                             store.update(cx, |store, cx| {
                                 store.set_effort(&value);
                                 cx.notify();
@@ -413,7 +450,15 @@ impl Composer {
                 }
                 menu
             })
-            .button(|button| button.help(effort_help).surface(Surface::Background).margin(margin(4., 4.)))
+            .button(move |button| {
+                button
+                    .symbol(effort_symbol(&current))
+                    .symbol_size(ControlSize::Small.symbol())
+                    .gap(MENU_GAP)
+                    .help(effort_help)
+                    .surface(Surface::Background)
+                    .margin(margin(4., 4.))
+            })
             .shortcut("composer.effort")
         });
 
@@ -421,7 +466,7 @@ impl Composer {
             let store = self.store.clone();
             let label = access_label(access).to_string();
             let symbol = access_symbol(access);
-            ActionMenu::new("access", if compact { String::new() } else { label }, move |_, _| {
+            ActionMenu::new("access", if labels == Labels::All { label } else { String::new() }, move |_, _| {
                 let mut menu = Menu::new();
                 for option in ACCESSES {
                     let store = store.clone();
@@ -472,9 +517,9 @@ impl Composer {
                             move |bounds, window, _| {
                                 let mut row = menus.get();
                                 let width = f32::from(bounds.size.width);
-                                if (row.menus - width).abs() > 0.5 || row.compact != compact {
+                                if (row.menus - width).abs() > 0.5 || row.labels != labels {
                                     row.menus = width;
-                                    row.compact = compact;
+                                    row.labels = labels;
                                     menus.set(row);
                                     window.refresh();
                                 }
@@ -588,7 +633,7 @@ impl Composer {
     fn box_(
         &self,
         thread: Option<&ThreadInfo>,
-        compact: bool,
+        labels: Labels,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -667,7 +712,7 @@ impl Composer {
                             .child(text),
                     ),
             )
-            .child(self.controls(compact, cx))
+            .child(self.controls(labels, cx))
     }
 }
 
@@ -698,7 +743,7 @@ fn margin(leading: f32, trailing: f32) -> Edges<f32> {
 
 pub fn effort_label(effort: &str) -> String {
     match effort {
-        "xhigh" => "Extra high".into(),
+        "xhigh" => "Extra".into(),
         "" => "Default".into(),
         other => {
             let mut chars = other.chars();
@@ -707,6 +752,18 @@ pub fn effort_label(effort: &str) -> String {
                 None => String::new(),
             }
         }
+    }
+}
+
+pub fn effort_symbol(effort: &str) -> &'static str {
+    match effort {
+        "none" | "minimal" | "low" => "effort-low",
+        "medium" => "effort-medium",
+        "high" => "effort-high",
+        "xhigh" => "effort-extra",
+        "max" => "rocket",
+        "ultracode" => "bot-message-square",
+        _ => "gauge",
     }
 }
 
@@ -736,7 +793,7 @@ pub fn choose_files(store: Entity<Store>, cx: &mut App) {
 impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
-        let compact = self.compact(window, cx);
+        let labels = self.labels(window, cx);
         let store = self.store.read(cx);
         let thread = store.selected_thread().cloned();
         let approval = thread.as_ref().and_then(|_| store.activity.approvals.first().cloned());
@@ -822,9 +879,26 @@ impl Render for Composer {
                     }),
             )
             .children(top_strip.map(|strip| div().relative().child(measure(true, self.strips.clone())).child(strip)))
-            .child(self.box_(thread.as_ref(), compact, window, cx))
+            .child(self.box_(thread.as_ref(), labels, window, cx))
             .children(
                 bottom_strip.map(|strip| div().relative().child(measure(false, self.strips.clone())).child(strip)),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Labels;
+
+    #[test]
+    fn the_effort_and_the_access_lose_their_words_before_the_model() {
+        // All labelled, the menus take 300: 120 of it the settings' words, 60 the model's.
+        assert_eq!(Labels::fitting(300., Labels::All, 120., 60., 300.), Labels::All);
+        assert_eq!(Labels::fitting(300., Labels::All, 120., 60., 299.), Labels::Model);
+        assert_eq!(Labels::fitting(300., Labels::All, 120., 60., 180.), Labels::Model);
+        assert_eq!(Labels::fitting(300., Labels::All, 120., 60., 179.), Labels::None);
+        // Drawn without words, they are measured as they would be with them.
+        assert_eq!(Labels::fitting(120., Labels::None, 120., 60., 300.), Labels::All);
+        assert_eq!(Labels::fitting(180., Labels::Model, 120., 60., 200.), Labels::Model);
     }
 }

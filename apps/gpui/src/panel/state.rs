@@ -1,4 +1,4 @@
-//! What the side panel shows: whether it is open, the tabs each thread has in it, and what the
+//! What the right panel shows: whether it is open, the tabs each thread has in it, and what the
 //! tabs of the open thread show.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -442,7 +442,7 @@ fn read_file(answer: Value, path: &str, id: String) -> FileContent {
 }
 
 /// The panel beside the thread.
-pub struct SidePanel {
+pub struct RightPanel {
     pub is_open: bool,
     pub tabs_by_key: BTreeMap<String, PanelTabs>,
     /// The turns of the open thread that changed files, the first one first.
@@ -464,6 +464,8 @@ pub struct SidePanel {
     pub contents: HashMap<PanelTab, Loaded<FileContent>>,
     /// Where the images and videos diffs show are on this device, by their blobs, once asked for.
     pub media_files: HashMap<String, Loaded<PathBuf>>,
+    /// The tabs whose content is being read, whose button to read it again turns meanwhile.
+    pub reading: HashSet<PanelTab>,
 
     /// The folder all of the above is of.
     shown: Option<PanelTarget>,
@@ -472,7 +474,7 @@ pub struct SidePanel {
     file_requests: HashMap<u64, PanelTab>,
 }
 
-impl SidePanel {
+impl RightPanel {
     pub fn new(is_open: bool, tabs_by_key: BTreeMap<String, PanelTabs>) -> Self {
         Self {
             is_open,
@@ -487,6 +489,7 @@ impl SidePanel {
             files_error: None,
             contents: HashMap::new(),
             media_files: HashMap::new(),
+            reading: HashSet::new(),
             shown: None,
             shown_scope: None,
             diff_request: 0,
@@ -526,6 +529,8 @@ impl SidePanel {
         }
         let same_folder = self.shown.as_ref().is_some_and(|shown| shown.key == target.key);
         self.shown = Some(target.clone());
+        // What is read for another target never answers here.
+        self.reading.clear();
         if same_folder {
             return;
         }
@@ -548,7 +553,7 @@ impl Store {
     /// Forgets what every tab showed, the pull requests' too, when the folder is another one
     /// than before.
     pub(crate) fn look_into(&mut self, target: &PanelTarget) {
-        self.side_panel.look_into(target);
+        self.right_panel.look_into(target);
         self.look_at_pull_requests(target);
     }
 
@@ -559,7 +564,7 @@ impl Store {
     /// The thread's tabs. There is always one: a blank one when none was opened.
     pub fn panel_tabs(&self) -> PanelTabs {
         let mut tabs =
-            self.panel_key().and_then(|key| self.side_panel.tabs_by_key.get(&key).cloned()).unwrap_or_default();
+            self.panel_key().and_then(|key| self.right_panel.tabs_by_key.get(&key).cloned()).unwrap_or_default();
         if tabs.tabs.is_empty() {
             tabs.tabs = vec![PanelTab::Blank(0)];
         }
@@ -575,17 +580,17 @@ impl Store {
         change(&mut tabs);
         let untouched = tabs.is_blank() && tabs.scope.is_none() && tabs.maximized.is_none();
         if untouched {
-            self.side_panel.tabs_by_key.remove(&key);
+            self.right_panel.tabs_by_key.remove(&key);
         } else {
-            self.side_panel.tabs_by_key.insert(key, tabs);
+            self.right_panel.tabs_by_key.insert(key, tabs);
         }
-        let saved = self.side_panel.tabs_by_key.clone();
+        let saved = self.right_panel.tabs_by_key.clone();
         self.prefs.set("panel.tabs", saved);
     }
 
     pub fn set_panel_open(&mut self, open: bool) {
-        let opens = open && !self.side_panel.is_open;
-        self.side_panel.is_open = open;
+        let opens = open && !self.right_panel.is_open;
+        self.right_panel.is_open = open;
         self.prefs.set("panel.open", open);
         if !open {
             self.change_tabs(|tabs| tabs.maximized = None);
@@ -627,7 +632,7 @@ impl Store {
 
     /// Adds a blank tab. A hidden panel that only has its blank tab just opens.
     pub fn open_blank_tab(&mut self) {
-        if !self.side_panel.is_open && self.panel_tabs().is_blank() {
+        if !self.right_panel.is_open && self.panel_tabs().is_blank() {
             self.set_panel_open(true);
             return;
         }
@@ -647,7 +652,7 @@ impl Store {
     /// Shows the tab `offset` places from the active one, wrapping around the ends.
     pub fn activate_tab_offset(&mut self, offset: isize) {
         let tabs = self.panel_tabs();
-        if !self.side_panel.is_open || tabs.tabs.len() < 2 {
+        if !self.right_panel.is_open || tabs.tabs.len() < 2 {
             return;
         }
         let Some(index) = tabs.active.as_ref().and_then(|active| tabs.tabs.iter().position(|tab| tab == active)) else {
@@ -669,7 +674,7 @@ impl Store {
             tabs.active =
                 if tabs.tabs.is_empty() { None } else { Some(tabs.tabs[index.min(tabs.tabs.len() - 1)].clone()) };
         });
-        self.side_panel.contents.remove(tab);
+        self.right_panel.contents.remove(tab);
     }
 
     pub fn close_other_tabs(&mut self, tab: &PanelTab) {
@@ -689,7 +694,7 @@ impl Store {
     /// What ⌘W does while the panel is open: closes its tab, or hides it when all it has is a
     /// blank one. `false` when the panel is hidden.
     pub fn close_active_tab(&mut self) -> bool {
-        if !self.side_panel.is_open {
+        if !self.right_panel.is_open {
             return false;
         }
         let tabs = self.panel_tabs();
@@ -703,12 +708,12 @@ impl Store {
 
     /// The panel covers the thread, so the window shows the sidebar and the panel.
     pub fn panel_maximized(&self) -> bool {
-        self.side_panel.is_open && self.panel_tabs().maximized == Some(true)
+        self.right_panel.is_open && self.panel_tabs().maximized == Some(true)
     }
 
     /// A panel that has no folder to show stays beside the thread.
     pub fn can_maximize_panel(&self) -> bool {
-        self.side_panel.is_open && self.panel_key().is_some()
+        self.right_panel.is_open && self.panel_key().is_some()
     }
 
     pub fn toggle_panel_maximized(&mut self) {
@@ -725,15 +730,15 @@ impl Store {
 
     /// The tabs a draft had go to the thread it became.
     pub fn move_tabs(&mut self, draft_key: &str, thread_key: &str) {
-        let Some(tabs) = self.side_panel.tabs_by_key.remove(draft_key) else { return };
-        self.side_panel.tabs_by_key.insert(thread_key.to_string(), tabs);
-        if self.side_panel.shown.as_ref().is_some_and(|shown| shown.key == draft_key) {
-            self.side_panel.shown = None;
+        let Some(tabs) = self.right_panel.tabs_by_key.remove(draft_key) else { return };
+        self.right_panel.tabs_by_key.insert(thread_key.to_string(), tabs);
+        if self.right_panel.shown.as_ref().is_some_and(|shown| shown.key == draft_key) {
+            self.right_panel.shown = None;
         }
     }
 
     pub fn forget_tabs(&mut self, key: &str) {
-        self.side_panel.tabs_by_key.remove(key);
+        self.right_panel.tabs_by_key.remove(key);
     }
 
     // What the panel can show here
@@ -776,7 +781,7 @@ impl Store {
     /// Opens the agents tab on what the agent did that the tool call started.
     pub fn show_agent(&mut self, id: String, cx: &mut Context<Self>) {
         let Some(thread_id) = self.transcript.read(cx).thread_id.clone() else { return };
-        self.side_panel.shown_agent = Some(id.clone());
+        self.right_panel.shown_agent = Some(id.clone());
         let live = self.transcript.read(cx).live;
         self.agent_transcript.update(cx, |transcript, _| transcript.begin(Some(thread_id.clone()), live, false));
         self.agents_changed(cx);
@@ -786,7 +791,7 @@ impl Store {
 
     /// Goes back to the list of agents.
     pub fn show_agents(&mut self, cx: &mut Context<Self>) {
-        if self.side_panel.shown_agent.take().is_none() {
+        if self.right_panel.shown_agent.take().is_none() {
             return;
         }
         let thread_id = self.agent_transcript.read(cx).thread_id.clone();
@@ -799,7 +804,7 @@ impl Store {
     /// The shown agent's transcript says that it works for as long as it does.
     pub fn agents_changed(&mut self, cx: &mut Context<Self>) {
         use crate::models::AgentViewExt;
-        let Some(agent) = self.agents.iter().find(|agent| Some(&agent.id) == self.side_panel.shown_agent.as_ref())
+        let Some(agent) = self.agents.iter().find(|agent| Some(&agent.id) == self.right_panel.shown_agent.as_ref())
         else {
             return;
         };
@@ -828,7 +833,7 @@ impl Store {
     /// A turn that is no longer known, or a pull request the folder no longer has, isn't shown.
     fn can_show(&self, scope: &DiffScope, target: &PanelTarget) -> bool {
         match scope {
-            DiffScope::Turn { item_id } => self.side_panel.turns.iter().any(|turn| &turn.id == item_id),
+            DiffScope::Turn { item_id } => self.right_panel.turns.iter().any(|turn| &turn.id == item_id),
             DiffScope::PullRequest { number } => {
                 Some(*number) == target.pull_request
                     || self.pull_requests.shown_page(target).is_some_and(|page| page.number == *number)
@@ -847,8 +852,8 @@ impl Store {
             self.choose_diff_scope(scope);
         }
         if let Some(path) = revealing {
-            let count = self.side_panel.reveal.as_ref().map_or(0, |reveal| reveal.1) + 1;
-            self.side_panel.reveal = Some((path, count));
+            let count = self.right_panel.reveal.as_ref().map_or(0, |reveal| reveal.1) + 1;
+            self.right_panel.reveal = Some((path, count));
         }
         self.open_tab(PanelTab::Diff);
     }
@@ -867,14 +872,14 @@ impl Store {
             tabs.tabs[index] = tab.clone();
         });
         if let Some(replaced) = replaced {
-            self.side_panel.contents.remove(&replaced);
+            self.right_panel.contents.remove(&replaced);
         }
         self.open_tab(tab);
     }
 
     /// What the diff's menu and a change's tab call the turn.
     pub fn turn_name(&self, id: &str) -> String {
-        let turns = &self.side_panel.turns;
+        let turns = &self.right_panel.turns;
         let Some(turn) = turns.iter().find(|turn| turn.id == id) else { return "Earlier turn".into() };
         if Some(&turn.id) == turns.last().map(|last| &last.id) {
             return "Latest turn".into();
@@ -886,14 +891,14 @@ impl Store {
     /// is of another folder or scope.
     pub fn load_diff(&mut self, target: &PanelTarget, scope: DiffScope) {
         self.look_into(target);
-        if self.side_panel.shown_scope.as_ref() != Some(&scope) {
-            self.side_panel.shown_scope = Some(scope.clone());
-            self.side_panel.diff = Loaded::Loading;
-            self.side_panel.collapsed = Rc::default();
+        if self.right_panel.shown_scope.as_ref() != Some(&scope) {
+            self.right_panel.shown_scope = Some(scope.clone());
+            self.right_panel.diff = Loaded::Loading;
+            self.right_panel.collapsed = Rc::default();
         }
         let (project_id, thread_id) = target_request(target);
         let id = format!("{}/{scope:?}", target.key);
-        let fresh = self.side_panel.diff.value().is_none_or(|document| document.id != id);
+        let fresh = self.right_panel.diff.value().is_none_or(|document| document.id != id);
         let target = target.clone();
         let command = Command::Diff {
             server_id: target.server_id.clone(),
@@ -903,20 +908,22 @@ impl Store {
             path: None,
         };
         let read_id = id.clone();
-        self.side_panel.diff_request = self.ask_read(
+        self.right_panel.reading.insert(PanelTab::Diff);
+        self.right_panel.diff_request = self.ask_read(
             command,
             move |value| Arc::new(CodeDocument::from_diff(value, read_id)),
             move |store, result: Result<Arc<CodeDocument>, crate::store::CoreError>, _| {
-                if store.side_panel.shown.as_ref() != Some(&target)
-                    || store.side_panel.shown_scope.as_ref() != Some(&scope)
+                if store.right_panel.shown.as_ref() != Some(&target)
+                    || store.right_panel.shown_scope.as_ref() != Some(&scope)
                 {
                     return;
                 }
+                store.right_panel.reading.remove(&PanelTab::Diff);
                 match result {
                     Ok(document) => {
                         if fresh {
                             let viewed = store.viewed_paths(&scope, &target);
-                            store.side_panel.collapsed = Rc::new(
+                            store.right_panel.collapsed = Rc::new(
                                 document
                                     .files
                                     .iter()
@@ -926,9 +933,9 @@ impl Store {
                                     .collect(),
                             );
                         }
-                        store.side_panel.diff = Loaded::Ready(document);
+                        store.right_panel.diff = Loaded::Ready(document);
                     }
-                    Err(error) => store.side_panel.diff = Loaded::Failed(error.into()),
+                    Err(error) => store.right_panel.diff = Loaded::Failed(error.into()),
                 }
             },
         );
@@ -946,24 +953,24 @@ impl Store {
     /// Marks the file viewed, or not, and closes or opens it in the diff with that.
     pub fn set_viewed(&mut self, path: &str, viewed: bool, target: &PanelTarget, number: u64) {
         if viewed {
-            Rc::make_mut(&mut self.side_panel.collapsed).insert(path.to_string());
+            Rc::make_mut(&mut self.right_panel.collapsed).insert(path.to_string());
         } else {
-            Rc::make_mut(&mut self.side_panel.collapsed).remove(path);
+            Rc::make_mut(&mut self.right_panel.collapsed).remove(path);
         }
         let edit = motile_protocol::wire::PullRequestEdit::Viewed { path: path.to_string(), viewed };
         self.pull_request_edit(edit, None, target, number);
     }
 
     pub fn toggle_collapsed(&mut self, path: &str) {
-        let collapsed = Rc::make_mut(&mut self.side_panel.collapsed);
+        let collapsed = Rc::make_mut(&mut self.right_panel.collapsed);
         if !collapsed.remove(path) {
             collapsed.insert(path.to_string());
         }
     }
 
     pub fn set_all_collapsed(&mut self, closed: bool) {
-        let all = self.side_panel.diff.value().filter(|_| closed);
-        self.side_panel.collapsed = Rc::new(
+        let all = self.right_panel.diff.value().filter(|_| closed);
+        self.right_panel.collapsed = Rc::new(
             all.map(|document| document.files.iter().map(|file| file.path.clone()).collect()).unwrap_or_default(),
         );
     }
@@ -973,7 +980,7 @@ impl Store {
     /// Reads the folders that have been looked into again, the folder itself first.
     pub fn load_files(&mut self, target: &PanelTarget) {
         self.look_into(target);
-        let mut folders: Vec<String> = self.side_panel.listings.keys().cloned().collect();
+        let mut folders: Vec<String> = self.right_panel.listings.keys().cloned().collect();
         if !folders.iter().any(String::is_empty) {
             folders.push(String::new());
         }
@@ -984,14 +991,14 @@ impl Store {
     }
 
     pub fn toggle_folder(&mut self, path: &str) {
-        if self.side_panel.open_folders.remove(path) {
+        if self.right_panel.open_folders.remove(path) {
             return;
         }
-        self.side_panel.open_folders.insert(path.to_string());
-        if self.side_panel.listings.contains_key(path) {
+        self.right_panel.open_folders.insert(path.to_string());
+        if self.right_panel.listings.contains_key(path) {
             return;
         }
-        let Some(shown) = self.side_panel.shown.clone() else { return };
+        let Some(shown) = self.right_panel.shown.clone() else { return };
         self.list_files_in(path.to_string(), &shown);
     }
 
@@ -999,26 +1006,32 @@ impl Store {
         let (project_id, thread_id) = target_request(target);
         let request = Request::ListFiles { project_id, thread_id, path: folder.clone() };
         let target = target.clone();
+        if folder.is_empty() {
+            self.right_panel.reading.insert(PanelTab::Files);
+        }
         self.request_then(&target.server_id.clone(), request, move |store, result, _| {
-            if store.side_panel.shown.as_ref() != Some(&target) {
+            if store.right_panel.shown.as_ref() != Some(&target) {
                 return;
+            }
+            if folder.is_empty() {
+                store.right_panel.reading.remove(&PanelTab::Files);
             }
             match result {
                 Ok(answer) => {
                     let entries: Vec<FileEntry> = serde_json::from_value(answer["entries"].clone()).unwrap_or_default();
-                    if store.side_panel.listings.get(&folder) != Some(&entries) {
-                        store.side_panel.listings.insert(folder.clone(), entries);
+                    if store.right_panel.listings.get(&folder) != Some(&entries) {
+                        store.right_panel.listings.insert(folder.clone(), entries);
                     }
                     if folder.is_empty() {
-                        store.side_panel.files_error = None;
+                        store.right_panel.files_error = None;
                     }
                 }
                 Err(error) => {
                     // A folder that has gone closes; only the folder itself says what went wrong.
-                    store.side_panel.listings.remove(&folder);
-                    store.side_panel.open_folders.remove(&folder);
+                    store.right_panel.listings.remove(&folder);
+                    store.right_panel.open_folders.remove(&folder);
                     if folder.is_empty() {
-                        store.side_panel.files_error = Some(error.into());
+                        store.right_panel.files_error = Some(error.into());
                     }
                 }
             }
@@ -1045,10 +1058,10 @@ impl Store {
     /// Fetches the image or the video a diff shows in place of the file's lines; its picture is
     /// decoded off the main thread once it is drawn.
     pub fn load_media(&mut self, path: &str, media: &CodeMedia, target: &PanelTarget) {
-        if self.side_panel.media_files.contains_key(&media.blob) {
+        if self.right_panel.media_files.contains_key(&media.blob) {
             return;
         }
-        self.side_panel.media_files.insert(media.blob.clone(), Loaded::Loading);
+        self.right_panel.media_files.insert(media.blob.clone(), Loaded::Loading);
         let (project_id, thread_id) = target_request(target);
         let command = Command::File {
             server_id: target.server_id.clone(),
@@ -1064,13 +1077,13 @@ impl Store {
                 Some(file) => Loaded::Ready(file),
                 None => Loaded::Failed(String::new()),
             };
-            store.side_panel.media_files.insert(blob, loaded);
+            store.right_panel.media_files.insert(blob, loaded);
         });
     }
 
     /// Opens the image or the video a diff shows in the viewer, once it is on this device.
     pub fn view_diff_media(&mut self, path: &str, media: &CodeMedia) {
-        let Some(Loaded::Ready(file)) = self.side_panel.media_files.get(&media.blob) else { return };
+        let Some(Loaded::Ready(file)) = self.right_panel.media_files.get(&media.blob) else { return };
         let viewed = crate::models::ViewedMedia {
             name: crate::models::last_component(path),
             video: media.video,
@@ -1105,27 +1118,29 @@ impl Store {
         read: impl FnOnce(Value) -> FileContent + Send + 'static,
     ) {
         self.look_into(target);
-        self.side_panel.contents.entry(tab.clone()).or_insert(Loaded::Loading);
+        self.right_panel.contents.entry(tab.clone()).or_insert(Loaded::Loading);
         let target = target.clone();
         let answered = tab.clone();
+        self.right_panel.reading.insert(tab.clone());
         let request =
             self.ask_read(command, read, move |store, result: Result<FileContent, crate::store::CoreError>, _| {
-                if store.side_panel.shown.as_ref() != Some(&target) {
+                if store.right_panel.shown.as_ref() != Some(&target) {
                     return;
                 }
+                store.right_panel.reading.remove(&answered);
                 let loaded = match result {
                     Ok(content) => Loaded::Ready(content),
                     Err(error) => Loaded::Failed(error.into()),
                 };
-                store.side_panel.contents.insert(answered, loaded);
+                store.right_panel.contents.insert(answered, loaded);
             });
-        self.side_panel.file_requests.retain(|_, requested| requested != &tab);
-        self.side_panel.file_requests.insert(request, tab);
+        self.right_panel.file_requests.retain(|_, requested| requested != &tab);
+        self.right_panel.file_requests.insert(request, tab);
     }
 
     /// The highlighting of what a request answered with has arrived.
     pub fn colour_code(&mut self, request: u64, file: usize, lines: Vec<Vec<u32>>) {
-        let panel = &self.side_panel;
+        let panel = &self.right_panel;
         let document = if request == panel.diff_request {
             panel.diff.value()
         } else if let Some(tab) = panel.file_requests.get(&request) {

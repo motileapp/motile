@@ -101,7 +101,7 @@ impl Store {
         self.set_opened_draft_preview(preview);
         self.activity = Activity::default();
         self.transcript_is_empty = true;
-        self.side_panel.turns.clear();
+        self.right_panel.turns.clear();
         self.show_agents(cx);
         self.agents.clear();
         self.draft_version += 1;

@@ -11,7 +11,8 @@ use motile_protocol::wire::PullRequestState;
 use super::pull_request::{
     label, line_counts, link_field, notice_bar, panel_bar, panel_loading, panel_message, parse_number,
 };
-use super::state::{Loaded, PanelTarget};
+use super::state::{Loaded, PanelTab, PanelTarget};
+use super::{END_ROOM, ROW_MARGIN};
 use crate::models::ago;
 use crate::store::Store;
 use crate::store::pull_requests::{Row, Tone};
@@ -137,6 +138,7 @@ impl PullRequestListView {
         let this = cx.entity().downgrade();
         let chosen = self.state;
         let refresh = cx.entity().downgrade();
+        let reading = self.store.read(cx).right_panel.reading.contains(&PanelTab::PullRequests);
         div()
             .flex()
             .items_center()
@@ -157,11 +159,13 @@ impl PullRequestListView {
             )
             .child(div().max_w(px(220.)).flex_1().child(InputField::new(&self.search).icon("search").clearable(true)))
             .child(div().flex_1().min_w(px(4.)))
-            .child(ActionButton::icon("pr-list-refresh", "rotate-cw", "Read the pull requests again").on_click(
-                move |_, _, cx| {
-                    let _ = refresh.update(cx, |view, cx| view.refresh(cx));
-                },
-            ))
+            .child(
+                ActionButton::icon("pr-list-refresh", "rotate-cw", "Read the pull requests again")
+                    .pending(reading)
+                    .on_click(move |_, _, cx| {
+                        let _ = refresh.update(cx, |view, cx| view.refresh(cx));
+                    }),
+            )
     }
 
     /// The rows that match the search, only those on screen built, under the field that links one.
@@ -192,15 +196,22 @@ impl PullRequestListView {
         list(self.list.clone(), move |index, _, cx| {
             if index > 0 {
                 let Some(row) = shown.get(index - 1) else { return div().into_any_element() };
-                return div().w_full().px(px(8.)).pb(px(2.)).child(list_row(row, &place, cx)).into_any_element();
+                let last = index == shown.len();
+                return div()
+                    .w_full()
+                    .px(px(8.))
+                    .when(last, |row| row.pb(px(END_ROOM - ROW_MARGIN)))
+                    .child(list_row(row, &place, cx))
+                    .into_any_element();
             }
             let this = this.clone();
             div()
                 .w_full()
-                .pt(px(8.))
+                .pt(px(8. - ROW_MARGIN))
                 .px(px(8.))
+                .when(empty.is_some(), |header| header.pb(px(END_ROOM - ROW_MARGIN)))
                 .when(place.thread.is_some(), |header| {
-                    header.child(div().w_full().max_w(px(380.)).px(px(6.)).pb(px(8.)).child(link_field(
+                    header.child(div().w_full().max_w(px(380.)).px(px(6.)).pb(px(9.)).child(link_field(
                         "pr-list-link",
                         &linking,
                         move |number, _, cx| {
@@ -276,11 +287,11 @@ fn list_row(row: &Row, place: &RowPlace, cx: &App) -> Stateful<Div> {
         .relative()
         .w_full()
         .px(px(10.))
-        .py(px(8.))
+        .py(px(8. + ROW_MARGIN))
         .flex()
         .items_start()
         .gap(px(10.))
-        .child(highlight(group, Radius::MD, edges(0., 0., 0., 0.), false, cx))
+        .child(highlight(group, Radius::MD, edges(ROW_MARGIN, 0., ROW_MARGIN, 0.), false, cx))
         .child(
             div()
                 .relative()

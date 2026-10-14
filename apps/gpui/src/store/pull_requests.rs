@@ -17,7 +17,7 @@ use motile_protocol::wire::{
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use crate::panel::state::{Loaded, PanelTarget};
+use crate::panel::state::{Loaded, PanelTab, PanelTarget};
 use crate::store::Store;
 use crate::theme::Colors;
 use crate::transcript::prose::{self, PreparedProse};
@@ -689,11 +689,13 @@ impl Store {
         let method = self.merge_method(&project_id);
         let command = Command::PullRequest { server_id, project_id, thread_id, number, method };
         let target = target.clone();
+        self.right_panel.reading.insert(PanelTab::PullRequest);
         self.ask_read(command, read_page, move |store, result: Result<Result<Page, String>, super::CoreError>, _| {
-            let state = &mut store.pull_requests;
-            if state.shown.as_ref() != Some(&target) || state.shown_number != Some(number) {
+            if store.pull_requests.shown.as_ref() != Some(&target) || store.pull_requests.shown_number != Some(number) {
                 return;
             }
+            store.right_panel.reading.remove(&PanelTab::PullRequest);
+            let state = &mut store.pull_requests;
             match result.map_err(String::from).and_then(|read| read) {
                 Ok(page) => state.page = Loaded::Ready(page),
                 // A pull request that was read stays; only its notice says what went wrong.
@@ -866,10 +868,12 @@ impl Store {
             serde_json::from_value::<Vec<Row>>(answer["rows"].clone())
                 .map_err(|error| format!("The pull requests couldn't be read: {error}"))
         };
+        self.right_panel.reading.insert(PanelTab::PullRequests);
         self.ask_read(command, read, move |store, result, cx| {
             if store.pull_requests.shown.as_ref() != Some(&target) {
                 return;
             }
+            store.right_panel.reading.remove(&PanelTab::PullRequests);
             match result.map_err(String::from).and_then(|read| read) {
                 Ok(rows) => store.pull_requests.list = Loaded::Ready(rows),
                 Err(error) if store.pull_requests.list.value().is_none() => {

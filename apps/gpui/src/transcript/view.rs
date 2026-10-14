@@ -32,7 +32,7 @@ const NEAR_END: f32 = 80.;
 pub struct TranscriptView {
     store: Entity<Store>,
     model: Entity<Transcript>,
-    /// This transcript is the one of an agent the thread started, in the side panel.
+    /// This transcript is the one of an agent the thread started, in the right panel.
     agent: bool,
     /// The tool calls opened here, to show their input and output.
     expanded: HashSet<String>,
@@ -386,8 +386,8 @@ impl TranscriptView {
     }
 }
 
-/// The room the side panel's agent transcript leaves under its last row.
-const AGENT_BOTTOM_INSET: f32 = 64.;
+/// The room the right panel's agent transcript leaves under its last row.
+const AGENT_BOTTOM_INSET: f32 = crate::panel::END_ROOM;
 
 impl Render for TranscriptView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

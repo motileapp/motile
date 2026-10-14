@@ -1078,7 +1078,7 @@ pub fn line_counts(added: u32, removed: u32, cx: &App) -> impl IntoElement {
 }
 
 /// What a turn changed: how many files and lines, and the files under their folders. A click on
-/// a file opens what the turn changed in it in the side panel; the button opens the whole diff.
+/// a file opens what the turn changed in it in the right panel; the button opens the whole diff.
 fn changes_row(
     model: &RowModel,
     files: usize,

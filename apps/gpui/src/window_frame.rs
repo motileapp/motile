@@ -13,7 +13,7 @@ const BUTTON_WIDTH: f32 = ControlSize::Small.height() + 2. * TOOLBAR_MARGIN;
 /// How far the buttons at the start of the top bar are from the window's edge: three of them
 /// fit before the sidebar's button, where the Mac's window buttons are.
 const LEADING_EDGE: f32 = 6.;
-/// How far the buttons at the end are from the window's edge, as the side panel's are.
+/// How far the buttons at the end are from the window's edge, as the right panel's are.
 const TRAILING_EDGE: f32 = 10.;
 /// The room between the buttons at the end and the top bar's own.
 const TRAILING_GAP: f32 = 4.;
@@ -86,7 +86,7 @@ pub fn trailing_room(window: &Window, cx: &App) -> f32 {
 }
 
 /// Where the top bar's own buttons start: past the Mac's window buttons, past those the app draws
-/// at the start, or as far from the edge as the side panel's are from the other.
+/// at the start, or as far from the edge as the right panel's are from the other.
 pub fn leading_room(window: &Window, cx: &App) -> f32 {
     if cfg!(target_os = "macos") {
         return MAC_WINDOW_BUTTONS;

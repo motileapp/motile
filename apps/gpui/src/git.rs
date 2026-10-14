@@ -1,4 +1,4 @@
-//! The git button in the top bar of a thread, its menu, the commit sheet, and what git said.
+//! The git button in the top bar of a thread, its menu and the commit sheet.
 
 use std::collections::HashSet;
 
@@ -9,13 +9,12 @@ use gpui_kit::*;
 use motile_protocol::wire::{Change, ChangedFile, GitAction};
 
 use crate::models::Project;
-use crate::store::{GitNotice, PendingGit, Store, stage_label};
-use crate::theme::{ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::store::{PendingGit, Store, stage_label};
+use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
 use crate::ui::logos::{pull_request_color, pull_request_symbol};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
 use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, modal};
-use crate::ui::rich_text::RichText;
-use crate::ui::{ActionButton, FadingScroll, PickMark, TextArea, Variant, icons, text_area_state};
+use crate::ui::{ActionButton, PickMark, TextArea, Variant, text_area_state};
 
 /// What leaves the room under the button that the composer's menus leave over theirs.
 const MENU_GAP: f32 = 16.;
@@ -194,147 +193,6 @@ pub fn confirm_alert(store: &Entity<Store>, pending: &PendingGit, cx: &App) -> M
         },
         cx,
     )
-}
-
-const NOTICE_RADIUS: f32 = Radius::LG;
-const NOTICE_PADDING: f32 = 14.;
-const TITLE_HEIGHT: f32 = 16.;
-const CLOSE_SIZE: f32 = ControlSize::Regular.height();
-/// Centres the close button on a notice of one line, as far from its right as from its top and
-/// bottom.
-const CLOSE_MARGIN: f32 = (NOTICE_PADDING * 2. + TITLE_HEIGHT - CLOSE_SIZE) / 2.;
-const TRAILING: f32 = CLOSE_MARGIN + CLOSE_SIZE + 4.;
-/// How many lines of what a failed action printed show before they scroll.
-const OUTPUT_LINES: f32 = 8.;
-const OUTPUT_LINE_HEIGHT: f32 = 16.;
-const OUTPUT_PADDING: f32 = 8.;
-
-/// What the last git action did, or what git refused, under the button. What follows is one click
-/// away: the push after a commit, the pull request after a push.
-pub fn git_notice(store: &Entity<Store>, notice: &GitNotice, cx: &App) -> impl IntoElement {
-    let c = colors(cx);
-    let close = store.clone();
-    let next = store.clone();
-    let view = store.clone();
-    let url = notice.url.clone();
-    let next_label = notice.next_label();
-    let description = notice.description.clone().map(|description| {
-        let text = RichText::new(SharedString::from(format!("notice-{}", notice.serial)), description);
-        if !notice.failed {
-            return div().text_size(px(12.5)).text_color(c.muted_foreground).line_clamp(2).child(text);
-        }
-        // The end is where a hook says what it found.
-        let output = FadingScroll::new("notice-output", OUTPUT_LINES * OUTPUT_LINE_HEIGHT + 2. * OUTPUT_PADDING)
-            .padding(OUTPUT_PADDING)
-            .starts_at_end(true)
-            .fill(Surface::Popover.layer(Layer::Box, c))
-            .child(
-                div()
-                    .text_size(px(11.5))
-                    .line_height(px(OUTPUT_LINE_HEIGHT))
-                    .font_family(crate::theme::MONO_FONT)
-                    .text_color(c.muted_foreground)
-                    .child(text),
-            );
-        div()
-            .self_stretch()
-            .mt(px(4.))
-            .mr(px(-(TRAILING - NOTICE_PADDING)))
-            .rounded(px(Radius::MD))
-            .overflow_hidden()
-            .bg(Surface::Popover.layer(Layer::Box, c))
-            .border_1()
-            .border_color(Surface::Popover.border(c))
-            .child(output)
-    });
-    div()
-        .relative()
-        .max_w(px(320.))
-        .py(px(NOTICE_PADDING - 1.))
-        .pl(px(NOTICE_PADDING - 1.))
-        .pr(px(TRAILING - 1.))
-        .bg(c.popover)
-        .rounded(px(NOTICE_RADIUS))
-        .border_1()
-        .border_color(c.border_popover)
-        .shadow(c.shadow(ShadowSize::Md, Opacity::Shadow))
-        .flex()
-        .items_start()
-        .gap(px(10.))
-        .child(
-            div().h(px(TITLE_HEIGHT)).flex_shrink_0().flex().items_center().child(
-                icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, 15.)
-                    .text_color(if notice.failed { c.destructive } else { c.success }),
-            ),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .items_start()
-                .gap(px(4.))
-                .child(
-                    div()
-                        .min_h(px(TITLE_HEIGHT))
-                        .flex()
-                        .items_center()
-                        .text_size(px(13.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.foreground)
-                        .child(notice.title.clone()),
-                )
-                .children(description)
-                .when(url.is_some() || next_label.is_some(), |column| {
-                    column.child(
-                        div()
-                            .pt(px(6.))
-                            .flex()
-                            .gap(px(8.))
-                            .when_some(url, |row, url| {
-                                let variant = if next_label.is_none() { Variant::Primary } else { Variant::Secondary };
-                                row.child(
-                                    ActionButton::new("notice-pr", "View PR")
-                                        .variant(variant)
-                                        .surface(Surface::Popover)
-                                        .on_click(move |_, _, cx| {
-                                            view.update(cx, |store, cx| {
-                                                store.show_pull_request(&url, cx);
-                                                cx.notify();
-                                            })
-                                        }),
-                                )
-                            })
-                            .when_some(next_label, |row, label| {
-                                row.child(
-                                    ActionButton::new("notice-next", label)
-                                        .primary()
-                                        .surface(Surface::Popover)
-                                        .on_click(move |_, _, cx| {
-                                            next.update(cx, |store, cx| {
-                                                store.run_next_git(cx);
-                                                cx.notify();
-                                            })
-                                        }),
-                                )
-                            }),
-                    )
-                }),
-        )
-        .child(
-            div().absolute().top(px(CLOSE_MARGIN - 1.)).right(px(CLOSE_MARGIN - 1.)).child(
-                ActionButton::icon("notice-close", "x", "Close")
-                    .symbol_size(ControlSize::Regular.small_symbol())
-                    .surface(Surface::Popover)
-                    .on_click(move |_, _, cx| {
-                        close.update(cx, |store, cx| {
-                            store.dismiss_git_notice();
-                            cx.notify();
-                        })
-                    }),
-            ),
-        )
 }
 
 const ROW_HEIGHT: f32 = 24.;

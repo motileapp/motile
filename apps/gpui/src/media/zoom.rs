@@ -1,7 +1,7 @@
 //! An image that fits its room until it is zoomed, as the Mac's `ZoomableImage` does: a double
 //! click, a pinch, ⌘ and a mouse wheel, or ⌘+, ⌘−, ⌘0 for its real size and ⌘9 to fit again.
 //! A double click and the keys zoom smoothly. Zoomed, it is moved by scrolling or by dragging
-//! anywhere. The viewer shows its images with it, and the side panel an image file.
+//! anywhere. The viewer shows its images with it, and the right panel an image file.
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};

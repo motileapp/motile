@@ -34,7 +34,7 @@ impl Store {
                 context.push("turnRunning");
             }
         }
-        if self.side_panel.is_open {
+        if self.right_panel.is_open {
             context.push("rightPanelOpen");
         }
         if self.settings.section.is_some() {
@@ -212,7 +212,7 @@ impl Store {
                 self.show_branches(&project);
             }
             "rightPanel.toggle" => {
-                let open = !self.side_panel.is_open;
+                let open = !self.right_panel.is_open;
                 self.set_panel_open(open);
             }
             "rightPanel.toggleMaximized" => {
@@ -228,7 +228,7 @@ impl Store {
                 self.open_blank_tab();
             }
             "rightPanel.nextTab" | "rightPanel.previousTab" => {
-                if !self.side_panel.is_open || self.panel_tabs().tabs.len() < 2 {
+                if !self.right_panel.is_open || self.panel_tabs().tabs.len() < 2 {
                     return false;
                 }
                 self.activate_tab_offset(if command == "rightPanel.nextTab" { 1 } else { -1 });
@@ -256,7 +256,7 @@ impl Store {
                 self.open_tab(if all { PanelTab::PullRequests } else { PanelTab::PullRequest });
             }
             "rightPanel.linear" => {
-                if self.panel_unavailable().is_some() || self.linear_unavailable().is_some() {
+                if self.panel_unavailable().is_some() || !self.linear_connected() {
                     return false;
                 }
                 self.open_tab(PanelTab::Linear);
@@ -302,9 +302,9 @@ impl Store {
         self.show_thread_at(index, cx)
     }
 
-    /// The pull request the side panel shows, while its tab is the one in front.
+    /// The pull request the right panel shows, while its tab is the one in front.
     fn shown_pull_request(&self) -> Option<&super::pull_requests::Page> {
-        if !self.side_panel.is_open {
+        if !self.right_panel.is_open {
             return None;
         }
         match self.panel_tabs().active {
@@ -320,7 +320,7 @@ impl Store {
     }
 
     /// What Esc does when the focused view claims nothing: leaves a route, restores the
-    /// maximized side panel, or hides a side panel that only has its blank tab. Nothing while
+    /// maximized right panel, or hides a right panel that only has its blank tab. Nothing while
     /// the command panel, the viewer or the branches have it. Whether it did anything.
     pub fn escape(&mut self) -> bool {
         if self.panel.is_some() || self.viewing.is_some() || self.shows_branches {
@@ -330,7 +330,7 @@ impl Store {
             self.close_route();
         } else if self.panel_maximized() {
             self.toggle_panel_maximized();
-        } else if self.side_panel.is_open && self.panel_tabs().is_blank() {
+        } else if self.right_panel.is_open && self.panel_tabs().is_blank() {
             self.set_panel_open(false);
         } else {
             return false;

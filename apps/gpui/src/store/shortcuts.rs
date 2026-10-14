@@ -518,6 +518,9 @@ fn keystroke_text(shortcut: &Shortcut) -> Option<String> {
 mod tests {
     use super::*;
 
+    /// The key `mod` stands for: ⌘ on the Mac, Ctrl elsewhere.
+    const PRIMARY: &str = if cfg!(target_os = "macos") { "cmd" } else { "ctrl" };
+
     fn rule(command: &str, key: &str, mods: &str, when: Option<Condition>, caps: &[&str]) -> ActiveRule {
         ActiveRule {
             command: command.into(),
@@ -546,16 +549,17 @@ mod tests {
     }
 
     fn key(code: u16, typed: &str, shift: bool) -> KeyPress {
-        KeyPress::of_key(TypedKey { code, typed: Some(typed) }, true, false, false, shift).unwrap()
+        let mac = cfg!(target_os = "macos");
+        KeyPress::of_key(TypedKey { code, typed: Some(typed) }, mac, !mac, false, shift).unwrap()
     }
 
     #[test]
     fn digits_and_signs_go_by_their_place_and_letters_by_the_layout() {
         let keys = shortcuts(vec![
-            rule("thread.jump.7", "7", "cmd", None, &["⌘", "7"]),
-            rule("thread.previous", "[", "cmd-shift", None, &["⇧", "⌘", "["]),
-            rule("chat.new", "n", "cmd", None, &["⌘", "N"]),
-            rule("sidebar.toggle", "z", "cmd", None, &["⌘", "Z"]),
+            rule("thread.jump.7", "7", PRIMARY, None, &["⌘", "7"]),
+            rule("thread.previous", "[", &format!("{PRIMARY}-shift"), None, &["⇧", "⌘", "["]),
+            rule("chat.new", "n", PRIMARY, None, &["⌘", "N"]),
+            rule("sidebar.toggle", "z", PRIMARY, None, &["⌘", "Z"]),
         ]);
         // The 7 key on a Czech layout, AZERTY's, and German's [ key with Shift.
         assert_eq!(keys.command_for(&key(26, "ý", false), &[]), Some("thread.jump.7"));
@@ -596,9 +600,10 @@ mod tests {
 
     #[test]
     fn a_recorded_press_is_written_as_the_file_writes_it() {
-        assert_eq!(press("cmd-shift-k").rule(), "mod+shift+k");
-        assert_eq!(press("ctrl-alt-up").rule(), "ctrl+alt+arrowup");
-        let typed = Keystroke { modifiers: Modifiers::command(), key: "{".into(), key_char: None };
+        assert_eq!(press(&format!("{PRIMARY}-shift-k")).rule(), "mod+shift+k");
+        let other = if cfg!(target_os = "macos") { "ctrl" } else { "cmd" };
+        assert_eq!(press(&format!("{other}-alt-up")).rule(), format!("{other}+alt+arrowup"));
+        let typed = Keystroke { modifiers: Modifiers::secondary_key(), key: "{".into(), key_char: None };
         assert_eq!(KeyPress::of(&typed).unwrap().rule(), "mod+shift+[");
         assert_eq!(press("f5").rule(), "f5");
     }
@@ -617,15 +622,16 @@ mod tests {
     #[test]
     fn labels_and_menus_skip_rules_a_later_one_takes() {
         let keys = shortcuts(vec![
-            rule("chat.new", "n", "cmd", None, &["⌘", "N"]),
-            rule("chat.new", "o", "cmd-shift", None, &["⇧", "⌘", "O"]),
-            rule("other", "n", "cmd", None, &["⌘", "N"]),
+            rule("chat.new", "n", PRIMARY, None, &["⌘", "N"]),
+            rule("chat.new", "o", &format!("{PRIMARY}-shift"), None, &["⇧", "⌘", "O"]),
+            rule("other", "n", PRIMARY, None, &["⌘", "N"]),
             rule("usage.cost", "c", "", Some(name("usagePageOpen")), &["C"]),
         ]);
         assert_eq!(keys.label("chat.new").as_deref(), Some("⇧⌘O"));
         assert_eq!(keys.help("New thread", "chat.new"), "New thread (⇧⌘O)");
         assert_eq!(keys.help("Nothing", "missing"), "Nothing");
-        assert_eq!(keys.menu_keystroke("chat.new").as_deref(), Some("shift-secondary-o"));
+        let menu = if cfg!(target_os = "macos") { "shift-secondary-o" } else { "ctrl-shift-o" };
+        assert_eq!(keys.menu_keystroke("chat.new").as_deref(), Some(menu));
         assert_eq!(keys.menu_keystroke("usage.cost"), None);
     }
 

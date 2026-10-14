@@ -206,6 +206,12 @@ impl Store {
         (server.protocol_version < 12).then(|| format!("Update {} to connect it to Linear.", server.name))
     }
 
+    /// The panel's server is connected to a Linear workspace.
+    pub fn linear_connected(&self) -> bool {
+        let Some(target) = self.panel_target().filter(|_| self.linear_unavailable().is_none()) else { return false };
+        !self.linear.connected(&target.server_id).is_empty()
+    }
+
     /// What the tab lists for the project: what was chosen there last, in a workspace that is
     /// still connected.
     pub fn linear_choice(&self, target: &PanelTarget) -> LinearChoice {

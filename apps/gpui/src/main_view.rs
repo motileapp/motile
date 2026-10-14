@@ -6,7 +6,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::panel::state::WIDTHS as PANEL_WIDTHS;
-use crate::panel::view::SidePanelView;
+use crate::panel::view::RightPanelView;
 use crate::sidebar::Sidebar;
 use crate::store::Store;
 use crate::theme::{self, colors};
@@ -53,7 +53,7 @@ pub struct MainView {
     store: Entity<Store>,
     sidebar: Entity<Sidebar>,
     thread: Entity<ThreadPane>,
-    panel: Entity<SidePanelView>,
+    panel: Entity<RightPanelView>,
     /// What the agents spent, in place of the thread and the right panel while it is open.
     usage: Option<Entity<UsageRoute>>,
     resizing: Option<Resizing>,
@@ -71,7 +71,7 @@ impl MainView {
     pub fn new(store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let sidebar = cx.new(|cx| Sidebar::new(store.clone(), window, cx));
         let thread = cx.new(|cx| ThreadPane::new(store.clone(), window, cx));
-        let panel = cx.new(|cx| SidePanelView::new(store.clone(), window, cx));
+        let panel = cx.new(|cx| RightPanelView::new(store.clone(), window, cx));
         let subscriptions = vec![cx.observe(&store, |_, _, cx| cx.notify())];
         Self {
             store,
@@ -100,7 +100,7 @@ impl MainView {
     /// Drawn over the top bar's end: the right panel's buttons.
     fn panel_buttons(&self, cx: &mut Context<Self>) -> Div {
         let store = self.store.read(cx);
-        let open = store.side_panel.is_open;
+        let open = store.right_panel.is_open;
         let maximized = store.panel_maximized();
         let can_maximize = store.can_maximize_panel();
         let maximize_help = if maximized {
@@ -133,7 +133,7 @@ impl MainView {
             })
             .child(toolbar_button("toggle-panel", "panel-right", side_help).on_click(move |_, _, cx| {
                 side.update(cx, |store, cx| {
-                    let open = !store.side_panel.is_open;
+                    let open = !store.right_panel.is_open;
                     store.set_panel_open(open);
                     cx.notify();
                 })
@@ -154,7 +154,7 @@ impl MainView {
     }
 
     /// The line between the thread and what is beside it. Dragging it makes the sidebar or the
-    /// side panel wider or narrower. With `grows_left` the pane is on the right of the line, so
+    /// right panel wider or narrower. With `grows_left` the pane is on the right of the line, so
     /// it grows when the line goes left.
     fn pane_divider(
         &self,
@@ -192,7 +192,7 @@ impl Render for MainView {
         let store = self.store.read(cx);
         let hidden = store.prefs.bool("sidebar.hidden");
         let panel_width = store.prefs.f32_or("panel.width", 460.);
-        let panel_open = store.side_panel.is_open;
+        let panel_open = store.right_panel.is_open;
         let maximized = store.panel_maximized();
         let trailing_room = crate::window_frame::trailing_room(window, cx);
         let leading_room = crate::window_frame::leading_room(window, cx);

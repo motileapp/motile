@@ -8,7 +8,8 @@ use gpui_kit::*;
 use motile_core::api::Command;
 use motile_protocol::wire::{GitHubState, Repo, Request};
 
-use super::{AddingProject, PanelPage, Store};
+use super::{AddingProject, Notice, PanelPage, Selection, Store};
+use crate::bridge::CoreError;
 use crate::models::{FolderListing, Project, Server};
 
 /// Which servers are listing their GitHub repositories now, and when each last did.
@@ -62,17 +63,22 @@ impl Store {
         }
     }
 
-    /// Adds the folder as a project. It is the one the next thread starts in, once the server
-    /// has told about it.
-    pub fn add_project_at(&mut self, server_id: &str, path: String) {
+    /// Adds the folder as a project and opens a thread in it. A folder that is a project already
+    /// is opened where it was left.
+    pub fn add_project_at(&mut self, server_id: &str, path: String, cx: &mut Context<Self>) {
+        let trimmed = if path.len() > 1 && path.ends_with('/') { &path[..path.len() - 1] } else { &path[..] };
+        let trimmed = trimmed.to_string();
+        let added = self.projects.iter().find(|project| project.server_id == server_id && project.path == trimmed);
+        if let Some(project) = added.cloned() {
+            return self.go_to(&project, cx);
+        }
+        let name = trimmed.rsplit('/').find(|part| !part.is_empty()).unwrap_or(&trimmed).to_string();
         let server = server_id.to_string();
-        self.request_then(server_id, Request::AddProject { path: path.clone() }, move |store, result, cx| {
+        self.request_then(server_id, Request::AddProject { path }, move |store, result, cx| {
             if let Err(error) = result {
-                store.fail(error);
-                return;
+                return store.show_notice(Notice::failure(format!("Couldn't add {name}"), error.into()), cx);
             }
-            let trimmed = if path.len() > 1 && path.ends_with('/') { &path[..path.len() - 1] } else { &path[..] };
-            store.awaited_folder = Some((server, trimmed.to_string()));
+            store.awaited_folder = Some((server, trimmed));
             store.pick_awaited_folder(cx);
         });
     }
@@ -80,9 +86,27 @@ impl Store {
     fn pick_awaited_folder(&mut self, cx: &mut Context<Self>) {
         let Some((server_id, path)) = &self.awaited_folder else { return };
         let found = self.projects.iter().find(|project| &project.server_id == server_id && &project.path == path);
-        let Some(id) = found.map(|project| project.id.clone()) else { return };
+        let Some(project) = found.cloned() else { return };
         self.awaited_folder = None;
-        self.set_new_thread_project(Some(id), cx);
+        self.open_thread_in(&project, cx);
+    }
+
+    /// Opens a thread in the project: the open draft, moved into it, or a new one.
+    pub(super) fn open_thread_in(&mut self, project: &Project, cx: &mut Context<Self>) {
+        self.close_settings();
+        let movable = self.selected_draft().is_some_and(|draft| !self.is_sending(&draft.id));
+        if !movable {
+            return self.start_new_thread(Some(project.id.clone()), cx);
+        }
+        self.set_new_thread_project(Some(project.id.clone()), cx);
+    }
+
+    /// Goes to the project's latest thread that is still going, or opens a new one in it.
+    fn go_to(&mut self, project: &Project, cx: &mut Context<Self>) {
+        let latest = self.active_threads().iter().find(|thread| thread.project_id == project.id);
+        let Some(id) = latest.map(|thread| thread.id.clone()) else { return self.open_thread_in(project, cx) };
+        self.close_settings();
+        self.select(Selection::Thread(id), cx);
     }
 
     /// Opens the panel on the ways to add a project, after the servers when there is a choice.
@@ -166,44 +190,72 @@ impl Store {
         });
     }
 
+    /// Makes the project and opens a thread in it. The panel waits, so that a name that is taken
+    /// can be changed.
     pub fn new_project_named(&mut self, name: String, server_id: &str) {
-        self.add(Request::NewProject { name: name.clone() }, name, server_id);
-    }
-
-    pub fn clone_repo(&mut self, repo: String, server_id: &str) {
-        self.add(Request::CloneRepo { repo: repo.clone() }, repo, server_id);
-    }
-
-    fn add(&mut self, request: Request, name: String, server_id: &str) {
         if self.adding_project.is_some() {
             return;
         }
-        self.adding_project = Some(AddingProject { server_id: server_id.to_string(), name });
+        self.adding_project = Some(AddingProject { server_id: server_id.to_string(), name: name.clone() });
         self.panel_notice = None;
-        self.request_then(server_id, request, |store, result, cx| {
+        let arrived = |store: &mut Store, project: Project, cx: &mut Context<Store>| {
             store.adding_project = None;
-            match result {
-                Ok(answer) => {
-                    store.projects_added += 1;
-                    store.awaited_project_id = answer["project_id"].as_str().map(String::from);
-                    store.open_awaited_project(cx);
-                }
-                Err(error) if store.panel.is_some() => store.panel_notice = Some(error.into()),
-                Err(error) => store.fail(error),
+            store.open_thread_in(&project, cx);
+        };
+        self.add(Request::NewProject { name }, server_id, arrived, |store, error, _| {
+            store.adding_project = None;
+            if store.panel.is_none() {
+                return store.fail(error);
             }
+            store.panel_notice = Some(error.into());
         });
     }
 
-    /// Starts a thread in the project that was just made, once the server has told about it.
-    fn open_awaited_project(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.project(self.awaited_project_id.as_deref()).map(|project| project.id.clone()) else {
-            return;
+    /// Clones the repository while the notice says so, and opens a thread in it once it is there.
+    /// Someone who has gone elsewhere meanwhile is offered the thread instead.
+    pub fn clone_repo(&mut self, repo: String, server_id: &str, cx: &mut Context<Self>) {
+        let into = self.server(Some(server_id)).map(|server| format!(" on {}", server.name)).unwrap_or_default();
+        let cloning = Notice::new(format!("Cloning {repo}"), Some(format!("Into ~/projects{into}")));
+        self.show_notice(Notice { pending: true, ..cloning }, cx);
+        let from = self.selection.clone();
+        let failed_repo = repo.clone();
+        let arrived = move |store: &mut Store, project: Project, cx: &mut Context<Store>| {
+            let cloned = Notice::new(format!("Cloned {repo}"), Some(project.path.clone()));
+            if store.selection != from {
+                return store.show_notice(Notice { project_id: Some(project.id.clone()), ..cloned }, cx);
+            }
+            store.show_notice(cloned, cx);
+            store.open_thread_in(&project, cx);
         };
-        self.awaited_project_id = None;
-        if self.selected_draft().is_some() {
-            return self.set_new_thread_project(Some(id), cx);
-        }
-        self.start_new_thread(Some(id), cx);
+        self.add(Request::CloneRepo { repo: failed_repo.clone() }, server_id, arrived, move |store, error, cx| {
+            store.show_notice(Notice::failure(format!("Couldn't clone {failed_repo}"), error.into()), cx);
+        });
+    }
+
+    fn add(
+        &mut self,
+        request: Request,
+        server_id: &str,
+        arrived: impl FnOnce(&mut Store, Project, &mut Context<Store>) + 'static,
+        failed: impl FnOnce(&mut Store, CoreError, &mut Context<Store>) + 'static,
+    ) {
+        self.request_then(server_id, request, |store, result, cx| match result {
+            Ok(answer) => {
+                store.projects_added += 1;
+                let id = answer["project_id"].as_str().unwrap_or_default().to_string();
+                store.awaited_project = Some((id, Box::new(arrived)));
+                store.open_awaited_project(cx);
+            }
+            Err(error) => failed(store, error, cx),
+        });
+    }
+
+    /// Does what was planned for the project that was just made, once the server has told about it.
+    fn open_awaited_project(&mut self, cx: &mut Context<Self>) {
+        let Some((id, _)) = &self.awaited_project else { return };
+        let Some(project) = self.project(Some(id)).cloned() else { return };
+        let Some((_, arrived)) = self.awaited_project.take() else { return };
+        arrived(self, project, cx);
     }
 
     /// Picks the model that writes titles, commit messages and pull requests on the server.

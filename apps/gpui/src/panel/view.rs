@@ -47,7 +47,7 @@ struct Trigger {
 /// A tab of a thread or a draft, by what its tabs are kept under.
 type TabOf = (String, PanelTab);
 
-pub struct SidePanelView {
+pub struct RightPanelView {
     store: Entity<Store>,
     /// The view of the open pull request or Linear tab, which starts afresh when another tab or
     /// another thread's is shown, as the Mac's does.
@@ -131,7 +131,7 @@ fn light(group: impl Into<SharedString>, radius: f32, inset: Edges<f32>, selecte
     Highlight::new().radius(radius).inset(inset).selected(selected).render(group, cx)
 }
 
-impl SidePanelView {
+impl RightPanelView {
     pub fn new(store: Entity<Store>, _window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.observe(&store, |this, _, cx| {
             this.pause_hidden_videos(cx);
@@ -397,9 +397,17 @@ impl SidePanelView {
             .child(crate::ui::divider(cx))
     }
 
-    fn refresh_button(id: &'static str, help: &'static str, cx: &mut Context<Self>) -> ActionButton {
+    /// The button that reads the tab again, which turns while `reading` is read.
+    fn refresh_button(
+        &self,
+        id: &'static str,
+        help: &'static str,
+        reading: &PanelTab,
+        cx: &mut Context<Self>,
+    ) -> ActionButton {
         let this = cx.entity().downgrade();
-        ActionButton::icon(id, "rotate-cw", help).on_click(move |_, _, cx| {
+        let pending = self.store.read(cx).right_panel.reading.contains(reading);
+        ActionButton::icon(id, "rotate-cw", help).pending(pending).on_click(move |_, _, cx| {
             let _ = this.update(cx, |this, cx| this.refresh(cx));
         })
     }
@@ -418,16 +426,16 @@ impl SidePanelView {
         let pull_requests_unavailable = store.pull_requests_unavailable();
         let extended = store.pull_requests_extended();
         let linear_unavailable = store.linear_unavailable();
-        let linear_title =
-            if store.linear.connected(&target.server_id).is_empty() { "Connect Linear" } else { "Linear" };
+        let linear_connected = store.linear_connected();
+        let linear_title = if linear_connected { "Linear" } else { "Connect Linear" };
         let row = |id: &'static str,
                    symbol: &'static str,
                    title: &'static str,
-                   command: &'static str,
+                   command: Option<&'static str>,
                    reason: Option<String>,
                    open: Box<dyn Fn(&mut Store)>| {
             let enabled = reason.is_none();
-            let keys = store.shortcuts.caps(command);
+            let keys = command.and_then(|command| store.shortcuts.caps(command));
             let group: SharedString = format!("launch-{id}").into();
             div()
                 .id(id)
@@ -474,7 +482,7 @@ impl SidePanelView {
                         "launch-files",
                         "folder",
                         "Files",
-                        "rightPanel.files",
+                        Some("rightPanel.files"),
                         None,
                         Box::new(|store| store.open_tab(PanelTab::Files)),
                     ))
@@ -482,7 +490,7 @@ impl SidePanelView {
                         "launch-diff",
                         "diff",
                         "Diff",
-                        "rightPanel.diff",
+                        Some("rightPanel.diff"),
                         (!target.repository).then(|| "Available in git repositories.".to_string()),
                         Box::new(|store| store.show_diff(None, None)),
                     ))
@@ -490,7 +498,7 @@ impl SidePanelView {
                         "launch-agents",
                         "users",
                         "Agents",
-                        "rightPanel.agents",
+                        Some("rightPanel.agents"),
                         None,
                         Box::new(|store| store.open_tab(PanelTab::Agents)),
                     ))
@@ -498,7 +506,7 @@ impl SidePanelView {
                         "launch-pull-request",
                         "git-pull-request",
                         "Pull Request",
-                        "rightPanel.pullRequest",
+                        Some("rightPanel.pullRequest"),
                         pull_requests_unavailable.clone(),
                         Box::new(|store| store.open_tab(PanelTab::PullRequest)),
                     ))
@@ -507,7 +515,7 @@ impl SidePanelView {
                             "launch-pull-requests",
                             "list",
                             "All Pull Requests",
-                            "rightPanel.pullRequests",
+                            Some("rightPanel.pullRequests"),
                             pull_requests_unavailable,
                             Box::new(|store| store.open_tab(PanelTab::PullRequests)),
                         ))
@@ -516,7 +524,7 @@ impl SidePanelView {
                         "launch-linear",
                         "linear",
                         linear_title,
-                        "rightPanel.linear",
+                        linear_connected.then_some("rightPanel.linear"),
                         linear_unavailable,
                         Box::new(|store| store.open_tab(PanelTab::Linear)),
                     )),
@@ -604,9 +612,9 @@ impl SidePanelView {
             );
         }
         let store = self.store.read(cx);
-        let document = store.side_panel.diff.value().cloned();
+        let document = store.right_panel.diff.value().cloned();
         let all_closed =
-            document.as_ref().is_some_and(|document| store.side_panel.collapsed.len() >= document.files.len());
+            document.as_ref().is_some_and(|document| store.right_panel.collapsed.len() >= document.files.len());
         let counts = document.as_ref().filter(|document| !document.files.is_empty()).map(|document| {
             let (text, runs) = counts_text(document.added(), document.removed(), colors(cx));
             div().pl(px(4.)).text_size(px(11.5)).child(StyledText::new(text).with_runs(runs))
@@ -654,7 +662,7 @@ impl SidePanelView {
                         .on_click(act(&self.store, move |store, _| store.set_all_collapsed(!all_closed))),
                     )
                 })
-                .child(Self::refresh_button("refresh-diff", "Read the changes again", cx)),
+                .child(self.refresh_button("refresh-diff", "Read the changes again", &PanelTab::Diff, cx)),
             cx,
         );
         let body: AnyElement = if !target.repository {
@@ -662,7 +670,7 @@ impl SidePanelView {
         } else if target.awaits_worktree {
             Self::message("Nothing has changed.", false, cx)
         } else {
-            match &self.store.read(cx).side_panel.diff {
+            match &self.store.read(cx).right_panel.diff {
                 Loaded::Loading => Self::loading(cx),
                 Loaded::Failed(message) => Self::message(message.clone(), true, cx),
                 Loaded::Ready(document) if document.files.is_empty() => Self::message(
@@ -688,7 +696,7 @@ impl SidePanelView {
                         .comment(act_line(&self.store, |store, line| store.comment_on_line(Some(line.into()))))
                         .media(load_media(&self.store, target), open_media(&self.store));
                     let code = self.diff.update(cx, |view, cx| {
-                        let panel = &store.read(cx).side_panel;
+                        let panel = &store.read(cx).right_panel;
                         let (collapsed, reveal, media) =
                             (panel.collapsed.clone(), panel.reveal.clone(), panel.media_files.clone());
                         view.element(
@@ -753,7 +761,7 @@ impl SidePanelView {
         let first_commit = commits.first().map(|(sha, _)| DiffScope::Commit { sha: sha.clone() });
         let lists_commits = commits.len() > 1 || first_commit.as_ref() == Some(scope);
         let turns: Vec<(DiffScope, String)> = store
-            .side_panel
+            .right_panel
             .turns
             .iter()
             .rev()
@@ -821,23 +829,24 @@ impl SidePanelView {
                         .child(target.name.clone()),
                 )
                 .child(div().flex_1().min_w(px(4.)))
-                .child(Self::refresh_button("refresh-files", "Read the folder again", cx)),
+                .child(self.refresh_button("refresh-files", "Read the folder again", &PanelTab::Files, cx)),
             cx,
         );
         let store = self.store.read(cx);
-        let body: AnyElement = if let Some(error) = &store.side_panel.files_error {
+        let body: AnyElement = if let Some(error) = &store.right_panel.files_error {
             Self::message(error.clone(), true, cx)
-        } else if let Some(top) = store.side_panel.listings.get("") {
+        } else if let Some(top) = store.right_panel.listings.get("") {
             if top.is_empty() {
                 Self::message("This folder is empty.", false, cx)
             } else {
-                let nodes = std::rc::Rc::new(store.side_panel.nodes());
+                let nodes = std::rc::Rc::new(store.right_panel.nodes());
                 let store = self.store.clone();
                 uniform_list("file-tree", nodes.len(), move |range, _, cx| {
                     range.map(|index| file_row(&nodes[index], &store, cx)).collect::<Vec<_>>()
                 })
                 .size_full()
-                .py(px(6.))
+                .pt(px(6.))
+                .pb(px(super::END_ROOM))
                 .into_any_element()
             }
         } else {
@@ -885,7 +894,7 @@ impl SidePanelView {
     #[cfg(target_os = "macos")]
     fn pause_hidden_videos(&mut self, cx: &mut Context<Self>) {
         let store = self.store.read(cx);
-        let shown = store.side_panel.is_open.then(|| store.panel_tabs().active).flatten();
+        let shown = store.right_panel.is_open.then(|| store.panel_tabs().active).flatten();
         let tabs = store.panel_tabs().tabs;
         self.players.retain(|tab, _| tabs.contains(tab));
         self.zooms.retain(|tab, _| tabs.contains(tab));
@@ -980,10 +989,10 @@ impl SidePanelView {
                         },
                     ),
                 )
-                .child(Self::refresh_button("refresh-file", "Read the file again", cx)),
+                .child(self.refresh_button("refresh-file", "Read the file again", &tab, cx)),
             cx,
         );
-        let content = self.store.read(cx).side_panel.contents.get(&tab).cloned();
+        let content = self.store.read(cx).right_panel.contents.get(&tab).cloned();
         let body: AnyElement = match content {
             None | Some(Loaded::Loading) => Self::loading(cx),
             Some(Loaded::Failed(message)) => Self::message(message, true, cx),
@@ -1075,7 +1084,7 @@ impl SidePanelView {
                 ),
             cx,
         );
-        let content = store.side_panel.contents.get(&tab).cloned();
+        let content = store.right_panel.contents.get(&tab).cloned();
         let body: AnyElement = match content {
             None | Some(Loaded::Loading) => Self::loading(cx),
             Some(Loaded::Failed(message)) => Self::message(message, true, cx),
@@ -1094,7 +1103,7 @@ impl SidePanelView {
                     })
                     .open(act_path(&self.store, |store, path| store.open_tab(PanelTab::File(path.to_string()))))
                     .media(load_media(&self.store, target), open_media(&self.store));
-                let media = self.store.read(cx).side_panel.media_files.clone();
+                let media = self.store.read(cx).right_panel.media_files.clone();
                 let code = view.update(cx, |view, cx| {
                     view.element(
                         CodeSnapshot {
@@ -1133,7 +1142,7 @@ impl SidePanelView {
         let store = self.store.read(cx);
         let agents = store.agents.clone();
         if let Some(agent) =
-            agents.iter().find(|agent| Some(&agent.id) == store.side_panel.shown_agent.as_ref()).cloned()
+            agents.iter().find(|agent| Some(&agent.id) == store.right_panel.shown_agent.as_ref()).cloned()
         {
             let bar = Self::bar(
                 div()
@@ -1172,7 +1181,7 @@ impl SidePanelView {
                     .text_size(px(12.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.muted_foreground)
-                    .child(summary(&agents)),
+                    .child(crate::ui::control::dotted(summary(&agents), c)),
             ),
             cx,
         );
@@ -1194,11 +1203,12 @@ impl SidePanelView {
         let (agents, store) = (Rc::new(agents), self.store.clone());
         let list = list(self.agents.clone(), move |index, _, cx| {
             let Some(agent) = agents.get(index) else { return div().into_any_element() };
-            div().py(px(1.)).child(agent_row(agent, &store, cx)).into_any_element()
+            agent_row(agent, &store, cx).into_any_element()
         })
         .size_full()
         .px(px(8.))
-        .py(px(7.));
+        .pt(px(8. - super::ROW_MARGIN))
+        .pb(px(super::END_ROOM - super::ROW_MARGIN));
         Self::surface(bar, list.into_any_element())
     }
 
@@ -1458,10 +1468,10 @@ fn agent_row(agent: &AgentView, store: &Entity<Store>, cx: &App) -> Stateful<Div
         .group(group.clone())
         .relative()
         .px(px(10.))
-        .py(px(8.))
+        .py(px(8. + super::ROW_MARGIN))
         // An agent that another agent started stands in from it.
         .when(agent.parent.is_some(), |row| row.pl(px(28.)))
-        .child(light(group, Radius::MD, edges(0., 0., 0., 0.), false, cx))
+        .child(light(group, Radius::MD, edges(super::ROW_MARGIN, 0., super::ROW_MARGIN, 0.), false, cx))
         .child(
             div()
                 .relative()
@@ -1560,9 +1570,11 @@ fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
     }
 }
 
-/// "2 working · 1 done · 1 failed", leaving out what there is none of.
+/// "2 working · 1 done · 1 failed · 48K tokens", leaving out what there is none of.
 fn summary(agents: &[AgentView]) -> String {
     let count = |status: ToolStatus| agents.iter().filter(|agent| agent.status == status).count();
+    let spent: Vec<u64> = agents.iter().filter_map(|agent| agent.tokens).collect();
+    let total = (!spent.is_empty()).then(|| crate::models::tokens(spent.iter().sum()));
     [
         (count(ToolStatus::Running), "working"),
         (count(ToolStatus::Succeeded), "done"),
@@ -1571,11 +1583,12 @@ fn summary(agents: &[AgentView]) -> String {
     .into_iter()
     .filter(|(count, _)| *count > 0)
     .map(|(count, word)| format!("{count} {word}"))
+    .chain(total)
     .collect::<Vec<_>>()
     .join(" · ")
 }
 
-impl Render for SidePanelView {
+impl Render for RightPanelView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         self.prune_tabs(cx);

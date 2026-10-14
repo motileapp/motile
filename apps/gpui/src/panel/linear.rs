@@ -441,7 +441,8 @@ impl LinearView {
             div().w_full().px(px(LIST_PADDING)).child(line).into_any_element()
         })
         .size_full()
-        .py(px(LIST_PADDING))
+        .pt(px(LIST_PADDING))
+        .pb(px(super::END_ROOM))
         .into_any_element()
     }
 
@@ -773,7 +774,9 @@ impl LinearView {
             .overflow_y_scroll()
             .child(
                 div()
-                    .p(px(16.))
+                    .px(px(16.))
+                    .pt(px(16.))
+                    .pb(px(super::END_ROOM))
                     .flex()
                     .flex_col()
                     .items_start()

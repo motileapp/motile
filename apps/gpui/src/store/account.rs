@@ -50,7 +50,18 @@ impl Store {
 
     pub(super) fn apply_servers(&mut self, servers: Vec<Server>, cx: &mut Context<Self>) {
         let composer_was_connected = self.composer_server().is_some_and(Server::connected);
+        let were_connected: std::collections::HashSet<String> =
+            self.servers.iter().filter(|server| server.connected()).map(|server| server.id.clone()).collect();
         self.servers = servers;
+        let connected: Vec<String> = self
+            .servers
+            .iter()
+            .filter(|server| server.connected() && !were_connected.contains(&server.id))
+            .map(|server| server.id.clone())
+            .collect();
+        for server_id in connected {
+            self.linear_read(&server_id);
+        }
         if !composer_was_connected && self.composer_server().is_some_and(Server::connected) {
             self.read_git(
                 true,

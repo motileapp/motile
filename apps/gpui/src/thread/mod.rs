@@ -1,6 +1,8 @@
 //! The right side of the window: the open thread with the composer over its end, or the start
 //! of a new one.
 
+mod notice;
+
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -31,7 +33,7 @@ pub struct ThreadPane {
     /// How far the title starts from the pane's left edge: past the window's buttons when the
     /// sidebar is hidden.
     pub title_inset: f32,
-    /// The side panel is beside the pane, so the window's last button isn't over it.
+    /// The right panel is beside the pane, so the window's last button isn't over it.
     pub beside_panel: bool,
     /// What the window's buttons take of the top bar's end, where the app draws them.
     pub trailing_room: f32,
@@ -124,7 +126,7 @@ impl ThreadPane {
             .right_0()
             .h(px(theme::TOP_BAR))
             .pl(px(self.title_inset))
-            // Room for the button that shows the side panel, which is at the window's edge.
+            // Room for the button that shows the right panel, which is at the window's edge.
             .pr(px(if self.beside_panel { 4. } else { TOOLBAR_WIDTH + 12. + self.trailing_room }))
             .flex()
             .items_center()
@@ -387,7 +389,7 @@ impl Render for ThreadPane {
         let is_start =
             store.selected_draft().is_some_and(|draft| store.transcript_is_empty && !store.is_sending(&draft.id));
         let pending_git = store.pending_git.clone();
-        let notice = store.open_git_notice();
+        let notice = store.open_notice();
         let removing = store.removing_project.clone();
         let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
         let takes_drops = store.composer_server().is_some();
@@ -415,10 +417,10 @@ impl Render for ThreadPane {
             window,
             cx,
         );
-        // The git notice slides and fades in and out, and changes in place when another follows it.
-        let notice = crate::ui::motion::lingering("git-notice", notice, NOTICE_FADE, window, cx);
+        // The notice slides and fades in and out, and changes in place when another follows it.
+        let notice = crate::ui::motion::lingering("notice", notice, NOTICE_FADE, window, cx);
         let notice_shown = crate::ui::motion::eased_from(
-            "git-notice-shown",
+            "notice-shown",
             0.,
             if notice.as_ref().is_some_and(|(_, going)| !going) { 1. } else { 0. },
             NOTICE_FADE,
@@ -478,7 +480,7 @@ impl Render for ThreadPane {
                         .top(px(theme::TOP_BAR + 6. - 6. * (1. - notice_shown)))
                         .right(px(14.))
                         .opacity(notice_shown)
-                        .child(crate::git::git_notice(&self.store, &notice, cx)),
+                        .child(notice::notice_view(&self.store, &notice, cx)),
                 )
             })
             .when(cover > 0., |pane| pane.child(self.drop_cover(cover, cx)))

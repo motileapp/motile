@@ -118,10 +118,18 @@ pub struct CommentedLine {
 }
 
 /// What a click on a file's heading does.
+#[derive(Clone, Copy, PartialEq)]
 enum HeadingPress {
     Toggle,
     Open,
     Viewed,
+}
+
+/// The heading under the pointer, and the part of it that takes the press.
+#[derive(Clone, Copy, PartialEq)]
+struct LitHeading {
+    file: usize,
+    press: HeadingPress,
 }
 
 /// A line as it is drawn: a tab becomes the spaces up to the next stop, every four columns.
@@ -359,6 +367,7 @@ pub struct CodeView {
     wanted: Option<String>,
     /// The line under the pointer, which shows that a comment can be written on it.
     hovered: Option<(usize, usize)>,
+    lit: Option<LitHeading>,
     /// Where the pointer is while it selects, to scroll on past the top or the bottom.
     dragged_to: Option<Point<Pixels>>,
     autoscroll: Option<Task<()>>,
@@ -435,6 +444,7 @@ impl CodeView {
             revealed: 0,
             wanted: None,
             hovered: None,
+            lit: None,
             dragged_to: None,
             autoscroll: None,
         }
@@ -512,7 +522,7 @@ impl CodeView {
         let number_width = digits as f32 * 6.8 + 12.;
         let gutter = if document.headed { 2. } else { 1. } * number_width + 4.;
         let width = gutter + TEXT_INSET + document.columns as f32 * ADVANCE + 24.;
-        Layout { blocks, height: y + 8., width, number_width, gutter, media_heights }
+        Layout { blocks, height: y + super::END_ROOM, width, number_width, gutter, media_heights }
     }
 
     /// Follows the snapshot: lays the document out again only when it, the closed files or the
@@ -540,6 +550,7 @@ impl CodeView {
             self.selection = None;
             self.selecting = None;
             self.hovered = None;
+            self.lit = None;
         }
         self.shown = Some(Laid {
             document: snapshot.document.clone(),
@@ -673,6 +684,39 @@ impl CodeView {
         HeadingPress::Toggle
     }
 
+    /// The heading at the point in the window, the pinned one or one in its place, and the part
+    /// of it there.
+    fn heading_at(
+        &self,
+        position: Point<Pixels>,
+        document: &CodeDocument,
+        layout: &Layout,
+        marks: &CodeMarks,
+        c: &theme::Colors,
+        window: &mut Window,
+    ) -> Option<LitHeading> {
+        let viewport = self.scroll.viewport.get();
+        if !document.headed || !viewport.contains(&position) {
+            return None;
+        }
+        let width = f32::from(viewport.size.width);
+        let x = f32::from(position.x - viewport.origin.x);
+        let scrolled = self.scroll.y();
+        let y = f32::from(position.y - viewport.origin.y) + scrolled;
+        let pinned = layout.pinned(scrolled).filter(|_| y - scrolled < HEADING_HEIGHT);
+        let block = pinned.or_else(|| layout.block_at(y).filter(|block| y < block.lines_top()))?;
+        let press = Self::heading_press(x, width, &document.files[block.file], marks, c, window);
+        Some(LitHeading { file: block.file, press })
+    }
+
+    /// Lights the heading under the pointer, and its button.
+    fn light_heading(&mut self, lit: Option<LitHeading>, cx: &mut Context<Self>) {
+        if lit != self.lit {
+            self.lit = lit;
+            cx.notify();
+        }
+    }
+
     /// The view of a document, its clicks handed to `actions`.
     pub fn element(
         &mut self,
@@ -690,6 +734,7 @@ impl CodeView {
         let scroll = self.scroll.get();
         let selection = self.selection;
         let hovered = self.hovered;
+        let lit = self.lit;
         let viewport = self.scroll.viewport.clone();
         let c = *colors(cx);
 
@@ -697,6 +742,7 @@ impl CodeView {
             (document.clone(), layout.clone(), collapsed.clone(), marks.clone(), media.clone());
         let (down_document, down_layout, down_marks) = (document.clone(), layout.clone(), marks.clone());
         let (move_document, move_layout, move_marks) = (document.clone(), layout.clone(), marks.clone());
+        let (scroll_document, scroll_layout, scroll_marks) = (document.clone(), layout.clone(), marks.clone());
         let fitted_width = f32::from(viewport.get().size.width);
         let has_media = !layout.media_heights.is_empty();
         let paint_actions = Rc::new(actions);
@@ -737,6 +783,7 @@ impl CodeView {
                             paint_heading(
                                 file,
                                 block.file > 0,
+                                lit.filter(|lit| lit.file == block.file).map(|lit| lit.press),
                                 paint_collapsed.contains(&file.path),
                                 &paint_marks,
                                 Bounds::new(point(bounds.origin.x, top), size(bounds.size.width, px(HEADING_HEIGHT))),
@@ -870,6 +917,7 @@ impl CodeView {
                         paint_heading(
                             file,
                             false,
+                            lit.filter(|lit| lit.file == block.file).map(|lit| lit.press),
                             paint_collapsed.contains(&file.path),
                             &paint_marks,
                             heading,
@@ -909,17 +957,25 @@ impl CodeView {
             .overflow_hidden()
             .bg(c.background)
             .when(pointing, |view| view.cursor_pointer())
-            .on_scroll_wheel(cx.listener(move |this, event: &ScrollWheelEvent, _, cx| {
+            .on_scroll_wheel(cx.listener(move |this, event: &ScrollWheelEvent, window, cx| {
                 let delta = event.delta.pixel_delta(px(LINE_HEIGHT));
                 this.scroll.set(this.scroll.get() - delta);
+                let lit = this.heading_at(event.position, &scroll_document, &scroll_layout, &scroll_marks, &c, window);
+                this.light_heading(lit, cx);
                 cx.notify();
             }))
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
-                if !*hovered && this.hovered.take().is_some() {
+                if *hovered {
+                    return;
+                }
+                this.light_heading(None, cx);
+                if this.hovered.take().is_some() {
                     cx.notify();
                 }
             }))
             .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, window, cx| {
+                let lit = this.heading_at(event.position, &move_document, &move_layout, &move_marks, &c, window);
+                this.light_heading(lit, cx);
                 // The line under the pointer shows that it can be commented on, while the pointer
                 // is on the numbers.
                 if !move_marks.commentable {
@@ -1216,6 +1272,7 @@ fn paint_viewed(viewed: bool, left: f32, bounds: Bounds<Pixels>, c: &theme::Colo
 fn paint_heading(
     file: &CodeFile,
     line_above: bool,
+    lit: Option<HeadingPress>,
     closed: bool,
     marks: &CodeMarks,
     bounds: Bounds<Pixels>,
@@ -1223,7 +1280,9 @@ fn paint_heading(
     window: &mut Window,
     cx: &mut App,
 ) {
-    window.paint_quad(fill(bounds, c.background_secondary));
+    let surface = theme::Surface::Secondary;
+    let fill_color = if lit.is_some() { surface.layer(theme::Layer::Row, c) } else { c.background_secondary };
+    window.paint_quad(fill(bounds, fill_color));
     if line_above {
         window.paint_quad(fill(Bounds::new(bounds.origin, size(bounds.size.width, px(1.))), c.border));
     }
@@ -1249,7 +1308,16 @@ fn paint_heading(
         cx,
     );
     let open_x = bounds.right() - px(34.);
-    paint_symbol("square-arrow-out-up-right", 12., point(open_x + px(14.), middle), c.muted_foreground, window, cx);
+    let open_center = point(open_x + px(14.), middle);
+    let open_lit = lit == Some(HeadingPress::Open);
+    if open_lit {
+        let side = px(theme::ControlSize::Small.height());
+        let button = Bounds::centered_at(open_center, size(side, side));
+        let radius = Corners::all(px(theme::ControlSize::Small.radius()));
+        window.paint_quad(fill(button, surface.layer(theme::Layer::ControlLit, c)).corner_radii(radius));
+    }
+    let open_color = if open_lit { c.foreground } else { c.muted_foreground };
+    paint_symbol("square-arrow-out-up-right", 12., open_center, open_color, window, cx);
 
     let mut counts_x = open_x - px(4.);
     if file.added + file.removed > 0 {

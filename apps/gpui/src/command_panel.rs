@@ -524,15 +524,10 @@ impl CommandPanel {
         };
         let clone = |name: &str, title: String, detail: String, symbol: &'static str| {
             let (repo, server) = (name.to_string(), id.to_string());
-            let mut item =
-                Item::new(format!("repo-{name}"), title, detail, ItemIcon::Symbol(symbol), move |this, _, cx| {
-                    let (repo, server) = (repo.clone(), server.clone());
-                    this.store.update(cx, |store, _| store.clone_repo(repo, &server));
-                })
-                .keeps_open();
-            item.busy =
-                store.adding_project == Some(AddingProject { server_id: id.to_string(), name: name.to_string() });
-            item
+            Item::new(format!("repo-{name}"), title, detail, ItemIcon::Symbol(symbol), move |this, _, cx| {
+                let (repo, server) = (repo.clone(), server.clone());
+                this.store.update(cx, |store, cx| store.clone_repo(repo, &server, cx));
+            })
         };
         let typed = self.query_text(cx).trim().to_string();
         let mut items: Vec<Item> = found(repos, &typed.to_lowercase())
@@ -623,7 +618,7 @@ impl CommandPanel {
                 ItemIcon::Symbol("folder-plus"),
                 move |this, _, cx| {
                     let (server, path) = (server.clone(), path.clone());
-                    this.store.update(cx, |store, _| store.add_project_at(&server, path));
+                    this.store.update(cx, |store, cx| store.add_project_at(&server, path, cx));
                 },
             ));
             if let Some(parent) = listing.parent.clone() {
@@ -649,7 +644,7 @@ impl CommandPanel {
             let (server, path) = (id.to_string(), folder.path.clone());
             item.alternate = Some(Rc::new(move |this, _, cx| {
                 let (server, path) = (server.clone(), path.clone());
-                this.store.update(cx, |store, _| store.add_project_at(&server, path));
+                this.store.update(cx, |store, cx| store.add_project_at(&server, path, cx));
             }));
             items.push(item);
         }

@@ -23,7 +23,7 @@ pub enum Variant {
     /// The others beside it.
     #[default]
     Secondary,
-    /// Only its border until the pointer is over it: the buttons of settings rows.
+    /// The page's colour inside its border: the buttons of settings rows.
     Outline,
     /// What can't be taken back.
     Danger,
@@ -111,7 +111,7 @@ impl Look {
                 if on {
                     self.surface.layer(Layer::Control, c)
                 } else {
-                    transparent_black()
+                    c.background
                 }
             }
             Variant::Danger => filled(c.destructive),

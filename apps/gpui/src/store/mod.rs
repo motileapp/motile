@@ -28,7 +28,7 @@ use motile_protocol::wire::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use self::git::{GitNotice, PendingGit, stage_label};
+pub use self::git::{Notice, PendingGit, stage_label};
 pub use self::projects::RepoListing;
 pub use self::pull_requests::PullRequests;
 pub use self::settings::SettingsState;
@@ -37,7 +37,7 @@ pub use self::sidebar::{SearchResult, SidebarState};
 pub use crate::bridge::CoreError;
 use crate::bridge::{Bridge, Incoming, Read};
 use crate::models::*;
-use crate::panel::state::{PanelTabs, PanelTarget, SidePanel};
+use crate::panel::state::{PanelTabs, PanelTarget, RightPanel};
 use crate::prefs::Prefs;
 use crate::transcript::model::{Prepared, Transcript};
 use crate::updater::Updater;
@@ -149,6 +149,9 @@ pub struct AddingProject {
     pub name: String,
 }
 
+/// What to do with a project that was just made or cloned, once its server has told about it.
+type AwaitedProject = Box<dyn FnOnce(&mut Store, Project, &mut Context<Store>)>;
+
 /// What the images and videos fetched from the servers take on this device, and what they may take.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct MediaStorage {
@@ -202,7 +205,7 @@ pub struct Store {
     pub pending_git: Option<PendingGit>,
     /// The stage a project's git action is at, by project.
     pub git_stages: HashMap<String, GitStage>,
-    pub git_notice: Option<GitNotice>,
+    pub notice: Option<Notice>,
     /// The projects whose folders their servers are making git repositories.
     pub initializing_git: HashSet<String>,
     /// The `draft_worktree_key`s whose base is being pulled.
@@ -220,7 +223,8 @@ pub struct Store {
     pub adding_project: Option<AddingProject>,
     /// Counts up when a project has been made or cloned.
     pub projects_added: u64,
-    awaited_project_id: Option<String>,
+    /// The project just made or cloned, and what to do with it once the server has told about it.
+    awaited_project: Option<(String, AwaitedProject)>,
     /// A folder added as a project, by its server and path, until the server tells about it.
     awaited_folder: Option<(String, String)>,
     /// Counts up when the composer should take the keyboard back.
@@ -274,14 +278,14 @@ pub struct Store {
     pub draft_version: u64,
 
     pub updater: Updater,
-    pub side_panel: SidePanel,
+    pub right_panel: RightPanel,
     pub settings: SettingsState,
     pub linear: linear::Linear,
     pub pull_requests: PullRequests,
     pub repo_listing: RepoListing,
     pub sidebar: SidebarState,
     pub transcript: Entity<Transcript>,
-    /// What the agent did that the side panel shows.
+    /// What the agent did that the right panel shows.
     pub agent_transcript: Entity<Transcript>,
     open_thread_id: Option<String>,
     /// The thread that was open when the app was last closed, until it has been opened again.
@@ -312,7 +316,7 @@ impl Store {
         let prefs_file =
             std::env::var("MOTILE_PREFS").map(PathBuf::from).unwrap_or_else(|_| data_dir.join("preferences.json"));
         let prefs = Prefs::load(prefs_file);
-        let side_panel = SidePanel::new(
+        let right_panel = RightPanel::new(
             prefs.bool("panel.open"),
             prefs.get::<BTreeMap<String, PanelTabs>>("panel.tabs").unwrap_or_default(),
         );
@@ -340,7 +344,7 @@ impl Store {
             git_files: Vec::new(),
             pending_git: None,
             git_stages: HashMap::new(),
-            git_notice: None,
+            notice: None,
             initializing_git: HashSet::new(),
             pulling_bases: HashSet::new(),
             worktree_starts: HashMap::new(),
@@ -351,7 +355,7 @@ impl Store {
             repo_errors: HashMap::new(),
             adding_project: None,
             projects_added: 0,
-            awaited_project_id: None,
+            awaited_project: None,
             awaited_folder: None,
             composer_focus: 0,
             blur_composer: 0,
@@ -381,7 +385,7 @@ impl Store {
             workspace_version: 0,
             draft_version: 0,
             updater: Updater::new(),
-            side_panel,
+            right_panel,
             settings: SettingsState::default(),
             linear: linear::Linear::default(),
             pull_requests: PullRequests::default(),
@@ -570,13 +574,13 @@ impl Store {
                     (transcript.is_empty(), transcript.turns())
                 });
                 self.transcript_is_empty = is_empty;
-                if self.side_panel.turns != turns {
-                    self.side_panel.turns = turns;
+                if self.right_panel.turns != turns {
+                    self.right_panel.turns = turns;
                 }
             }
             Prepared::AgentRows { thread_id, agent_id, reset, start, remove, rows } => {
                 if self.transcript.read(cx).thread_id.as_deref() != Some(&thread_id)
-                    || self.side_panel.shown_agent.as_deref() != Some(&agent_id)
+                    || self.right_panel.shown_agent.as_deref() != Some(&agent_id)
                 {
                     return;
                 }
@@ -831,7 +835,7 @@ impl Store {
         self.can_use_git(&project).then_some(project)
     }
 
-    /// The folder the side panel looks into: the one the open thread works in, or the project's
+    /// The folder the right panel looks into: the one the open thread works in, or the project's
     /// when the open draft's thread would start there.
     pub fn panel_target(&self) -> Option<PanelTarget> {
         let thread = self.selected_thread();
@@ -869,7 +873,7 @@ impl Store {
         })
     }
 
-    /// Why the side panel has nothing to show here, when it hasn't.
+    /// Why the right panel has nothing to show here, when it hasn't.
     pub fn panel_unavailable(&self) -> Option<String> {
         let Some(target) = self.panel_target() else { return Some("Add a project to see its files.".into()) };
         let Some(server) = self.server(Some(&target.server_id)).filter(|server| server.connected()) else {

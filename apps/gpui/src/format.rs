@@ -1,6 +1,5 @@
 //! Amounts, sizes and dates in the user's language and region, written by the system's
-//! formatters as the Mac app's are: Foundation's, and ICU's for compact counts, which is what
-//! Foundation's own compact style runs on. Elsewhere, and should a formatter fail, they are
+//! formatters as the Mac app's are: Foundation's. Elsewhere, and should a formatter fail, they are
 //! written as in US English.
 
 use chrono::{Local, TimeZone};
@@ -37,9 +36,25 @@ pub fn percent(share: f64) -> String {
     system::percent(share).unwrap_or_else(|| plain_percent(share))
 }
 
-/// A count in up to three significant figures, its size in a word or a letter: "12.3K", "1M".
-pub fn compact(value: u64) -> String {
-    system::compact(value).unwrap_or_else(|| plain_compact(value))
+/// "820", "1.5K", "45.7M", "123B", "1.2T": at most three significant digits.
+pub fn abbreviated(count: u64) -> String {
+    const UNITS: [&str; 5] = ["", "K", "M", "B", "T"];
+    let mut value = count as f64;
+    let mut unit = 0;
+    while value >= 999.5 && unit < UNITS.len() - 1 {
+        value /= 1000.;
+        unit += 1;
+    }
+    let decimals = if unit == 0 || value >= 100. {
+        0
+    } else if value >= 10. {
+        1
+    } else {
+        2
+    };
+    let digits = format!("{value:.decimals$}");
+    let digits = if decimals > 0 { digits.trim_end_matches('0').trim_end_matches('.') } else { &digits };
+    format!("{digits}{}", UNITS[unit])
 }
 
 /// The time, in seconds since 1970, written with the parts of a date `template` names, in the
@@ -94,36 +109,15 @@ fn plain_percent(share: f64) -> String {
     if tenths.fract() == 0. { format!("{tenths:.0}%") } else { format!("{tenths:.1}%") }
 }
 
-fn plain_compact(value: u64) -> String {
-    let value = value as f64;
-    if value < 1e3 {
-        return format!("{value}");
-    }
-    let exponent = value.log10().floor() as i32;
-    let rounded = {
-        let scale = 10f64.powi(exponent - 2);
-        (value / scale).round() * scale
-    };
-    let units = [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")];
-    let Some((size, unit)) = units.into_iter().find(|(size, _)| rounded >= *size) else {
-        return format!("{rounded}");
-    };
-    let shown = rounded / size;
-    let text = format!("{shown:.2}");
-    let text = text.trim_end_matches('0').trim_end_matches('.');
-    format!("{text}{unit}")
-}
-
 #[cfg(target_os = "macos")]
 mod system {
     use std::cell::RefCell;
     use std::collections::HashMap;
-    use std::ffi::{CString, c_char, c_void};
 
     use objc2::rc::Retained;
     use objc2_foundation::{
         NSByteCountFormatter, NSByteCountFormatterCountStyle, NSCalendar, NSDate, NSDateFormatter,
-        NSDateFormatterStyle, NSLocale, NSNumber, NSNumberFormatter, NSNumberFormatterStyle, NSString,
+        NSDateFormatterStyle, NSNumber, NSNumberFormatter, NSNumberFormatterStyle, NSString,
     };
 
     thread_local! {
@@ -159,7 +153,6 @@ mod system {
             formatter
         };
         static DATES: RefCell<HashMap<&'static str, Retained<NSDateFormatter>>> = RefCell::default();
-        static COMPACT: RefCell<Option<(String, Compact)>> = const { RefCell::new(None) };
     }
 
     pub fn bytes(count: u64) -> Option<String> {
@@ -198,89 +191,6 @@ mod system {
     pub fn first_weekday() -> Option<u32> {
         u32::try_from(NSCalendar::currentCalendar().firstWeekday()).ok().filter(|day| (1..=7).contains(day))
     }
-
-    pub fn compact(value: u64) -> Option<String> {
-        let locale = NSLocale::currentLocale().localeIdentifier().to_string();
-        COMPACT.with(|kept| {
-            let mut kept = kept.borrow_mut();
-            if kept.as_ref().is_none_or(|(made_for, _)| *made_for != locale) {
-                *kept = Some((locale.clone(), Compact::new(&locale)?));
-            }
-            kept.as_ref()?.1.format(value.min(i64::MAX as u64) as i64)
-        })
-    }
-
-    /// ICU's number formatter on Foundation's `.compactName` with 1 to 3 significant digits.
-    struct Compact {
-        formatter: *mut c_void,
-        result: *mut c_void,
-    }
-
-    #[link(name = "icucore", kind = "dylib")]
-    unsafe extern "C" {
-        fn unumf_openForSkeletonAndLocale(
-            skeleton: *const u16,
-            length: i32,
-            locale: *const c_char,
-            status: *mut i32,
-        ) -> *mut c_void;
-        fn unumf_openResult(status: *mut i32) -> *mut c_void;
-        fn unumf_formatInt(formatter: *const c_void, value: i64, result: *mut c_void, status: *mut i32);
-        fn unumf_resultToString(result: *const c_void, buffer: *mut u16, capacity: i32, status: *mut i32) -> i32;
-        fn unumf_close(formatter: *mut c_void);
-        fn unumf_closeResult(result: *mut c_void);
-    }
-
-    /// ICU says an error with a status above zero; below zero is a warning.
-    fn failed(status: i32) -> bool {
-        status > 0
-    }
-
-    impl Compact {
-        fn new(locale: &str) -> Option<Self> {
-            let skeleton: Vec<u16> = "compact-short @##".encode_utf16().collect();
-            let locale = CString::new(locale).ok()?;
-            let mut status = 0;
-            // SAFETY: the skeleton and the locale outlive the call, which copies them.
-            let formatter = unsafe {
-                unumf_openForSkeletonAndLocale(skeleton.as_ptr(), skeleton.len() as i32, locale.as_ptr(), &mut status)
-            };
-            if failed(status) || formatter.is_null() {
-                return None;
-            }
-            // SAFETY: ICU makes an empty result to format into.
-            let result = unsafe { unumf_openResult(&mut status) };
-            let compact = Self { formatter, result };
-            (!failed(status) && !result.is_null()).then_some(compact)
-        }
-
-        fn format(&self, value: i64) -> Option<String> {
-            let mut status = 0;
-            let mut buffer = [0u16; 64];
-            // SAFETY: both were opened by ICU and are only used on this thread; the buffer's
-            // length is its capacity.
-            let length = unsafe {
-                unumf_formatInt(self.formatter, value, self.result, &mut status);
-                unumf_resultToString(self.result, buffer.as_mut_ptr(), buffer.len() as i32, &mut status)
-            };
-            if failed(status) {
-                return None;
-            }
-            String::from_utf16(buffer.get(..usize::try_from(length).ok()?)?).ok()
-        }
-    }
-
-    impl Drop for Compact {
-        fn drop(&mut self) {
-            // SAFETY: opened by ICU, closed once.
-            unsafe {
-                if !self.result.is_null() {
-                    unumf_closeResult(self.result);
-                }
-                unumf_close(self.formatter);
-            }
-        }
-    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -305,10 +215,6 @@ mod system {
         None
     }
 
-    pub fn compact(_: u64) -> Option<String> {
-        None
-    }
-
     pub fn date(_: f64, _: &'static str) -> Option<String> {
         None
     }
@@ -327,14 +233,23 @@ mod tests {
         assert_eq!(plain_usd(1234.5), "$1,234.50");
         assert_eq!(plain_percent(0.42), "42%");
         assert_eq!(plain_percent(0.4251), "42.5%");
-        assert_eq!(plain_compact(999), "999");
-        assert_eq!(plain_compact(12_345), "12.3K");
-        assert_eq!(plain_compact(999_999), "1M");
-        assert_eq!(plain_compact(1_234_567), "1.23M");
         assert_eq!(plain_bytes(1), "1 byte");
         assert_eq!(plain_bytes(5_432), "5 KB");
         assert_eq!(plain_bytes(123_456_789), "123.5 MB");
         assert_eq!(plain_bytes(1_234_567_890), "1.23 GB");
+    }
+
+    #[test]
+    fn counts_are_abbreviated_to_three_digits() {
+        assert_eq!(abbreviated(820), "820");
+        assert_eq!(abbreviated(1_500), "1.5K");
+        assert_eq!(abbreviated(21_437), "21.4K");
+        assert_eq!(abbreviated(999_999), "1M");
+        assert_eq!(abbreviated(4_571_000), "4.57M");
+        assert_eq!(abbreviated(45_700_000), "45.7M");
+        assert_eq!(abbreviated(123_000_000_000), "123B");
+        assert_eq!(abbreviated(1_200_000_000_000), "1.2T");
+        assert_eq!(abbreviated(1_200_000_000_000_000), "1200T");
     }
 
     #[test]
@@ -345,7 +260,6 @@ mod tests {
         assert!(!usd(1234.5).is_empty());
         assert!(usd(0.004).starts_with('<'));
         assert!(!percent(0.42).is_empty());
-        assert!(!compact(999_999).is_empty());
         assert!(!date(1_760_000_000., "EEEj", "%a %-I %p").is_empty());
         assert!((1..=7).contains(&first_weekday()));
     }

@@ -599,6 +599,7 @@ impl PullRequestView {
         let c = colors(cx);
         let store = self.store.read(cx);
         let unavailable = store.pull_requests_unavailable().is_some();
+        let reading = store.right_panel.reading.contains(&PanelTab::PullRequest);
         let watching = store.selected_thread().is_some_and(|thread| thread.watching)
             && page.is_some_and(|page| Some(page.number) == target.and_then(|target| target.pull_request));
         let url = page.map(|page| page.url.clone()).filter(|url| !url.is_empty());
@@ -639,11 +640,13 @@ impl PullRequestView {
                 )
             })
             .when(shown.is_some() && !unavailable, |bar| {
-                bar.child(ActionButton::icon("pr-refresh", "rotate-cw", "Read the pull request again").on_click(
-                    move |_, _, cx| {
-                        let _ = this.update(cx, |this, cx| this.refresh(cx));
-                    },
-                ))
+                bar.child(
+                    ActionButton::icon("pr-refresh", "rotate-cw", "Read the pull request again")
+                        .pending(reading)
+                        .on_click(move |_, _, cx| {
+                            let _ = this.update(cx, |this, cx| this.refresh(cx));
+                        }),
+                )
             })
     }
 
@@ -765,7 +768,9 @@ impl PullRequestView {
             .child(
                 div()
                     .w_full()
-                    .p(px(14.))
+                    .px(px(14.))
+                    .pt(px(14.))
+                    .pb(px(super::END_ROOM))
                     .flex()
                     .flex_col()
                     .items_start()

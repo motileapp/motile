@@ -7,7 +7,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
-use crate::format::{self, compact as count, percent, usd as cost};
+use crate::format::{self, abbreviated as count, percent, usd as cost};
 use crate::models::agent_name;
 use crate::store::Store;
 use crate::store::usage::{UsageLine, UsagePeriod, UsageReport, UsageSeries, UsageTab};

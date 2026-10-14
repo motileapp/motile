@@ -60,8 +60,8 @@ fn handle(store: &Entity<Store>, event: &KeystrokeEvent, window: &mut Window, cx
     let composing = editing && event.context_stack.iter().any(|context| context.contains("Composer"));
     let context = state.shortcut_context(composing, editing);
     let Some(command) = state.shortcuts.command_for(&press, &context).map(String::from) else {
-        // ⌘+, ⌘−, ⌘0 and ⌘9 zoom the image file the side panel shows.
-        let image_shown = state.side_panel.is_open && matches!(state.panel_tabs().active, Some(PanelTab::File(_)));
+        // ⌘+, ⌘−, ⌘0 and ⌘9 zoom the image file the right panel shows.
+        let image_shown = state.right_panel.is_open && matches!(state.panel_tabs().active, Some(PanelTab::File(_)));
         return image_shown && crate::media::zoom::ZoomableImage::key(&event.keystroke, cx);
     };
     // The command panel takes its own keys, the digits of its rows among them.
@@ -106,7 +106,7 @@ pub fn perform(store: &Entity<Store>, command: &str, window: &mut Window, cx: &m
     }
 }
 
-/// Leaves a route, else closes the side panel's tab, else the window, which ends the app as
+/// Leaves a route, else closes the right panel's tab, else the window, which ends the app as
 /// on the Mac. The window is busy with the key until it has been handled.
 fn close(store: &Entity<Store>, window: AnyWindowHandle, cx: &mut App) {
     let store = store.clone();
