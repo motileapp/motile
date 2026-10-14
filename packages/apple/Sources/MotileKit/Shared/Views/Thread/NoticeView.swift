@@ -11,8 +11,8 @@ struct NoticeView: View {
     private static let padding: CGFloat = 14
     private static let closeSize = ControlSize.regular.height
     private static let titleHeight: CGFloat = scaled(16)
-    /// Centres the close button on a notice of one line, as far from its right as from its top and bottom.
-    private static let closeMargin = (padding * 2 + titleHeight - closeSize) / 2
+    /// Tucks the close button into the corner, its own corner running along the notice's.
+    private static let closeMargin = radius - ControlSize.regular.radius
     private static let trailing = closeMargin + closeSize + 4
 
     var body: some View {

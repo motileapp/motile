@@ -12,9 +12,8 @@ const NOTICE_RADIUS: f32 = Radius::LG;
 const NOTICE_PADDING: f32 = 14.;
 const TITLE_HEIGHT: f32 = 16.;
 const CLOSE_SIZE: f32 = ControlSize::Regular.height();
-/// Centres the close button on a notice of one line, as far from its right as from its top and
-/// bottom.
-const CLOSE_MARGIN: f32 = (NOTICE_PADDING * 2. + TITLE_HEIGHT - CLOSE_SIZE) / 2.;
+/// Tucks the close button into the corner, its own corner running along the notice's.
+const CLOSE_MARGIN: f32 = NOTICE_RADIUS - ControlSize::Regular.radius();
 const TRAILING: f32 = CLOSE_MARGIN + CLOSE_SIZE + 4.;
 /// How many lines of what a failed action printed show before they scroll.
 const OUTPUT_LINES: f32 = 8.;
