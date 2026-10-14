@@ -56,14 +56,14 @@ struct PullRequestListSurface: View {
         case .ready(let rows):
             let shown = filtered(rows)
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     if let thread = store.selectedThread {
                         LinkPullRequestField(text: $linking) { number in
                             store.rightPanel.link(number, thread: thread.id, serverID: thread.serverID)
                         }
                         .frame(maxWidth: 380, alignment: .leading)
                         .padding(.horizontal, 6)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 9)
                     }
                     if shown.isEmpty {
                         Text(search.isEmpty ? "No \(state == "all" ? "" : "\(state) ")pull requests." : "None match “\(search)”.")
@@ -76,7 +76,8 @@ struct PullRequestListSurface: View {
                         PullRequestListRow(row: row, target: target, linked: store.selectedThread?.pullRequest?.number == row.number)
                     }
                 }
-                .padding(8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8 - panelRowMargin.top)
             }
         }
     }
@@ -129,8 +130,9 @@ private struct PullRequestListRow: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(panelRowMargin)
         }
-        .buttonStyle(.highlight())
+        .buttonStyle(.highlight(inset: panelRowMargin))
         .contextMenu {
             if let thread = store.selectedThread, !linked {
                 Button("Link to This Thread") { store.rightPanel.link(row.number, thread: thread.id, serverID: thread.serverID) }
