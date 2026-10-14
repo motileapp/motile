@@ -130,6 +130,17 @@ enum DemoDriver {
             guard let approval = store.activity.approvals.first else { return }
             store.answer(approval, allow: rest == "allow")
         case "done": store.toggleDone()
+        case "tmpaccount":
+            guard let server = store.servers.first else { return }
+            var account = AgentAccount(agent: .claude)
+            account.name = rest
+            account.folder = "/tmp/claude-\(rest.lowercased())-9de1015d"
+            store.saveAgentAccount(account, on: server) { _ in }
+        case "tmpreasoning": UserDefaults.standard.set(rest == "on", forKey: "tmpReasoning")
+        case "tmpeffort": store.setEffort(rest == "default" ? "" : rest)
+        case "tmpwork":
+            guard let choice = store.composerChoices.first(where: { $0.account.name == "Work" }), let model = choice.models.first(where: { $0.id == store.composerModel?.id }) ?? choice.models.first else { return }
+            store.setModel(model, account: choice.account)
         case "drop": store.dropTargeted = rest == "on"
         case "top":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first

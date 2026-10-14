@@ -23,6 +23,21 @@ export function MenuChevron() {
   )
 }
 
+/** The reasoning effort High, as the clients draw it: a ring round a pie three quarters full. */
+export function EffortHighIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-[13px] shrink-0"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 12V6a6 6 0 1 1-6 6Z" />
+    </svg>
+  )
+}
+
 export function AgentIcon({
   agent,
   size = 12,

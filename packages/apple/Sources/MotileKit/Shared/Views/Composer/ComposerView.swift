@@ -178,9 +178,21 @@ struct ComposerView: View {
 
     static func effortLabel(_ effort: String) -> String {
         switch effort {
-        case "xhigh": return "Extra high"
+        case "xhigh": return "Extra"
         case "": return "Default"
         default: return effort.prefix(1).uppercased() + String(effort.dropFirst())
+        }
+    }
+
+    static func effortSymbol(_ effort: String) -> Symbol {
+        switch effort {
+        case "none", "minimal", "low": .effortLow
+        case "medium": .effortMedium
+        case "high": .effortHigh
+        case "xhigh": .effortExtra
+        case "max": .rocket
+        case "ultracode": .botMessageSquare
+        default: .gauge
         }
     }
 
@@ -248,12 +260,14 @@ struct ComposerView: View {
 
     @ViewBuilder private var effortMenu: some View {
         if let model = store.composerModel, !model.efforts.isEmpty {
+            let current = store.composerEffort ?? ""
             ActionMenu(
-                Self.effortLabel(store.composerEffort ?? ""), help: store.shortcuts.help("Reasoning effort", "composer.effort"),
-                margin: Self.margin(leading: 4, trailing: 4)
+                Self.effortLabel(current), icon: Self.effortSymbol(current), help: store.shortcuts.help("Reasoning effort", "composer.effort"),
+                symbolSize: ControlSize.small.symbol, gap: 5, margin: Self.margin(leading: 4, trailing: 4)
             ) {
                 ForEach(model.effortChoices, id: \.self) { effort in
-                    choice(Self.effortLabel(effort), chosen: effort == store.composerEffort) {
+                    let image = PlatformImage.symbol(Self.effortSymbol(effort), size: 13)
+                    choice(Self.effortLabel(effort), image: image, chosen: effort == store.composerEffort) {
                         store.setEffort(effort)
                     }
                 }
