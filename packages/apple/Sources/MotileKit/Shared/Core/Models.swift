@@ -936,9 +936,9 @@ struct AgentInfo: Equatable, Identifiable {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    /// "820 tokens", "21k tokens".
+    /// "820 tokens", "21.4K tokens", "4.57M tokens".
     static func tokens(_ count: Int) -> String {
-        count < 1000 ? "\(count) tokens" : "\(count / 1000)k tokens"
+        "\(count.abbreviated) tokens"
     }
 }
 
@@ -1198,6 +1198,26 @@ struct FolderListing {
         parent = json.optionalString("parent")
         folders = json.objects("folders").map { Folder(name: $0.string("name"), path: $0.string("path"), typed: $0.string("typed")) }
         images = json.objects("images").map { ($0.string("name"), $0.string("path")) }
+    }
+}
+
+extension Int {
+    /// "820", "1.5K", "45.7M", "123B", "1.2T": at most three significant digits.
+    var abbreviated: String {
+        let units = ["", "K", "M", "B", "T"]
+        var value = Double(magnitude)
+        var unit = 0
+        while value >= 999.5 && unit < units.count - 1 {
+            value /= 1000
+            unit += 1
+        }
+        let decimals = unit == 0 || value >= 100 ? 0 : value >= 10 ? 1 : 2
+        var digits = String(format: "%.\(decimals)f", value)
+        if decimals > 0 {
+            while digits.hasSuffix("0") { digits.removeLast() }
+            if digits.hasSuffix(".") { digits.removeLast() }
+        }
+        return (self < 0 ? "-" : "") + digits + units[unit]
     }
 }
 
