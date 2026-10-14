@@ -190,7 +190,7 @@ struct ComposerView: View {
         case "none", "minimal", "low": .effortLow
         case "medium": .effortMedium
         case "high": .effortHigh
-        case "xhigh": .effortExtra
+        case "xhigh": .zap
         case "max": .rocket
         case "ultracode": .botMessageSquare
         default: .gauge
