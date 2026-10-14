@@ -9,24 +9,24 @@ final class Drawer {
     var isOpen = false
 }
 
-/// The sidebar and the side panel under the thread: swiping right anywhere on the thread slides
+/// The sidebar and the right panel under the thread: swiping right anywhere on the thread slides
 /// it aside as a card and shows the sidebar, swiping left shows the panel, and a swipe back
 /// closes either. On a phone they take the whole screen; a wider window leaves some of the card
 /// in view, and a tap on it closes too.
 struct DrawerView<Sidebar: View, Content: View, Panel: View>: UIViewControllerRepresentable {
     let drawer: Drawer
-    let sidePanel: SidePanel
+    let rightPanel: RightPanel
     @ViewBuilder let sidebar: Sidebar
     @ViewBuilder let content: Content
     @ViewBuilder let panel: Panel
 
     func makeUIViewController(context: Context) -> DrawerController {
         let controller = DrawerController(sidebar: UIHostingController(rootView: AnyView(sidebar)), content: UIHostingController(rootView: AnyView(content)))
-        controller.onChange = { [drawer, sidePanel] side in
+        controller.onChange = { [drawer, rightPanel] side in
             if drawer.isOpen != (side == .sidebar) { drawer.isOpen = side == .sidebar }
-            if sidePanel.isOpen != (side == .panel) { sidePanel.isOpen = side == .panel }
+            if rightPanel.isOpen != (side == .panel) { rightPanel.isOpen = side == .panel }
         }
-        controller.onPanelShown = { [sidePanel] in sidePanel.showPullRequestIfBlank() }
+        controller.onPanelShown = { [rightPanel] in rightPanel.showPullRequestIfBlank() }
         return controller
     }
 
@@ -34,7 +34,7 @@ struct DrawerView<Sidebar: View, Content: View, Panel: View>: UIViewControllerRe
         (controller.sidebar as? UIHostingController<AnyView>)?.rootView = AnyView(sidebar)
         (controller.content as? UIHostingController<AnyView>)?.rootView = AnyView(content)
         controller.panelContent = AnyView(panel)
-        controller.follow(sidebar: drawer.isOpen, panel: sidePanel.isOpen)
+        controller.follow(sidebar: drawer.isOpen, panel: rightPanel.isOpen)
     }
 }
 
@@ -42,7 +42,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     /// A window narrower than this gives all of its width to the sidebar and the panel.
     private static let fullBelow: CGFloat = 500
     private static let widest: CGFloat = 360
-    /// What the side panel leaves of the card in a window too wide to give it all.
+    /// What the right panel leaves of the card in a window too wide to give it all.
     private static let panelPeek: CGFloat = 64
     /// The name of the recognizers that slide the sidebar's rows aside.
     static let rowSwipe = "row-swipe"
@@ -51,7 +51,7 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
 
     let sidebar: UIViewController
     let content: UIViewController
-    /// The side panel is only built while it is in view, since it loads what it shows.
+    /// The right panel is only built while it is in view, since it loads what it shows.
     var panelContent = AnyView(EmptyView()) {
         didSet { showPanelContent() }
     }

@@ -17,7 +17,7 @@ import { MenuChevron } from "./icons"
 import { folderOf, LineCounts, nameOf } from "./transcript"
 import { cn } from "@/lib/utils"
 
-/** The side panel with one tab open, the thread's uncommitted changes. */
+/** The right panel with one tab open, the thread's uncommitted changes. */
 export function DiffPanel({
   diff,
   pastWindowButtons,
@@ -103,7 +103,7 @@ export function DiffPanel({
           Everything is committed.
         </p>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto pb-16">
           {files.map((file, index) => (
             <File
               key={file.path}
@@ -143,7 +143,7 @@ function File({
         type="button"
         onClick={onToggle}
         className={cn(
-          "flex h-[34px] w-full items-center border-b bg-background-secondary pr-1.5 text-left text-[12.5px]",
+          "flex h-[34px] w-full items-center border-b bg-background-secondary pr-1.5 text-left text-[12.5px] hover:bg-background-secondary-accent",
           !first && "border-t"
         )}
       >
@@ -165,8 +165,10 @@ function File({
         <span className="mr-1 ml-auto pl-2.5">
           <LineCounts added={file.added} removed={file.removed} />
         </span>
-        <span className="flex size-7 items-center justify-center text-muted-foreground">
-          <SquareArrowOutUpRightIcon className="size-3" />
+        <span className="flex size-7 items-center justify-center">
+          <span className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-background-secondary-accent-stronger hover:text-foreground">
+            <SquareArrowOutUpRightIcon className="size-3" />
+          </span>
         </span>
       </button>
       {!closed && (

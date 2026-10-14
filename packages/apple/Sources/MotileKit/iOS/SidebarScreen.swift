@@ -106,9 +106,10 @@ struct SidebarScreen: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("Motile")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+            Mark()
+                .fill(Color.themeForeground)
+                .frame(width: 24, height: 24)
+                .accessibilityLabel("Motile")
             Spacer()
             Button {
                 store.openPanel(.commands)
@@ -329,7 +330,7 @@ struct SidebarScreen: View {
 
     private func showThread() {
         guard underThread else { return }
-        store.sidePanel.isOpen = false
+        store.rightPanel.isOpen = false
         drawer.isOpen = false
     }
 

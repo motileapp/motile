@@ -67,25 +67,25 @@ enum DemoDriver {
         case "stop": store.stop()
         case "panel":
             switch rest {
-            case "diff": store.sidePanel.showDiff()
-            case "files": store.sidePanel.open(.files)
-            case "agents": store.sidePanel.open(.agents)
-            case "pull request": store.sidePanel.open(.pullRequest)
-            case "pull requests": store.sidePanel.open(.pullRequests)
-            case "linear": store.sidePanel.open(.linear)
-            case "max": store.sidePanel.toggleMaximized()
-            case "open": store.sidePanel.isOpen = true
-            default: store.sidePanel.isOpen = false
+            case "diff": store.rightPanel.showDiff()
+            case "files": store.rightPanel.open(.files)
+            case "agents": store.rightPanel.open(.agents)
+            case "pull request": store.rightPanel.open(.pullRequest)
+            case "pull requests": store.rightPanel.open(.pullRequests)
+            case "linear": store.rightPanel.open(.linear)
+            case "max": store.rightPanel.toggleMaximized()
+            case "open": store.rightPanel.isOpen = true
+            default: store.rightPanel.isOpen = false
             }
-        case "file": store.sidePanel.open(.file(rest))
+        case "file": store.rightPanel.open(.file(rest))
         case "issue":
             // "issue motile issue-1 ENG-1": the workspace, the issue's id and its identifier.
             let named = rest.split(separator: " ").map(String.init)
             guard named.count == 3 else { return }
-            store.sidePanel.open(.linearIssue(workspace: named[0], id: named[1], identifier: named[2]))
+            store.rightPanel.open(.linearIssue(workspace: named[0], id: named[1], identifier: named[2]))
         case "change":
-            guard let turn = store.sidePanel.turns.last else { return }
-            store.sidePanel.showChange(turn: turn.id, path: rest)
+            guard let turn = store.rightPanel.turns.last else { return }
+            store.rightPanel.showChange(turn: turn.id, path: rest)
         case "sheet":
             switch rest {
             case "commands": store.openPanel(.commands)
@@ -130,6 +130,17 @@ enum DemoDriver {
             guard let approval = store.activity.approvals.first else { return }
             store.answer(approval, allow: rest == "allow")
         case "done": store.toggleDone()
+        case "tmpaccount":
+            guard let server = store.servers.first else { return }
+            var account = AgentAccount(agent: .claude)
+            account.name = rest
+            account.folder = "/tmp/claude-\(rest.lowercased())-9de1015d"
+            store.saveAgentAccount(account, on: server) { _ in }
+        case "tmpreasoning": UserDefaults.standard.set(rest == "on", forKey: "tmpReasoning")
+        case "tmpeffort": store.setEffort(rest == "default" ? "" : rest)
+        case "tmpwork":
+            guard let choice = store.composerChoices.first(where: { $0.account.name == "Work" }), let model = choice.models.first(where: { $0.id == store.composerModel?.id }) ?? choice.models.first else { return }
+            store.setModel(model, account: choice.account)
         case "drop": store.dropTargeted = rest == "on"
         case "top":
             let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first

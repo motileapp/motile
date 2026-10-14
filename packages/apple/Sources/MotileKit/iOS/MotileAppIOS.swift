@@ -26,7 +26,7 @@ struct MotileApp: App {
                     delegate.started = true
                     appearance.apply()
                     // A phone opens on the thread, not on the panel that was open last time.
-                    if UIDevice.current.userInterfaceIdiom == .phone { store.sidePanel.isOpen = false }
+                    if UIDevice.current.userInterfaceIdiom == .phone { store.rightPanel.isOpen = false }
                     store.start()
                     DemoDriver.startIfRequested(store: store, drawer: drawer)
                 }
@@ -95,29 +95,29 @@ struct MotileCommands: Commands {
         CommandGroup(replacing: .sidebar) {
             Button(drawer.isOpen ? "Hide Sidebar" : "Show Sidebar") { drawer.isOpen.toggle() }
                 .shortcut("sidebar.toggle", in: keys)
-            Button(store.sidePanel.isOpen ? "Hide Side Panel" : "Show Side Panel") { store.sidePanel.isOpen.toggle() }
+            Button(store.rightPanel.isOpen ? "Hide Right Panel" : "Show Right Panel") { store.rightPanel.isOpen.toggle() }
                 .shortcut("rightPanel.toggle", in: keys)
-            Button(store.sidePanel.isMaximized ? "Restore Side Panel" : "Maximize Side Panel") { store.sidePanel.toggleMaximized() }
+            Button(store.rightPanel.isMaximized ? "Restore Right Panel" : "Maximize Right Panel") { store.rightPanel.toggleMaximized() }
                 .shortcut("rightPanel.toggleMaximized", in: keys)
-                .disabled(!store.sidePanel.canMaximize)
-            Button("Show Changes") { store.sidePanel.showDiff() }
+                .disabled(!store.rightPanel.canMaximize)
+            Button("Show Changes") { store.rightPanel.showDiff() }
                 .shortcut("rightPanel.diff", in: keys)
                 .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
-            Button("Show Files") { store.sidePanel.open(.files) }
+            Button("Show Files") { store.rightPanel.open(.files) }
                 .shortcut("rightPanel.files", in: keys)
                 .disabled(store.panelUnavailable != nil)
-            Button("Show Agents") { store.sidePanel.open(.agents) }
+            Button("Show Agents") { store.rightPanel.open(.agents) }
                 .shortcut("rightPanel.agents", in: keys)
                 .disabled(store.panelUnavailable != nil)
-            Button("Show Pull Request") { store.sidePanel.open(.pullRequest) }
+            Button("Show Pull Request") { store.rightPanel.open(.pullRequest) }
                 .shortcut("rightPanel.pullRequest", in: keys)
                 .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil)
-            Button("Show All Pull Requests") { store.sidePanel.open(.pullRequests) }
+            Button("Show All Pull Requests") { store.rightPanel.open(.pullRequests) }
                 .shortcut("rightPanel.pullRequests", in: keys)
                 .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil || !store.pullRequestsExtended)
-            Button("Show Linear") { store.sidePanel.open(.linear) }
+            Button("Show Linear") { store.rightPanel.open(.linear) }
                 .shortcut("rightPanel.linear", in: keys)
-                .disabled(store.panelUnavailable != nil || store.linearUnavailable != nil)
+                .disabled(store.panelUnavailable != nil || !store.linearConnected)
             PanelTabCommands(store: store)
         }
         CommandMenu("Thread") {
@@ -133,9 +133,9 @@ struct MotileCommands: Commands {
             Button("Next Thread") { _ = store.perform("thread.next") }
                 .shortcut("thread.next", in: keys)
                 .disabled(store.jumpThreads.isEmpty)
-            Button("Close Tab") { _ = store.sidePanel.closeActive() }
+            Button("Close Tab") { _ = store.rightPanel.closeActive() }
                 .shortcut("rightPanel.close", in: keys)
-                .disabled(!store.sidePanel.isOpen)
+                .disabled(!store.rightPanel.isOpen)
             Divider()
             Button("Add a Project") { store.addProject() }
                 .disabled(store.servers.isEmpty)
@@ -285,7 +285,7 @@ struct MainScreen: View {
 
     private var narrow: some View {
         let (store, drawer) = (store, drawer)
-        return DrawerView(drawer: drawer, sidePanel: store.sidePanel) {
+        return DrawerView(drawer: drawer, rightPanel: store.rightPanel) {
             SidebarScreen()
                 .environment(store)
                 .environment(drawer)
@@ -308,9 +308,9 @@ struct MainScreen: View {
     }
 
     private func wide(_ width: CGFloat) -> some View {
-        let open = store.sidePanel.isOpen
+        let open = store.rightPanel.isOpen
         let rest = width - Self.sidebarWidth - 1
-        let covers = open && (store.sidePanel.isMaximized || rest - 1 - Self.panelWidth < Self.threadBesidePanel)
+        let covers = open && (store.rightPanel.isMaximized || rest - 1 - Self.panelWidth < Self.threadBesidePanel)
         return HStack(spacing: 0) {
             SidebarScreen(underThread: false)
                 .frame(width: Self.sidebarWidth)

@@ -6,7 +6,7 @@ enum ButtonVariant {
     case primary
     /// The others beside it.
     case secondary
-    /// Only its border until the pointer is over it: the buttons of settings rows.
+    /// The page's colour inside its border: the buttons of settings rows.
     case outline
     /// What can't be taken back.
     case danger
@@ -63,7 +63,7 @@ struct ControlLook {
         switch variant {
         case .primary: filled(.themePrimary)
         case .secondary: AnyShapeStyle(surface.color(selected || lit ? .controlLit : .control))
-        case .outline: AnyShapeStyle(selected || lit ? surface.color(.control) : .clear)
+        case .outline: AnyShapeStyle(selected || lit ? surface.color(.control) : Color.themeBackground)
         case .danger: filled(.themeDestructive)
         case .warning: filled(.themeWarning)
         case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
@@ -122,6 +122,8 @@ struct ControlLabel: View {
     var gap: CGFloat?
     /// The room between its words and its sides where it isn't the one that goes with `size`.
     var padding: CGFloat?
+    /// A symbol after a dot behind the words, as the reasoning effort after the model.
+    var detail: Symbol?
 
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: CGFloat { symbolSize ?? size.symbol }
@@ -169,10 +171,18 @@ struct ControlLabel: View {
                 mark(icon)
             }
             if let title {
-                Text(dotted: title)
-                    .font(size.font)
-                    .lineLimit(1)
-                    .opacity(pending && !spins ? 0 : 1)
+                HStack(spacing: 0) {
+                    Text(dotted: title)
+                        .lineLimit(1)
+                    if let detail {
+                        Text(verbatim: " · ")
+                            .foregroundStyle(Color.themeMutedStrongerForeground)
+                        Image(detail, size: markSize - 2)
+                            .foregroundStyle(Color.themeMutedStrongerForeground)
+                    }
+                }
+                .font(size.font)
+                .opacity(pending && !spins ? 0 : 1)
             }
         }
     }
@@ -276,13 +286,14 @@ struct ActionButton: View {
     private let symbolSize: CGFloat?
     private var gap: CGFloat?
     private var padding: CGFloat?
+    private let detail: Symbol?
     private let margin: EdgeInsets
     private let action: () -> Void
 
     init(
-        _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, help: String? = nil, variant: ButtonVariant = .secondary,
-        size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil, padding: CGFloat? = nil, pending: Bool = false,
-        pendingTitle: String? = nil,
+        _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, detail: Symbol? = nil, help: String? = nil,
+        variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil,
+        padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
         fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, joined: HorizontalEdge.Set = [],
         tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
@@ -290,6 +301,7 @@ struct ActionButton: View {
         chevron = opens
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture)
+        self.detail = detail
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
@@ -312,6 +324,7 @@ struct ActionButton: View {
     ) {
         title = nil
         self.icon = .symbol(icon)
+        detail = nil
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
@@ -339,7 +352,7 @@ struct ActionButton: View {
         Button(action: action) {
             ControlLabel(
                 title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, pendingTitle: pendingTitle, fills: fills,
-                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding
+                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail
             )
             .padding(reach.around)
         }

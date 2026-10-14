@@ -306,11 +306,11 @@ private final class Demo {
             await shoot("07-git-button")
             store.runQuickGit(in: project)
             await expect("one click commits with a written message") {
-                store.gitNotice?.title.hasPrefix("Committed") == true
+                store.notice?.title.hasPrefix("Committed") == true
                     && store.project(project.id)?.gitControl?.quick.action == nil
             }
             await shoot("07-committed")
-            store.dismissGitNotice()
+            store.dismissNotice()
         }
 
         // What a turn changed in its folder is listed under its reply, and opens beside the
@@ -321,32 +321,32 @@ private final class Demo {
             turnEnded && store.transcript.rows.contains { $0.kindName == "changes" }
         }
         await shoot("07-changes")
-        if let turn = store.sidePanel.turns.last {
-            store.sidePanel.showDiff(.turn(turn.id), revealing: "greet.py")
+        if let turn = store.rightPanel.turns.last {
+            store.rightPanel.showDiff(.turn(turn.id), revealing: "greet.py")
             await expect("the turn's diff opens beside the thread, highlighted") {
-                let files = store.sidePanel.diff.value?.files ?? []
+                let files = store.rightPanel.diff.value?.files ?? []
                 return files.count == 2 && files.contains { !$0.spans.isEmpty }
             }
             await shoot("07-diff")
-            store.sidePanel.showChange(turn: turn.id, path: "greet.py")
+            store.rightPanel.showChange(turn: turn.id, path: "greet.py")
             await expect("what the turn changed in one file opens in a tab of its own") {
-                guard case .text(let document, _) = store.sidePanel.contents[.change(turn: turn.id, path: "greet.py")]?.value else { return false }
+                guard case .text(let document, _) = store.rightPanel.contents[.change(turn: turn.id, path: "greet.py")]?.value else { return false }
                 return document.files.map(\.path) == ["greet.py"]
             }
-            store.sidePanel.open(.files)
-            await expect("the folder the thread works in is listed") { store.sidePanel.nodes.contains { $0.name == "greet.py" } }
-            store.sidePanel.open(.file("greet.py"))
+            store.rightPanel.open(.files)
+            await expect("the folder the thread works in is listed") { store.rightPanel.nodes.contains { $0.name == "greet.py" } }
+            store.rightPanel.open(.file("greet.py"))
             await expect("a file of the folder opens in a tab of its own") {
-                guard case .text(let document, _) = store.sidePanel.contents[.file("greet.py")]?.value else { return false }
+                guard case .text(let document, _) = store.rightPanel.contents[.file("greet.py")]?.value else { return false }
                 return document.files.first?.lines.first == "def greet(name):"
             }
             await shoot("07-file")
-            store.sidePanel.toggleMaximized()
-            await expect("the maximized panel covers the thread") { store.sidePanel.isMaximized }
+            store.rightPanel.toggleMaximized()
+            await expect("the maximized panel covers the thread") { store.rightPanel.isMaximized }
             await shoot("07-maximized")
-            store.sidePanel.toggleMaximized()
-            store.sidePanel.closeAll()
-            store.sidePanel.isOpen = false
+            store.rightPanel.toggleMaximized()
+            store.rightPanel.closeAll()
+            store.rightPanel.isOpen = false
         }
 
         // A long reply full of code, to see that the window keeps up.
@@ -438,6 +438,15 @@ private final class Demo {
         await expect("the draft opens with what was written in it") { store.draft.hasPrefix("Why is the sync slow") && store.attachments.count == 1 }
         for listed in store.listedDrafts { store.discard(listed.draft) }
         await expect("discarded drafts are gone, and a thread is open instead") { store.listedDrafts.isEmpty && store.selectedThread != nil }
+
+        // A folder added while a thread is open becomes a project with a new thread open in it.
+        let src = (environment["MOTILE_DEMO_PROJECT"] ?? NSTemporaryDirectory()) + "/src"
+        store.addProject(serverID: server.id, path: src)
+        await expect("adding a project opens a new thread in it") {
+            store.selectedThread == nil && store.project(store.selectedDraft?.projectID)?.path == src
+        }
+        if let added = store.projects.first(where: { $0.path == src }) { store.removeProject(added) }
+        await expect("the project added for the check is removed again") { !store.projects.contains { $0.path == src } }
 
         // The smallest window with the widest sidebar: the sidebar gives way to the thread.
         UserDefaults.standard.set(420.0, forKey: "sidebar.width")

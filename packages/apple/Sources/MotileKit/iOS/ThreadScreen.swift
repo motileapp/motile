@@ -44,14 +44,14 @@ struct ThreadScreen: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar { bar }
         .overlay(alignment: .topTrailing) {
-            if let notice = store.openGitNotice {
-                GitNoticeView(notice: notice)
+            if let notice = store.openNotice {
+                NoticeView(notice: notice)
                     .padding(.top, 6)
                     .padding(.horizontal, 14)
                     .appearing(.opacity.combined(with: .offset(y: -6)))
             }
         }
-        .animation(.easeOut(duration: 0.15), value: store.gitNotice)
+        .animation(.easeOut(duration: 0.15), value: store.notice)
     }
 
     @ToolbarContentBuilder private var bar: some ToolbarContent {
@@ -75,7 +75,7 @@ struct ThreadScreen: View {
                 PullBaseButton(base: base)
             }
             Button {
-                store.sidePanel.isOpen.toggle()
+                store.rightPanel.isOpen.toggle()
             } label: {
                 Image(.panelRight, size: 16)
             }

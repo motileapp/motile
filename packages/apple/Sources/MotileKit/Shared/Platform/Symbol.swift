@@ -9,6 +9,7 @@ enum Symbol: String {
     case arrowUp = "\u{e04a}"
     case bookMarked = "\u{e3f1}"
     case bot = "\u{e1bb}"
+    case botMessageSquare = "\u{e5ce}"
     case braces = "\u{e36a}"
     case brain = "\u{e3c6}"
     case camera = "\u{e064}"
@@ -40,6 +41,12 @@ enum Symbol: String {
     case cornerLeftUp = "\u{e0a4}"
     case diff = "\u{e30c}"
     case download = "\u{e0b2}"
+    /// The reasoning efforts up to extra: a ring round a pie a quarter, half, three quarters or
+    /// nine tenths full, which Lucide doesn't have.
+    case effortLow = "effortLow"
+    case effortMedium = "effortMedium"
+    case effortHigh = "effortHigh"
+    case effortExtra = "effortExtra"
     case ellipsis = "\u{e0b6}"
     case eye = "\u{e0ba}"
     case eyeOff = "\u{e0bb}"
@@ -88,6 +95,7 @@ enum Symbol: String {
     case play = "\u{e13c}"
     case plus = "\u{e13d}"
     case refreshCw = "\u{e145}"
+    case rocket = "\u{e286}"
     case rotateCw = "\u{e149}"
     case search = "\u{e151}"
     case server = "\u{e153}"
@@ -192,8 +200,33 @@ extension PlatformImage {
         return logo.copy(using: &placed) ?? logo
     }
 
+    /// A ring as Lucide draws a circle, round a pie that fills `share` of it clockwise from the
+    /// top, in a square of 24.
+    private static func gauge(_ share: CGFloat, side: CGFloat) -> CGPath {
+        let center = CGPoint(x: 12, y: 12)
+        let ring = CGPath(ellipseIn: CGRect(x: 2, y: 2, width: 20, height: 20), transform: nil)
+        let path = CGMutablePath()
+        path.addPath(ring.copy(strokingWithWidth: 2, lineCap: .butt, lineJoin: .miter, miterLimit: 10))
+        path.move(to: center)
+        path.addArc(center: center, radius: 6, startAngle: .pi / 2, endAngle: .pi / 2 - share * 2 * .pi, clockwise: true)
+        path.closeSubpath()
+        var scaled = CGAffineTransform(scaleX: side / 24, y: side / 24)
+        return path.copy(using: &scaled) ?? path
+    }
+
+    private static func outline(_ symbol: Symbol, side: CGFloat) -> CGPath? {
+        switch symbol {
+        case .linear: linearLogo(side: side)
+        case .effortLow: gauge(0.25, side: side)
+        case .effortMedium: gauge(0.5, side: side)
+        case .effortHigh: gauge(0.75, side: side)
+        case .effortExtra: gauge(0.9, side: side)
+        default: glyph(symbol, side: side)
+        }
+    }
+
     private static func drawn(_ symbol: Symbol, side: CGFloat, trimmed: Bool) -> PlatformImage {
-        guard let path = symbol == .linear ? linearLogo(side: side) : glyph(symbol, side: side) else { return PlatformImage() }
+        guard let path = outline(symbol, side: side) else { return PlatformImage() }
         let box = trimmed ? path.boundingBoxOfPath.integral : CGRect(x: 0, y: 0, width: side, height: side)
         #if os(macOS)
         let image = NSImage(size: box.size, flipped: false) { _ in

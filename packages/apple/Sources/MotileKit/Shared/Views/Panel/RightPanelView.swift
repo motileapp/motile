@@ -4,7 +4,7 @@ import SwiftUI
 #if os(macOS)
 /// The panel beside the thread: its tabs in the window's top bar, and under them what the open
 /// tab shows of the folder the thread works in.
-struct SidePanelView: View {
+struct RightPanelView: View {
     @Environment(AppStore.self) private var store
     /// The height of the window's top bar, which the tabs are drawn in.
     let topInset: CGFloat
@@ -13,7 +13,7 @@ struct SidePanelView: View {
     var tabInset: CGFloat?
 
     var body: some View {
-        let tabs = store.sidePanel.tabs
+        let tabs = store.rightPanel.tabs
         VStack(spacing: 0) {
             PanelLine()
             PanelContent(active: tabs.active)
@@ -180,7 +180,7 @@ struct PanelTabStrip: View {
                         }
                     }
                     if store.panelUnavailable == nil, !tabs.isBlank {
-                        ActionButton(icon: .plus, help: "New tab") { store.sidePanel.openBlank() }
+                        ActionButton(icon: .plus, help: "New tab") { store.rightPanel.openBlank() }
                     }
                 }
                 .padding(.leading, leading - PanelTabChip.margin)
@@ -200,7 +200,7 @@ struct PanelTabCommands: View {
     let store: AppStore
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         let switchable = panel.isOpen && panel.tabs.tabs.count > 1
         Button("New Tab") { panel.openBlank() }
             .shortcut("rightPanel.new", in: store.shortcuts)
@@ -231,7 +231,7 @@ struct PanelTabChip: View {
     static let margin: CGFloat = 1
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         HStack(spacing: 6) {
             Image(tab.symbol, size: 11)
                 .frame(width: 14)
@@ -286,21 +286,21 @@ private struct PanelLauncher: View {
                 .font(.ui(size: 13, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 2) {
-                row(.folder, "Files", command: "rightPanel.files", reason: nil) { store.sidePanel.open(.files) }
+                row(.folder, "Files", command: "rightPanel.files", reason: nil) { store.rightPanel.open(.files) }
                 row(.diff, "Diff", command: "rightPanel.diff", reason: target.repository ? nil : "Available in git repositories.") {
-                    store.sidePanel.showDiff()
+                    store.rightPanel.showDiff()
                 }
-                row(.users, "Agents", command: "rightPanel.agents", reason: nil) { store.sidePanel.open(.agents) }
+                row(.users, "Agents", command: "rightPanel.agents", reason: nil) { store.rightPanel.open(.agents) }
                 row(.gitPullRequest, "Pull Request", command: "rightPanel.pullRequest", reason: store.pullRequestsUnavailable) {
-                    store.sidePanel.open(.pullRequest)
+                    store.rightPanel.open(.pullRequest)
                 }
                 if store.pullRequestsExtended {
                     row(.list, "All Pull Requests", command: "rightPanel.pullRequests", reason: store.pullRequestsUnavailable) {
-                        store.sidePanel.open(.pullRequests)
+                        store.rightPanel.open(.pullRequests)
                     }
                 }
-                row(.linear, store.linear.connected(target.serverID).isEmpty ? "Connect Linear" : "Linear", command: "rightPanel.linear", reason: store.linearUnavailable) {
-                    store.sidePanel.open(.linear)
+                row(.linear, store.linearConnected ? "Linear" : "Connect Linear", command: store.linearConnected ? "rightPanel.linear" : nil, reason: store.linearUnavailable) {
+                    store.rightPanel.open(.linear)
                 }
             }
             .frame(width: 250)
@@ -309,7 +309,7 @@ private struct PanelLauncher: View {
         .task(id: target.serverID) { store.linear.read(target.serverID) }
     }
 
-    private func row(_ symbol: Symbol, _ title: String, command: String, reason: String?, action: @escaping () -> Void) -> some View {
+    private func row(_ symbol: Symbol, _ title: String, command: String?, reason: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(symbol, size: 13)
@@ -318,7 +318,7 @@ private struct PanelLauncher: View {
                     .font(.ui(size: 13))
                 Spacer()
                 #if os(macOS)
-                if let caps = store.shortcuts.effective(command).first?.caps {
+                if let command, let caps = store.shortcuts.effective(command).first?.caps {
                     KeyCaps(caps, joined: true)
                         .foregroundStyle(Color.themeMutedForeground)
                 }
@@ -387,7 +387,7 @@ struct DiffSurface: View {
     /// The pull request the diff shows, when it shows one or one of its commits, as far as it
     /// has been read.
     private func page(for scope: DiffScope) -> PullRequestPage? {
-        let page = store.sidePanel.pullRequest.value
+        let page = store.rightPanel.pullRequest.value
         switch scope {
         case .pullRequest(let number): return page?.number == number ? page : nil
         case .commit(let sha): return page?.activity.contains { $0.commits.contains { $0.sha == sha } } == true ? page : nil
@@ -396,7 +396,7 @@ struct DiffSurface: View {
     }
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         let scope = panel.scope(for: target)
         VStack(spacing: 0) {
             PanelBar {
@@ -420,7 +420,7 @@ struct DiffSurface: View {
                         panel.setAllCollapsed(!allClosed)
                     }
                 }
-                ActionButton(icon: .rotateCw, help: "Read the changes again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the changes again", pending: panel.reading.contains(.diff)) { asked += 1 }
             }
             if !target.repository {
                 NoRepositoryMessage(projectID: target.projectID)
@@ -449,7 +449,7 @@ struct DiffSurface: View {
     private func marks(_ document: CodeDocument, scope: DiffScope) -> CodeMarks {
         guard case .pullRequest(let number) = scope, store.pullRequestsExtended, let page = page(for: scope) else { return CodeMarks() }
         var marks = CodeMarks(viewable: true, viewed: Set(page.viewed.filter(\.value).keys), commentable: page.canReviewLines)
-        let pending = store.sidePanel.pendingComments[number] ?? []
+        let pending = store.rightPanel.pendingComments[number] ?? []
         let places = page.threads.compactMap { thread in thread.line.map { (thread.path, $0, thread.side) } }
             + pending.map { ($0.path, $0.line, $0.side) }
         for (path, line, side) in places {
@@ -465,7 +465,7 @@ struct DiffSurface: View {
 
     @ViewBuilder
     private func changes(_ diff: Loaded<CodeDocument>, scope: DiffScope) -> some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         switch diff {
         case .loading:
             PanelLoading()
@@ -501,13 +501,13 @@ struct DiffSurface: View {
     }
 
     private func scopeMenu(_ scope: DiffScope) -> some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         return ActionMenu(title(of: scope)) {
             Toggle("Uncommitted changes", isOn: chosen(.uncommitted, scope))
             Toggle("Branch changes", isOn: chosen(.branch, scope))
             if let number = pullRequestNumber(scope), store.pullRequestsUnavailable == nil {
                 Toggle("Pull request #\(number)", isOn: chosen(.pullRequest(number), scope))
-                if let page = store.sidePanel.pullRequest.value, page.number == number {
+                if let page = store.rightPanel.pullRequest.value, page.number == number {
                     let commits = page.activity.flatMap(\.commits).filter { !$0.sha.isEmpty }
                     if commits.count > 1 || scope == .commit(commits.first?.sha ?? "") {
                         Menu("Its Commits") {
@@ -529,7 +529,7 @@ struct DiffSurface: View {
     }
 
     private func chosen(_ option: DiffScope, _ scope: DiffScope) -> Binding<Bool> {
-        Binding { option == scope } set: { _ in store.sidePanel.choose(option) }
+        Binding { option == scope } set: { _ in store.rightPanel.choose(option) }
     }
 
     private func title(of scope: DiffScope) -> String {
@@ -538,18 +538,18 @@ struct DiffSurface: View {
         case .branch: return "Branch"
         case .pullRequest(let number): return "PR #\(number)"
         case .commit(let sha): return "Commit \(sha.prefix(7))"
-        case .turn(let id): return store.sidePanel.name(ofTurn: id)
+        case .turn(let id): return store.rightPanel.name(ofTurn: id)
         }
     }
 
     /// The pull request the scope menu offers: the thread's, or the one the panel shows.
     private func pullRequestNumber(_ scope: DiffScope) -> Int? {
         if case .pullRequest(let number) = scope { return number }
-        return target.pullRequest ?? store.sidePanel.pullRequest.value?.number
+        return target.pullRequest ?? store.rightPanel.pullRequest.value?.number
     }
 
     private func label(of turn: TurnChange) -> String {
-        let name = store.sidePanel.name(ofTurn: turn.id)
+        let name = store.rightPanel.name(ofTurn: turn.id)
         return "\(name) · \(turn.files == 1 ? "1 file" : "\(turn.files) files")"
     }
 }
@@ -561,7 +561,7 @@ struct FilesSurface: View {
     @State private var asked = 0
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         VStack(spacing: 0) {
             PanelBar {
                 Image(.folder, size: 11)
@@ -572,7 +572,7 @@ struct FilesSurface: View {
                     .lineLimit(1)
                     .padding(.leading, 3)
                 Spacer(minLength: 4)
-                ActionButton(icon: .rotateCw, help: "Read the folder again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the folder again", pending: panel.reading.contains(.files)) { asked += 1 }
             }
             if let error = panel.filesError {
                 PanelMessage(text: error, failed: true)
@@ -586,7 +586,8 @@ struct FilesSurface: View {
                                 FileRow(node: node)
                             }
                         }
-                        .padding(.vertical, 6)
+                        .padding(.top, 6)
+                        .padding(.bottom, panelEndRoom)
                     }
                 }
             } else {
@@ -604,7 +605,7 @@ private struct FileRow: View {
     let node: FileNode
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         HStack(spacing: 6) {
             Image(node.open ? .chevronDown : .chevronRight, size: 8)
                 .foregroundStyle(Color.themeMutedStrongerForeground)
@@ -641,7 +642,7 @@ struct FileSurface: View {
     @State private var asked = 0
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         VStack(spacing: 0) {
             PanelBar {
                 (Text(folder).foregroundStyle(Color.themeMutedForeground) + Text((path as NSString).lastPathComponent).foregroundStyle(Color.themeForeground))
@@ -650,7 +651,7 @@ struct FileSurface: View {
                     .truncationMode(.head)
                 Spacer(minLength: 4)
                 CopyButton(help: "Copy the path") { Platform.copy(path) }
-                ActionButton(icon: .rotateCw, help: "Read the file again") { asked += 1 }
+                ActionButton(icon: .rotateCw, help: "Read the file again", pending: panel.reading.contains(.file(path))) { asked += 1 }
             }
             switch panel.contents[.file(path)] {
             case nil, .loading:
@@ -707,7 +708,7 @@ struct ChangeSurface: View {
     @State private var closed = false
 
     var body: some View {
-        let panel = store.sidePanel
+        let panel = store.rightPanel
         VStack(spacing: 0) {
             PanelBar {
                 Text(panel.name(ofTurn: turn))

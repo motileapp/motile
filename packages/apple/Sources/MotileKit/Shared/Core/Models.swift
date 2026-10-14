@@ -500,16 +500,21 @@ enum GitStage: String {
     }
 }
 
-/// What a git action did, or why it couldn't, shown under the button until it is dismissed.
-struct GitNotice: Equatable {
-    let checkoutID: String
+/// What a git action or a project add did, or why it couldn't, shown at the top of the thread
+/// until it is dismissed. A git notice belongs to its checkout; a project's shows anywhere.
+struct Notice: Equatable {
+    var checkoutID: String?
     let title: String
     var description: String?
     var failed = false
+    /// Still under way, like a clone.
+    var pending = false
     /// The pull request to open.
     var url: String?
     /// The action that follows, like a push after a commit.
     var next: String?
+    /// The project to open a thread in.
+    var projectID: String?
 
     var nextLabel: String? {
         switch next {
@@ -927,9 +932,13 @@ struct AgentInfo: Equatable, Identifiable {
     /// "3 tools · 21k tokens", as far as either is known.
     var usage: String? {
         let tools = toolUses.map { "\($0) \($0 == 1 ? "tool" : "tools")" }
-        let spent = tokens.map { $0 < 1000 ? "\($0) tokens" : "\($0 / 1000)k tokens" }
-        let parts = [tools, spent].compactMap { $0 }
+        let parts = [tools, tokens.map(Self.tokens)].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// "820 tokens", "21.4K tokens", "4.57M tokens".
+    static func tokens(_ count: Int) -> String {
+        "\(count.abbreviated) tokens"
     }
 }
 
@@ -1189,6 +1198,26 @@ struct FolderListing {
         parent = json.optionalString("parent")
         folders = json.objects("folders").map { Folder(name: $0.string("name"), path: $0.string("path"), typed: $0.string("typed")) }
         images = json.objects("images").map { ($0.string("name"), $0.string("path")) }
+    }
+}
+
+extension Int {
+    /// "820", "1.5K", "45.7M", "123B", "1.2T": at most three significant digits.
+    var abbreviated: String {
+        let units = ["", "K", "M", "B", "T"]
+        var value = Double(magnitude)
+        var unit = 0
+        while value >= 999.5 && unit < units.count - 1 {
+            value /= 1000
+            unit += 1
+        }
+        let decimals = unit == 0 || value >= 100 ? 0 : value >= 10 ? 1 : 2
+        var digits = String(format: "%.\(decimals)f", value)
+        if decimals > 0 {
+            while digits.hasSuffix("0") { digits.removeLast() }
+            if digits.hasSuffix(".") { digits.removeLast() }
+        }
+        return (self < 0 ? "-" : "") + digits + units[unit]
     }
 }
 

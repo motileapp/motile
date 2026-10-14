@@ -166,7 +166,7 @@ final class AppStore {
     private(set) var initializingGit: Set<String> = []
     /// The `draftWorktreeKey`s whose base is being pulled.
     private(set) var pullingBases: Set<String> = []
-    private(set) var gitNotice: GitNotice?
+    private(set) var notice: Notice?
     /// What a new worktree starts at, like `origin/main`, by `draftWorktreeKey`.
     private(set) var worktreeStarts: [String: String] = [:]
     private(set) var panel: PanelPage?
@@ -183,7 +183,8 @@ final class AppStore {
     private(set) var addingProject: AddingProject?
     /// Counts up when a project has been made or cloned.
     private(set) var projectsAdded = 0
-    @ObservationIgnored private var awaitedProjectID: String?
+    /// The project just made or cloned, and what to do with it once the server has told about it.
+    @ObservationIgnored private var awaitedProject: (id: String, arrived: (Project) -> Void)?
     /// The folder just added as a project, which the next thread starts in once the server has told about it.
     @ObservationIgnored private var awaitedFolder: (serverID: String, path: String)?
     /// Counts up when the composer should take the keyboard back.
@@ -277,11 +278,11 @@ final class AppStore {
     private(set) var messageSearch = MessageSearch()
 
     let updater = AppUpdater()
-    let sidePanel = SidePanel()
+    let rightPanel = RightPanel()
     let linear = Linear()
     @ObservationIgnored let core = CoreBridge()
     @ObservationIgnored let transcript = TranscriptModel()
-    /// What the agent did that the side panel shows.
+    /// What the agent did that the right panel shows.
     @ObservationIgnored let agentTranscript = TranscriptModel()
     @ObservationIgnored private var signInSession: SignInSession?
     @ObservationIgnored private let lifecycle = Lifecycle()
@@ -296,7 +297,7 @@ final class AppStore {
 
     init() {
         loadPreferences()
-        sidePanel.store = self
+        rightPanel.store = self
         linear.store = self
         updater.onFound = { [weak self] asked in self?.showServerUpdates(asked: asked) }
     }
@@ -440,7 +441,7 @@ final class AppStore {
                 let isEmpty = self.transcript.isEmpty
                 if self.transcriptIsEmpty != isEmpty { self.transcriptIsEmpty = isEmpty }
                 let turns = self.transcript.turns
-                if self.sidePanel.turns != turns { self.sidePanel.turns = turns }
+                if self.rightPanel.turns != turns { self.rightPanel.turns = turns }
             }
         case "agents":
             let threadID = event.string("thread_id")
@@ -448,21 +449,21 @@ final class AppStore {
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
                 if self.agents != agents { self.agents = agents }
-                self.sidePanel.agentsChanged()
+                self.rightPanel.agentsChanged()
             }
         case "agent_rows":
             let (threadID, agentID) = (event.string("thread_id"), event.string("agent_id"))
             let (reset, start, remove) = (event.bool("reset"), event.int("start"), event.int("remove"))
             let rows = event.objects("rows").compactMap { RowModel(json: $0) }
             return { [weak self] in
-                guard let self, self.transcript.threadID == threadID, self.sidePanel.shownAgent == agentID else { return }
+                guard let self, self.transcript.threadID == threadID, self.rightPanel.shownAgent == agentID else { return }
                 self.agentTranscript.apply(reset: reset, start: start, remove: remove, rows: rows, earlier: false)
             }
         case "code_spans":
             let request = (event["id"] as? NSNumber)?.uint64Value ?? 0
             let lines = (event["lines"] as? [[NSNumber]] ?? []).map { $0.map(\.int32Value) }
             let file = event.int("file")
-            return { [weak self] in self?.sidePanel.colour(request: request, file: file, lines: lines) }
+            return { [weak self] in self?.rightPanel.colour(request: request, file: file, lines: lines) }
         case "spans":
             let (threadID, rowID) = (event.string("thread_id"), event.string("row_id"))
             let spans = event["spans"] as? [NSNumber] ?? []
@@ -507,7 +508,11 @@ final class AppStore {
 
     private func apply(servers: [Server]) {
         let composerWasConnected = composerServer?.state == .connected
+        let wereConnected = Set(self.servers.filter { $0.state == .connected }.map(\.id))
         self.servers = servers
+        for server in servers where server.state == .connected && !wereConnected.contains(server.id) {
+            linear.read(server.id)
+        }
         if !composerWasConnected, composerServer?.state == .connected {
             readGit(fetch: true)
             readWorktreeStart(fetch: true)
@@ -565,7 +570,7 @@ final class AppStore {
 
     private func removeThread(_ id: String) {
         setThread(nil, id: id)
-        sidePanel.forget(id)
+        rightPanel.forget(id)
         if selection == .thread(id) { openEmptyDraft() }
     }
 
@@ -713,16 +718,16 @@ final class AppStore {
         return project
     }
 
-    /// The git notice of the checkout git works in from here, or of the project the open draft
-    /// starts a worktree in.
-    var openGitNotice: GitNotice? {
-        guard let notice = gitNotice else { return nil }
+    /// The notice to draw here: a project's anywhere, a git one over the checkout git works in
+    /// from here, or over the project the open draft starts a worktree in.
+    var openNotice: Notice? {
+        guard let notice, let wanted = notice.checkoutID else { return notice }
         let draftProject = draftUsesWorktree ? project(selectedDraft?.projectID) : nil
-        guard let checkoutID = (gitProject ?? draftProject)?.checkoutID, notice.checkoutID == checkoutID else { return nil }
+        guard let checkoutID = (gitProject ?? draftProject)?.checkoutID, wanted == checkoutID else { return nil }
         return notice
     }
 
-    /// The folder the side panel looks into: the one the open thread works in, or the project's
+    /// The folder the right panel looks into: the one the open thread works in, or the project's
     /// for the open draft.
     var panelTarget: PanelTarget? {
         guard let project = threadProject ?? project(selectedDraft?.projectID) else { return nil }
@@ -772,9 +777,9 @@ final class AppStore {
 
     /// Opens the pull request's tab, or the pull request on GitHub where the tab can't show it.
     func showPullRequest(_ url: URL) {
-        gitNotice = nil
+        notice = nil
         guard panelUnavailable == nil, pullRequestUnavailable == nil else { return Platform.open(url) }
-        sidePanel.open(.pullRequest)
+        rightPanel.open(.pullRequest)
     }
 
     /// Puts a prompt that a pull request's tab wrote in the composer, under what is there, for
@@ -782,8 +787,8 @@ final class AppStore {
     func handOff(_ prompt: String) {
         let written = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         draft = written.isEmpty ? prompt : "\(written)\n\n\(prompt)"
-        if sidePanel.isMaximized { sidePanel.toggleMaximized() }
-        if Platform.panelCoversThread { sidePanel.isOpen = false }
+        if rightPanel.isMaximized { rightPanel.toggleMaximized() }
+        if Platform.panelCoversThread { rightPanel.isOpen = false }
         composerFocus += 1
     }
 
@@ -792,13 +797,13 @@ final class AppStore {
     func startWork(_ prompt: String, in projectID: String) {
         guard selectedDraft == nil else { return handOff(prompt) }
         guard let project = project(projectID) else { return }
-        let tab = sidePanel.tabs.active
+        let tab = rightPanel.tabs.active
         startNewThread(in: project)
-        if let tab, tab.blankNumber == nil { sidePanel.open(tab) }
+        if let tab, tab.blankNumber == nil { rightPanel.open(tab) }
         handOff(prompt)
     }
 
-    /// Why the side panel has nothing to show here, when it hasn't.
+    /// Why the right panel has nothing to show here, when it hasn't.
     var panelUnavailable: String? {
         guard let target = panelTarget else { return "Add a project to see its files." }
         guard let server = server(target.serverID), server.state == .connected else { return "Your server isn't connected." }
@@ -1202,13 +1207,24 @@ final class AppStore {
 
     // MARK: Projects
 
+    /// Adds the folder as a project and opens a thread in it. A folder that is a project
+    /// already is opened where it was left.
     func addProject(serverID: String, path: String) {
-        request(serverID, ["type": "add_project", "path": path], done: { [weak self] in
+        let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+        if let project = projects.first(where: { $0.serverID == serverID && $0.path == trimmed }) {
+            return goTo(project)
+        }
+        let name = URL(fileURLWithPath: trimmed).lastPathComponent
+        core.send("request", ["server_id": serverID, "request": ["type": "add_project", "path": path]]) { [weak self] result in
             guard let self else { return }
-            let trimmed = path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
-            awaitedFolder = (serverID, trimmed)
-            pickAwaitedFolder()
-        })
+            switch result {
+            case .success:
+                awaitedFolder = (serverID, trimmed)
+                pickAwaitedFolder()
+            case .failure(let error):
+                show(Notice(title: "Couldn't add \(name)", description: error.message, failed: true))
+            }
+        }
     }
 
     private func pickAwaitedFolder() {
@@ -1216,7 +1232,22 @@ final class AppStore {
               let project = projects.first(where: { $0.serverID == folder.serverID && $0.path == folder.path })
         else { return }
         awaitedFolder = nil
+        openThread(in: project)
+    }
+
+    /// Opens a thread in the project: the open draft, moved into it, or a new one.
+    private func openThread(in project: Project) {
+        closeSettings()
+        guard let draft = selectedDraft, !isSending(draft) else { return startNewThread(in: project) }
         setNewThreadProject(project.id)
+        threadsShown += 1
+    }
+
+    /// Goes to the project's latest thread that is still going, or opens a new one in it.
+    private func goTo(_ project: Project) {
+        guard let thread = activeThreads.first(where: { $0.projectID == project.id }) else { return openThread(in: project) }
+        closeSettings()
+        show(.thread(thread.id))
     }
 
     /// Opens the panel on the ways to add a project, after the servers when there is a choice.
@@ -1261,6 +1292,12 @@ final class AppStore {
         return server.protocolVersion >= 12 ? nil : "Update \(server.name) to connect it to Linear."
     }
 
+    /// The panel's server is connected to a Linear workspace.
+    var linearConnected: Bool {
+        guard let target = panelTarget, linearUnavailable == nil else { return false }
+        return !linear.connected(target.serverID).isEmpty
+    }
+
     /// Asks the server for its GitHub repositories, unless it listed them in the last minute or
     /// `fresh` asks again anyway. The ones it listed before stay until it answers.
     func loadRepos(_ serverID: String, fresh: Bool = false) {
@@ -1284,40 +1321,60 @@ final class AppStore {
         }
     }
 
+    /// Makes the project and opens a thread in it. The panel waits, so that a name that is taken
+    /// can be changed.
     func newProject(named name: String, on serverID: String) {
-        add(["type": "new_project", "name": name], named: name, on: serverID)
-    }
-
-    func clone(_ repo: String, on serverID: String) {
-        add(["type": "clone_repo", "repo": repo], named: repo, on: serverID)
-    }
-
-    private func add(_ request: JSON, named name: String, on serverID: String) {
         guard addingProject == nil else { return }
         addingProject = AddingProject(serverID: serverID, name: name)
         panelNotice = nil
-        core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
+        add(["type": "new_project", "name": name], on: serverID, arrived: { [weak self] project in
+            self?.addingProject = nil
+            self?.openThread(in: project)
+        }, failed: { [weak self] error in
             guard let self else { return }
             addingProject = nil
+            guard panel != nil else { return alert(error) }
+            panelNotice = error.message
+        })
+    }
+
+    /// Clones the repository while the notice says so, and opens a thread in it once it is
+    /// there. Someone who has gone elsewhere meanwhile is offered the thread instead.
+    func clone(_ repo: String, on serverID: String) {
+        let into = server(serverID).map { " on \($0.name)" } ?? ""
+        show(Notice(title: "Cloning \(repo)", description: "Into ~/projects\(into)", pending: true))
+        let from = selection
+        add(["type": "clone_repo", "repo": repo], on: serverID, arrived: { [weak self] project in
+            guard let self else { return }
+            guard selection == from else {
+                return show(Notice(title: "Cloned \(repo)", description: project.path, projectID: project.id))
+            }
+            show(Notice(title: "Cloned \(repo)", description: project.path))
+            openThread(in: project)
+        }, failed: { [weak self] error in
+            self?.show(Notice(title: "Couldn't clone \(repo)", description: error.message, failed: true))
+        })
+    }
+
+    private func add(_ request: JSON, on serverID: String, arrived: @escaping (Project) -> Void, failed: @escaping (CoreBridge.CoreError) -> Void) {
+        core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
+            guard let self else { return }
             switch result {
             case .success(let answer):
                 projectsAdded += 1
-                awaitedProjectID = answer.string("project_id")
+                awaitedProject = (answer.string("project_id"), arrived)
                 openAwaitedProject()
-            case .failure(let error) where panel != nil:
-                panelNotice = error.message
             case .failure(let error):
-                alert(error)
+                failed(error)
             }
         }
     }
 
-    /// Starts a thread in the project that was just made, once the server has told about it.
+    /// Does what was planned for the project that was just made, once the server has told about it.
     private func openAwaitedProject() {
-        guard let project = project(awaitedProjectID) else { return }
-        awaitedProjectID = nil
-        guard selectedDraft == nil else { return setNewThreadProject(project.id) }
-        startNewThread(in: project)
+        guard let awaited = awaitedProject, let project = project(awaited.id) else { return }
+        awaitedProject = nil
+        awaited.arrived(project)
     }
 
     // MARK: Branches
@@ -1370,7 +1427,7 @@ final class AppStore {
             guard let self, case .success(let answer) = result else { return }
             worktreeStarts[key] = answer.string("start")
             guard let problem = answer.optionalString("problem") else { return }
-            show(GitNotice(checkoutID: project.checkoutID, title: "Couldn't fetch \(base)", description: problem, failed: true))
+            show(Notice(checkoutID: project.checkoutID, title: "Couldn't fetch \(base)", description: problem, failed: true))
         }
     }
 
@@ -1392,7 +1449,7 @@ final class AppStore {
         guard let key = draftWorktreeKey, let base = draftBaseToPull, let project = project(selectedDraft?.projectID),
             pullingBases.insert(key).inserted
         else { return }
-        gitNotice = nil
+        notice = nil
         let request: JSON = ["type": "update_base", "project_id": project.id, "base": base]
         core.send("request", ["server_id": project.serverID, "request": request]) { [weak self] result in
             guard let self else { return }
@@ -1400,9 +1457,9 @@ final class AppStore {
             switch result {
             case .success(let answer):
                 worktreeStarts[key] = answer.string("start")
-                show(GitNotice(checkoutID: project.checkoutID, title: "Pulled \(base)"))
+                show(Notice(checkoutID: project.checkoutID, title: "Pulled \(base)"))
             case .failure(let error):
-                show(GitNotice(checkoutID: project.checkoutID, title: "Couldn't pull \(base)", description: error.message, failed: true))
+                show(Notice(checkoutID: project.checkoutID, title: "Couldn't pull \(base)", description: error.message, failed: true))
             }
         }
     }
@@ -1495,7 +1552,7 @@ final class AppStore {
             case .success(let answer):
                 if let problem = answer.optionalString("problem") {
                     let title = "Couldn't fetch from the remote"
-                    self?.show(GitNotice(checkoutID: project.checkoutID, title: title, description: problem, failed: true))
+                    self?.show(Notice(checkoutID: project.checkoutID, title: title, description: problem, failed: true))
                 }
                 done?(answer.objects("files").map { ChangedFile(json: $0) })
             // Only said when the user is waiting for the answer.
@@ -1531,7 +1588,7 @@ final class AppStore {
             return
         }
         guard let action = quick.action else {
-            show(GitNotice(checkoutID: project.checkoutID, title: quick.hint ?? quick.label))
+            show(Notice(checkoutID: project.checkoutID, title: quick.hint ?? quick.label))
             return
         }
         startGit(action, in: project, confirm: quick.confirm)
@@ -1565,7 +1622,7 @@ final class AppStore {
         let checkoutID = project.checkoutID
         guard gitStage(in: project) == nil else { return }
         gitStages[checkoutID] = firstStage(of: action, in: project, written: message?.isEmpty == false && !newBranch)
-        gitNotice = nil
+        notice = nil
         var command: JSON = [
             "server_id": project.serverID, "project_id": project.id, "action": action, "paths": paths, "new_branch": newBranch,
         ]
@@ -1576,37 +1633,45 @@ final class AppStore {
             self.gitStages[checkoutID] = nil
             switch result {
             case .success(let done):
-                let notice = GitNotice(
+                let notice = Notice(
                     checkoutID: checkoutID, title: done.string("title"), description: done.optionalString("description"),
                     url: done.optionalString("url"), next: done.optionalString("next")
                 )
                 self.show(notice)
             case .failure(let error):
-                self.show(GitNotice(checkoutID: checkoutID, title: "Git stopped", description: error.message, failed: true))
+                self.show(Notice(checkoutID: checkoutID, title: "Git stopped", description: error.message, failed: true))
             }
         }
     }
 
-    /// What worked goes away by itself; what failed stays until it is closed.
-    private func show(_ notice: GitNotice) {
-        gitNotice = notice
-        guard !notice.failed else { return }
+    /// What worked goes away by itself; what failed or is still under way stays until it is
+    /// closed or replaced.
+    private func show(_ notice: Notice) {
+        self.notice = notice
+        guard !notice.failed, !notice.pending else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
-            if self?.gitNotice == notice { self?.gitNotice = nil }
+            if self?.notice == notice { self?.notice = nil }
         }
     }
 
-    func dismissGitNotice() {
-        gitNotice = nil
+    func dismissNotice() {
+        notice = nil
     }
 
     /// The action a notice says comes next, like the push after a commit.
     func runNextGit() {
-        guard let notice = gitNotice, let next = notice.next else { return }
+        guard let notice, let next = notice.next else { return }
         guard let project = gitProject, project.checkoutID == notice.checkoutID else { return }
         let confirm = project.gitControl?.menu.first { $0.action == next }?.confirm
-        gitNotice = nil
+        self.notice = nil
         startGit(next, in: project, confirm: confirm)
+    }
+
+    /// Opens a thread in the project a notice is about.
+    func openNoticeProject() {
+        guard let project = project(notice?.projectID) else { return }
+        notice = nil
+        openThread(in: project)
     }
 
     /// What the agents spent on the connected `servers`, or all of them, in the last `buckets`
@@ -1697,13 +1762,13 @@ final class AppStore {
     }
 
     /// What Esc does when the focused view claims nothing: leaves a route, restores the
-    /// maximized side panel, or hides a side panel that only has its blank tab. Nothing while
+    /// maximized right panel, or hides a right panel that only has its blank tab. Nothing while
     /// the command panel, the viewer or the branches have it.
     var escapes: (() -> Void)? {
         guard panel == nil, viewing == nil, !showsBranches else { return nil }
         if settings != nil || showsUsage { return { [self] in closeRoute() } }
-        if sidePanel.isMaximized { return { [self] in sidePanel.toggleMaximized() } }
-        if sidePanel.isOpen, sidePanel.tabs.isBlank { return { [self] in sidePanel.isOpen = false } }
+        if rightPanel.isMaximized { return { [self] in rightPanel.toggleMaximized() } }
+        if rightPanel.isOpen, rightPanel.tabs.isBlank { return { [self] in rightPanel.isOpen = false } }
         return nil
     }
 
@@ -1756,8 +1821,8 @@ final class AppStore {
         openedDraftPreview = selectedDraft.flatMap { preview(of: $0) }
         activity = Activity()
         transcriptIsEmpty = true
-        sidePanel.turns = []
-        sidePanel.showAgents()
+        rightPanel.turns = []
+        rightPanel.showAgents()
         agents = []
         guard case .thread(let id) = new, let thread = threads[id] else {
             transcript.begin(threadID: nil)
@@ -1923,7 +1988,7 @@ final class AppStore {
     private func openNewThread(id: String, serverID: String, draftID: String) {
         let wasOpen = selection == .draft(draftID)
         removeDraft(draftID)
-        sidePanel.move(from: draftID, to: id)
+        rightPanel.move(from: draftID, to: id)
         guard wasOpen else { return }
         selection = .thread(id)
         openThreadID = id

@@ -9,7 +9,7 @@ struct ThreadPane: View {
     /// How far the title starts from the pane's left edge: past the window's buttons when the
     /// sidebar is hidden.
     var titleInset: CGFloat = 20
-    /// The side panel is beside the pane, so the window's last button isn't over it.
+    /// The right panel is beside the pane, so the window's last button isn't over it.
     var besidePanel = false
     @State private var removal: Removal?
 
@@ -43,14 +43,14 @@ struct ThreadPane: View {
             CommitSheet(project: project)
         }
         .overlay(alignment: .topTrailing) {
-            if let notice = store.openGitNotice {
-                GitNoticeView(notice: notice)
+            if let notice = store.openNotice {
+                NoticeView(notice: notice)
                     .padding(.top, 6)
                     .padding(.trailing, 14)
                     .appearing(.opacity.combined(with: .offset(y: -6)))
             }
         }
-        .animation(.easeOut(duration: 0.15), value: store.gitNotice)
+        .animation(.easeOut(duration: 0.15), value: store.notice)
         .confirmsRemoval($removal)
     }
 
@@ -71,7 +71,7 @@ struct ThreadPane: View {
                 }
             }
             .padding(.leading, titleInset)
-            // Room for the button that shows the side panel, which is at the window's edge.
+            // Room for the button that shows the right panel, which is at the window's edge.
             .padding(.trailing, besidePanel ? 4 : ToolbarButton.width + 12)
             .frame(maxWidth: .infinity)
             .frame(height: proxy.safeAreaInsets.top)

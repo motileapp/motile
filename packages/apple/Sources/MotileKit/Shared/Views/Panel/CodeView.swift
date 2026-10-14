@@ -218,6 +218,12 @@ final class CodeSheet {
         case toggle, open, viewed
     }
 
+    /// The heading under the pointer or the finger, and the part of it that takes the press.
+    struct LitHeading: Equatable {
+        let file: Int
+        let press: HeadingPress
+    }
+
     private(set) var document: CodeDocument?
     private(set) var collapsed: Set<String> = []
     /// How wide the view is, which images and videos fit in.
@@ -227,6 +233,7 @@ final class CodeSheet {
     var wantsMedia: (CodeFile) -> Void = { _ in }
     /// The line under the pointer, which shows that a comment can be written on it.
     var hovered: (file: Int, line: Int)?
+    var lit: LitHeading?
     private(set) var blocks: [Block] = []
     private(set) var gutter: CGFloat = 0
     private var numberWidth: CGFloat = 0
@@ -263,7 +270,7 @@ final class CodeSheet {
         let digits = max(2, String(lastNumber).count)
         numberWidth = CGFloat(digits) * 6.8 + 12
         gutter = (document.headed ? 2 : 1) * numberWidth + 4
-        contentSize = CGSize(width: gutter + Self.textInset + CGFloat(columns) * Self.advance + 24, height: y + 8)
+        contentSize = CGSize(width: gutter + Self.textInset + CGFloat(columns) * Self.advance + 24, height: y + panelEndRoom)
     }
 
     /// Lays the document out again for a view `width` wide, when its images and videos take
@@ -501,7 +508,8 @@ final class CodeSheet {
     func drawHeading(of index: Int, in rect: CGRect, lineAbove: Bool) {
         guard let document, index < document.files.count else { return }
         let file = document.files[index]
-        Theme.backgroundSecondary.setFill()
+        let lit = self.lit?.file == index ? self.lit : nil
+        (lit == nil ? Theme.backgroundSecondary : Surface.secondary.platform(.row)).setFill()
         rect.fillCurrent()
         Theme.border.setFill()
         if lineAbove { CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: 1).fillCurrent() }
@@ -514,7 +522,13 @@ final class CodeSheet {
         TintedSymbol.draw(FileSymbol.symbol(for: file.path), size: 11, color: Theme.mutedForeground, in: icon)
 
         let open = CGRect(x: rect.maxX - 34, y: rect.minY, width: 28, height: rect.height)
-        TintedSymbol.draw(.squareArrowOutUpRight, size: 12, color: Theme.mutedForeground, in: open)
+        let openLit = lit?.press == .open
+        if openLit {
+            let side = ControlSize.small.height
+            Surface.secondary.platform(.controlLit).setFill()
+            RoundedBox.fill(CGRect(x: open.midX - side / 2, y: open.midY - side / 2, width: side, height: side), radius: ControlSize.small.radius)
+        }
+        TintedSymbol.draw(.squareArrowOutUpRight, size: 12, color: openLit ? Theme.foreground : Theme.mutedForeground, in: open)
         let counts = LineCountText.text(added: file.added, removed: file.removed)
         let countsSize = counts.size()
         let countsX = open.minX - 4 - countsSize.width

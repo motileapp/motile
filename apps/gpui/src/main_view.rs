@@ -35,13 +35,13 @@ pub fn shown_sidebar_width(store: &Store, window_width: f32) -> f32 {
     let widths = sidebar_widths(window_width);
     store.prefs.f32_or("sidebar.width", SIDEBAR_WIDTH).clamp(widths.0, widths.1)
 }
-/// What the side panel leaves to the thread. Without that much room, it lies over the thread.
+/// What the right panel leaves to the thread. Without that much room, it lies over the thread.
 const THREAD_BESIDE_PANEL: f32 = 400.;
 /// How far the top bar's content starts past the sidebar's button while the sidebar is hidden.
 const PAST_SIDEBAR_BUTTON: f32 = 46.;
 const PANEL_BUTTONS_INSET: f32 = 10.;
 
-/// A drag of the line beside the sidebar or the side panel: where it started, the width then,
+/// A drag of the line beside the sidebar or the right panel: where it started, the width then,
 /// and how narrow and how wide the window lets it be.
 #[derive(Clone, Copy, PartialEq)]
 enum Resizing {
@@ -54,7 +54,7 @@ pub struct MainView {
     sidebar: Entity<Sidebar>,
     thread: Entity<ThreadPane>,
     panel: Entity<SidePanelView>,
-    /// What the agents spent, in place of the thread and the side panel while it is open.
+    /// What the agents spent, in place of the thread and the right panel while it is open.
     usage: Option<Entity<UsageRoute>>,
     resizing: Option<Resizing>,
     /// A press in the top bar that moves the window once it drags.
@@ -97,19 +97,20 @@ impl MainView {
         });
     }
 
-    /// Drawn over the top bar's end: the side panel's buttons.
+    /// Drawn over the top bar's end: the right panel's buttons.
     fn panel_buttons(&self, cx: &mut Context<Self>) -> Div {
         let store = self.store.read(cx);
         let open = store.side_panel.is_open;
         let maximized = store.panel_maximized();
         let can_maximize = store.can_maximize_panel();
         let maximize_help = if maximized {
-            "Restore the side panel (Esc)".to_string()
+            "Restore the right panel (Esc)".to_string()
         } else {
-            store.shortcuts.help("Maximize the side panel", "rightPanel.toggleMaximized")
+            store.shortcuts.help("Maximize the right panel", "rightPanel.toggleMaximized")
         };
-        let side_help =
-            store.shortcuts.help(if open { "Hide the side panel" } else { "Show the side panel" }, "rightPanel.toggle");
+        let side_help = store
+            .shortcuts
+            .help(if open { "Hide the right panel" } else { "Show the right panel" }, "rightPanel.toggle");
         let maximize = self.store.clone();
         let side = self.store.clone();
         div()
@@ -357,7 +358,7 @@ impl Render for MainView {
                         .on_click(toggle_sidebar),
                     ),
             )
-            // Drawn over the top bar's end, so that the side panel's button keeps its place
+            // Drawn over the top bar's end, so that the right panel's button keeps its place
             // when the one beside it comes and goes.
             .child(
                 div()

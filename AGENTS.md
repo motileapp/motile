@@ -198,7 +198,7 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   SF Symbols. A new one is a case with the character it has in lucide-static's
   `font/codepoints.json`. Linear's logo, which Lucide doesn't have, is drawn by hand there.
 - `Shared/Core`: `CoreBridge.swift` calls the Rust core, `AppStore.swift` is the state the
-  views show, `SidePanel.swift` the side panel's state, `Linear.swift` the Linear tab's.
+  views show, `RightPanel.swift` the right panel's state, `Linear.swift` the Linear tab's.
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
   rows on screen, `Rows.swift` builds their text and measures them off the main thread,
   `RowViews.swift` are the rows.
@@ -278,7 +278,7 @@ a second launch hands its link to the running one (`instance.rs`).
   tells the core when the Mac wakes or changes networks. `window_frame.rs` is the window's
   buttons in the top bar where the desktop draws no title bar (GNOME under Wayland); GPUI Kit
   draws the edges that resize it.
-- `panel/`: the side panel: `state.rs` (the tabs, as `SidePanel.swift`), `view.rs` (the chrome
+- `panel/`: the right panel: `state.rs` (the tabs, as `RightPanel.swift`), `view.rs` (the chrome
   and the changes, files and agents tabs), `code_view.rs`, `pull_request.rs`,
   `pull_request_list.rs`, `line_comment.rs` and `linear.rs`.
 - `scripts/dev-app.sh` opens its dev app on the Mac's dev stack (`apps/macos/scripts/dev-stack.sh`),

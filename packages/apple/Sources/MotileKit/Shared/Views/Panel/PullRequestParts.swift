@@ -93,7 +93,7 @@ struct PullRequestNoticeBar: View {
                     if let url = notice.url {
                         ActionButton("Open", variant: .link, size: .small) { Platform.open(url) }
                     }
-                    ActionButton(icon: .x, help: "Close", size: .small) { store.sidePanel.dismissPullRequestNotice() }
+                    ActionButton(icon: .x, help: "Close", size: .small) { store.rightPanel.dismissPullRequestNotice() }
                 }
                 .frame(height: Self.lineHeight)
             }

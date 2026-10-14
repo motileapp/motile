@@ -289,9 +289,9 @@ fn menus(state: &State) -> Vec<Menu> {
         ]),
         Menu::new("View").items([
             item(if state.sidebar_hidden { "Show Sidebar" } else { "Hide Sidebar" }, "sidebar.toggle"),
-            item(if state.panel_open { "Hide Side Panel" } else { "Show Side Panel" }, "rightPanel.toggle"),
+            item(if state.panel_open { "Hide Right Panel" } else { "Show Right Panel" }, "rightPanel.toggle"),
             item(
-                if state.panel_maximized { "Restore Side Panel" } else { "Maximize Side Panel" },
+                if state.panel_maximized { "Restore Right Panel" } else { "Maximize Right Panel" },
                 "rightPanel.toggleMaximized",
             )
             .disabled(!state.can_maximize),

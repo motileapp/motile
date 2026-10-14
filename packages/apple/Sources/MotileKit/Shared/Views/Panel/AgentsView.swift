@@ -1,41 +1,55 @@
 import SwiftUI
 
+/// The space between the right panel's list rows, split around each: it looks empty but is the row's.
+let panelRowMargin = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
+
+/// The room under the end of what the right panel scrolls through, so that it never ends on the window's edge.
+#if os(macOS)
+let panelEndRoom: CGFloat = 64
+#else
+let panelEndRoom: CGFloat = 48
+#endif
+
 /// The agents the thread's agent has started, and what one of them did once it is opened.
 struct AgentsSurface: View {
     @Environment(AppStore.self) private var store
 
     var body: some View {
         let agents = store.agents
-        if let agent = agents.first(where: { $0.id == store.sidePanel.shownAgent }) {
+        if let agent = agents.first(where: { $0.id == store.rightPanel.shownAgent }) {
             AgentTranscript(agent: agent)
         } else if agents.isEmpty {
             PanelMessage(text: "The agents this thread starts show up here.")
         } else {
             VStack(spacing: 0) {
                 PanelBar {
-                    Text(Self.summary(of: agents))
+                    Text(dotted: Self.summary(of: agents))
                         .font(.ui(size: 12, weight: .medium))
                         .foregroundStyle(Color.themeMutedForeground)
                     Spacer()
                 }
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: 0) {
                         ForEach(agents) { AgentRow(agent: $0) }
                     }
-                    .padding(8)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8 - panelRowMargin.top)
+                    .padding(.bottom, panelEndRoom - panelRowMargin.bottom)
                 }
             }
         }
     }
 
-    /// "2 working · 1 done · 1 failed", leaving out what there is none of.
+    /// "2 working · 1 done · 1 failed · 48k tokens", leaving out what there is none of.
     static func summary(of agents: [AgentInfo]) -> String {
         let counts: [(Int, String)] = [
             (agents.count { $0.status == .running }, "working"),
             (agents.count { $0.status == .succeeded }, "done"),
             (agents.count { $0.status == .failed }, "failed"),
         ]
-        return counts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
+        let spent = agents.compactMap(\.tokens)
+        let total = spent.isEmpty ? [] : [AgentInfo.tokens(spent.reduce(0, +))]
+        return (counts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" } + total).joined(separator: " · ")
     }
 }
 
@@ -45,7 +59,7 @@ private struct AgentRow: View {
 
     var body: some View {
         Button {
-            store.sidePanel.showAgent(agent.id)
+            store.rightPanel.showAgent(agent.id)
         } label: {
             HStack(alignment: .top, spacing: 9) {
                 AgentStatusIcon(status: agent.status)
@@ -85,8 +99,9 @@ private struct AgentRow: View {
             // An agent that another agent started stands in from it.
             .padding(.leading, agent.parent == nil ? 0 : 18)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(panelRowMargin)
         }
-        .buttonStyle(.highlight())
+        .buttonStyle(.highlight(inset: panelRowMargin))
     }
 }
 
@@ -137,7 +152,7 @@ private struct AgentTranscript: View {
     var body: some View {
         VStack(spacing: 0) {
             PanelBar {
-                ActionButton(icon: .chevronLeft, help: "All agents") { store.sidePanel.showAgents() }
+                ActionButton(icon: .chevronLeft, help: "All agents") { store.rightPanel.showAgents() }
                     .padding(.leading, -8)
                 AgentStatusIcon(status: agent.status)
                     .frame(width: 16)
@@ -149,7 +164,7 @@ private struct AgentTranscript: View {
                 AgentTime(agent: agent)
                     .padding(.trailing, 6)
             }
-            TranscriptRepresentable(store: store, ofAgent: true, bottomInset: 64)
+            TranscriptRepresentable(store: store, ofAgent: true, bottomInset: panelEndRoom)
         }
     }
 }

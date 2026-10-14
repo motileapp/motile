@@ -200,7 +200,7 @@ extension Notification.Name {
 /// The panel beside the thread: whether it is open, the tabs each thread has in it, and what the
 /// tabs of the open thread show. All of it is used on the main thread.
 @Observable
-final class SidePanel {
+final class RightPanel {
     static let widths: ClosedRange<Double> = 340...900
 
     @ObservationIgnored weak var store: AppStore?
@@ -243,6 +243,8 @@ final class SidePanel {
     private(set) var pullRequestNotice: PullRequestNotice?
     /// Goes up each time the pull request has been read.
     private(set) var pullRequestReads = 0
+    /// The tabs whose content is being read, whose button to read it again turns meanwhile.
+    private(set) var reading: Set<PanelTab> = []
 
     /// The folder all of the above is of.
     @ObservationIgnored private var shown: PanelTarget?
@@ -485,8 +487,10 @@ final class SidePanel {
         command["scope"] = scope.request
         let id = "\(target.key)/\(scope)"
         let fresh = diff.value?.id != id
+        reading.insert(.diff)
         diffRequest = store?.core.send("diff", command, read: { CodeDocument(diff: $0, id: id) }) { [weak self] result in
             guard let self, self.shown == target, self.shownScope == scope else { return }
+            self.reading.remove(.diff)
             switch result {
             case .success(let document):
                 if fresh {
@@ -554,8 +558,10 @@ final class SidePanel {
         var request = target.request
         request["type"] = "list_files"
         request["path"] = folder
+        if folder.isEmpty { reading.insert(.files) }
         store?.core.send("request", ["server_id": target.serverID, "request": request]) { [weak self] result in
             guard let self, self.shown == target else { return }
+            if folder.isEmpty { self.reading.remove(.files) }
             switch result {
             case .success(let answer):
                 let entries = answer.objects("entries").map {
@@ -624,8 +630,10 @@ final class SidePanel {
         if contents[tab] == nil { contents[tab] = .loading }
         var command = target.request.merging(fields) { $1 }
         command["server_id"] = target.serverID
+        reading.insert(tab)
         let request = store?.core.send(type, command, read: read) { [weak self] result in
             guard let self, self.shown == target else { return }
+            self.reading.remove(tab)
             switch result {
             case .success(let content): self.contents[tab] = .ready(content)
             case .failure(let error): self.contents[tab] = .failed(error.message)
@@ -675,8 +683,10 @@ final class SidePanel {
         command["server_id"] = target.serverID
         command["number"] = number
         if let method = mergeMethods[target.projectID] { command["method"] = method }
+        reading.insert(.pullRequest)
         store?.core.send("pull_request", command, read: PullRequestPage.init) { [weak self] result in
             guard let self, self.shown == target, self.shownPullRequest == number else { return }
+            self.reading.remove(.pullRequest)
             switch result {
             case .success(let page): self.pullRequest = .ready(page)
             // A pull request that was read stays; only its notice says what went wrong.
@@ -783,8 +793,10 @@ final class SidePanel {
         var command = target.request
         command["server_id"] = target.serverID
         command["state"] = state
+        reading.insert(.pullRequests)
         store?.core.send("pull_requests", command, read: { $0.objects("rows").map(PullRequestRow.init) }) { [weak self] result in
             guard let self, self.shown == target else { return }
+            self.reading.remove(.pullRequests)
             switch result {
             case .success(let rows): self.pullRequestList = .ready(rows)
             case .failure(let error) where self.pullRequestList.value == nil: self.pullRequestList = .failed(error.message)
@@ -858,6 +870,8 @@ final class SidePanel {
         guard shown != target else { return }
         let sameFolder = shown?.key == target.key
         shown = target
+        // What is read for another target never answers here.
+        reading = []
         guard !sameFolder else { return }
         shownScope = nil
         diff = .loading
