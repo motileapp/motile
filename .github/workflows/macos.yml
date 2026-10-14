@@ -2,6 +2,7 @@ name: macOS
 
 # Builds the Mac app and the server for Macs, walks the client through a demo against a real auth server
 # and a real server on the runner, and keeps the client, the server and the screenshots as artifacts.
+# Builds the GPUI app for Macs beside it, which the release carries but motile.app doesn't offer.
 # The release runs it on every push to main that touches them.
 on:
   workflow_dispatch:
@@ -45,7 +46,10 @@ jobs:
         working-directory: apps/macos
         run: swift build -c release --target Motile
 
+      # A key of its own: the iOS workflow's job is called build too.
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: mac-app
 
       - name: Build the core, the server and the auth server
         run: cargo build --release -p motile-core -p motile-server -p motile-auth
@@ -55,17 +59,7 @@ jobs:
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(uuidgen)"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
-          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
-          echo "MOTILE_SIGN_IDENTITY=Developer ID Application" >> "$GITHUB_ENV"
+        run: apps/macos/scripts/import-certificate.sh
 
       # Signed so that macOS keeps trusting it across updates. Nothing downloads it through a
       # browser, so it needs no notarization.
@@ -93,20 +87,7 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-        run: |
-          echo "$APPLE_API_KEY" > "$RUNNER_TEMP/api-key.p8"
-          CREDENTIALS=(--key "$RUNNER_TEMP/api-key.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID")
-          ditto -c -k --keepParent apps/macos/build/Motile.app "$RUNNER_TEMP/notarize.zip"
-          ls -lh "$RUNNER_TEMP/notarize.zip"
-          SUBMISSION="$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" "${CREDENTIALS[@]}" --output-format json | jq -r .id)"
-          echo "Uploaded as submission $SUBMISSION"
-          STATUS=0
-          xcrun notarytool wait "$SUBMISSION" "${CREDENTIALS[@]}" --timeout 30m || STATUS=$?
-          xcrun notarytool info "$SUBMISSION" "${CREDENTIALS[@]}"
-          xcrun notarytool log "$SUBMISSION" "${CREDENTIALS[@]}" || true
-          [ "$STATUS" -eq 0 ] || exit "$STATUS"
-          xcrun stapler staple apps/macos/build/Motile.app
-          spctl --assess --type execute --verbose apps/macos/build/Motile.app
+        run: apps/macos/scripts/notarize.sh apps/macos/build/Motile.app
 
       - name: Zip the client
         if: always()
@@ -123,3 +104,49 @@ jobs:
         with:
           name: screenshots
           path: apps/macos/screenshots
+
+  gpui:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version
+        run: scripts/release-version.sh
+
+      - name: Toolchain
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/gpui -> target
+
+      - name: Import the signing certificate
+        if: inputs.sign
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: apps/macos/scripts/import-certificate.sh
+
+      - name: Bundle the client
+        run: apps/gpui/scripts/build-app.sh
+
+      - name: Notarize the client
+        if: inputs.sign
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: apps/macos/scripts/notarize.sh "apps/gpui/build/Motile GPUI.app"
+
+      - name: Zip the client
+        run: ditto -c -k --keepParent "apps/gpui/build/Motile GPUI.app" Motile-GPUI-macos-aarch64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpui-aarch64-apple-darwin
+          path: Motile-GPUI-macos-aarch64.zip

@@ -247,8 +247,9 @@ The Mac app ported to Rust, the client on Linux and Windows. A Cargo workspace o
 own `Cargo.lock`: run `cargo` from `apps/gpui`. CI checks it on Linux and Windows, and every release
 carries it for both, built by `scripts/package.sh` (`Motile-GPUI-linux-x86_64.tar.gz`,
 `-linux-aarch64.tar.gz`, `-windows-x86_64.zip`, `-windows-aarch64.zip`), which its updater installs.
-It builds on a Mac too, where its dev app runs, but no release carries it for macOS: the Mac app is
-the client there. It uses `crates/core` as a Rust library. Its data is in
+Every release carries it for Macs too, signed and notarized as `Motile-GPUI-macos-aarch64.zip` by the
+`macOS` workflow, but motile.app doesn't offer it and its updater only opens the release's page there:
+the Mac app is the client on a Mac. It uses `crates/core` as a Rust library. Its data is in
 `%LOCALAPPDATA%\Motile GPUI` on Windows, `~/.local/share/motile-gpui` on Linux and `Motile GPUI`
 on a Mac, so it is a device of its own. On Linux and Windows it takes `motile://` links itself, and
 a second launch hands its link to the running one (`instance.rs`).
@@ -460,8 +461,8 @@ Linear the real one, to connect a workspace of your own.
 ## Releasing and deploying
 
 Every push to `main` that touches the server, the auth server, the Mac app or the GPUI app is a
-release. The `Release` workflow publishes the server and the auth server for Linux, the server and
-the client for Macs, and the GPUI app for Linux and Windows, as a GitHub release. Its
+release. The `Release` workflow publishes the server and the auth server for Linux, the server,
+the client and the GPUI app for Macs, and the GPUI app for Linux and Windows, as a GitHub release. Its
 version is the first two numbers of `version` in `Cargo.toml` and the number of commits as the third
 (`scripts/release-version.sh`), so set `version` only to change the first two. The installer and the
 download button always fetch the latest release, and clients and servers compare their own version
