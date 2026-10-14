@@ -1,6 +1,7 @@
 //! A reply's prose as blocks ready to draw: paragraphs with their styled stretches and links,
 //! code boxes, rules and tables. The core counts in UTF-16 units; here every range is in bytes of
-//! the paragraph's own text, and the line separators inside code are line breaks.
+//! the paragraph's own text, and the core's line separators are line breaks, which GPUI breaks
+//! lines at and which other apps take for them.
 
 use std::ops::Range;
 
@@ -91,12 +92,12 @@ struct Piece {
 }
 
 impl Piece {
-    fn new(units: &[u16], code: bool) -> Self {
+    fn new(units: &[u16]) -> Self {
         let mut text = String::new();
         let mut bytes = Vec::with_capacity(units.len() + 1);
         for result in char::decode_utf16(units.iter().copied()) {
             let character = result.unwrap_or('\u{fffd}');
-            let character = if code && character == '\u{2028}' { '\n' } else { character };
+            let character = if character == '\u{2028}' { '\n' } else { character };
             bytes.push(text.len());
             if character.len_utf16() == 2 {
                 bytes.push(text.len());
@@ -146,7 +147,7 @@ pub fn prepare(prose: &Prose) -> PreparedProse {
         let start = para.start.min(units.len() as u32);
         let end = (para.start + para.len).min(units.len() as u32);
         let code = matches!(para.kind, ParaKind::Pre { .. });
-        let mut piece = Piece::new(&units[start as usize..end as usize], code);
+        let mut piece = Piece::new(&units[start as usize..end as usize]);
         trimmed_end(&mut piece);
         // What follows a list, a quote or a table brings the rest of the gap.
         let ended = previous.map(|previous| block_of(&previous.kind)).unwrap_or_default();
@@ -290,14 +291,14 @@ pub fn is_strike(bits: u32) -> bool {
 /// The links of a message, from the core's UTF-16 units to bytes of its text.
 pub fn link_ranges(text: &str, links: &[motile_core::render::markdown::Link]) -> Vec<(Range<usize>, String)> {
     let units: Vec<u16> = text.encode_utf16().collect();
-    let piece = Piece::new(&units, false);
+    let piece = Piece::new(&units);
     links.iter().filter_map(|link| piece.range(link.start, link.len).map(|range| (range, link.url.clone()))).collect()
 }
 
 /// Spans of the core, `[start, length, colour]` in UTF-16 units of `code`, as byte ranges.
 pub fn code_spans(code: &str, spans: &[u32]) -> Vec<(Range<usize>, u32)> {
     let units: Vec<u16> = code.encode_utf16().collect();
-    let piece = Piece::new(&units, false);
+    let piece = Piece::new(&units);
     spans
         .chunks(3)
         .filter(|span| span.len() == 3 && span[2] > 0)
@@ -325,6 +326,16 @@ mod tests {
         assert_eq!(&first.text[first.links[0].0.clone()], "a link");
         let ProseBlock::Para(second) = &prepared.blocks[1] else { panic!("not a paragraph") };
         assert_eq!(&second.text[second.runs[0].0.clone()], "code");
+    }
+
+    #[test]
+    fn line_breaks_inside_a_paragraph_break_its_lines() {
+        let prepared = prose("first line\nsecond line\n\n- one\n  two");
+        let ProseBlock::Para(first) = &prepared.blocks[0] else { panic!("not a paragraph") };
+        assert_eq!(first.text.as_ref(), "first line\nsecond line");
+        let ProseBlock::Para(item) = &prepared.blocks[1] else { panic!("not a paragraph") };
+        assert_eq!(item.text.as_ref(), "one\ntwo");
+        assert_eq!(prepared.plain, "first line\nsecond line\n•\tone\ntwo");
     }
 
     #[test]

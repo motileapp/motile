@@ -1,6 +1,6 @@
-//! Colours, type and sizes for the whole app, the same as the Mac app's `Theme.swift`. Each
-//! colour has a light and a dark value; `colors(cx)` gives the ones of the appearance the window
-//! has now.
+//! Colours, type and sizes for the whole app, the same as the Mac app's `Theme.swift`. The
+//! design tokens are generated into `tokens.rs` from `packages/theme/tokens.json`; `colors(cx)`
+//! gives them in the appearance the window has now, with the colours made from them.
 
 use gpui_kit::*;
 
@@ -25,244 +25,183 @@ impl Appearance {
     }
 }
 
+pub use crate::tokens::{Opacity, Radius, ShadowSize, Tokens};
+
+/// The design tokens of one appearance, with the colours made from them. Every colour the app
+/// shows is one of these; a view never makes a colour of its own.
 #[derive(Clone, Copy)]
 pub struct Colors {
-    // Surfaces
-    pub background: Hsla,
-    pub background_secondary: Hsla,
-    pub background_tertiary: Hsla,
-    pub background_quaternary: Hsla,
-    pub popover: Hsla,
-    pub popover_secondary: Hsla,
-    pub composer: Hsla,
-    pub composer_secondary: Hsla,
-    /// Borders are solid, so that where two meet they do not darken.
-    pub border: Hsla,
-    pub border_secondary: Hsla,
-
-    // Text
-    pub text: Hsla,
-    pub prose: Hsla,
-    pub secondary: Hsla,
-    pub tertiary: Hsla,
-    pub activity: Hsla,
-    pub shimmer: Hsla,
-
-    // Meaning
-    pub primary: Hsla,
-    pub primary_hover: Hsla,
-    pub link: Hsla,
-    pub link_hover: Hsla,
-    pub danger: Hsla,
-    pub danger_fill: Hsla,
-    pub danger_background: Hsla,
-    pub warning: Hsla,
-    pub warning_background: Hsla,
-    pub success: Hsla,
-    pub merged: Hsla,
-    pub working: Hsla,
-    pub unread: Hsla,
-
-    // Charts: what tells one agent's line from the other's.
-    pub claude_series: Hsla,
-    pub codex_series: Hsla,
-
-    /// What lies over the window behind a sheet or the media viewer.
+    tokens: Tokens,
+    pub dark: bool,
+    /// The text colours as they are in the dark, for what lies over a picture.
+    pub foreground_over_picture: Hsla,
+    pub muted_foreground_over_picture: Hsla,
+    /// A control as it is in the dark, over a picture: the background's accent, stronger when lit.
+    pub control_over_picture: Hsla,
+    pub control_lit_over_picture: Hsla,
+    /// A colour's wash: the colour at color-tint. Chips, notices, diff lines.
+    #[expect(dead_code, reason = "for the views still to be ported")]
+    pub primary_tint: Hsla,
+    pub primary_tint_stronger: Hsla,
+    pub destructive_tint: Hsla,
+    pub success_tint: Hsla,
+    pub warning_tint: Hsla,
+    /// What lies over the window behind a modal or the media viewer.
     pub scrim: Hsla,
-
     /// The colours code is highlighted with, by the core's palette index.
     pub syntax: [Hsla; 16],
 }
 
-fn hex(value: u32) -> Hsla {
-    rgb(value).into()
-}
+impl std::ops::Deref for Colors {
+    type Target = Tokens;
 
-fn hexa(value: u32, alpha: f32) -> Hsla {
-    let mut color: Hsla = rgb(value).into();
-    color.a = alpha;
-    color
-}
-
-fn black(alpha: f32) -> Hsla {
-    hsla(0., 0., 0., alpha)
-}
-
-pub static LIGHT: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| {
-    let text = hex(0x22242b);
-    Colors {
-        background: hex(0xf8f9fc),
-        background_secondary: hex(0xeceef4),
-        background_tertiary: hex(0xe1e4ed),
-        background_quaternary: hex(0xd6dae6),
-        popover: hex(0xffffff),
-        popover_secondary: hex(0xeceef4),
-        composer: hex(0xffffff),
-        composer_secondary: hex(0xeceef4),
-        border: hex(0xe2e3e5),
-        border_secondary: hex(0xd5d6d9),
-        text,
-        prose: hex(0x383b45),
-        secondary: hex(0x6b6f7c),
-        tertiary: hex(0x9a9eab),
-        activity: hex(0x6b6f7c),
-        shimmer: hex(0x000000),
-        primary: hex(0x2a5bd7),
-        primary_hover: hexa(0x2a5bd7, 0.1),
-        link: hex(0x1d4ed8),
-        link_hover: hexa(0x1d4ed8, 0.12),
-        danger: hex(0xc62828),
-        danger_fill: hex(0xc62828),
-        danger_background: hexa(0xdc2626, 0.07),
-        warning: hex(0xb45309),
-        warning_background: hexa(0xf59e0b, 0.1),
-        success: hex(0x047857),
-        merged: hex(0x8250df),
-        working: hex(0x0284c7),
-        unread: hex(0xea580c),
-        claude_series: hex(0xeb6834),
-        codex_series: hex(0x2a78d6),
-        scrim: black(0.32),
-        syntax: [
-            text,
-            hex(0x6e7781),
-            hex(0xcf222e),
-            hex(0x0a3069),
-            hex(0x0550ae),
-            hex(0x8250df),
-            hex(0x953800),
-            hex(0x953800),
-            hex(0x116329),
-            hex(0x0550ae),
-            hex(0x116329),
-            hex(0xb3261e),
-            hex(0x0550ae),
-            hex(0x0550ae),
-            hex(0x0550ae),
-            hex(0x6e7781),
-        ],
+    fn deref(&self) -> &Tokens {
+        &self.tokens
     }
-});
+}
 
-pub static DARK: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| {
-    let text = hex(0xdcdee4);
-    Colors {
-        background: hex(0x0a0b0f),
-        background_secondary: hex(0x111217),
-        background_tertiary: hex(0x191a1f),
-        background_quaternary: hex(0x212227),
-        popover: hex(0x191a1f),
-        popover_secondary: hex(0x222226),
-        composer: hex(0x111217),
-        composer_secondary: hex(0x191a1f),
-        border: hex(0x191a1e),
-        border_secondary: hex(0x2b2b2f),
-        text,
-        prose: hex(0xa8abb6),
-        secondary: hex(0x9a9eab),
-        tertiary: hex(0x646875),
-        activity: hex(0x7a7e8b),
-        shimmer: hex(0xffffff),
-        primary: hex(0x4f7cff),
-        primary_hover: hexa(0x4f7cff, 0.18),
-        link: hex(0x7aa2ff),
-        link_hover: hexa(0x7aa2ff, 0.12),
-        danger: hex(0xff7b72),
-        danger_fill: hex(0xe5484d),
-        danger_background: hexa(0xff5c5c, 0.1),
-        warning: hex(0xf5b454),
-        warning_background: hexa(0xf59e0b, 0.12),
-        success: hex(0x55c483),
-        merged: hex(0xba93fb),
-        working: hex(0x38bdf8),
-        unread: hex(0xfb923c),
-        claude_series: hex(0xd95926),
-        codex_series: hex(0x3987e5),
-        scrim: black(0.5),
-        syntax: [
-            text,
-            hex(0x8b949e),
-            hex(0xff7b72),
-            hex(0xa5d6ff),
-            hex(0x79c0ff),
-            hex(0xd2a8ff),
-            hex(0xffa657),
-            hex(0xffa657),
-            hex(0x7ee787),
-            hex(0x79c0ff),
-            hex(0x7ee787),
-            hex(0xffa198),
-            hex(0x79c0ff),
-            hex(0x79c0ff),
-            hex(0x79c0ff),
-            hex(0x8b949e),
-        ],
+impl Colors {
+    fn new(tokens: Tokens, dark: bool) -> Self {
+        let night = Tokens::dark();
+        let thinned =
+            |color: Hsla, opacity: Opacity| color.opacity(if dark { opacity.dark() } else { opacity.light() });
+        let t = &tokens;
+        Self {
+            dark,
+            foreground_over_picture: night.foreground,
+            muted_foreground_over_picture: night.muted_foreground,
+            control_over_picture: night.background_accent,
+            control_lit_over_picture: night.background_accent_stronger,
+            primary_tint: thinned(t.primary, Opacity::ColorTint),
+            primary_tint_stronger: thinned(t.primary, Opacity::ColorTintStronger),
+            destructive_tint: thinned(t.destructive, Opacity::ColorTint),
+            success_tint: thinned(t.success, Opacity::ColorTint),
+            warning_tint: thinned(t.warning, Opacity::ColorTint),
+            scrim: thinned(t.overlay, Opacity::Overlay),
+            syntax: [
+                t.foreground,
+                t.syntax_comment,
+                t.syntax_keyword,
+                t.syntax_string,
+                t.syntax_constant,
+                t.syntax_function,
+                t.syntax_type,
+                t.syntax_type,
+                t.syntax_tag,
+                t.syntax_constant,
+                t.success,
+                t.destructive,
+                t.syntax_constant,
+                t.syntax_constant,
+                t.syntax_constant,
+                t.syntax_comment,
+            ],
+            tokens,
+        }
     }
-});
 
-/// What a view lies on. The page is a ladder: what lies on one layer is filled with the next, and
-/// so is what the pointer is over. What floats over the page, a popover or the composer, has one
-/// colour of its own for both.
+    /// The opacity's value in this appearance.
+    pub fn opacity(&self, opacity: Opacity) -> f32 {
+        if self.dark { opacity.dark() } else { opacity.light() }
+    }
+
+    /// The colour at one of the opacities.
+    pub fn at(&self, color: Hsla, opacity: Opacity) -> Hsla {
+        color.opacity(self.opacity(opacity))
+    }
+
+    /// The colour's wash: at color-tint, or color-tint-stronger when lit.
+    pub fn wash(&self, color: Hsla, lit: bool) -> Hsla {
+        self.at(color, if lit { Opacity::ColorTintStronger } else { Opacity::ColorTint })
+    }
+
+    /// A shadow of the size, in the colour shadow at one of its three opacities. GPUI's blur is
+    /// the Gaussian's spread, half of what CSS calls the blur.
+    pub fn shadow(&self, size: ShadowSize, strength: Opacity) -> Vec<BoxShadow> {
+        vec![BoxShadow {
+            color: self.at(self.tokens.shadow, strength),
+            offset: point(px(0.), px(size.down())),
+            blur_radius: px(size.blur() / 2.),
+            spread_radius: px(0.),
+            inset: false,
+        }]
+    }
+}
+
+pub static LIGHT: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| Colors::new(Tokens::light(), false));
+pub static DARK: std::sync::LazyLock<Colors> = std::sync::LazyLock::new(|| Colors::new(Tokens::dark(), true));
+
+/// What a view lies on: the page, a box on it, a card or a popover. What is drawn on a surface
+/// takes the surface's accent.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Surface {
     #[default]
     Background,
     Secondary,
-    Tertiary,
-    Quaternary,
+    Card,
     Popover,
-    PopoverSecondary,
-    Composer,
-    ComposerSecondary,
+}
+
+/// What is drawn on a surface, each in the surface's own accent.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Layer {
+    /// A filled control at rest: a secondary button, a chip's fill, a track.
+    Control,
+    /// The same lit, or selected.
+    ControlLit,
+    /// A control lit on a selected row, which is already as light as a lit control.
+    ControlLitOnSelected,
+    /// A row or a tab lit.
+    Row,
+    /// A row or a tab selected.
+    RowSelected,
+    /// A box on it: code, a message, a notice, a quoted line.
+    Box,
 }
 
 impl Surface {
-    /// What lies on it, and what the pointer is over.
-    pub fn next(self) -> Surface {
-        match self {
-            Surface::Background => Surface::Secondary,
-            Surface::Secondary => Surface::Tertiary,
-            Surface::Tertiary => Surface::Quaternary,
-            Surface::Quaternary => Surface::Tertiary,
-            Surface::Popover => Surface::PopoverSecondary,
-            Surface::PopoverSecondary => Surface::Popover,
-            Surface::Composer => Surface::ComposerSecondary,
-            Surface::ComposerSecondary => Surface::Composer,
-        }
-    }
-
-    /// What is selected, and a filled control under the pointer.
-    pub fn further(self) -> Surface {
-        match self {
-            Surface::Background => Surface::Tertiary,
-            Surface::Secondary
-            | Surface::Popover
-            | Surface::PopoverSecondary
-            | Surface::Composer
-            | Surface::ComposerSecondary => Surface::Background,
-            Surface::Tertiary | Surface::Quaternary => Surface::Secondary,
-        }
-    }
-
     pub fn color(self, c: &Colors) -> Hsla {
         match self {
             Surface::Background => c.background,
             Surface::Secondary => c.background_secondary,
-            Surface::Tertiary => c.background_tertiary,
-            Surface::Quaternary => c.background_quaternary,
+            Surface::Card => c.card,
             Surface::Popover => c.popover,
-            Surface::PopoverSecondary => c.popover_secondary,
-            Surface::Composer => c.composer,
-            Surface::ComposerSecondary => c.composer_secondary,
         }
     }
 
-    /// The border around a card or a field that lies on it.
+    /// The surface's edge, which the lines across it share.
     pub fn border(self, c: &Colors) -> Hsla {
         match self {
-            Surface::Background => c.border,
-            _ => c.border_secondary,
+            Surface::Background | Surface::Secondary => c.border,
+            Surface::Card => c.border_card,
+            Surface::Popover => c.border_popover,
         }
+    }
+
+    pub fn layer(self, layer: Layer, c: &Colors) -> Hsla {
+        match self {
+            Surface::Background => match layer {
+                Layer::Control => c.background_accent,
+                Layer::ControlLit => c.background_accent_stronger,
+                Layer::ControlLitOnSelected => c.background_accent_strongest,
+                Layer::Row => c.background_accent_larger,
+                Layer::RowSelected => c.background_accent_larger_stronger,
+                Layer::Box => c.background_secondary,
+            },
+            Surface::Secondary => match layer {
+                Layer::Control | Layer::Row | Layer::Box => c.background_secondary_accent,
+                Layer::ControlLit | Layer::ControlLitOnSelected | Layer::RowSelected => {
+                    c.background_secondary_accent_stronger
+                }
+            },
+            Surface::Card => c.card_accent,
+            Surface::Popover => c.popover_accent,
+        }
+    }
+
+    /// What lies in a box on it.
+    pub fn in_box(self) -> Surface {
+        if self == Surface::Background { Surface::Secondary } else { self }
     }
 }
 
@@ -280,7 +219,7 @@ pub enum ControlSize {
 }
 
 impl ControlSize {
-    pub fn height(self) -> f32 {
+    pub const fn height(self) -> f32 {
         match self {
             ControlSize::Small => 24.,
             ControlSize::Regular => 28.,
@@ -318,6 +257,11 @@ impl ControlSize {
         }
     }
 
+    /// How much nearer its side a chevron stands than words do, so that the control's sides look alike.
+    pub fn chevron_outset(self) -> f32 {
+        if self == ControlSize::Regular { 2. } else { 0. }
+    }
+
     /// The room between its symbol and its words.
     pub fn gap(self) -> f32 {
         match self {
@@ -329,9 +273,8 @@ impl ControlSize {
 
     pub fn radius(self) -> f32 {
         match self {
-            ControlSize::Small => Radius::SMALL,
-            ControlSize::Regular => Radius::CONTROL,
-            ControlSize::Large => Radius::LARGE,
+            ControlSize::Small => Radius::SM,
+            ControlSize::Regular | ControlSize::Large => Radius::MD,
         }
     }
 
@@ -352,18 +295,6 @@ pub const SYMBOL_SCALE: f32 = 1.2;
 /// The side of the square a symbol for text of `size` is drawn in.
 pub fn symbol_side(size: f32) -> f32 {
     (size * SYMBOL_SCALE).round()
-}
-
-/// How round corners are.
-pub struct Radius;
-
-impl Radius {
-    pub const SMALL: f32 = 6.;
-    pub const CONTROL: f32 = 7.;
-    pub const LARGE: f32 = 9.;
-    /// Boxes that hold text or rows: cards, code, notices.
-    pub const CARD: f32 = 10.;
-    pub const SHEET: f32 = 14.;
 }
 
 /// Whether the app is drawn dark now: the setting, or the system's appearance under "System".
@@ -398,25 +329,27 @@ pub fn apply(dark: bool, window: &mut Window, cx: &mut App) {
         theme.font_size = px(13.);
         theme.mono_font_size = px(CODE_SIZE);
         theme.background = c.background;
-        theme.foreground = c.text;
+        theme.foreground = c.foreground;
         theme.border = c.border;
-        theme.input = c.border;
+        theme.input = c.border_input;
         theme.popover = c.popover;
-        theme.popover_foreground = c.text;
+        theme.popover_foreground = c.foreground;
         theme.muted = c.background_secondary;
-        theme.muted_foreground = c.tertiary;
-        theme.accent = c.background_secondary;
-        theme.accent_foreground = c.text;
-        theme.list_hover = c.background_secondary;
-        theme.list_active = c.background_tertiary;
+        theme.muted_foreground = c.muted_stronger_foreground;
+        theme.accent = c.popover_accent;
+        theme.accent_foreground = c.foreground;
+        theme.list_hover = c.background_accent_larger;
+        theme.list_active = c.background_accent_larger_stronger;
         theme.primary = c.primary;
-        theme.ring = c.primary;
-        theme.caret = c.text;
-        theme.selection = c.primary_hover;
-        theme.link = c.link;
-        theme.danger = c.danger;
-        theme.radius = px(Radius::CONTROL);
-        theme.radius_lg = px(Radius::CARD);
+        theme.primary_foreground = c.primary_foreground;
+        theme.ring = c.ring;
+        theme.caret = c.foreground;
+        theme.selection = c.primary_tint_stronger;
+        theme.link = c.primary;
+        theme.danger = c.destructive;
+        theme.danger_foreground = c.destructive_foreground;
+        theme.radius = px(Radius::MD);
+        theme.radius_lg = px(Radius::LG);
         theme.shadow = true;
     });
 }
@@ -441,8 +374,15 @@ pub fn set_app_appearance(_: Appearance) {}
 pub const UI_FONT: &str = "DM Sans";
 #[cfg(target_os = "macos")]
 pub const MONO_FONT: &str = ".AppleSystemUIFontMonospaced";
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+pub const MONO_FONT: &str = "Consolas";
+#[cfg(not(any(target_os = "macos", windows)))]
 pub const MONO_FONT: &str = "DejaVu Sans Mono";
+/// The system's own typeface, which the Mac draws numbers in where it says so.
+#[cfg(target_os = "macos")]
+pub const SYSTEM_FONT: &str = ".AppleSystemUIFont";
+#[cfg(not(target_os = "macos"))]
+pub const SYSTEM_FONT: &str = UI_FONT;
 
 pub const PROSE_SIZE: f32 = 14.;
 pub const CODE_SIZE: f32 = 12.5;

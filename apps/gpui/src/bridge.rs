@@ -23,7 +23,7 @@ pub enum Incoming {
     /// The answer to a command sent with `send_read`, already read.
     Read {
         id: u64,
-        result: Result<Read, String>,
+        result: Result<Read, CoreError>,
     },
     /// Rows of a transcript, made ready to draw.
     Rows(Box<Prepared>),
@@ -48,7 +48,7 @@ impl Bridge {
                     let reader = waiting.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(&id);
                     match reader {
                         Some(read) if ok => Incoming::Read { id, result: Ok(read(value)) },
-                        Some(_) => Incoming::Read { id, result: Err(error_of(&value)) },
+                        Some(_) => Incoming::Read { id, result: Err(CoreError::of(&value)) },
                         None => Incoming::Event(Box::new(Event::Reply { id, ok, value })),
                     }
                 }
@@ -91,8 +91,45 @@ impl Bridge {
     }
 }
 
-pub fn error_of(value: &Value) -> String {
-    value["error"].as_str().unwrap_or("Something went wrong.").to_string()
+/// What went wrong with a command, as its reply says.
+#[derive(Clone, PartialEq, Debug)]
+pub struct CoreError {
+    pub message: String,
+    /// The server couldn't be reached, which its state in the sidebar already shows.
+    pub offline: bool,
+}
+
+impl CoreError {
+    pub fn of(value: &Value) -> Self {
+        Self {
+            message: value["error"].as_str().unwrap_or("Something went wrong.").to_string(),
+            offline: value["offline"].as_bool() == Some(true),
+        }
+    }
+}
+
+impl std::fmt::Display for CoreError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl From<String> for CoreError {
+    fn from(message: String) -> Self {
+        Self { message, offline: false }
+    }
+}
+
+impl From<&str> for CoreError {
+    fn from(message: &str) -> Self {
+        message.to_string().into()
+    }
+}
+
+impl From<CoreError> for String {
+    fn from(error: CoreError) -> Self {
+        error.message
+    }
 }
 
 pub fn init_logging() {

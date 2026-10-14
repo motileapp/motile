@@ -1,9 +1,11 @@
 //! The rows of a transcript, kept in step with the core. Rows are made ready to draw on the
 //! core's thread (`prepare`), so the main thread only splices them in.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
+use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use gpui_kit::*;
 use motile_core::api::Event;
@@ -180,56 +182,96 @@ pub struct TurnChange {
 /// An item of the list that shows a transcript.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Item {
+    /// The room above the first row, which the list counts as content for its scroll bar.
+    Top,
     /// The row of the transcript at that index.
     Row(usize),
     /// The line that says the agent works.
     Working,
     /// The message on its way to the server.
     Pending,
+    /// The room under the last row for what floats over the transcript's end.
+    Bottom,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 enum Key {
+    Top,
     Row(String),
     Working,
     Pending,
+    Bottom,
 }
+
+/// How long a row that streams in takes to fade in.
+pub const FADE: Duration = Duration::from_millis(350);
 
 /// The rows of the open thread, and the list that shows them: a row for each of them, the line
 /// that says the agent works above the messages that wait for it, and the message on its way.
 pub struct Transcript {
     pub thread_id: Option<String>,
-    pub rows: Vec<Arc<RowModel>>,
+    /// Shared with the frame that draws them, so that drawing doesn't copy them.
+    pub rows: Rc<Vec<Arc<RowModel>>>,
     pub pending: Option<Arc<RowModel>>,
     pub activity: Activity,
     /// The thread has turns before the first row.
     pub earlier: bool,
+    /// The thread has caught up with its server. What it had before that is simply there when
+    /// the thread opens; only what arrives after it streams in.
+    pub live: bool,
+    /// The rows shown are another thread's, kept until this one's arrive so the view isn't
+    /// empty in between.
+    keeps_rows: bool,
     pub list: ListState,
     /// What the list shows, in order.
-    pub items: Vec<Item>,
+    pub items: Rc<Vec<Item>>,
     keys: Vec<Key>,
     /// The row that ended the turn the server still reports as running.
     end_of_running_turn: Option<String>,
+    /// Rows that just streamed in, which fade in, and when they came.
+    fresh: HashMap<String, Instant>,
+    /// Prose rows that grew while a reply streamed, and when.
+    grown: HashMap<String, Instant>,
     /// Counts up whenever the rows change, so views that keep state about them can tell.
     pub version: u64,
 }
 
 impl Transcript {
     pub fn new() -> Self {
-        let list = ListState::new(0, ListAlignment::Top, px(1000.));
+        // Rows are laid out this far past the viewport, as the Mac keeps views for them.
+        let list = ListState::new(0, ListAlignment::Top, px(400.));
         list.set_follow_mode(FollowMode::Tail);
         Self {
             thread_id: None,
-            rows: Vec::new(),
+            rows: Rc::default(),
             pending: None,
             activity: Activity::default(),
             earlier: false,
+            live: false,
+            keeps_rows: false,
             list,
-            items: Vec::new(),
+            items: Rc::default(),
             keys: Vec::new(),
             end_of_running_turn: None,
+            fresh: HashMap::new(),
+            grown: HashMap::new(),
             version: 0,
         }
+    }
+
+    /// Whether what arrives streams in: rows fade in and the view glides after them.
+    pub fn animates(&self) -> bool {
+        self.live && self.activity.running && !crate::media::native::reduces_motion()
+    }
+
+    /// The rows that streamed in and still fade in, and when they came.
+    pub fn fresh_rows(&self) -> HashMap<String, Instant> {
+        self.fresh.iter().filter(|(_, at)| at.elapsed() < FADE).map(|(id, at)| (id.clone(), *at)).collect()
+    }
+
+    /// The prose rows that grew while a reply streamed, and when, while what they grew by fades in.
+    pub fn grown_rows(&self) -> HashMap<String, Instant> {
+        self.grown.iter().filter(|(_, at)| at.elapsed() < FADE).map(|(id, at)| (id.clone(), *at)).collect()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -261,14 +303,22 @@ impl Transcript {
             || self.rows.last().map(|row| row.row.id.as_str()) != self.end_of_running_turn.as_deref()
     }
 
-    /// Where the working line goes: above the messages that wait for the agent, which are the
-    /// last rows the core sends.
+    /// Where the working line goes, counting the message on its way as the last row: above the
+    /// messages that wait for the agent, which are the last rows, the one on its way among them.
+    /// Without them it goes under every row.
     fn working_index(&self) -> usize {
-        let mut index = self.rows.len();
-        while index > 0 && self.rows[index - 1].is_queued() {
+        let pending_queued = self.pending.as_ref().map(|pending| pending.is_queued());
+        let count = self.rows.len() + usize::from(pending_queued.is_some());
+        let queued = |index: usize| match self.rows.get(index) {
+            Some(row) => row.is_queued(),
+            None => pending_queued == Some(true),
+        };
+        let end = count - usize::from(pending_queued == Some(false));
+        let mut index = end;
+        while index > 0 && queued(index - 1) {
             index -= 1;
         }
-        index
+        if index == end { count } else { index }
     }
 
     /// Lays the items out again and has the list measure the ones that changed: those with a
@@ -279,8 +329,10 @@ impl Transcript {
 
     fn sync_with(&mut self, changed: &HashSet<String>, pending_changed: bool) {
         let working = self.shows_working().then(|| self.working_index());
-        let mut items = Vec::with_capacity(self.rows.len() + 2);
-        let mut keys = Vec::with_capacity(self.rows.len() + 2);
+        let mut items = vec![Item::Top];
+        let mut keys = vec![Key::Top];
+        items.reserve(self.rows.len() + 3);
+        keys.reserve(self.rows.len() + 3);
         for (index, row) in self.rows.iter().enumerate() {
             if working == Some(index) {
                 items.push(Item::Working);
@@ -289,14 +341,20 @@ impl Transcript {
             items.push(Item::Row(index));
             keys.push(Key::Row(row.row.id.clone()));
         }
-        if working == Some(self.rows.len()) {
-            items.push(Item::Working);
-            keys.push(Key::Working);
-        }
         if self.pending.is_some() {
+            if working == Some(self.rows.len()) {
+                items.push(Item::Working);
+                keys.push(Key::Working);
+            }
             items.push(Item::Pending);
             keys.push(Key::Pending);
         }
+        if working.is_some() && working == Some(self.rows.len() + usize::from(self.pending.is_some())) {
+            items.push(Item::Working);
+            keys.push(Key::Working);
+        }
+        items.push(Item::Bottom);
+        keys.push(Key::Bottom);
         let same = |old: &Key, new: &Key| {
             old == new
                 && !matches!(new, Key::Row(id) if changed.contains(id))
@@ -311,21 +369,42 @@ impl Transcript {
         if old_end > prefix || new_count > 0 {
             self.list.splice(prefix..old_end, new_count);
         }
-        self.items = items;
+        self.items = Rc::new(items);
         self.keys = keys;
         self.version += 1;
     }
 
-    /// Starts showing another thread, or none. Its rows follow from the core.
-    pub fn begin(&mut self, thread_id: Option<String>) {
+    /// Starts showing another thread, or none. Its rows follow from the core. With `keeping_rows`
+    /// the rows shown stay until they do, so that the view isn't empty in between.
+    pub fn begin(&mut self, thread_id: Option<String>, live: bool, keeping_rows: bool) {
         self.thread_id = thread_id;
-        self.rows.clear();
         self.pending = None;
-        self.activity = Activity::default();
         self.earlier = false;
+        self.live = live;
+        self.activity = Activity::default();
         self.end_of_running_turn = None;
+        self.keeps_rows = keeping_rows && !self.rows.is_empty();
+        if self.keeps_rows {
+            return;
+        }
+        self.clear();
+    }
+
+    /// The thread's rows aren't coming: the view lets go of the ones it kept.
+    pub fn drop_kept_rows(&mut self) {
+        if std::mem::take(&mut self.keeps_rows) {
+            self.clear();
+        }
+    }
+
+    fn clear(&mut self) {
+        self.rows = Rc::default();
+        self.activity = Activity::default();
+        self.end_of_running_turn = None;
+        self.fresh.clear();
+        self.grown.clear();
         self.keys.clear();
-        self.items.clear();
+        self.items = Rc::default();
         self.list.reset(0);
         self.list.set_follow_mode(FollowMode::Tail);
         self.version += 1;
@@ -334,6 +413,10 @@ impl Transcript {
     /// The message on screen now belongs to a thread; its rows are about to arrive.
     pub fn adopt(&mut self, thread_id: String) {
         self.thread_id = Some(thread_id);
+    }
+
+    pub fn set_live(&mut self, live: bool) {
+        self.live = live;
     }
 
     pub fn apply(&mut self, reset: bool, start: usize, remove: usize, rows: Vec<Arc<RowModel>>, earlier: bool) {
@@ -345,8 +428,11 @@ impl Transcript {
         }
         let changed: HashSet<String> = rows.iter().map(|row| row.row.id.clone()).collect();
         if reset {
-            self.rows = rows;
+            self.keeps_rows = false;
+            self.rows = Rc::new(rows);
             self.end_of_running_turn = None;
+            self.fresh.clear();
+            self.grown.clear();
             self.keys.clear();
             self.list.reset(0);
             self.list.set_follow_mode(FollowMode::Tail);
@@ -357,7 +443,10 @@ impl Transcript {
         if start + remove > self.rows.len() {
             return;
         }
-        self.rows.splice(start..start + remove, rows);
+        if self.animates() {
+            self.mark_fresh(start, remove, &rows);
+        }
+        Rc::make_mut(&mut self.rows).splice(start..start + remove, rows);
         if self.activity.running
             && let Some(last) = self.rows.last()
             && matches!(last.row.kind, RowKind::TurnEnd { .. })
@@ -366,6 +455,23 @@ impl Transcript {
             self.end_of_running_turn = Some(last.row.id.clone());
         }
         self.sync(&changed);
+    }
+
+    /// Notes the rows that streamed in and the prose that grew, which fade in.
+    fn mark_fresh(&mut self, start: usize, remove: usize, rows: &[Arc<RowModel>]) {
+        let now = Instant::now();
+        self.fresh.retain(|_, at| at.elapsed() < FADE);
+        self.grown.retain(|_, at| at.elapsed() < FADE);
+        let known: HashSet<&str> = self.rows[start..start + remove].iter().map(|row| row.row.id.as_str()).collect();
+        for row in rows {
+            if !known.contains(row.row.id.as_str()) {
+                if !row.is_sent_message() {
+                    self.fresh.insert(row.row.id.clone(), now);
+                }
+            } else if row.prose.is_some() {
+                self.grown.insert(row.row.id.clone(), now);
+            }
+        }
     }
 
     pub fn set_pending(&mut self, pending: Option<RowModel>) {
@@ -389,10 +495,16 @@ impl Transcript {
         let RowKind::Code { language, code, .. } = &self.rows[index].row.kind else { return };
         let mut row = self.rows[index].row.clone();
         row.kind = RowKind::Code { language: language.clone(), code: code.clone(), spans: Some(spans) };
-        self.rows[index] = Arc::new(RowModel::new(row));
+        Rc::make_mut(&mut self.rows)[index] = Arc::new(RowModel::new(row));
         let mut changed = HashSet::new();
         changed.insert(row_id.to_string());
         self.sync(&changed);
+    }
+
+    /// Has the list measure the room under the last row again, which changed.
+    pub fn bottom_changed(&self) {
+        let Some(last) = self.items.len().checked_sub(1) else { return };
+        self.list.splice(last..last + 1, 1);
     }
 
     pub fn row_index(&self, row_id: &str) -> Option<usize> {
@@ -405,7 +517,7 @@ impl Transcript {
         let index = match item {
             Item::Row(index) => *index,
             Item::Pending => return self.pending.as_ref().filter(|row| row.is_user()).map(|row| row.row.id.clone()),
-            Item::Working => return None,
+            Item::Working | Item::Top | Item::Bottom => return None,
         };
         let under = self.rows.get(index)?;
         if under.is_user() {

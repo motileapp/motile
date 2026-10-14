@@ -7,21 +7,25 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui_kit::component::input::{InputEvent, InputState, Textarea, TextareaState};
+use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_core::linear::{Group, Page, Row};
 use motile_protocol::wire::{LinearChange, LinearState, LinearStateKind, LinearTeam, LinearUser, NewLinearIssue};
 
+use super::pull_request::text_blocks;
 use super::state::{Loaded, PanelTarget};
 use crate::models::ago;
 use crate::store::Store;
-use crate::store::linear::{KINDS, LinearChoice, PRIORITIES, priority_name, priority_symbol, state_symbol};
-use crate::theme::{ControlSize, Radius, Surface, colors};
-use crate::ui::menu::Menu;
-use crate::ui::rich_text::markdown;
-use crate::ui::sheet::sheet;
-use crate::ui::{ActionButton, ActionMenu, Chip, InputField, Spinner, Variant, divider, icons, tooltip};
+use crate::store::linear::{
+    Group, KINDS, LinearChoice, PRIORITIES, Page, Row, priority_name, priority_symbol, state_symbol,
+};
+use crate::theme::{ControlSize, Layer, Radius, Surface, colors};
+use crate::ui::control::turning_symbol;
+use crate::ui::menu::{Menu, MenuIcon};
+use crate::ui::modal::{modal, present_sheet};
+use crate::ui::{
+    ActionButton, ActionMenu, Chip, InputField, TextArea, Variant, divider, icons, text_area_state, tooltip,
+};
 
 /// Under this the bar is two rows.
 const WRAPS: f32 = 520.;
@@ -48,6 +52,11 @@ pub struct LinearView {
     debounce: Option<Task<()>>,
     /// The comment was said; its field empties on the next draw.
     clear_comment: bool,
+    /// The lines of the list on screen, and what they were last laid out as.
+    list: ListState,
+    listed: Vec<String>,
+    /// The lines last made.
+    entries: Option<Lines>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -60,7 +69,7 @@ impl LinearView {
         cx: &mut Context<Self>,
     ) -> Self {
         let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
-        let comment = cx.new(|cx| TextareaState::new(window, cx).auto_grow(4, 10).placeholder("Leave a comment"));
+        let comment = text_area_state("Leave a comment", 4, 12, window, cx);
         let subscriptions = vec![
             cx.observe(&store, |_, _, cx| cx.notify()),
             cx.subscribe(&search, |_, _, event: &InputEvent, cx| {
@@ -88,6 +97,9 @@ impl LinearView {
             triggers: HashMap::new(),
             debounce: None,
             clear_comment: false,
+            list: ListState::new(0, ListAlignment::Top, px(600.)),
+            listed: Vec::new(),
+            entries: None,
             _subscriptions: subscriptions,
         }
     }
@@ -152,7 +164,7 @@ impl LinearView {
 
     // The list
 
-    fn issues_surface(&mut self, target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
+    fn issues_surface(&mut self, target: &PanelTarget, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let choice = self.store.read(cx).linear_choice(target);
         let search = self.search.read(cx).value().to_string();
         let narrow = self.width.get() < WRAPS;
@@ -181,6 +193,13 @@ impl LinearView {
                 .child(divider(cx))
         };
         let content = self.issues_content(target, &choice, &search, narrow, cx);
+        let filing = present_sheet(
+            "linear-new-issue",
+            self.filing.clone(),
+            |sheet, leaving| sheet.leaving = leaving,
+            window,
+            cx,
+        );
         div()
             .size_full()
             .relative()
@@ -190,7 +209,7 @@ impl LinearView {
             .child(bar)
             .when_some(error, |tab, error| tab.child(note(error, cx)))
             .child(div().flex_1().min_h_0().child(content))
-            .children(self.filing.clone())
+            .children(filing)
             .into_any_element()
     }
 
@@ -234,7 +253,7 @@ impl LinearView {
                 });
                 menu.when_some(workspace.clone(), |menu, workspace| {
                     let (store, server) = (store.clone(), target.server_id.clone());
-                    menu.item(format!("Disconnect {}", workspace.workspace), move |_, cx| {
+                    menu.danger_item(format!("Disconnect {}", workspace.workspace), move |_, cx| {
                         store.update(cx, |store, cx| {
                             store.linear_disconnect(&workspace.id, &server);
                             cx.notify();
@@ -355,16 +374,17 @@ impl LinearView {
     }
 
     fn issues_content(
-        &self,
+        &mut self,
         target: &PanelTarget,
         choice: &LinearChoice,
         search: &str,
         narrow: bool,
-        cx: &Context<Self>,
+        cx: &mut Context<Self>,
     ) -> AnyElement {
         let store = self.store.read(cx);
         let workspace = choice.workspace.clone().unwrap_or_default();
-        match store.linear.issues() {
+        let issues = store.linear.issues().cloned();
+        match &issues {
             None | Some(Loaded::Loading) => loading(cx),
             Some(Loaded::Failed(reason)) => message(reason.clone(), true, cx),
             Some(Loaded::Ready(groups)) if groups.is_empty() => {
@@ -382,17 +402,18 @@ impl LinearView {
         }
     }
 
+    /// The issues under their statuses, only the lines on screen built.
     fn list(
-        &self,
+        &mut self,
         target: &PanelTarget,
         workspace: &str,
-        groups: &[Group],
+        groups: &Rc<Vec<Group>>,
         narrow: bool,
-        cx: &Context<Self>,
+        cx: &mut Context<Self>,
     ) -> AnyElement {
+        let entries = self.entries(workspace, groups, cx);
+        crate::ui::relist(&self.list, &mut self.listed, entries.iter().map(Entry::key).collect());
         let store = self.store.read(cx);
-        let users: Vec<LinearUser> = store.linear.users.get(workspace).cloned().unwrap_or_default();
-        let pending = store.linear.working.clone();
         let change: Change = {
             let (store, workspace, server) = (self.store.clone(), workspace.to_string(), target.server_id.clone());
             Rc::new(move |id, change, cx| {
@@ -402,215 +423,56 @@ impl LinearView {
                 });
             })
         };
-        let mut rows: Vec<AnyElement> = Vec::new();
-        for group in groups {
+        let place = Rc::new(ListPlace {
+            store: self.store.clone(),
+            view: cx.entity().downgrade(),
+            workspace: workspace.to_string(),
+            users: store.linear.users.get(workspace).cloned().unwrap_or_default(),
+            pending: store.linear.working.clone(),
+            narrow,
+            change,
+        });
+        list(self.list.clone(), move |index, _, cx| {
+            let Some(entry) = entries.get(index) else { return div().into_any_element() };
+            let line = match entry {
+                Entry::Header { state, count, folded } => header(state, *count, *folded, &place, cx),
+                Entry::Issue { row, state, states } => issue_row(row, state, states, &place, cx),
+            };
+            div().w_full().px(px(LIST_PADDING)).child(line).into_any_element()
+        })
+        .size_full()
+        .pt(px(LIST_PADDING))
+        .pb(px(super::END_ROOM))
+        .into_any_element()
+    }
+
+    /// The lines of the list, made again only when the issues or the folding change.
+    fn entries(&mut self, workspace: &str, groups: &Rc<Vec<Group>>, cx: &App) -> Rc<Vec<Entry>> {
+        let store = self.store.read(cx);
+        let teams = store.linear.teams.contains_key(workspace);
+        if let Some(lines) = &self.entries
+            && Rc::ptr_eq(&lines.made_of, groups)
+            && lines.folded == self.collapsed
+            && lines.teams == teams
+        {
+            return lines.entries.clone();
+        }
+        let mut entries = Vec::new();
+        for group in groups.iter() {
             let folded = self.collapsed.contains(&group.state.id);
-            rows.push(self.header(&group.state, group.rows.len(), folded, cx));
+            entries.push(Entry::Header { state: group.state.clone(), count: group.rows.len(), folded });
             if folded {
                 continue;
             }
             for row in &group.rows {
                 let states = store.linear.states_of(workspace, &row.team);
-                let spinning = pending.contains(&row.id);
-                rows.push(self.issue_row(workspace, row, &group.state, states, &users, &change, spinning, narrow, cx));
+                entries.push(Entry::Issue { row: Box::new(row.clone()), state: group.state.clone(), states });
             }
         }
-        div()
-            .id("linear-list")
-            .size_full()
-            .overflow_y_scroll()
-            .p(px(8.))
-            .flex()
-            .flex_col()
-            .children(rows)
-            .into_any_element()
-    }
-
-    /// A status over its issues, on the secondary background, which a click folds up and out.
-    fn header(&self, state: &LinearState, count: usize, folded: bool, cx: &Context<Self>) -> AnyElement {
-        let c = colors(cx);
-        let this = cx.entity().downgrade();
-        let id = state.id.clone();
-        div()
-            .id(SharedString::from(format!("linear-header-{}", state.id)))
-            .mt(px(7.))
-            .mb(px(1.))
-            .h(px(30.))
-            .w_full()
-            .flex_shrink_0()
-            .rounded(px(Radius::CONTROL))
-            .bg(c.background_secondary)
-            .hover(|header| header.bg(c.background_tertiary))
-            .flex()
-            .items_center()
-            .px(px(10.))
-            .gap(px(8.))
-            .child(
-                div()
-                    .w(px(16.))
-                    .flex()
-                    .justify_center()
-                    .child(icons::symbol(state_symbol(state.kind), 12.).text_color(hex_color(&state.color))),
-            )
-            .child(
-                div().text_size(px(12.)).font_weight(FontWeight::SEMIBOLD).text_color(c.text).child(state.name.clone()),
-            )
-            .child(div().text_size(px(12.)).text_color(c.tertiary).child(count.to_string()))
-            .child(div().flex_1())
-            .child(
-                div()
-                    .w(px(16.))
-                    .flex()
-                    .justify_center()
-                    .text_color(c.tertiary)
-                    .child(icons::symbol(if folded { "chevron-right" } else { "chevron-down" }, 10.)),
-            )
-            .on_click(move |_, _, cx| {
-                let id = id.clone();
-                let _ = this.update(cx, |this, cx| {
-                    if !this.collapsed.remove(&id) {
-                        this.collapsed.insert(id);
-                    }
-                    cx.notify();
-                });
-            })
-            .into_any_element()
-    }
-
-    /// An issue on one line as Linear lists it: its priority and its status, which a click
-    /// changes, its identifier and title, then its labels, who has it and when it last changed.
-    /// A click opens it; a right click offers what else can be done with it.
-    #[allow(clippy::too_many_arguments)]
-    fn issue_row(
-        &self,
-        workspace: &str,
-        row: &Row,
-        state: &LinearState,
-        states: Vec<LinearState>,
-        users: &[LinearUser],
-        change: &Change,
-        spinning: bool,
-        narrow: bool,
-        cx: &Context<Self>,
-    ) -> AnyElement {
-        let c = colors(cx);
-        let priority = ActionMenu::icon(
-            SharedString::from(format!("linear-priority-{}", row.id)),
-            priority_symbol(row.priority),
-            row.priority_label,
-            {
-                let (change, id, current) = (change.clone(), row.id.clone(), row.priority);
-                move |_, _| {
-                    priorities_menu(
-                        current,
-                        Rc::new({
-                            let (change, id) = (change.clone(), id.clone());
-                            move |priority, cx: &mut App| {
-                                change(id.clone(), LinearChange { priority: Some(priority), ..Default::default() }, cx)
-                            }
-                        }),
-                    )
-                }
-            },
-        )
-        .button(|button| button.small().tint((row.priority == 1).then_some(c.warning)));
-        let status = ActionMenu::icon(
-            SharedString::from(format!("linear-status-{}", row.id)),
-            state_symbol(state.kind),
-            format!("Status: {}", state.name),
-            {
-                let (change, id, current) = (change.clone(), row.id.clone(), state.id.clone());
-                move |_, _| {
-                    states_menu(
-                        &states,
-                        Some(&current),
-                        Rc::new({
-                            let (change, id) = (change.clone(), id.clone());
-                            move |state, cx: &mut App| {
-                                change(id.clone(), LinearChange { state: Some(state), ..Default::default() }, cx)
-                            }
-                        }),
-                    )
-                }
-            },
-        )
-        .button(|button| button.small().tint(Some(hex_color(&state.color))).pending(spinning));
-        let labels: Vec<AnyElement> = if narrow {
-            Vec::new()
-        } else {
-            row.labels
-                .iter()
-                .take(2)
-                .map(|label| Chip::new(label.name.clone()).dot(hex_color(&label.color)).into_any_element())
-                .collect()
-        };
-        let initials = row.initials.clone().map(|initials| (initials, row.assignee.clone().unwrap_or_default()));
-        let open = {
-            let (store, workspace, id, identifier) =
-                (self.store.clone(), workspace.to_string(), row.id.clone(), row.identifier.clone());
-            move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-                store.update(cx, |store, cx| {
-                    store.open_linear_issue(workspace.clone(), id.clone(), identifier.clone());
-                    cx.notify();
-                });
-            }
-        };
-        let actions = {
-            let (change, users, row) = (change.clone(), users.to_vec(), row.clone());
-            move |event: &MouseDownEvent, window: &mut Window, cx: &mut App| {
-                cx.stop_propagation();
-                row_menu(&row, &users, &change, event.position).show(event.position, window, cx);
-            }
-        };
-        div()
-            .id(SharedString::from(format!("linear-row-{}", row.id)))
-            .my(px(1.))
-            .h(px(34.))
-            .w_full()
-            .flex_shrink_0()
-            .rounded(px(Radius::CONTROL))
-            .hover(|row| row.bg(c.background_secondary))
-            .flex()
-            .items_center()
-            .pl(px(6.))
-            .pr(px(10.))
-            .gap(px(4.))
-            .child(priority)
-            .child(status)
-            .child(
-                div()
-                    .ml(px(4.))
-                    .flex_shrink_0()
-                    .text_size(px(11.5))
-                    .text_color(c.tertiary)
-                    .child(row.identifier.clone()),
-            )
-            .child(
-                div()
-                    .ml(px(4.))
-                    .flex_1()
-                    .min_w_0()
-                    .text_size(px(13.))
-                    .text_color(c.text)
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .child(row.title.clone()),
-            )
-            .child(
-                div()
-                    .ml(px(4.))
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .children(labels)
-                    .when_some(initials, |side, (initials, name)| side.child(initials_disc(initials, name, cx)))
-                    .child(div().text_size(px(11.5)).text_color(c.tertiary).child(ago(row.updated_at))),
-            )
-            .on_click(open)
-            .on_mouse_down(MouseButton::Right, actions)
-            .into_any_element()
+        let entries = Rc::new(entries);
+        let made_of = groups.clone();
+        self.entries = Some(Lines { made_of, folded: self.collapsed.clone(), teams, entries: entries.clone() });
+        entries
     }
 
     // How to connect
@@ -634,7 +496,7 @@ impl LinearView {
                     .flex_col()
                     .items_center()
                     .gap(px(16.))
-                    .child(div().text_color(c.text).child(icons::symbol("linear", 28.)))
+                    .child(div().text_color(c.foreground).child(icons::symbol("linear", 28.)))
                     .child(
                         div()
                             .flex()
@@ -645,14 +507,15 @@ impl LinearView {
                                 div()
                                     .text_size(px(15.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c.text)
+                                    .text_color(c.foreground)
                                     .child("Connect Linear"),
                             )
-                            .child(div().text_size(px(12.5)).text_color(c.secondary).text_center().child(
+                            .child(div().text_size(px(12.5)).text_color(c.muted_foreground).text_center().child(
                                 "See your issues and hand them to your agents. The connection is kept on your server.",
                             )),
                     )
-                    .child(
+                    .child({
+                        let store = store.clone();
                         ActionButton::new("linear-connect", "Connect Linear").primary().pending(connecting).on_click(
                             move |_, _, cx| {
                                 store.update(cx, |store, cx| {
@@ -660,10 +523,20 @@ impl LinearView {
                                     cx.notify();
                                 });
                             },
-                        ),
-                    )
+                        )
+                    })
+                    .when(connecting && !cfg!(target_os = "macos"), |column| {
+                        column.child(ActionButton::new("linear-cancel", "Cancel").ghost().small().on_click(
+                            move |_, _, cx| {
+                                store.update(cx, |store, cx| {
+                                    store.linear_cancel_connect();
+                                    cx.notify();
+                                });
+                            },
+                        ))
+                    })
                     .when_some(error, |column, error| {
-                        column.child(div().text_size(px(12.5)).text_color(c.danger).text_center().child(error))
+                        column.child(div().text_size(px(12.5)).text_color(c.destructive).text_center().child(error))
                     }),
             )
             .into_any_element()
@@ -703,7 +576,13 @@ impl LinearView {
         let url = page.value().map(|page| page.row.url.clone()).filter(|url| !url.is_empty());
         let this = cx.entity().downgrade();
         let bar = bar_row(cx)
-            .child(div().text_size(px(12.5)).font_weight(FontWeight::MEDIUM).text_color(c.secondary).child(identifier))
+            .child(
+                div()
+                    .text_size(px(12.5))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c.muted_foreground)
+                    .child(identifier),
+            )
             .child(div().flex_1().min_w(px(4.)))
             .when_some(url, |bar, url| {
                 bar.child(
@@ -757,6 +636,7 @@ impl LinearView {
                 states_menu(
                     &states,
                     Some(&current),
+                    Offer::Plain,
                     Rc::new(move |state, cx: &mut App| {
                         change(LinearChange { state: Some(state), ..Default::default() }, cx)
                     }),
@@ -770,7 +650,7 @@ impl LinearView {
                 .help("Status")
                 .picture(
                     icons::symbol(state_symbol(page.state.kind), ControlSize::Small.symbol())
-                        .text_color(hex_color(&page.state.color)),
+                        .text_color(hex_color(&page.state.color, c)),
                 )
                 .pending(changing)
         });
@@ -780,6 +660,7 @@ impl LinearView {
                 let change = change.clone();
                 priorities_menu(
                     current,
+                    Offer::Plain,
                     Rc::new(move |priority, cx: &mut App| {
                         change(LinearChange { priority: Some(priority), ..Default::default() }, cx)
                     }),
@@ -797,6 +678,7 @@ impl LinearView {
                     assignees_menu(
                         &users,
                         current.as_deref(),
+                        true,
                         Rc::new(move |assignee: Option<String>, cx: &mut App| {
                             change(
                                 LinearChange { assignee: Some(assignee.unwrap_or_default()), ..Default::default() },
@@ -822,9 +704,13 @@ impl LinearView {
                 }
             });
         let description: AnyElement = if page.description.is_empty() {
-            div().text_size(px(12.5)).text_color(c.tertiary).child("No description.").into_any_element()
+            div()
+                .text_size(px(12.5))
+                .text_color(c.muted_stronger_foreground)
+                .child("No description.")
+                .into_any_element()
         } else {
-            markdown("issue-description", &page.description, cx).into_any_element()
+            text_blocks("issue-description", &page.description, Surface::Background, cx).into_any_element()
         };
         let comments = page.comments.iter().map(|comment| {
             div()
@@ -845,13 +731,17 @@ impl LinearView {
                                 .child(
                                     div()
                                         .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(c.text)
+                                        .text_color(c.foreground)
                                         .child(comment.author.clone()),
                                 )
-                                .child(div().text_color(c.tertiary).child(format!(" · {}", ago(comment.at)))),
+                                .child(
+                                    div()
+                                        .text_color(c.muted_stronger_foreground)
+                                        .child(format!(" · {}", ago(comment.at))),
+                                ),
                         ),
                 )
-                .child(markdown(&format!("issue-comment-{}", comment.id), &comment.body, cx))
+                .child(text_blocks(&format!("issue-comment-{}", comment.id), &comment.body, Surface::Background, cx))
         });
         let words = self.comment.read(cx).value().trim().to_string();
         let send =
@@ -876,21 +766,17 @@ impl LinearView {
                     });
                 }
             });
-        let writing = div()
-            .w_full()
-            .flex()
-            .flex_col()
-            .items_end()
-            .gap(px(8.))
-            .child(writing_field(&self.comment, 84., cx))
-            .child(send);
+        let writing =
+            div().w_full().flex().flex_col().items_end().gap(px(8.)).child(TextArea::new(&self.comment)).child(send);
         div()
             .id("linear-issue-scroll")
             .size_full()
             .overflow_y_scroll()
             .child(
                 div()
-                    .p(px(16.))
+                    .px(px(16.))
+                    .pt(px(16.))
+                    .pb(px(super::END_ROOM))
                     .flex()
                     .flex_col()
                     .items_start()
@@ -899,8 +785,8 @@ impl LinearView {
                         div()
                             .text_size(px(17.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c.text)
-                            .child(page.row.title.clone()),
+                            .text_color(c.foreground)
+                            .child(crate::ui::rich_text::RichText::new("issue-title", page.row.title.clone())),
                     )
                     .child(div().flex().flex_wrap().gap(px(6.)).child(status).child(priority).child(assignee))
                     .when(!page.row.labels.is_empty(), |column| {
@@ -909,15 +795,14 @@ impl LinearView {
                                 page.row
                                     .labels
                                     .iter()
-                                    .map(|label| Chip::new(label.name.clone()).dot(hex_color(&label.color))),
+                                    .map(|label| Chip::new(label.name.clone()).dot(hex_color(&label.color, c))),
                             ),
                         )
                     })
                     .child(work)
                     .child(description)
                     .child(divider(cx))
-                    .children(comments)
-                    .child(writing),
+                    .child(div().w_full().flex().flex_col().gap(px(20.)).children(comments).child(writing)),
             )
             .into_any_element()
     }
@@ -938,7 +823,7 @@ impl Render for LinearView {
         if self.store.read(cx).linear.connected(&target.server_id).is_empty() {
             return self.connect_surface(&target, cx);
         }
-        self.issues_surface(&target, cx)
+        self.issues_surface(&target, window, cx)
     }
 }
 
@@ -956,6 +841,8 @@ pub struct NewIssue {
     assignee_id: Option<String>,
     priority: u8,
     pub closed: bool,
+    /// It has closed and fades out.
+    pub leaving: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -970,13 +857,13 @@ impl NewIssue {
     ) -> Self {
         store.update(cx, |store, _| store.linear_need_teams(&workspace, &target.server_id));
         let title = cx.new(|cx| InputState::new(window, cx).placeholder("Title"));
-        let description = cx.new(|cx| TextareaState::new(window, cx).auto_grow(6, 12).placeholder("Add a description"));
+        let description = cx.new(|cx| TextareaState::new(window, cx).placeholder("Add a description"));
         let subscriptions = vec![
             cx.observe(&store, |_, _, cx| cx.notify()),
-            cx.subscribe(&title, |_, _, event: &InputEvent, cx| {
-                if matches!(event, InputEvent::Change) {
-                    cx.notify();
-                }
+            cx.subscribe(&title, |this: &mut Self, _, event: &InputEvent, cx| match event {
+                InputEvent::Change => cx.notify(),
+                InputEvent::PressEnter { .. } => this.create(cx),
+                _ => {}
             }),
         ];
         title.update(cx, |title, cx| title.focus(window, cx));
@@ -992,6 +879,7 @@ impl NewIssue {
             assignee_id: None,
             priority: 0,
             closed: false,
+            leaving: false,
             _subscriptions: subscriptions,
         }
     }
@@ -999,6 +887,52 @@ impl NewIssue {
     fn close(&mut self, cx: &mut Context<Self>) {
         self.closed = true;
         cx.notify();
+    }
+
+    /// The team the issue goes to: the one picked, else the one the list shows, else the first.
+    fn team(&self, cx: &App) -> Option<LinearTeam> {
+        let store = self.store.read(cx);
+        let teams = store.linear.teams.get(&self.workspace)?;
+        let wanted = self.team_id.as_ref().or(self.team.as_ref());
+        teams.iter().find(|team| Some(&team.id) == wanted).or(teams.first()).cloned()
+    }
+
+    /// The status it starts in: the one picked, else the team's first not started.
+    fn state(&self, team: Option<&LinearTeam>) -> Option<LinearState> {
+        let states = team.map(|team| team.states.as_slice()).unwrap_or_default();
+        states
+            .iter()
+            .find(|state| Some(&state.id) == self.state_id.as_ref())
+            .or_else(|| states.iter().find(|state| state.kind == LinearStateKind::Unstarted))
+            .or(states.first())
+            .cloned()
+    }
+
+    /// Files the issue and opens it in a tab.
+    fn create(&mut self, cx: &mut Context<Self>) {
+        let title = self.title.read(cx).value().trim().to_string();
+        let Some(team) = self.team(cx).filter(|_| !title.is_empty()) else { return };
+        if self.store.read(cx).linear.is_working("create") {
+            return;
+        }
+        let issue = NewLinearIssue {
+            team: team.id.clone(),
+            title,
+            description: self.description.read(cx).value().to_string(),
+            state: self.state(Some(&team)).map(|state| state.id),
+            assignee: self.assignee_id.clone(),
+            priority: self.priority,
+        };
+        let (this, workspace, server) =
+            (cx.entity().downgrade(), self.workspace.clone(), self.target.server_id.clone());
+        self.store.update(cx, |store, cx| {
+            let opened = workspace.clone();
+            store.linear_create(issue, &workspace, &server, move |store, id, identifier, cx| {
+                let _ = this.update(cx, |this, cx| this.close(cx));
+                store.open_linear_issue(opened, id, identifier);
+            });
+            cx.notify();
+        });
     }
 }
 
@@ -1008,15 +942,9 @@ impl Render for NewIssue {
         let store = self.store.read(cx);
         let teams: Vec<LinearTeam> = store.linear.teams.get(&self.workspace).cloned().unwrap_or_default();
         let users: Vec<LinearUser> = store.linear.users.get(&self.workspace).cloned().unwrap_or_default();
-        let wanted = self.team_id.clone().or_else(|| self.team.clone());
-        let picked = teams.iter().find(|team| Some(&team.id) == wanted.as_ref()).or(teams.first()).cloned();
+        let picked = self.team(cx);
         let states: Vec<LinearState> = picked.as_ref().map(|team| team.states.clone()).unwrap_or_default();
-        let state = states
-            .iter()
-            .find(|state| Some(&state.id) == self.state_id.as_ref())
-            .or_else(|| states.iter().find(|state| state.kind == LinearStateKind::Unstarted))
-            .or(states.first())
-            .cloned();
+        let state = self.state(picked.as_ref());
         let error = store.linear.error.clone();
         let creating = store.linear.is_working("create");
         let title = self.title.read(cx).value().trim().to_string();
@@ -1056,6 +984,7 @@ impl Render for NewIssue {
                     states_menu(
                         &states,
                         current.as_deref(),
+                        Offer::Plain,
                         Rc::new(move |state, cx: &mut App| {
                             let _ = this.update(cx, |this, cx| {
                                 this.state_id = Some(state);
@@ -1079,6 +1008,7 @@ impl Render for NewIssue {
                 let this = this.clone();
                 priorities_menu(
                     current,
+                    Offer::Plain,
                     Rc::new(move |priority, cx: &mut App| {
                         let _ = this.update(cx, |this, cx| {
                             this.priority = priority;
@@ -1103,6 +1033,7 @@ impl Render for NewIssue {
                 assignees_menu(
                     &users,
                     current.as_deref(),
+                    true,
                     Rc::new(move |assignee: Option<String>, cx: &mut App| {
                         let _ = this.update(cx, |this, cx| {
                             this.assignee_id = assignee;
@@ -1114,7 +1045,7 @@ impl Render for NewIssue {
         })
         .button(|button| button.variant(Variant::Secondary).small().symbol("circle-user").help("Assignee"));
 
-        let cancel = ActionButton::new("new-issue-cancel", "Cancel").surface(Surface::Popover).on_click({
+        let cancel = ActionButton::new("new-issue-cancel", "Cancel").on_click({
             let this = this.clone();
             move |_, _, cx| {
                 let _ = this.update(cx, |this, cx| this.close(cx));
@@ -1122,46 +1053,28 @@ impl Render for NewIssue {
         });
         let create = ActionButton::new("new-issue-create", "Create Issue")
             .primary()
-            .surface(Surface::Popover)
             .pending(creating)
             .disabled(picked.is_none() || title.is_empty())
-            .on_click({
-                let (store, this, target, workspace) =
-                    (self.store.clone(), this.clone(), self.target.clone(), self.workspace.clone());
-                let (picked, state, assignee, priority) =
-                    (picked.clone(), state.clone(), self.assignee_id.clone(), self.priority);
-                let description = self.description.clone();
-                move |_, _, cx| {
-                    let Some(team) = picked.as_ref() else { return };
-                    let issue = NewLinearIssue {
-                        team: team.id.clone(),
-                        title: title.clone(),
-                        description: description.read(cx).value().to_string(),
-                        state: state.as_ref().map(|state| state.id.clone()),
-                        assignee: assignee.clone(),
-                        priority,
-                    };
-                    let (this, workspace) = (this.clone(), workspace.clone());
-                    store.update(cx, |store, cx| {
-                        let opened = workspace.clone();
-                        store.linear_create(issue, &workspace, &target.server_id, move |store, id, identifier, cx| {
-                            let _ = this.update(cx, |this, cx| this.close(cx));
-                            store.open_linear_issue(opened, id, identifier);
-                        });
-                        cx.notify();
-                    });
-                }
-            });
+            .on_click(cx.listener(|this, _, _, cx| this.create(cx)));
 
         let content = div()
+            .id("linear-new-issue-content")
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                if event.keystroke.key == "escape" {
+                    this.close(cx);
+                    cx.stop_propagation();
+                }
+            }))
             .h(px(400.))
             .p(px(20.))
             .flex()
             .flex_col()
             .gap(px(12.))
-            .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(c.text).child("New issue"))
-            .child(InputField::new(&self.title).surface(Surface::Popover))
-            .child(div().flex_1().min_h_0().child(writing_field(&self.description, 0., cx)))
+            .child(
+                div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("New Issue"),
+            )
+            .child(InputField::new(&self.title))
+            .child(div().flex_1().min_h_0().child(TextArea::new(&self.description).fills(true)))
             .child(
                 div()
                     .flex()
@@ -1172,38 +1085,358 @@ impl Render for NewIssue {
                     .child(priority_menu)
                     .child(assignee_menu),
             )
-            .when_some(error, |column, error| column.child(div().text_size(px(12.5)).text_color(c.danger).child(error)))
+            .when_some(error, |column, error| {
+                column.child(div().text_size(px(12.5)).text_color(c.destructive).child(error))
+            })
             .child(div().flex().justify_end().gap(px(8.)).child(cancel).child(create));
-        sheet("linear-new-issue", 520., content, cx)
+        let close = cx.entity().downgrade();
+        modal("linear-new-issue", content, move |_, cx| {
+            close.update(cx, |this, cx| this.close(cx)).ok();
+        })
+        .width(520.)
+        .leaving(self.leaving)
     }
+}
+
+// The list
+
+/// The room around the list.
+const LIST_PADDING: f32 = 8.;
+/// The space between the rows' lights, and around each one: it looks empty but is the row's.
+const ROW_GAP: f32 = 2.;
+
+/// A line of the list: a status, or an issue under it with the statuses its team has.
+enum Entry {
+    Header { state: LinearState, count: usize, folded: bool },
+    Issue { row: Box<Row>, state: LinearState, states: Vec<LinearState> },
+}
+
+/// The lines of the list, and the issues, the folding and the teams they were made of.
+struct Lines {
+    made_of: Rc<Vec<Group>>,
+    folded: HashSet<String>,
+    teams: bool,
+    entries: Rc<Vec<Entry>>,
+}
+
+impl Entry {
+    /// What the line is, which a list laid out again keeps its place by.
+    fn key(&self) -> String {
+        match self {
+            Entry::Header { state, folded, .. } => format!("header:{}:{folded}", state.id),
+            Entry::Issue { row, .. } => format!("issue:{}", row.id),
+        }
+    }
+}
+
+/// What the lines of the list need to know of where they are.
+struct ListPlace {
+    store: Entity<Store>,
+    view: WeakEntity<LinearView>,
+    workspace: String,
+    users: Vec<LinearUser>,
+    /// The issues whose status, priority or assignee is being changed.
+    pending: HashSet<String>,
+    /// The panel is too narrow for the labels beside the titles.
+    narrow: bool,
+    change: Change,
+}
+
+/// A status over its issues, on the secondary background, which a click folds up and out.
+fn header(state: &LinearState, count: usize, folded: bool, place: &ListPlace, cx: &App) -> AnyElement {
+    let c = colors(cx);
+    let (view, id) = (place.view.clone(), state.id.clone());
+    div()
+        .id(SharedString::from(format!("linear-header-{}", state.id)))
+        .mt(px(6. + ROW_GAP / 2.))
+        .mb(px(ROW_GAP / 2.))
+        .h(px(30.))
+        .w_full()
+        .rounded(px(Radius::MD))
+        .bg(c.background_secondary)
+        .hover(|header| header.bg(c.background_secondary_accent))
+        .flex()
+        .items_center()
+        .px(px(10.))
+        .gap(px(8.))
+        .child(
+            div()
+                .w(px(16.))
+                .flex()
+                .justify_center()
+                .child(icons::symbol(state_symbol(state.kind), 12.).text_color(hex_color(&state.color, c))),
+        )
+        .child(
+            div()
+                .text_size(px(12.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c.foreground)
+                .child(state.name.clone()),
+        )
+        .child(div().text_size(px(12.)).text_color(c.muted_stronger_foreground).child(count.to_string()))
+        .child(div().flex_1())
+        .child(
+            div()
+                .w(px(16.))
+                .flex()
+                .justify_center()
+                .text_color(c.muted_stronger_foreground)
+                .child(icons::symbol(if folded { "chevron-right" } else { "chevron-down" }, 10.)),
+        )
+        .on_click(move |_, _, cx| {
+            let id = id.clone();
+            let _ = view.update(cx, |view, cx| {
+                if !view.collapsed.remove(&id) {
+                    view.collapsed.insert(id);
+                }
+                cx.notify();
+            });
+        })
+        .into_any_element()
+}
+
+/// An issue on one line as Linear lists it: its priority and its status, which a click changes,
+/// its identifier and title, then its labels, who has it and when it last changed. A click opens
+/// it; a right click offers what else can be done with it.
+fn issue_row(row: &Row, state: &LinearState, states: &[LinearState], place: &ListPlace, cx: &App) -> AnyElement {
+    let c = colors(cx);
+    let group: SharedString = format!("linear-row-{}", row.id).into();
+    let priority = {
+        let (change, id, current) = (place.change.clone(), row.id.clone(), row.priority);
+        row_button(
+            format!("linear-priority-{}", row.id),
+            priority_symbol(row.priority),
+            (row.priority == 1).then_some(c.warning),
+            row.priority_label.clone(),
+            false,
+            move || {
+                let (change, id) = (change.clone(), id.clone());
+                priorities_menu(
+                    current,
+                    Offer::WithSymbols,
+                    Rc::new(move |priority, cx: &mut App| {
+                        change(id.clone(), LinearChange { priority: Some(priority), ..Default::default() }, cx)
+                    }),
+                )
+            },
+            cx,
+        )
+    };
+    let status = {
+        let (change, id, current, states) = (place.change.clone(), row.id.clone(), state.id.clone(), states.to_vec());
+        row_button(
+            format!("linear-status-{}", row.id),
+            state_symbol(state.kind),
+            Some(hex_color(&state.color, c)),
+            format!("Status: {}", state.name),
+            place.pending.contains(&row.id),
+            move || {
+                let (change, id) = (change.clone(), id.clone());
+                states_menu(
+                    &states,
+                    Some(&current),
+                    Offer::WithSymbols,
+                    Rc::new(move |state, cx: &mut App| {
+                        change(id.clone(), LinearChange { state: Some(state), ..Default::default() }, cx)
+                    }),
+                )
+            },
+            cx,
+        )
+    };
+    let labels: Vec<AnyElement> = if place.narrow {
+        Vec::new()
+    } else {
+        row.labels.iter().take(2).map(|label| label_chip(label, &group, cx).into_any_element()).collect()
+    };
+    let initials = row.initials.clone().map(|initials| (initials, row.assignee.clone().unwrap_or_default()));
+    let open = {
+        let (store, workspace, id, identifier) =
+            (place.store.clone(), place.workspace.clone(), row.id.clone(), row.identifier.clone());
+        move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+            store.update(cx, |store, cx| {
+                store.open_linear_issue(workspace.clone(), id.clone(), identifier.clone());
+                cx.notify();
+            });
+        }
+    };
+    let actions = {
+        let (change, users, row) = (place.change.clone(), place.users.clone(), row.clone());
+        move |event: &MouseDownEvent, window: &mut Window, cx: &mut App| {
+            cx.stop_propagation();
+            row_menu(&row, &users, &change, event.position).show(event.position, window, cx);
+        }
+    };
+    let lit = Surface::Background.layer(Layer::Row, c);
+    div()
+        .id(group.clone())
+        .group(group.clone())
+        .my(px(ROW_GAP / 2.))
+        .h(px(34.))
+        .w_full()
+        .rounded(px(Radius::MD))
+        .hover(move |row| row.bg(lit))
+        .flex()
+        .items_center()
+        .pl(px(6.))
+        .pr(px(10.))
+        .gap(px(4.))
+        .child(priority)
+        .child(status)
+        .child(
+            div()
+                .ml(px(4.))
+                .flex_shrink_0()
+                .text_size(px(11.5))
+                .text_color(c.muted_stronger_foreground)
+                .child(row.identifier.clone()),
+        )
+        .child(
+            div()
+                .ml(px(4.))
+                .flex_1()
+                .min_w_0()
+                .text_size(px(13.))
+                .text_color(c.foreground)
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(row.title.clone()),
+        )
+        .child(
+            div()
+                .ml(px(4.))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .children(labels)
+                .when_some(initials, |side, (initials, name)| side.child(initials_disc(initials, name, cx)))
+                .child(div().text_size(px(11.5)).text_color(c.muted_stronger_foreground).child(ago(row.updated_at))),
+        )
+        .on_click(open)
+        .on_mouse_down(MouseButton::Right, actions)
+        .into_any_element()
+}
+
+/// A small symbol that is a button: lit a layer above the row under the pointer, in its own
+/// colour when it says something, and turning while what it changes is being changed, which
+/// takes no clicks. A click offers `menu` at the pointer.
+#[allow(clippy::too_many_arguments)]
+fn row_button(
+    id: String,
+    symbol: &'static str,
+    tint: Option<Hsla>,
+    tip: String,
+    spinning: bool,
+    menu: impl Fn() -> Menu + 'static,
+    cx: &App,
+) -> impl IntoElement {
+    let c = colors(cx);
+    let side = ControlSize::Small.height();
+    let size = ControlSize::Small.symbol();
+    let group: SharedString = format!("{id}-button").into();
+    let lit = Surface::Background.layer(Layer::RowSelected, c);
+    let mark: AnyElement = if spinning {
+        div()
+            .text_color(tint.unwrap_or(c.muted_foreground))
+            .child(turning_symbol("loader".into(), size * 0.85, true))
+            .into_any_element()
+    } else {
+        let icon = icons::symbol(symbol, size);
+        match tint {
+            Some(tint) => icon.text_color(tint).into_any_element(),
+            None => div()
+                .text_color(c.muted_foreground)
+                .group_hover(group.clone(), |mark| mark.text_color(c.foreground))
+                .child(icon)
+                .into_any_element(),
+        }
+    };
+    div()
+        .id(SharedString::from(id))
+        .group(group)
+        .relative()
+        .size(px(side))
+        .flex_shrink_0()
+        .rounded(px(Radius::SM))
+        .flex()
+        .items_center()
+        .justify_center()
+        .when(!spinning, |button| button.hover(move |button| button.bg(lit)))
+        .child(mark)
+        .tooltip(tooltip(tip))
+        .when(!spinning, |button| {
+            button.on_click(move |event, window, cx| {
+                cx.stop_propagation();
+                menu().show(event.position(), window, cx);
+            })
+        })
+}
+
+/// A label's name beside its colour, on a capsule that lights with its row.
+fn label_chip(label: &motile_protocol::wire::Label, row: &SharedString, cx: &App) -> impl IntoElement {
+    let c = colors(cx);
+    let lit = c.background_secondary_accent;
+    div()
+        .flex_shrink_0()
+        .h(px(Chip::HEIGHT))
+        .px(px(7.))
+        .rounded_full()
+        .bg(c.background_secondary)
+        .group_hover(row.clone(), move |chip| chip.bg(lit))
+        .flex()
+        .items_center()
+        .gap(px(5.))
+        .child(div().size(px(7.)).rounded_full().bg(hex_color(&label.color, c)))
+        .child(
+            div()
+                .text_size(px(11.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.foreground)
+                .whitespace_nowrap()
+                .child(label.name.clone()),
+        )
 }
 
 // What the menus that change an issue offer
 
 type Pick<T> = Rc<dyn Fn(T, &mut App)>;
 
-fn states_menu(states: &[LinearState], current: Option<&str>, pick: Pick<String>) -> Menu {
+/// What the menus offer the choices with: a row's offer each with its symbol, a page's without.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Offer {
+    Plain,
+    WithSymbols,
+}
+
+fn states_menu(states: &[LinearState], current: Option<&str>, offer: Offer, pick: Pick<String>) -> Menu {
     let mut menu = Menu::new();
     for state in states {
         let (pick, id) = (pick.clone(), state.id.clone());
-        menu = menu.checked(Some(state.id.as_str()) == current, state.name.clone(), move |_, cx| pick(id.clone(), cx));
+        let symbol = (offer == Offer::WithSymbols).then(|| MenuIcon::Symbol(state_symbol(state.kind)));
+        let chosen = Some(state.id.as_str()) == current;
+        menu = menu.choice(chosen, state.name.clone(), symbol, None, move |_, cx| pick(id.clone(), cx));
     }
     menu
 }
 
-fn priorities_menu(current: u8, pick: Pick<u8>) -> Menu {
+fn priorities_menu(current: u8, offer: Offer, pick: Pick<u8>) -> Menu {
     let mut menu = Menu::new();
     for (value, name) in PRIORITIES {
         let pick = pick.clone();
-        menu = menu.checked(value == current, name, move |_, cx| pick(value, cx));
+        let symbol = (offer == Offer::WithSymbols).then(|| MenuIcon::Symbol(priority_symbol(value)));
+        menu = menu.choice(value == current, name, symbol, None, move |_, cx| pick(value, cx));
     }
     menu
 }
 
-/// `pick` is given nothing for nobody.
-fn assignees_menu(users: &[LinearUser], current: Option<&str>, pick: Pick<Option<String>>) -> Menu {
+/// `pick` is given nothing for nobody. A `divided` menu sets nobody apart from the people, as
+/// the menus of an issue's page and of a new one do; a row's lists them all as one.
+fn assignees_menu(users: &[LinearUser], current: Option<&str>, divided: bool, pick: Pick<Option<String>>) -> Menu {
     let nobody = pick.clone();
-    let mut menu = Menu::new().checked(current.is_none(), "Unassigned", move |_, cx| nobody(None, cx)).separator();
+    let menu = Menu::new().checked(current.is_none(), "Unassigned", move |_, cx| nobody(None, cx));
+    let mut menu = if divided { menu.separator() } else { menu };
     for user in users {
         let (pick, id) = (pick.clone(), user.id.clone());
         let name = if user.me { format!("{} (you)", user.name) } else { user.name.clone() };
@@ -1225,13 +1458,13 @@ fn row_menu(row: &Row, users: &[LinearUser], change: &Change, at: Point<Pixels>)
                     cx,
                 )
             });
-            assignees_menu(&users, current.as_deref(), pick).show(at, window, cx);
+            assignees_menu(&users, current.as_deref(), false, pick).show(at, window, cx);
         }
     };
     let url = (!row.url.is_empty()).then(|| row.url.clone());
     let identifier = row.identifier.clone();
     Menu::new()
-        .symbol_item("Assign To…", "circle-user", assign)
+        .symbol_item("Assign To", "circle-user", assign)
         .when_some(url, |menu, url| {
             let link = url.clone();
             menu.symbol_item("Open in Linear", "square-arrow-out-up-right", move |_, cx| cx.open_url(&url)).symbol_item(
@@ -1255,32 +1488,15 @@ fn initials_disc(initials: String, name: String, cx: &App) -> impl IntoElement {
         .size(px(18.))
         .flex_shrink_0()
         .rounded_full()
-        .bg(c.background_tertiary)
+        .bg(c.background_accent)
         .flex()
         .items_center()
         .justify_center()
         .text_size(px(9.))
         .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c.secondary)
+        .text_color(c.muted_foreground)
         .child(initials)
         .tooltip(tooltip(name))
-}
-
-/// A box to write in, with a word in it while it is empty. Without a `height` it is as tall as
-/// there is room for.
-fn writing_field(state: &Entity<TextareaState>, height: f32, cx: &App) -> Div {
-    let c = colors(cx);
-    div()
-        .w_full()
-        .when(height > 0., |field| field.min_h(px(height)))
-        .when(height <= 0., |field| field.h_full())
-        .px(px(4.))
-        .py(px(6.))
-        .rounded(px(Radius::CONTROL))
-        .border_1()
-        .border_color(c.border)
-        .text_size(px(12.5))
-        .child(Textarea::new(state).appearance(false).px_0().py_0().text_size(px(12.5)))
 }
 
 /// A row of the strip under the tabs with what the open tab is about and its buttons.
@@ -1288,32 +1504,12 @@ fn bar_row(_: &App) -> Div {
     div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(4.))
 }
 
-/// What the tab says in the middle of the panel when it has nothing to show.
 fn message(text: impl Into<SharedString>, failed: bool, cx: &App) -> AnyElement {
-    let c = colors(cx);
-    div()
-        .size_full()
-        .p(px(24.))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(12.5))
-        .text_color(if failed { c.danger } else { c.secondary })
-        .text_center()
-        .child(text.into())
-        .into_any_element()
+    super::pull_request::panel_message(text, failed, cx)
 }
 
 fn loading(cx: &App) -> AnyElement {
-    let c = colors(cx);
-    div()
-        .size_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(c.tertiary)
-        .child(Spinner::new(ControlSize::Large.symbol()).render(cx))
-        .into_any_element()
+    super::pull_request::panel_loading(cx)
 }
 
 /// What went wrong, under the tab's bar.
@@ -1328,7 +1524,7 @@ fn note(text: String, cx: &App) -> Div {
                 .w_full()
                 .px(px(12.))
                 .py(px(7.))
-                .bg(c.warning_background)
+                .bg(c.warning_tint)
                 .text_size(px(12.))
                 .text_color(c.warning)
                 .child(text),
@@ -1337,7 +1533,7 @@ fn note(text: String, cx: &App) -> Div {
 }
 
 /// Linear's colours come as hex without the `#`.
-fn hex_color(hex: &str) -> Hsla {
+fn hex_color(hex: &str, c: &crate::theme::Colors) -> Hsla {
     let hex = hex.trim_start_matches('#');
-    Rgba::try_from(format!("#{hex}").as_str()).map(Hsla::from).unwrap_or_else(|_| hsla(0., 0., 0.5, 1.))
+    Rgba::try_from(format!("#{hex}").as_str()).map(Hsla::from).unwrap_or(c.muted_stronger_foreground)
 }

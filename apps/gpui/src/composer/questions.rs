@@ -11,11 +11,12 @@ use motile_core::render::rows::{Question, Waiting};
 
 use crate::composer::strips::waiting_title;
 use crate::store::Store;
-use crate::theme::{ControlSize, Surface, colors};
-use crate::ui::{ActionButton, InputField, Variant, icons};
+use crate::theme::{ControlSize, Radius, Surface, colors};
+use crate::ui::{ActionButton, InputField, InputVariant, PickMark, Variant};
 
 /// How far past its text an option's light and the room to press it reach.
 const OPTION_REACH: f32 = 8.;
+const MARK_GAP: f32 = 10.;
 
 pub struct Questions {
     store: Entity<Store>,
@@ -33,8 +34,17 @@ impl Questions {
             .iter()
             .map(|_| cx.new(|cx| InputState::new(window, cx).placeholder("Something else")))
             .collect();
-        let subscriptions =
-            typed.iter().map(|input| cx.subscribe(input, |_, _, _: &InputEvent, cx| cx.notify())).collect();
+        let subscriptions = typed
+            .iter()
+            .map(|input| {
+                cx.subscribe(input, |this, _, event: &InputEvent, cx| {
+                    if let InputEvent::PressEnter { .. } = event {
+                        this.go_on(cx);
+                    }
+                    cx.notify();
+                })
+            })
+            .collect();
         Self { store, approval, index: 0, chosen: HashMap::new(), typed, _subscriptions: subscriptions }
     }
 
@@ -69,6 +79,33 @@ impl Questions {
         answers
     }
 
+    fn can_go_on(&self, cx: &App) -> bool {
+        let answers = self.answers(cx);
+        if self.is_last() {
+            answers.len() == self.approval.questions.len()
+        } else {
+            answers.contains_key(&self.question().text)
+        }
+    }
+
+    /// Answers the questions after the last, or else goes on to the next.
+    fn go_on(&mut self, cx: &mut Context<Self>) {
+        if !self.can_go_on(cx) {
+            return;
+        }
+        if !self.is_last() {
+            self.index += 1;
+            cx.notify();
+            return;
+        }
+        let answers = self.answers(cx);
+        let id = self.approval.id.clone();
+        self.store.update(cx, |store, cx| {
+            store.answer(&id, true, answers);
+            cx.notify();
+        });
+    }
+
     /// What is typed counts in place of the options, so none shows as chosen beside it.
     fn is_chosen(&self, label: &str, cx: &App) -> bool {
         if !self.written(self.index, cx).is_empty() {
@@ -81,6 +118,9 @@ impl Questions {
         let index = self.index;
         let question = self.question().clone();
         self.typed[index].update(cx, |typed, cx| typed.set_value("", window, cx));
+        if self.typed[index].read(cx).focus_handle(cx).is_focused(window) {
+            window.blur(cx);
+        }
         let picked = self.chosen.entry(question.text.clone()).or_default();
         if !question.multiple {
             picked.clear();
@@ -110,77 +150,134 @@ impl Questions {
         .detach();
     }
 
+    /// The light of a row: under the pointer, and while it is the answer.
+    fn light(id: SharedString, lit: bool, cx: &App) -> Stateful<Div> {
+        let fill = colors(cx).border_composer;
+        div()
+            .id(id)
+            .w_full()
+            .py(px(8.))
+            .px(px(OPTION_REACH))
+            .rounded(px(Radius::MD))
+            .flex()
+            .gap(px(MARK_GAP))
+            .when(lit, |row| row.bg(fill))
+            .when(!lit, |row| row.hover(move |row| row.bg(fill)))
+    }
+
     fn option_row(&self, option_index: usize, label: String, detail: String, cx: &mut Context<Self>) -> Stateful<Div> {
         let c = colors(cx);
         let picked = self.is_chosen(&label, cx);
-        let light = Surface::Composer.next().color(c);
-        div()
-            .id(("option", option_index))
-            .w_full()
-            .py(px(6.))
-            .px(px(OPTION_REACH))
-            .rounded(px(8.))
-            .flex()
-            .items_center()
-            .gap(px(8.))
-            .when(picked, |row| row.bg(light))
-            .when(!picked, |row| row.hover(move |row| row.bg(light)))
+        let multiple = self.question().multiple;
+        Self::light(SharedString::from(format!("option-{option_index}")), picked, cx)
+            .items_start()
+            .child(div().h(px(18.)).flex().items_center().child(PickMark::new(
+                SharedString::from(format!("pick-{}-{option_index}", self.index)),
+                picked,
+                multiple,
+            )))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap(px(1.))
-                    .child(div().font_weight(FontWeight::MEDIUM).child(label.clone()))
+                    .gap(px(2.))
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .line_height(px(18.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c.foreground)
+                            .child(label.clone()),
+                    )
                     .when(!detail.is_empty(), |text| {
-                        text.child(div().text_size(px(11.5)).text_color(c.secondary).child(detail))
+                        text.child(
+                            div().text_size(px(12.)).line_height(px(16.)).text_color(c.muted_foreground).child(detail),
+                        )
                     }),
             )
-            .child(icons::symbol("check", 13.).text_color(c.primary.opacity(if picked { 1. } else { 0. })))
             .on_click(cx.listener(move |this, _, window, cx| this.choose(label.clone(), window, cx)))
+    }
+
+    /// The last row, which takes an answer typed in place of the options.
+    fn something_else(&self, window: &mut Window, cx: &mut Context<Self>) -> Stateful<Div> {
+        let field = self.typed[self.index].clone();
+        let written = !self.written(self.index, cx).is_empty();
+        let typing = field.read(cx).focus_handle(cx).is_focused(window);
+        let focus = field.clone();
+        Self::light("something-else".into(), written || typing, cx)
+            .items_center()
+            .child(PickMark::new(
+                SharedString::from(format!("pick-{}-else", self.index)),
+                written,
+                self.question().multiple,
+            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .h(px(18.))
+                    .ml(px(-(ControlSize::Large.padding() - 2.)))
+                    .flex()
+                    .items_center()
+                    .child(
+                        InputField::new(&field)
+                            .variant(InputVariant::Bare)
+                            .size(ControlSize::Large)
+                            .surface(Surface::Background),
+                    ),
+            )
+            .on_click(move |_, window, cx| focus.update(cx, |field, cx| field.focus(window, cx)))
     }
 }
 
 impl Render for Questions {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let count = self.approval.questions.len();
         let question = self.question().clone();
-        let answers = self.answers(cx);
-        let complete = answers.len() >= count;
-        let answered = answers.contains_key(&question.text);
+        let can_go_on = self.can_go_on(cx);
         let place = (count > 1).then(|| format!("{} of {}", self.index + 1, count));
-        let (refuse, allow) = (self.store.clone(), self.store.clone());
-        let (refuse_id, allow_id) = (self.approval.id.clone(), self.approval.id.clone());
+        let title = if question.header.is_empty() { self.approval.title.clone() } else { question.header.clone() };
+        let refuse = self.store.clone();
+        let refuse_id = self.approval.id.clone();
+        let go_on = if self.is_last() { self.approval.allow } else { "Next" };
         div()
             .flex()
             .flex_col()
-            .gap(px(10.))
-            .child(
-                waiting_title(self.approval.title.clone(), "message-circle-question-mark", place, cx)
-                    .text_color(c.secondary),
-            )
+            .gap(px(12.))
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .gap(px(2.))
-                    .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(question.text.clone()))
+                    .gap(px(6.))
+                    .child(waiting_title(title, "message-circle-question-mark", place, cx).text_color(c.warning))
+                    .child(
+                        div()
+                            .text_size(px(13.5))
+                            .line_height(px(19.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c.foreground)
+                            .child(question.text.clone()),
+                    )
                     .when(question.multiple, |text| {
-                        text.child(div().text_color(c.secondary).child("Choose any that apply"))
+                        text.child(div().text_color(c.muted_foreground).child("Choose any that apply"))
                     }),
             )
             .child(
-                div().mx(px(-OPTION_REACH)).flex().flex_col().gap(px(2.)).children(
-                    question
-                        .options
-                        .iter()
-                        .enumerate()
-                        .map(|(index, option)| self.option_row(index, option.label.clone(), option.detail.clone(), cx)),
-                ),
+                div()
+                    .mx(px(-OPTION_REACH))
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .children(
+                        question.options.iter().enumerate().map(|(index, option)| {
+                            self.option_row(index, option.label.clone(), option.detail.clone(), cx)
+                        }),
+                    )
+                    .child(self.something_else(window, cx)),
             )
-            .child(InputField::new(&self.typed[self.index]).size(ControlSize::Small).surface(Surface::Composer))
             .child(
                 div()
                     .flex()
@@ -192,7 +289,7 @@ impl Render for Questions {
                                 .symbol("chevron-left")
                                 .ghost()
                                 .small()
-                                .surface(Surface::Composer)
+                                .surface(Surface::Background)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.index -= 1;
                                     cx.notify();
@@ -203,7 +300,7 @@ impl Render for Questions {
                     .child(
                         ActionButton::new("refuse-questions", self.approval.refuse)
                             .small()
-                            .surface(Surface::Composer)
+                            .surface(Surface::Background)
                             .on_click(move |_, _, cx| {
                                 refuse.update(cx, |store, cx| {
                                     store.answer(&refuse_id, false, HashMap::new());
@@ -211,35 +308,14 @@ impl Render for Questions {
                                 })
                             }),
                     )
-                    .when(self.is_last(), |row| {
-                        row.child(
-                            ActionButton::new("allow-questions", self.approval.allow)
-                                .variant(Variant::Primary)
-                                .small()
-                                .surface(Surface::Composer)
-                                .disabled(!complete)
-                                .on_click(move |_, _, cx| {
-                                    let answers = answers.clone();
-                                    allow.update(cx, |store, cx| {
-                                        store.answer(&allow_id, true, answers);
-                                        cx.notify();
-                                    })
-                                }),
-                        )
-                    })
-                    .when(!self.is_last(), |row| {
-                        row.child(
-                            ActionButton::new("next-question", "Next")
-                                .variant(Variant::Primary)
-                                .small()
-                                .surface(Surface::Composer)
-                                .disabled(!answered)
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.index += 1;
-                                    cx.notify();
-                                })),
-                        )
-                    }),
+                    .child(
+                        ActionButton::new("go-on", go_on)
+                            .variant(Variant::Primary)
+                            .small()
+                            .surface(Surface::Background)
+                            .disabled(!can_go_on)
+                            .on_click(cx.listener(|this, _, _, cx| this.go_on(cx))),
+                    ),
             )
     }
 }

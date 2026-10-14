@@ -1,6 +1,6 @@
-// Writes the design tokens of tokens.json out as tokens.css, theme.css and the clients'
-// Tokens.swift. Run it with `pnpm tokens` after changing tokens.json; the three are generated
-// and never edited by hand.
+// Writes the design tokens of tokens.json out as tokens.css, theme.css, the clients' Tokens.swift
+// and the GPUI app's tokens.rs. Run it with `pnpm tokens` after changing tokens.json; the four are
+// generated and never edited by hand.
 import { readFileSync, writeFileSync } from "node:fs"
 
 const here = (path) => new URL(path, import.meta.url)
@@ -13,6 +13,9 @@ const percent = (value) => `${Math.round(value * 100)}%`
 const camel = (name) => name.replace(/-([a-z0-9])/g, (_, letter) => letter.toUpperCase())
 const swiftName = (name) => (name === "2xl" ? "xxl" : camel(name))
 const hex = (value) => `0x${value.slice(1)}`
+const snake = (name) => name.replace(/-/g, "_")
+const pascal = (name) => camel(`-${name === "2xl" ? "xxl" : name}`)
+const float = (value) => (Number.isInteger(value) ? `${value}.` : `${value}`)
 
 const generated = (comment) => `${comment} Generated from tokens.json by build.mjs: edit tokens.json and run \`pnpm tokens\`.`
 
@@ -149,6 +152,91 @@ ${shadows.map(([name, [, , blur]]) => `        case .${name}: ${blur}`).join("\n
 `
 }
 
+function rust() {
+  const shadows = Object.entries(shadow).map(([name, value]) => [name, value.split(" ").map(parseFloat)])
+  const palette = (mode) => names.map((name) => `            ${snake(name)}: hex(${hex(colors[mode][name])}),`).join("\n")
+  const opacityArms = (mode) => opacities.map((name) => `            Opacity::${pascal(name)} => ${float(opacity[mode][name])},`).join("\n")
+  return `// ${generated("The design tokens of the GPUI app.")}
+#![allow(dead_code)]
+
+use gpui_kit::{Hsla, rgb};
+
+/// Every colour of the design, in one appearance.
+#[derive(Clone, Copy, Debug)]
+pub struct Tokens {
+${names.map((name) => `    pub ${snake(name)}: Hsla,`).join("\n")}
+}
+
+impl Tokens {
+    pub fn light() -> Self {
+        Self {
+${palette("light")}
+        }
+    }
+
+    pub fn dark() -> Self {
+        Self {
+${palette("dark")}
+        }
+    }
+}
+
+fn hex(value: u32) -> Hsla {
+    rgb(value).into()
+}
+
+/// How much of a colour shows: every opacity in the app is one of these.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Opacity {
+${opacities.map((name) => `    ${pascal(name)},`).join("\n")}
+}
+
+impl Opacity {
+    pub fn light(self) -> f32 {
+        match self {
+${opacityArms("light")}
+        }
+    }
+
+    pub fn dark(self) -> f32 {
+        match self {
+${opacityArms("dark")}
+        }
+    }
+}
+
+/// How round corners are: every radius is one of these.
+pub struct Radius;
+
+impl Radius {
+${Object.entries(radius)
+  .map(([name, value]) => `    pub const ${(name === "2xl" ? "xxl" : name).toUpperCase()}: f32 = ${float(value)};`)
+  .join("\n")}
+}
+
+/// A shadow's size: how far down it falls and its blur, as CSS gives them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShadowSize {
+${shadows.map(([name]) => `    ${pascal(name)},`).join("\n")}
+}
+
+impl ShadowSize {
+    pub fn down(self) -> f32 {
+        match self {
+${shadows.map(([name, [, down]]) => `            ShadowSize::${pascal(name)} => ${float(down)},`).join("\n")}
+        }
+    }
+
+    pub fn blur(self) -> f32 {
+        match self {
+${shadows.map(([name, [, , blur]]) => `            ShadowSize::${pascal(name)} => ${float(blur)},`).join("\n")}
+        }
+    }
+}
+`
+}
+
 writeFileSync(here("tokens.css"), tokensCSS())
 writeFileSync(here("theme.css"), themeCSS())
 writeFileSync(here("../apple/Sources/MotileKit/Shared/Theme/Tokens.swift"), swift())
+writeFileSync(here("../../apps/gpui/src/tokens.rs"), rust())

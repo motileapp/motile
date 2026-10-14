@@ -15,6 +15,13 @@ const OWN: &[(&str, &[u8])] = &[
     ("icons/google-red.svg", include_bytes!("../assets/icons/google-red.svg")),
     ("icons/smile-plus.svg", include_bytes!("../assets/icons/smile-plus.svg")),
     ("icons/linear.svg", include_bytes!("../assets/icons/linear.svg")),
+    ("icons/effort-low.svg", include_bytes!("../assets/icons/effort-low.svg")),
+    ("icons/effort-medium.svg", include_bytes!("../assets/icons/effort-medium.svg")),
+    ("icons/effort-high.svg", include_bytes!("../assets/icons/effort-high.svg")),
+    ("icons/effort-extra.svg", include_bytes!("../assets/icons/effort-extra.svg")),
+    ("icons/chevron-down-trimmed.svg", include_bytes!("../assets/icons/chevron-down-trimmed.svg")),
+    ("icons/chevron-right-trimmed.svg", include_bytes!("../assets/icons/chevron-right-trimmed.svg")),
+    ("icons/undo-2-trimmed.svg", include_bytes!("../assets/icons/undo-2-trimmed.svg")),
 ];
 
 /// DM Sans, the app's typeface, in the weights the views use.
@@ -25,6 +32,7 @@ pub const FONTS: &[&[u8]] = &[
     include_bytes!("../assets/fonts/DMSans-Bold.ttf"),
     include_bytes!("../assets/fonts/DMSans-Italic.ttf"),
     include_bytes!("../assets/fonts/DMSans-MediumItalic.ttf"),
+    include_bytes!("../assets/fonts/DMSans-SemiBoldItalic.ttf"),
 ];
 
 pub struct Assets;

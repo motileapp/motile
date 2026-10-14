@@ -5,18 +5,22 @@ use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use crate::sidebar::SidebarFooter;
 use crate::store::Store;
 use crate::store::settings::{SettingsEntry, SettingsSection};
-use crate::theme::{self, Surface, colors};
-use crate::ui::{InputField, InputVariant, icons};
+use crate::theme::{self, Radius, colors};
+use crate::ui::{Highlight, InputField, InputVariant, edges, hover_state, icons, track_hover};
 
 const ROW_INSET: f32 = 10.;
-const ROW_RADIUS: f32 = 8.;
-const ROW_HEIGHT: f32 = 30.;
+const SECTION_HEIGHT: f32 = 32.;
+const RESULT_HEIGHT: f32 = 30.;
+/// Where the sidebar's text starts: past the rows' inset and their padding.
+const SIDEBAR_EDGE: f32 = ROW_INSET + 8.;
 
 pub struct SettingsSidebar {
     store: Entity<Store>,
     search: Entity<InputState>,
+    footer: Entity<SidebarFooter>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -27,7 +31,8 @@ impl SettingsSidebar {
             cx.subscribe(&search, |_, _, _: &InputEvent, cx| cx.notify()),
             cx.observe(&store, |_, _, cx| cx.notify()),
         ];
-        Self { store, search, _subscriptions: subscriptions }
+        let footer = cx.new(|cx| SidebarFooter::new(store.clone(), cx));
+        Self { store, search, footer, _subscriptions: subscriptions }
     }
 
     fn choose(&self, section: SettingsSection, target: Option<String>, cx: &mut App) {
@@ -38,49 +43,70 @@ impl SettingsSidebar {
         });
     }
 
-    fn section_row(
+    /// A row of the list: its light, and what it shows faded until it lights up.
+    fn row(
         &self,
-        index: usize,
-        section: SettingsSection,
+        id: ElementId,
         selected: bool,
+        content: Div,
+        window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let c = colors(cx);
-        let group: SharedString = format!("settings-section-{index}").into();
+    ) -> Stateful<Div> {
+        let hovered = hover_state(&id, window, cx);
+        let group = SharedString::from(format!("settings-row-{id:?}"));
+        let light = Highlight::new()
+            .radius(Radius::MD)
+            .inset(edges(1., ROW_INSET, 1., ROW_INSET))
+            .selected(selected)
+            .lit(*hovered.read(cx));
         div()
-            .id(("settings-section", index))
+            .id(id)
             .group(group.clone())
             .relative()
             .px(px(ROW_INSET))
             .py(px(1.))
-            .child(highlight(group.clone(), selected, cx))
-            .child(
-                div()
-                    .relative()
-                    .h(px(ROW_HEIGHT))
-                    .px(px(8.))
+            .child(light.render(group, cx))
+            .child(light.faded(content.relative(), cx))
+            .on_hover(track_hover(&hovered))
+    }
+
+    fn sections(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let selected = self.store.read(cx).settings.section;
+        SettingsSection::ALL
+            .into_iter()
+            .enumerate()
+            .map(|(index, section)| {
+                let content = div()
+                    .h(px(SECTION_HEIGHT))
+                    .px(px(9.))
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .text_color(if selected { c.text } else { c.secondary })
-                    .group_hover(group, move |row| row.text_color(c.text))
                     .child(icons::symbol(section.symbol(), 14.))
-                    .child(div().text_size(px(13.)).font_weight(FontWeight::MEDIUM).child(section.title())),
-            )
-            .on_click(cx.listener(move |this, _, _, cx| this.choose(section, None, cx)))
-            .into_any_element()
+                    .child(div().text_size(px(13.)).child(section.title()));
+                self.row(
+                    ElementId::NamedInteger("settings-section".into(), index as u64),
+                    selected == Some(section),
+                    content,
+                    window,
+                    cx,
+                )
+                .on_click(cx.listener(move |this, _, _, cx| this.choose(section, None, cx)))
+                .into_any_element()
+            })
+            .collect()
     }
 
-    fn results(&self, query: &str, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    fn results(&self, query: &str, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let c = colors(cx);
-        let found = SettingsEntry::matching(query);
+        let found = SettingsEntry::matching(query, &self.store.read(cx).shortcuts);
         if found.is_empty() {
             return vec![
                 div()
-                    .px(px(ROW_INSET + 8.))
+                    .px(px(SIDEBAR_EDGE))
                     .py(px(10.))
                     .text_size(px(13.))
-                    .text_color(c.tertiary)
+                    .text_color(c.muted_stronger_foreground)
                     .child("No settings found")
                     .into_any_element(),
             ];
@@ -89,82 +115,50 @@ impl SettingsSidebar {
             .into_iter()
             .enumerate()
             .map(|(index, entry)| {
-                let group: SharedString = format!("settings-entry-{index}").into();
-                div()
-                    .id(("settings-entry", index))
-                    .group(group.clone())
-                    .relative()
-                    .px(px(ROW_INSET))
-                    .py(px(1.))
-                    .child(highlight(group.clone(), false, cx))
+                let content = div()
+                    .min_h(px(RESULT_HEIGHT))
+                    .px(px(8.))
+                    .py(px(4.))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(icons::symbol(entry.section.symbol(), 14.))
                     .child(
                         div()
-                            .relative()
-                            .min_h(px(ROW_HEIGHT))
-                            .px(px(8.))
-                            .py(px(4.))
+                            .min_w_0()
                             .flex()
-                            .items_center()
-                            .gap(px(8.))
-                            .text_color(c.secondary)
-                            .group_hover(group, move |row| row.text_color(c.text))
-                            .child(icons::symbol(entry.section.symbol(), 14.))
+                            .flex_col()
+                            .gap(px(1.))
                             .child(
                                 div()
-                                    .min_w_0()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(1.))
-                                    .child(
-                                        div()
-                                            .text_size(px(13.))
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .whitespace_nowrap()
-                                            .overflow_hidden()
-                                            .text_ellipsis()
-                                            .child(entry.title),
-                                    )
-                                    .child(
-                                        div().text_size(px(11.)).text_color(c.tertiary).child(entry.section.title()),
-                                    ),
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .whitespace_nowrap()
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .child(entry.title.clone()),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(c.muted_stronger_foreground)
+                                    .whitespace_nowrap()
+                                    .child(entry.section.title()),
                             ),
-                    )
-                    .on_click(
-                        cx.listener(move |this, _, _, cx| this.choose(entry.section, Some(entry.id.to_string()), cx)),
-                    )
+                    );
+                let (section, target) = (entry.section, entry.id);
+                self.row(ElementId::NamedInteger("settings-entry".into(), index as u64), false, content, window, cx)
+                    .on_click(cx.listener(move |this, _, _, cx| this.choose(section, Some(target.clone()), cx)))
                     .into_any_element()
             })
             .collect()
     }
 }
 
-/// The light under the row the pointer is over, and under the open section.
-fn highlight(group: SharedString, selected: bool, cx: &App) -> Div {
-    let c = colors(cx);
-    div()
-        .absolute()
-        .top(px(1.))
-        .bottom(px(1.))
-        .left(px(ROW_INSET))
-        .right(px(ROW_INSET))
-        .rounded(px(ROW_RADIUS))
-        .when(selected, |light| light.bg(Surface::Background.further().color(c)))
-        .when(!selected, |light| light.group_hover(group, move |light| light.bg(Surface::Background.next().color(c))))
-}
-
 impl Render for SettingsSidebar {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self.search.read(cx).value().to_string();
-        let selected = self.store.read(cx).settings.section;
-        let rows: Vec<AnyElement> = if query.trim().is_empty() {
-            SettingsSection::ALL
-                .into_iter()
-                .enumerate()
-                .map(|(index, section)| self.section_row(index, section, selected == Some(section), cx))
-                .collect()
-        } else {
-            self.results(&query, cx)
-        };
+        let rows = if query.is_empty() { self.sections(window, cx) } else { self.results(&query, window, cx) };
         div()
             .size_full()
             .flex()
@@ -185,5 +179,7 @@ impl Render for SettingsSidebar {
                     .overflow_y_scroll()
                     .child(div().flex().flex_col().pb(px(12.)).children(rows)),
             )
+            .child(crate::ui::divider(cx))
+            .child(self.footer.clone())
     }
 }

@@ -1,13 +1,14 @@
 //! The threads and drafts: opening them, sending, and changing a thread's settings.
 
 use std::collections::HashMap;
-use std::time::Duration;
 
 use gpui_kit::prelude::*;
 use motile_core::api::Command;
-use motile_protocol::wire::{Access, NewThread, NewWorktree, Request, ThreadChange};
+use motile_protocol::wire::{
+    Access, AgentAccount, Interruption, ModelInfo, NewThread, NewWorktree, Request, ThreadChange,
+};
 
-use super::{Selection, Store, ThreadDraft, UndoNotice};
+use super::{Selection, SendingDraft, Store, ThreadDraft, UndoNotice};
 use crate::models::*;
 use crate::transcript::model::RowModel;
 
@@ -16,11 +17,18 @@ impl Store {
     /// waiting for it.
     pub const STEERS_KEY: &str = "send.steers";
 
+    /// It steers until the setting says otherwise.
+    pub fn steers(&self) -> bool {
+        self.prefs.get(Self::STEERS_KEY).unwrap_or(true)
+    }
+
     pub(super) fn apply_threads(&mut self, new: Vec<ThreadInfo>, server_id: &str, cx: &mut Context<Self>) {
-        self.threads.retain(|_, thread| thread.server_id != server_id);
+        let mut kept: HashMap<String, ThreadInfo> =
+            self.threads.drain().filter(|(_, thread)| thread.server_id != server_id).collect();
         for thread in new {
-            self.threads.insert(thread.id.clone(), thread);
+            kept.insert(thread.id.clone(), thread);
         }
+        self.set_threads(kept);
         if let Selection::Thread(id) = &self.selection
             && !self.threads.contains_key(id)
         {
@@ -31,11 +39,15 @@ impl Store {
     }
 
     pub(super) fn upsert(&mut self, thread: ThreadInfo) {
-        let before = self.threads.insert(thread.id.clone(), thread.clone());
+        let before = self.threads.get(&thread.id).cloned();
+        if before.as_ref() == Some(&thread) {
+            return;
+        }
+        self.set_thread(Some(thread.clone()), &thread.id);
         self.mark_open_thread_seen();
         let Some(before) = before else { return };
         if !before.is_done() && thread.is_done() && before.pull_request != thread.pull_request {
-            self.sidebar.settled_thread_id = Some(thread.id.clone());
+            self.sidebar.revealed_thread_id = Some(thread.id.clone());
         }
         if self.selection != Selection::Thread(thread.id.clone()) {
             return;
@@ -56,7 +68,7 @@ impl Store {
     }
 
     pub(super) fn remove_thread(&mut self, id: &str, cx: &mut Context<Self>) {
-        self.threads.remove(id);
+        self.set_thread(None, id);
         self.forget_tabs(id);
         if self.selection == Selection::Thread(id.to_string()) {
             self.open_empty_draft(cx);
@@ -65,6 +77,7 @@ impl Store {
 
     pub fn select(&mut self, new: Selection, cx: &mut Context<Self>) {
         self.last_selection = None;
+        self.shows_usage = false;
         let reopens = self.selected_thread().is_some() && self.open_thread_id.is_none();
         if new == self.selection && !reopens {
             return;
@@ -73,17 +86,22 @@ impl Store {
             self.send(Command::CloseThread { thread_id: open });
         }
         let left = self.selected_draft().cloned();
-        self.selection = new.clone();
-        if let Some(left) = left
-            && self.preview(&left).is_none()
-            && !self.sending_draft_ids.contains(&left.id)
-        {
-            self.remove_draft(&left.id);
+        self.set_selection(new.clone());
+        if self.sidebar.revealed_thread_id.as_ref().map(|id| Selection::Thread(id.clone())) != Some(new.clone()) {
+            self.sidebar.revealed_thread_id = None;
         }
-        self.opened_draft_preview = self.selected_draft().cloned().and_then(|draft| self.preview(&draft));
+        if let Some(left) = left {
+            if let Some(sending) = self.sending_drafts.get_mut(&left.id) {
+                sending.left = true;
+            } else if self.preview(&left).is_none() {
+                self.remove_draft(&left.id);
+            }
+        }
+        let preview = self.selected_draft().cloned().and_then(|draft| self.preview(&draft));
+        self.set_opened_draft_preview(preview);
         self.activity = Activity::default();
         self.transcript_is_empty = true;
-        self.side_panel.turns.clear();
+        self.right_panel.turns.clear();
         self.show_agents(cx);
         self.agents.clear();
         self.draft_version += 1;
@@ -93,42 +111,67 @@ impl Store {
         };
         let Some(thread) = thread else {
             self.transcript.update(cx, |transcript, cx| {
-                transcript.begin(None);
+                transcript.begin(None, false, false);
                 cx.notify();
             });
-            let key = self.draft_key();
-            self.prefs.set("selection", key);
+            self.show_sending_message(cx);
             self.ensure_draft_project();
             self.read_git(
                 true,
                 None::<fn(&mut Store, Vec<motile_protocol::wire::ChangedFile>, &mut Context<Store>)>,
                 cx,
             );
+            self.refresh_composer_models();
             return;
         };
         self.open(&thread, cx);
     }
 
-    fn open(&mut self, thread: &ThreadInfo, cx: &mut Context<Self>) {
-        self.open_thread_id = Some(thread.id.clone());
-        let id = thread.id.clone();
+    /// A draft whose first message is still on its way shows it as it was sent.
+    fn show_sending_message(&mut self, cx: &mut Context<Self>) {
+        let Some(sending) = self.selected_draft().and_then(|draft| self.sending_drafts.get(&draft.id)).cloned() else {
+            return;
+        };
+        self.activity = sending.activity.clone();
+        let pending = RowModel::pending(sending.text, sending.attachments, false);
         self.transcript.update(cx, |transcript, cx| {
-            transcript.begin(Some(id));
+            transcript.set_activity(sending.activity);
+            transcript.set_pending(Some(pending));
             cx.notify();
         });
-        self.prefs.set("selection", thread.id.clone());
-        self.send(Command::OpenThread { server_id: thread.server_id.clone(), thread_id: thread.id.clone() });
+        self.transcript_is_empty = false;
+    }
+
+    fn open(&mut self, thread: &ThreadInfo, cx: &mut Context<Self>) {
+        self.open_thread_id = Some(thread.id.clone());
+        // What the cached thread says, so Stop and the monitoring strip show at once.
+        self.activity = Activity { running: thread.running, monitoring: thread.monitoring, ..Activity::default() };
+        let id = thread.id.clone();
+        self.transcript.update(cx, |transcript, cx| {
+            transcript.begin(Some(id.clone()), false, true);
+            cx.notify();
+        });
+        let command = Command::OpenThread { server_id: thread.server_id.clone(), thread_id: thread.id.clone() };
+        self.ask(command, move |store, result, cx| {
+            if result.is_ok() || store.transcript.read(cx).thread_id.as_deref() != Some(&id) {
+                return;
+            }
+            store.transcript.update(cx, |transcript, cx| {
+                transcript.drop_kept_rows();
+                cx.notify();
+            });
+        });
         self.send(Command::MarkSeen { thread_id: thread.id.clone() });
         self.read_git(true, None::<fn(&mut Store, Vec<motile_protocol::wire::ChangedFile>, &mut Context<Store>)>, cx);
     }
 
     /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft
-    /// opens at once, with more the panel asks which.
+    /// opens at once, without one it starts without a project, and with more the panel asks which.
     pub fn new_thread(&mut self, cx: &mut Context<Self>) {
         if self.projects.len() > 1 {
             return self.open_panel(super::PanelPage::Projects);
         }
-        let first = self.projects.first().map(|project| project.id.clone());
+        let first = self.projects.first().or(self.no_projects.first()).map(|project| project.id.clone());
         self.start_new_thread(first, cx);
     }
 
@@ -148,21 +191,21 @@ impl Store {
     }
 
     pub fn set_new_thread_project(&mut self, id: Option<String>, cx: &mut Context<Self>) {
-        self.update_draft(|draft| {
-            draft.project_id = id;
-            draft.base = None;
-        });
+        self.move_draft(id);
         self.upload_to_composer_server();
         self.read_git(true, None::<fn(&mut Store, Vec<motile_protocol::wire::ChangedFile>, &mut Context<Store>)>, cx);
     }
 
     pub fn discard(&mut self, draft: &ThreadDraft, cx: &mut Context<Self>) {
+        if self.is_sending(&draft.id) {
+            return;
+        }
         let was_open = self.selection == Selection::Draft(draft.id.clone());
         self.remove_draft(&draft.id);
         if !was_open {
             return;
         }
-        let next = self.thread_drafts.iter().rev().find(|draft| !self.sending_draft_ids.contains(&draft.id)).cloned();
+        let next = self.thread_drafts.iter().rev().find(|draft| !self.is_sending(&draft.id)).cloned();
         if let Some(next) = next {
             return self.select(Selection::Draft(next.id), cx);
         }
@@ -173,7 +216,7 @@ impl Store {
     }
 
     pub fn can_send(&self) -> bool {
-        if self.sending_draft_ids.contains(&self.draft_key()) {
+        if self.is_sending(&self.draft_key()) {
             return false;
         }
         let Some(server) = self.composer_server().filter(|server| server.connected()) else { return false };
@@ -204,7 +247,9 @@ impl Store {
             .then_some("Waiting for the attachments to upload")
     }
 
-    pub fn send_message(&mut self, cx: &mut Context<Self>) {
+    /// Sends what is written. While the agent works, `alternate` sends it the other way than the
+    /// settings say: queued instead of steering, or the other way round.
+    pub fn send_message(&mut self, alternate: bool, cx: &mut Context<Self>) {
         if !self.can_send() {
             return;
         }
@@ -213,7 +258,7 @@ impl Store {
         let key = self.draft_key();
         let paths: Vec<String> = attached.iter().filter_map(|attachment| attachment.path.clone()).collect();
         let existing = self.selected_thread().cloned();
-        let steers = existing.is_some() && self.prefs.bool(Self::STEERS_KEY);
+        let steers = existing.is_some() && self.steers() != alternate;
         let command = if let Some(thread) = &existing {
             Command::Send {
                 server_id: thread.server_id.clone(),
@@ -235,18 +280,26 @@ impl Store {
             } else {
                 None
             };
+            let account =
+                self.composer_account().map_or_else(|| default_account_id(model.agent).into(), |account| account.id);
             let new_thread = NewThread {
                 project_id: project.id.clone(),
                 agent: model.agent,
+                agent_account: Some(account),
                 model: Some(model.id.clone()),
                 effort: self.composer_effort(),
                 access: draft.access,
-                plan: draft.plan,
                 worktree,
             };
-            self.sending_draft_ids.insert(draft.id.clone());
             self.activity = Activity::starting();
             let activity = self.activity.clone();
+            let sending = SendingDraft {
+                text: text.clone(),
+                attachments: attached.iter().map(Attachment::attached).collect(),
+                activity: activity.clone(),
+                left: false,
+            };
+            self.sending_drafts.insert(draft.id.clone(), sending);
             self.transcript.update(cx, |transcript, cx| {
                 transcript.set_activity(activity);
                 cx.notify();
@@ -277,7 +330,7 @@ impl Store {
         let was_new = existing.is_none();
         self.ask(command, move |store, result, cx| {
             if was_new {
-                store.sending_draft_ids.remove(&key);
+                store.sending_drafts.remove(&key);
             }
             match result {
                 Err(error) => {
@@ -323,9 +376,8 @@ impl Store {
         if !was_open {
             return;
         }
-        self.selection = Selection::Thread(id.clone());
+        self.set_selection(Selection::Thread(id.clone()));
         self.open_thread_id = Some(id.clone());
-        self.prefs.set("selection", id.clone());
         let adopted = id.clone();
         self.transcript.update(cx, |transcript, _| transcript.adopt(adopted));
         self.send(Command::OpenThread { server_id, thread_id: id.clone() });
@@ -411,34 +463,40 @@ impl Store {
         self.request(&server_id, Request::Delete { thread_id: thread_id.to_string() });
     }
 
-    pub fn set_model(&mut self, model: &motile_protocol::wire::ModelInfo) {
+    /// Has the thread or the draft work with `model` under `account`. A thread that moves to an
+    /// account without its session goes on in a new one, which is told what was said.
+    pub fn set_model(&mut self, model: &ModelInfo, account: &AgentAccount) {
         let Some(thread) = self.selected_thread().cloned() else {
-            let id = model.id.clone();
+            let (id, account) = (model.id.clone(), account.id.clone());
             self.update_draft(|draft| {
                 draft.model = Some(id);
-                draft.effort = None;
+                draft.agent_account = Some(account);
             });
             return;
         };
-        self.remember_settings(Some(model.id.clone()), None, thread.access);
-        let change = ThreadChange { model: Some(model.id.clone()), effort: Some(String::new()), ..Default::default() };
-        let id = model.id.clone();
+        let effort = thread.effort.clone().filter(|effort| model.efforts.contains(effort));
+        let change = ThreadChange {
+            model: Some(model.id.clone()),
+            effort: Some(effort.clone().unwrap_or_default()),
+            agent_account: (account.id != thread.agent_account).then(|| account.id.clone()),
+            ..Default::default()
+        };
+        let (model, account) = (model.clone(), account.id.clone());
         self.update_thread(&thread, change, |thread| {
-            thread.thread.model = Some(id);
-            thread.thread.effort = None;
+            thread.thread.model = Some(model.id);
+            thread.thread.effort = effort;
+            thread.thread.agent = model.agent;
+            thread.thread.agent_account = account;
         });
     }
 
     pub fn set_effort(&mut self, effort: &str) {
+        let effort = effort.to_string();
         let Some(thread) = self.selected_thread().cloned() else {
-            let effort = effort.to_string();
             self.update_draft(|draft| draft.effort = Some(effort));
             return;
         };
-        let model = thread.model.clone().or_else(|| self.composer_model().map(|model| model.id));
-        self.remember_settings(model, Some(effort.to_string()), thread.access);
-        let change = ThreadChange { effort: Some(effort.to_string()), ..Default::default() };
-        let effort = effort.to_string();
+        let change = ThreadChange { effort: Some(effort.clone()), ..Default::default() };
         self.update_thread(&thread, change, |thread| thread.thread.effort = Some(effort));
     }
 
@@ -447,19 +505,25 @@ impl Store {
             self.update_draft(|draft| draft.access = access);
             return;
         };
-        let model = thread.model.clone().or_else(|| self.composer_model().map(|model| model.id));
-        self.remember_settings(model, thread.effort.clone(), access);
         let change = ThreadChange { access: Some(access), ..Default::default() };
         self.update_thread(&thread, change, |thread| thread.thread.access = access);
     }
 
-    pub fn set_plan(&mut self, plan: bool) {
-        let Some(thread) = self.selected_thread().cloned() else {
-            self.update_draft(|draft| draft.plan = plan);
-            return;
-        };
-        let change = ThreadChange { plan: Some(plan), ..Default::default() };
-        self.update_thread(&thread, change, |thread| thread.thread.plan = plan);
+    /// Has the agent of the open thread go on with what it was doing when it was interrupted.
+    pub fn continue_thread(&mut self) {
+        let Some(thread) = self.selected_thread() else { return };
+        let (server_id, thread_id) = (thread.server_id.clone(), thread.id.clone());
+        self.request(&server_id, Request::Continue { thread_id });
+    }
+
+    /// Whether the open thread goes on by itself once its usage limit resets.
+    pub fn set_continues(&mut self, on: bool) {
+        let Some(thread) = self.selected_thread().cloned() else { return };
+        let Some(Interruption::Limit { resets_at, .. }) = thread.interruption else { return };
+        let change = ThreadChange { continues: Some(on), ..Default::default() };
+        self.update_thread(&thread, change, |thread| {
+            thread.thread.interruption = Some(Interruption::Limit { resets_at, continues: on })
+        });
     }
 
     /// Marks threads done or brings them back. A thread that is working or monitoring can't be
@@ -494,14 +558,11 @@ impl Store {
             self.update_thread(thread, change, |thread| thread.thread.done_at = done.then_some(now));
         }
         if !done {
-            self.undo = None;
+            self.clear_undo();
             return;
         }
-        let text = if changed.len() == 1 {
-            "Marked done".to_string()
-        } else {
-            format!("Marked {} threads done", changed.len())
-        };
+        let text =
+            if changed.len() == 1 { "Done".to_string() } else { format!("Marked {} threads done", changed.len()) };
         self.show_undo(UndoNotice { thread_ids: changed.iter().map(|thread| thread.id.clone()).collect(), text }, cx);
     }
 
@@ -513,30 +574,30 @@ impl Store {
 
     fn show_undo(&mut self, notice: UndoNotice, cx: &mut Context<Self>) {
         self.undo = Some(notice);
-        self.undo_task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(5)).await;
-            let _ = this.update(cx, |store, cx| {
-                store.undo = None;
-                cx.notify();
-            });
-        }));
+        self.schedule_undo_dismissal(cx);
     }
 
     pub fn perform_undo(&mut self, cx: &mut Context<Self>) {
-        let Some(notice) = self.undo.take() else { return };
+        let Some(notice) = self.clear_undo() else { return };
         self.set_done(&notice.thread_ids, false, false, cx);
     }
 
     /// Changes a thread on its server, and here at once so the app doesn't wait for the answer.
-    fn update_thread(&mut self, thread: &ThreadInfo, change: ThreadChange, locally: impl FnOnce(&mut ThreadInfo)) {
+    pub(super) fn update_thread(
+        &mut self,
+        thread: &ThreadInfo,
+        change: ThreadChange,
+        locally: impl FnOnce(&mut ThreadInfo),
+    ) {
         let mut changed = thread.clone();
         locally(&mut changed);
-        self.threads.insert(thread.id.clone(), changed);
+        self.set_thread(Some(changed), &thread.id);
         let before = thread.clone();
         let request = Request::Update { thread_id: thread.id.clone(), change };
         self.request_then(&thread.server_id, request, move |store, result, _| {
             if let Err(error) = result {
-                store.threads.insert(before.id.clone(), before);
+                let id = before.id.clone();
+                store.set_thread(Some(before), &id);
                 store.fail(error);
             }
         });

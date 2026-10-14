@@ -1,6 +1,6 @@
 //! The images and videos of a message or of the composer, one at a time over the whole window.
 //! ← and → go through them, and Esc or a click beside the picture closes it. An image zooms as
-//! it does in Preview: a double click, a pinch, or ⌘+, ⌘−, ⌘0 for its real size and ⌘9 to fit.
+//! a `ZoomableImage` does. ⌘C copies what is shown and ⌘S saves it.
 
 use std::path::PathBuf;
 
@@ -8,37 +8,31 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::MediaFiles;
+use super::zoom::ZoomableImage;
 use crate::models::{MediaSource, ViewedMedia};
 use crate::store::Store;
-use crate::theme::ControlSize;
-use crate::ui::control::over;
-use crate::ui::{Spinner, icons};
+use crate::theme::{ControlSize, Radius, colors};
+use crate::ui::parts::CopyButton;
+use crate::ui::{ActionButton, Spinner, Variant};
 
 /// The room the picture leaves around it when it fits the window.
 pub const MARGIN: (f32, f32) = (64., 52.);
-const MAX_ZOOM: f32 = 8.;
-
-enum Loaded {
-    Image {
-        path: PathBuf,
-        width: f32,
-        height: f32,
-    },
-    #[cfg(target_os = "macos")]
-    Video(Entity<super::video::VideoPlayer>),
-}
 
 pub struct MediaViewer {
     store: Entity<Store>,
     focus: FocusHandle,
     shown: Option<ViewedMedia>,
-    loaded: Option<Loaded>,
+    /// The file of what is shown, once it is on this device.
+    file: Option<PathBuf>,
     failed: bool,
-    /// How much the image is magnified, and how far it is moved from the middle.
-    scale: Option<f32>,
-    offset: Point<Pixels>,
-    dragging: Option<Point<Pixels>>,
-    dragged: bool,
+    #[cfg(target_os = "macos")]
+    player: Option<Entity<super::video::VideoPlayer>>,
+    /// The image shown, which zooms.
+    image: Option<Entity<ZoomableImage>>,
+    /// How many times ⌘C copied, for the copy button's check mark.
+    copies: usize,
+    /// A press fell on the darkness around what is shown, which closes it once let go.
+    pressed_beside: bool,
     _subscription: Subscription,
 }
 
@@ -51,12 +45,13 @@ impl MediaViewer {
             store,
             focus,
             shown: None,
-            loaded: None,
+            file: None,
             failed: false,
-            scale: None,
-            offset: Point::default(),
-            dragging: None,
-            dragged: false,
+            #[cfg(target_os = "macos")]
+            player: None,
+            image: None,
+            copies: 0,
+            pressed_beside: false,
             _subscription: subscription,
         };
         viewer.follow_store(cx);
@@ -70,42 +65,44 @@ impl MediaViewer {
         }
         self.pause(cx);
         self.shown = item.clone();
-        self.loaded = None;
+        self.file = None;
         self.failed = false;
-        self.scale = None;
-        self.offset = Point::default();
+        #[cfg(target_os = "macos")]
+        {
+            self.player = None;
+        }
+        self.image = None;
         let Some(item) = item else { return };
         match &item.source {
-            MediaSource::File(file) => self.show(item.clone(), Some(file.clone()), cx),
+            MediaSource::File(file) => self.show(item.clone(), Ok(file.clone()), cx),
             MediaSource::Media(id) => {
                 let view = cx.entity().downgrade();
                 let wanted = item.clone();
-                let path = MediaFiles::fetch_then(&self.store, id, cx, move |path, cx| {
-                    let _ = view.update(cx, |viewer, cx| viewer.show(wanted, path, cx));
+                MediaFiles::fetch(&self.store, id, cx, move |file, cx| {
+                    let _ = view.update(cx, |viewer, cx| viewer.show(wanted, file, cx));
                 });
-                if path.is_some() {
-                    self.show(item, path, cx);
-                }
             }
         }
         cx.notify();
     }
 
-    fn show(&mut self, item: ViewedMedia, file: Option<PathBuf>, cx: &mut Context<Self>) {
+    fn show(&mut self, item: ViewedMedia, file: Result<PathBuf, String>, cx: &mut Context<Self>) {
         if self.shown.as_ref() != Some(&item) {
             return;
         }
-        let Some(file) = file else {
+        let Ok(file) = file else {
             self.failed = true;
             return cx.notify();
         };
+        self.file = Some(file.clone());
         if !item.video {
-            match image::image_dimensions(&file) {
-                Ok((width, height)) => {
-                    self.loaded = Some(Loaded::Image { path: file, width: width as f32, height: height as f32 });
-                }
-                Err(_) => self.failed = true,
-            }
+            let viewer = cx.entity().downgrade();
+            let image = ZoomableImage::new(&file, size(MARGIN.0, MARGIN.1), Radius::MD)
+                .over_picture()
+                .on_clicked_beside(move |_, cx| {
+                    let _ = viewer.update(cx, |viewer, cx| viewer.close(cx));
+                });
+            self.image = Some(cx.new(|_| image));
             return cx.notify();
         }
         // A video the system's player can't play opens in the app the system has for it.
@@ -115,7 +112,7 @@ impl MediaViewer {
         }
         #[cfg(target_os = "macos")]
         {
-            self.loaded = Some(Loaded::Video(cx.new(|cx| super::video::VideoPlayer::new(&file, cx))));
+            self.player = Some(cx.new(|cx| super::video::VideoPlayer::new(&file, cx)));
         }
         #[cfg(not(target_os = "macos"))]
         cx.open_with_system(&file);
@@ -124,10 +121,20 @@ impl MediaViewer {
 
     fn pause(&mut self, cx: &mut Context<Self>) {
         #[cfg(target_os = "macos")]
-        if let Some(Loaded::Video(player)) = &self.loaded {
+        if let Some(player) = &self.player {
             player.update(cx, |player, _| player.pause());
         }
         let _ = cx;
+    }
+
+    /// Whether the video fills the screen, which then takes the keys.
+    fn full_screen(&self, cx: &App) -> bool {
+        #[cfg(target_os = "macos")]
+        if let Some(player) = &self.player {
+            return player.read(cx).full_screen();
+        }
+        let _ = cx;
+        false
     }
 
     fn close(&mut self, cx: &mut Context<Self>) {
@@ -145,90 +152,111 @@ impl MediaViewer {
         });
     }
 
-    /// The scale at which the image fits the window, never larger than its real size.
-    fn fit(&self, viewport: Size<Pixels>) -> f32 {
-        let Some(Loaded::Image { width, height, .. }) = &self.loaded else { return 1. };
-        let across = (f32::from(viewport.width) - 2. * MARGIN.0) / width;
-        let down = (f32::from(viewport.height) - 2. * MARGIN.1) / height;
-        across.min(down).clamp(0.01, 1.)
+    fn copy(&mut self, cx: &mut Context<Self>) {
+        let (Some(file), Some(item)) = (self.file.clone(), self.shown.clone()) else { return };
+        super::copy(file, item.video, item.name, cx);
     }
 
-    fn zoom_to(&mut self, scale: f32, around: Option<Point<Pixels>>, viewport: Size<Pixels>, cx: &mut Context<Self>) {
-        let fit = self.fit(viewport);
-        let old = self.scale.unwrap_or(fit);
-        let new = scale.clamp(fit, MAX_ZOOM);
-        // The point under the pointer stays where it is.
-        if let Some(around) = around {
-            let center = point(viewport.width / 2., viewport.height / 2.);
-            let from_center = around - center - self.offset;
-            self.offset -= from_center * (new / old - 1.);
-        }
-        self.scale = Some(new);
-        if (new - fit).abs() < 0.001 {
-            self.offset = Point::default();
-        }
-        self.clamp_offset(viewport);
-        cx.notify();
-    }
-
-    fn clamp_offset(&mut self, viewport: Size<Pixels>) {
-        let Some(Loaded::Image { width, height, .. }) = &self.loaded else { return };
-        let scale = self.scale.unwrap_or(self.fit(viewport));
-        let spare_x = ((width * scale - f32::from(viewport.width)) / 2.).max(0.);
-        let spare_y = ((height * scale - f32::from(viewport.height)) / 2.).max(0.);
-        self.offset.x = self.offset.x.clamp(px(-spare_x), px(spare_x));
-        self.offset.y = self.offset.y.clamp(px(-spare_y), px(spare_y));
+    fn save(&self, cx: &mut App) {
+        let (Some(file), Some(item)) = (self.file.clone(), self.shown.as_ref()) else { return };
+        super::native::save(file, &item.name, cx);
     }
 
     fn key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let viewport = window.viewport_size();
         let keystroke = &event.keystroke;
-        let command = keystroke.modifiers.platform;
+        let command = keystroke.modifiers.secondary();
+        // The video that fills the screen takes its own keys, as the system's player does.
+        #[cfg(not(target_os = "macos"))]
+        let _ = window;
+        if self.full_screen(cx) {
+            #[cfg(target_os = "macos")]
+            if let Some(player) = self.player.clone() {
+                let key = keystroke.key.as_str();
+                let plain = !keystroke.modifiers.modified();
+                let taken = plain && (key == "escape" || player.update(cx, |player, cx| player.key(key, cx)));
+                if !taken {
+                    return;
+                }
+                if key == "escape" {
+                    player.update(cx, |player, cx| player.set_full_screen(false, window, cx));
+                }
+            }
+            return cx.stop_propagation();
+        }
         match keystroke.key.as_str() {
+            "c" if command && self.file.is_some() => {
+                self.copy(cx);
+                self.copies += 1;
+                cx.notify();
+            }
+            "s" if command && self.file.is_some() => self.save(cx),
             "escape" => self.close(cx),
             "left" => self.step(-1, cx),
             "right" => self.step(1, cx),
             "space" =>
             {
                 #[cfg(target_os = "macos")]
-                if let Some(Loaded::Video(player)) = &self.loaded {
+                if let Some(player) = &self.player {
                     player.update(cx, |player, cx| player.toggle(cx));
                 }
             }
-            "=" | "+" if command => {
-                let scale = self.scale.unwrap_or(self.fit(viewport));
-                self.zoom_to(scale * 1.5, None, viewport, cx);
+            _ if command => {
+                let Some(image) = self.image.clone() else { return };
+                if !image.update(cx, |image, cx| image.zoom_key(keystroke, cx)) {
+                    return;
+                }
             }
-            "-" if command => {
-                let scale = self.scale.unwrap_or(self.fit(viewport));
-                self.zoom_to(scale / 1.5, None, viewport, cx);
-            }
-            "0" if command => self.zoom_to(1., None, viewport, cx),
-            "9" if command => self.zoom_to(self.fit(viewport), None, viewport, cx),
-            _ => return,
+            _ => {}
         }
         cx.stop_propagation();
     }
 
-    /// A round button over the picture: white on a wash of white over black.
-    fn round_button(id: &'static str, symbol: &'static str, help: &'static str) -> Stateful<Div> {
+    /// A round button over the picture, as a control is in the dark.
+    fn round_button(
+        id: &'static str,
+        symbol: &'static str,
+        help: impl Into<SharedString>,
+        on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Div {
+        div().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(
+            ActionButton::icon(id, symbol, help)
+                .overlay()
+                .large()
+                .round(true)
+                .symbol_size(ControlSize::Large.small_symbol())
+                .on_click(on_click),
+        )
+    }
+
+    fn status(&self, item: &ViewedMedia, progress: Option<f64>, failed: bool, cx: &App) -> Div {
+        let c = colors(cx);
+        let words: AnyElement = if failed {
+            div()
+                .child(if item.video { "This video couldn't be loaded." } else { "This image couldn't be loaded." })
+                .into_any_element()
+        } else if let Some(fraction) = progress {
+            div()
+                .font_features(crate::ui::tabular_numbers())
+                .child(format!("Downloading {} · {}%", item.name, (fraction * 100.) as u32))
+                .into_any_element()
+        } else {
+            Spinner::new(ControlSize::Large.symbol()).render(cx).into_any_element()
+        };
         div()
-            .id(id)
-            .size(px(32.))
-            .rounded_full()
-            .bg(over(hsla(0., 0., 0., 0.5), hsla(0., 0., 1., 0.14)))
-            .active(|button| button.opacity(0.7))
+            .absolute()
+            .inset_0()
             .flex()
             .items_center()
             .justify_center()
-            .child(icons::symbol(symbol, 13.).text_color(white()))
-            .tooltip(crate::ui::tooltip(help))
+            .text_size(px(13.))
+            .text_color(c.muted_foreground_over_picture)
+            .child(words)
     }
 }
 
 impl Render for MediaViewer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let viewport = window.viewport_size();
+        let viewport = crate::window_frame::content_size(window);
         let Some(viewing) = self.store.read(cx).viewing.clone() else { return div().into_any_element() };
         let item = viewing.item().clone();
         let progress = match &item.source {
@@ -236,78 +264,15 @@ impl Render for MediaViewer {
             MediaSource::File(_) => None,
         };
         let many = viewing.items.len() > 1;
-        let fit = self.fit(viewport);
-        let scale = self.scale.unwrap_or(fit);
+        let full_screen = self.full_screen(cx);
+        let c = colors(cx);
 
-        let content: AnyElement = match &self.loaded {
-            Some(Loaded::Image { path, width, height }) => {
-                let (shown_width, shown_height) = (width * scale, height * scale);
-                let left = (viewport.width - px(shown_width)) / 2. + self.offset.x;
-                let top = (viewport.height - px(shown_height)) / 2. + self.offset.y;
-                div()
-                    .id("viewed-image")
-                    .absolute()
-                    .left(left)
-                    .top(top)
-                    .w(px(shown_width))
-                    .h(px(shown_height))
-                    .rounded(px(8.))
-                    .overflow_hidden()
-                    .child(img(path.clone()).size_full().object_fit(ObjectFit::Fill))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                            cx.stop_propagation();
-                            let viewport = window.viewport_size();
-                            if event.click_count == 2 {
-                                let fit = this.fit(viewport);
-                                let zoomed = this.scale.unwrap_or(fit) > fit + 0.001;
-                                let target = if zoomed { fit } else { (fit * 2.).max(1.) };
-                                this.zoom_to(target, Some(event.position), viewport, cx);
-                                return;
-                            }
-                            this.dragging = Some(event.position);
-                            this.dragged = false;
-                        }),
-                    )
-                    .into_any_element()
-            }
-            #[cfg(target_os = "macos")]
-            Some(Loaded::Video(player)) => div()
-                .absolute()
-                .left(px(MARGIN.0))
-                .right(px(MARGIN.0))
-                .top(px(MARGIN.1))
-                .bottom(px(MARGIN.1))
-                .rounded(px(8.))
-                .overflow_hidden()
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .child(player.clone())
-                .into_any_element(),
-            None => {
-                let words: AnyElement = if self.failed {
-                    div()
-                        .child(if item.video {
-                            "This video couldn't be loaded."
-                        } else {
-                            "This image couldn't be loaded."
-                        })
-                        .into_any_element()
-                } else if let Some(fraction) = progress {
-                    div().child(format!("Downloading {} · {}%", item.name, (fraction * 100.) as u32)).into_any_element()
-                } else {
-                    Spinner::new(ControlSize::Large.symbol()).render(cx).into_any_element()
-                };
-                div()
-                    .absolute()
-                    .inset_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(px(13.))
-                    .text_color(hsla(0., 0., 1., 0.7))
-                    .child(words)
-                    .into_any_element()
+        let content: AnyElement = if let Some(image) = self.image.clone() {
+            div().absolute().inset_0().child(image).into_any_element()
+        } else {
+            match self.video(full_screen, cx) {
+                Some(video) => video,
+                None => self.status(&item, progress, self.failed, cx).into_any_element(),
             }
         };
 
@@ -315,82 +280,92 @@ impl Render for MediaViewer {
             .h(px(24.))
             .px(px(10.))
             .rounded_full()
-            .bg(hsla(0., 0., 0., 0.5))
+            .bg(c.scrim)
             .flex()
             .items_center()
             .gap(px(8.))
             .text_size(px(13.))
             .font_weight(FontWeight::MEDIUM)
-            .text_color(white())
-            .child(div().truncate().child(item.name.clone()))
+            .text_color(c.foreground_over_picture)
+            .child(crate::ui::middle_truncated(item.name.clone()))
             .when(many, |title| {
-                title.child(div().text_color(hsla(0., 0., 1., 0.6)).child(format!(
+                title.child(div().flex_none().text_color(c.muted_foreground_over_picture).child(format!(
                     "{} of {}",
                     viewing.index + 1,
                     viewing.items.len()
                 )))
             });
 
+        let shortcuts = &self.store.read(cx).shortcuts;
+        let (copy_keys, save_keys) = (shortcuts.keys_label("mod+c"), shortcuts.keys_label("mod+s"));
+        let corner = div()
+            .absolute()
+            .top(px(crate::theme::TOP_BAR + 10.))
+            .right(px(10.))
+            .flex()
+            .gap(px(8.))
+            .when(self.file.is_some(), |corner| {
+                let copy = cx.entity().downgrade();
+                corner
+                    .child(
+                        div().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(
+                            CopyButton::new(
+                                "copy-viewed",
+                                format!("Copy {} ({copy_keys})", if item.video { "Video" } else { "Image" }),
+                                move |_, cx| {
+                                    let _ = copy.update(cx, |viewer, cx| viewer.copy(cx));
+                                },
+                            )
+                            .variant(Variant::Overlay)
+                            .size(ControlSize::Large)
+                            .symbol_size(ControlSize::Large.small_symbol())
+                            .round(true)
+                            .copies(self.copies),
+                        ),
+                    )
+                    .child(Self::round_button(
+                        "save-viewed",
+                        "download",
+                        format!("Save As ({save_keys})"),
+                        cx.listener(|this, _, _, cx| this.save(cx)),
+                    ))
+            })
+            .child(Self::round_button(
+                "close-viewer",
+                "x",
+                "Close (Esc)",
+                cx.listener(|this, _, _, cx| this.close(cx)),
+            ));
+
         deferred(
-            anchored().position(point(px(0.), px(0.))).child(
+            anchored().position(crate::window_frame::content_origin(window)).child(
                 div()
                     .id("media-viewer")
                     .track_focus(&self.focus)
                     .w(viewport.width)
                     .h(viewport.height)
                     .relative()
-                    .bg(hsla(0., 0., 0., 0.86))
+                    .bg(if full_screen { c.overlay } else { c.scrim })
                     .occlude()
                     .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| this.key(event, window, cx)))
+                    // A click on the darkness closes it; a video takes its own clicks, and an image
+                    // says itself when one falls beside it.
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(|this, _, _, _| {
-                            this.dragging = None;
-                            this.dragged = false;
+                        cx.listener(|this, _, _, cx| {
+                            this.pressed_beside = this.image.is_none() && !this.full_screen(cx);
                         }),
                     )
-                    .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
-                        let Some(from) = this.dragging else { return };
-                        if event.pressed_button != Some(MouseButton::Left) {
-                            this.dragging = None;
-                            return;
-                        }
-                        this.offset += event.position - from;
-                        this.dragging = Some(event.position);
-                        this.dragged = true;
-                        this.clamp_offset(window.viewport_size());
-                        cx.notify();
-                    }))
                     .on_mouse_up(
                         MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
-                            let on_picture = this.dragging.take().is_some();
-                            if !on_picture && !this.dragged {
+                            if std::mem::take(&mut this.pressed_beside) {
                                 this.close(cx);
                             }
-                            this.dragged = false;
                         }),
                     )
-                    .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, window, cx| {
-                        let viewport = window.viewport_size();
-                        let delta = event.delta.pixel_delta(px(20.));
-                        if event.modifiers.platform {
-                            let scale = this.scale.unwrap_or(this.fit(viewport));
-                            let factor = 1. + f32::from(delta.y) / 200.;
-                            this.zoom_to(scale * factor, Some(event.position), viewport, cx);
-                            return;
-                        }
-                        this.offset += delta;
-                        this.clamp_offset(viewport);
-                        cx.notify();
-                    }))
-                    .on_pinch(cx.listener(|this, event: &PinchEvent, window, cx| {
-                        let viewport = window.viewport_size();
-                        let scale = this.scale.unwrap_or(this.fit(viewport));
-                        this.zoom_to(scale * (1. + event.delta), Some(event.position), viewport, cx);
-                    }))
                     .child(content)
-                    .when(many, |viewer| {
+                    .when(many && !full_screen, |viewer| {
                         viewer.child(
                             div()
                                 .absolute()
@@ -401,38 +376,82 @@ impl Render for MediaViewer {
                                 .flex()
                                 .items_center()
                                 .justify_between()
-                                .child(
-                                    Self::round_button("previous", "chevron-left", "Previous (←)")
-                                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                                        .on_click(cx.listener(|this, _, _, cx| this.step(-1, cx))),
-                                )
-                                .child(
-                                    Self::round_button("next", "chevron-right", "Next (→)")
-                                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                                        .on_click(cx.listener(|this, _, _, cx| this.step(1, cx))),
-                                ),
+                                .child(Self::round_button(
+                                    "previous",
+                                    "chevron-left",
+                                    "Previous (←)",
+                                    cx.listener(|this, _, _, cx| this.step(-1, cx)),
+                                ))
+                                .child(Self::round_button(
+                                    "next",
+                                    "chevron-right",
+                                    "Next (→)",
+                                    cx.listener(|this, _, _, cx| this.step(1, cx)),
+                                )),
                         )
                     })
-                    .child(
-                        div()
-                            .absolute()
-                            .top(px(crate::theme::TOP_BAR + 14.))
-                            .left(px(80.))
-                            .right(px(80.))
-                            .flex()
-                            .justify_center()
-                            .child(title),
-                    )
-                    .child(
-                        div().absolute().top(px(crate::theme::TOP_BAR + 10.)).right(px(10.)).child(
-                            Self::round_button("close-viewer", "x", "Close (Esc)")
-                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                                .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
-                        ),
-                    ),
+                    .when(!full_screen, |viewer| {
+                        viewer
+                            .child(
+                                div()
+                                    .absolute()
+                                    .top(px(crate::theme::TOP_BAR + 14.))
+                                    .left(px(80.))
+                                    .right(px(80.))
+                                    .flex()
+                                    .justify_center()
+                                    .child(title),
+                            )
+                            .child(corner)
+                    }),
             ),
         )
         .with_priority(2)
         .into_any_element()
+    }
+}
+
+impl MediaViewer {
+    /// The video in its place, with a spinner until its first frame is there, or filling the
+    /// window while it is full screen.
+    #[cfg(target_os = "macos")]
+    fn video(&self, full_screen: bool, cx: &App) -> Option<AnyElement> {
+        let player = self.player.clone()?;
+        let ready = player.read(cx).ready();
+        let c = colors(cx);
+        Some(
+            div()
+                .absolute()
+                .when(full_screen, |video| video.inset_0())
+                .when(!full_screen, |video| {
+                    video
+                        .left(px(MARGIN.0))
+                        .right(px(MARGIN.0))
+                        .top(px(MARGIN.1))
+                        .bottom(px(MARGIN.1))
+                        .rounded(px(Radius::MD))
+                        .overflow_hidden()
+                })
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(player)
+                .when(!ready, |video| {
+                    video.child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_color(c.muted_foreground_over_picture)
+                            .child(Spinner::new(ControlSize::Large.symbol()).render(cx)),
+                    )
+                })
+                .into_any_element(),
+        )
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn video(&self, _: bool, _: &App) -> Option<AnyElement> {
+        None
     }
 }

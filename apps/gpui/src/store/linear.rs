@@ -2,19 +2,68 @@
 //! the Mac app's `Core/Linear.swift` keeps them.
 
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use gpui_kit::*;
 use motile_core::api::Command;
-use motile_core::linear::{Group, Page};
 use motile_protocol::wire::{
-    LinearChange, LinearConnection, LinearIssue, LinearIssueDetail, LinearStateKind, LinearTeam, LinearUser,
-    NewLinearIssue, Request,
+    Label, LinearChange, LinearConnection, LinearState, LinearStateKind, LinearTeam, LinearUser, NewLinearIssue,
+    Request,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::Store;
+use super::pull_requests::{Text, read_text};
 use crate::panel::state::{Loaded, PanelTab, PanelTarget};
+
+/// The issues of one status, as the core groups them.
+#[derive(Deserialize, Clone, Debug)]
+pub struct Group {
+    pub state: LinearState,
+    pub rows: Vec<Row>,
+}
+
+/// An issue as the list shows it.
+#[derive(Deserialize, Clone, Debug)]
+pub struct Row {
+    pub id: String,
+    pub identifier: String,
+    pub title: String,
+    pub url: String,
+    pub priority: u8,
+    pub priority_label: String,
+    pub team: String,
+    pub assignee: Option<String>,
+    pub assignee_id: Option<String>,
+    /// The assignee's first letters, for where the name has no room.
+    pub initials: Option<String>,
+    pub labels: Vec<Label>,
+    pub updated_at: f64,
+}
+
+/// One issue as its tab shows it, its Markdown ready to draw.
+#[derive(Deserialize, Clone, Debug)]
+pub struct Page {
+    pub row: Row,
+    pub state: LinearState,
+    #[serde(deserialize_with = "read_text")]
+    pub description: Vec<Text>,
+    /// The oldest first.
+    pub comments: Vec<Comment>,
+    /// What hands the issue to an agent.
+    pub prompt: String,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct Comment {
+    pub id: String,
+    pub author: String,
+    pub initials: String,
+    pub at: f64,
+    #[serde(deserialize_with = "read_text")]
+    pub body: Vec<Text>,
+}
 
 /// The kinds of status in the order an issue goes through them, with what Linear calls them.
 pub const KINDS: [(LinearStateKind, &str, &str); 6] = [
@@ -109,7 +158,7 @@ pub struct Linear {
     /// Who can be assigned, by workspace.
     pub users: HashMap<String, Vec<LinearUser>>,
     /// The lists read so far, by what asked for them, so that a tab opens as it was left.
-    lists: HashMap<Query, Loaded<Vec<Group>>>,
+    lists: HashMap<Query, Loaded<Rc<Vec<Group>>>>,
     /// The open issues, by id.
     pub pages: HashMap<String, Loaded<Page>>,
     /// The issues that are being changed, those commented on as `comment:` and their id, those
@@ -130,7 +179,7 @@ impl Linear {
     }
 
     /// The issues the tab lists; nothing while none have been asked for.
-    pub fn issues(&self) -> Option<&Loaded<Vec<Group>>> {
+    pub fn issues(&self) -> Option<&Loaded<Rc<Vec<Group>>>> {
         self.lists.get(self.listed.as_ref()?)
     }
 
@@ -155,6 +204,12 @@ impl Store {
         let target = self.panel_target()?;
         let server = self.server(Some(&target.server_id))?;
         (server.protocol_version < 12).then(|| format!("Update {} to connect it to Linear.", server.name))
+    }
+
+    /// The panel's server is connected to a Linear workspace.
+    pub fn linear_connected(&self) -> bool {
+        let Some(target) = self.panel_target().filter(|_| self.linear_unavailable().is_none()) else { return false };
+        !self.linear.connected(&target.server_id).is_empty()
     }
 
     /// What the tab lists for the project: what was chosen there last, in a workspace that is
@@ -225,7 +280,7 @@ impl Store {
                 Ok(answer) => answer["url"].as_str().map(String::from),
                 Err(error) => {
                     store.linear.connecting = None;
-                    store.linear.error = Some(error);
+                    store.linear.error = Some(error.into());
                     return;
                 }
             };
@@ -234,7 +289,7 @@ impl Store {
                 store.linear.error = Some("The connection couldn't be started.".into());
                 return;
             };
-            let Some((session, answer)) = crate::sign_in::start(&url) else {
+            let Some((session, answer)) = crate::sign_in::start(&url, motile_protocol::LINEAR_REDIRECT, cx) else {
                 // Without the system's sheet the browser can't hand the approval back.
                 cx.open_url(&url);
                 store.linear.connecting = None;
@@ -251,6 +306,12 @@ impl Store {
             })
             .detach();
         });
+    }
+
+    /// Gives up waiting for the browser, which can't say that the user left it.
+    pub fn linear_cancel_connect(&mut self) {
+        self.linear.session = None;
+        self.linear.connecting = None;
     }
 
     /// The browser has come back from Linear, with a code or a refusal.
@@ -284,7 +345,7 @@ impl Store {
                 Ok(answer) => answer,
                 Err(error) => {
                     if !asking_status {
-                        store.linear.error = Some(error);
+                        store.linear.error = Some(error.into());
                     }
                     return;
                 }
@@ -340,7 +401,8 @@ impl Store {
         // A server that doesn't read `states` yet goes by `closed`.
         let closed = states.is_empty()
             || states.iter().any(|kind| matches!(kind, LinearStateKind::Completed | LinearStateKind::Canceled));
-        let request = Request::LinearIssues {
+        let command = Command::LinearIssues {
+            server_id: query.server_id.clone(),
             workspace: query.workspace.clone(),
             team: query.team.clone(),
             mine: query.mine,
@@ -348,15 +410,14 @@ impl Store {
             states,
             search: (!query.search.is_empty()).then(|| query.search.clone()),
         };
-        let command = Command::Request { server_id: query.server_id.clone(), request };
         self.ask_read(command, read_groups, move |store, result, _| {
             let shown = store.linear.listed.as_ref() == Some(&query);
             if shown {
                 store.linear.working.remove("issues");
             }
-            match result.and_then(|read| read) {
+            match result.map_err(String::from).and_then(|read| read) {
                 Ok(groups) => {
-                    store.linear.lists.insert(query, Loaded::Ready(groups));
+                    store.linear.lists.insert(query, Loaded::Ready(Rc::new(groups)));
                     if shown {
                         store.linear.error = None;
                     }
@@ -379,8 +440,7 @@ impl Store {
 
     /// Reads the issue for its tab.
     pub fn linear_load_issue(&mut self, id: &str, workspace: &str, server_id: &str) {
-        let request = Request::LinearIssue { workspace: workspace.to_string(), issue: id.to_string() };
-        self.linear_read_issue(server_id, request, id, false, None);
+        self.linear_read_issue(server_id, workspace, id, None, None);
     }
 
     /// Says `body` on the issue, then reads it again; `done` runs once it has been said.
@@ -392,11 +452,19 @@ impl Store {
         body: String,
         done: impl FnOnce(&mut Store, &mut Context<Store>) + 'static,
     ) {
-        let request = Request::LinearComment { workspace: workspace.to_string(), issue: id.to_string(), body };
-        self.linear_read_issue(server_id, request, id, true, Some(Box::new(done)));
+        self.linear_read_issue(server_id, workspace, id, Some(body), Some(Box::new(done)));
     }
 
-    fn linear_read_issue(&mut self, server_id: &str, request: Request, id: &str, commenting: bool, done: Option<Done>) {
+    /// Reads the issue, and with `comment` says that on it first.
+    fn linear_read_issue(
+        &mut self,
+        server_id: &str,
+        workspace: &str,
+        id: &str,
+        comment: Option<String>,
+        done: Option<Done>,
+    ) {
+        let commenting = comment.is_some();
         if commenting {
             self.linear.working.insert(format!("comment:{id}"));
         }
@@ -405,13 +473,18 @@ impl Store {
         }
         self.linear.working.insert(format!("read:{id}"));
         let id = id.to_string();
-        let command = Command::Request { server_id: server_id.to_string(), request };
+        let command = Command::LinearIssue {
+            server_id: server_id.to_string(),
+            workspace: workspace.to_string(),
+            issue: id.clone(),
+            comment,
+        };
         self.ask_read(command, read_page, move |store, result, cx| {
             store.linear.working.remove(&format!("read:{id}"));
             if commenting {
                 store.linear.working.remove(&format!("comment:{id}"));
             }
-            match result.and_then(|read| read) {
+            match result.map_err(String::from).and_then(|read| read) {
                 Ok(page) => {
                     store.linear.pages.insert(id, Loaded::Ready(page));
                     store.linear.error = None;
@@ -441,7 +514,7 @@ impl Store {
         self.request_then(server_id, request, move |store, result, _| {
             store.linear.working.remove(&id);
             if let Err(error) = result {
-                store.linear.error = Some(error);
+                store.linear.error = Some(error.into());
             }
             store.linear_refresh(Some(&id), &workspace, &server);
         });
@@ -472,7 +545,7 @@ impl Store {
                     store.linear_refresh(None, &workspace, &server);
                     done(store, id, identifier, cx);
                 }
-                Err(error) => store.linear.error = Some(error),
+                Err(error) => store.linear.error = Some(error.into()),
             }
         });
     }
@@ -504,20 +577,16 @@ impl Store {
     /// project first, which takes the panel's open tab along.
     fn linear_start_work(&mut self, prompt: String, project_id: &str, cx: &mut Context<Self>) {
         if self.selected_draft().is_none() {
-            let tab = self.panel_tabs().active;
+            if self.project(Some(project_id)).is_none() {
+                return;
+            }
+            let tab = self.panel_tabs().active.filter(|tab| tab.blank_number().is_none());
             self.start_new_thread(Some(project_id.to_string()), cx);
             if let Some(tab) = tab {
                 self.open_tab(tab);
             }
         }
-        let written = self.draft().trim().to_string();
-        let text = if written.is_empty() { prompt } else { format!("{written}\n\n{prompt}") };
-        self.set_draft(text);
-        if self.panel_maximized() {
-            self.toggle_panel_maximized();
-        }
-        self.draft_version += 1;
-        self.composer_focus += 1;
+        self.hand_off(prompt);
     }
 
     fn linear_refresh(&mut self, id: Option<&str>, workspace: &str, server_id: &str) {
@@ -554,25 +623,11 @@ impl Store {
 }
 
 fn read_groups(answer: Value) -> Result<Vec<Group>, String> {
-    if answer["type"] != "linear_issues" {
-        return Err(unexpected(&answer));
-    }
-    let issues: Vec<LinearIssue> =
-        serde_json::from_value(answer["issues"].clone()).map_err(|error| error.to_string())?;
-    Ok(motile_core::linear::groups(&issues))
+    serde_json::from_value(answer["groups"].clone()).map_err(|error| format!("The issues couldn't be read: {error}"))
 }
 
 fn read_page(answer: Value) -> Result<Page, String> {
-    if answer["type"] != "linear_issue_detail" {
-        return Err(unexpected(&answer));
-    }
-    let detail: LinearIssueDetail =
-        serde_json::from_value(answer["detail"].clone()).map_err(|error| error.to_string())?;
-    Ok(motile_core::linear::page(&detail))
-}
-
-fn unexpected(answer: &Value) -> String {
-    answer["message"].as_str().map(String::from).unwrap_or_else(|| "Your server answered with something else.".into())
+    serde_json::from_value(answer["page"].clone()).map_err(|error| format!("The issue couldn't be read: {error}"))
 }
 
 /// The names and values of a URL's query.
@@ -614,7 +669,7 @@ fn decode(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::query_items;
 
     #[test]
     fn the_query_of_a_callback_is_read() {

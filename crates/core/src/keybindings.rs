@@ -553,6 +553,19 @@ impl Keybindings {
     }
 }
 
+/// The caps of keys as the file writes them, as `platform` draws them: `mod+r` is ⌘ and R on
+/// Apple's systems, Ctrl and R elsewhere. Nothing for keys that can't be read.
+pub fn caps_of(keys: &str, platform: &str) -> Vec<String> {
+    let Some(keys) = parse_keys(keys) else { return Vec::new() };
+    let drawing = Keybindings {
+        path: PathBuf::new(),
+        apple: matches!(platform, "macos" | "ios"),
+        custom: vec![],
+        issues: vec![],
+    };
+    drawing.caps(&keys)
+}
+
 fn label_of(command: &str) -> Option<&'static str> {
     COMMANDS.iter().find(|(id, _, _)| *id == command).map(|(_, label, _)| *label)
 }
@@ -896,6 +909,15 @@ mod tests {
         assert!(other.shortcut(&keys).control && !other.shortcut(&keys).command);
         assert_eq!(mac.caps(&keys), vec!["⇧", "⌘", "K"]);
         assert_eq!(other.caps(&keys), vec!["Ctrl", "Shift", "K"]);
+    }
+
+    #[test]
+    fn keys_no_command_has_are_drawn_for_the_platform() {
+        assert_eq!(caps_of("mod+enter", "macos"), vec!["⌘", "↩"]);
+        assert_eq!(caps_of("mod+enter", "linux"), vec!["Ctrl", "Enter"]);
+        assert_eq!(caps_of("backspace", "windows"), vec!["Backspace"]);
+        assert_eq!(caps_of("escape", "macos"), vec!["esc"]);
+        assert!(caps_of("mod+banana", "linux").is_empty());
     }
 
     #[test]

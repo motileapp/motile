@@ -1,8 +1,9 @@
 //! What the app remembers between runs: a JSON object in a file, read once and written in the
-//! background whenever something changes.
+//! background a moment after something changes, so that a burst of changes, like a window
+//! being resized, is written once and never turned into text on the main thread.
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -10,9 +11,10 @@ use serde_json::{Map, Value};
 
 pub struct Prefs {
     file: PathBuf,
-    values: Map<String, Value>,
-    /// The latest text to write, shared with the thread that writes it.
-    pending: Arc<Mutex<Option<String>>>,
+    /// The values, shared with the thread that writes them.
+    values: Arc<Mutex<Map<String, Value>>>,
+    /// A write is on its way, which takes every change made until it starts.
+    writing: Arc<Mutex<bool>>,
 }
 
 impl Prefs {
@@ -21,11 +23,16 @@ impl Prefs {
             .ok()
             .and_then(|text| serde_json::from_str::<Map<String, Value>>(&text).ok())
             .unwrap_or_default();
-        Self { file, values, pending: Arc::default() }
+        Self { file, values: Arc::new(Mutex::new(values)), writing: Arc::default() }
+    }
+
+    fn values(&self) -> MutexGuard<'_, Map<String, Value>> {
+        self.values.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub fn get<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
-        self.values.get(key).and_then(|value| serde_json::from_value(value.clone()).ok())
+        let value = self.values().get(key).cloned()?;
+        serde_json::from_value(value).ok()
     }
 
     pub fn string(&self, key: &str) -> Option<String> {
@@ -42,36 +49,41 @@ impl Prefs {
 
     pub fn set<T: Serialize>(&mut self, key: &str, value: T) {
         let value = serde_json::to_value(value).unwrap_or(Value::Null);
-        if value.is_null() {
-            if self.values.remove(key).is_none() {
+        {
+            let mut values = self.values();
+            if value.is_null() {
+                if values.remove(key).is_none() {
+                    return;
+                }
+            } else if values.get(key) == Some(&value) {
                 return;
+            } else {
+                values.insert(key.to_string(), value);
             }
-        } else if self.values.get(key) == Some(&value) {
-            return;
-        } else {
-            self.values.insert(key.to_string(), value);
         }
         self.save();
     }
 
     pub fn remove(&mut self, key: &str) {
-        if self.values.remove(key).is_some() {
+        if self.values().remove(key).is_some() {
             self.save();
         }
     }
 
     fn save(&self) {
-        let Ok(text) = serde_json::to_string_pretty(&self.values) else { return };
-        let was_waiting = self.pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).replace(text).is_some();
-        if was_waiting {
-            return;
+        {
+            let mut writing = self.writing.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            if *writing {
+                return;
+            }
+            *writing = true;
         }
-        let pending = self.pending.clone();
-        let file = self.file.clone();
+        let (values, writing, file) = (self.values.clone(), self.writing.clone(), self.file.clone());
         std::thread::spawn(move || {
-            // Changes that come in a burst are written once.
             std::thread::sleep(std::time::Duration::from_millis(200));
-            let Some(text) = pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take() else { return };
+            *writing.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = false;
+            let kept = values.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
+            let Ok(text) = serde_json::to_string_pretty(&kept) else { return };
             if let Some(folder) = file.parent() {
                 let _ = std::fs::create_dir_all(folder);
             }

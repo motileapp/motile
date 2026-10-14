@@ -43,7 +43,7 @@ pub fn path(symbol: &str) -> SharedString {
         "arrow.up.and.down.and.arrow.left.and.right" => "move",
         "ellipsis" => "ellipsis",
         "gearshape" => "settings",
-        "trash" => "trash-2",
+        "trash" | "trash-2" => "trash",
         "link" => "link",
         "key" => "key",
         "externaldrive" => "hard-drive",
@@ -116,7 +116,43 @@ const SCALE: f32 = crate::theme::SYMBOL_SCALE;
 
 /// The symbol at `size`, in the colour of the text around it unless it is given one.
 pub fn symbol(name: impl AsRef<str>, size: f32) -> Symbol {
-    Symbol { path: path(name.as_ref()), size: size * SCALE, color: None, rotation: 0. }
+    Symbol { path: path(name.as_ref()), size: size * SCALE, color: None, rotation: 0., trimmed: None }
+}
+
+/// An arrow that goes round, which turns in place of the spinner while it waits.
+pub fn turns(name: &str) -> bool {
+    matches!(path(name).as_ref(), "icons/refresh-cw.svg" | "icons/rotate-cw.svg")
+}
+
+/// The chevron that opens a menu for text of `size`, without the empty room Lucide draws around
+/// it, in the colour of the text around it unless it is given one.
+pub fn trimmed_chevron(size: f32) -> Symbol {
+    Symbol {
+        path: "icons/chevron-down-trimmed.svg".into(),
+        size: size * SCALE,
+        color: None,
+        rotation: 0.,
+        trimmed: Some((14., 8.)),
+    }
+}
+
+/// The symbol for text of `size` without the empty room Lucide draws around it, for one like a
+/// chevron that fills little of its square. Only the symbols with a trimmed copy in `assets` have
+/// one.
+pub fn trimmed(name: &str, size: f32) -> Symbol {
+    let kept = match name {
+        "chevron-right" => (8., 14.),
+        "chevron-down" => (14., 8.),
+        "undo-2" => (18., 18.),
+        _ => return symbol(name, size),
+    };
+    Symbol {
+        path: format!("icons/{name}-trimmed.svg").into(),
+        size: size * SCALE,
+        color: None,
+        rotation: 0.,
+        trimmed: Some(kept),
+    }
 }
 
 #[derive(IntoElement)]
@@ -126,6 +162,8 @@ pub struct Symbol {
     color: Option<Hsla>,
     /// Turned clockwise by this many degrees.
     rotation: f32,
+    /// The part of Lucide's square of 24 a trimmed symbol keeps: its width and height.
+    trimmed: Option<(f32, f32)>,
 }
 
 impl Symbol {
@@ -143,9 +181,18 @@ impl Symbol {
 impl RenderOnce for Symbol {
     fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
         let color = self.color.unwrap_or(window.text_style().color);
-        svg().path(self.path).size(px(self.size)).flex_shrink_0().text_color(color).when(self.rotation != 0., |icon| {
-            icon.with_transformation(Transformation::rotate(radians(self.rotation.to_radians())))
-        })
+        let side = self.size.round();
+        let (width, height) =
+            self.trimmed.map_or((side, side), |(width, height)| (side * width / 24., side * height / 24.));
+        svg()
+            .path(self.path)
+            .w(px(width))
+            .h(px(height))
+            .flex_shrink_0()
+            .text_color(color)
+            .when(self.rotation != 0., |icon| {
+                icon.with_transformation(Transformation::rotate(radians(self.rotation.to_radians())))
+            })
     }
 }
 
@@ -160,7 +207,7 @@ pub fn tool_symbol(icon: &str) -> &'static str {
         "agent" => "person.2",
         "watch" => "eye",
         "question" => "questionmark.bubble",
-        "todo" => "checklist",
+        "todo" => "list-checks",
         _ => "wrench.and.screwdriver",
     }
 }

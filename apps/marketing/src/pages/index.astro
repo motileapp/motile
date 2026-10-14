@@ -1,11 +1,11 @@
 ---
 import { RouteIcon, ServerIcon, ZapIcon } from "lucide-react"
 import Layout from "@/layouts/main.astro"
-import AppleIcon from "@/components/apple-icon.astro"
 import GithubIcon from "@/components/github-icon.astro"
 import { Demo } from "@/components/demo/demo"
+import { DownloadButton } from "@/components/download-button"
 import { LinkButton } from "@/components/link-button"
-import { DOWNLOAD_URL, GITHUB_URL, TAGLINE } from "@/lib/links"
+import { GITHUB_URL, TAGLINE } from "@/lib/links"
 
 const features = [
   {
@@ -37,15 +37,7 @@ const features = [
         a native Mac app: opens in under a second, connects in 1/10th.
       </p>
       <div class="mt-8 flex flex-wrap justify-center gap-3">
-        <LinkButton
-          target="_blank"
-          rel="noreferrer"
-          href={DOWNLOAD_URL}
-          size="lg"
-        >
-          <AppleIcon />
-          Download for macOS
-        </LinkButton>
+        <DownloadButton client:load />
         <LinkButton
           target="_blank"
           rel="noreferrer"

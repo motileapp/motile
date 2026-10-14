@@ -6,8 +6,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
-use gpui_kit::component::Sizable;
-use gpui_kit::component::input::{InputEvent, InputState, Textarea, TextareaState};
+use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::api::Command;
@@ -22,12 +21,12 @@ use crate::store::pull_requests::{
     Button, Check, Choice, Entry, EntryKind, Notice, Page, PendingLineComment, REACTIONS, Stack, Status, StatusKind,
     Style, Text, Thread, Toggle, Tone, emoji, read_blocks,
 };
-use crate::theme::{self, ControlSize, Radius, colors};
-use crate::ui::alert::{AlertButton, alert};
+use crate::theme::{self, ControlSize, Radius, Surface, colors};
 use crate::ui::menu::Menu;
-use crate::ui::sheet::sheet;
+use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::{
-    ActionButton, ActionMenu, Chip, InputField, Segmented, Variant, divider, edges, highlight, icons, spinner,
+    ActionButton, ActionMenu, Chip, Highlight, InputField, Segmented, TextArea, Variant, divider, edges, highlight,
+    icons, spinner, text_area_state,
 };
 
 /// The height of a line of the panel's text, which the buttons beside it centre on.
@@ -38,16 +37,23 @@ const LINE: f32 = 17.;
 /// What a tab says in the middle of the panel when it has nothing to show.
 pub fn panel_message(text: impl Into<SharedString>, failed: bool, cx: &App) -> AnyElement {
     let c = colors(cx);
+    let text: SharedString = text.into();
     div()
         .size_full()
         .p(px(24.))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.5))
-        .text_color(if failed { c.danger } else { c.secondary })
-        .text_center()
-        .child(text.into())
+        .overflow_hidden()
+        .child(
+            // As wide as the panel, so that a long message wraps in it.
+            div()
+                .w_full()
+                .text_size(px(12.5))
+                .text_color(if failed { c.destructive } else { c.muted_foreground })
+                .text_center()
+                .child(crate::ui::rich_text::RichText::new(SharedString::from(format!("panel-message-{text}")), text)),
+        )
         .into_any_element()
 }
 
@@ -58,7 +64,7 @@ pub fn panel_loading(cx: &App) -> AnyElement {
         .flex()
         .items_center()
         .justify_center()
-        .text_color(c.tertiary)
+        .text_color(c.muted_stronger_foreground)
         .child(spinner(ControlSize::Large.symbol(), cx))
         .into_any_element()
 }
@@ -69,7 +75,7 @@ pub fn panel_bar(content: impl IntoElement, cx: &App) -> Div {
         .flex_shrink_0()
         .flex()
         .flex_col()
-        .child(div().h(px(36.)).pl(px(12.)).pr(px(6.)).flex().items_center().gap(px(4.)).child(content))
+        .child(div().h(px(36.)).pl(px(12.)).pr(px(4.)).flex().items_center().gap(px(4.)).child(content))
         .child(divider(cx))
 }
 
@@ -117,13 +123,13 @@ pub fn line_counts(added: u32, removed: u32, cx: &App) -> Option<Div> {
     Some(div().text_size(px(11.5)).child(StyledText::new(text).with_runs(runs)))
 }
 
-/// Markdown from the pull request, drawn as the transcript draws a reply.
-pub fn text_blocks(id: &str, blocks: &[Text], cx: &App) -> Div {
+/// Markdown from the pull request, drawn as the transcript draws a reply, on `surface`.
+pub fn text_blocks(id: &str, blocks: &[Text], surface: Surface, cx: &App) -> Div {
     div().w_full().flex().flex_col().gap(px(10.)).children(blocks.iter().enumerate().map(|(index, block)| {
         let block_id = format!("{id}-{index}");
         match block {
-            Text::Prose(prose) => crate::ui::rich_text::prose_blocks(&block_id, prose, 13., cx),
-            Text::Code { code, spans, .. } => crate::ui::rich_text::code_block(&block_id, code, spans, cx),
+            Text::Prose(prose) => crate::ui::rich_text::prose_blocks(&block_id, prose, 13., surface, cx),
+            Text::Code { code, spans, .. } => crate::ui::rich_text::code_block(&block_id, code, spans, surface, cx),
         }
     }))
 }
@@ -138,31 +144,14 @@ pub fn variant_of(style: Style) -> Variant {
 }
 
 /// A label's colour, from GitHub's hex.
-pub fn label_color(hex: &str) -> Hsla {
-    rgb(u32::from_str_radix(hex.trim_start_matches('#'), 16).unwrap_or(0x888888)).into()
+pub fn label_color(hex: &str, c: &theme::Colors) -> Hsla {
+    let Ok(value) = u32::from_str_radix(hex.trim_start_matches('#'), 16) else { return c.muted_stronger_foreground };
+    rgb(value).into()
 }
 
 /// The box on the next surface that a card lies in.
 fn layered(cx: &App) -> Div {
-    div().w_full().bg(colors(cx).background_secondary).rounded(px(Radius::CARD))
-}
-
-/// A box to write in, with a word in it while it is empty. Without a height it is as tall as
-/// there is room for.
-pub fn writing_field(state: &Entity<TextareaState>, height: Option<f32>, cx: &App) -> Div {
-    let c = colors(cx);
-    div()
-        .w_full()
-        .when_some(height, |field, height| field.h(px(height)))
-        .when(height.is_none(), |field| field.flex_1().min_h_0())
-        .px(px(4.))
-        .py(px(6.))
-        .bg(c.background_secondary)
-        .rounded(px(Radius::CONTROL))
-        .border_1()
-        .border_color(c.border)
-        .text_size(px(12.5))
-        .child(Textarea::new(state).appearance(false).xsmall().text_size(px(12.5)).px_0().py_0().h_full())
+    div().w_full().bg(Surface::Background.layer(theme::Layer::Box, colors(cx))).rounded(px(Radius::LG))
 }
 
 /// The number in "#12", "12" or "https://github.com/acme/app/pull/12".
@@ -204,17 +193,22 @@ pub fn notice_bar(notice: &Notice, store: &Entity<Store>, cx: &App) -> Div {
                 .pl(px(12.))
                 .pr(px(6.))
                 .py(px(8.))
-                .bg(if notice.failed { c.danger_background } else { c.success.opacity(0.08) })
+                .bg(c.wash(if notice.failed { c.destructive } else { c.success }, false))
                 .flex()
                 .items_start()
                 .gap(px(8.))
                 .child(
                     div().h(px(LINE)).flex().items_center().child(
                         icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, 13.)
-                            .text_color(if notice.failed { c.danger } else { c.success }),
+                            .text_color(if notice.failed { c.destructive } else { c.success }),
                     ),
                 )
-                .child(div().flex_1().min_w_0().min_h(px(LINE)).child(label(notice.text.clone(), 12.5, c.text)))
+                .child(div().flex_1().min_w_0().min_h(px(LINE)).text_size(px(12.5)).text_color(c.foreground).child(
+                    crate::ui::rich_text::RichText::new(
+                        SharedString::from(format!("pr-notice-{}", notice.text)),
+                        notice.text.clone(),
+                    ),
+                ))
                 .child(
                     div()
                         .h(px(LINE))
@@ -250,6 +244,7 @@ pub fn reaction_picker(
     id: impl Into<ElementId>,
     reactions: &[Reaction],
     size: ControlSize,
+    surface: Surface,
     react: React,
 ) -> ActionMenu {
     let mine: Vec<ReactionKind> =
@@ -265,15 +260,14 @@ pub fn reaction_picker(
         }
         menu
     })
-    .button(move |button| button.size(size))
+    .button(move |button| button.size(size).surface(surface))
 }
 
 /// The reactions to a comment or a review, each one a toggle, and a menu to add another.
-pub fn reaction_bar(id: &str, reactions: &[Reaction], react: React) -> Div {
+pub fn reaction_bar(id: &str, reactions: &[Reaction], surface: Surface, react: React) -> Div {
     div()
         .flex()
         .items_center()
-        .flex_wrap()
         .gap(px(4.))
         .children(reactions.iter().map(|reaction| {
             let (kind, mine) = (reaction.kind, reaction.mine);
@@ -285,10 +279,12 @@ pub fn reaction_bar(id: &str, reactions: &[Reaction], react: React) -> Div {
             .variant(if mine { Variant::Accent } else { Variant::Secondary })
             .small()
             .round(true)
+            .monospaced_digits()
+            .surface(surface)
             .help(if mine { "Take your reaction back" } else { "React so too" })
             .on_click(move |_, window, cx| react(kind, !mine, window, cx))
         }))
-        .child(reaction_picker(SharedString::from(format!("{id}-add")), reactions, ControlSize::Small, react))
+        .child(reaction_picker(SharedString::from(format!("{id}-add")), reactions, ControlSize::Small, surface, react))
 }
 
 // MARK: The tab
@@ -386,7 +382,7 @@ impl PullRequestView {
     /// The tab of the thread's own pull request, or with a `number` of another one.
     pub fn new(store: Entity<Store>, number: Option<u64>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
-        let comment = cx.new(|cx| TextareaState::new(window, cx).placeholder("Leave a comment"));
+        let comment = text_area_state("Leave a comment", 4, 12, window, cx);
         cx.subscribe(&comment, |_, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
                 cx.notify();
@@ -428,6 +424,20 @@ impl PullRequestView {
     fn refresh(&mut self, cx: &mut Context<Self>) {
         self.asked += 1;
         cx.notify();
+    }
+
+    /// What was written, opened or asked on the page goes with it while another pull request
+    /// loads, as the Mac's page goes.
+    fn forget_page(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.title = None;
+        self.reply = None;
+        self.confirming = None;
+        self.describing = None;
+        self.open_threads.clear();
+        self.shows_all_checks = false;
+        if !self.comment.read(cx).value().is_empty() {
+            self.comment.update(cx, |comment, cx| comment.set_value("", window, cx));
+        }
     }
 
     /// Asks the server for the pull request when what the tab shows may have changed.
@@ -589,6 +599,7 @@ impl PullRequestView {
         let c = colors(cx);
         let store = self.store.read(cx);
         let unavailable = store.pull_requests_unavailable().is_some();
+        let reading = store.right_panel.reading.contains(&PanelTab::PullRequest);
         let watching = store.selected_thread().is_some_and(|thread| thread.watching)
             && page.is_some_and(|page| Some(page.number) == target.and_then(|target| target.pull_request));
         let url = page.map(|page| page.url.clone()).filter(|url| !url.is_empty());
@@ -600,20 +611,27 @@ impl PullRequestView {
             .gap(px(4.))
             .when_some(page, |bar, page| {
                 bar.child(icons::symbol(page.state.symbol(), 12.).text_color(page.state.color(c)))
-                    .child(label(format!("#{}", page.number), 12.5, c.text).pl(px(2.)).font_weight(FontWeight::MEDIUM))
+                    .child(
+                        label(format!("#{}", page.number), 12.5, c.foreground)
+                            .pl(px(2.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .font_features(crate::ui::tabular_numbers()),
+                    )
                     .when(watching, |bar| {
                         bar.child(
                             div()
                                 .id("pr-watching")
                                 .pl(px(4.))
-                                .child(icons::symbol("eye", 12.).text_color(c.link))
+                                .child(icons::symbol("eye", 12.).text_color(c.primary))
                                 .tooltip(crate::ui::tooltip(
                                     "The agent hears when its checks finish, someone comments or it conflicts",
                                 )),
                         )
                     })
             })
-            .when(page.is_none(), |bar| bar.child(label("Pull Request", 12.5, c.text).font_weight(FontWeight::MEDIUM)))
+            .when(page.is_none(), |bar| {
+                bar.child(label("Pull Request", 12.5, c.foreground).font_weight(FontWeight::MEDIUM))
+            })
             .child(div().flex_1().min_w(px(4.)))
             .when_some(url, |bar, url| {
                 bar.child(
@@ -622,11 +640,13 @@ impl PullRequestView {
                 )
             })
             .when(shown.is_some() && !unavailable, |bar| {
-                bar.child(ActionButton::icon("pr-refresh", "rotate-cw", "Read the pull request again").on_click(
-                    move |_, _, cx| {
-                        let _ = this.update(cx, |this, cx| this.refresh(cx));
-                    },
-                ))
+                bar.child(
+                    ActionButton::icon("pr-refresh", "rotate-cw", "Read the pull request again")
+                        .pending(reading)
+                        .on_click(move |_, _, cx| {
+                            let _ = this.update(cx, |this, cx| this.refresh(cx));
+                        }),
+                )
             })
     }
 
@@ -656,8 +676,8 @@ impl PullRequestView {
             .items_center()
             .justify_center()
             .gap(px(14.))
-            .child(icons::symbol("git-pull-request", 22.).text_color(c.tertiary))
-            .child(label("This branch has no pull request yet.", 13., c.secondary))
+            .child(icons::symbol("git-pull-request", 22.).text_color(c.muted_stronger_foreground))
+            .child(label("This branch has no pull request yet.", 13., c.muted_foreground))
             .child(
                 div()
                     .flex()
@@ -705,7 +725,7 @@ impl PullRequestView {
         let c = colors(cx);
         let store = self.store.read(cx);
         let extended = store.pull_requests_extended();
-        let working = store.pull_requests.working.clone();
+        let working = store.pull_requests.working();
         let pending = store.pull_requests.pending_for(page.number);
         let actions = Actions {
             store: self.store.clone(),
@@ -727,8 +747,20 @@ impl PullRequestView {
             .flex()
             .items_baseline()
             .gap(px(6.))
-            .child(label("Activity", 13., c.text).font_weight(FontWeight::SEMIBOLD))
-            .child(label("Oldest first", 12., c.tertiary));
+            .child(label("Activity", 13., c.foreground).font_weight(FontWeight::SEMIBOLD))
+            .child(label("Oldest first", 12., c.muted_stronger_foreground));
+        let activity = div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .items_start()
+            .gap(px(20.))
+            .children(
+                page.activity.iter().enumerate().map(|(index, entry)| self.activity_row(index, entry, &actions, cx)),
+            )
+            .when(page.state != crate::store::pull_requests::State::Merged, |column| {
+                column.child(self.comment_box(page, target, &pending, working.as_deref(), cx))
+            });
         div()
             .id("pr-page")
             .size_full()
@@ -736,7 +768,9 @@ impl PullRequestView {
             .child(
                 div()
                     .w_full()
-                    .p(px(14.))
+                    .px(px(14.))
+                    .pt(px(14.))
+                    .pb(px(super::END_ROOM))
                     .flex()
                     .flex_col()
                     .items_start()
@@ -744,16 +778,16 @@ impl PullRequestView {
                     .child(self.header(page, target, extended, &actions, cx))
                     .when_some(stack, |column, stack| column.child(self.stack_card(stack, target, cx)))
                     .child(self.merge_box(page, target, working.as_deref(), cx))
-                    .child(activity_title)
-                    .children(
-                        page.activity
-                            .iter()
-                            .enumerate()
-                            .map(|(index, entry)| self.activity_row(index, entry, &actions, cx)),
-                    )
-                    .when(page.state != crate::store::pull_requests::State::Merged, |column| {
-                        column.child(self.comment_box(page, target, &pending, working.as_deref(), cx))
-                    }),
+                    .child(
+                        div()
+                            .w_full()
+                            .flex()
+                            .flex_col()
+                            .items_start()
+                            .gap(px(16.))
+                            .child(activity_title)
+                            .child(activity),
+                    ),
             )
             .into_any_element()
     }
@@ -780,12 +814,12 @@ impl PullRequestView {
             .flex()
             .items_center()
             .gap(px(6.))
-            .child(highlight("pr-files", 6., edges(0., 0., 0., 0.), false, cx))
-            .child(div().relative().child(icons::symbol("diff", 11.).text_color(c.secondary)))
+            .child(highlight("pr-files", Radius::SM, edges(0., 0., 0., 0.), false, cx))
+            .child(div().relative().child(icons::symbol("diff", 11.).text_color(c.muted_foreground)))
             .child(div().relative().child(label(
                 if page.files == 1 { "1 file".to_string() } else { format!("{} files", page.files) },
                 12.,
-                c.text,
+                c.foreground,
             )))
             .children(line_counts(page.additions, page.deletions, cx).map(|counts| div().relative().child(counts)))
             .tooltip(crate::ui::tooltip("Show what it changes"))
@@ -809,8 +843,8 @@ impl PullRequestView {
                         .text_size(px(15.))
                         .line_height(px(20.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c.text)
-                        .child(page.title.clone()),
+                        .text_color(c.foreground)
+                        .child(crate::ui::rich_text::RichText::new("pr-title", page.title.clone())),
                 )
                 .child(div().mt(px(-4.)).child(self.more_menu(page, target, extended, actions, cx))),
         };
@@ -827,12 +861,12 @@ impl PullRequestView {
                 .flex()
                 .items_center()
                 .gap(px(6.))
-                .child(highlight("pr-stacked-on", 6., edges(0., 0., 0., 0.), false, cx))
-                .child(div().relative().child(icons::symbol("layers", 11.).text_color(c.secondary)))
+                .child(highlight("pr-stacked-on", Radius::SM, edges(0., 0., 0., 0.), false, cx))
+                .child(div().relative().child(icons::symbol("layers", 11.).text_color(c.muted_foreground)))
                 .child(div().relative().min_w_0().text_size(px(12.)).truncate().child(styled_line(vec![
-                    ("Stacked on ".into(), c.secondary, FontWeight::NORMAL),
+                    ("Stacked on ".into(), c.muted_foreground, FontWeight::NORMAL),
                     (format!("#{} ", below.number), below.state.color(c), FontWeight::NORMAL),
-                    (below.title.clone(), c.text, FontWeight::NORMAL),
+                    (below.title.clone(), c.foreground, FontWeight::NORMAL),
                 ])))
                 .tooltip(crate::ui::tooltip("Open the pull request it merges into"))
                 .on_click(move |_, _, cx| {
@@ -856,7 +890,11 @@ impl PullRequestView {
                     .items_start()
                     .gap(px(8.))
                     .child(Chip::new(page.state.title()).icon(page.state.symbol()).tone(page.state.color(c)))
-                    .child(div().flex_1().min_w_0().pt(px(2.)).child(label(page.byline.clone(), 12., c.secondary))),
+                    .child(div().flex_1().min_w_0().pt(px(2.)).child(label(
+                        page.byline.clone(),
+                        12.,
+                        c.muted_foreground,
+                    ))),
             )
             .child(
                 div()
@@ -864,9 +902,13 @@ impl PullRequestView {
                     .flex()
                     .items_center()
                     .gap(px(6.))
-                    .child(Chip::new(page.base.clone()).monospaced(true))
-                    .child(icons::symbol("arrow-left", 10.).text_color(c.tertiary))
-                    .child(Chip::new(page.head.clone()).monospaced(true))
+                    .child(Chip::branch("pr-base", page.base.clone()))
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .child(icons::symbol("arrow-left", 10.).text_color(c.muted_stronger_foreground)),
+                    )
+                    .child(Chip::branch("pr-head", page.head.clone()))
                     .child(div().flex_1().min_w(px(8.)))
                     .child(files),
             )
@@ -939,8 +981,8 @@ impl PullRequestView {
                 .flex()
                 .items_center()
                 .gap(px(8.))
-                .child(div().w(px(70.)).flex_shrink_0().child(label(title, 12., c.tertiary)))
-                .when(empty, |row| row.child(label("None yet", 12., c.tertiary)))
+                .child(div().w(px(70.)).flex_shrink_0().child(label(title, 12., c.muted_stronger_foreground)))
+                .when(empty, |row| row.child(label("None yet", 12., c.muted_stronger_foreground)))
                 .when(!empty, |row| row.child(div().flex().flex_wrap().items_center().gap(px(5.)).children(chips)))
                 .when(!choices.is_empty(), |row| {
                     row.child(
@@ -977,8 +1019,11 @@ impl PullRequestView {
                             .iter()
                             .enumerate()
                             .map(|(index, reviewer)| {
-                                let dot =
-                                    if reviewer.tone == Tone::Neutral { c.tertiary } else { reviewer.tone.color(c) };
+                                let dot = if reviewer.tone == Tone::Neutral {
+                                    c.muted_stronger_foreground
+                                } else {
+                                    reviewer.tone.color(c)
+                                };
                                 div()
                                     .id(("pr-reviewer", index))
                                     .child(Chip::new(reviewer.name.clone()).dot(dot))
@@ -1006,7 +1051,7 @@ impl PullRequestView {
                         page.labels
                             .iter()
                             .map(|found| {
-                                let color = label_color(&found.color);
+                                let color = label_color(&found.color, c);
                                 Chip::new(found.name.clone()).dot(color).tone(color).into_any_element()
                             })
                             .collect(),
@@ -1060,7 +1105,7 @@ impl PullRequestView {
                         let _ = edit_title.update(cx, |view, cx| view.edit_title(&page_title, window, cx));
                     });
                     let (describe, describe_page, describe_target) = (this.clone(), page.clone(), target.clone());
-                    menu = menu.item("Edit Description…", move |window, cx| {
+                    menu = menu.item("Edit Description", move |window, cx| {
                         let _ =
                             describe.update(cx, |view, cx| view.describe(&describe_page, &describe_target, window, cx));
                     });
@@ -1123,9 +1168,13 @@ impl PullRequestView {
                     .flex()
                     .items_center()
                     .gap(px(6.))
-                    .child(icons::symbol("layers", 12.).text_color(c.secondary))
-                    .child(label("Stack", 13., c.text).font_weight(FontWeight::MEDIUM))
-                    .child(label(format!("{} pull requests onto {}", stack.layers.len(), stack.base), 12., c.tertiary))
+                    .child(icons::symbol("layers", 12.).text_color(c.muted_foreground))
+                    .child(label("Stack", 13., c.foreground).font_weight(FontWeight::MEDIUM))
+                    .child(label(
+                        format!("{} pull requests onto {}", stack.layers.len(), stack.base),
+                        12.,
+                        c.muted_stronger_foreground,
+                    ))
                     .child(div().flex_1().min_w(px(4.)))
                     .when_some(url, |row, url| {
                         row.child(
@@ -1133,6 +1182,7 @@ impl PullRequestView {
                                 .link()
                                 .small()
                                 .help("A stack merges on GitHub, bottom first")
+                                .surface(Surface::Secondary)
                                 .margin(edges(0., 0., 0., -8.))
                                 .on_click(move |_, _, cx| cx.open_url(&url)),
                         )
@@ -1150,7 +1200,15 @@ impl PullRequestView {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .when(!layer.current, |row| row.child(highlight(group, 6., edges(0., 4., 0., 4.), false, cx)))
+                    .when(!layer.current, |row| {
+                        row.child(
+                            Highlight::new()
+                                .radius(Radius::SM)
+                                .inset(edges(0., 4., 0., 4.))
+                                .surface(Surface::Secondary)
+                                .render(group, cx),
+                        )
+                    })
                     .child(
                         div()
                             .relative()
@@ -1161,7 +1219,9 @@ impl PullRequestView {
                     )
                     .child(
                         div().relative().child(
-                            label(format!("#{}", layer.number), 12., c.secondary).font_weight(FontWeight::MEDIUM),
+                            label(format!("#{}", layer.number), 12., c.muted_foreground)
+                                .font_weight(FontWeight::MEDIUM)
+                                .font_features(crate::ui::tabular_numbers()),
                         ),
                     )
                     .child(
@@ -1169,13 +1229,14 @@ impl PullRequestView {
                             .relative()
                             .min_w_0()
                             .text_size(px(12.5))
-                            .font_weight(if layer.current { FontWeight::SEMIBOLD } else { FontWeight::NORMAL })
-                            .text_color(c.text)
+                            .text_color(c.foreground)
                             .truncate()
                             .child(layer.title.clone()),
                     )
                     .child(div().flex_1().min_w(px(4.)))
-                    .when(layer.current, |row| row.child(div().relative().child(label("This one", 11.5, c.tertiary))))
+                    .when(layer.current, |row| {
+                        row.child(div().relative().child(label("This one", 11.5, c.muted_stronger_foreground)))
+                    })
                     .when(!layer.current, |row| {
                         row.on_click(move |_, _, cx| {
                             open.update(cx, |store, cx| {
@@ -1226,7 +1287,7 @@ impl PullRequestView {
             (_, Tone::Success) => "circle-check",
             (StatusKind::Conflicts, Tone::Danger) => "triangle-alert",
             (_, Tone::Danger) => "circle-x",
-            (_, Tone::Pending) => "loader-circle",
+            (_, Tone::Pending) => "circle-dashed",
             _ => "circle-alert",
         };
         let busy = working.is_some();
@@ -1260,10 +1321,14 @@ impl PullRequestView {
                             .flex()
                             .items_center()
                             .gap(px(6.))
-                            .child(label(status.title.clone(), 13., c.text).font_weight(FontWeight::MEDIUM))
-                            .when_some(status.at, |row, at| row.child(label(ago(at), 12., c.tertiary))),
+                            .child(label(status.title.clone(), 13., c.foreground).font_weight(FontWeight::MEDIUM))
+                            .when_some(status.at, |row, at| {
+                                row.child(label(ago(at), 12., c.muted_stronger_foreground))
+                            }),
                     )
-                    .when_some(status.detail.clone(), |column, detail| column.child(label(detail, 12., c.secondary)))
+                    .when_some(status.detail.clone(), |column, detail| {
+                        column.child(label(detail, 12., c.muted_foreground))
+                    })
                     .when(!status.buttons.is_empty(), |column| {
                         column.child(div().pt(px(5.)).flex().items_center().gap(px(6.)).children(
                             status.buttons.iter().enumerate().map(|(button_index, button)| {
@@ -1271,6 +1336,7 @@ impl PullRequestView {
                                 let (run, target) = (button.clone(), target.clone());
                                 ActionButton::new(("pr-status-button", index * 10 + button_index), button.label.clone())
                                     .variant(variant_of(button.style))
+                                    .surface(Surface::Secondary)
                                     .pending(pending)
                                     .disabled(busy)
                                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -1301,10 +1367,12 @@ impl PullRequestView {
             .children(shown.into_iter().enumerate().map(|(index, check)| self.check_row(index, check, cx)))
             .when(settled > 0, |column| {
                 column.child(div().pl(px(30.)).child(
-                    ActionButton::new("pr-all-checks", title).link().small().on_click(cx.listener(|this, _, _, cx| {
-                        this.shows_all_checks = !this.shows_all_checks;
-                        cx.notify();
-                    })),
+                    ActionButton::new("pr-all-checks", title).link().small().surface(Surface::Secondary).on_click(
+                        cx.listener(|this, _, _, cx| {
+                            this.shows_all_checks = !this.shows_all_checks;
+                            cx.notify();
+                        }),
+                    ),
                 ))
             })
     }
@@ -1337,25 +1405,33 @@ impl PullRequestView {
                     .flex_shrink_0()
                     .max_w(relative(0.6))
                     .text_size(px(12.5))
-                    .text_color(c.text)
+                    .text_color(c.foreground)
                     .truncate()
                     .child(check.name.clone())
                     .tooltip(crate::ui::tooltip(check.description.clone().unwrap_or_else(|| check.name.clone()))),
             )
             .when_some(check.workflow.clone(), |row, workflow| {
-                row.child(div().min_w_0().text_size(px(12.)).text_color(c.tertiary).truncate().child(workflow))
+                row.child(
+                    div()
+                        .min_w_0()
+                        .text_size(px(12.))
+                        .text_color(c.muted_stronger_foreground)
+                        .truncate()
+                        .child(workflow),
+                )
             })
             .child(div().flex_1().min_w(px(6.)))
             .child(label(
                 check.label.clone(),
                 12.,
-                if check.tone == Tone::Neutral { c.tertiary } else { check.tone.color(c) },
+                if check.tone == Tone::Neutral { c.muted_stronger_foreground } else { check.tone.color(c) },
             ))
             .when_some(fix, |row, fix| {
                 row.child(
                     ActionButton::new(("pr-check-fix", index), "Fix")
                         .link()
                         .small()
+                        .surface(Surface::Secondary)
                         .help("Have the agent fix it")
                         .on_click(move |_, _, cx| {
                             store.update(cx, |store, cx| {
@@ -1369,6 +1445,7 @@ impl PullRequestView {
                 row.child(
                     ActionButton::icon(("pr-check-open", index), "square-arrow-out-up-right", "Show its details")
                         .small()
+                        .surface(Surface::Secondary)
                         .on_click(move |_, _, cx| cx.open_url(&url)),
                 )
             })
@@ -1390,6 +1467,7 @@ impl PullRequestView {
         let (run, run_target, number) = (primary.clone(), target.clone(), page.number);
         let mut button = ActionButton::new("pr-primary", primary.label.clone())
             .variant(variant)
+            .surface(Surface::Secondary)
             .pending(working == Some(primary.key().as_str()))
             .joined(false, chooses)
             .disabled(busy)
@@ -1417,7 +1495,12 @@ impl PullRequestView {
                         menu
                     })
                     .button(move |button| {
-                        button.variant(variant).joined(true, false).help("Choose how it merges").disabled(busy)
+                        button
+                            .variant(variant)
+                            .surface(Surface::Secondary)
+                            .joined(true, false)
+                            .help("Choose how it merges")
+                            .disabled(busy)
                     }),
                 )
             }),
@@ -1444,7 +1527,7 @@ impl PullRequestView {
         let id = format!("pr-entry-{index}");
         let subject = entry.subject.clone().filter(|_| entry.thread.is_none());
         let reacts = subject.as_ref().map(|subject| actions.react(subject.clone()));
-        let color = if entry.tone == Tone::Neutral { c.secondary } else { entry.tone.color(c) };
+        let color = if entry.tone == Tone::Neutral { c.muted_foreground } else { entry.tone.color(c) };
         div()
             .w_full()
             .flex()
@@ -1467,17 +1550,24 @@ impl PullRequestView {
                     .flex()
                     .flex_col()
                     .items_start()
-                    .gap(px(8.))
+                    .gap(px(6.))
                     .child(self.byline(&id, entry, reacts.clone(), actions, cx))
                     .when(!entry.commits.is_empty(), |column| column.child(self.commits(&id, entry, actions, cx)))
                     .when_some(entry.thread.as_ref(), |column, thread| {
                         column.child(self.thread_card(thread, actions, cx))
                     })
                     .when(entry.thread.is_none() && !entry.body.is_empty(), |column| {
-                        column.child(layered(cx).p(px(12.)).child(text_blocks(&id, &entry.body, cx)))
+                        column.child(
+                            div().w_full().pt(px(1.)).pb(px(2.)).child(layered(cx).p(px(12.)).child(text_blocks(
+                                &id,
+                                &entry.body,
+                                Surface::Secondary,
+                                cx,
+                            ))),
+                        )
                     })
                     .when_some(reacts.filter(|_| !entry.reactions.is_empty()), |column, react| {
-                        column.child(reaction_bar(&id, &entry.reactions, react))
+                        column.child(reaction_bar(&id, &entry.reactions, Surface::Background, react))
                     }),
             )
     }
@@ -1486,9 +1576,9 @@ impl PullRequestView {
         let c = colors(cx);
         let said = if entry.author.is_empty() { entry.said.clone() } else { format!(" {}", entry.said) };
         let line = styled_line(vec![
-            (entry.author.clone(), c.text, FontWeight::SEMIBOLD),
-            (said, c.secondary, FontWeight::NORMAL),
-            (format!(" · {}", ago(entry.at)), c.tertiary, FontWeight::NORMAL),
+            (entry.author.clone(), c.foreground, FontWeight::SEMIBOLD),
+            (said, c.muted_foreground, FontWeight::NORMAL),
+            (format!(" · {}", ago(entry.at)), c.muted_stronger_foreground, FontWeight::NORMAL),
         ]);
         let url = entry.url.clone();
         let edits = entry.kind == EntryKind::Opened && actions.edits_description;
@@ -1511,6 +1601,7 @@ impl PullRequestView {
                             SharedString::from(format!("{id}-react")),
                             &entry.reactions,
                             ControlSize::Regular,
+                            Surface::Background,
                             react,
                         ))
                     })
@@ -1547,7 +1638,7 @@ impl PullRequestView {
     /// The commits, each one opening what it changed.
     fn commits(&self, id: &str, entry: &Entry, actions: &Actions, cx: &mut Context<Self>) -> Div {
         let c = colors(cx);
-        div().w_full().ml(px(-6.)).flex().flex_col().children(entry.commits.iter().enumerate().map(
+        div().w_full().ml(px(-6.)).my(px(-3.)).flex().flex_col().children(entry.commits.iter().enumerate().map(
             |(index, commit)| {
                 let group: SharedString = format!("{id}-commit-{index}").into();
                 let enabled = !commit.sha.is_empty();
@@ -1562,13 +1653,13 @@ impl PullRequestView {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .when(enabled, |row| row.child(highlight(group, 6., edges(0., 0., 0., 0.), false, cx)))
+                    .when(enabled, |row| row.child(highlight(group, Radius::SM, edges(0., 0., 0., 0.), false, cx)))
                     .child(
                         div()
                             .relative()
                             .font_family(theme::MONO_FONT)
                             .text_size(px(11.5))
-                            .text_color(c.link)
+                            .text_color(c.primary)
                             .child(commit.oid.clone()),
                     )
                     .child(
@@ -1576,7 +1667,7 @@ impl PullRequestView {
                             .relative()
                             .min_w_0()
                             .text_size(px(12.5))
-                            .text_color(c.text)
+                            .text_color(c.foreground)
                             .truncate()
                             .child(commit.headline.clone()),
                     )
@@ -1593,56 +1684,63 @@ impl PullRequestView {
         let open = self.open_threads.get(&thread.id).copied().unwrap_or(!thread.resolved);
         let id = thread.id.clone();
         let comments = thread.comments.len();
-        let header =
-            div()
-                .id(SharedString::from(format!("pr-thread-{}", thread.id)))
-                .group(SharedString::from(format!("pr-thread-{}", thread.id)))
-                .relative()
-                .w_full()
-                .h(px(32.))
-                .px(px(12.))
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .child(highlight(
-                    SharedString::from(format!("pr-thread-{}", thread.id)),
-                    0.,
-                    edges(0., 0., 0., 0.),
-                    false,
-                    cx,
-                ))
-                .child(div().relative().w(px(10.)).flex().justify_center().child(
-                    icons::symbol(if open { "chevron-down" } else { "chevron-right" }, 8.).text_color(c.tertiary),
-                ))
-                .child(div().relative().child(icons::symbol(file_symbol(&thread.path), 11.).text_color(c.secondary)))
-                .child(
-                    div()
-                        .relative()
-                        .min_w_0()
-                        .text_size(px(12.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.text)
-                        .truncate()
-                        .child(thread.path.clone()),
-                )
-                .when_some(thread.line, |row, line| {
-                    row.child(div().relative().flex_shrink_0().child(label(format!("line {line}"), 12., c.tertiary)))
-                })
-                .when(thread.outdated, |row| row.child(div().relative().child(Chip::new("Outdated").tone(c.warning))))
-                .when(thread.resolved, |row| row.child(div().relative().child(Chip::new("Resolved").tone(c.success))))
-                .child(div().flex_1().min_w(px(0.)))
-                .when(!open, |row| {
-                    row.child(div().relative().flex_shrink_0().child(label(
-                        if comments == 1 { "1 comment".to_string() } else { format!("{comments} comments") },
-                        11.5,
-                        c.tertiary,
-                    )))
-                })
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    let now = this.open_threads.get(&id).copied().unwrap_or(open);
-                    this.open_threads.insert(id.clone(), !now);
-                    cx.notify();
-                }));
+        let header = div()
+            .id(SharedString::from(format!("pr-thread-{}", thread.id)))
+            .group(SharedString::from(format!("pr-thread-{}", thread.id)))
+            .relative()
+            .w_full()
+            .h(px(32.))
+            .px(px(12.))
+            .flex()
+            .items_center()
+            .gap(px(6.))
+            .child(
+                Highlight::new()
+                    .radius(0.)
+                    .surface(Surface::Secondary)
+                    .render(SharedString::from(format!("pr-thread-{}", thread.id)), cx),
+            )
+            .child(
+                div().relative().w(px(10.)).flex().justify_center().child(
+                    icons::symbol(if open { "chevron-down" } else { "chevron-right" }, 8.)
+                        .text_color(c.muted_stronger_foreground),
+                ),
+            )
+            .child(div().relative().child(icons::symbol(file_symbol(&thread.path), 11.).text_color(c.muted_foreground)))
+            .child(
+                div()
+                    .relative()
+                    .min_w_0()
+                    .text_size(px(12.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c.foreground)
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_ellipsis_start()
+                    .child(thread.path.clone()),
+            )
+            .when_some(thread.line, |row, line| {
+                row.child(div().relative().flex_shrink_0().child(label(
+                    format!("line {line}"),
+                    12.,
+                    c.muted_stronger_foreground,
+                )))
+            })
+            .when(thread.outdated, |row| row.child(div().relative().child(Chip::new("Outdated").tone(c.warning))))
+            .when(thread.resolved, |row| row.child(div().relative().child(Chip::new("Resolved").tone(c.success))))
+            .child(div().flex_1().min_w(px(0.)))
+            .when(!open, |row| {
+                row.child(div().relative().flex_shrink_0().child(label(
+                    if comments == 1 { "1 comment".to_string() } else { format!("{comments} comments") },
+                    11.5,
+                    c.muted_stronger_foreground,
+                )))
+            })
+            .on_click(cx.listener(move |this, _, _, cx| {
+                let now = this.open_threads.get(&id).copied().unwrap_or(open);
+                this.open_threads.insert(id.clone(), !now);
+                cx.notify();
+            }));
         let mut card = layered(cx).overflow_hidden().flex().flex_col().child(header);
         if !open {
             return card;
@@ -1666,10 +1764,11 @@ impl PullRequestView {
         let c = colors(cx);
         let count = lines.len();
         div().w_full().pb(px(6.)).flex().flex_col().children(lines.iter().enumerate().map(|(index, line)| {
+            let last = index + 1 == count;
             let fill = if line.starts_with('+') {
-                c.success.opacity(0.14)
+                c.wash(c.success, last)
             } else if line.starts_with('-') {
-                c.danger.opacity(0.14)
+                c.wash(c.destructive, last)
             } else {
                 transparent_black()
             };
@@ -1680,10 +1779,9 @@ impl PullRequestView {
                 .flex()
                 .items_center()
                 .bg(fill)
-                .when(index + 1 != count, |row| row.opacity(0.7))
                 .font_family(theme::MONO_FONT)
                 .text_size(px(11.5))
-                .text_color(c.text)
+                .text_color(c.foreground)
                 .whitespace_nowrap()
                 .overflow_hidden()
                 .child(div().truncate().child(if line.is_empty() { " ".to_string() } else { line.clone() }))
@@ -1714,8 +1812,8 @@ impl PullRequestView {
                     .flex()
                     .items_center()
                     .child(div().flex_1().min_w_0().text_size(px(12.5)).child(styled_line(vec![
-                        (comment.author.clone(), c.text, FontWeight::SEMIBOLD),
-                        (format!(" · {}", ago(comment.at)), c.tertiary, FontWeight::NORMAL),
+                        (comment.author.clone(), c.foreground, FontWeight::SEMIBOLD),
+                        (format!(" · {}", ago(comment.at)), c.muted_stronger_foreground, FontWeight::NORMAL),
                     ])))
                     .child(div().w(px(4.)).flex_shrink_0())
                     .child(
@@ -1729,6 +1827,7 @@ impl PullRequestView {
                                     SharedString::from(format!("{id}-react")),
                                     &comment.reactions,
                                     ControlSize::Small,
+                                    Surface::Secondary,
                                     react.clone(),
                                 ))
                             })
@@ -1740,13 +1839,16 @@ impl PullRequestView {
                                         "Open on GitHub",
                                     )
                                     .small()
+                                    .surface(Surface::Secondary)
                                     .on_click(move |_, _, cx| cx.open_url(&url)),
                                 )
                             }),
                     ),
             )
-            .child(text_blocks(id, &comment.body, cx))
-            .when(!comment.reactions.is_empty(), |column| column.child(reaction_bar(id, &comment.reactions, react)))
+            .child(text_blocks(id, &comment.body, Surface::Secondary, cx))
+            .when(!comment.reactions.is_empty(), |column| {
+                column.child(reaction_bar(id, &comment.reactions, Surface::Secondary, react))
+            })
     }
 
     fn thread_footer(&self, thread: &Thread, actions: &Actions, cx: &mut Context<Self>) -> Div {
@@ -1762,19 +1864,19 @@ impl PullRequestView {
                 .flex()
                 .flex_col()
                 .gap(px(8.))
-                .child(writing_field(reply, Some(64.), cx))
+                .child(TextArea::new(reply).surface(Surface::Secondary))
                 .child(
                     div()
                         .w_full()
                         .flex()
                         .justify_end()
                         .gap(px(8.))
-                        .child(ActionButton::new("pr-reply-cancel", "Cancel").on_click(cx.listener(
-                            |this, _, _, cx| {
+                        .child(ActionButton::new("pr-reply-cancel", "Cancel").surface(Surface::Secondary).on_click(
+                            cx.listener(|this, _, _, cx| {
                                 this.reply = None;
                                 cx.notify();
-                            },
-                        )))
+                            }),
+                        ))
                         .child(
                             ActionButton::new("pr-reply-send", "Reply")
                                 .primary()
@@ -1797,21 +1899,24 @@ impl PullRequestView {
             .flex()
             .items_center()
             .gap(px(6.))
-            .child(ActionButton::new("pr-reply", "Reply").on_click(cx.listener(move |this, _, window, cx| {
-                let reply = cx.new(|cx| TextareaState::new(window, cx).placeholder("Reply"));
-                cx.subscribe(&reply, |_, _, event: &InputEvent, cx| {
-                    if matches!(event, InputEvent::Change) {
-                        cx.notify();
-                    }
-                })
-                .detach();
-                reply.update(cx, |reply, cx| reply.focus(window, cx));
-                this.reply = Some((thread_id.clone(), reply));
-                cx.notify();
-            })))
+            .child(ActionButton::new("pr-reply", "Reply").surface(Surface::Secondary).on_click(cx.listener(
+                move |this, _, window, cx| {
+                    let reply = text_area_state("Reply", 3, 12, window, cx);
+                    cx.subscribe(&reply, |_, _, event: &InputEvent, cx| {
+                        if matches!(event, InputEvent::Change) {
+                            cx.notify();
+                        }
+                    })
+                    .detach();
+                    reply.update(cx, |reply, cx| reply.focus(window, cx));
+                    this.reply = Some((thread_id.clone(), reply));
+                    cx.notify();
+                },
+            )))
             .when_some(fix, |row, fix| {
                 row.child(
                     ActionButton::new("pr-thread-fix", "Fix")
+                        .surface(Surface::Secondary)
                         .help("Have the agent do what it asks")
                         .on_click(move |_, _, cx| fix_actions.hand_off(fix.clone(), cx)),
                 )
@@ -1820,6 +1925,7 @@ impl PullRequestView {
             .when(thread.can_resolve, |row| {
                 row.child(
                     ActionButton::new("pr-resolve", if resolved { "Unresolve" } else { "Resolve" })
+                        .surface(Surface::Secondary)
                         .pending(actions.is_working(&format!("resolve:{}", thread.id)))
                         .disabled(busy)
                         .on_click(move |_, _, cx| {
@@ -1855,7 +1961,7 @@ impl PullRequestView {
             .flex_col()
             .gap(px(8.))
             .when(!pending.is_empty(), |column| column.child(self.pending_comments(number, pending, cx)))
-            .child(writing_field(&self.comment, Some(84.), cx))
+            .child(TextArea::new(&self.comment))
             .child(
                 div()
                     .w_full()
@@ -1944,7 +2050,7 @@ impl PullRequestView {
                     .px(px(12.))
                     .pt(px(9.))
                     .pb(px(4.))
-                    .child(label(title, 12., c.secondary).font_weight(FontWeight::MEDIUM)),
+                    .child(label(title, 12., c.muted_foreground).font_weight(FontWeight::MEDIUM)),
             )
             .children(comments.iter().map(|comment| {
                 let (store, id) = (self.store.clone(), comment.id);
@@ -1960,7 +2066,7 @@ impl PullRequestView {
                             .flex_shrink_0()
                             .font_family(theme::MONO_FONT)
                             .text_size(px(11.5))
-                            .text_color(c.link)
+                            .text_color(c.primary)
                             .child(format!("{}:{}", crate::models::last_component(&comment.path), comment.line)),
                     )
                     .child(
@@ -1968,7 +2074,7 @@ impl PullRequestView {
                             .flex_1()
                             .min_w_0()
                             .text_size(px(12.5))
-                            .text_color(c.text)
+                            .text_color(c.foreground)
                             .line_clamp(2)
                             .child(comment.body.clone()),
                     )
@@ -1976,6 +2082,7 @@ impl PullRequestView {
                     .child(
                         ActionButton::icon(("pr-pending-remove", id as usize), "x", "Take it back")
                             .small()
+                            .surface(Surface::Secondary)
                             .margin(edges(-4., 0., -4., 0.))
                             .on_click(move |_, _, cx| {
                                 store.update(cx, |store, cx| {
@@ -1992,30 +2099,29 @@ impl PullRequestView {
         &self,
         target: Option<&PanelTarget>,
         number: Option<u64>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let button = self.confirming.clone()?;
+        let (button, leaving) = presented("pr-confirm", self.confirming.clone(), window, cx)?;
         let confirm = button.confirm.clone()?;
         let (target, number) = (target?.clone(), number?);
         let danger = button.style == Style::Danger;
         let (cancel_view, go_view) = (cx.entity().downgrade(), cx.entity().downgrade());
-        let cancel = AlertButton::new("Cancel", move |_, cx| {
-            let _ = cancel_view.update(cx, |this, cx| {
-                this.confirming = None;
-                cx.notify();
-            });
-        });
-        let go = AlertButton::new(confirm.button.clone(), move |_, cx| {
+        let go = Answer::new(confirm.button.clone(), move |_, cx| {
             let _ = go_view.update(cx, |this, cx| {
                 this.confirming = None;
                 this.perform(button.clone(), &target, number, cx);
             });
         });
-        let go = if danger { go.destructive() } else { go.prominent() };
-        Some(
-            alert("pr-confirm", confirm.title, Some(confirm.message.into()), None, vec![cancel, go], cx)
-                .into_any_element(),
-        )
+        let asked =
+            Confirmation::new(confirm.title).message(confirm.message).answer(if danger { go.danger() } else { go });
+        let cancel = move |_: &mut Window, cx: &mut App| {
+            let _ = cancel_view.update(cx, |this, cx| {
+                this.confirming = None;
+                cx.notify();
+            });
+        };
+        Some(confirmation("pr-confirm", asked, cancel, cx).leaving(leaving).into_any_element())
     }
 }
 
@@ -2043,8 +2149,9 @@ impl Render for PullRequestView {
             )
         };
         if self.page.as_ref().map(|cached| cached.0) != Some(reads) {
-            let page = self.store.read(cx).pull_requests.page.value().map(|page| Rc::new(page.clone()));
-            self.page = Some((reads, page));
+            let store = self.store.read(cx);
+            let page = target.as_ref().and_then(|target| store.pull_requests.shown_page(target));
+            self.page = Some((reads, page.map(|page| Rc::new(page.clone()))));
         }
         if let Some((key, count)) = finished
             && count != self.seen_finished
@@ -2061,15 +2168,16 @@ impl Render for PullRequestView {
             }
         }
         let bar = panel_bar(self.bar(page.as_ref(), target.as_ref(), shown, cx), cx);
+        let showing_page = unavailable.is_none() && target.is_some() && page.is_some();
+        if !showing_page {
+            self.forget_page(window, cx);
+        }
         let body: AnyElement = match (&unavailable, shown, &target) {
             (Some(reason), _, _) => panel_message(reason.clone(), false, cx),
-            (None, Some(number), Some(target)) => match (&page, &loaded) {
+            (None, Some(_), Some(target)) => match (&page, &loaded) {
                 (Some(page), _) => self.page_view(page, target, window, cx),
                 (None, Loaded::Failed(message)) => panel_message(message.clone(), true, cx),
-                _ => {
-                    let _ = number;
-                    panel_loading(cx)
-                }
+                _ => panel_loading(cx),
             },
             _ => self.no_pull_request(cx),
         };
@@ -2080,8 +2188,14 @@ impl Render for PullRequestView {
             .child(bar)
             .when_some(notice, |column, notice| column.child(notice_bar(&notice, &self.store, cx)))
             .child(div().flex_1().min_h_0().child(body))
-            .children(self.confirm_alert(target.as_ref(), shown, cx))
-            .children(self.describing.clone())
+            .children(self.confirm_alert(target.as_ref(), shown, window, cx))
+            .children(present_sheet(
+                "pr-description",
+                self.describing.clone(),
+                |sheet, leaving| sheet.leaving = leaving,
+                window,
+                cx,
+            ))
     }
 }
 
@@ -2098,6 +2212,8 @@ pub struct DescriptionEditor {
     previewing: bool,
     preview: Vec<Text>,
     focus: FocusHandle,
+    /// It has closed and fades out.
+    pub leaving: bool,
 }
 
 impl DescriptionEditor {
@@ -2130,6 +2246,7 @@ impl DescriptionEditor {
             previewing: false,
             preview: Vec::new(),
             focus: cx.focus_handle(),
+            leaving: false,
         }
     }
 
@@ -2182,20 +2299,29 @@ impl Render for DescriptionEditor {
                 .overflow_y_scroll()
                 .p(px(12.))
                 .bg(c.background_secondary)
-                .rounded(px(Radius::CONTROL))
-                .when(empty, |preview| preview.child(label("Nothing to preview", 12.5, c.tertiary)))
-                .when(!empty, |preview| preview.child(text_blocks("pr-description-preview", &self.preview, cx)))
+                .rounded(px(Radius::MD))
+                .when(empty, |preview| preview.child(label("Nothing to preview", 12.5, c.muted_stronger_foreground)))
+                .when(!empty, |preview| {
+                    preview.child(text_blocks("pr-description-preview", &self.preview, Surface::Secondary, cx))
+                })
                 .into_any_element()
         } else {
-            writing_field(&self.text, None, cx).into_any_element()
+            div().flex_1().min_h_0().child(TextArea::new(&self.text).fills(true)).into_any_element()
         };
         let content = div()
             .id("pr-description-editor")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if event.keystroke.key == "escape" {
-                    this.dismiss(cx);
+                let modified = event.keystroke.modifiers.modified();
+                match event.keystroke.key.as_str() {
+                    "escape" => this.dismiss(cx),
+                    // Return writes a line while the text is edited; it saves from the preview.
+                    "enter" if this.previewing && !modified && this.text.read(cx).value() != this.original.as_str() => {
+                        this.save(cx)
+                    }
+                    _ => return,
                 }
+                cx.stop_propagation();
             }))
             .h(px(440.))
             .p(px(20.))
@@ -2207,7 +2333,7 @@ impl Render for DescriptionEditor {
                     .w_full()
                     .flex()
                     .items_center()
-                    .child(label("Edit description", 15., c.text).font_weight(FontWeight::SEMIBOLD))
+                    .child(label("Edit Description", 15., c.foreground).font_weight(FontWeight::SEMIBOLD))
                     .child(div().flex_1())
                     .child(
                         Segmented::new(
@@ -2245,6 +2371,11 @@ impl Render for DescriptionEditor {
                             .on_click(cx.listener(|this, _, _, cx| this.save(cx))),
                     ),
             );
-        sheet("pr-description", 560., content, cx)
+        let close = cx.entity().downgrade();
+        modal("pr-description", content, move |_, cx| {
+            close.update(cx, |this, cx| this.dismiss(cx)).ok();
+        })
+        .width(560.)
+        .leaving(self.leaving)
     }
 }

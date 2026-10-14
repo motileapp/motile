@@ -7,16 +7,16 @@ use gpui_kit::*;
 use motile_core::api::Command;
 use motile_protocol::wire::{PullRequestEdit, Side};
 
-use super::pull_request::{label, styled_line, text_blocks, writing_field};
+use super::pull_request::{label, styled_line, text_blocks};
 use super::state::file_symbol;
 use crate::models::ago;
 use crate::store::Store;
 pub use crate::store::pull_requests::CommentedLine;
 use crate::store::pull_requests::Thread;
-use crate::theme::{self, Radius, colors};
-use crate::ui::ActionButton;
+use crate::theme::{self, Layer, Radius, Surface, colors};
 use crate::ui::icons;
-use crate::ui::sheet::sheet;
+use crate::ui::modal::{modal, present_sheet};
+use crate::ui::{ActionButton, TextArea, text_area_state};
 
 impl From<super::code_view::CommentedLine> for CommentedLine {
     fn from(line: super::code_view::CommentedLine) -> Self {
@@ -31,6 +31,8 @@ pub struct LineCommentSheet {
     commented: CommentedLine,
     text: Entity<TextareaState>,
     focus: FocusHandle,
+    /// It has closed and fades out.
+    pub leaving: bool,
 }
 
 impl LineCommentSheet {
@@ -44,7 +46,7 @@ impl LineCommentSheet {
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
         let has_threads = !Self::threads_of(&store, number, &commented, cx).is_empty();
         let placeholder = if has_threads { "Reply, or say something new" } else { "Comment on this line" };
-        let text = cx.new(|cx| TextareaState::new(window, cx).placeholder(placeholder));
+        let text = text_area_state(placeholder, 5, 12, window, cx);
         cx.subscribe(&text, |_, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
                 cx.notify();
@@ -52,7 +54,7 @@ impl LineCommentSheet {
         })
         .detach();
         text.update(cx, |text, cx| text.focus(window, cx));
-        Self { store, number, commented, text, focus: cx.focus_handle() }
+        Self { store, number, commented, text, focus: cx.focus_handle(), leaving: false }
     }
 
     /// The conversations already on the line.
@@ -133,8 +135,8 @@ impl Render for LineCommentSheet {
                 .w_full()
                 .max_h(px(220.))
                 .overflow_y_scroll()
-                .bg(c.background_secondary)
-                .rounded(px(Radius::CARD))
+                .bg(Surface::Background.layer(Layer::Box, c))
+                .rounded(px(Radius::LG))
                 .child(div().w_full().p(px(12.)).flex().flex_col().items_start().gap(px(10.)).children(
                     threads.iter().flat_map(|thread| thread.comments.iter()).enumerate().map(|(index, comment)| {
                         div()
@@ -144,20 +146,31 @@ impl Render for LineCommentSheet {
                             .items_start()
                             .gap(px(4.))
                             .child(div().text_size(px(12.5)).child(styled_line(vec![
-                                (comment.author.clone(), c.text, FontWeight::SEMIBOLD),
-                                (format!(" · {}", ago(comment.at)), c.tertiary, FontWeight::NORMAL),
+                                (comment.author.clone(), c.foreground, FontWeight::SEMIBOLD),
+                                (format!(" · {}", ago(comment.at)), c.muted_stronger_foreground, FontWeight::NORMAL),
                             ])))
-                            .child(text_blocks(&format!("line-comment-{index}"), &comment.body, cx))
+                            .child(text_blocks(&format!("line-comment-{index}"), &comment.body, Surface::Secondary, cx))
                     }),
                 ))
         });
         let content = div()
             .id("line-comment")
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if event.keystroke.key == "escape" {
-                    this.dismiss(cx);
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                let modified = event.keystroke.modifiers.modified();
+                match event.keystroke.key.as_str() {
+                    "escape" => this.dismiss(cx),
+                    // Return is a line break while the comment is written.
+                    "enter"
+                        if !modified
+                            && !this.text.focus_handle(cx).is_focused(window)
+                            && !this.written(cx).is_empty() =>
+                    {
+                        this.add_to_review(cx)
+                    }
+                    _ => return,
                 }
+                cx.stop_propagation();
             }))
             .p(px(20.))
             .flex()
@@ -177,20 +190,22 @@ impl Render for LineCommentSheet {
                             .flex()
                             .items_center()
                             .gap(px(6.))
-                            .child(icons::symbol(file_symbol(&self.commented.path), 12.).text_color(c.secondary))
+                            .child(icons::symbol(file_symbol(&self.commented.path), 12.).text_color(c.muted_foreground))
                             .child(
                                 div()
                                     .min_w_0()
                                     .text_size(px(13.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c.text)
-                                    .truncate()
+                                    .text_color(c.foreground)
+                                    .whitespace_nowrap()
+                                    .overflow_hidden()
+                                    .text_ellipsis_start()
                                     .child(self.commented.path.clone()),
                             )
                             .child(div().flex_shrink_0().child(label(
                                 format!("line {}", self.commented.line),
                                 12.5,
-                                c.tertiary,
+                                c.muted_stronger_foreground,
                             ))),
                     )
                     .child(
@@ -198,17 +213,17 @@ impl Render for LineCommentSheet {
                             .w_full()
                             .px(px(10.))
                             .py(px(7.))
-                            .bg(c.background_secondary)
-                            .rounded(px(7.))
+                            .bg(Surface::Background.layer(Layer::Box, c))
+                            .rounded(px(Radius::MD))
                             .font_family(theme::MONO_FONT)
                             .text_size(px(12.))
-                            .text_color(c.text)
+                            .text_color(c.foreground)
                             .line_clamp(3)
                             .child(code),
                     ),
             )
             .children(conversation)
-            .child(writing_field(&self.text, Some(96.), cx))
+            .child(TextArea::new(&self.text))
             .child(
                 div()
                     .w_full()
@@ -240,12 +255,18 @@ impl Render for LineCommentSheet {
                             .on_click(cx.listener(|this, _, _, cx| this.add_to_review(cx))),
                     ),
             );
-        sheet("line-comment-sheet", 500., content, cx)
+        let close = cx.entity().downgrade();
+        modal("line-comment-sheet", content, move |_, cx| {
+            close.update(cx, |this, cx| this.dismiss(cx)).ok();
+        })
+        .width(500.)
+        .leaving(self.leaving)
     }
 }
 
 /// Keeps the sheet up while the store says which line is being commented on, and gives it to
-/// draw. Whoever draws the panel calls this from its render with a slot of its own.
+/// draw, and for a moment after while it fades out. Whoever draws the panel calls this from its
+/// render with a slot of its own.
 pub fn follow(
     slot: &mut Option<Entity<LineCommentSheet>>,
     store: &Entity<Store>,
@@ -256,14 +277,13 @@ pub fn follow(
     let commenting = state.pull_requests.commenting.clone();
     let number = state.panel_target().and_then(|target| target.pull_request);
     let shown = state.pull_requests.page.value().map(|page| page.number).or(number);
-    let Some(line) = commenting else {
-        *slot = None;
-        return None;
-    };
-    let number = shown?;
-    if slot.is_none() {
-        let store = store.clone();
-        *slot = Some(cx.new(|cx| LineCommentSheet::new(store, number, line, window, cx)));
+    match commenting.zip(shown) {
+        None => *slot = None,
+        Some((line, number)) if slot.is_none() => {
+            let store = store.clone();
+            *slot = Some(cx.new(|cx| LineCommentSheet::new(store, number, line, window, cx)));
+        }
+        Some(_) => {}
     }
-    slot.clone()
+    present_sheet("line-comment-sheet", slot.clone(), |sheet, leaving| sheet.leaving = leaving, window, cx)
 }
