@@ -6,7 +6,7 @@ enum ButtonVariant {
     case primary
     /// The others beside it.
     case secondary
-    /// Only its border until the pointer is over it: the buttons of settings rows.
+    /// The page's colour inside its border: the buttons of settings rows.
     case outline
     /// What can't be taken back.
     case danger
@@ -63,7 +63,7 @@ struct ControlLook {
         switch variant {
         case .primary: filled(.themePrimary)
         case .secondary: AnyShapeStyle(surface.color(selected || lit ? .controlLit : .control))
-        case .outline: AnyShapeStyle(selected || lit ? surface.color(.control) : .clear)
+        case .outline: AnyShapeStyle(selected || lit ? surface.color(.control) : Color.themeBackground)
         case .danger: filled(.themeDestructive)
         case .warning: filled(.themeWarning)
         case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
