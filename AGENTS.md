@@ -99,7 +99,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   works with one account and can move to another.
 - `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
   worktrees, snapshots and the agents an agent starts. It continues a thread once its usage limit
-  resets, and after a restart that cut its agent off, where the server's settings say so. Every
+  resets, and after a restart that cut its agent off, where the server's settings say so. Claude
+  Code's process rests for ten minutes after a turn to take the thread's next message, and a new
+  one holds its first prompt until its MCP servers, claude.ai's connectors too, have connected. Every
   server has a "No project" project, whose threads each work in a folder of their own under
   `no-project` in its data folder, out of reach of any git repository above it.
 - `handoff.rs`: what an agent is told of a thread that went on without it. A thread keeps a

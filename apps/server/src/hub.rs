@@ -25,8 +25,8 @@ use motile_protocol::wire::{
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, Command};
-use tokio::sync::{Mutex, broadcast, mpsc};
+use tokio::process::{Child, ChildStdin, Command};
+use tokio::sync::{Mutex, broadcast, mpsc, watch};
 use tokio::task::AbortHandle;
 
 use crate::agents::environment::Environment;
@@ -70,6 +70,12 @@ const CONTINUE_AFTER_RESTARTS: &str = "continue_after_restarts";
 const CONTINUE_AFTER_THIS_RESTART: &str = "continue_after_this_restart";
 /// How long a stopped agent has to save its session before it is killed.
 const AGENTS_STOP_WITHIN: Duration = Duration::from_secs(2);
+/// How long Claude Code's process waits for the thread's next message once its turn has ended, so
+/// that the turn starts with its MCP servers connected.
+const RESTING_PROCESS_STAYS: Duration = Duration::from_secs(10 * 60);
+/// How long a new process of Claude Code holds its first prompt for its MCP servers to connect.
+const MCP_WAIT: Duration = Duration::from_secs(5);
+const MCP_ASK_EVERY: Duration = Duration::from_millis(250);
 const PRICES: &str = "prices";
 /// How long what the agents' logins had used is answered again before it is read anew.
 const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
@@ -235,6 +241,9 @@ struct Run {
     interrupted: Arc<AtomicBool>,
     /// The turn has ended; a process that is still there is idle.
     received_result: bool,
+    /// Since when the process has waited for the thread's next message, with nothing it started
+    /// still running.
+    resting: Option<Instant>,
     /// Writes lines to the process's stdin, which closes when this is dropped.
     input: Option<mpsc::UnboundedSender<String>>,
     background: Background,
@@ -545,6 +554,7 @@ impl Hub {
         if moves_sessions {
             ensure_idle(&threads, &account.id)?;
         }
+        let_go_of_account(&mut threads, &account.id);
         let id = account.id.clone();
         let mut accounts = accounts;
         match accounts.iter_mut().find(|kept| kept.id == account.id) {
@@ -571,6 +581,7 @@ impl Hub {
         }
         let default = self.default_account(account.agent);
         ensure_idle(&threads, id)?;
+        let_go_of_account(&mut threads, id);
         accounts.retain(|account| account.id != id);
         self.keep_agent_accounts(accounts)?;
         self.reload_sessions(&mut threads, id, Some(&default))
@@ -685,7 +696,7 @@ impl Hub {
     /// The threads that wait to continue once their usage limit resets, and whose limit has.
     async fn limits_reset(&self) -> Vec<String> {
         let threads = self.threads.lock().await;
-        let idle = |live: &&Live| live.run.is_none() && live.preparing.is_none();
+        let idle = |live: &&Live| !live.busy();
         let reset = |live: &&Live| match live.stored.thread.interruption {
             Some(Interruption::Limit { resets_at: Some(at), continues: true }) => at <= now(),
             _ => false,
@@ -822,7 +833,7 @@ impl Hub {
             live.send_activity();
             return Ok(thread_id);
         }
-        if let Some(run) = &live.run {
+        if let Some(run) = live.run.as_ref().filter(|run| run.resting.is_none()) {
             // An agent that is only monitoring takes the message right away.
             let idle = run.received_result;
             if !idle || !live.write_prompt(&prompt, &new_id()) {
@@ -1108,7 +1119,7 @@ impl Hub {
         if live.preparing.is_some() {
             bail!("The agent isn't ready yet. Send it again in a moment.");
         }
-        let Some(run) = &live.run else {
+        let Some(run) = live.run.as_ref().filter(|run| run.resting.is_none()) else {
             let queued = live.queued.remove(index);
             return self.start_next_turn(live, queued);
         };
@@ -1162,7 +1173,7 @@ impl Hub {
             }
             return;
         }
-        let Some(run) = &live.run else { return };
+        let Some(run) = live.run.as_ref().filter(|run| run.resting.is_none()) else { return };
         run.interrupted.store(true, Ordering::Relaxed);
         let process_id = run.process_id;
         let thread = &live.stored.thread;
@@ -1254,6 +1265,9 @@ impl Hub {
                 live.write(line);
             }
         }
+        if live.stored.thread.done_at.is_some() {
+            live.let_go();
+        }
         self.store.save_thread(&live.stored)?;
         self.announce(&live.stored.thread);
         Ok(())
@@ -1262,9 +1276,10 @@ impl Hub {
     /// Has the thread go on with another account, in the session it has where that account keeps
     /// its sessions. Without one, a new one starts and is told what was said.
     fn move_to_account(&self, live: &mut Live, id: &str) -> anyhow::Result<()> {
-        if live.run.is_some() || live.preparing.is_some() {
+        if live.busy() {
             bail!("The agent is still working. Switch accounts once it has finished.");
         }
+        live.let_go();
         let account = self.agent_accounts().into_iter().find(|account| account.id == id);
         let account = account.context("That account is no longer on your server.")?;
         let thread = &mut live.stored.thread;
@@ -1315,7 +1330,7 @@ impl Hub {
     }
 
     pub async fn any_running(&self) -> bool {
-        self.threads.lock().await.values().any(|live| live.run.is_some() || live.preparing.is_some())
+        self.threads.lock().await.values().any(Live::busy)
     }
 
     /// Answers with the project's id, also when the folder was a project already.
@@ -2534,6 +2549,9 @@ impl Hub {
     }
 
     fn start_turn(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
+        if !Path::new(&live.stored.thread.cwd).is_dir() {
+            live.let_go();
+        }
         let thread = &live.stored.thread;
         let makes_worktree = live.stored.worktree.is_some() && !Path::new(&thread.cwd).is_dir();
         if !makes_worktree && !git::in_repository(&thread.cwd) {
@@ -2550,6 +2568,15 @@ impl Hub {
     /// resume wasn't there.
     fn start_agent(self: &Arc<Self>, live: &mut Live, prompt: String, retried: bool) -> anyhow::Result<()> {
         live.flush(&self.store)?;
+        if live.run.as_ref().is_some_and(|run| run.resting.is_some()) {
+            let prompt_id = new_id();
+            if live.write_prompt(&prompt, &prompt_id) {
+                let message_seq = live.last_message_seq.unwrap_or(live.stored.next_seq);
+                live.turn = Some(StartedTurn { prompt_id, prompt, message_seq, retried, accepted: false });
+                return self.resume(live);
+            }
+            live.let_go();
+        }
         let mcp = self.mcp_access(live);
         let thread = &live.stored.thread;
         let continuation = self.continuation(thread);
@@ -2616,13 +2643,14 @@ impl Hub {
             started: Instant::now(),
             interrupted: interrupted.clone(),
             received_result: false,
+            resting: None,
             input: Some(input),
             background: Background::default(),
             turn_id: None,
         });
         self.announce_working(live)?;
 
-        tokio::spawn(self.clone().drive(live.stored.thread.id.clone(), child, lines, parser, interrupted));
+        tokio::spawn(self.clone().drive(live.stored.thread.id.clone(), agent, child, lines, parser, interrupted));
         Ok(())
     }
 
@@ -2671,13 +2699,14 @@ impl Hub {
     fn resume(&self, live: &mut Live) -> anyhow::Result<()> {
         let Some(run) = live.run.as_mut().filter(|run| run.received_result) else { return Ok(()) };
         run.received_result = false;
+        run.resting = None;
         run.started = Instant::now();
         self.announce_working(live)
     }
 
     /// What the process does once its turn has ended: take the next message that waits, exit,
-    /// keep working in the background, or monitor.
-    fn rest(&self, live: &mut Live) -> anyhow::Result<()> {
+    /// keep working in the background, monitor, or rest until the next message.
+    fn rest(self: &Arc<Self>, live: &mut Live) -> anyhow::Result<()> {
         let Some(run) = live.run.as_ref().filter(|run| run.received_result) else { return Ok(()) };
         // What the agent asks once its turn has ended, it stays to hear the answer to.
         if !live.activity.approvals.is_empty() {
@@ -2690,24 +2719,42 @@ impl Hub {
             return self.resume(live);
         }
         let Some(run) = &mut live.run else { return Ok(()) };
-        if run.background.is_empty() || interrupted {
+        let rests = run.background.is_empty() && !interrupted && live.stored.thread.agent == Agent::Claude;
+        if !rests && (run.background.is_empty() || interrupted) {
             run.input = None;
             return Ok(());
         }
         if run.background.agents > 0 {
             return Ok(());
         }
+        let resting = rests.then(Instant::now);
+        run.resting = resting;
         let thread = &mut live.stored.thread;
         thread.running = false;
-        thread.monitoring = true;
+        thread.monitoring = !rests;
         thread.updated_at = now();
         thread.turn_ended_at = Some(now());
-        live.activity = Activity { monitoring: true, ..Activity::default() };
+        live.activity = Activity { monitoring: !rests, ..Activity::default() };
         live.flush(&self.store)?;
         self.store.save_thread(&live.stored)?;
         live.send_activity();
         self.announce(&live.stored.thread);
+        if let Some(since) = resting {
+            self.let_go_once_rested(live.stored.thread.id.clone(), since);
+        }
         Ok(())
+    }
+
+    fn let_go_once_rested(self: &Arc<Self>, thread_id: String, since: Instant) {
+        let hub = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(RESTING_PROCESS_STAYS).await;
+            let mut threads = hub.threads.lock().await;
+            let Some(live) = threads.get_mut(&thread_id) else { return };
+            if live.run.as_ref().is_some_and(|run| run.resting == Some(since)) {
+                live.let_go();
+            }
+        });
     }
 
     fn spawn(&self, turn: &Turn, cwd: &str, account: &AgentAccount) -> anyhow::Result<Child> {
@@ -2744,13 +2791,20 @@ impl Hub {
     async fn drive(
         self: Arc<Self>,
         thread_id: String,
+        agent: Agent,
         mut child: Child,
         mut lines: mpsc::UnboundedReceiver<String>,
         mut parser: Parser,
         interrupted: Arc<AtomicBool>,
     ) {
+        let process_id = child.id().unwrap_or_default();
+        let started = Instant::now();
+        let (mcp_sender, mcp_ready) = watch::channel(false);
         if let Some(mut stdin) = child.stdin.take() {
             tokio::spawn(async move {
+                if agent == Agent::Claude {
+                    wait_for_mcp(&mut stdin, mcp_ready).await;
+                }
                 while let Some(line) = lines.recv().await {
                     if stdin.write_all(line.as_bytes()).await.is_err() {
                         return;
@@ -2770,6 +2824,10 @@ impl Hub {
         if let Some(stdout) = child.stdout.take() {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
+                if let Some(ready) = claude::mcp_ready(&line, started.elapsed()) {
+                    mcp_sender.send_replace(ready);
+                    continue;
+                }
                 let events = parser.parse(&line);
                 if !events.is_empty() {
                     self.apply(&thread_id, events).await;
@@ -2778,7 +2836,7 @@ impl Hub {
         }
         let exit_code = child.wait().await.ok().and_then(|status| status.code());
         let stderr = stderr.await.unwrap_or_default();
-        self.finish_turn(&thread_id, exit_code, &stderr, interrupted.load(Ordering::Relaxed)).await;
+        self.finish_turn(&thread_id, process_id, exit_code, &stderr, interrupted.load(Ordering::Relaxed)).await;
     }
 
     async fn apply(self: &Arc<Self>, thread_id: &str, events: Vec<AgentEvent>) {
@@ -2800,7 +2858,7 @@ impl Hub {
             tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
         }
         self.read_changes(live);
-        if was_running && live.stored.thread.monitoring {
+        if was_running && !live.stored.thread.running {
             self.after_turn(live).await;
         }
         if live.last_flush.elapsed() < FLUSH_EVERY {
@@ -3029,12 +3087,25 @@ impl Hub {
         self.announce(&live.stored.thread);
     }
 
-    async fn finish_turn(self: &Arc<Self>, thread_id: &str, exit_code: Option<i32>, stderr: &str, interrupted: bool) {
+    async fn finish_turn(
+        self: &Arc<Self>,
+        thread_id: &str,
+        process_id: u32,
+        exit_code: Option<i32>,
+        stderr: &str,
+        interrupted: bool,
+    ) {
         if self.closing.load(Ordering::SeqCst) {
             return;
         }
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
+        // A process that was let go, or ended as it rested, has told of its turn already.
+        let Some(run) = live.run.as_ref().filter(|run| run.process_id == process_id) else { return };
+        if run.resting.is_some() {
+            live.run = None;
+            return;
+        }
         let answered = live.run.as_ref().is_some_and(|run| run.received_result);
         if !answered
             && stderr.contains(claude::NO_CONVERSATION)
@@ -3338,6 +3409,18 @@ impl Live {
         self.given.push(queued);
         self.send_activity();
         Ok(())
+    }
+
+    /// Whether the agent works on the thread, or is about to.
+    fn busy(&self) -> bool {
+        self.preparing.is_some() || self.run.as_ref().is_some_and(|run| run.resting.is_none())
+    }
+
+    /// Lets the resting process go: its stdin closes and it exits. The next turn starts a new one.
+    fn let_go(&mut self) {
+        if self.run.as_ref().is_some_and(|run| run.resting.is_some()) {
+            self.run = None;
+        }
     }
 
     /// Writes a line to the process's stdin. `false` when it takes no more.
@@ -3646,11 +3729,32 @@ fn continuation_of(thread: &Thread, accounts: &[AgentAccount], environment: &Env
 }
 
 fn ensure_idle(threads: &HashMap<String, Live>, account_id: &str) -> anyhow::Result<()> {
-    let mut of_account = threads.values().filter(|live| live.stored.thread.agent_account == account_id);
-    if of_account.any(|live| live.run.is_some() || live.preparing.is_some()) {
+    if threads.values().any(|live| live.stored.thread.agent_account == account_id && live.busy()) {
         bail!("An agent still works with this account. Change it once the agent has finished.");
     }
     Ok(())
+}
+
+/// Lets the account's resting processes go, so that the next turn starts with what it is now.
+fn let_go_of_account(threads: &mut HashMap<String, Live>, account_id: &str) {
+    for live in threads.values_mut().filter(|live| live.stored.thread.agent_account == account_id) {
+        live.let_go();
+    }
+}
+
+/// Holds Claude Code's first prompt until its MCP servers are ready, asking it every
+/// `MCP_ASK_EVERY` for at most `MCP_WAIT`. It starts a turn without waiting for claude.ai's
+/// connectors, which would leave the turn without them.
+async fn wait_for_mcp(stdin: &mut ChildStdin, ready: watch::Receiver<bool>) {
+    let asking = async {
+        while !*ready.borrow() {
+            if stdin.write_all(claude::mcp_status_line().as_bytes()).await.is_err() {
+                return;
+            }
+            tokio::time::sleep(MCP_ASK_EVERY).await;
+        }
+    };
+    let _ = tokio::time::timeout(MCP_WAIT, asking).await;
 }
 
 /// The model with the default effort it was known to have, where its agent couldn't say it now.
