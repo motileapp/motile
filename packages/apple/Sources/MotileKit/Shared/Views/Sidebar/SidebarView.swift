@@ -1171,6 +1171,7 @@ struct SidebarFooter: View {
                 Spacer(minLength: 0)
                 if store.updater.state == .upToDate {
                     UpdateLabel.upToDate
+                        .padding(.trailing, 2)
                 }
                 ActionButton(icon: .refreshCw, help: "Check for Updates", pending: store.updater.state == .checking, margin: Self.reach) {
                     store.updater.check(asked: true)
