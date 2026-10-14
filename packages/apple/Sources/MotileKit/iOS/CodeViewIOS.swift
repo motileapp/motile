@@ -73,6 +73,7 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         touch.cancelsTouchesInView = false
         touch.delegate = self
         scrollView.addGestureRecognizer(touch)
+        scrollView.addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
         addInteraction(editMenu)
         NotificationCenter.default.addObserver(self, selector: #selector(coloured(_:)), name: .codeColoured, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(pictured(_:)), name: .codeMedia, object: nil)
@@ -208,32 +209,40 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         canvas.setNeedsDisplay()
     }
 
-    /// Lights the open button of a heading while a finger is on it, until it scrolls.
+    /// Lights the heading a finger is on, and its button, until it scrolls.
     @objc private func touched(_ recognizer: UILongPressGestureRecognizer) {
         let down = recognizer.state == .began || (recognizer.state == .changed && !scrollView.isDragging)
-        let lit = down ? openButton(at: recognizer.location(in: scrollView)) : nil
-        guard lit != sheet.litOpen else { return }
-        sheet.litOpen = lit
+        light(down ? heading(at: recognizer.location(in: scrollView)) : nil)
+    }
+
+    @objc private func hovered(_ recognizer: UIHoverGestureRecognizer) {
+        let over = recognizer.state == .began || recognizer.state == .changed
+        light(over ? heading(at: recognizer.location(in: scrollView)) : nil)
+    }
+
+    private func light(_ lit: CodeSheet.LitHeading?) {
+        guard lit != sheet.lit else { return }
+        sheet.lit = lit
         canvas.setNeedsDisplay()
     }
 
     override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
         guard recognizer === touch else { return super.gestureRecognizerShouldBegin(recognizer) }
-        return openButton(at: recognizer.location(in: scrollView)) != nil
+        return heading(at: recognizer.location(in: scrollView)) != nil
     }
 
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         true
     }
 
-    /// The file whose heading has its open button at the point, in the document.
-    private func openButton(at point: CGPoint) -> Int? {
+    /// The heading at the point, in the document, and the part of it there.
+    private func heading(at point: CGPoint) -> CodeSheet.LitHeading? {
         let left = scrollView.contentOffset.x
         if let pinned = pinnedHeading, pinned.frame.contains(point) {
-            return sheet.headingPress(at: point.x - left, width: bounds.width, file: pinned.file) == .open ? pinned.file : nil
+            return CodeSheet.LitHeading(file: pinned.file, press: sheet.headingPress(at: point.x - left, width: bounds.width, file: pinned.file))
         }
         guard sheet.document?.headed == true, let block = sheet.block(at: point.y), point.y < block.linesTop else { return nil }
-        return sheet.headingPress(at: point.x - left, width: bounds.width, file: block.file) == .open ? block.file : nil
+        return CodeSheet.LitHeading(file: block.file, press: sheet.headingPress(at: point.x - left, width: bounds.width, file: block.file))
     }
 
     private func pressedHeading(of file: Int, at x: CGFloat) {

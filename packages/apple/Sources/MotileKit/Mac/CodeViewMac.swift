@@ -168,27 +168,26 @@ final class CodeView: NSView {
         pinned.needsDisplay = true
     }
 
-    /// Lights the open button of the heading under the pointer, where the pointer is now.
+    /// Lights the heading under the pointer, and its button, where the pointer is now.
     fileprivate func pointerMoved() {
         guard let window else { return }
         let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        let lit = bounds.contains(point) ? openButton(at: point) : nil
-        guard lit != sheet.litOpen else { return }
-        sheet.litOpen = lit
+        let lit = bounds.contains(point) ? heading(at: point) : nil
+        guard lit != sheet.lit else { return }
+        sheet.lit = lit
         canvas.needsDisplay = true
         pinned.needsDisplay = true
     }
 
-    /// The file whose heading has its open button at the point.
-    private func openButton(at point: NSPoint) -> Int? {
+    /// The heading at the point, and the part of it there.
+    private func heading(at point: NSPoint) -> CodeSheet.LitHeading? {
         if !pinned.isHidden, pinned.frame.contains(point) {
-            let press = sheet.headingPress(at: point.x, width: pinned.bounds.width, file: pinned.file)
-            return press == .open ? pinned.file : nil
+            return CodeSheet.LitHeading(file: pinned.file, press: sheet.headingPress(at: point.x, width: pinned.bounds.width, file: pinned.file))
         }
         let visible = canvas.visibleRect
         let inCanvas = canvas.convert(point, from: self)
         guard sheet.document?.headed == true, let block = sheet.block(at: inCanvas.y), inCanvas.y < block.linesTop else { return nil }
-        return sheet.headingPress(at: inCanvas.x - visible.minX, width: visible.width, file: block.file) == .open ? block.file : nil
+        return CodeSheet.LitHeading(file: block.file, press: sheet.headingPress(at: inCanvas.x - visible.minX, width: visible.width, file: block.file))
     }
 
     fileprivate func pressedHeading(of file: Int, at x: CGFloat, width: CGFloat) {
