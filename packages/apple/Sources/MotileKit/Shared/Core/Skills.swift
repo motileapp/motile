@@ -96,6 +96,18 @@ extension AppStore {
         )
     }
 
+    /// The composer's project on its server while it is connected, whose skills its menu offers.
+    var composerSkillsKey: String? {
+        guard let project = composerProject, server(project.serverID)?.state == .connected else { return nil }
+        return "\(project.serverID)#\(project.id)"
+    }
+
+    /// Has the composer's skills listed before its menu opens, so that it opens with them.
+    func prefetchSkills() {
+        guard let project = composerProject, server(project.serverID)?.state == .connected else { return }
+        core.send("prefetch_skills", ["server_id": project.serverID, "project_id": project.id])
+    }
+
     /// Asks the core which skills fit the word that ends `beforeCursor`, the composer's text up
     /// to its cursor. Only the last answer counts.
     func readSkillMenu(beforeCursor: String) {
@@ -111,7 +123,10 @@ extension AppStore {
             "before_cursor": String(beforeCursor.suffix(200)),
         ]
         core.send("skill_menu", fields) { [weak self] result in
-            guard let self, asked == skillMenusAsked, case .success(let answer) = result else { return }
+            guard let self, asked == skillMenusAsked else { return }
+            skillMenusAnswered = asked
+            skillMenuLoading = false
+            guard case .success(let answer) = result else { return }
             let menu = SkillMenu(json: answer)
             if menu.typed != skillMenuDismissed { skillMenuDismissed = nil }
             guard !menu.rows.isEmpty, skillMenuDismissed == nil else {
@@ -121,11 +136,19 @@ extension AppStore {
             if menu.rows.map(\.name) != skillMenu?.rows.map(\.name) { skillHighlight = 0 }
             skillMenu = menu
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.skillMenuPatience) { [weak self] in
+            guard let self, asked == skillMenusAsked, skillMenusAnswered < asked, skillMenu == nil, skillMenuDismissed == nil else { return }
+            skillMenuLoading = true
+        }
     }
+
+    /// How long the menu's skills may take before the menu says they are loading.
+    private static let skillMenuPatience: TimeInterval = 0.15
 
     func closeSkillMenu() {
         skillMenusAsked += 1
         skillMenu = nil
+        skillMenuLoading = false
     }
 
     /// Leaves the menu closed until something else is typed.

@@ -2,12 +2,16 @@
 //! `Core/Skills.swift` keeps them: the menu, the row lit in it, and the skill picked from it.
 
 use std::ops::Range;
+use std::time::Duration;
 
 use gpui_kit::*;
 use motile_core::api::Command;
 use serde::Deserialize;
 
 use super::Store;
+
+/// How long the menu's skills may take before the menu says they are loading.
+const SKILL_MENU_PATIENCE: Duration = Duration::from_millis(150);
 
 /// The skills that fit the word being typed, as the core ranks them, and that word.
 #[derive(Deserialize, Clone, Debug, Default, PartialEq)]
@@ -76,12 +80,29 @@ pub struct Skills {
     pub menu: Option<SkillMenu>,
     pub highlight: usize,
     pub pick: Option<SkillPick>,
+    /// The menu's skills are asked for and haven't come in a moment, the first time on a server.
+    pub loading: bool,
     asked: u64,
+    answered: u64,
+    loading_soon: Option<Task<()>>,
     /// The word whose menu was put away, which stays away until another is typed.
     dismissed: Option<String>,
 }
 
 impl Store {
+    /// The composer's project on its server while it is connected, whose skills its menu offers.
+    pub fn composer_skills_key(&self) -> Option<(String, String)> {
+        let project = self.composer_project()?;
+        self.server(Some(&project.server_id)).filter(|server| server.connected())?;
+        Some((project.server_id, project.id))
+    }
+
+    /// Has the composer's skills listed before its menu opens, so that it opens with them.
+    pub fn prefetch_skills(&mut self) {
+        let Some((server_id, project_id)) = self.composer_skills_key() else { return };
+        self.send(Command::PrefetchSkills { server_id, project_id });
+    }
+
     /// Asks the core which skills fit the word that ends `before_cursor`, the composer's text up
     /// to its cursor. Only the last answer counts.
     pub fn read_skill_menu(&mut self, before_cursor: &str, cx: &mut Context<Self>) {
@@ -102,10 +123,12 @@ impl Store {
             before_cursor: before_cursor[start..].to_string(),
         };
         self.ask(command, move |store, result, cx| {
-            let Ok(answer) = result else { return };
             if asked != store.skills.asked {
                 return;
             }
+            store.skills.answered = asked;
+            store.skills.loading = false;
+            let Ok(answer) = result else { return cx.notify() };
             let menu: SkillMenu = serde_json::from_value(answer).unwrap_or_default();
             let skills = &mut store.skills;
             if skills.dismissed.as_ref() != Some(&menu.typed) {
@@ -122,11 +145,27 @@ impl Store {
             skills.menu = Some(menu);
             cx.notify();
         });
+        self.skills.loading_soon = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(SKILL_MENU_PATIENCE).await;
+            let _ = this.update(cx, |store, cx| {
+                let skills = &mut store.skills;
+                if asked != skills.asked
+                    || skills.answered >= asked
+                    || skills.menu.is_some()
+                    || skills.dismissed.is_some()
+                {
+                    return;
+                }
+                skills.loading = true;
+                cx.notify();
+            });
+        }));
     }
 
     pub fn close_skill_menu(&mut self, cx: &mut Context<Self>) {
         self.skills.asked += 1;
-        if self.skills.menu.take().is_some() {
+        let loading = std::mem::take(&mut self.skills.loading);
+        if self.skills.menu.take().is_some() || loading {
             cx.notify();
         }
     }

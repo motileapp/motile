@@ -340,6 +340,14 @@ fn error_text(error: anyhow::Error) -> String {
     motile_protocol::error_text(&error)
 }
 
+/// Asks the server for the skills of the project of `key` and keeps what it lists.
+async fn list_skills(link: Arc<Link>, key: (String, String), listed: Skills) {
+    let Ok(Message::Skills { accounts }) = link.request(&Request::Skills { project_id: key.1.clone() }).await else {
+        return;
+    };
+    listed.lock().await.insert(key, (Instant::now(), accounts));
+}
+
 impl Core {
     fn emit(&self, event: Event) {
         (self.sink)(event);
@@ -349,9 +357,9 @@ impl Core {
         reply(&self.sink, id, result);
     }
 
-    /// Answers with what `answer` makes of the skills of `account` in the project, which the
-    /// server is asked for unless it listed them within `SKILLS_FRESH`. A server too old to list
-    /// them has none.
+    /// Answers with what `answer` makes of the skills of `account` in the project, as the server
+    /// last listed them. Once that is older than `SKILLS_FRESH` it is asked again behind the
+    /// answer; only a project it never listed waits for it. A server too old to list them has none.
     fn answer_with_skills(
         &self,
         id: u64,
@@ -369,18 +377,22 @@ impl Core {
         };
         let (sink, listed) = (self.sink.clone(), self.skills.clone());
         tokio::spawn(async move {
+            let kept = listed.clone();
             let mut listed = listed.lock().await;
             let key = (server_id, project_id.clone());
-            let fresh = listed.get(&key).filter(|(at, _)| at.elapsed() < SKILLS_FRESH).is_some();
-            if !fresh {
-                match link.request(&Request::Skills { project_id }).await {
+            match listed.get_mut(&key) {
+                Some((at, _)) if at.elapsed() >= SKILLS_FRESH => {
+                    *at = Instant::now();
+                    tokio::spawn(list_skills(link, key.clone(), kept));
+                }
+                Some(_) => {}
+                None => match link.request(&Request::Skills { project_id }).await {
                     Ok(Message::Skills { accounts }) => {
                         listed.insert(key.clone(), (Instant::now(), accounts));
                     }
                     Ok(_) => {}
-                    Err(error) if !listed.contains_key(&key) => return reply(&sink, id, Err(error_text(error))),
-                    Err(_) => {}
-                }
+                    Err(error) => return reply(&sink, id, Err(error_text(error))),
+                },
             }
             let accounts = listed.get(&key).map(|(_, accounts)| accounts.as_slice()).unwrap_or_default();
             let skills =
@@ -1511,6 +1523,9 @@ impl Core {
                 self.answer_with_skills(id, server_id, project_id, account, move |skills| {
                     serde_json::to_value(skills::menu(&before_cursor, skills).unwrap_or_default()).unwrap_or_default()
                 });
+            }
+            Command::PrefetchSkills { server_id, project_id } => {
+                self.answer_with_skills(id, server_id, project_id, String::new(), |_| Value::Null);
             }
             Command::SkillChips { server_id, project_id, account, text } => {
                 if motile_protocol::skills::mentions(&text).is_empty() {
