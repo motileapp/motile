@@ -20,6 +20,7 @@ if [ "${1:-}" = "--stop" ]; then
 fi
 
 start_stack
+scripts/patch-crates.sh
 # The app is built for debugging unless MOTILE_GPUI_RELEASE=1: it builds much faster.
 if [ "${MOTILE_GPUI_RELEASE:-}" = "1" ]; then
     (cd "$GPUI" && cargo build --release)

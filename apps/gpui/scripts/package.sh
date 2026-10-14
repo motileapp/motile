@@ -25,6 +25,7 @@ esac
 
 echo "▸ Building for $TARGET…"
 rustup target add "$TARGET"
+scripts/patch-crates.sh
 cargo build --release --target "$TARGET"
 
 STAGE="build/package-$TARGET"

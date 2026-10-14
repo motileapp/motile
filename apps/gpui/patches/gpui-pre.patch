@@ -1,0 +1,313 @@
+diff --git a/src/gpui.rs b/src/gpui.rs
+index d4da5aa..fd42945 100644
+--- a/src/gpui.rs
++++ b/src/gpui.rs
+@@ -50,6 +50,7 @@ pub mod queue;
+ #[cfg(any(test, feature = "bench-support"))]
+ pub mod randomized_element_tree;
+ mod scene;
++mod scene_damage;
+ #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+ mod seeds;
+ mod shared_uri;
+@@ -198,6 +199,7 @@ pub use profiler::*;
+ pub use queue::{PriorityQueueReceiver, PriorityQueueSender};
+ pub use refineable::*;
+ pub use scene::*;
++pub use scene_damage::*;
+ pub use shared_uri::*;
+ use std::{any::Any, future::Future};
+ pub use style::*;
+diff --git a/src/platform.rs b/src/platform.rs
+index c08d964..5eba90a 100644
+--- a/src/platform.rs
++++ b/src/platform.rs
+@@ -1274,6 +1274,14 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
+     fn on_appearance_changed(&self, callback: Box<dyn FnMut()>);
+     fn on_button_layout_changed(&self, _callback: Box<dyn FnMut()>) {}
+     fn draw(&self, scene: &Scene);
++    /// Whether [`Self::draw_with_damage`] uses the damage, which GPUI only computes then.
++    fn wants_render_damage(&self) -> bool {
++        false
++    }
++    /// [`Self::draw`] with what changed since the previous frame; `None` redraws everything.
++    fn draw_with_damage(&self, scene: &Scene, _damage: Option<crate::SceneDamage>) {
++        self.draw(scene);
++    }
+     fn schedule_frame(&self) {}
+     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas>;
+     fn is_subpixel_rendering_supported(&self) -> bool;
+diff --git a/src/scene.rs b/src/scene.rs
+index be37813..03a0a8a 100644
+--- a/src/scene.rs
++++ b/src/scene.rs
+@@ -529,7 +529,7 @@ impl PrimitiveBatch {
+     }
+ }
+ 
+-#[derive(Default, Debug, Copy, Clone)]
++#[derive(Default, Debug, Copy, Clone, PartialEq)]
+ #[repr(C)]
+ #[expect(missing_docs)]
+ pub struct Quad {
+@@ -549,7 +549,7 @@ impl From<Quad> for Primitive {
+     }
+ }
+ 
+-#[derive(Debug, Copy, Clone)]
++#[derive(Debug, Copy, Clone, PartialEq)]
+ #[repr(C)]
+ #[expect(missing_docs)]
+ pub struct Underline {
+@@ -568,7 +568,7 @@ impl From<Underline> for Primitive {
+     }
+ }
+ 
+-#[derive(Debug, Copy, Clone)]
++#[derive(Debug, Copy, Clone, PartialEq)]
+ #[repr(C)]
+ #[expect(missing_docs)]
+ pub struct Shadow {
+@@ -705,7 +705,7 @@ impl Default for TransformationMatrix {
+     }
+ }
+ 
+-#[derive(Copy, Clone, Debug)]
++#[derive(Copy, Clone, Debug, PartialEq)]
+ #[repr(C)]
+ #[expect(missing_docs)]
+ pub struct MonochromeSprite {
+@@ -724,7 +724,7 @@ impl From<MonochromeSprite> for Primitive {
+     }
+ }
+ 
+-#[derive(Copy, Clone, Debug)]
++#[derive(Copy, Clone, Debug, PartialEq)]
+ #[repr(C)]
+ #[expect(missing_docs)]
+ pub struct SubpixelSprite {
+@@ -743,7 +743,7 @@ impl From<SubpixelSprite> for Primitive {
+     }
+ }
+ 
+-#[derive(Copy, Clone, Debug)]
++#[derive(Copy, Clone, Debug, PartialEq)]
+ #[repr(C)]
+ #[expect(missing_docs)]
+ pub struct PolychromeSprite {
+@@ -928,7 +928,7 @@ impl From<Path<ScaledPixels>> for Primitive {
+     }
+ }
+ 
+-#[derive(Clone, Debug)]
++#[derive(Clone, Debug, PartialEq)]
+ #[repr(C)]
+ #[expect(missing_docs)]
+ pub struct PathVertex<P: Clone + Debug + Default + PartialEq> {
+diff --git a/src/scene_damage.rs b/src/scene_damage.rs
+new file mode 100644
+index 0000000..bade8ea
+--- /dev/null
++++ b/src/scene_damage.rs
+@@ -0,0 +1,150 @@
++use crate::{Bounds, Path, Point, ScaledPixels, Scene, Size, TransformationMatrix};
++
++/// The part of the window that changed between two frames, in device pixels.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub enum SceneDamage {
++    /// Everything must be redrawn.
++    Full,
++    /// Only this rectangle changed.
++    Rect(Bounds<ScaledPixels>),
++    /// Nothing changed.
++    Unchanged,
++}
++
++impl SceneDamage {
++    /// Covers every pixel that differs between two finished scenes, and possibly more.
++    pub fn between(prev: &Scene, next: &Scene) -> SceneDamage {
++        let mut damage = None;
++        diff(
++            &prev.quads,
++            &next.quads,
++            PartialEq::eq,
++            |q| q.bounds,
++            &mut damage,
++        );
++        diff(
++            &prev.shadows,
++            &next.shadows,
++            PartialEq::eq,
++            |s| s.bounds.dilate(s.blur_radius * 3.0),
++            &mut damage,
++        );
++        diff(
++            &prev.underlines,
++            &next.underlines,
++            PartialEq::eq,
++            |u| u.bounds,
++            &mut damage,
++        );
++        diff(
++            &prev.monochrome_sprites,
++            &next.monochrome_sprites,
++            PartialEq::eq,
++            |s| transformed_bounds(s.bounds, &s.transformation),
++            &mut damage,
++        );
++        diff(
++            &prev.subpixel_sprites,
++            &next.subpixel_sprites,
++            PartialEq::eq,
++            |s| transformed_bounds(s.bounds, &s.transformation),
++            &mut damage,
++        );
++        diff(
++            &prev.polychrome_sprites,
++            &next.polychrome_sprites,
++            PartialEq::eq,
++            |s| s.bounds,
++            &mut damage,
++        );
++        diff(
++            &prev.paths,
++            &next.paths,
++            paths_equal,
++            |p| p.bounds,
++            &mut damage,
++        );
++        if prev.surfaces.len() + next.surfaces.len() > 0 {
++            return SceneDamage::Full;
++        }
++
++        match damage {
++            Some(rect) => SceneDamage::Rect(rect),
++            None => SceneDamage::Unchanged,
++        }
++    }
++
++    /// Covers both, for frames drawn but not yet presented.
++    pub fn union(self, other: SceneDamage) -> SceneDamage {
++        match (self, other) {
++            (SceneDamage::Full, _) | (_, SceneDamage::Full) => SceneDamage::Full,
++            (SceneDamage::Unchanged, damage) | (damage, SceneDamage::Unchanged) => damage,
++            (SceneDamage::Rect(a), SceneDamage::Rect(b)) => SceneDamage::Rect(a.union(&b)),
++        }
++    }
++}
++
++fn paths_equal(a: &Path<ScaledPixels>, b: &Path<ScaledPixels>) -> bool {
++    a.order == b.order
++        && a.bounds == b.bounds
++        && a.content_mask == b.content_mask
++        && a.color == b.color
++        && a.vertices == b.vertices
++}
++
++// Matching the common prefix and suffix keeps one inserted primitive, like a caret, from
++// damaging every primitive after it.
++fn diff<T>(
++    prev: &[T],
++    next: &[T],
++    equal: impl Fn(&T, &T) -> bool,
++    bounds_of: impl Fn(&T) -> Bounds<ScaledPixels>,
++    damage: &mut Option<Bounds<ScaledPixels>>,
++) {
++    let common = prev.len().min(next.len());
++    let prefix = (0..common)
++        .find(|&i| !equal(&prev[i], &next[i]))
++        .unwrap_or(common);
++    if prefix == prev.len() && prefix == next.len() {
++        return;
++    }
++    let suffix = (0..common - prefix)
++        .find(|&i| !equal(&prev[prev.len() - 1 - i], &next[next.len() - 1 - i]))
++        .unwrap_or(common - prefix);
++
++    let changed = prev[prefix..prev.len() - suffix]
++        .iter()
++        .chain(&next[prefix..next.len() - suffix]);
++    for primitive in changed {
++        let bounds = bounds_of(primitive);
++        *damage = Some(damage.map_or(bounds, |damage| damage.union(&bounds)));
++    }
++}
++
++fn transformed_bounds(
++    bounds: Bounds<ScaledPixels>,
++    transform: &TransformationMatrix,
++) -> Bounds<ScaledPixels> {
++    let [[a, b], [c, d]] = transform.rotation_scale;
++    let [tx, ty] = transform.translation;
++    let left = bounds.origin.x.0;
++    let top = bounds.origin.y.0;
++    let right = left + bounds.size.width.0;
++    let bottom = top + bounds.size.height.0;
++    let corners = [(left, top), (right, top), (left, bottom), (right, bottom)]
++        .map(|(x, y)| (a * x + b * y + tx, c * x + d * y + ty));
++    let min_x = corners.iter().map(|p| p.0).fold(f32::MAX, f32::min);
++    let min_y = corners.iter().map(|p| p.1).fold(f32::MAX, f32::min);
++    let max_x = corners.iter().map(|p| p.0).fold(f32::MIN, f32::max);
++    let max_y = corners.iter().map(|p| p.1).fold(f32::MIN, f32::max);
++    Bounds {
++        origin: Point {
++            x: ScaledPixels(min_x),
++            y: ScaledPixels(min_y),
++        },
++        size: Size {
++            width: ScaledPixels(max_x - min_x),
++            height: ScaledPixels(max_y - min_y),
++        },
++    }
++}
+diff --git a/src/window.rs b/src/window.rs
+index 1214b03..89fcb5b 100644
+--- a/src/window.rs
++++ b/src/window.rs
+@@ -1249,6 +1249,7 @@ pub struct Window {
+     pub(crate) image_cache_stack: Vec<AnyImageCache>,
+     pub(crate) rendered_frame: Frame,
+     pub(crate) next_frame: Frame,
++    render_damage: Option<crate::SceneDamage>,
+     next_hitbox_id: HitboxId,
+     pub(crate) next_tooltip_id: TooltipId,
+     pub(crate) tooltip_bounds: Option<TooltipBounds>,
+@@ -2149,6 +2150,7 @@ impl Window {
+             focused_text_input_active: false,
+             rendered_frame: Frame::new(DispatchTree::new(cx.keymap.clone(), cx.actions.clone())),
+             next_frame: Frame::new(DispatchTree::new(cx.keymap.clone(), cx.actions.clone())),
++            render_damage: None,
+             next_frame_callbacks,
+             next_hitbox_id: HitboxId(0),
+             next_tooltip_id: TooltipId::default(),
+@@ -3506,6 +3508,15 @@ impl Window {
+         self.layout_engine.as_mut().unwrap().clear();
+         self.text_system().finish_frame();
+         self.next_frame.finish(&mut self.rendered_frame);
++        if self.platform_window.wants_render_damage() {
++            let damage =
++                crate::SceneDamage::between(&self.rendered_frame.scene, &self.next_frame.scene);
++            self.render_damage = Some(
++                self.render_damage
++                    .take()
++                    .map_or(damage, |unpresented| unpresented.union(damage)),
++            );
++        }
+ 
+         self.invalidator.set_phase(DrawPhase::Focus);
+         let previous_focus_path = self.rendered_frame.focus_path();
+@@ -3606,7 +3617,13 @@ impl Window {
+         let _foreground_turn = profiler::journal::foreground_turn();
+         #[cfg(feature = "profiler")]
+         let present_start = Instant::now();
+-        self.platform_window.draw(&self.rendered_frame.scene);
++        let damage = self.render_damage.take().or_else(|| {
++            self.platform_window
++                .wants_render_damage()
++                .then_some(crate::SceneDamage::Unchanged)
++        });
++        self.platform_window
++            .draw_with_damage(&self.rendered_frame.scene, damage);
+         #[cfg(feature = "profiler")]
+         self.window_profiler.record_present(
+             present_start,

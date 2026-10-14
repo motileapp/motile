@@ -1,0 +1,87 @@
+diff --git a/src/linux/wayland/window.rs b/src/linux/wayland/window.rs
+index 8d92234..a69b1ac 100644
+--- a/src/linux/wayland/window.rs
++++ b/src/linux/wayland/window.rs
+@@ -44,7 +44,7 @@ use gpui::{
+     popup::PopupOptions,
+     px, size,
+ };
+-use gpui_wgpu::{CompositorGpuHint, WgpuRenderer, WgpuSurfaceConfig, wgpu};
++use gpui_wgpu::{CompositorGpuHint, DrawOutcome, WgpuRenderer, WgpuSurfaceConfig, wgpu};
+ 
+ #[derive(Default)]
+ pub(crate) struct Callbacks {
+@@ -2009,6 +2009,17 @@ impl PlatformWindow for WaylandWindow {
+     }
+ 
+     fn draw(&self, scene: &Scene) {
++        self.draw_with_damage(scene, None);
++    }
++
++    fn wants_render_damage(&self) -> bool {
++        self.borrow()
++            .renderer
++            .as_ref()
++            .is_some_and(|renderer| renderer.damage_enabled())
++    }
++
++    fn draw_with_damage(&self, scene: &Scene, damage: Option<gpui::SceneDamage>) {
+         let mut state = self.borrow_mut();
+         let state = &mut *state;
+         let Some(renderer) = &mut state.renderer else {
+@@ -2043,12 +2054,16 @@ impl PlatformWindow for WaylandWindow {
+             let callback = state.surface.frame(&state.globals.qh, state.surface.id());
+             state.pending_frame_callback = Some(callback);
+         }
+-        if renderer.draw(scene) {
+-            state.presentation = PresentationState::Presented;
+-            self.0.frame_loop.set(FrameLoop::AwaitingCallback);
+-        } else {
+-            state.presentation = state.presentation.failed();
+-            self.0.frame_loop.set(FrameLoop::PresentationFailed);
++        match renderer.draw_with_damage(scene, damage) {
++            DrawOutcome::Presented => {
++                state.presentation = PresentationState::Presented;
++                self.0.frame_loop.set(FrameLoop::AwaitingCallback);
++            }
++            DrawOutcome::Unchanged => {}
++            DrawOutcome::Failed => {
++                state.presentation = state.presentation.failed();
++                self.0.frame_loop.set(FrameLoop::PresentationFailed);
++            }
+         }
+ 
+         if renderer.needs_redraw() {
+diff --git a/src/linux/x11/window.rs b/src/linux/x11/window.rs
+index f6ee76a..c0bafee 100644
+--- a/src/linux/x11/window.rs
++++ b/src/linux/x11/window.rs
+@@ -1749,6 +1749,19 @@ impl PlatformWindow for X11Window {
+     }
+ 
+     fn draw(&self, scene: &Scene) {
++        self.draw_with_damage(scene, None);
++    }
++
++    fn wants_render_damage(&self) -> bool {
++        self.0
++            .state
++            .borrow()
++            .renderer
++            .as_ref()
++            .is_some_and(|renderer| renderer.damage_enabled())
++    }
++
++    fn draw_with_damage(&self, scene: &Scene, damage: Option<gpui::SceneDamage>) {
+         let mut inner = self.0.state.borrow_mut();
+         let inner = &mut *inner;
+         let Some(renderer) = &mut inner.renderer else {
+@@ -1775,7 +1788,7 @@ impl PlatformWindow for X11Window {
+             return;
+         }
+ 
+-        renderer.draw(scene);
++        renderer.draw_with_damage(scene, damage);
+ 
+         if renderer.needs_redraw() {
+             inner.force_render_after_recovery = true;

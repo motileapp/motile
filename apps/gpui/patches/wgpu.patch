@@ -1,0 +1,94 @@
+diff --git a/src/api/surface_texture.rs b/src/api/surface_texture.rs
+index f08c462..e70c904 100644
+--- a/src/api/surface_texture.rs
++++ b/src/api/surface_texture.rs
+@@ -33,6 +33,21 @@ impl SurfaceTexture {
+         self.detail.present();
+     }
+ 
++    /// Schedule this texture to be presented on the owning surface, with
++    /// damage hints.
++    ///
++    /// `damage_rects` describes the regions that changed since the last
++    /// present. On backends that support incremental presentation (e.g.,
++    /// Vulkan with `VK_KHR_incremental_present`), these are forwarded to the
++    /// compositor so it can limit repainting to the affected area.
++    ///
++    /// An empty slice is equivalent to calling [`present`](Self::present) —
++    /// the entire surface is considered damaged.
++    pub fn present_with_damage(mut self, damage_rects: &[wgt::DamageRect]) {
++        self.presented = true;
++        self.detail.present_with_damage(damage_rects);
++    }
++
+     #[cfg(custom)]
+     /// Returns custom implementation of SurfaceTexture (if custom backend and is internally T)
+     pub fn as_custom<T: crate::custom::SurfaceOutputDetailInterface>(&self) -> Option<&T> {
+diff --git a/src/backend/webgpu.rs b/src/backend/webgpu.rs
+index 4796bdb..bba561a 100644
+--- a/src/backend/webgpu.rs
++++ b/src/backend/webgpu.rs
+@@ -3948,6 +3948,10 @@ impl dispatch::SurfaceOutputDetailInterface for WebSurfaceOutputDetail {
+         // Swapchain is presented automatically on the web.
+     }
+ 
++    fn present_with_damage(&self, _damage_rects: &[wgt::DamageRect]) {
++        // Swapchain is presented automatically on the web.
++    }
++
+     fn texture_discard(&self) {
+         // Can't really discard the texture on the web.
+     }
+diff --git a/src/backend/wgpu_core.rs b/src/backend/wgpu_core.rs
+index 612a226..a3303af 100644
+--- a/src/backend/wgpu_core.rs
++++ b/src/backend/wgpu_core.rs
+@@ -3955,6 +3955,23 @@ impl dispatch::SurfaceOutputDetailInterface for CoreSurfaceOutputDetail {
+         }
+     }
+ 
++    fn present_with_damage(&self, damage_rects: &[wgt::DamageRect]) {
++        match self
++            .context
++            .0
++            .surface_present_with_damage(self.surface_id, damage_rects)
++        {
++            Ok(_status) => (),
++            Err(err) => {
++                self.context.handle_error_nolabel(
++                    &self.error_sink,
++                    err,
++                    "Surface::present_with_damage",
++                );
++            }
++        }
++    }
++
+     fn texture_discard(&self) {
+         match self.context.0.surface_texture_discard(self.surface_id) {
+             Ok(_status) => (),
+diff --git a/src/dispatch.rs b/src/dispatch.rs
+index d2b2366..7c2b830 100644
+--- a/src/dispatch.rs
++++ b/src/dispatch.rs
+@@ -579,6 +579,7 @@ pub trait SurfaceInterface: CommonTraits {
+ 
+ pub trait SurfaceOutputDetailInterface: CommonTraits {
+     fn present(&self);
++    fn present_with_damage(&self, damage_rects: &[wgt::DamageRect]);
+     fn texture_discard(&self);
+ }
+ 
+diff --git a/src/lib.rs b/src/lib.rs
+index 3462050..f95f1ad 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -133,7 +133,7 @@ pub use wgt::{
+     BlendState, BufferAddress, BufferBindingType, BufferSize, BufferTextureCopyInfo,
+     BufferTransition, BufferUsages, BufferUses, Color, ColorTargetState, ColorWrites,
+     CommandBufferDescriptor, CompareFunction, CompositeAlphaMode, CooperativeMatrixProperties,
+-    CooperativeScalarType, CopyExternalImageDestInfo, CoreCounters, DepthBiasState,
++    CooperativeScalarType, CopyExternalImageDestInfo, CoreCounters, DamageRect, DepthBiasState,
+     DepthStencilState, DeviceLostReason, DeviceType, DownlevelCapabilities, DownlevelFlags,
+     DownlevelLimits, Dx12BackendOptions, Dx12Compiler, Dx12SwapchainKind,
+     Dx12UseFrameLatencyWaitableObject, DxcShaderModel, DynamicOffset, ExperimentalFeatures,
