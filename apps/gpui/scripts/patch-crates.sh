@@ -34,7 +34,7 @@ while read -r name version checksum; do
     dir="patched/$name"
     [ "$(cat "$dir.stamp" 2>/dev/null)" = "$(stamp "$name" "$version" "$checksum")" ] && continue
 
-    echo "▸ Patching $name $version…"
+    echo "▸ Patching ${name} ${version}…"
     archive="patched/$name-$version.crate"
     curl -fsSL "https://static.crates.io/crates/$name/$name-$version.crate" -o "$archive"
     if [ "$(sha256 "$archive")" != "$checksum" ]; then
