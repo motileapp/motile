@@ -261,7 +261,7 @@ struct SpendingView: View {
     }
 
     static func count(_ value: Int) -> String {
-        value.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)))
+        value.abbreviated
     }
 }
 
