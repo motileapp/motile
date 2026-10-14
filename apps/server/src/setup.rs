@@ -76,7 +76,11 @@ fn install_agent(agent: Agent) -> anyhow::Result<()> {
         Agent::Codex => (CODEX_INSTALL, "codex login"),
     };
     println!("\nInstalling {}…", agent_name(agent));
-    let status = Command::new("sh").args(["-c", script]).status().context("sh isn't available.")?;
+    let status = Command::new("sh")
+        .args(["-c", script])
+        .env("CODEX_NON_INTERACTIVE", "1")
+        .status()
+        .context("sh isn't available.")?;
     if !status.success() {
         bail!("{} couldn't be installed. Install it by hand and run the command again.", agent_name(agent));
     }
