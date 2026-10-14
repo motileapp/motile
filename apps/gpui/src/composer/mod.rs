@@ -108,6 +108,8 @@ pub struct Composer {
     /// the worktree would start at.
     worktree_key: Option<String>,
     project_git: Option<motile_protocol::wire::GitStatus>,
+    /// The project whose skills were last listed ahead of the menu.
+    skills_key: Option<(String, String)>,
     /// How wide the composer is, as the thread lays it out.
     pub width: f32,
     skills: skills::SkillTyping,
@@ -144,6 +146,7 @@ impl Composer {
             strips: Rc::default(),
             worktree_key: None,
             project_git: None,
+            skills_key: None,
             width: theme::CONTENT_WIDTH,
             skills: skills::SkillTyping::after(picked),
             _subscriptions: subscriptions,
@@ -250,7 +253,18 @@ impl Composer {
         self.follow_approvals(window, cx);
         self.tick(tick, cx);
         self.follow_worktree_start(cx);
+        self.follow_skills_key(cx);
         cx.notify();
+    }
+
+    /// Has the skills of the composer's project listed once it has one, before its menu opens.
+    fn follow_skills_key(&mut self, cx: &mut Context<Self>) {
+        let key = self.store.read(cx).composer_skills_key();
+        if key == self.skills_key {
+            return;
+        }
+        self.skills_key = key;
+        self.store.update(cx, |store, _| store.prefetch_skills());
     }
 
     /// Asks what the draft's worktree would start at when it is another one, fetching first, and
@@ -897,7 +911,7 @@ impl Render for Composer {
                         )
                     }),
             )
-            .children(self.skill_menu(cx))
+            .child(self.skill_menu(cx))
             .children(top_strip.map(|strip| div().relative().child(measure(true, self.strips.clone())).child(strip)))
             .child(self.box_(thread.as_ref(), labels, window, cx))
             .children(

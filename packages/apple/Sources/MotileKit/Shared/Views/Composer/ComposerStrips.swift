@@ -34,7 +34,7 @@ struct ComposerStrip: ViewModifier {
 }
 
 /// The strip's outline, rounded on the two outer corners.
-private struct StripShape: Shape {
+struct StripShape: Shape {
     let edge: ComposerStrip.Edge
 
     func path(in rect: CGRect) -> Path {

@@ -1499,16 +1499,27 @@ impl Hub {
         Ok(Message::WorktreeStart { start: start.name().to_string(), problem: start.problem })
     }
 
-    /// The skills each account's agent can run in the project, as they listed them within
-    /// `SKILLS_FRESH`, or asked now. What an agent last listed stays while it doesn't answer.
-    pub async fn skills(&self, project_id: &str) -> anyhow::Result<Message> {
+    /// The skills each account's agent can run in the project, as they last listed them. Once
+    /// that is older than `SKILLS_FRESH` they are asked again behind the answer; only a project
+    /// they never listed waits for them.
+    pub async fn skills(self: &Arc<Self>, project_id: &str) -> anyhow::Result<Message> {
+        let known = self.lock_skills().get(project_id).cloned();
+        let Some((at, accounts)) = known else {
+            return Ok(Message::Skills { accounts: self.ask_skills(project_id).await? });
+        };
+        if at.elapsed() >= SKILLS_FRESH {
+            self.lock_skills().insert(project_id.to_string(), (Instant::now(), accounts.clone()));
+            let (hub, project_id) = (self.clone(), project_id.to_string());
+            tokio::spawn(async move { hub.ask_skills(&project_id).await });
+        }
+        Ok(Message::Skills { accounts })
+    }
+
+    /// Asks each account's agent for the skills it can run in the project, the accounts at once.
+    /// What an agent last listed stays while it doesn't answer.
+    async fn ask_skills(&self, project_id: &str) -> anyhow::Result<Vec<AccountSkills>> {
         let path = PathBuf::from(self.project_path(project_id).await?);
         let known = self.lock_skills().get(project_id).cloned();
-        if let Some((at, accounts)) = &known
-            && at.elapsed() < SKILLS_FRESH
-        {
-            return Ok(Message::Skills { accounts: accounts.clone() });
-        }
         let asks: Vec<_> = self
             .agent_accounts()
             .into_iter()
@@ -1536,7 +1547,7 @@ impl Hub {
             accounts.push(AccountSkills { account, skills });
         }
         self.lock_skills().insert(project_id.to_string(), (Instant::now(), accounts.clone()));
-        Ok(Message::Skills { accounts })
+        Ok(accounts)
     }
 
     /// Asks the agents for the skills of the thread's project unless they were, for a message that
@@ -1551,7 +1562,7 @@ impl Hub {
         };
         let Some(project_id) = project_id else { return };
         if !self.lock_skills().contains_key(&project_id) {
-            let _ = self.skills(&project_id).await;
+            let _ = self.ask_skills(&project_id).await;
         }
     }
 

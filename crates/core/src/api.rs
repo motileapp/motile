@@ -111,6 +111,12 @@ pub enum Command {
         account: String,
         before_cursor: String,
     },
+    /// Has the skills of the project's agents listed ahead of the composer's menu, which then
+    /// opens with them at once. Answers once they are.
+    PrefetchSkills {
+        server_id: String,
+        project_id: String,
+    },
     /// The `$name`s of `text` that are skills of the agent's `account` in the project. Answers
     /// with them as `chips`, each a `SkillChip`.
     SkillChips {

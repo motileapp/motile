@@ -37,6 +37,7 @@ struct ThreadScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .coordinateSpace(.named(ComposerView.roomSpace))
         .transcriptBehind(of: store, shown: !isStart, under: .vertical)
         .takingDroppedFiles()
         .background(Color.themeBackground.ignoresSafeArea())

@@ -14,6 +14,11 @@ struct ComposerView: View {
     #if os(iOS)
     @State private var focused = false
     #endif
+    /// How far the composer's top is from the top of the thread, where its skill menu has to end.
+    @State private var room: CGFloat = .infinity
+
+    /// The space the composer's room is measured in: the thread under its top bar.
+    static let roomSpace = "composerRoom"
 
     var body: some View {
         GlassGroup {
@@ -35,16 +40,22 @@ struct ComposerView: View {
             }
             .overlay(alignment: .top) {
                 // Hangs above the composer from its top edge, over the transcript.
-                if let menu = store.skillMenu {
+                if store.skillMenu != nil || store.skillMenuLoading {
                     Color.clear
                         .frame(height: 0)
-                        .overlay(alignment: .bottom) { SkillMenuStrip(menu: menu) }
+                        .overlay(alignment: .bottom) { SkillMenuStrip(menu: store.skillMenu, room: room) }
                 }
+            }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .named(Self.roomSpace)).minY
+            } action: { top in
+                room = top
             }
         }
         .composerOutlineShadow()
         .frame(maxWidth: Theme.composerWidth)
         .task(id: store.draftWorktreeKey) { store.readWorktreeStart(fetch: true) }
+        .task(id: store.composerSkillsKey) { store.prefetchSkills() }
         .onChange(of: store.draftKey) { store.closeSkillMenu() }
         .onChange(of: store.composerProject?.git) { store.readWorktreeStart(fetch: false) }
     }

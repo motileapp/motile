@@ -194,7 +194,10 @@ final class AppStore {
     var skillHighlight = 0
     /// The skill the composer's text puts in place of the word typed, once.
     var skillPick: SkillPick?
+    /// The menu's skills are asked for and haven't come in a moment, the first time on a server.
+    var skillMenuLoading = false
     @ObservationIgnored var skillMenusAsked = 0
+    @ObservationIgnored var skillMenusAnswered = 0
     /// The word whose menu was put away, which stays away until another is typed.
     @ObservationIgnored var skillMenuDismissed: String?
     /// Counts up when a thread or a draft is brought to the front, which puts away a sidebar

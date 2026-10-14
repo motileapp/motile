@@ -14,12 +14,16 @@ use gpui_kit::*;
 use super::{Composer, strips};
 use crate::store::skills::{SkillPick, SkillRow, SkillSpan, skill_word};
 use crate::theme::{self, Radius, colors};
-use crate::ui::{Chip, icons, skill_chip};
+use crate::ui::{Chip, Spinner, icons, skill_chip};
 
 const ROW_HEIGHT: f32 = 32.;
 const INSET: f32 = 4.;
 /// As many rows as show before the rest scroll, the last cut in half to say there are more.
 const SHOWN_ROWS: f32 = 7.5;
+/// The fewest rows shown, however little room there is.
+const FEWEST_ROWS: f32 = 1.5;
+/// The room kept between the menu and the top bar.
+const CLEARANCE: f32 = 8.;
 
 #[derive(Default)]
 pub struct SkillTyping {
@@ -31,12 +35,14 @@ pub struct SkillTyping {
     pub pasted: Rc<Cell<bool>>,
     scroll: UniformListScrollHandle,
     lit: usize,
+    /// How far the composer's top was last drawn under the top bar, the room the menu has.
+    room: Rc<Cell<f32>>,
 }
 
 impl SkillTyping {
     /// Before any skill is put in but the ones picked up to `picked`.
     pub fn after(picked: u64) -> Self {
-        Self { picked, ..Self::default() }
+        Self { picked, room: Rc::new(Cell::new(f32::INFINITY)), ..Self::default() }
     }
 }
 
@@ -119,14 +125,45 @@ impl Composer {
     }
 
     /// The skills that fit the word typed, on top of the composer: the best first, each with
-    /// what it does and where it comes from.
-    pub(super) fn skill_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// what it does and where it comes from, or that they are loading. It ends below the top bar,
+    /// however little room it has.
+    pub(super) fn skill_menu(&self, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let skills = &self.store.read(cx).skills;
-        let rows = Rc::new(skills.menu.as_ref()?.rows.clone());
-        let highlight = skills.highlight;
-        let height = (rows.len() as f32).min(SHOWN_ROWS) * ROW_HEIGHT + INSET * 2.;
-        let list = uniform_list(
+        let content = match &skills.menu {
+            Some(menu) => Some(self.skill_list(Rc::new(menu.rows.clone()), skills.highlight, cx)),
+            None if skills.loading => Some(loading_row(cx)),
+            None => None,
+        };
+        let strip = content.map(|content| {
+            let strip = strips::strip(true, None, cx)
+                .id("skill-menu-strip")
+                .occlude()
+                .shadow(c.shadow(theme::ShadowSize::Lg, theme::Opacity::Shadow))
+                .child(div().flex_1().min_w_0().child(content));
+            div().absolute().bottom_0().left_0().right_0().child(strip)
+        });
+        let room = self.skills.room.clone();
+        let measure = canvas(
+            move |bounds, window, _| {
+                let top = crate::window_frame::content_bounds(window).top() + px(theme::TOP_BAR);
+                let measured = f32::from(bounds.top() - top);
+                if (room.get() - measured).abs() > 0.5 {
+                    room.set(measured);
+                    window.refresh();
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full();
+        div().absolute().top_0().left_0().right_0().h(px(0.)).child(measure).children(strip).into_any_element()
+    }
+
+    fn skill_list(&self, rows: Rc<Vec<SkillRow>>, highlight: usize, cx: &mut Context<Self>) -> AnyElement {
+        let fitting = ((self.skills.room.get() - CLEARANCE - INSET * 2.) / ROW_HEIGHT - 0.5).floor() + 0.5;
+        let shown = (rows.len() as f32).min(SHOWN_ROWS).min(fitting.max(FEWEST_ROWS));
+        uniform_list(
             "skill-menu",
             rows.len(),
             cx.processor(move |this, range: Range<usize>, _, cx| {
@@ -135,15 +172,9 @@ impl Composer {
         )
         .track_scroll(&self.skills.scroll)
         .w_full()
-        .h(px(height))
-        .py(px(INSET));
-        let strip = strips::strip(true, None, cx)
-            .id("skill-menu-strip")
-            .occlude()
-            .shadow(c.shadow(theme::ShadowSize::Lg, theme::Opacity::Shadow))
-            .child(div().flex_1().min_w_0().child(list));
-        let hanging = div().absolute().bottom_0().left_0().right_0().child(strip);
-        Some(div().absolute().top_0().left_0().right_0().h(px(0.)).child(hanging).into_any_element())
+        .h(px(shown * ROW_HEIGHT + INSET * 2.))
+        .py(px(INSET))
+        .into_any_element()
     }
 
     fn skill_row(&self, index: usize, row: &SkillRow, lit: bool, cx: &mut Context<Self>) -> Stateful<Div> {
@@ -199,6 +230,23 @@ impl Composer {
                     .child(Chip::new(row.source.clone()).icon(row.symbol.clone())),
             )
     }
+}
+
+/// The menu's one row while the skills are asked for.
+fn loading_row(cx: &App) -> AnyElement {
+    let c = colors(cx);
+    div()
+        .w_full()
+        .h(px(ROW_HEIGHT + INSET * 2.))
+        .px(px(INSET + 10.))
+        .flex()
+        .items_center()
+        .gap(px(8.))
+        .text_size(px(skill_chip::TEXT_SIZE))
+        .text_color(c.muted_foreground)
+        .child(Spinner::new(skill_chip::TEXT_SIZE).render(cx))
+        .child("Loading skills")
+        .into_any_element()
 }
 
 fn token(name: &str, label: impl Into<SharedString>) -> InlineToken {

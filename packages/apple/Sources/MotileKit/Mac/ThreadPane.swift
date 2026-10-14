@@ -35,6 +35,7 @@ struct ThreadPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .coordinateSpace(.named(ComposerView.roomSpace))
         .transcriptBehind(of: store, shown: !isStart, under: [])
         .takingDroppedFiles()
         .overlay(alignment: .topLeading) { topBar }
