@@ -63,8 +63,9 @@ struct ComposerView: View {
             .background { typingArea }
 
             ViewThatFits(in: .horizontal) {
-                controls(compact: false)
-                controls(compact: true)
+                controls(settingsLabels: true, modelLabel: true)
+                controls(settingsLabels: false, modelLabel: true)
+                controls(settingsLabels: false, modelLabel: false)
             }
             #else
             aboveText
@@ -201,15 +202,15 @@ struct ComposerView: View {
     }
 
     #if os(macOS)
-    /// The row under the text. When it is too narrow for all of it, the model and the access
-    /// are only their icons. The space between its controls and around them is their margins,
-    /// so each takes clicks up to the next one and to the composer's edges.
-    private func controls(compact: Bool) -> some View {
+    /// The row under the text. When it is too narrow for all of it, the effort and the access
+    /// are only their icons, then the model too. The space between its controls and around them
+    /// is their margins, so each takes clicks up to the next one and to the composer's edges.
+    private func controls(settingsLabels: Bool, modelLabel: Bool) -> some View {
         HStack(spacing: 0) {
-            modelMenu(compact: compact)
+            modelMenu(labeled: modelLabel)
             ComposerDivider()
-            effortMenu
-            accessMenu(compact: compact)
+            effortMenu(labeled: settingsLabels)
+            accessMenu(labeled: settingsLabels)
             typingArea
                 .frame(minWidth: 10, maxWidth: .infinity, maxHeight: .infinity)
             ActionButton(icon: .paperclip, help: "Attach files", round: true, margin: Self.margin(trailing: 4)) { chooseFiles() }
@@ -233,14 +234,14 @@ struct ComposerView: View {
         }
     }
 
-    @ViewBuilder private func modelMenu(compact: Bool) -> some View {
+    @ViewBuilder private func modelMenu(labeled: Bool) -> some View {
         let current = store.composerModel
         let account = store.composerAccount
         let name = store.composerModelLabel
         let margin = Self.margin(leading: 8, trailing: 4)
         let logo = current.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         ActionMenu(
-            compact && current != nil ? nil : name, picture: logo, help: store.shortcuts.help(current?.name ?? name, "modelPicker.toggle"),
+            labeled || current == nil ? name : nil, picture: logo, help: store.shortcuts.help(current?.name ?? name, "modelPicker.toggle"),
             symbolSize: ControlSize.regular.symbol, gap: 5, margin: margin
         ) {
             ForEach(store.composerChoices, id: \.account.id) { choices in
@@ -258,11 +259,11 @@ struct ComposerView: View {
         .shortcutTarget("modelPicker.toggle")
     }
 
-    @ViewBuilder private var effortMenu: some View {
+    @ViewBuilder private func effortMenu(labeled: Bool) -> some View {
         if let model = store.composerModel, !model.efforts.isEmpty {
             let current = store.composerEffort ?? ""
             ActionMenu(
-                Self.effortLabel(current), icon: Self.effortSymbol(current), help: store.shortcuts.help("Reasoning effort", "composer.effort"),
+                labeled ? Self.effortLabel(current) : nil, icon: Self.effortSymbol(current), help: store.shortcuts.help("Reasoning effort", "composer.effort"),
                 symbolSize: ControlSize.small.symbol, gap: 5, margin: Self.margin(leading: 4, trailing: 4)
             ) {
                 ForEach(model.effortChoices, id: \.self) { effort in
@@ -277,9 +278,9 @@ struct ComposerView: View {
         }
     }
 
-    private func accessMenu(compact: Bool) -> some View {
+    private func accessMenu(labeled: Bool) -> some View {
         ActionMenu(
-            compact ? nil : store.composerAccess.label, icon: store.composerAccess.symbol,
+            labeled ? store.composerAccess.label : nil, icon: store.composerAccess.symbol,
             help: store.shortcuts.help(store.composerAccess.detail, "composer.access"),
             symbolSize: ControlSize.small.symbol, gap: 5, margin: Self.margin(leading: 4)
         ) {
