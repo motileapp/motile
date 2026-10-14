@@ -1,15 +1,16 @@
 name: Release
 
-# Builds the server and the auth server for Linux, and the server and the client for Macs, and publishes
-# them as a GitHub release, on every push to main that touches them. The version is the one
-# scripts/release-version.sh gives the commit. The installer downloads the server from the latest
-# release, and the download button on motile.app links to the client in it. A newer push takes the
-# place of a release that is still on its way.
+# Builds the server and the auth server for Linux, the server and the client for Macs, and the GPUI app
+# for Linux and Windows, and publishes them as a GitHub release, on every push to main that touches
+# them. The version is the one scripts/release-version.sh gives the commit. The installer downloads the
+# server from the latest release, and the download button on motile.app links to the clients in it. A
+# newer push takes the place of a release that is still on its way.
 on:
   push:
     branches: [main]
     paths:
       - apps/macos/**
+      - apps/gpui/**
       - packages/apple/**
       - crates/**
       - apps/server/**
@@ -63,6 +64,45 @@ jobs:
           name: linux-${{ matrix.target }}
           path: "*.tar.gz"
 
+  gpui:
+    strategy:
+      matrix:
+        include:
+          # The oldest Ubuntu runner, so that the GPUI app runs on systems with an older glibc too.
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Version
+        run: scripts/release-version.sh
+      - name: Toolchain
+        run: rustup update stable --no-self-update && rustup default stable
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libxcb1-dev libx11-xcb-dev libfontconfig-dev libfreetype-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/gpui -> target
+          key: ${{ matrix.target }}
+      - name: Package
+        run: apps/gpui/scripts/package.sh ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpui-${{ matrix.target }}
+          path: apps/gpui/build/Motile-GPUI-*
+
   macos:
     uses: ./.github/workflows/macos.yml
     with:
@@ -71,7 +111,7 @@ jobs:
 
   # The release is the latest one as soon as it exists, so it is made once, with every file.
   publish:
-    needs: [linux, macos]
+    needs: [linux, gpui, macos]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -86,4 +126,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v$(scripts/release-version.sh)"
-          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --generate-notes artifacts/*.tar.gz artifacts/Motile.zip
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --generate-notes artifacts/*.tar.gz artifacts/*.zip

@@ -17,7 +17,7 @@ These programs make it up, plus the code the clients share:
 | Mac app (`apps/macos`) | The user's Mac | The interface |
 | iOS app (`apps/ios`) | The user's iPhone and iPad | The interface |
 | Apple kit (`packages/apple`) | Inside the Mac and the iOS app | Their state and their views |
-| GPUI app (`apps/gpui`) | The user's Mac | The Mac app again, in Rust with GPUI. A trial: no workflow builds it |
+| GPUI app (`apps/gpui`) | The user's Linux machines and Windows PCs | The Mac app again, in Rust with GPUI |
 | Core (`crates/core`) | Inside every client | Account, connections, sync, the local cache, rendering transcripts |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
@@ -64,9 +64,9 @@ What the programs agree on.
 
 The design tokens. `tokens.json` is the one source of every colour, opacity, shadow and radius
 in the repo; `pnpm tokens` (`build.mjs`) writes it out as `tokens.css` (plain variables, for the
-auth page), `theme.css` (Tailwind, for the web projects) and the clients' `Tokens.swift`. A
-colour that only one place needs, like the window buttons of the demo or the icons' tile,
-is added to the JSON, never written where it is used.
+auth page), `theme.css` (Tailwind, for the web projects), the clients' `Tokens.swift` and the
+GPUI app's `apps/gpui/src/tokens.rs`. A colour that only one place needs, like the window buttons
+of the demo or the icons' tile, is added to the JSON, never written where it is used.
 
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
 
@@ -78,8 +78,10 @@ shadcn's own colours, opacities and radii are gone from the theme.
   colours, shadows and radii. An opacity is one of the tokens, as Tailwind's own modifier:
   `bg-overlay/(--opacity-overlay)`, `opacity-(--opacity-disabled)`. Dark is the default; the
   theme switch keeps the choice in a cookie on motile.app, which both read.
-- `apps/marketing` ships no JavaScript but the theme switch and the demo: `src/components/demo`
-  is the Mac app's window in React, with made-up threads. `public/i` is the installer, and `public/install.sh` its old address.
+- `apps/marketing` ships no JavaScript but the theme switch, the download button and the demo.
+  The download button (`src/components/download-button.tsx`) offers the client for the reader's
+  system and every other one behind its chevron, from `DOWNLOADS` in `src/lib/links.ts`.
+  `src/components/demo` is the Mac app's window in React, with made-up threads. `public/i` is the installer, and `public/install.sh` its old address.
   `scripts/icons.mjs` draws the icons of both web projects: `pnpm --filter motile-marketing icons`.
   `scripts/preview.mjs` draws the link preview image of both from the `/preview/` page, the
   tagline over the demo: `pnpm --filter motile-marketing preview-image`. Run it when the demo
@@ -241,34 +243,49 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 
 ### apps/gpui (Rust: GPUI with GPUI Kit)
 
-Paused: see the rule under General Rules.
-
-The Mac app ported to Rust. A Cargo workspace of its own with its own `Cargo.lock`, so the
-checks and the workflows leave it alone; run `cargo` from `apps/gpui`. It uses `crates/core` as
-a Rust library, and its data folder is `Motile GPUI`, so it is a device of its own beside the
-Mac app.
+The Mac app ported to Rust, the client on Linux and Windows. A Cargo workspace of its own with its
+own `Cargo.lock`: run `cargo` from `apps/gpui`. CI checks it on Linux and Windows, and every release
+carries it for both, built by `scripts/package.sh` (`Motile-GPUI-linux-x86_64.tar.gz`,
+`-linux-aarch64.tar.gz`, `-windows-x86_64.zip`, `-windows-aarch64.zip`), which its updater installs.
+It builds on a Mac too, where its dev app runs, but no release carries it for macOS: the Mac app is
+the client there. It uses `crates/core` as a Rust library. Its data is in
+`%LOCALAPPDATA%\Motile GPUI` on Windows, `~/.local/share/motile-gpui` on Linux and `Motile GPUI`
+on a Mac, so it is a device of its own. On Linux and Windows it takes `motile://` links itself, and
+a second launch hands its link to the running one (`instance.rs`).
 
 - `bridge.rs`: runs the core and prepares a transcript's rows off the main thread. `store/` is
   the state the views show, as `AppStore.swift` is, a module per area (`threads.rs`, `git.rs`,
   `projects.rs`, `pull_requests.rs`, `linear.rs`, `settings.rs`, `sidebar.rs`).
-- `root.rs`, `main_view.rs`, `app_menu.rs`: the window, its layout, the menu bar and shortcuts.
+- `root.rs`, `main_view.rs`, `app_menu.rs`: the window, its layout and the menu bar.
+  `keyboard.rs` runs the core's keybindings ahead of the menus and the focused view, as
+  `ShortcutMonitor.swift` does, with the commands in `store/commands.rs` and the rules in
+  `store/shortcuts.rs`, and does what Esc means when nothing focused claims it.
   `settings/` is the settings route over the window, with `usage.rs` the Usage chart.
-- `theme.rs`: `Theme.swift` in Rust: the colours, the `Surface` ladder, `ControlSize` and
-  `Radius`. The typeface is DM Sans, bundled in `assets/fonts`.
+- `theme.rs`: `Theme.swift` in Rust: the tokens of `tokens.rs` with the colours made from them,
+  the `Surface`s and their layers, `ControlSize`, and shadows. The typeface is DM Sans, bundled in
+  `assets/fonts`.
 - `ui/`: the component library of `Shared/Views/UI` (`control.rs`: `ActionButton`,
-  `ActionMenu`, `Spinner`, `Chip`, `Switch`, `Segmented`, `InputField`, cards), the menus the
-  app draws itself (`menu.rs`), alerts and sheets, the Lucide icons by the names of
-  `Symbol.swift` (`icons.rs`). Nothing native is imitated: a menu, an alert or a sheet is drawn
-  in the app's own style.
+  `ActionMenu`, `Spinner`, `Chip`, `Switch`, `Segmented`, `InputField`, `TextArea`, cards;
+  `parts.rs`: `KeyCaps`, `CopyButton`, `CommandBox`, `PickMark`, `FadingScroll`, `CheckMenu`),
+  the row light (`Highlight` in `mod.rs`), the menus the app draws itself (`menu.rs`), the modal
+  stack and confirmations (`modal.rs`), the Lucide icons by the names of `Symbol.swift`
+  (`icons.rs`). Nothing native is imitated: a menu or a modal is drawn in the app's own style.
 - `transcript/`: `model.rs` (the rows and their splices into GPUI's list), `prose.rs`,
   `rows.rs`, `view.rs`.
-- `composer/`, `sidebar.rs`, `thread/`, `git.rs`, `command_panel.rs`, `media/`,
-  `onboarding.rs`, `folder_picker.rs`: the views of the same names in the Apple kit.
+- `composer/`, `sidebar/`, `thread/`, `git.rs`, `command_panel.rs`, `media/`,
+  `onboarding.rs`: the views of the same names in the Apple kit. `app_window.rs` keeps the
+  window invisible until it has something to show and its frame across launches, `lifecycle.rs`
+  tells the core when the Mac wakes or changes networks. `window_frame.rs` is the window's
+  buttons in the top bar where the desktop draws no title bar (GNOME under Wayland); GPUI Kit
+  draws the edges that resize it.
 - `panel/`: the side panel: `state.rs` (the tabs, as `SidePanel.swift`), `view.rs` (the chrome
   and the changes, files and agents tabs), `code_view.rs`, `pull_request.rs`,
   `pull_request_list.rs`, `line_comment.rs` and `linear.rs`.
-- `scripts/dev-app.sh` opens its dev app on a stack of its own, with `--mac` the Mac app beside
-  it to compare. `scripts/build-app.sh` builds `Motile GPUI.app`.
+- `scripts/dev-app.sh` opens its dev app on the Mac's dev stack (`apps/macos/scripts/dev-stack.sh`),
+  a device of its own with its data in `apps/macos/build/dev/gpui`; `--mac` opens the Mac's dev
+  app beside it to compare. `scripts/shot.sh` takes a picture of it, and `scripts/do.sh "click 85
+  330" "key cmd-k" "type hello"` clicks, types and runs commands in it, through `dev_drive.rs`.
+  `scripts/build-app.sh` builds `Motile GPUI.app`.
 
 ## General Rules:
 
@@ -294,25 +311,24 @@ Mac app.
 - The marketing site's demo (`apps/marketing/src/components/demo`) shows the Mac app as it is.
   When a change alters anything it shows (a view, a colour, a label, a state), update the demo in
   the same change.
-- The Mac app and the iOS app do the same things. What one gets, the other gets in the same
-  change, and what both do is written once, in `packages/apple/Sources/MotileKit/Shared`. Only
-  what a system does differently is written twice.
+- The Mac app, the iOS app and the GPUI app do the same things. What one gets, the others get in
+  the same change. What the two Apple clients do is written once, in
+  `packages/apple/Sources/MotileKit/Shared`, and only what a system does differently is written
+  twice; the GPUI app writes it again in Rust, as the Mac app does it.
 - A button, a menu, a spinner, a chip or a field in the clients comes from
-  `packages/apple/Sources/MotileKit/Shared/Views/UI`. Its size is a `ControlSize`, never a
-  number, and nothing is smaller than `.small`. A view does not style a control by hand; what is
-  missing is added to the component. A button inside something is as far from its top and bottom
-  as from its side. A button that waits is `pending`: it shows the spinner, or turns its arrow
-  if its symbol `turns`, and a spinner is never followed by "…".
-- Ignore `apps/gpui` for now. We are not working on it currently: do not read it, change it or
-  keep it in step with the Mac app unless we ask for it.
+  `packages/apple/Sources/MotileKit/Shared/Views/UI`, or `apps/gpui/src/ui` in the GPUI app. Its
+  size is a `ControlSize`, never a number, and nothing is smaller than `.small`. A view does not
+  style a control by hand; what is missing is added to the component. A button inside something is
+  as far from its top and bottom as from its side. A button that waits is `pending`: it shows the
+  spinner, or turns its arrow if its symbol `turns`, and a spinner is never followed by "…".
 - Do not leave paragraphs of comments on top of the code. You should try to avoid them as much
   as possible with understandable function names and code. If they are necessary even then, make
   them concise. Remove such comments when you come by them in the codebase. Comments should
   always move with code, not be left behind.
 - Use guard statement patterns in any code you write.
 - Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
-  and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css` and
-  `Tokens.swift`.
+  and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css`,
+  `Tokens.swift` and `apps/gpui/src/tokens.rs`.
   The shadcn components in `src/components/ui` are ours once added: they are rewritten on the
   design tokens and edited like any view. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.
@@ -368,6 +384,8 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
     pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
     packages/apple/scripts/check-ui.sh                    # after changing the clients' views
+    (cd apps/gpui && cargo fmt && cargo clippy --all-targets && cargo test)
+                                                          # after changing the GPUI app, crates/core or crates/protocol
 
 The `Release` workflow runs the demo on every push to `main` that touches the client or the server:
 
@@ -441,15 +459,15 @@ Linear the real one, to connect a workspace of your own.
 
 ## Releasing and deploying
 
-Every push to `main` that touches the server, the auth server or the Mac app is a release, for
-now. The `Release` workflow publishes the server and the auth server for Linux, and the server and
-the client for Macs, as a GitHub release. Its version is the first two numbers of `version` in
-`Cargo.toml` and the number of commits as the third (`scripts/release-version.sh`), so set
-`version` only to change the first two. The installer and the download button always fetch the
-latest release, and clients and servers compare their own version with it to offer an update. The
-client in a release is signed with the Developer ID certificate and notarized, using the repository's
-`APPLE_*` secrets; running the `macOS` workflow by hand with `sign` does the same without a
-release.
+Every push to `main` that touches the server, the auth server, the Mac app or the GPUI app is a
+release. The `Release` workflow publishes the server and the auth server for Linux, the server and
+the client for Macs, and the GPUI app for Linux and Windows, as a GitHub release. Its
+version is the first two numbers of `version` in `Cargo.toml` and the number of commits as the third
+(`scripts/release-version.sh`), so set `version` only to change the first two. The installer and the
+download button always fetch the latest release, and clients and servers compare their own version
+with it to offer an update. The Mac app in a release is signed with the Developer ID certificate
+and notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with
+`sign` does the same without a release.
 
 Every push to `main` that touches the iOS app uploads it to TestFlight
 (`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID`

@@ -3,24 +3,69 @@
 use gpui_kit::prelude::*;
 use motile_core::api::{AccountView, Command};
 
-use super::{ServerUpdate, Store};
-use crate::models::{EnrollToken, Server, is_older, now};
+use motile_protocol::wire::RestartWhen;
+
+use super::Store;
+use crate::models::{EnrollToken, Server, ServerUpdate, is_older, now};
 
 impl Store {
     pub(super) fn apply_account(&mut self, account: AccountView, cx: &mut Context<Self>) {
         let was_signed_in = self.account.signed_in;
+        let picture_before = self.account.user.as_ref().and_then(|user| user.picture.clone());
         self.account = account;
         if was_signed_in && !self.account.signed_in {
             self.open_empty_draft(cx);
             self.enroll_token = None;
+            self.usage = super::usage::Usage::default();
+        }
+        let picture = self.account.user.as_ref().and_then(|user| user.picture.clone());
+        if picture != picture_before || (picture.is_some() && self.account_picture.is_none()) {
+            self.fetch_account_picture(picture, cx);
         }
     }
 
-    pub(super) fn apply_servers(&mut self, servers: Vec<Server>) {
+    /// Keeps the account's picture as a file, for the sidebar's account button. It is fetched
+    /// once for each address.
+    fn fetch_account_picture(&mut self, url: Option<String>, cx: &mut Context<Self>) {
+        self.account_picture = None;
+        let Some(url) = url else { return };
+        let file = self.data_dir.join(format!("account-picture-{:016x}", picture_key(&url)));
+        if file.exists() {
+            self.account_picture = Some(file);
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let saved = file.clone();
+            let fetched = cx.background_executor().spawn(async move { download(&url, &saved) }).await;
+            if !fetched {
+                return;
+            }
+            let _ = this.update(cx, |store, cx| {
+                store.account_picture = Some(file);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn apply_servers(&mut self, servers: Vec<Server>, cx: &mut Context<Self>) {
+        let composer_was_connected = self.composer_server().is_some_and(Server::connected);
         self.servers = servers;
+        if !composer_was_connected && self.composer_server().is_some_and(Server::connected) {
+            self.read_git(
+                true,
+                None::<fn(&mut Store, Vec<motile_protocol::wire::ChangedFile>, &mut Context<Store>)>,
+                cx,
+            );
+            self.read_worktree_start(true);
+        }
         let known: std::collections::HashSet<String> = self.servers.iter().map(|server| server.id.clone()).collect();
         self.projects.retain(|project| known.contains(&project.server_id));
-        self.threads.retain(|_, thread| known.contains(&thread.server_id));
+        self.no_projects.retain(|project| known.contains(&project.server_id));
+        if self.threads.values().any(|thread| !known.contains(&thread.server_id)) {
+            let threads = std::mem::take(&mut self.threads);
+            self.set_threads(threads.into_iter().filter(|(_, thread)| known.contains(&thread.server_id)).collect());
+        }
         // A server that is back with another version has finished updating.
         for server in self.servers.iter().filter(|server| server.connected()) {
             let finished = self
@@ -31,6 +76,7 @@ impl Store {
                 self.server_updates.remove(&server.id);
             }
         }
+        self.show_server_updates(false);
         self.ensure_draft_project();
         // The server has arrived; the install command has done its job.
         if self.shows_add_server && self.servers.len() > self.add_server_count {
@@ -52,7 +98,7 @@ impl Store {
                 store.sign_in_failed("The sign-in couldn't be started.");
                 return;
             };
-            let Some((session, answer)) = crate::sign_in::start(&url) else {
+            let Some((session, answer)) = crate::sign_in::start(&url, motile_protocol::APP_REDIRECT, cx) else {
                 // Without the system's sheet the browser sends the sign-in back to `motile://auth`.
                 cx.open_url(&url);
                 return;
@@ -72,6 +118,12 @@ impl Store {
             .detach();
         });
         cx.notify();
+    }
+
+    /// Gives up waiting for the browser, which can't say that the user left it.
+    pub fn cancel_sign_in(&mut self) {
+        self.sign_in_session = None;
+        self.signing_in = false;
     }
 
     /// The browser has sent the sign-in back to the app.
@@ -98,6 +150,7 @@ impl Store {
     }
 
     pub fn sign_out(&mut self, cx: &mut Context<Self>) {
+        self.close_settings();
         self.drafts.clear();
         self.attachments_by_key.clear();
         self.thread_drafts.clear();
@@ -110,12 +163,24 @@ impl Store {
     pub fn prepare_to_add_server(&mut self) {
         self.add_server_count = self.servers.len();
         self.send(Command::WatchServers { on: true });
-        if self.enroll_token.as_ref().is_some_and(|token| token.expires_at - now() > 600.) {
+        if self.enroll_token.as_ref().is_some_and(|token| !token.is_expired(now())) {
             return;
         }
-        self.ask(Command::CreateEnrollToken, |store, result, _| match result {
-            Ok(value) => store.enroll_token = serde_json::from_value::<EnrollToken>(value).ok(),
-            Err(error) => store.fail(error),
+        self.regenerate_enroll_token();
+    }
+
+    /// Asks for a new install command, for when the last one has expired.
+    pub fn regenerate_enroll_token(&mut self) {
+        if self.enroll_token_pending {
+            return;
+        }
+        self.enroll_token_pending = true;
+        self.ask(Command::CreateEnrollToken, |store, result, _| {
+            store.enroll_token_pending = false;
+            match result {
+                Ok(value) => store.enroll_token = serde_json::from_value::<EnrollToken>(value).ok(),
+                Err(error) => store.fail(error),
+            }
         });
     }
 
@@ -132,17 +197,33 @@ impl Store {
         server.connected() && is_older(&server.version, self.updater.latest.as_deref())
     }
 
-    /// Has the server install the newest release and start it.
-    pub fn update_server(&mut self, server: &Server) {
-        if self.server_updates.contains_key(&server.id) {
+    /// The update a server is putting in place: as it says itself, or as this client started it.
+    pub fn server_update<'a>(&'a self, server: &'a Server) -> Option<&'a ServerUpdate> {
+        server.update.as_ref().or_else(|| self.server_updates.get(&server.id))
+    }
+
+    /// Whether an agent works on the server now.
+    pub fn is_busy(&self, server: &Server) -> bool {
+        self.threads.values().any(|thread| thread.server_id == server.id && thread.busy())
+    }
+
+    /// Has the server install the newest release and start it: `when` its agents work, once they
+    /// have finished or at once. A server that can't choose refuses while they work.
+    pub fn update_server(&mut self, server: &Server, when: RestartWhen) {
+        let current = self.server_update(server);
+        if current.is_some_and(|update| update.waiting) && when == RestartWhen::Now {
+            return self.restart_now(server);
+        }
+        if current.is_some() {
             return;
         }
         let id = server.id.clone();
-        self.server_updates
-            .insert(id.clone(), ServerUpdate { from: server.version.clone(), fraction: None, restarting: false });
-        self.ask(Command::UpdateServer { server_id: id.clone() }, move |store, result, cx| match result {
+        self.server_updates.insert(id.clone(), ServerUpdate::new(&server.version));
+        let when = server.can_choose_restart().then_some(when);
+        self.ask(Command::UpdateServer { server_id: id.clone(), when }, move |store, result, cx| match result {
             Ok(_) => {
                 if let Some(update) = store.server_updates.get_mut(&id) {
+                    update.waiting = false;
                     update.restarting = true;
                 }
                 // If the server never says it is back, the row stops waiting for it.
@@ -164,6 +245,17 @@ impl Store {
         });
     }
 
+    /// Has a server that waits for its agents to update stop them and restart now. The request
+    /// that started the update answers once it restarts.
+    fn restart_now(&mut self, server: &Server) {
+        let command = Command::UpdateServer { server_id: server.id.clone(), when: Some(RestartWhen::Now) };
+        self.ask(command, |store, result, _| {
+            if let Err(error) = result {
+                store.fail(error);
+            }
+        });
+    }
+
     pub fn remove_server(&mut self, server: &Server) {
         self.ask(Command::RemoveServer { server_id: server.id.clone() }, |store, result, _| {
             if let Err(error) = result {
@@ -171,4 +263,27 @@ impl Store {
             }
         });
     }
+}
+
+fn picture_key(url: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    url.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Fetches the file at `url` into `file`. Whether it did.
+fn download(url: &str, file: &std::path::Path) -> bool {
+    motile_protocol::tls::install();
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return false };
+    let bytes = runtime.block_on(async {
+        let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().ok()?;
+        let response = client.get(url).send().await.ok()?.error_for_status().ok()?;
+        response.bytes().await.ok()
+    });
+    let Some(bytes) = bytes.filter(|bytes| !bytes.is_empty()) else { return false };
+    if let Some(folder) = file.parent() {
+        let _ = std::fs::create_dir_all(folder);
+    }
+    std::fs::write(file, bytes).is_ok()
 }

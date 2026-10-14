@@ -1,78 +1,65 @@
-//! The menu bar and the app's shortcuts. The menus follow the store: their titles say what an
-//! item would do now, and what can't be done is greyed.
+//! The menu bar. Its items run the keyboard shortcuts' commands and show their keys as the user
+//! set them; their titles say what an item would do now, and what can't be done is greyed.
 
 use gpui_kit::component::input;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use crate::panel::state::PanelTab;
 use crate::store::{PanelPage, Store};
 
 actions!(
     motile,
     [
+        About,
+        Help,
         Quit,
         Hide,
         HideOthers,
         ShowAll,
-        OpenSettings,
         CheckForUpdates,
-        NewThread,
-        NewThreadInProject,
-        GoToThread,
-        ShowCommands,
-        Close,
-        ToggleSidebar,
-        ToggleSidePanel,
-        ToggleSidePanelMaximized,
-        ShowChanges,
-        ShowFiles,
-        ShowAgents,
-        ShowPullRequest,
-        ShowAllPullRequests,
-        NewTab,
-        ShowNextTab,
-        ShowPreviousTab,
-        ToggleFullScreen,
-        ToggleDone,
-        Stop,
         AddProject,
         AddServer,
+        ToggleFullScreen,
         Minimize,
-        Zoom,
+        Zoom
     ]
 );
 
+/// Runs a keyboard shortcut's command from the menu.
+#[derive(Clone, PartialEq, Debug, gpui_kit::Action)]
+#[action(namespace = motile, no_json)]
+pub struct Perform(pub &'static str);
+
+/// Opens the command panel on the page of a command that toggles it: the menu only ever opens
+/// it, where its keys open and close it.
+#[derive(Clone, PartialEq, Debug, gpui_kit::Action)]
+#[action(namespace = motile, no_json)]
+pub struct OpenPanel(pub &'static str);
+
+/// The page of a command that toggles the command panel.
+fn panel_page(command: &str) -> Option<PanelPage> {
+    match command {
+        "threadPicker.toggle" => Some(PanelPage::Threads),
+        "commandPalette.toggle" => Some(PanelPage::Commands),
+        _ => None,
+    }
+}
+
+/// The context of the menus' keys. No view has it, so the keys only label the menus: a key press
+/// meets the rules in `keyboard` first.
+const MENU_KEYS: &str = "MenuKeys";
+
 pub fn install(store: &Entity<Store>, cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("secondary-q", Quit, None),
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
-        KeyBinding::new("cmd-,", OpenSettings, None),
-        KeyBinding::new("cmd-n", NewThread, None),
-        KeyBinding::new("shift-cmd-n", NewThreadInProject, None),
-        KeyBinding::new("cmd-p", GoToThread, None),
-        KeyBinding::new("cmd-k", ShowCommands, None),
-        KeyBinding::new("cmd-w", Close, None),
-        KeyBinding::new("ctrl-cmd-s", ToggleSidebar, None),
-        KeyBinding::new("alt-cmd-b", ToggleSidePanel, None),
-        KeyBinding::new("shift-alt-cmd-b", ToggleSidePanelMaximized, None),
-        KeyBinding::new("cmd-d", ShowChanges, None),
-        KeyBinding::new("shift-cmd-e", ShowFiles, None),
-        KeyBinding::new("shift-cmd-a", ShowAgents, None),
-        KeyBinding::new("shift-cmd-r", ShowPullRequest, None),
-        KeyBinding::new("shift-alt-cmd-r", ShowAllPullRequests, None),
-        KeyBinding::new("cmd-t", NewTab, None),
-        KeyBinding::new("ctrl-tab", ShowNextTab, None),
-        KeyBinding::new("ctrl-shift-tab", ShowPreviousTab, None),
-        KeyBinding::new("shift-cmd-]", ShowNextTab, None),
-        KeyBinding::new("shift-cmd-[", ShowPreviousTab, None),
         KeyBinding::new("ctrl-cmd-f", ToggleFullScreen, None),
-        KeyBinding::new("shift-cmd-d", ToggleDone, None),
-        KeyBinding::new("cmd-.", Stop, None),
         KeyBinding::new("cmd-m", Minimize, None),
     ]);
 
+    cx.on_action(|_: &About, cx| show_about(cx));
+    cx.on_action(|_: &Help, cx| show_help(cx));
     cx.on_action(|_: &Quit, cx| cx.quit());
     cx.on_action(|_: &Hide, cx| cx.hide());
     cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
@@ -80,107 +67,10 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
     on_window(cx, |_: &Minimize, window, _| window.minimize_window());
     on_window(cx, |_: &Zoom, window, _| window.zoom_window());
     on_window(cx, |_: &ToggleFullScreen, window, _| window.toggle_fullscreen());
-
-    let settings = store.clone();
-    cx.on_action(move |_: &OpenSettings, cx| {
-        settings.update(cx, |store, cx| {
-            store.open_settings(Default::default(), None);
-            cx.notify();
-        })
-    });
     on_store(store, cx, |_: &CheckForUpdates, store, cx| store.updater.check(true, cx));
-    on_store(store, cx, |_: &NewThread, store, cx| store.new_thread(cx));
-    on_store(store, cx, |_: &NewThreadInProject, store, cx| {
-        let Some(project) = store.composer_project() else { return };
-        store.start_new_thread(Some(project.id), cx);
-    });
-    on_store(store, cx, |_: &GoToThread, store, _| store.open_panel(PanelPage::Threads));
-    on_store(store, cx, |_: &ShowCommands, store, _| store.open_panel(PanelPage::Commands));
-    let closing = store.clone();
-    cx.on_action(move |_: &Close, cx| {
-        let Some(window) = cx.active_window() else { return };
-        let closing = closing.clone();
-        // The window is busy with the key until the action has run.
-        cx.defer(move |cx| {
-            if !crate::settings::is_main_window(window, cx) {
-                let _ = window.update(cx, |_, window, _| window.remove_window());
-                return;
-            }
-            // The last window closing ends the app, as on the Mac.
-            let closed_settings = closing.update(cx, |store, cx| {
-                let open = store.settings.section.is_some();
-                store.close_settings();
-                cx.notify();
-                open
-            });
-            if closed_settings {
-                return;
-            }
-            let closed_tab = closing.update(cx, |store, cx| {
-                cx.notify();
-                store.close_active_tab()
-            });
-            if !closed_tab {
-                cx.quit();
-            }
-        });
-    });
-    on_store(store, cx, |_: &ToggleSidebar, store, _| {
-        let hidden = !store.prefs.bool("sidebar.hidden");
-        store.prefs.set("sidebar.hidden", hidden);
-    });
-    on_store(store, cx, |_: &ToggleSidePanel, store, _| {
-        let open = !store.side_panel.is_open;
-        store.set_panel_open(open);
-    });
-    on_store(store, cx, |_: &ToggleSidePanelMaximized, store, _| store.toggle_panel_maximized());
-    on_store(store, cx, |_: &ShowChanges, store, _| {
-        if store.panel_unavailable().is_none() && store.panel_target().is_some_and(|target| target.repository) {
-            store.show_diff(None, None);
-        }
-    });
-    on_store(store, cx, |_: &ShowFiles, store, _| {
-        if store.panel_unavailable().is_none() {
-            store.open_tab(PanelTab::Files);
-        }
-    });
-    on_store(store, cx, |_: &ShowAgents, store, _| {
-        if store.panel_unavailable().is_none() {
-            store.open_tab(PanelTab::Agents);
-        }
-    });
-    on_store(store, cx, |_: &ShowPullRequest, store, _| {
-        if store.panel_unavailable().is_none() && store.pull_requests_unavailable().is_none() {
-            store.open_tab(PanelTab::PullRequest);
-        }
-    });
-    on_store(store, cx, |_: &ShowAllPullRequests, store, _| {
-        if store.panel_unavailable().is_none()
-            && store.pull_requests_unavailable().is_none()
-            && store.pull_requests_extended()
-        {
-            store.open_tab(PanelTab::PullRequests);
-        }
-    });
-    on_store(store, cx, |_: &NewTab, store, _| {
-        if store.panel_unavailable().is_none() {
-            store.open_blank_tab();
-        }
-    });
-    on_store(store, cx, |_: &ShowNextTab, store, _| {
-        if store.side_panel.is_open {
-            store.activate_tab_offset(1);
-        }
-    });
-    on_store(store, cx, |_: &ShowPreviousTab, store, _| {
-        if store.side_panel.is_open {
-            store.activate_tab_offset(-1);
-        }
-    });
-    on_store(store, cx, |_: &ToggleDone, store, cx| store.toggle_done(cx));
-    on_store(store, cx, |_: &Stop, store, _| {
-        if store.activity.busy() {
-            store.stop_thread();
+    on_store(store, cx, |action: &OpenPanel, store, _| {
+        if let Some(page) = panel_page(action.0) {
+            store.open_panel(page);
         }
     });
     on_store(store, cx, |_: &AddProject, store, _| {
@@ -193,13 +83,22 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
             store.shows_add_server = true;
         }
     });
+    let performing = store.clone();
+    cx.on_action(move |action: &Perform, cx| {
+        let Some(window) = cx.active_window().or_else(|| cx.windows().into_iter().next()) else { return };
+        let (store, command) = (performing.clone(), action.0);
+        // The window is busy with the menu's key until the action has run.
+        cx.defer(move |cx| {
+            let _ = window.update(cx, |_, window, cx| crate::keyboard::perform(&store, command, window, cx));
+        });
+    });
 
     let mut shown = None;
     follow(store, &mut shown, cx);
     cx.observe(store, move |store, cx| follow(&store, &mut shown, cx)).detach();
 }
 
-/// Runs a menu's action on the store, when a window is there to show what it did.
+/// Runs a menu's action on the store.
 fn on_store<A: Action>(
     store: &Entity<Store>,
     cx: &mut App,
@@ -225,55 +124,139 @@ fn on_window<A: Action + Clone>(cx: &mut App, run: impl Fn(&A, &mut Window, &mut
     });
 }
 
+/// The commands the menus run, whose keys they show.
+const COMMANDS: [&str; 24] = [
+    "settings.open",
+    "usage.open",
+    "chat.new",
+    "chat.newLocal",
+    "chat.newWithoutProject",
+    "threadPicker.toggle",
+    "commandPalette.toggle",
+    "rightPanel.close",
+    "sidebar.toggle",
+    "rightPanel.toggle",
+    "rightPanel.toggleMaximized",
+    "rightPanel.diff",
+    "rightPanel.files",
+    "rightPanel.agents",
+    "rightPanel.pullRequest",
+    "rightPanel.pullRequests",
+    "rightPanel.linear",
+    "rightPanel.new",
+    "rightPanel.nextTab",
+    "rightPanel.previousTab",
+    "thread.done",
+    "thread.stop",
+    "thread.previous",
+    "thread.next",
+];
+
 /// What the menus say and allow, which they are made again from when it changes.
 #[derive(Clone, PartialEq)]
 struct State {
+    keys: Vec<(&'static str, String)>,
     sidebar_hidden: bool,
     panel_open: bool,
     panel_maximized: bool,
+    can_maximize: bool,
     shows_changes: bool,
     panel_available: bool,
     shows_pull_request: bool,
     shows_pull_requests: bool,
+    shows_linear: bool,
     switchable_tabs: bool,
-    project: Option<String>,
+    /// The project of "New Thread in …", and whether it is a server's "No project".
+    project: Option<(String, bool)>,
+    no_projects: bool,
     thread: Option<bool>,
     busy: bool,
+    jumps: bool,
     has_servers: bool,
     signed_in: bool,
+    full_screen: bool,
 }
 
 fn follow(store: &Entity<Store>, shown: &mut Option<State>, cx: &mut App) {
     let store = store.read(cx);
     let available = store.panel_unavailable().is_none();
     let state = State {
+        keys: COMMANDS
+            .into_iter()
+            .filter_map(|command| Some((command, store.shortcuts.menu_keystroke(command)?)))
+            .collect(),
         sidebar_hidden: store.prefs.bool("sidebar.hidden"),
         panel_open: store.side_panel.is_open,
         panel_maximized: store.panel_maximized(),
+        can_maximize: store.can_maximize_panel(),
         shows_changes: available && store.panel_target().is_some_and(|target| target.repository),
         panel_available: available,
         shows_pull_request: available && store.pull_requests_unavailable().is_none(),
         shows_pull_requests: available && store.pull_requests_unavailable().is_none() && store.pull_requests_extended(),
+        shows_linear: available && store.linear_unavailable().is_none(),
         switchable_tabs: store.side_panel.is_open && store.panel_tabs().tabs.len() > 1,
-        project: store.composer_project().map(|project| project.name),
+        project: store.composer_project().map(|project| (project.name, project.no_project)),
+        no_projects: !store.no_projects.is_empty(),
         thread: store.selected_thread().map(|thread| thread.is_done()),
         busy: store.activity.busy(),
+        jumps: store.has_jump_threads(),
         has_servers: !store.servers.is_empty(),
         signed_in: store.account.signed_in,
+        full_screen: store.full_screen,
     };
     if shown.as_ref() == Some(&state) {
         return;
+    }
+    if shown.as_ref().is_none_or(|shown| shown.keys != state.keys) {
+        bind_menu_keys(&state.keys, cx);
     }
     cx.set_menus(menus(&state));
     *shown = Some(state);
 }
 
+/// Gives the menus' items the keys of their commands, in place of the ones they had.
+fn bind_menu_keys(keys: &[(&'static str, String)], cx: &mut App) {
+    let keymap = cx.key_bindings();
+    let others: Vec<KeyBinding> = keymap
+        .borrow()
+        .bindings()
+        .filter(|binding| {
+            let action = binding.action().as_any();
+            !action.is::<Perform>() && !action.is::<OpenPanel>()
+        })
+        .cloned()
+        .collect();
+    let context = KeyBindingContextPredicate::parse(MENU_KEYS).ok().map(std::rc::Rc::new);
+    let ours = keys.iter().filter_map(|(command, keystroke)| {
+        let action: Box<dyn Action> =
+            if panel_page(command).is_some() { Box::new(OpenPanel(command)) } else { Box::new(Perform(command)) };
+        KeyBinding::load(keystroke, action, context.clone(), false, None, &DummyKeyboardMapper).ok()
+    });
+    let mut keymap = keymap.borrow_mut();
+    keymap.clear();
+    keymap.add_bindings(others.into_iter().chain(ours));
+}
+
+fn item(title: impl Into<SharedString>, command: &'static str) -> MenuItem {
+    if panel_page(command).is_some() {
+        return MenuItem::action(title, OpenPanel(command));
+    }
+    MenuItem::action(title, Perform(command))
+}
+
 fn menus(state: &State) -> Vec<Menu> {
+    let new_in_project = match &state.project {
+        Some((_, true)) => "New Thread Without a Project".to_string(),
+        Some((name, false)) => format!("New Thread in “{name}”"),
+        None => "New Thread in This Project".to_string(),
+    };
     vec![
         Menu::new("Motile").items([
-            MenuItem::action("Check for Updates…", CheckForUpdates),
+            MenuItem::action("About Motile", About),
+            MenuItem::action("Check for Updates", CheckForUpdates),
             MenuItem::separator(),
-            MenuItem::action("Settings…", OpenSettings),
+            item("Settings", "settings.open"),
+            item("Usage", "usage.open").disabled(!state.signed_in),
             MenuItem::separator(),
             MenuItem::os_submenu("Services", SystemMenuType::Services),
             MenuItem::separator(),
@@ -284,19 +267,13 @@ fn menus(state: &State) -> Vec<Menu> {
             MenuItem::action("Quit Motile", Quit),
         ]),
         Menu::new("File").items([
-            MenuItem::action("New Thread…", NewThread),
-            MenuItem::action(
-                state
-                    .project
-                    .as_ref()
-                    .map_or("New Thread in This Project".into(), |name| format!("New Thread in “{name}”")),
-                NewThreadInProject,
-            )
-            .disabled(state.project.is_none()),
-            MenuItem::action("Go to Thread…", GoToThread),
-            MenuItem::action("Commands…", ShowCommands),
+            item("New Thread", "chat.new"),
+            item(new_in_project, "chat.newLocal").disabled(state.project.is_none()),
+            item("New Thread Without a Project", "chat.newWithoutProject").disabled(!state.no_projects),
+            item("Go to Thread", "threadPicker.toggle"),
+            item("Commands", "commandPalette.toggle"),
             MenuItem::separator(),
-            MenuItem::action("Close", Close),
+            item("Close", "rightPanel.close"),
         ]),
         Menu::new("Edit").items([
             MenuItem::os_action("Undo", input::Undo, OsAction::Undo),
@@ -305,35 +282,76 @@ fn menus(state: &State) -> Vec<Menu> {
             MenuItem::os_action("Cut", input::Cut, OsAction::Cut),
             MenuItem::os_action("Copy", input::Copy, OsAction::Copy),
             MenuItem::os_action("Paste", input::Paste, OsAction::Paste),
+            // The fields only ever take plain text, so pasting matches their style anyway.
+            MenuItem::action("Paste and Match Style", input::Paste),
+            MenuItem::action("Delete", input::Delete),
             MenuItem::os_action("Select All", input::SelectAll, OsAction::SelectAll),
         ]),
         Menu::new("View").items([
-            MenuItem::action(if state.sidebar_hidden { "Show Sidebar" } else { "Hide Sidebar" }, ToggleSidebar),
-            MenuItem::action(if state.panel_open { "Hide Side Panel" } else { "Show Side Panel" }, ToggleSidePanel),
-            MenuItem::action(
+            item(if state.sidebar_hidden { "Show Sidebar" } else { "Hide Sidebar" }, "sidebar.toggle"),
+            item(if state.panel_open { "Hide Side Panel" } else { "Show Side Panel" }, "rightPanel.toggle"),
+            item(
                 if state.panel_maximized { "Restore Side Panel" } else { "Maximize Side Panel" },
-                ToggleSidePanelMaximized,
+                "rightPanel.toggleMaximized",
             )
-            .disabled(!state.panel_open),
-            MenuItem::action("Show Changes", ShowChanges).disabled(!state.shows_changes),
-            MenuItem::action("Show Files", ShowFiles).disabled(!state.panel_available),
-            MenuItem::action("Show Agents", ShowAgents).disabled(!state.panel_available),
-            MenuItem::action("Show Pull Request", ShowPullRequest).disabled(!state.shows_pull_request),
-            MenuItem::action("Show All Pull Requests", ShowAllPullRequests).disabled(!state.shows_pull_requests),
-            MenuItem::action("New Tab", NewTab).disabled(!state.panel_available),
-            MenuItem::action("Show Next Tab", ShowNextTab).disabled(!state.switchable_tabs),
-            MenuItem::action("Show Previous Tab", ShowPreviousTab).disabled(!state.switchable_tabs),
+            .disabled(!state.can_maximize),
+            item("Show Changes", "rightPanel.diff").disabled(!state.shows_changes),
+            item("Show Files", "rightPanel.files").disabled(!state.panel_available),
+            item("Show Agents", "rightPanel.agents").disabled(!state.panel_available),
+            item("Show Pull Request", "rightPanel.pullRequest").disabled(!state.shows_pull_request),
+            item("Show All Pull Requests", "rightPanel.pullRequests").disabled(!state.shows_pull_requests),
+            item("Show Linear", "rightPanel.linear").disabled(!state.shows_linear),
+            item("New Tab", "rightPanel.new").disabled(!state.panel_available),
+            item("Show Next Tab", "rightPanel.nextTab").disabled(!state.switchable_tabs),
+            item("Show Previous Tab", "rightPanel.previousTab").disabled(!state.switchable_tabs),
             MenuItem::separator(),
-            MenuItem::action("Enter Full Screen", ToggleFullScreen),
+            MenuItem::action(
+                if state.full_screen { "Exit Full Screen" } else { "Enter Full Screen" },
+                ToggleFullScreen,
+            ),
         ]),
         Menu::new("Thread").items([
-            MenuItem::action(if state.thread == Some(true) { "Mark Undone" } else { "Mark Done" }, ToggleDone)
+            item(if state.thread == Some(true) { "Mark Undone" } else { "Mark Done" }, "thread.done")
                 .disabled(state.thread.is_none()),
-            MenuItem::action("Stop", Stop).disabled(!state.busy),
+            item("Stop", "thread.stop").disabled(!state.busy),
+            item("Previous Thread", "thread.previous").disabled(!state.jumps),
+            item("Next Thread", "thread.next").disabled(!state.jumps),
             MenuItem::separator(),
-            MenuItem::action("Add a Project…", AddProject).disabled(!state.has_servers),
-            MenuItem::action("Add a Server…", AddServer).disabled(!state.signed_in),
+            MenuItem::action("Add a Project", AddProject).disabled(!state.has_servers),
+            MenuItem::action("Add a Server", AddServer).disabled(!state.signed_in),
         ]),
+        // The system adds its own items to the window menu: filling and tiling, Bring All to
+        // Front and the windows.
         Menu::new("Window").items([MenuItem::action("Minimize", Minimize), MenuItem::action("Zoom", Zoom)]),
+        // The system adds the search of the menus to the help menu.
+        Menu::new("Help").items([MenuItem::action("Motile Help", Help)]),
     ]
+}
+
+/// The system's panel with the app's name, icon and version.
+#[cfg(target_os = "macos")]
+fn show_about(_: &mut App) {
+    let Some(main) = objc2::MainThreadMarker::new() else { return };
+    let app = objc2_app_kit::NSApplication::sharedApplication(main);
+    app.orderFrontStandardAboutPanel(None);
+}
+
+/// What the system says of an app without a help book, as it does for the Mac app.
+#[cfg(target_os = "macos")]
+fn show_help(_: &mut App) {
+    let Some(main) = objc2::MainThreadMarker::new() else { return };
+    let app = objc2_app_kit::NSApplication::sharedApplication(main);
+    unsafe { app.showHelp(None) };
+}
+
+/// Motile's site, which says what it is and which version is the newest.
+#[cfg(not(target_os = "macos"))]
+fn show_about(cx: &mut App) {
+    cx.open_url("https://motile.app");
+}
+
+/// The repository's README, which says how Motile is set up.
+#[cfg(not(target_os = "macos"))]
+fn show_help(cx: &mut App) {
+    cx.open_url("https://github.com/motileapp/motile#readme");
 }

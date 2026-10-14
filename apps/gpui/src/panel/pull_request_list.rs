@@ -1,6 +1,8 @@
 //! The repository's pull requests, the last updated first, to open one in a tab of its own or link
 //! it to the thread.
 
+use std::rc::Rc;
+
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -13,9 +15,9 @@ use super::state::{Loaded, PanelTarget};
 use crate::models::ago;
 use crate::store::Store;
 use crate::store::pull_requests::{Row, Tone};
-use crate::theme::colors;
+use crate::theme::{Radius, colors};
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, ActionMenu, Chip, InputField, InputVariant, edges, highlight, icons};
+use crate::ui::{ActionButton, ActionMenu, Chip, InputField, edges, highlight, icons, middle_truncated};
 
 const STATES: [(&str, &str, PullRequestState); 4] = [
     ("open", "Open", PullRequestState::Open),
@@ -40,6 +42,10 @@ pub struct PullRequestListView {
     linking: Entity<InputState>,
     asked: u64,
     trigger: Option<Trigger>,
+    /// The rows on screen, under the field that links one.
+    list: ListState,
+    /// What the list was last laid out with.
+    listed: Vec<String>,
 }
 
 impl PullRequestListView {
@@ -65,7 +71,16 @@ impl PullRequestListView {
             _ => {}
         })
         .detach();
-        Self { store, state, search, linking, asked: 0, trigger: None }
+        Self {
+            store,
+            state,
+            search,
+            linking,
+            asked: 0,
+            trigger: None,
+            list: ListState::new(0, ListAlignment::Top, px(600.)),
+            listed: Vec::new(),
+        }
     }
 
     fn refresh(&mut self, cx: &mut Context<Self>) {
@@ -117,7 +132,7 @@ impl PullRequestListView {
             .collect()
     }
 
-    fn bar(&self, shows_refresh: bool, cx: &mut Context<Self>) -> Div {
+    fn bar(&self, cx: &mut Context<Self>) -> Div {
         let current = STATES.iter().find(|(key, _, _)| *key == self.state).map_or("Open", |(_, title, _)| title);
         let this = cx.entity().downgrade();
         let chosen = self.state;
@@ -140,193 +155,197 @@ impl PullRequestListView {
                 })
                 .button(|button| button.help("Which pull requests to show").margin(edges(0., -8., 0., 0.))),
             )
-            .child(
-                div().max_w(px(220.)).flex_1().child(
-                    InputField::new(&self.search).icon("search").variant(InputVariant::Outlined).clearable(true),
-                ),
-            )
+            .child(div().max_w(px(220.)).flex_1().child(InputField::new(&self.search).icon("search").clearable(true)))
             .child(div().flex_1().min_w(px(4.)))
-            .when(shows_refresh, |bar| {
-                bar.child(ActionButton::icon("pr-list-refresh", "rotate-cw", "Read the pull requests again").on_click(
-                    move |_, _, cx| {
-                        let _ = refresh.update(cx, |view, cx| view.refresh(cx));
-                    },
-                ))
-            })
+            .child(ActionButton::icon("pr-list-refresh", "rotate-cw", "Read the pull requests again").on_click(
+                move |_, _, cx| {
+                    let _ = refresh.update(cx, |view, cx| view.refresh(cx));
+                },
+            ))
     }
 
-    fn rows(&self, rows: &[Row], target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
-        let c = colors(cx);
+    /// The rows that match the search, only those on screen built, under the field that links one.
+    fn rows(&mut self, rows: &[Row], target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
         let store = self.store.read(cx);
         let thread = store.selected_thread().map(|thread| (thread.id.clone(), thread.server_id.clone()));
         let linked = store.selected_thread().and_then(|thread| thread.pull_request.as_ref()).map(|found| found.number);
-        let shown = self.filtered(rows, cx);
+        let shown: Vec<Row> = self.filtered(rows, cx).into_iter().cloned().collect();
         let search = self.search.read(cx).value().trim().to_string();
-        let empty = if search.is_empty() {
-            format!("No {}pull requests.", if self.state == "all" { String::new() } else { format!("{} ", self.state) })
-        } else {
-            format!("None match “{search}”.")
-        };
-        let this = cx.entity().downgrade();
-        div()
-            .id("pr-list")
-            .size_full()
-            .overflow_y_scroll()
-            .child(
-                div()
-                    .w_full()
-                    .p(px(8.))
-                    .flex()
-                    .flex_col()
-                    .items_start()
-                    .gap(px(2.))
-                    .when(thread.is_some(), |column| {
-                        column.child(div().w_full().max_w(px(380.)).px(px(6.)).pb(px(8.)).child(link_field(
-                            "pr-list-link",
-                            &self.linking,
-                            move |number, _, cx| {
-                                let _ = this.update(cx, |view, cx| view.link(number, cx));
-                            },
-                            cx,
-                        )))
-                    })
-                    .when(shown.is_empty(), |column| {
-                        column.child(div().w_full().pt(px(40.)).flex().justify_center().child(label(
-                            empty,
-                            12.5,
-                            c.secondary,
-                        )))
-                    })
-                    .children(
-                        shown
-                            .into_iter()
-                            .map(|row| self.row(row, target, linked == Some(row.number), thread.clone(), cx)),
-                    ),
-            )
-            .into_any_element()
-    }
-
-    fn row(
-        &self,
-        row: &Row,
-        target: &PanelTarget,
-        linked: bool,
-        thread: Option<(String, String)>,
-        cx: &mut Context<Self>,
-    ) -> Stateful<Div> {
-        let c = colors(cx);
-        let group: SharedString = format!("pr-row-{}", row.number).into();
-        let (open, number, open_target) = (self.store.clone(), row.number, target.clone());
-        let (menu_store, url) = (self.store.clone(), row.url.clone());
-        let signals = div()
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap(px(7.))
-            .when_some(row.review.as_ref(), |row_signals, (tone, text)| {
-                let symbol = match tone {
-                    Tone::Success => "circle-check",
-                    Tone::Danger => "circle-alert",
-                    _ => "eye",
-                };
-                row_signals.child(
-                    div()
-                        .id(("pr-row-review", row.number as usize))
-                        .child(icons::symbol(symbol, 11.).text_color(tone.color(c)))
-                        .tooltip(crate::ui::tooltip(text.clone())),
+        let empty = shown.is_empty().then(|| {
+            if search.is_empty() {
+                format!(
+                    "No {}pull requests.",
+                    if self.state == "all" { String::new() } else { format!("{} ", self.state) }
                 )
-            })
-            .when_some(row.checks, |row_signals, checks| {
-                row_signals.child(
-                    div()
-                        .id(("pr-row-checks", row.number as usize))
-                        .size(px(7.))
-                        .rounded_full()
-                        .bg(checks.color(c))
-                        .tooltip(crate::ui::tooltip(row.checks_label.clone().unwrap_or_default())),
-                )
-            })
-            .children(line_counts(row.additions, row.deletions, cx));
-        let subline =
-            format!("#{} · {} · {} → {} · {}", row.number, row.author, row.head, row.base, ago(row.updated_at));
-        div()
-            .id(group.clone())
-            .group(group.clone())
-            .relative()
-            .w_full()
-            .px(px(10.))
-            .py(px(8.))
-            .flex()
-            .items_start()
-            .gap(px(10.))
-            .child(highlight(group, 7., edges(0., 0., 0., 0.), false, cx))
-            .child(
-                div()
-                    .relative()
-                    .w(px(16.))
-                    .h(px(18.))
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(icons::symbol(row.state.symbol(), 13.).text_color(row.state.color(c))),
-            )
-            .child(
-                div()
-                    .relative()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap(px(3.))
-                    .child(
-                        div()
-                            .w_full()
-                            .flex()
-                            .items_start()
-                            .gap(px(6.))
-                            .child(
-                                div()
-                                    .min_w_0()
-                                    .text_size(px(13.))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(c.text)
-                                    .line_clamp(2)
-                                    .child(row.title.clone()),
-                            )
-                            .when(linked, |title| title.child(Chip::new("This thread").tone(c.link)))
-                            .child(div().flex_1().min_w(px(4.)))
-                            .child(signals),
-                    )
-                    .child(div().text_size(px(11.5)).text_color(c.tertiary).truncate().child(subline)),
-            )
-            .on_click(move |_, _, cx| {
-                open.update(cx, |store, cx| {
-                    store.show_pull_request_tab(number, &open_target);
-                    cx.notify();
+            } else {
+                format!("None match “{search}”.")
+            }
+        });
+        let header = format!("header:{}:{empty:?}", thread.is_some());
+        let keys = std::iter::once(header)
+            .chain(shown.iter().map(|row| format!("{}:{}", row.number, row.updated_at)))
+            .collect();
+        crate::ui::relist(&self.list, &mut self.listed, keys);
+        let place = Rc::new(RowPlace { store: self.store.clone(), target: target.clone(), linked, thread });
+        let shown = Rc::new(shown);
+        let (linking, this) = (self.linking.clone(), cx.entity().downgrade());
+        list(self.list.clone(), move |index, _, cx| {
+            if index > 0 {
+                let Some(row) = shown.get(index - 1) else { return div().into_any_element() };
+                return div().w_full().px(px(8.)).pb(px(2.)).child(list_row(row, &place, cx)).into_any_element();
+            }
+            let this = this.clone();
+            div()
+                .w_full()
+                .pt(px(8.))
+                .px(px(8.))
+                .when(place.thread.is_some(), |header| {
+                    header.child(div().w_full().max_w(px(380.)).px(px(6.)).pb(px(8.)).child(link_field(
+                        "pr-list-link",
+                        &linking,
+                        move |number, _, cx| {
+                            let _ = this.update(cx, |view, cx| view.link(number, cx));
+                        },
+                        cx,
+                    )))
                 })
+                .when_some(empty.clone(), |header, empty| {
+                    header.child(div().w_full().pt(px(40.)).flex().justify_center().child(label(
+                        empty,
+                        12.5,
+                        colors(cx).muted_foreground,
+                    )))
+                })
+                .into_any_element()
+        })
+        .size_full()
+        .into_any_element()
+    }
+}
+
+/// What a row of the list needs to know of where it is.
+struct RowPlace {
+    store: Entity<Store>,
+    target: PanelTarget,
+    /// The thread's own pull request.
+    linked: Option<u64>,
+    thread: Option<(String, String)>,
+}
+
+/// A pull request of the list: what it is, where it stands, and what it changes. A click opens
+/// it in a tab.
+fn list_row(row: &Row, place: &RowPlace, cx: &App) -> Stateful<Div> {
+    let c = colors(cx);
+    let linked = place.linked == Some(row.number);
+    let group: SharedString = format!("pr-row-{}", row.number).into();
+    let (open, number, open_target) = (place.store.clone(), row.number, place.target.clone());
+    let (menu_store, url, thread) = (place.store.clone(), row.url.clone(), place.thread.clone());
+    let signals = div()
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .gap(px(7.))
+        .when_some(row.review.as_ref(), |row_signals, (tone, text)| {
+            let symbol = match tone {
+                Tone::Success => "circle-check",
+                Tone::Danger => "circle-alert",
+                _ => "eye",
+            };
+            row_signals.child(
+                div()
+                    .id(("pr-row-review", row.number as usize))
+                    .child(icons::symbol(symbol, 11.).text_color(tone.color(c)))
+                    .tooltip(crate::ui::tooltip(text.clone())),
+            )
+        })
+        .when_some(row.checks, |row_signals, checks| {
+            row_signals.child(
+                div()
+                    .id(("pr-row-checks", row.number as usize))
+                    .size(px(7.))
+                    .rounded_full()
+                    .bg(checks.color(c))
+                    .tooltip(crate::ui::tooltip(row.checks_label.clone().unwrap_or_default())),
+            )
+        })
+        .children(line_counts(row.additions, row.deletions, cx));
+    let subline = format!("#{} · {} · {} → {} · {}", row.number, row.author, row.head, row.base, ago(row.updated_at));
+    div()
+        .id(group.clone())
+        .group(group.clone())
+        .relative()
+        .w_full()
+        .px(px(10.))
+        .py(px(8.))
+        .flex()
+        .items_start()
+        .gap(px(10.))
+        .child(highlight(group, Radius::MD, edges(0., 0., 0., 0.), false, cx))
+        .child(
+            div()
+                .relative()
+                .w(px(16.))
+                .h(px(18.))
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icons::symbol(row.state.symbol(), 13.).text_color(row.state.color(c))),
+        )
+        .child(
+            div()
+                .relative()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(3.))
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_start()
+                        .gap(px(6.))
+                        .child(
+                            div()
+                                .min_w_0()
+                                .text_size(px(13.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c.foreground)
+                                .line_clamp(2)
+                                .child(row.title.clone()),
+                        )
+                        .when(linked, |title| title.child(Chip::new("This thread").tone(c.primary)))
+                        .child(div().flex_1().min_w(px(4.)))
+                        .child(signals),
+                )
+                .child(middle_truncated(subline).text_size(px(11.5)).text_color(c.muted_stronger_foreground)),
+        )
+        .on_click(move |_, _, cx| {
+            open.update(cx, |store, cx| {
+                store.show_pull_request_tab(number, &open_target);
+                cx.notify();
             })
-            .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                let (link_store, thread) = (menu_store.clone(), thread.clone());
-                let (open_url, copy_url) = (url.clone(), url.clone());
-                Menu::new()
-                    .when_some(thread.filter(|_| !linked), |menu, (thread_id, server_id)| {
-                        menu.item("Link to This Thread", move |_, cx| {
-                            link_store.update(cx, |store, cx| {
-                                store.link_pull_request(Some(number), thread_id.clone(), &server_id);
-                                cx.notify();
-                            })
+        })
+        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+            let (link_store, thread) = (menu_store.clone(), thread.clone());
+            let (open_url, copy_url) = (url.clone(), url.clone());
+            Menu::new()
+                .when_some(thread.filter(|_| !linked), |menu, (thread_id, server_id)| {
+                    menu.item("Link to This Thread", move |_, cx| {
+                        link_store.update(cx, |store, cx| {
+                            store.link_pull_request(Some(number), thread_id.clone(), &server_id);
+                            cx.notify();
                         })
                     })
-                    .when(!url.is_empty(), |menu| {
-                        menu.item("Open on GitHub", move |_, cx| cx.open_url(&open_url))
-                            .item("Copy Link", move |_, cx| {
-                                cx.write_to_clipboard(ClipboardItem::new_string(copy_url.clone()))
-                            })
+                })
+                .when(!url.is_empty(), |menu| {
+                    menu.item("Open on GitHub", move |_, cx| cx.open_url(&open_url)).item("Copy Link", move |_, cx| {
+                        cx.write_to_clipboard(ClipboardItem::new_string(copy_url.clone()))
                     })
-                    .show(event.position, window, cx);
-            })
-    }
+                })
+                .show(event.position, window, cx);
+        })
 }
 
 impl Render for PullRequestListView {
@@ -345,7 +364,7 @@ impl Render for PullRequestListView {
         if let (Some(target), true) = (&target, listable) {
             self.follow(Trigger { target: target.clone(), state: self.state, version, asked: self.asked }, cx);
         }
-        let bar = panel_bar(self.bar(listable, cx), cx);
+        let bar = panel_bar(self.bar(cx), cx);
         let body: AnyElement = match (&unavailable, extended, &target) {
             (Some(reason), _, _) => panel_message(reason.clone(), false, cx),
             (None, false, _) => panel_message("Update your server to see its pull requests here.", false, cx),

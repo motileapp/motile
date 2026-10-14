@@ -3,13 +3,16 @@
 
 mod account;
 mod attachments;
+mod commands;
 mod git;
 pub mod linear;
 mod projects;
 pub mod pull_requests;
 pub mod settings;
+pub mod shortcuts;
 mod sidebar;
 mod threads;
+pub mod usage;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
@@ -19,7 +22,9 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::api::{AccountView, Command, Config, Event};
 use motile_core::render::agents::AgentView;
-use motile_protocol::wire::{Access, Branch, ChangedFile, GitHubState, GitStage, Repo, Request};
+use motile_protocol::wire::{
+    Access, AgentAccount, Branch, ChangedFile, GitHubState, GitStage, ModelInfo, Repo, Request,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -27,8 +32,10 @@ pub use self::git::{GitNotice, PendingGit, stage_label};
 pub use self::projects::RepoListing;
 pub use self::pull_requests::PullRequests;
 pub use self::settings::SettingsState;
-pub use self::sidebar::SidebarState;
-use crate::bridge::{Bridge, Incoming, Read, error_of};
+pub use self::shortcuts::Shortcuts;
+pub use self::sidebar::{SearchResult, SidebarState};
+pub use crate::bridge::CoreError;
+use crate::bridge::{Bridge, Incoming, Read};
 use crate::models::*;
 use crate::panel::state::{PanelTabs, PanelTarget, SidePanel};
 use crate::prefs::Prefs;
@@ -47,9 +54,11 @@ pub struct ThreadDraft {
     pub id: String,
     pub project_id: Option<String>,
     pub model: Option<String>,
+    /// The id of the account of the model's agent the thread starts with.
+    #[serde(default)]
+    pub agent_account: Option<String>,
     pub effort: Option<String>,
     pub access: Access,
-    pub plan: bool,
     /// The thread starts in a new worktree, on a branch that starts from `base`.
     pub worktree: Option<bool>,
     pub base: Option<String>,
@@ -61,9 +70,9 @@ impl ThreadDraft {
             id: uuid::Uuid::new_v4().to_string().to_uppercase(),
             project_id: None,
             model: None,
+            agent_account: None,
             effort: None,
             access: Access::Full,
-            plan: false,
             worktree: None,
             base: None,
         }
@@ -75,6 +84,36 @@ impl ThreadDraft {
 pub struct ListedDraft {
     pub draft: ThreadDraft,
     pub preview: String,
+    /// Its first message is on its way to the server.
+    pub sending: bool,
+}
+
+/// The first message of a draft, on its way to the server.
+#[derive(Clone, Debug)]
+pub struct SendingDraft {
+    pub text: String,
+    pub attachments: Vec<AttachedFile>,
+    pub activity: Activity,
+    /// The client has gone elsewhere since, so the sidebar lists the draft.
+    pub left: bool,
+}
+
+impl SendingDraft {
+    fn preview(&self) -> String {
+        preview_of(&self.text, self.attachments.len()).unwrap_or_default()
+    }
+}
+
+/// The first line of what was written, or what is attached. Nothing for a draft that is empty.
+fn preview_of(text: &str, attachments: usize) -> Option<String> {
+    if let Some(line) = text.trim().split('\n').find(|line| !line.is_empty()) {
+        return Some(line.to_string());
+    }
+    match attachments {
+        0 => None,
+        1 => Some("1 attachment".into()),
+        count => Some(format!("{count} attachments")),
+    }
 }
 
 /// Where the command panel opens.
@@ -84,6 +123,8 @@ pub enum PanelPage {
     Commands,
     /// The projects, to start a thread in one.
     Projects,
+    /// The projects, to choose the one the open draft starts in.
+    DraftProject,
     /// The threads, to open one.
     Threads,
     /// The servers, to add a project on one.
@@ -97,6 +138,8 @@ pub enum PanelPage {
     GithubSetup(String),
     /// The server's folders, to add one.
     Folder(String),
+    /// The folders and images on the project's server, to choose its icon.
+    Icon(String),
 }
 
 /// A project that a server is making or cloning.
@@ -104,17 +147,6 @@ pub enum PanelPage {
 pub struct AddingProject {
     pub server_id: String,
     pub name: String,
-}
-
-/// A server that is installing a new version of itself.
-#[derive(Clone, PartialEq, Debug)]
-pub struct ServerUpdate {
-    /// The version it had when the update began.
-    pub from: String,
-    /// How much of the download has arrived, when the server knows how much there is.
-    pub fraction: Option<f64>,
-    /// The new version is installed and the server is starting it.
-    pub restarting: bool,
 }
 
 /// What the images and videos fetched from the servers take on this device, and what they may take.
@@ -130,9 +162,9 @@ pub struct UndoNotice {
     pub text: String,
 }
 
-pub type Reply = Result<Value, String>;
+pub type Reply = Result<Value, CoreError>;
 type Answer = Box<dyn FnOnce(&mut Store, Reply, &mut Context<Store>)>;
-type ReadAnswer = Box<dyn FnOnce(&mut Store, Result<Read, String>, &mut Context<Store>)>;
+type ReadAnswer = Box<dyn FnOnce(&mut Store, Result<Read, CoreError>, &mut Context<Store>)>;
 
 pub struct Store {
     bridge: Option<Bridge>,
@@ -148,17 +180,21 @@ pub struct Store {
     pub signing_in: bool,
     pub sign_in_error: Option<String>,
     pub enroll_token: Option<EnrollToken>,
+    /// A new install command has been asked for.
+    pub enroll_token_pending: bool,
     pub shows_add_server: bool,
     add_server_count: usize,
-    /// The project an icon is being chosen for.
-    pub icon_project: Option<Project>,
+    /// The project the user asked to remove, until they say whether to.
+    pub removing_project: Option<Project>,
     /// The browser sheet of a sign-in that is open.
     pub sign_in_session: Option<crate::sign_in::Session>,
-    /// Files are being dragged over the window.
-    pub drop_targeted: bool,
-    /// The branch picker under the composer is open, on the branches it was opened with.
+    /// The branch picker under the composer is open. Its branches are `None` until the server
+    /// has listed them.
     pub shows_branches: bool,
-    pub listed_branches: Result<Vec<Branch>, String>,
+    pub listed_branches: Option<Result<Vec<Branch>, String>>,
+    branches_project_id: Option<String>,
+    /// Each project's branches as last listed, which the picker opens on while it lists them again.
+    known_branches: HashMap<String, Vec<Branch>>,
     /// The project whose changes the commit sheet is open on, with the files it was opened with.
     pub committing_project: Option<Project>,
     pub git_files: Vec<ChangedFile>,
@@ -167,6 +203,12 @@ pub struct Store {
     /// The stage a project's git action is at, by project.
     pub git_stages: HashMap<String, GitStage>,
     pub git_notice: Option<GitNotice>,
+    /// The projects whose folders their servers are making git repositories.
+    pub initializing_git: HashSet<String>,
+    /// The `draft_worktree_key`s whose base is being pulled.
+    pulling_bases: HashSet<String>,
+    /// What a new worktree starts at, like `origin/main`, by `draft_worktree_key`.
+    worktree_starts: HashMap<String, String>,
     pub panel: Option<PanelPage>,
     /// What a server refused while the panel was adding a project.
     pub panel_notice: Option<String>,
@@ -179,6 +221,8 @@ pub struct Store {
     /// Counts up when a project has been made or cloned.
     pub projects_added: u64,
     awaited_project_id: Option<String>,
+    /// A folder added as a project, by its server and path, until the server tells about it.
+    awaited_folder: Option<(String, String)>,
     /// Counts up when the composer should take the keyboard back.
     pub composer_focus: u64,
     /// Counts up when the composer should let go of the keyboard.
@@ -186,9 +230,15 @@ pub struct Store {
 
     // What the servers hold
     pub servers: Vec<Server>,
-    pub server_updates: HashMap<String, ServerUpdate>,
+    server_updates: HashMap<String, ServerUpdate>,
+    /// The folders the user added. "No project" of each server is in `no_projects`.
     pub projects: Vec<Project>,
+    /// The project of each server that threads start in without one, in the servers' order.
+    pub no_projects: Vec<Project>,
     pub threads: HashMap<String, ThreadInfo>,
+    /// The active threads and the done ones, each in the order the sidebar lists them.
+    active: Vec<ThreadInfo>,
+    done: Vec<ThreadInfo>,
 
     // The open thread
     /// Always a draft or a thread; `load_preferences` opens the first draft.
@@ -197,8 +247,8 @@ pub struct Store {
     pub transcript_is_empty: bool,
     /// The agents the open thread's agent has started, in the order it started them.
     pub agents: Vec<AgentView>,
-    /// The drafts whose first message is on its way to the server.
-    pub sending_draft_ids: HashSet<String>,
+    /// The drafts whose first message is on its way to the server, by draft.
+    pub sending_drafts: HashMap<String, SendingDraft>,
     pub error_message: Option<String>,
     pub thread_drafts: Vec<ThreadDraft>,
     /// What the open draft said when it was opened, if it said anything. Its row in the sidebar
@@ -206,6 +256,8 @@ pub struct Store {
     pub opened_draft_preview: Option<String>,
     pub undo: Option<UndoNotice>,
     undo_task: Option<Task<()>>,
+    /// The account's picture as a file on this device, once it has been fetched.
+    pub account_picture: Option<PathBuf>,
     /// Unknown until Settings asks for it.
     pub media_storage: Option<MediaStorage>,
     drafts: HashMap<String, String>,
@@ -234,8 +286,23 @@ pub struct Store {
     open_thread_id: Option<String>,
     /// The thread that was open when the app was last closed, until it has been opened again.
     last_selection: Option<String>,
+    /// The draft whose server wasn't known yet when it was given its server's last choices.
+    draft_awaiting_server: Option<String>,
     /// Whether the app is in front.
     pub app_active: bool,
+    /// Whether the window fills the screen, which the menu bar says how to leave.
+    pub full_screen: bool,
+    pub shortcuts: Shortcuts,
+    /// The shortcut field that records a key, so every key is that.
+    pub recording_shortcut: Option<SharedString>,
+    /// The key a field recorded, until the view it is in takes it. Nothing when it was stopped.
+    pub recorded_shortcut: Option<(SharedString, Option<String>)>,
+    /// The modifiers of the threads' keys are held, so the sidebar shows the keys.
+    pub shows_jump_hints: bool,
+    jump_hint_task: Option<Task<()>>,
+    /// The usage is open over the window, as a route of its own.
+    pub shows_usage: bool,
+    pub usage: usage::Usage,
     _events: Option<Task<()>>,
 }
 
@@ -260,18 +327,23 @@ impl Store {
             signing_in: false,
             sign_in_error: None,
             enroll_token: None,
+            enroll_token_pending: false,
             shows_add_server: false,
             add_server_count: 0,
-            icon_project: None,
+            removing_project: None,
             sign_in_session: None,
-            drop_targeted: false,
             shows_branches: false,
-            listed_branches: Ok(Vec::new()),
+            listed_branches: None,
+            branches_project_id: None,
+            known_branches: HashMap::new(),
             committing_project: None,
             git_files: Vec::new(),
             pending_git: None,
             git_stages: HashMap::new(),
             git_notice: None,
+            initializing_git: HashSet::new(),
+            pulling_bases: HashSet::new(),
+            worktree_starts: HashMap::new(),
             panel: None,
             panel_notice: None,
             github: HashMap::new(),
@@ -280,22 +352,27 @@ impl Store {
             adding_project: None,
             projects_added: 0,
             awaited_project_id: None,
+            awaited_folder: None,
             composer_focus: 0,
             blur_composer: 0,
             servers: Vec::new(),
             server_updates: HashMap::new(),
             projects: Vec::new(),
+            no_projects: Vec::new(),
             threads: HashMap::new(),
+            active: Vec::new(),
+            done: Vec::new(),
             selection: Selection::Draft(String::new()),
             activity: Activity::default(),
             transcript_is_empty: true,
             agents: Vec::new(),
-            sending_draft_ids: HashSet::new(),
+            sending_drafts: HashMap::new(),
             error_message: None,
             thread_drafts: Vec::new(),
             opened_draft_preview: None,
             undo: None,
             undo_task: None,
+            account_picture: None,
             media_storage: None,
             drafts: HashMap::new(),
             attachments_by_key: HashMap::new(),
@@ -314,7 +391,16 @@ impl Store {
             agent_transcript: cx.new(|_| Transcript::new()),
             open_thread_id: None,
             last_selection: None,
+            draft_awaiting_server: None,
             app_active: true,
+            full_screen: false,
+            shortcuts: Shortcuts::default(),
+            recording_shortcut: None,
+            recorded_shortcut: None,
+            shows_jump_hints: false,
+            jump_hint_task: None,
+            shows_usage: false,
+            usage: usage::Usage::default(),
             _events: None,
         };
         store.load_preferences();
@@ -385,9 +471,17 @@ impl Store {
             return;
         }
         self.app_active = active;
+        if !active {
+            self.jump_hint_task = None;
+            self.shows_jump_hints = false;
+        }
         if active {
+            // What waits to dial again dials now.
+            self.send(Command::Foreground);
+            self.send(Command::ReloadKeybindings);
             self.mark_open_thread_seen();
             self.read_git(true, None::<fn(&mut Store, Vec<ChangedFile>, &mut Context<Store>)>, cx);
+            self.read_worktree_start(true);
         }
     }
 
@@ -417,7 +511,7 @@ impl Store {
         &mut self,
         command: Command,
         read: impl FnOnce(Value) -> T + Send + 'static,
-        then: impl FnOnce(&mut Store, Result<T, String>, &mut Context<Store>) + 'static,
+        then: impl FnOnce(&mut Store, Result<T, CoreError>, &mut Context<Store>) + 'static,
     ) -> u64 {
         let Some(bridge) = self.bridge.as_mut() else { return 0 };
         let id = bridge.send_read(command, read);
@@ -445,7 +539,7 @@ impl Store {
     pub fn request(&mut self, server_id: &str, request: Request) {
         self.request_then(server_id, request, |store, result, _| {
             if let Err(error) = result {
-                store.error_message = Some(error);
+                store.fail(error);
             }
         });
     }
@@ -501,18 +595,21 @@ impl Store {
                 self.ready = true;
                 self.ensure_draft_project();
             }
-            Event::Servers { servers } => self.apply_servers(servers.into_iter().map(Server::from).collect()),
+            Event::Servers { servers } => self.apply_servers(servers.into_iter().map(Server::from).collect(), cx),
             Event::Threads { server_id, threads } => {
                 self.apply_threads(threads.into_iter().map(ThreadInfo::from).collect(), &server_id, cx)
             }
-            Event::ThreadUpsert { thread } => self.upsert(thread.into()),
+            Event::ThreadUpsert { thread } => self.upsert((*thread).into()),
             Event::ThreadDeleted { thread_id } => self.remove_thread(&thread_id, cx),
             Event::Projects { server_id, projects } => {
                 let projects = projects.into_iter().map(|view| Project::new(view, &server_id)).collect();
                 self.apply_projects(projects, &server_id, cx);
             }
-            Event::ServerUpdate { server_id, received, total } => {
-                if let Some(update) = self.server_updates.get_mut(&server_id) {
+            Event::ServerUpdate { server_id, received, total, waiting } => {
+                let Some(update) = self.server_updates.get_mut(&server_id) else { return };
+                if waiting {
+                    update.waiting = true;
+                } else {
                     update.fraction = total.filter(|total| *total > 0).map(|total| received as f64 / total as f64);
                 }
             }
@@ -571,25 +668,75 @@ impl Store {
             Event::ThreadError { message, .. } => self.error_message = Some(message),
             Event::Reply { id, ok, value } => {
                 let Some(answer) = self.answers.remove(&id) else { return };
-                let result = if ok { Ok(value) } else { Err(error_of(&value)) };
+                let result = if ok { Ok(value) } else { Err(CoreError::of(&value)) };
                 answer(self, result, cx);
             }
-            Event::Rows { .. } | Event::AgentRows { .. } | Event::Live { .. } => {}
+            Event::Live { thread_id, live } => {
+                for transcript in [self.transcript.clone(), self.agent_transcript.clone()] {
+                    if transcript.read(cx).thread_id.as_deref() == Some(&thread_id) {
+                        transcript.update(cx, |transcript, _| transcript.set_live(live));
+                    }
+                }
+            }
+            Event::Rows { .. } | Event::AgentRows { .. } => {}
+            Event::Keybindings { keybindings } => self.shortcuts = keybindings.into(),
+            Event::ThreadSearch { query, searching, matches } => {
+                self.apply_thread_search(sidebar::MessageSearch::new(query, searching, matches))
+            }
         }
     }
 
     // Lookups
 
-    pub fn active_threads(&self) -> Vec<&ThreadInfo> {
-        let mut active: Vec<&ThreadInfo> = self.threads.values().filter(|thread| !thread.is_done()).collect();
-        active.sort_by(|a, b| b.active_order().total_cmp(&a.active_order()).then_with(|| b.id.cmp(&a.id)));
-        active
+    pub fn active_threads(&self) -> &[ThreadInfo] {
+        &self.active
     }
 
-    pub fn done_threads(&self) -> Vec<&ThreadInfo> {
-        let mut done: Vec<&ThreadInfo> = self.threads.values().filter(|thread| thread.is_done()).collect();
-        done.sort_by(|a, b| b.done_at.unwrap_or(0.).total_cmp(&a.done_at.unwrap_or(0.)).then_with(|| b.id.cmp(&a.id)));
-        done
+    pub fn done_threads(&self) -> &[ThreadInfo] {
+        &self.done
+    }
+
+    fn set_threads(&mut self, threads: HashMap<String, ThreadInfo>) {
+        self.threads = threads;
+        let mut active: Vec<ThreadInfo> = self.threads.values().filter(|thread| !thread.is_done()).cloned().collect();
+        let mut done: Vec<ThreadInfo> = self.threads.values().filter(|thread| thread.is_done()).cloned().collect();
+        active.sort_by(ThreadInfo::listed_order);
+        done.sort_by(ThreadInfo::listed_order);
+        self.active = active;
+        self.done = done;
+    }
+
+    /// Changes one thread, and moves it in its list only when its place there changed.
+    fn set_thread(&mut self, thread: Option<ThreadInfo>, id: &str) {
+        let before = match &thread {
+            Some(thread) => self.threads.insert(id.to_string(), thread.clone()),
+            None => self.threads.remove(id),
+        };
+        if let (Some(before), Some(thread)) = (&before, &thread)
+            && before.is_done() == thread.is_done()
+            && before.listed_at() == thread.listed_at()
+        {
+            let list = self.list_mut(thread.is_done());
+            if let Some(index) = index_of(list, before) {
+                list[index] = thread.clone();
+            }
+            return;
+        }
+        if let Some(before) = before {
+            let list = self.list_mut(before.is_done());
+            if let Some(index) = index_of(list, &before) {
+                list.remove(index);
+            }
+        }
+        if let Some(thread) = thread {
+            let list = self.list_mut(thread.is_done());
+            let place = place_of(list, &thread);
+            list.insert(place, thread);
+        }
+    }
+
+    fn list_mut(&mut self, done: bool) -> &mut Vec<ThreadInfo> {
+        if done { &mut self.done } else { &mut self.active }
     }
 
     pub fn selected_thread(&self) -> Option<&ThreadInfo> {
@@ -602,20 +749,23 @@ impl Store {
         self.thread_drafts.iter().find(|draft| &draft.id == id)
     }
 
-    /// Every draft with something written in it that isn't being sent, newest first. The open
-    /// one is listed as it was when it was opened.
+    /// Every draft with something written in it, newest first. The open one is listed as it was
+    /// when it was opened, and one being sent once it has been left.
     pub fn listed_drafts(&self) -> Vec<ListedDraft> {
         self.thread_drafts
             .iter()
             .rev()
-            .filter(|draft| !self.sending_draft_ids.contains(&draft.id))
             .filter_map(|draft| {
+                if let Some(sending) = self.sending_drafts.get(&draft.id) {
+                    let listed = ListedDraft { draft: draft.clone(), preview: sending.preview(), sending: true };
+                    return sending.left.then_some(listed);
+                }
                 let written = if self.selection == Selection::Draft(draft.id.clone()) {
                     self.opened_draft_preview.clone()
                 } else {
                     self.preview(draft)
                 };
-                written.map(|preview| ListedDraft { draft: draft.clone(), preview })
+                written.map(|preview| ListedDraft { draft: draft.clone(), preview, sending: false })
             })
             .collect()
     }
@@ -623,17 +773,18 @@ impl Store {
     /// The first line of what was written in a draft, or what is attached to it. Nothing for a
     /// draft that is still empty.
     fn preview(&self, draft: &ThreadDraft) -> Option<String> {
-        let text = self.drafts.get(&draft.id).map(|text| text.trim()).unwrap_or_default();
-        if let Some(line) = text.split('\n').find(|line| !line.is_empty()) {
-            return Some(line.to_string());
-        }
-        let files = self.attachments_by_key.get(&draft.id)?;
-        Some(if files.len() == 1 { "1 attachment".into() } else { format!("{} attachments", files.len()) })
+        let text = self.drafts.get(&draft.id).map(String::as_str).unwrap_or_default();
+        preview_of(text, self.attachments_by_key.get(&draft.id).map_or(0, Vec::len))
     }
 
+    pub fn is_sending(&self, draft_id: &str) -> bool {
+        self.sending_drafts.contains_key(draft_id)
+    }
+
+    /// The project with that id, a folder the user added or a server's "No project".
     pub fn project(&self, id: Option<&str>) -> Option<&Project> {
         let id = id?;
-        self.projects.iter().find(|project| project.id == id)
+        self.projects.iter().chain(&self.no_projects).find(|project| project.id == id)
     }
 
     /// The projects, the one a thread was last started in first. A project without threads
@@ -683,9 +834,19 @@ impl Store {
     /// The folder the side panel looks into: the one the open thread works in, or the project's
     /// when the open draft's thread would start there.
     pub fn panel_target(&self) -> Option<PanelTarget> {
-        let project = self.thread_project().or_else(|| self.draft_folder_project())?;
-        let folder =
-            project.worktree.as_ref().map(|worktree| worktree.path.clone()).unwrap_or_else(|| project.path.clone());
+        let thread = self.selected_thread();
+        let project =
+            self.thread_project().or_else(|| self.project(self.selected_draft()?.project_id.as_deref()).cloned())?;
+        // A thread without a project has no folder until it starts.
+        if project.no_project && thread.is_none() {
+            return None;
+        }
+        let folder = if project.no_project {
+            thread.map(|thread| thread.cwd.clone())
+        } else {
+            project.worktree.as_ref().map(|worktree| worktree.path.clone())
+        };
+        let folder = folder.unwrap_or_else(|| project.path.clone());
         let awaits_worktree = self.selected_thread().is_none() && self.draft_uses_worktree();
         let pull_request = (!awaits_worktree)
             .then(|| {
@@ -710,13 +871,7 @@ impl Store {
 
     /// Why the side panel has nothing to show here, when it hasn't.
     pub fn panel_unavailable(&self) -> Option<String> {
-        let Some(target) = self.panel_target() else {
-            return Some(if self.draft_uses_worktree() {
-                "The worktree is made when the thread starts.".into()
-            } else {
-                "Add a project to see its files.".into()
-            });
-        };
+        let Some(target) = self.panel_target() else { return Some("Add a project to see its files.".into()) };
         let Some(server) = self.server(Some(&target.server_id)).filter(|server| server.connected()) else {
             return Some("Your server isn't connected.".into());
         };
@@ -728,26 +883,79 @@ impl Store {
         if let Some(thread) = self.selected_thread() {
             return self.server(Some(&thread.server_id));
         }
-        let project = self.project(self.selected_draft().and_then(|draft| draft.project_id.as_deref()));
+        self.selected_draft().and_then(|draft| self.server_of(draft))
+    }
+
+    /// The server a draft starts its thread on: its project's, or the first one.
+    fn server_of(&self, draft: &ThreadDraft) -> Option<&Server> {
+        let project = self.project(draft.project_id.as_deref());
         self.server(project.map(|project| project.server_id.as_str())).or(self.servers.first())
     }
 
-    /// The models the composer offers: an open thread stays with its agent.
-    pub fn composer_models(&self) -> Vec<motile_protocol::wire::ModelInfo> {
-        let models = self.composer_server().map(|server| server.models.clone()).unwrap_or_default();
-        let Some(thread) = self.selected_thread() else { return models };
-        models.into_iter().filter(|model| model.agent == thread.agent).collect()
+    /// The models the composer offers. An open thread on a server from before accounts stays
+    /// with its agent.
+    pub fn composer_models(&self) -> Vec<ModelInfo> {
+        let Some(server) = self.composer_server() else { return Vec::new() };
+        let Some(thread) = self.selected_thread().filter(|_| !server.switches_accounts()) else {
+            return server.models.clone();
+        };
+        server.models.iter().filter(|model| model.agent == thread.agent).cloned().collect()
     }
 
-    pub fn composer_model(&self) -> Option<motile_protocol::wire::ModelInfo> {
+    /// The id of the account the thread works with, or the draft starts with.
+    fn composer_account_id(&self) -> Option<&str> {
+        let id = match self.selected_thread() {
+            Some(thread) => Some(thread.agent_account.as_str()),
+            None => self.selected_draft()?.agent_account.as_deref(),
+        };
+        id.filter(|id| !id.is_empty())
+    }
+
+    /// The model of the thread or the draft, as its account lists it, or the first one offered.
+    pub fn composer_model(&self) -> Option<ModelInfo> {
         let id = match self.selected_thread() {
             Some(thread) => thread.model.clone(),
             None => self.selected_draft().and_then(|draft| draft.model.clone()),
         };
-        let models = self.composer_models();
-        models.iter().find(|model| Some(&model.id) == id.as_ref()).or(models.first()).cloned()
+        let agent = self.selected_thread().map(|thread| thread.agent);
+        let offered: Vec<ModelInfo> =
+            self.composer_models().into_iter().filter(|model| agent.is_none_or(|agent| model.agent == agent)).collect();
+        Server::model(id.as_deref(), self.composer_account_id(), &offered).cloned()
     }
 
+    /// The account of the composer's model's agent the thread works with.
+    pub fn composer_account(&self) -> Option<AgentAccount> {
+        let model = self.composer_model()?;
+        self.composer_server()?.account(self.composer_account_id(), model.agent).cloned()
+    }
+
+    /// The model the composer shows, with the account when its agent has more than one.
+    pub fn composer_model_label(&self) -> Option<String> {
+        let model = self.composer_model()?;
+        let label = self.composer_server().map(|server| server.label(&model, self.composer_account_id()));
+        Some(label.unwrap_or_else(|| model.name.clone()))
+    }
+
+    /// What the model menu lists: each account with its agent's models, titled with the
+    /// account's name when its agent has more than one.
+    pub fn composer_choices(&self) -> Vec<(String, AgentAccount, Vec<ModelInfo>)> {
+        let Some(server) = self.composer_server() else { return Vec::new() };
+        let models = self.composer_models();
+        AGENTS
+            .into_iter()
+            .filter(|agent| models.iter().any(|model| model.agent == *agent))
+            .flat_map(|agent| server.accounts(agent))
+            .map(|account| {
+                let several = server.accounts(account.agent).len() > 1;
+                let name = agent_name(account.agent);
+                let title = if several { format!("{name} · {}", account.name) } else { name.to_string() };
+                let offered = models.iter().filter(|model| model.runs_under(account)).cloned().collect();
+                (title, account.clone(), offered)
+            })
+            .collect()
+    }
+
+    /// The effort the thread or the draft runs at: "" where the agent applies its own default.
     pub fn composer_effort(&self) -> Option<String> {
         let effort = match self.selected_thread() {
             Some(thread) => thread.effort.clone(),
@@ -760,7 +968,7 @@ impl Store {
         if let Some(effort) = effort.filter(|effort| model.efforts.contains(effort)) {
             return Some(effort);
         }
-        model.default_effort.clone().or_else(|| model.efforts.first().cloned())
+        Some(model.default_effort.clone().unwrap_or_default())
     }
 
     pub fn composer_access(&self) -> Access {
@@ -768,13 +976,6 @@ impl Store {
             .map(|thread| thread.access)
             .or_else(|| self.selected_draft().map(|draft| draft.access))
             .unwrap_or(Access::Full)
-    }
-
-    pub fn composer_plan(&self) -> bool {
-        self.selected_thread()
-            .map(|thread| thread.plan)
-            .or_else(|| self.selected_draft().map(|draft| draft.plan))
-            .unwrap_or(false)
     }
 
     /// What the composer's text and attachments are kept under: the open draft or thread.
@@ -814,13 +1015,35 @@ impl Store {
         self.drafts = self.prefs.get("drafts").unwrap_or_default();
         self.last_selection = self.prefs.string("selection");
         let saved: Vec<ThreadDraft> = self.prefs.get("threadDrafts").unwrap_or_default();
-        self.thread_drafts = saved.into_iter().filter(|draft| self.preview(draft).is_some()).collect();
-        let opened = match self.thread_drafts.iter().find(|draft| Some(&draft.id) == self.last_selection.as_ref()) {
+        let last = self.last_selection.clone();
+        self.thread_drafts = saved
+            .into_iter()
+            .filter(|draft| self.preview(draft).is_some() || Some(&draft.id) == last.as_ref())
+            .collect();
+        let restored = self.thread_drafts.iter().find(|draft| Some(&draft.id) == last.as_ref()).cloned();
+        let restored_preview = self.prefs.string("openedDraftPreview");
+        let opened = match &restored {
             Some(draft) => draft.clone(),
             None => self.empty_draft(),
         };
-        self.selection = Selection::Draft(opened.id.clone());
-        self.opened_draft_preview = self.preview(&opened);
+        if opened.model.is_none() && opened.agent_account.is_none() && opened.effort.is_none() {
+            self.draft_awaiting_server = Some(opened.id.clone());
+        }
+        self.set_selection(Selection::Draft(opened.id.clone()));
+        self.set_opened_draft_preview(restored.and(restored_preview));
+    }
+
+    /// Opens the draft or the thread, kept for the next launch.
+    fn set_selection(&mut self, selection: Selection) {
+        self.selection = selection;
+        let key = self.draft_key();
+        self.prefs.set("selection", key);
+    }
+
+    /// What the open draft said when it was opened, kept for the next launch too.
+    fn set_opened_draft_preview(&mut self, preview: Option<String>) {
+        self.prefs.set("openedDraftPreview", preview.clone());
+        self.opened_draft_preview = preview;
     }
 
     fn save_thread_drafts(&mut self) {
@@ -839,24 +1062,50 @@ impl Store {
         draft
     }
 
-    fn apply_last_settings(&self, draft: &mut ThreadDraft) {
-        draft.model = self.prefs.string("new.model");
-        draft.effort = self.prefs.string("new.effort");
+    /// The model, account and effort are the server's, so each server keeps what was last chosen
+    /// on it. A draft whose server isn't known yet keeps what it had.
+    fn apply_last_settings(&mut self, draft: &mut ThreadDraft) {
         draft.access = self.prefs.get("new.access").unwrap_or(Access::Full);
+        draft.base = None;
+        let Some(server) = self.server_of(draft).map(|server| server.id.clone()) else {
+            self.draft_awaiting_server = Some(draft.id.clone());
+            return;
+        };
+        if self.draft_awaiting_server.as_ref() == Some(&draft.id) {
+            self.draft_awaiting_server = None;
+        }
+        draft.model = self.prefs.string(&format!("new.model-{server}"));
+        draft.agent_account = self.prefs.string(&format!("new.agentAccount-{server}"));
+        draft.effort = self.prefs.string(&format!("new.effort-{server}"));
     }
 
-    fn remember_settings(&mut self, model: Option<String>, effort: Option<String>, access: Access) {
-        self.prefs.set("new.model", model);
-        self.prefs.set("new.effort", effort);
-        self.prefs.set("new.access", access);
+    /// Has the next draft start with what was just chosen, and only that.
+    fn remember_choices(&mut self, draft: &ThreadDraft, before: &ThreadDraft) {
+        if draft.project_id != before.project_id {
+            self.prefs.set("new.project", draft.project_id.clone());
+        }
+        if draft.worktree != before.worktree {
+            self.prefs.set("new.worktree", draft.worktree == Some(true));
+        }
+        if draft.access != before.access {
+            self.prefs.set("new.access", draft.access);
+        }
+        let Some(server) = self.server_of(draft).map(|server| server.id.clone()) else { return };
+        if draft.model != before.model {
+            self.prefs.set(&format!("new.model-{server}"), draft.model.clone());
+        }
+        if draft.agent_account != before.agent_account {
+            self.prefs.set(&format!("new.agentAccount-{server}"), draft.agent_account.clone());
+        }
+        if draft.effort != before.effort {
+            self.prefs.set(&format!("new.effort-{server}"), draft.effort.clone());
+        }
     }
 
     /// A draft with nothing in it: the one that is already there, or a new one.
     fn empty_draft(&mut self) -> ThreadDraft {
-        let empty = self
-            .thread_drafts
-            .iter()
-            .rposition(|draft| self.preview(draft).is_none() && !self.sending_draft_ids.contains(&draft.id));
+        let empty =
+            self.thread_drafts.iter().rposition(|draft| self.preview(draft).is_none() && !self.is_sending(&draft.id));
         if let Some(index) = empty {
             let mut draft = self.thread_drafts[index].clone();
             self.apply_last_settings(&mut draft);
@@ -867,16 +1116,48 @@ impl Store {
         self.add_draft()
     }
 
-    /// Changes the open draft, and has the next draft start with the same choices.
+    /// Changes the open draft, and has the next draft start with what changed.
     fn update_draft(&mut self, change: impl FnOnce(&mut ThreadDraft)) {
         let Selection::Draft(id) = &self.selection else { return };
         let Some(index) = self.thread_drafts.iter().position(|draft| &draft.id == id) else { return };
+        let before = self.thread_drafts[index].clone();
         change(&mut self.thread_drafts[index]);
         let draft = self.thread_drafts[index].clone();
-        self.prefs.set("new.project", draft.project_id.clone());
-        self.prefs.set("new.worktree", draft.worktree == Some(true));
-        self.remember_settings(draft.model, draft.effort, draft.access);
+        self.remember_choices(&draft, &before);
         self.save_thread_drafts();
+    }
+
+    /// Puts the open draft in a project. On another server, it starts with that server's last
+    /// choices.
+    fn move_draft(&mut self, project_id: Option<String>) {
+        let Selection::Draft(id) = &self.selection else { return };
+        let Some(index) = self.thread_drafts.iter().position(|draft| &draft.id == id) else { return };
+        let before = self.thread_drafts[index].clone();
+        let from = self.server_of(&before).map(|server| server.id.clone());
+        let mut draft = before.clone();
+        draft.project_id = project_id;
+        draft.base = None;
+        let to = self.server_of(&draft).map(|server| server.id.clone());
+        if to != from {
+            self.apply_last_settings(&mut draft);
+        }
+        self.thread_drafts[index] = draft.clone();
+        self.remember_choices(&draft, &before);
+        self.save_thread_drafts();
+        if to != from {
+            self.refresh_composer_models();
+        }
+    }
+
+    /// Has the open draft's server ask its agents what models they run, so that its menus offer
+    /// what the thread would start with.
+    fn refresh_composer_models(&mut self) {
+        let Some(server) = self.composer_server().filter(|server| server.connected() && server.refreshes_models())
+        else {
+            return;
+        };
+        let server_id = server.id.clone();
+        self.request_then(&server_id, Request::RefreshModels, |_, _, _| {});
     }
 
     fn remove_draft(&mut self, id: &str) {
@@ -888,6 +1169,11 @@ impl Store {
 
     /// Keeps the open draft pointing at a project that exists, once the projects are known.
     fn ensure_draft_project(&mut self) {
+        self.move_to_first_project();
+        self.apply_last_settings_once_server_known();
+    }
+
+    fn move_to_first_project(&mut self) {
         if !self.ready {
             return;
         }
@@ -895,8 +1181,30 @@ impl Store {
         if self.project(draft.project_id.as_deref()).is_some() {
             return;
         }
-        let Some(first) = self.projects.first().map(|project| project.id.clone()) else { return };
-        self.update_draft(|draft| draft.project_id = Some(first));
+        let first = self.projects.first().or(self.no_projects.first()).map(|project| project.id.clone());
+        let Some(first) = first else { return };
+        self.move_draft(Some(first));
+    }
+
+    /// Gives the draft opened at launch without choices of its own its server's last ones, once
+    /// the cache has said which server that is.
+    fn apply_last_settings_once_server_known(&mut self) {
+        let Some(awaiting) = self.draft_awaiting_server.clone() else { return };
+        if self.selection != Selection::Draft(awaiting.clone()) {
+            return;
+        }
+        let Some(index) = self.thread_drafts.iter().position(|draft| draft.id == awaiting) else { return };
+        let mut draft = self.thread_drafts[index].clone();
+        let known = match &draft.project_id {
+            None => !self.servers.is_empty(),
+            Some(id) => self.project(Some(id)).is_some(),
+        };
+        if !known {
+            return;
+        }
+        self.apply_last_settings(&mut draft);
+        self.thread_drafts[index] = draft;
+        self.save_thread_drafts();
     }
 
     /// Opens the thread that was open when the app was last closed, once it is known.
@@ -907,38 +1215,53 @@ impl Store {
         }
         self.last_selection = None;
         let Some(draft) = self.selected_draft() else { return };
-        if self.preview(draft).is_some() {
+        if self.preview(draft).is_some() || self.is_sending(&draft.id) {
             return;
         }
         self.select(Selection::Thread(wanted), cx);
     }
 
-    /// Opens the pull request's tab in the side panel.
-    pub fn open_pull_request_tab(&mut self, number: u64, _cx: &mut Context<Self>) {
-        let Some(target) = self.panel_target() else { return };
-        self.show_pull_request_tab(number, &target);
+    /// Shows an alert that says what went wrong, unless it is that a server couldn't be reached,
+    /// which its state in the sidebar already shows.
+    pub fn fail(&mut self, error: impl Into<CoreError>) {
+        let error = error.into();
+        if error.offline {
+            return;
+        }
+        self.error_message = Some(error.message);
     }
 
-    /// Shows an alert that says what went wrong.
-    pub fn fail(&mut self, message: impl Into<String>) {
-        self.error_message = Some(message.into());
+    /// The account's name, when its sign-in gave one.
+    pub fn account_name(&self) -> Option<&str> {
+        self.account.user.as_ref()?.name.as_deref()
     }
+}
+
+/// Where the thread is, or would go, in a list in the sidebar's order.
+fn place_of(list: &[ThreadInfo], thread: &ThreadInfo) -> usize {
+    list.partition_point(|listed| ThreadInfo::listed_order(listed, thread).is_lt())
+}
+
+fn index_of(list: &[ThreadInfo], thread: &ThreadInfo) -> Option<usize> {
+    let place = place_of(list, thread);
+    (list.get(place)?.id == thread.id).then_some(place)
 }
 
 pub fn data_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("MOTILE_DATA_DIR") {
         return PathBuf::from(dir);
     }
-    let base = if cfg!(target_os = "macos") {
-        std::env::var("HOME").map(|home| PathBuf::from(home).join("Library/Application Support")).ok()
+    let home = || std::env::var_os("HOME").filter(|home| !home.is_empty()).map(PathBuf::from);
+    // Not the Mac app's folder, nor the server's on Linux: each is a device of its own.
+    let (base, folder) = if cfg!(target_os = "macos") {
+        (home().map(|home| home.join("Library/Application Support")), "Motile GPUI")
+    } else if cfg!(windows) {
+        (std::env::var_os("LOCALAPPDATA").map(PathBuf::from), "Motile GPUI")
     } else {
-        std::env::var("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .ok()
-            .or_else(|| std::env::var("HOME").map(|home| PathBuf::from(home).join(".local/share")).ok())
+        let xdg = std::env::var_os("XDG_DATA_HOME").filter(|dir| !dir.is_empty()).map(PathBuf::from);
+        (xdg.or_else(|| home().map(|home| home.join(".local/share"))), "motile-gpui")
     };
-    // Not the Mac app's folder: both can run on one Mac, each a device of its own.
-    base.map(|base| base.join("Motile GPUI")).unwrap_or_else(std::env::temp_dir)
+    base.map(|base| base.join(folder)).unwrap_or_else(std::env::temp_dir)
 }
 
 fn device_name() -> String {
@@ -948,6 +1271,10 @@ fn device_name() -> String {
         if !name.is_empty() {
             return name;
         }
+    }
+    #[cfg(windows)]
+    if let Some(name) = std::env::var("COMPUTERNAME").ok().filter(|name| !name.is_empty()) {
+        return name;
     }
     std::process::Command::new("hostname")
         .output()

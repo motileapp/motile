@@ -10,18 +10,37 @@ use super::{MediaStorage, Store};
 use crate::models::*;
 
 impl Store {
-    /// The file of an image or a video the open thread shows. The core fetches it from the
-    /// thread's server if this device doesn't have it.
-    pub fn media(&mut self, id: &str, done: impl FnOnce(&mut Store, Option<PathBuf>, &mut Context<Store>) + 'static) {
+    /// The file of an image, a video or a file the open thread shows, or why it can't be had.
+    /// The core fetches it from the thread's server if this device doesn't have it.
+    pub fn media(
+        &mut self,
+        id: &str,
+        done: impl FnOnce(&mut Store, Result<PathBuf, String>, &mut Context<Store>) + 'static,
+        cx: &mut Context<Store>,
+    ) {
         let server_id = self
             .selected_thread()
             .map(|thread| thread.server_id.clone())
             .or_else(|| self.composer_server().map(|server| server.id.clone()));
-        let Some(server_id) = server_id else { return };
+        let Some(server_id) = server_id else {
+            cx.spawn(async move |this, cx| {
+                let error = "That server isn't connected. Try again when it is back.".to_string();
+                let _ = this.update(cx, |store, cx| done(store, Err(error), cx));
+            })
+            .detach();
+            return;
+        };
         self.ask(Command::Media { server_id, media_id: id.to_string() }, move |store, result, cx| {
-            let path = result.ok().and_then(|value| value["path"].as_str().map(PathBuf::from));
+            let path = result.map_err(|error| error.to_string()).and_then(|value| {
+                value["path"].as_str().map(PathBuf::from).ok_or_else(|| "Something went wrong.".to_string())
+            });
             done(store, path, cx);
         });
+    }
+
+    /// Stops fetching the file; whoever waits for it is told it failed.
+    pub fn cancel_media(&mut self, id: &str) {
+        self.send(Command::CancelMedia { media_id: id.to_string() });
     }
 
     pub fn refresh_media_storage(&mut self) {
@@ -45,7 +64,7 @@ impl Store {
         let Some(server_id) = self.composer_server().map(|server| server.id.clone()) else { return };
         let key = self.draft_key();
         for file in files {
-            if !file.is_file() || self.attachments().iter().any(|attachment| attachment.file.as_ref() == Some(&file)) {
+            if self.attachments().iter().any(|attachment| attachment.file.as_ref() == Some(&file)) {
                 continue;
             }
             let attachment = Attachment::from_file(file, &server_id);
@@ -53,23 +72,26 @@ impl Store {
             self.attachments_by_key.entry(key.clone()).or_default().push(attachment);
             self.upload(&id);
         }
+        self.composer_focus += 1;
     }
 
-    /// Attaches an image that was pasted, writing it to a file first.
-    pub fn attach_image(&mut self, image: &Image) {
-        let extension = match image.format {
-            ImageFormat::Png => "png",
-            ImageFormat::Jpeg => "jpg",
-            ImageFormat::Gif => "gif",
-            ImageFormat::Webp => "webp",
-            ImageFormat::Tiff => "tiff",
-            ImageFormat::Bmp => "bmp",
-            ImageFormat::Svg => "svg",
-            _ => "png",
-        };
-        if let Some(file) = save_for_attaching(&image.bytes, extension) {
-            self.attach(vec![file]);
-        }
+    /// Attaches an image that was pasted, written to a file as a PNG first, off the main thread.
+    pub fn attach_image(&mut self, image: Image, cx: &mut Context<Self>) {
+        let saving = cx.background_executor().spawn(async move {
+            let png = match image.format {
+                ImageFormat::Png => image.bytes,
+                _ => crate::media::pictures::png(&image.bytes)?,
+            };
+            save_for_attaching(&png, "png")
+        });
+        cx.spawn(async move |this, cx| {
+            let Some(file) = saving.await else { return };
+            let _ = this.update(cx, |store, cx| {
+                store.attach(vec![file]);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub fn remove_attachment(&mut self, id: &str) {
@@ -122,7 +144,7 @@ impl Store {
             Err(error) => store.change_attachment(&id, |attachment| {
                 // An upload that was stopped to go to another server is on its way there.
                 if attachment.server_id == server_id {
-                    attachment.state = UploadState::Failed(error);
+                    attachment.state = UploadState::Failed(error.into());
                 }
             }),
             Ok(value) => {
@@ -144,7 +166,8 @@ impl Store {
     /// Sends the first frame of a video after it, which stands for it wherever it isn't played.
     /// A video without one is sent all the same.
     fn upload_poster(&mut self, id: String, file: PathBuf, path: String, server_id: String, cx: &mut Context<Self>) {
-        let frame = cx.background_executor().spawn(async move { crate::media::poster::first_frame(&file, 1280) });
+        let frame =
+            cx.background_executor().spawn(async move { crate::media::poster::first_frame_jpeg(&file, 1280).await });
         cx.spawn(async move |this, cx| {
             let poster = frame.await;
             let _ = this.update(cx, |store, cx| {

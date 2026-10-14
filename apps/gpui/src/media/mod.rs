@@ -1,39 +1,52 @@
-//! Images and videos: the files of the ones the threads show, as the core fetches them, the rows
-//! and tiles that show them, posters for the videos that are attached, and playing them.
+//! Images, videos and files: the files of the ones the threads show, as the core fetches them, the
+//! rows and tiles that show them, posters for the videos that are attached, and playing them.
 
+pub mod file;
+pub mod native;
+pub mod pictures;
 pub mod poster;
 #[cfg(target_os = "macos")]
 pub mod video;
 pub mod viewer;
+pub mod zoom;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::rows::RowKind;
+use pictures::{Failure, Picture, Pictures};
 
 use crate::models::{AttachedFile, MediaSource, ViewedMedia};
 use crate::store::Store;
-use crate::theme::{Radius, colors};
+use crate::theme::{ControlSize, Radius, colors};
+use crate::transcript::kit::RowButton;
 use crate::transcript::model::RowModel;
 use crate::transcript::rows::RowContext;
-use crate::ui::icons;
 use crate::ui::menu::Menu;
+use crate::ui::{ActionButton, Spinner};
 
 /// The tallest an image or a video of a reply is shown.
 const MAX_HEIGHT: f32 = 480.;
 const GAP: f32 = 6.;
-const TILE: (f32, f32) = (104., 78.);
+/// The room between the spinner and its percentage, and the message and its button.
+const STACK_GAP: f32 = 10.;
+const LINE_HEIGHT: f32 = 16.;
+const TILE: f32 = 96.;
 const TILE_GAP: f32 = 6.;
 const PLAYED_HERE: [&str; 3] = ["mp4", "mov", "m4v"];
+pub const SAVE_TITLE: &str = "Save As";
 
-/// The files of the images and videos asked for, by the name the core has them under.
+type Waiter = Box<dyn FnOnce(Result<PathBuf, String>, &mut App)>;
+
+/// The files of the images, videos and files asked for, by the name the core has them under,
+/// and what waits for the ones on their way.
 #[derive(Default)]
 pub struct MediaFiles {
     paths: HashMap<String, PathBuf>,
-    asked: HashSet<String>,
-    failed: HashSet<String>,
+    waiting: HashMap<String, (u64, Vec<Waiter>)>,
+    asks: u64,
 }
 
 impl Global for MediaFiles {}
@@ -43,50 +56,57 @@ impl MediaFiles {
         cx.try_global::<MediaFiles>()?.paths.get(id).cloned()
     }
 
-    pub fn failed(id: &str, cx: &App) -> bool {
-        cx.try_global::<MediaFiles>().is_some_and(|files| files.failed.contains(id))
-    }
-
-    /// The file of the image or video, once it is on this device; it is fetched the first time
-    /// it is asked for, and whoever watches the store is told when it is there.
-    pub fn fetch(store: &Entity<Store>, id: &str, cx: &mut App) -> Option<PathBuf> {
-        Self::fetch_then(store, id, cx, |_, _| {})
-    }
-
-    pub fn fetch_then(
+    /// Hands over the file, or why it can't be had, once the core has it on this device. It is
+    /// fetched from the server the first time it is asked for.
+    pub fn fetch(
         store: &Entity<Store>,
         id: &str,
         cx: &mut App,
-        then: impl FnOnce(Option<PathBuf>, &mut App) + 'static,
-    ) -> Option<PathBuf> {
+        done: impl FnOnce(Result<PathBuf, String>, &mut App) + 'static,
+    ) {
         if let Some(path) = Self::path(id, cx) {
-            return Some(path);
+            return cx.defer(move |cx| done(Ok(path), cx));
         }
         let files = cx.default_global::<MediaFiles>();
-        files.failed.remove(id);
-        if !files.asked.insert(id.to_string()) {
-            return None;
+        if let Some((_, waiters)) = files.waiting.get_mut(id) {
+            return waiters.push(Box::new(done));
         }
+        files.asks += 1;
+        let ask = files.asks;
+        files.waiting.insert(id.to_string(), (ask, vec![Box::new(done)]));
         let (store, id) = (store.clone(), id.to_string());
         cx.defer(move |cx| {
-            store.update(cx, |store, _| {
-                store.media(&id.clone(), move |_, path, cx| {
-                    let files = cx.default_global::<MediaFiles>();
-                    files.asked.remove(&id);
-                    match &path {
-                        Some(path) => {
+            store.update(cx, |store, cx| {
+                store.media_progress.remove(&id);
+                store.media(
+                    &id.clone(),
+                    move |_, result, cx| {
+                        let files = cx.default_global::<MediaFiles>();
+                        if files.waiting.get(&id).is_none_or(|(asked, _)| *asked != ask) {
+                            return;
+                        }
+                        let (_, waiters) = files.waiting.remove(&id).unwrap_or_default();
+                        if let Ok(path) = &result {
                             files.paths.insert(id, path.clone());
                         }
-                        None => {
-                            files.failed.insert(id);
+                        for waiter in waiters {
+                            waiter(result.clone(), cx);
                         }
-                    }
-                    then(path, cx);
-                    cx.notify();
-                });
+                        cx.refresh_windows();
+                    },
+                    cx,
+                );
             });
         });
-        None
+    }
+
+    /// Stops fetching the file. What waits for it is told that it stopped.
+    pub fn cancel(store: &Entity<Store>, id: &str, cx: &mut App) {
+        let Some((_, waiters)) = cx.default_global::<MediaFiles>().waiting.remove(id) else { return };
+        store.update(cx, |store, _| store.cancel_media(id));
+        for waiter in waiters {
+            waiter(Err("The download was stopped.".into()), cx);
+        }
     }
 
     /// Forgets the files, which the core has removed.
@@ -95,20 +115,19 @@ impl MediaFiles {
     }
 }
 
-/// An image the core has or fetches, drawn at a size.
+/// An image the core has or fetches, fitted in a frame.
 #[derive(IntoElement)]
 pub struct MediaImage {
     store: Entity<Store>,
     id: String,
     width: f32,
     height: f32,
-    cover: bool,
     radius: f32,
 }
 
 impl MediaImage {
     pub fn new(store: Entity<Store>, id: String) -> Self {
-        Self { store, id, width: 64., height: 64., cover: false, radius: 0. }
+        Self { store, id, width: 64., height: 64., radius: 0. }
     }
 
     pub fn size(mut self, side: f32) -> Self {
@@ -117,40 +136,88 @@ impl MediaImage {
         self
     }
 
-    pub fn frame(mut self, width: f32, height: f32) -> Self {
-        self.width = width;
-        self.height = height;
-        self
-    }
-
-    pub fn cover(mut self) -> Self {
-        self.cover = true;
+    /// Its corners, which a box around it doesn't round.
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
         self
     }
 }
 
 impl RenderOnce for MediaImage {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let max_pixels = (self.width.max(self.height) * 2. * window.scale_factor()).ceil() as u32;
+        let picture = Pictures::load(&self.store, &format!("tile:{}", self.id), &self.id, max_pixels, cx);
         let c = colors(cx);
-        let Some(path) = MediaFiles::fetch(&self.store, &self.id, cx) else {
-            return div()
-                .w(px(self.width))
-                .h(px(self.height))
-                .rounded(px(self.radius))
-                .bg(c.background_secondary)
-                .into_any_element();
+        let Picture::Ready(shown) = picture else {
+            return div().w(px(self.width)).h(px(self.height)).bg(c.background_secondary).into_any_element();
         };
-        img(path)
+        // The box's own shape, which GPUI would otherwise take from the image.
+        img(ImageSource::Render(shown.image))
             .w(px(self.width))
             .h(px(self.height))
+            .aspect_ratio(self.width / self.height)
             .rounded(px(self.radius))
-            .object_fit(if self.cover { ObjectFit::Cover } else { ObjectFit::Contain })
+            .object_fit(ObjectFit::Contain)
             .into_any_element()
     }
 }
 
-/// The images, videos and files attached to a message: tiles of one size for the pictures, which
-/// open in the viewer, and the names of the others under them.
+/// What a right click on an image or a video offers: copying it and saving it.
+pub fn media_menu(store: &Entity<Store>, id: &str, video: bool, name: &str) -> Menu {
+    let (copy_store, save_store) = (store.clone(), store.clone());
+    let (copy_id, save_id) = (id.to_string(), id.to_string());
+    let (copy_name, save_name) = (name.to_string(), name.to_string());
+    Menu::new()
+        .symbol_item(if video { "Copy Video" } else { "Copy Image" }, "copy", move |_, cx| {
+            let name = copy_name.clone();
+            MediaFiles::fetch(&copy_store, &copy_id, cx, move |file, cx| {
+                if let Ok(file) = file {
+                    copy(file, video, name, cx);
+                }
+            });
+        })
+        .symbol_item(SAVE_TITLE, "download", move |_, cx| {
+            let name = save_name.clone();
+            MediaFiles::fetch(&save_store, &save_id, cx, move |file, cx| {
+                if let Ok(file) = file {
+                    native::save(file, &name, cx);
+                }
+            });
+        })
+}
+
+/// Copies an image's picture, or a video's file under its name.
+pub fn copy(file: PathBuf, video: bool, name: String, cx: &mut App) {
+    if video {
+        let copying = cx.background_executor().spawn(async move { named_copy(&file, &name) });
+        return cx
+            .spawn(async move |cx| {
+                let file = copying.await;
+                cx.update(|cx| native::copy_file(&file, cx))
+            })
+            .detach();
+    }
+    let format = image_format(&file);
+    let reading = cx.background_executor().spawn(async move { std::fs::read(&file).ok() });
+    cx.spawn(async move |cx| {
+        let Some(bytes) = reading.await else { return };
+        cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_image(&Image::from_bytes(format, bytes))));
+    })
+    .detach();
+}
+
+/// A copy of the file under its name, in a temporary folder, for what takes it to know it by it.
+pub fn named_copy(file: &Path, name: &str) -> PathBuf {
+    let folder = std::env::temp_dir().join("motile-shared");
+    let named = if name.is_empty() { file.file_name().map(PathBuf::from).unwrap_or_default() } else { name.into() };
+    let copy = folder.join(named);
+    let _ = std::fs::create_dir_all(&folder);
+    let _ = std::fs::remove_file(&copy);
+    if std::fs::copy(file, &copy).is_ok() { copy } else { file.to_path_buf() }
+}
+
+/// The images, videos and files attached to a message: tiles of one size with the whole picture
+/// fitted in each, which open in the viewer, and the names of the others under them.
 pub fn attached_files(store: &Entity<Store>, files: &[AttachedFile], cx: &App) -> AnyElement {
     let c = colors(cx);
     let pictured: Vec<&AttachedFile> = files.iter().filter(|file| file.media.is_some()).collect();
@@ -173,44 +240,67 @@ pub fn attached_files(store: &Entity<Store>, files: &[AttachedFile], cx: &App) -
         .when(!pictured.is_empty(), |files| {
             files.child(div().flex().flex_wrap().gap(px(TILE_GAP)).children(pictured.iter().enumerate().map(
                 |(index, file)| {
+                    let media = file.media.clone().unwrap_or_default();
                     let (store, viewed) = (store.clone(), viewed.clone());
+                    let (open_store, open_viewed) = (store.clone(), viewed.clone());
+                    let (menu_store, menu_media, menu_name, video) =
+                        (store.clone(), media.clone(), file.name.clone(), file.video);
+                    let open = move |cx: &mut App| {
+                        let viewed = open_viewed.clone();
+                        open_store.update(cx, |store, cx| {
+                            store.view(viewed, index);
+                            cx.notify();
+                        })
+                    };
+                    let play = open.clone();
                     div()
-                        .id(SharedString::from(format!("attached-{}-{index}", file.media.clone().unwrap_or_default())))
+                        .id(SharedString::from(format!("attached-{media}-{index}")))
                         .relative()
-                        .w(px(TILE.0))
-                        .h(px(TILE.1))
-                        .rounded(px(Radius::CARD))
+                        .size(px(TILE))
+                        .rounded(px(Radius::LG))
                         .overflow_hidden()
                         .bg(c.background_secondary)
                         .border_1()
                         .border_color(c.border)
                         .cursor_pointer()
                         .when_some(file.picture().cloned(), |tile, picture| {
-                            tile.child(MediaImage::new(store.clone(), picture).frame(TILE.0, TILE.1).cover())
+                            tile.child(MediaImage::new(store.clone(), picture).size(TILE - 2.).radius(Radius::LG - 1.))
                         })
                         .when(file.video, |tile| {
                             tile.child(
                                 div().absolute().inset_0().flex().items_center().justify_center().child(
-                                    div()
-                                        .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.4), 0., 4.))
-                                        .child(icons::symbol("circle-play", 26.).text_color(white())),
+                                    ActionButton::icon(
+                                        SharedString::from(format!("play-{media}-{index}")),
+                                        "play",
+                                        "Play",
+                                    )
+                                    .overlay()
+                                    .round(true)
+                                    .on_click(move |_, _, cx| play(cx)),
                                 ),
                             )
                         })
                         .tooltip(crate::ui::tooltip(file.name.clone()))
                         .on_click(move |_, _, cx| {
                             cx.stop_propagation();
-                            let viewed = viewed.clone();
-                            store.update(cx, |store, cx| {
-                                store.view(viewed, index);
-                                cx.notify();
-                            })
+                            open(cx)
+                        })
+                        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                            cx.stop_propagation();
+                            media_menu(&menu_store, &menu_media, video, &menu_name).show(event.position, window, cx);
                         })
                 },
             )))
         })
         .when(!names.is_empty(), |files| {
-            files.child(div().h(px(16.)).text_size(px(12.)).text_color(c.secondary).truncate().child(names.join("   ")))
+            files.child(
+                div()
+                    .h(px(LINE_HEIGHT))
+                    .text_size(px(12.))
+                    .text_color(c.muted_foreground)
+                    .truncate()
+                    .child(names.join("   ")),
+            )
         })
         .into_any_element()
 }
@@ -221,61 +311,125 @@ fn boxed(width: Option<u32>, height: Option<u32>) -> (f32, f32) {
     match (width, height) {
         (Some(width), Some(height)) if width > 0 && height > 0 => {
             let (width, height) = (width as f32, height as f32);
-            let scale = (MAX_HEIGHT / height).min(1.);
-            (width * scale, height * scale)
+            let scale = (MAX_HEIGHT / height).min(crate::theme::CONTENT_WIDTH / width).min(1.);
+            ((width * scale).round().max(1.), (height * scale).round().max(1.))
         }
         _ => (640., 360.),
     }
 }
 
-fn file_size(bytes: u64) -> String {
+pub fn file_size(bytes: u64) -> String {
     crate::composer::attachments::file_size(bytes)
 }
 
 /// An image or a video a reply shows. The core says how large it is, so the row has its place
-/// before the file is on this device.
-pub fn media_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
-    let c = colors(cx);
-    let RowKind::Media { media, video, width, height, size, alt, name } = &model.row.kind else {
+/// before the file is on this device. A video shows its poster, or the box with its name, and
+/// either opens in the viewer.
+pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
+    let RowKind::Media { media, video, width, height, size, alt, name, poster } = &model.row.kind else {
         return div().into_any_element();
     };
     let (box_width, box_height) = boxed(*width, *height);
+    let video = *video;
+    let picture_id = if video { poster.clone() } else { Some(media.clone()) };
+    let max_pixels = (box_width.max(box_height) * window.scale_factor()).ceil() as u32;
+    let picture = picture_id.as_ref().map(|id| Pictures::load(&ctx.store, id, id, max_pixels, cx));
+    let fraction = (!video).then(|| ctx.store.read(cx).media_progress.get(media).copied()).flatten();
+    let c = colors(cx);
     let row_id = model.row.id.clone();
-    let player = ctx.view.upgrade().and_then(|view| view.read(cx).player(&row_id));
-    let fetching = ctx.view.upgrade().is_some_and(|view| view.read(cx).fetching(&row_id));
-    let progress = ctx.store.read(cx).media_progress.get(media).copied();
-    let path = (!video).then(|| MediaFiles::fetch_path_quietly(media, cx)).flatten();
-    let failed = MediaFiles::failed(media, cx);
-    let caption = if *video {
-        if fetching {
-            match progress {
-                Some(fraction) => format!("Downloading {name} · {}%", (fraction * 100.) as u32),
-                None => format!("Downloading {name}…"),
+    let shown = match &picture {
+        Some(Picture::Ready(shown)) => Some(shown.image.clone()),
+        _ => None,
+    };
+    let failure = match picture {
+        Some(Picture::Failed(failure)) if !video => Some(failure),
+        _ => None,
+    };
+    let loading = matches!(picture, Some(Picture::Loading));
+    let caption = (video && poster.is_none()).then(|| format!("{name} · {}", file_size(*size)));
+    let viewed = vec![ViewedMedia { name: name.clone(), video, source: MediaSource::Media(media.clone()) }];
+    let open = {
+        let store = ctx.store.clone();
+        let ready = shown.is_some();
+        move |cx: &mut App| {
+            if !video && !ready {
+                return;
             }
-        } else if failed {
-            "This video couldn't be loaded. Click to try again.".to_string()
-        } else {
-            format!("{name} · {}", file_size(*size))
+            let viewed = viewed.clone();
+            store.update(cx, |store, cx| {
+                store.view(viewed, 0);
+                cx.notify();
+            });
         }
-    } else if failed {
-        "This image couldn't be loaded. Click to try again.".to_string()
-    } else {
-        String::new()
     };
-    let ratio = box_width / box_height;
-    let (store, view) = (ctx.store.clone(), ctx.view.clone());
-    let (media_id, name_owned, is_video, click_row) = (media.clone(), name.clone(), *video, row_id.clone());
+    let play = open.clone();
+    let retry_key = picture_id.clone().unwrap_or_default();
     let (menu_store, menu_media, menu_name) = (ctx.store.clone(), media.clone(), name.clone());
-    if !video && path.is_none() && !failed {
-        let _ = MediaFiles::fetch_path_quietly(media, cx);
-    }
-    let picture: AnyElement = match (&player, &path) {
-        (Some(player), _) => player.clone().into_any_element(),
-        (None, Some(path)) => img(path.clone()).size_full().object_fit(ObjectFit::Contain).into_any_element(),
-        _ => div().into_any_element(),
+    let message = match failure {
+        Some(Failure::Fetch) => "This image couldn't be loaded.",
+        Some(Failure::Decode) => "This image couldn't be shown.",
+        None => "",
     };
-    let store_for_image = ctx.store.clone();
-    let wants_image = !video && path.is_none() && !failed;
+
+    let states = div()
+        .absolute()
+        .inset_0()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .when(loading, |states| {
+            states
+                .child(
+                    div()
+                        .size(px(ControlSize::Large.symbol() + 4.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_color(c.muted_foreground)
+                        .child(Spinner::new(ControlSize::Large.symbol()).render(cx)),
+                )
+                .when_some(fraction, |states, fraction| {
+                    states.child(
+                        div()
+                            .mt(px(STACK_GAP))
+                            .h(px(LINE_HEIGHT))
+                            .text_size(px(12.))
+                            .font_features(crate::ui::tabular_numbers())
+                            .text_color(c.muted_foreground)
+                            .child(format!("{}%", (fraction * 100.) as u32)),
+                    )
+                })
+        })
+        .when(failure.is_some(), |states| {
+            states
+                .child(
+                    div()
+                        .max_w_full()
+                        .px(px(12.))
+                        .h(px(LINE_HEIGHT))
+                        .text_size(px(12.))
+                        .text_color(c.muted_foreground)
+                        .truncate()
+                        .child(message),
+                )
+                .child(
+                    div().mt(px(STACK_GAP)).child(
+                        RowButton::new(
+                            SharedString::from(format!("retry-{row_id}")),
+                            "Try again",
+                            "Load the image again",
+                        )
+                        .bordered()
+                        .hover(c.background_secondary_accent)
+                        .on_click(move |_, _, cx| {
+                            Pictures::retry(&retry_key, cx);
+                            cx.refresh_windows();
+                        }),
+                    ),
+                )
+        });
+
     div()
         .py(px(GAP))
         .child(
@@ -284,112 +438,56 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 .relative()
                 .w_full()
                 .max_w(px(box_width))
-                .aspect_ratio(ratio)
-                .rounded(px(Radius::CARD))
+                .aspect_ratio(box_width / box_height)
+                .rounded(px(Radius::LG))
                 .overflow_hidden()
                 .bg(c.background_secondary)
                 .border_1()
                 .border_color(c.border)
-                .child(picture)
-                .when(wants_image, |frame| {
-                    let store = store_for_image.clone();
-                    let id = media.clone();
-                    frame.child(canvas(
-                        move |_, _, cx| {
-                            let _ = MediaFiles::fetch(&store, &id, cx);
-                        },
-                        |_, _, _, _| {},
-                    ))
-                })
-                .when(*video && player.is_none(), |frame| {
+                .when_some(shown, |frame, image| {
                     frame.child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(icons::symbol("circle-play", 40.).text_color(c.secondary)),
+                        img(ImageSource::Render(image))
+                            .size_full()
+                            .aspect_ratio(box_width / box_height)
+                            .rounded(px(Radius::LG - 1.))
+                            .object_fit(ObjectFit::Contain),
                     )
                 })
-                .when(!caption.is_empty() && player.is_none(), |frame| {
+                .child(states)
+                .when(video, |frame| {
+                    frame.child(
+                        div().absolute().inset_0().flex().items_center().justify_center().child(
+                            ActionButton::icon(SharedString::from(format!("play-{row_id}")), "play", "Play")
+                                .overlay()
+                                .large()
+                                .round(true)
+                                .on_click(move |_, _, cx| play(cx)),
+                        ),
+                    )
+                })
+                .when_some(caption, |frame, caption| {
                     frame.child(
                         div()
                             .absolute()
-                            .left(px(12.))
-                            .right(px(12.))
-                            .bottom(px(10.))
-                            .h(px(16.))
+                            .left(px(11.))
+                            .right(px(11.))
+                            .bottom(px(9.))
+                            .h(px(LINE_HEIGHT))
                             .text_size(px(12.))
-                            .text_color(c.secondary)
-                            .truncate()
-                            .child(caption),
+                            .text_color(c.muted_foreground)
+                            .child(crate::ui::middle_truncated(caption)),
                     )
                 })
                 .when(!alt.is_empty(), |frame| frame.tooltip(crate::ui::tooltip(alt.clone())))
-                .when(player.is_none(), |frame| {
-                    frame.on_click(move |_, _, cx| {
-                        if !is_video {
-                            if MediaFiles::path(&media_id, cx).is_none() {
-                                let _ = MediaFiles::fetch(&store, &media_id, cx);
-                                return;
-                            }
-                            let viewed = vec![ViewedMedia {
-                                name: name_owned.clone(),
-                                video: false,
-                                source: MediaSource::Media(media_id.clone()),
-                            }];
-                            store.update(cx, |store, cx| {
-                                store.view(viewed, 0);
-                                cx.notify();
-                            });
-                            return;
-                        }
-                        let _ = view.update(cx, |view, cx| view.play(click_row.clone(), media_id.clone(), cx));
-                    })
-                })
+                .on_click(move |_, _, cx| open(cx))
                 .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                    let (copy_store, save_store) = (menu_store.clone(), menu_store.clone());
-                    let (copy_id, save_id, save_name) = (menu_media.clone(), menu_media.clone(), menu_name.clone());
-                    Menu::new()
-                        .when(!is_video, |menu| {
-                            menu.symbol_item("Copy Image", "copy", move |_, cx| {
-                                let copy_id = copy_id.clone();
-                                let path = MediaFiles::fetch_then(&copy_store, &copy_id, cx, |path, cx| {
-                                    if let Some(path) = path {
-                                        copy_image(&path, cx);
-                                    }
-                                });
-                                if let Some(path) = path {
-                                    copy_image(&path, cx);
-                                }
-                            })
-                        })
-                        .symbol_item("Save As…", "download", move |_, cx| {
-                            let name = save_name.clone();
-                            let path = MediaFiles::fetch_then(&save_store, &save_id, cx, move |path, cx| {
-                                if let Some(path) = path {
-                                    save_as(path, name, cx);
-                                }
-                            });
-                            if let Some(path) = path {
-                                save_as(path, save_name.clone(), cx);
-                            }
-                        })
-                        .show(event.position, window, cx);
+                    media_menu(&menu_store, &menu_media, video, &menu_name).show(event.position, window, cx);
                 }),
         )
         .into_any_element()
 }
 
-impl MediaFiles {
-    /// The file if it is here, without asking for it.
-    fn fetch_path_quietly(id: &str, cx: &App) -> Option<PathBuf> {
-        Self::path(id, cx)
-    }
-}
-
-fn image_format(path: &Path) -> ImageFormat {
+pub fn image_format(path: &Path) -> ImageFormat {
     match path.extension().and_then(|extension| extension.to_str()).unwrap_or_default().to_lowercase().as_str() {
         "jpg" | "jpeg" => ImageFormat::Jpeg,
         "gif" => ImageFormat::Gif,
@@ -399,24 +497,6 @@ fn image_format(path: &Path) -> ImageFormat {
         "tif" | "tiff" => ImageFormat::Tiff,
         _ => ImageFormat::Png,
     }
-}
-
-fn copy_image(path: &Path, cx: &mut App) {
-    let Ok(bytes) = std::fs::read(path) else { return };
-    cx.write_to_clipboard(ClipboardItem::new_image(&Image::from_bytes(image_format(path), bytes)));
-}
-
-/// Asks where to save the file and copies it there.
-fn save_as(path: PathBuf, name: String, cx: &mut App) {
-    let folder = std::env::var("HOME").map(|home| PathBuf::from(home).join("Downloads")).unwrap_or_default();
-    let chosen = cx.prompt_for_new_path(&folder, Some(&name));
-    cx.background_executor()
-        .spawn(async move {
-            let Ok(Ok(Some(destination))) = chosen.await else { return };
-            let _ = std::fs::remove_file(&destination);
-            let _ = std::fs::copy(&path, &destination);
-        })
-        .detach();
 }
 
 /// Whether the system's player is used for a video here, or the app the system has for it.

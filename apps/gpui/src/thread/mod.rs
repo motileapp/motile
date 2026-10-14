@@ -3,15 +3,18 @@
 
 use std::cell::Cell;
 use std::rc::Rc;
+use std::time::Duration;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::composer::Composer;
-use crate::store::Store;
-use crate::theme::{self, Surface, colors};
+use crate::models::Project;
+use crate::store::{PanelPage, Store};
+use crate::theme::{self, Radius, colors};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
-use crate::ui::{ActionButton, TOOLBAR_WIDTH, even, highlight_in, icons, logos};
+use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, present_sheet, presented};
+use crate::ui::{ActionButton, Highlight, TOOLBAR_WIDTH, icons, logos};
 
 /// The room between the last row and the composer, which the transcript fades out in.
 pub const COMPOSER_GAP: f32 = 48.;
@@ -19,8 +22,7 @@ const COMPOSER_BOTTOM_GAP: f32 = 16.;
 /// How far above the middle the start is, as a part of the window's height.
 const START_LIFT: f32 = 0.03;
 const HEADLINE_SIZE: f32 = 28.;
-/// The width of a space in the headline's type.
-const HEADLINE_WORD_SPACE: f32 = 8.;
+const NOTICE_FADE: Duration = Duration::from_millis(150);
 
 pub struct ThreadPane {
     store: Entity<Store>,
@@ -31,11 +33,19 @@ pub struct ThreadPane {
     pub title_inset: f32,
     /// The side panel is beside the pane, so the window's last button isn't over it.
     pub beside_panel: bool,
+    /// What the window's buttons take of the top bar's end, where the app draws them.
+    pub trailing_room: f32,
+    /// How much of the pane's right side something lies over, which takes no files dropped.
+    pub covered: f32,
+    /// Files from outside are held over the pane.
+    drop_over: bool,
     /// How tall the composer was last drawn, which the transcript leaves room for.
     composer_height: Rc<Cell<f32>>,
     project_menu: Anchor,
     git_menu: Anchor,
     commit_sheet: Option<Entity<crate::git::CommitSheet>>,
+    /// The title the window was last given.
+    window_title: String,
 }
 
 impl ThreadPane {
@@ -53,11 +63,15 @@ impl ThreadPane {
             composer,
             transcript,
             title_inset: 20.,
+            trailing_room: 0.,
             beside_panel: false,
+            covered: 0.,
+            drop_over: false,
             composer_height: Rc::new(Cell::new(120.)),
             project_menu: Anchor::default(),
             git_menu: Anchor::default(),
             commit_sheet: None,
+            window_title: String::new(),
         }
     }
 
@@ -84,13 +98,25 @@ impl ThreadPane {
     }
 
     /// The thread's project and name and its git button, drawn in the window's top bar over
-    /// this pane.
+    /// this pane. Without a git button, a folder that is no repository can be made one, and a draft
+    /// whose worktree would start from the remote's base can pull it.
     fn top_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let project = store.composer_project();
-        let project_line = store.composer_project_line();
+        let parts = store.composer_project_line();
         let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
+        let git_project = store.git_project();
+        let control: Option<AnyElement> = if let Some(button) = crate::git::git_button(&self.store, &self.git_menu, cx)
+        {
+            Some(button)
+        } else if let Some(project) = git_project.filter(|project| store.can_initialize_git(project)) {
+            Some(crate::git::initialize_git_button(&self.store, &project, cx).into_any_element())
+        } else {
+            store
+                .draft_base_to_pull()
+                .map(|base| crate::git::pull_base_button(&self.store, &base, cx).into_any_element())
+        };
         div()
             .absolute()
             .top_0()
@@ -99,7 +125,7 @@ impl ThreadPane {
             .h(px(theme::TOP_BAR))
             .pl(px(self.title_inset))
             // Room for the button that shows the side panel, which is at the window's edge.
-            .pr(px(if self.beside_panel { 4. } else { TOOLBAR_WIDTH + 12. }))
+            .pr(px(if self.beside_panel { 4. } else { TOOLBAR_WIDTH + 12. + self.trailing_room }))
             .flex()
             .items_center()
             .gap(px(8.))
@@ -109,40 +135,38 @@ impl ThreadPane {
                     .flex_col()
                     .gap(px(2.))
                     .min_w_0()
-                    .when_some(project_line, |title, line| {
-                        title.child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.))
-                                .child(logos::project_icon(project.as_ref(), 14., cx))
-                                .child(div().text_size(px(11.)).text_color(c.secondary).truncate().child(line)),
-                        )
-                    })
+                    .when_some(parts, |title, parts| title.child(project_line(project.as_ref(), &parts, cx)))
                     .child(
                         div()
                             .text_size(px(13.))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c.text)
+                            .text_color(c.foreground)
                             .truncate()
                             .child(title),
                     ),
             )
             .child(div().flex_1())
-            .children(crate::git::git_button(&self.store, &self.git_menu, cx))
+            .children(control)
     }
 
     /// The empty state of a new thread: a question, and the composer a little above the middle
     /// of the window.
-    fn start(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let lift = f32::from(window.viewport_size().height) * START_LIFT * 2.;
-        div().size_full().pb(px(lift)).flex().flex_col().items_center().justify_center().child(self.start_block(cx))
+    fn start(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let lift = f32::from(crate::window_frame::content_size(window).height) * START_LIFT * 2.;
+        div()
+            .size_full()
+            .pb(px(lift))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .child(self.start_block(window, cx))
     }
 
-    fn start_block(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn start_block(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
-        let no_projects = store.projects.is_empty();
+        let no_projects = store.projects.is_empty() && store.no_projects.is_empty();
         let connected = store.servers.iter().any(|server| server.connected());
         let add = self.store.clone();
         div()
@@ -162,7 +186,7 @@ impl ThreadPane {
                         .child(
                             div()
                                 .text_size(px(14.))
-                                .text_color(c.secondary)
+                                .text_color(c.muted_foreground)
                                 .child("A project is a folder on your server that threads work in."),
                         )
                         .child(
@@ -183,56 +207,55 @@ impl ThreadPane {
                 )
             })
             .when(!no_projects, |start| {
-                start.child(self.headline(cx)).child(
+                start.child(self.headline(window, cx)).child(
                     div().w_full().px(px(theme::COMPOSER_PADDING)).flex().justify_center().child(self.composer.clone()),
                 )
             })
     }
 
-    fn headline(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn headline(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The room between the words is a space of the headline's type.
+        let word_space = crate::ui::text_width(" ", HEADLINE_SIZE, FontWeight::NORMAL, window);
         let c = colors(cx);
         let store = self.store.read(cx);
         let selected = store.project(store.selected_draft().and_then(|draft| draft.project_id.as_deref())).cloned();
         let anchor = self.project_menu.clone();
         let handle = self.store.clone();
         let several_servers = store.servers.len() > 1;
-        let projects: Vec<(String, String, Option<String>)> = store
+        let (lead, name) = Project::headline(selected.as_ref());
+        let projects: Vec<(String, String, Option<String>, &'static str)> = store
             .recent_projects()
             .into_iter()
+            .chain(&store.no_projects)
             .map(|project| {
                 let name = if several_servers {
-                    let server =
-                        store.server(Some(&project.server_id)).map(|server| server.name.clone()).unwrap_or_default();
+                    let server = store
+                        .server(Some(&project.server_id))
+                        .map(|server| server.short_name.clone())
+                        .unwrap_or_default();
                     format!("{} · {server}", project.name)
                 } else {
                     project.name.clone()
                 };
-                (project.id.clone(), name, project.icon_path.clone())
+                (project.id.clone(), name, project.icon_path.clone(), project.symbol())
             })
             .collect();
         div()
             .flex()
             .items_center()
-            .gap(px(HEADLINE_WORD_SPACE))
+            .gap(px(word_space))
             .text_size(px(HEADLINE_SIZE))
-            .text_color(c.text)
-            .child("Let’s build in")
+            .text_color(c.foreground)
+            .child(lead)
             .child(
                 div()
                     .id("headline-project")
                     .group("headline-project")
                     .relative()
-                    .rounded(px(10.))
+                    .rounded(px(Radius::LG))
                     .border_1()
                     .border_color(c.border)
-                    .child(highlight_in(
-                        "headline-project",
-                        10.,
-                        even(0.),
-                        false,
-                        Surface::Background.next().color(c),
-                        cx,
-                    ))
+                    .child(Highlight::new().radius(Radius::LG).render("headline-project", cx))
                     .child(
                         div()
                             .relative()
@@ -244,16 +267,16 @@ impl ThreadPane {
                             .gap(px(8.))
                             .child(anchor.track())
                             .child(logos::project_icon(selected.as_ref(), 22., cx))
-                            .child(selected.as_ref().map(|project| project.name.clone()).unwrap_or("a project".into()))
-                            .child(icons::symbol("chevron-down", 13.).text_color(c.tertiary)),
+                            .child(name)
+                            .child(icons::symbol("chevron-down", 13.).text_color(c.muted_stronger_foreground)),
                     )
                     .on_click(move |_, window, cx| {
                         let mut menu = Menu::new();
-                        for (id, name, icon) in &projects {
+                        for (id, name, icon, symbol) in &projects {
                             let (store, id) = (handle.clone(), id.clone());
                             let icon = match icon {
                                 Some(path) => MenuIcon::File(path.clone().into()),
-                                None => MenuIcon::Symbol("folder"),
+                                None => MenuIcon::Symbol(symbol),
                             };
                             menu = menu.icon_item(name.clone(), icon, true, None, move |_, cx| {
                                 store.update(cx, |store, cx| {
@@ -263,42 +286,67 @@ impl ThreadPane {
                             });
                         }
                         let add = handle.clone();
-                        menu = menu.separator().item("Add Project…", move |_, cx| {
+                        menu = menu.separator().item("Add Project", move |_, cx| {
                             add.update(cx, |store, cx| {
                                 store.add_project();
                                 cx.notify();
                             })
                         });
-                        if let Some(project) = selected.clone() {
-                            let (choose, reset, remove) = (handle.clone(), handle.clone(), handle.clone());
-                            let (chosen, reset_project, removed) = (project.clone(), project.clone(), project.clone());
+                        if let Some(project) = selected.clone().filter(|project| !project.no_project) {
+                            let (choose, remove) = (handle.clone(), handle.clone());
+                            let (chosen, removed) = (project.clone(), project.clone());
                             menu = menu
-                                .item(format!("Choose an Icon for “{}”…", project.name), move |_, cx| {
+                                .item(format!("Choose an Icon for “{}”", project.name), move |_, cx| {
                                     choose.update(cx, |store, cx| {
-                                        store.icon_project = Some(chosen.clone());
-                                        cx.notify();
-                                    })
-                                })
-                                .item("Use the Icon in Its Folder", move |_, cx| {
-                                    reset.update(cx, |store, cx| {
-                                        store.set_icon(&reset_project, None);
+                                        store.open_panel(PanelPage::Icon(chosen.id.clone()));
                                         cx.notify();
                                     })
                                 })
                                 .item(format!("Remove “{}” from Projects", project.name), move |_, cx| {
                                     remove.update(cx, |store, cx| {
-                                        store.remove_project(&removed);
+                                        store.removing_project = Some(removed.clone());
                                         cx.notify();
                                     })
                                 });
                         }
-                        menu.show(anchor.below(), window, cx);
+                        menu.show_under(&anchor, 4., window, cx);
                     }),
             )
     }
 
-    /// Covers the thread while files are held over it, to say they can be dropped.
-    fn drop_cover(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// Asks before a project leaves the clients, and lets it go only when the user says so.
+    fn removal(&self, project: &Project, cx: &mut Context<Self>) -> Modal {
+        let store = self.store.read(cx);
+        let server =
+            store.server(Some(&project.server_id)).map_or("its server".to_string(), |server| server.name.clone());
+        let message =
+            format!("{} leaves your clients. Its folder stays on {server} with everything in it.", project.name);
+        let (remove, cancel, removed) = (self.store.clone(), self.store.clone(), project.clone());
+        let asked = Confirmation::new(format!("Remove “{}”?", project.name)).message(message).answer(
+            Answer::new("Remove", move |_, cx| {
+                remove.update(cx, |store, cx| {
+                    store.remove_project(&removed);
+                    cx.notify();
+                })
+            })
+            .danger(),
+        );
+        confirmation(
+            "remove-project",
+            asked,
+            move |_, cx| {
+                cancel.update(cx, |store, cx| {
+                    store.removing_project = None;
+                    cx.notify();
+                })
+            },
+            cx,
+        )
+    }
+
+    /// Covers the thread while files are held over it, to say they can be dropped. It fades in
+    /// and out.
+    fn drop_cover(&self, shown: f32, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         div()
             .absolute()
@@ -306,14 +354,19 @@ impl ThreadPane {
             .left_0()
             .right_0()
             .bottom_0()
-            .invisible()
-            .group_drag_over::<ExternalPaths>("main-drop", |cover| cover.visible())
-            .bg(c.background.opacity(0.9))
+            .opacity(shown)
+            .bg(c.background)
             .flex()
             .items_center()
             .justify_center()
             .child(
-                div().absolute().inset(px(8.)).rounded(px(16.)).border(px(1.5)).border_dashed().border_color(c.primary),
+                div()
+                    .absolute()
+                    .inset(px(8.))
+                    .rounded(px(Radius::XL))
+                    .border(px(1.5))
+                    .border_dashed()
+                    .border_color(c.primary),
             )
             .child(
                 div()
@@ -321,7 +374,7 @@ impl ThreadPane {
                     .flex_col()
                     .items_center()
                     .gap(px(12.))
-                    .text_color(c.text)
+                    .text_color(c.foreground)
                     .child(icons::symbol("paperclip", 28.))
                     .child(div().text_size(px(17.)).font_weight(FontWeight::SEMIBOLD).child("Drop files here")),
             )
@@ -331,21 +384,50 @@ impl ThreadPane {
 impl Render for ThreadPane {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let store = self.store.read(cx);
-        let is_start = store
-            .selected_draft()
-            .is_some_and(|draft| store.transcript_is_empty && !store.sending_draft_ids.contains(&draft.id));
+        let is_start =
+            store.selected_draft().is_some_and(|draft| store.transcript_is_empty && !store.is_sending(&draft.id));
         let pending_git = store.pending_git.clone();
-        let checkout = store.git_project().map(|project| project.checkout_id());
-        let notice = store.git_notice.clone().filter(|notice| Some(&notice.checkout_id) == checkout.as_ref());
+        let notice = store.open_git_notice();
+        let removing = store.removing_project.clone();
+        let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
         let takes_drops = store.composer_server().is_some();
+        if self.window_title != title {
+            window.set_window_title(&title);
+            self.window_title = title;
+        }
+        let pending_git = presented("git-confirm", pending_git, window, cx);
+        let removing = presented("remove-project", removing, window, cx);
+        let commit_sheet = present_sheet(
+            "commit-sheet",
+            self.commit_sheet.clone(),
+            |sheet, leaving| sheet.leaving = leaving,
+            window,
+            cx,
+        );
+        if !cx.has_active_drag() {
+            self.drop_over = false;
+        }
+        let held_over = takes_drops && self.drop_over;
+        let cover = crate::ui::motion::eased(
+            "drop-cover",
+            if held_over { 1. } else { 0. },
+            crate::ui::motion::QUICK,
+            window,
+            cx,
+        );
+        // The git notice slides and fades in and out, and changes in place when another follows it.
+        let notice = crate::ui::motion::lingering("git-notice", notice, NOTICE_FADE, window, cx);
+        let notice_shown = crate::ui::motion::eased_from(
+            "git-notice-shown",
+            0.,
+            if notice.as_ref().is_some_and(|(_, going)| !going) { 1. } else { 0. },
+            NOTICE_FADE,
+            window,
+            cx,
+        );
         let measured = self.composer_height.clone();
         let inset = self.composer_height.get();
-        self.transcript.update(cx, |transcript, cx| {
-            if transcript.bottom_inset != inset {
-                transcript.bottom_inset = inset;
-                cx.notify();
-            }
-        });
+        self.transcript.update(cx, |transcript, cx| transcript.set_bottom_inset(inset, cx));
         div()
             .id("thread-pane")
             .size_full()
@@ -389,15 +471,53 @@ impl Render for ThreadPane {
                     .into_any_element()
             })
             .child(self.top_bar(cx))
-            .when_some(notice, |pane, notice| {
-                pane.child(div().absolute().top(px(theme::TOP_BAR + 6.)).right(px(14.)).child(crate::git::git_notice(
-                    &self.store,
-                    &notice,
-                    cx,
-                )))
+            .when_some(notice, |pane, (notice, _)| {
+                pane.child(
+                    div()
+                        .absolute()
+                        .top(px(theme::TOP_BAR + 6. - 6. * (1. - notice_shown)))
+                        .right(px(14.))
+                        .opacity(notice_shown)
+                        .child(crate::git::git_notice(&self.store, &notice, cx)),
+                )
             })
-            .when(takes_drops, |pane| pane.child(self.drop_cover(cx)))
-            .children(self.commit_sheet.clone())
-            .when_some(pending_git, |pane, pending| pane.child(crate::git::confirm_alert(&self.store, &pending, cx)))
+            .when(cover > 0., |pane| pane.child(self.drop_cover(cover, cx)))
+            .on_drag_move(cx.listener(|this, event: &DragMoveEvent<ExternalPaths>, _, cx| {
+                let at = event.event.position;
+                let inside = event.bounds.contains(&at) && at.x < event.bounds.right() - px(this.covered);
+                if inside != this.drop_over {
+                    this.drop_over = inside;
+                    cx.notify();
+                }
+            }))
+            .on_drop(cx.listener(move |this, paths: &ExternalPaths, _, cx| {
+                let held_over = std::mem::take(&mut this.drop_over);
+                if !held_over || !takes_drops {
+                    return;
+                }
+                let files = paths.paths().to_vec();
+                this.store.update(cx, |store, cx| {
+                    store.attach(files);
+                    cx.notify();
+                });
+            }))
+            .children(commit_sheet)
+            .when_some(pending_git, |pane, (pending, leaving)| {
+                pane.child(crate::git::confirm_alert(&self.store, &pending, cx).leaving(leaving))
+            })
+            .when_some(removing, |pane, (project, leaving)| pane.child(self.removal(&project, cx).leaving(leaving)))
     }
+}
+
+/// The line over a thread's title: its project's icon, then its parts with muted dots between.
+fn project_line(project: Option<&Project>, parts: &[String], cx: &App) -> impl IntoElement {
+    let c = colors(cx);
+    div().min_w_0().flex().items_center().gap(px(4.)).child(logos::project_icon(project, 12., cx)).child(
+        div()
+            .min_w_0()
+            .text_size(px(11.))
+            .text_color(c.muted_foreground)
+            .truncate()
+            .child(crate::ui::control::dotted(parts.join(" · "), c)),
+    )
 }

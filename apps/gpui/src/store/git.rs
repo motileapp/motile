@@ -67,6 +67,13 @@ pub fn stage_label(stage: GitStage) -> &'static str {
         GitStage::PullRequestText => "Writing PR",
         GitStage::PullRequest => "Creating PR",
         GitStage::Pull => "Pulling",
+        GitStage::Merge => "Merging PR",
+        GitStage::AutoMerge => "Setting Auto-merge",
+        GitStage::UpdateBranch => "Updating Branch",
+        GitStage::Close => "Closing PR",
+        GitStage::Reopen => "Reopening PR",
+        GitStage::Revert => "Reverting PR",
+        GitStage::Unknown => "Working",
     }
 }
 
@@ -81,10 +88,16 @@ impl Store {
             .any(|thread| thread.project_id == project.id && thread.running && thread.cwd == project.path)
     }
 
-    /// Whether the project's server is new enough to start threads in worktrees of their own.
+    fn protocol_of(&self, project: &Project) -> u32 {
+        self.server(Some(&project.server_id)).map_or(0, |server| server.protocol_version)
+    }
+
+    /// Whether the project's server is new enough to start threads in worktrees of their own, and
+    /// its branch has a commit to start them from.
     pub fn can_use_worktrees(&self, project: &Project) -> bool {
         project.branch.is_some()
-            && self.server(Some(&project.server_id)).map_or(0, |server| server.protocol_version) >= 6
+            && !project.git.as_ref().is_some_and(|git| git.no_commit)
+            && self.protocol_of(project) >= 6
     }
 
     /// Whether the open draft starts its thread in a new worktree.
@@ -94,25 +107,127 @@ impl Store {
         draft.worktree == Some(true) && self.can_use_worktrees(project)
     }
 
-    /// The branch the open draft's worktree starts from: the one picked, or the one checked out.
+    /// The branch the open draft's worktree starts from: the one picked, the one picked last in
+    /// its project, or the default one.
     pub fn draft_base(&self) -> Option<String> {
         let draft = self.selected_draft()?;
-        draft.base.clone().or_else(|| self.project(draft.project_id.as_deref())?.branch.clone())
+        let project = self.project(draft.project_id.as_deref())?;
+        draft
+            .base
+            .clone()
+            .or_else(|| self.prefs.string(&format!("new.base-{}", project.id)))
+            .or_else(|| project.git.as_ref().and_then(|git| git.default_branch.clone()))
+            .or_else(|| project.branch.clone())
+    }
+
+    /// The project and the base of the open draft's worktree, when its thread starts in one.
+    pub fn draft_worktree_key(&self) -> Option<String> {
+        if !self.draft_uses_worktree() {
+            return None;
+        }
+        let project_id = self.selected_draft()?.project_id.clone()?;
+        Some(format!("{project_id} {}", self.draft_base()?))
+    }
+
+    /// What the open draft's worktree starts at: its base, or the remote's when that has commits
+    /// the local one lacks.
+    pub fn draft_start(&self) -> Option<String> {
+        let base = self.draft_base()?;
+        Some(self.draft_worktree_key().and_then(|key| self.worktree_starts.get(&key).cloned()).unwrap_or(base))
+    }
+
+    /// Asks the project's server what the open draft's worktree would start at. With `fetch` the
+    /// remote is asked first, and a fetch that fails is said.
+    pub fn read_worktree_start(&mut self, fetch: bool) {
+        let (Some(key), Some(base)) = (self.draft_worktree_key(), self.draft_base()) else { return };
+        let Some(project) = self.project(self.selected_draft().and_then(|draft| draft.project_id.as_deref())).cloned()
+        else {
+            return;
+        };
+        if self.protocol_of(&project) < 13 {
+            return;
+        }
+        let request = Request::WorktreeStart { project_id: project.id.clone(), base: base.clone(), fetch };
+        let server_id = project.server_id.clone();
+        self.request_then(&server_id, request, move |store, result, cx| {
+            let Ok(answer) = result else { return };
+            store.worktree_starts.insert(key, answer["start"].as_str().unwrap_or_default().to_string());
+            let Some(problem) = answer["problem"].as_str() else { return };
+            let mut notice = GitNotice::new(&project.checkout_id(), format!("Couldn't fetch {base}"));
+            notice.description = Some(problem.to_string());
+            notice.failed = true;
+            store.show_git_notice(notice, cx);
+        });
+    }
+
+    /// The open draft's base, when its worktree would start from the remote's instead, which has
+    /// commits the local one lacks.
+    pub fn draft_base_to_pull(&self) -> Option<String> {
+        let (base, start) = (self.draft_base()?, self.draft_start()?);
+        let project = self.project(self.selected_draft()?.project_id.as_deref())?;
+        (start != base && self.protocol_of(project) >= 20).then_some(base)
+    }
+
+    pub fn pulling_draft_base(&self) -> bool {
+        self.draft_worktree_key().is_some_and(|key| self.pulling_bases.contains(&key))
+    }
+
+    /// Brings the open draft's local base up to the remote's, for its worktree to start from it.
+    pub fn pull_draft_base(&mut self) {
+        let (Some(key), Some(base)) = (self.draft_worktree_key(), self.draft_base_to_pull()) else { return };
+        let Some(project) = self.project(self.selected_draft().and_then(|draft| draft.project_id.as_deref())).cloned()
+        else {
+            return;
+        };
+        if !self.pulling_bases.insert(key.clone()) {
+            return;
+        }
+        self.git_notice = None;
+        let request = Request::UpdateBase { project_id: project.id.clone(), base: base.clone() };
+        let server_id = project.server_id.clone();
+        self.request_then(&server_id, request, move |store, result, cx| {
+            store.pulling_bases.remove(&key);
+            let notice = match result {
+                Ok(answer) => {
+                    store.worktree_starts.insert(key, answer["start"].as_str().unwrap_or_default().to_string());
+                    GitNotice::new(&project.checkout_id(), format!("Pulled {base}"))
+                }
+                Err(error) => {
+                    let mut notice = GitNotice::new(&project.checkout_id(), format!("Couldn't pull {base}"));
+                    notice.description = Some(error.into());
+                    notice.failed = true;
+                    notice
+                }
+            };
+            store.show_git_notice(notice, cx);
+        });
+    }
+
+    /// The git notice of the checkout git works in from here, or of the project the open draft
+    /// starts a worktree in.
+    pub fn open_git_notice(&self) -> Option<GitNotice> {
+        let notice = self.git_notice.as_ref()?;
+        let draft_project = self
+            .draft_uses_worktree()
+            .then(|| self.project(self.selected_draft()?.project_id.as_deref()).cloned())
+            .flatten();
+        let checkout = self.git_project().or(draft_project)?.checkout_id();
+        (notice.checkout_id == checkout).then(|| notice.clone())
     }
 
     /// The line over the thread's title: its project, its branch, and whether it starts in a new
     /// worktree.
-    pub fn composer_project_line(&self) -> Option<String> {
+    pub fn composer_project_line(&self) -> Option<Vec<String>> {
         let project = self.composer_project();
         let folder = self.selected_thread().map(|thread| crate::models::last_component(&thread.cwd));
         let name = project.as_ref().map(|project| project.name.clone()).or(folder)?;
         if self.draft_uses_worktree()
-            && let Some(base) = self.draft_base()
+            && let Some(start) = self.draft_start()
         {
-            return Some(format!("{name} · {base} · New worktree"));
+            return Some(vec![name, start, "New worktree".into()]);
         }
-        let Some(branch) = project.and_then(|project| project.branch) else { return Some(name) };
-        Some(format!("{name} · {branch}"))
+        let Some(branch) = project.and_then(|project| project.branch) else { return Some(vec![name]) };
+        Some(vec![name, branch])
     }
 
     pub fn set_draft_worktree(&mut self, worktree: bool, cx: &mut Context<Self>) {
@@ -121,22 +236,47 @@ impl Store {
     }
 
     pub fn set_draft_base(&mut self, branch: String) {
-        self.update_draft(|draft| draft.base = Some(branch));
+        self.update_draft(|draft| draft.base = Some(branch.clone()));
+        let Some(project_id) = self.selected_draft().and_then(|draft| draft.project_id.clone()) else { return };
+        self.prefs.set(&format!("new.base-{project_id}"), branch);
     }
 
     /// Whether the project's server is new enough to list and switch branches.
     pub fn can_switch_branches(&self, project: &Project) -> bool {
-        project.branch.is_some()
-            && self.server(Some(&project.server_id)).map_or(0, |server| server.protocol_version) >= 3
+        project.branch.is_some() && self.protocol_of(project) >= 3
     }
 
-    /// Opens the branch picker once the branches are known.
+    /// Opens the branch picker at once, on the branches last listed or on placeholders, and lists
+    /// them again.
     pub fn show_branches(&mut self, project: &Project) {
+        self.listed_branches = self.known_branches.get(&project.id).cloned().map(Ok);
+        self.branches_project_id = Some(project.id.clone());
+        self.shows_branches = true;
+        self.list_branches(project);
+    }
+
+    /// Lists the branches of the project the composer is on before the picker is opened.
+    fn list_composer_branches(&mut self) {
+        let Some(project) = self.composer_project().filter(|project| self.can_switch_branches(project)) else {
+            return;
+        };
+        self.list_branches(&project);
+    }
+
+    fn list_branches(&mut self, project: &Project) {
         let request = Request::Branches { project_id: project.id.clone() };
-        self.request_then(&project.server_id, request, |store, result, _| {
-            store.listed_branches = result
+        let project_id = project.id.clone();
+        self.request_then(&project.server_id, request, move |store, result, _| {
+            let listed = result
+                .map_err(String::from)
                 .map(|value| serde_json::from_value::<Vec<Branch>>(value["branches"].clone()).unwrap_or_default());
-            store.shows_branches = true;
+            if let Ok(branches) = &listed {
+                store.known_branches.insert(project_id.clone(), branches.clone());
+            }
+            if store.branches_project_id.as_ref() != Some(&project_id) || !store.shows_branches {
+                return;
+            }
+            store.listed_branches = Some(listed);
         });
     }
 
@@ -150,27 +290,58 @@ impl Store {
         done: impl FnOnce(&mut Store, Option<String>, &mut Context<Store>) + 'static,
     ) {
         let request = Request::SwitchBranch { project_id: project.id.clone(), branch: name, create };
-        self.request_then(&project.server_id, request, move |store, result, cx| done(store, result.err(), cx));
+        self.request_then(&project.server_id, request, move |store, result, cx| {
+            done(store, result.err().map(String::from), cx)
+        });
     }
 
     /// Whether the project's server is new enough to commit, push and open pull requests.
     pub fn can_use_git(&self, project: &Project) -> bool {
-        self.server(Some(&project.server_id)).map_or(0, |server| server.protocol_version) >= 4
+        self.protocol_of(project) >= 4
+    }
+
+    /// Whether the project's folder is no git repository and its server can make it one.
+    pub fn can_initialize_git(&self, project: &Project) -> bool {
+        !project.no_project && project.branch.is_none() && project.git.is_none() && self.protocol_of(project) >= 16
+    }
+
+    pub fn initialize_git(&mut self, project: &Project) {
+        if !self.initializing_git.insert(project.id.clone()) {
+            return;
+        }
+        let project_id = project.id.clone();
+        let request = Request::InitRepository { project_id: project.id.clone() };
+        self.request_then(&project.server_id, request, move |store, result, _| {
+            store.initializing_git.remove(&project_id);
+            if let Err(error) = result {
+                store.fail(error);
+            }
+        });
     }
 
     /// Has the server read the repository git works in from here again, which the project then
-    /// arrives with. With `fetch` the remote is asked first.
+    /// arrives with. With `fetch` the remote is asked first, and a fetch that fails is said.
     pub fn read_git(
         &mut self,
         fetch: bool,
         done: Option<impl FnOnce(&mut Store, Vec<ChangedFile>, &mut Context<Store>) + 'static>,
         _cx: &mut Context<Self>,
     ) {
+        if fetch {
+            self.list_composer_branches();
+        }
         let Some(project) = self.git_project() else { return };
         let thread_id = self.selected_thread().map(|thread| thread.id.clone());
         let request = Request::GitStatus { project_id: project.id.clone(), thread_id, fetch };
-        self.request_then(&project.server_id, request, move |store, result, cx| match result {
+        let server_id = project.server_id.clone();
+        self.request_then(&server_id, request, move |store, result, cx| match result {
             Ok(answer) => {
+                if let Some(problem) = answer["problem"].as_str() {
+                    let mut notice = GitNotice::new(&project.checkout_id(), "Couldn't fetch from the remote".into());
+                    notice.description = Some(problem.to_string());
+                    notice.failed = true;
+                    store.show_git_notice(notice, cx);
+                }
                 if let Some(done) = done {
                     let files: Vec<ChangedFile> = serde_json::from_value(answer["files"].clone()).unwrap_or_default();
                     done(store, files, cx);
@@ -329,7 +500,7 @@ impl Store {
                 }
                 Err(error) => {
                     let mut notice = GitNotice::new(&checkout_id, "Git stopped".into());
-                    notice.description = Some(error);
+                    notice.description = Some(error.into());
                     notice.failed = true;
                     notice
                 }
@@ -339,7 +510,7 @@ impl Store {
     }
 
     /// What worked goes away by itself; what failed stays until it is closed.
-    fn show_git_notice(&mut self, mut notice: GitNotice, cx: &mut Context<Self>) {
+    pub(super) fn show_git_notice(&mut self, mut notice: GitNotice, cx: &mut Context<Self>) {
         notice.serial = self.git_notice.as_ref().map_or(0, |shown| shown.serial) + 1;
         let failed = notice.failed;
         self.git_notice = Some(notice.clone());

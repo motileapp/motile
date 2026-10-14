@@ -2,19 +2,20 @@
 
 use std::collections::HashSet;
 
-use gpui_kit::component::Sizable;
-use gpui_kit::component::input::{Textarea, TextareaState};
+use gpui_kit::component::input::TextareaState;
+use gpui_kit::component::scroll::Scrollbar;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_protocol::wire::{Change, ChangedFile, GitAction, PullRequest};
+use motile_protocol::wire::{Change, ChangedFile, GitAction};
 
 use crate::models::Project;
 use crate::store::{GitNotice, PendingGit, Store, stage_label};
-use crate::theme::{Colors, ControlSize, Radius, Surface, colors};
-use crate::ui::alert::{AlertButton, alert};
+use crate::theme::{ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::ui::logos::{pull_request_color, pull_request_symbol};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
-use crate::ui::sheet::sheet;
-use crate::ui::{ActionButton, Variant, icons};
+use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, modal};
+use crate::ui::rich_text::RichText;
+use crate::ui::{ActionButton, FadingScroll, PickMark, TextArea, Variant, icons, text_area_state};
 
 /// What leaves the room under the button that the composer's menus leave over theirs.
 const MENU_GAP: f32 = 16.;
@@ -29,28 +30,6 @@ pub fn git_symbol(action: Option<GitAction>) -> &'static str {
     }
 }
 
-/// The symbol of what became of a pull request.
-pub fn pull_request_symbol(pull_request: &PullRequest) -> &'static str {
-    if pull_request.merged {
-        return "git-merge";
-    }
-    if pull_request.closed {
-        return "git-pull-request-closed";
-    }
-    if pull_request.draft { "git-pull-request-draft" } else { "git-pull-request" }
-}
-
-/// The colour of what became of a pull request.
-pub fn pull_request_color(pull_request: &PullRequest, c: &Colors) -> Hsla {
-    if pull_request.merged {
-        return c.merged;
-    }
-    if pull_request.closed {
-        return c.danger;
-    }
-    if pull_request.draft { c.secondary } else { c.success }
-}
-
 /// Its left half does the one thing the repository calls for, at once: commit, push, open a pull
 /// request, pull. Its right half opens the menu of all of them, where an item that can't run now
 /// says why. While an action runs, the button says which stage it is at.
@@ -61,7 +40,7 @@ pub fn git_button(store: &Entity<Store>, anchor: &Anchor, cx: &App) -> Option<An
     let control = project.git_control.clone()?;
     let stage = state.git_stage(&project);
     let quick = control.quick.clone();
-    let pull_request = project.git.as_ref().and_then(|git| git.pull_request.clone());
+    let pull_request = quick.pull_request.clone();
     let symbol = match (&quick.url, &pull_request) {
         (Some(_), Some(pull_request)) => pull_request_symbol(pull_request),
         (Some(_), None) => "git-pull-request",
@@ -75,10 +54,11 @@ pub fn git_button(store: &Entity<Store>, anchor: &Anchor, cx: &App) -> Option<An
     let help = quick.hint.clone().or_else(|| pull_request.as_ref().map(|pr| pr.title.clone())).unwrap_or(title);
     // A pull request is in the colour of its state, and what has nothing to do is quiet.
     let tint = match (stage, &quick.url, &pull_request) {
-        (Some(_), _, _) => c.text,
+        (Some(_), _, _) => c.foreground,
+        (None, Some(_), Some(pull_request)) if pull_request.draft => c.foreground,
         (None, Some(_), Some(pull_request)) => pull_request_color(pull_request, c),
-        (None, None, _) if quick.action.is_none() => c.tertiary,
-        _ => c.text,
+        (None, None, _) if quick.action.is_none() => c.muted_stronger_foreground,
+        _ => c.foreground,
     };
     let quick_store = store.clone();
     let quick_project = project.clone();
@@ -91,7 +71,7 @@ pub fn git_button(store: &Entity<Store>, anchor: &Anchor, cx: &App) -> Option<An
             .relative()
             .flex()
             .items_center()
-            .rounded(px(Radius::CONTROL))
+            .rounded(px(Radius::MD))
             .overflow_hidden()
             .child(anchor.track())
             .child(
@@ -109,20 +89,57 @@ pub fn git_button(store: &Entity<Store>, anchor: &Anchor, cx: &App) -> Option<An
                         });
                     }),
             )
-            .child(div().w(px(1.)).h(px(ControlSize::Regular.height())).bg(c.border_secondary))
+            .child(div().w(px(1.)).h(px(ControlSize::Regular.height())).bg(c.border))
             .child(
                 ActionButton::chevron("git-menu", "Commit, push or open a pull request").joined(true, true).on_click(
                     move |_, window, cx| {
-                        git_menu(&menu_store, &project, cx).show_right_aligned(
-                            menu_anchor.below_right(MENU_GAP),
-                            window,
-                            cx,
-                        );
+                        git_menu(&menu_store, &project, cx).show_under_right(&menu_anchor, MENU_GAP, window, cx);
                     },
                 ),
             )
-            .child(div().absolute().inset_0().rounded(px(Radius::CONTROL)).border_1().border_color(c.border_secondary))
+            .child(div().absolute().inset_0().rounded(px(Radius::MD)).border_1().border_color(c.border))
             .into_any_element(),
+    )
+}
+
+/// What stands in for the git button in a folder that is no git repository: it makes it one.
+pub fn initialize_git_button(store: &Entity<Store>, project: &Project, cx: &App) -> impl IntoElement {
+    let pending = store.read(cx).initializing_git.contains(&project.id);
+    let (store, project) = (store.clone(), project.clone());
+    div().mx(px(6.)).flex_shrink_0().child(
+        ActionButton::new("initialize-git", "Initialize git")
+            .symbol("git-branch")
+            .help(format!("Make {} a git repository", project.name))
+            .ghost()
+            .pending(pending)
+            .on_click(move |_, _, cx| {
+                store.update(cx, |store, cx| {
+                    store.initialize_git(&project);
+                    cx.notify();
+                })
+            }),
+    )
+}
+
+/// What stands in for the git button in a draft that starts a new worktree, while the remote's
+/// base has commits the local one lacks: it brings the local one up to date.
+pub fn pull_base_button(store: &Entity<Store>, base: &str, cx: &App) -> impl IntoElement {
+    let state = store.read(cx);
+    let pending = state.pulling_draft_base();
+    let start = state.draft_start().unwrap_or(base.to_string());
+    let store = store.clone();
+    div().mx(px(6.)).flex_shrink_0().child(
+        ActionButton::new("pull-base", format!("Pull {base}"))
+            .symbol(git_symbol(Some(GitAction::Pull)))
+            .help(format!("Bring {base} up to date with {start}"))
+            .ghost()
+            .pending(pending)
+            .on_click(move |_, _, cx| {
+                store.update(cx, |store, cx| {
+                    store.pull_draft_base();
+                    cx.notify();
+                })
+            }),
     )
 }
 
@@ -148,97 +165,106 @@ fn git_menu(store: &Entity<Store>, project: &Project, cx: &App) -> Menu {
     menu.when_some(control.warning, |menu, warning| menu.separator().note(warning))
 }
 
-/// Asks where an action that would push from the default branch should happen.
-pub fn confirm_alert(store: &Entity<Store>, pending: &PendingGit, cx: &App) -> impl IntoElement {
+/// Asks where an action that would push from the default branch should happen: Cancel, branch
+/// off, or go ahead there.
+pub fn confirm_alert(store: &Entity<Store>, pending: &PendingGit, cx: &App) -> Modal {
     let on = |new_branch: bool| {
         let store = store.clone();
         let pending = pending.clone();
         move |_: &mut Window, cx: &mut App| {
             store.update(cx, |store, cx| {
-                store.pending_git = None;
                 store.confirm_git(pending.clone(), new_branch, cx);
                 cx.notify();
             })
         }
     };
     let cancel = store.clone();
-    alert(
+    let asked = Confirmation::new(pending.confirm.title.clone())
+        .message(pending.confirm.description.clone())
+        .answer(Answer::new(pending.confirm.branch_off.clone(), on(true)).variant(Variant::Secondary))
+        .answer(Answer::new(pending.confirm.proceed.clone(), on(false)));
+    confirmation(
         "git-confirm",
-        pending.confirm.title.clone(),
-        Some(pending.confirm.description.clone().into()),
-        None,
-        vec![
-            AlertButton::new(pending.confirm.proceed.clone(), on(false)).prominent(),
-            AlertButton::new(pending.confirm.branch_off.clone(), on(true)),
-            AlertButton::new("Cancel", move |_, cx| {
-                cancel.update(cx, |store, cx| {
-                    store.pending_git = None;
-                    cx.notify();
-                })
-            }),
-        ],
+        asked,
+        move |_, cx| {
+            cancel.update(cx, |store, cx| {
+                store.pending_git = None;
+                cx.notify();
+            })
+        },
         cx,
     )
 }
 
-const NOTICE_RADIUS: f32 = Radius::SHEET;
+const NOTICE_RADIUS: f32 = Radius::LG;
 const NOTICE_PADDING: f32 = 14.;
-/// The close button is this far from the top and the right.
-const CLOSE_MARGIN: f32 = 8.;
 const TITLE_HEIGHT: f32 = 16.;
+const CLOSE_SIZE: f32 = ControlSize::Regular.height();
+/// Centres the close button on a notice of one line, as far from its right as from its top and
+/// bottom.
+const CLOSE_MARGIN: f32 = (NOTICE_PADDING * 2. + TITLE_HEIGHT - CLOSE_SIZE) / 2.;
+const TRAILING: f32 = CLOSE_MARGIN + CLOSE_SIZE + 4.;
+/// How many lines of what a failed action printed show before they scroll.
+const OUTPUT_LINES: f32 = 8.;
+const OUTPUT_LINE_HEIGHT: f32 = 16.;
+const OUTPUT_PADDING: f32 = 8.;
 
 /// What the last git action did, or what git refused, under the button. What follows is one click
 /// away: the push after a commit, the pull request after a push.
 pub fn git_notice(store: &Entity<Store>, notice: &GitNotice, cx: &App) -> impl IntoElement {
     let c = colors(cx);
-    let close_size = ControlSize::Small.height();
     let close = store.clone();
     let next = store.clone();
     let view = store.clone();
     let url = notice.url.clone();
     let next_label = notice.next_label();
     let description = notice.description.clone().map(|description| {
+        let text = RichText::new(SharedString::from(format!("notice-{}", notice.serial)), description);
         if !notice.failed {
-            return div().text_size(px(12.5)).text_color(c.secondary).line_clamp(2).child(description);
+            return div().text_size(px(12.5)).text_color(c.muted_foreground).line_clamp(2).child(text);
         }
         // The end is where a hook says what it found.
-        let lines: Vec<&str> = description.lines().collect();
-        let shown = lines[lines.len().saturating_sub(8)..].join("\n");
-        div().text_size(px(11.5)).font_family(crate::theme::MONO_FONT).text_color(c.secondary).child(shown)
+        let output = FadingScroll::new("notice-output", OUTPUT_LINES * OUTPUT_LINE_HEIGHT + 2. * OUTPUT_PADDING)
+            .padding(OUTPUT_PADDING)
+            .starts_at_end(true)
+            .fill(Surface::Popover.layer(Layer::Box, c))
+            .child(
+                div()
+                    .text_size(px(11.5))
+                    .line_height(px(OUTPUT_LINE_HEIGHT))
+                    .font_family(crate::theme::MONO_FONT)
+                    .text_color(c.muted_foreground)
+                    .child(text),
+            );
+        div()
+            .self_stretch()
+            .mt(px(4.))
+            .mr(px(-(TRAILING - NOTICE_PADDING)))
+            .rounded(px(Radius::MD))
+            .overflow_hidden()
+            .bg(Surface::Popover.layer(Layer::Box, c))
+            .border_1()
+            .border_color(Surface::Popover.border(c))
+            .child(output)
     });
     div()
         .relative()
         .max_w(px(320.))
         .py(px(NOTICE_PADDING - 1.))
         .pl(px(NOTICE_PADDING - 1.))
-        .pr(px(CLOSE_MARGIN + close_size + 4. - 1.))
+        .pr(px(TRAILING - 1.))
         .bg(c.popover)
         .rounded(px(NOTICE_RADIUS))
         .border_1()
-        .border_color(c.border_secondary)
-        .shadow(vec![
-            BoxShadow {
-                color: hsla(0., 0., 0., 0.05),
-                offset: point(px(0.), px(1.)),
-                blur_radius: px(1.5),
-                spread_radius: px(0.),
-                inset: false,
-            },
-            BoxShadow {
-                color: hsla(0., 0., 0., 0.1),
-                offset: point(px(0.), px(8.)),
-                blur_radius: px(20.),
-                spread_radius: px(0.),
-                inset: false,
-            },
-        ])
+        .border_color(c.border_popover)
+        .shadow(c.shadow(ShadowSize::Md, Opacity::Shadow))
         .flex()
         .items_start()
         .gap(px(10.))
         .child(
             div().h(px(TITLE_HEIGHT)).flex_shrink_0().flex().items_center().child(
                 icons::symbol(if notice.failed { "circle-alert" } else { "circle-check" }, 15.)
-                    .text_color(if notice.failed { c.danger } else { c.success }),
+                    .text_color(if notice.failed { c.destructive } else { c.success }),
             ),
         )
         .child(
@@ -256,7 +282,7 @@ pub fn git_notice(store: &Entity<Store>, notice: &GitNotice, cx: &App) -> impl I
                         .items_center()
                         .text_size(px(13.))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.text)
+                        .text_color(c.foreground)
                         .child(notice.title.clone()),
                 )
                 .children(description)
@@ -296,16 +322,19 @@ pub fn git_notice(store: &Entity<Store>, notice: &GitNotice, cx: &App) -> impl I
                     )
                 }),
         )
-        .child(div().absolute().top(px(CLOSE_MARGIN - 1.)).right(px(CLOSE_MARGIN - 1.)).child(
-            ActionButton::icon("notice-close", "x", "Close").small().surface(Surface::Popover).on_click(
-                move |_, _, cx| {
-                    close.update(cx, |store, cx| {
-                        store.dismiss_git_notice();
-                        cx.notify();
-                    })
-                },
+        .child(
+            div().absolute().top(px(CLOSE_MARGIN - 1.)).right(px(CLOSE_MARGIN - 1.)).child(
+                ActionButton::icon("notice-close", "x", "Close")
+                    .symbol_size(ControlSize::Regular.small_symbol())
+                    .surface(Surface::Popover)
+                    .on_click(move |_, _, cx| {
+                        close.update(cx, |store, cx| {
+                            store.dismiss_git_notice();
+                            cx.notify();
+                        })
+                    }),
             ),
-        ))
+        )
 }
 
 const ROW_HEIGHT: f32 = 24.;
@@ -319,16 +348,28 @@ pub struct CommitSheet {
     message: Entity<TextareaState>,
     excluded: HashSet<String>,
     editing: bool,
+    scroll: UniformListScrollHandle,
     focus: FocusHandle,
+    /// It has closed and fades out.
+    pub leaving: bool,
 }
 
 impl CommitSheet {
     pub fn new(store: Entity<Store>, project: Project, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let files = store.read(cx).git_files.clone();
-        let message = cx.new(|cx| TextareaState::new(window, cx).placeholder("Leave empty to have one written"));
+        let message = text_area_state("Leave empty to have one written", 4, 12, window, cx);
         let focus = cx.focus_handle();
-        message.update(cx, |message, cx| message.focus(window, cx));
-        Self { store, project, files, message, excluded: HashSet::new(), editing: false, focus }
+        Self {
+            store,
+            project,
+            files,
+            message,
+            excluded: HashSet::new(),
+            editing: false,
+            scroll: UniformListScrollHandle::new(),
+            focus,
+            leaving: false,
+        }
     }
 
     fn included(&self) -> Vec<String> {
@@ -362,13 +403,18 @@ impl CommitSheet {
         let total = self.files.len();
         let included = total - self.excluded.len();
         let height = (total as f32 * ROW_HEIGHT).min(192.) + 8.;
-        let mut rows = Vec::new();
-        for (index, file) in self.files.iter().enumerate() {
-            rows.push(self.row(index, file, cx));
-        }
-        let link = |id: &'static str, title: &'static str| {
-            ActionButton::new(id, title).variant(Variant::Link).small().surface(Surface::Popover)
-        };
+        let rows = uniform_list(
+            "commit-files",
+            total,
+            cx.processor(|this, range: std::ops::Range<usize>, _, cx| {
+                range.map(|index| this.row(index, &this.files[index], cx)).collect()
+            }),
+        )
+        .track_scroll(&self.scroll)
+        .size_full()
+        .px(px(10.))
+        .py(px(4.));
+        let link = |id: &'static str, title: &'static str| ActionButton::new(id, title).variant(Variant::Link).small();
         div()
             .flex()
             .flex_col()
@@ -381,7 +427,7 @@ impl CommitSheet {
                     .text_size(px(12.))
                     .child(div().text_size(px(12.5)).font_weight(FontWeight::MEDIUM).child("Files"))
                     .when(!self.excluded.is_empty() && !self.editing, |header| {
-                        header.child(div().text_color(c.secondary).child(format!("{included} of {total}")))
+                        header.child(div().text_color(c.muted_foreground).child(format!("{included} of {total}")))
                     })
                     .child(div().flex_1())
                     .child(
@@ -410,16 +456,19 @@ impl CommitSheet {
             )
             .child(
                 div()
-                    .id("commit-files")
+                    .relative()
                     .h(px(height))
-                    .overflow_y_scroll()
-                    .px(px(10.))
-                    .py(px(4.))
-                    .bg(Surface::Popover.next().color(c))
-                    .rounded(px(Radius::CONTROL))
+                    .bg(Surface::Background.layer(Layer::Box, c))
+                    .rounded(px(Radius::MD))
                     .border_1()
-                    .border_color(c.border_secondary)
-                    .children(rows),
+                    .border_color(Surface::Background.border(c))
+                    .child(rows)
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .child(Scrollbar::vertical(&self.scroll).id("commit-scroller").viewport_from_layout()),
+                    ),
             )
     }
 
@@ -428,20 +477,21 @@ impl CommitSheet {
         let excluded = self.excluded.contains(&file.path);
         let path = file.path.clone();
         div()
+            .w_full()
             .h(px(ROW_HEIGHT))
             .flex()
             .items_center()
             .gap(px(8.))
             .text_size(px(12.5))
             .when(self.editing, |row| {
-                row.child(checkbox(("commit-file", index), !excluded, cx).on_click(cx.listener(
-                    move |this, _, _, cx| {
+                row.child(div().id(("commit-file", index)).child(PickMark::new("pick", !excluded, true)).on_click(
+                    cx.listener(move |this, _, _, cx| {
                         if !this.excluded.remove(&path) {
                             this.excluded.insert(path.clone());
                         }
                         cx.notify();
-                    },
-                )))
+                    }),
+                ))
             })
             .child(
                 div()
@@ -450,12 +500,12 @@ impl CommitSheet {
                     .overflow_hidden()
                     .whitespace_nowrap()
                     .text_ellipsis_start()
-                    .text_color(if excluded { c.tertiary } else { c.text })
+                    .text_color(if excluded { c.muted_stronger_foreground } else { c.foreground })
                     .child(file.path.clone()),
             )
             .child(div().ml(px(8.)).flex_shrink_0().map(|end| {
                 if excluded {
-                    end.text_color(c.tertiary).child("Excluded")
+                    end.text_color(c.muted_stronger_foreground).child("Excluded")
                 } else if file.added + file.removed > 0 {
                     end.child(line_counts(file.added, file.removed, cx))
                 } else {
@@ -465,7 +515,7 @@ impl CommitSheet {
                         Change::Deleted => "deleted",
                         Change::Renamed => "renamed",
                     };
-                    end.text_color(c.tertiary).child(change)
+                    end.text_color(c.muted_stronger_foreground).child(change)
                 }
             }))
     }
@@ -479,25 +529,9 @@ fn line_counts(added: u32, removed: u32, cx: &App) -> Div {
         .gap(px(4.))
         .text_size(px(11.))
         .font_weight(FontWeight::MEDIUM)
+        .font_features(crate::ui::tabular_numbers())
         .when(added > 0, |counts| counts.child(div().text_color(c.success).child(format!("+{added}"))))
-        .when(removed > 0, |counts| counts.child(div().text_color(c.danger).child(format!("−{removed}"))))
-}
-
-/// A checkbox: a small rounded square, filled with the primary colour when on.
-fn checkbox(id: impl Into<ElementId>, checked: bool, cx: &App) -> Stateful<Div> {
-    let c = colors(cx);
-    div()
-        .id(id.into())
-        .size(px(14.))
-        .flex_shrink_0()
-        .rounded(px(3.5))
-        .flex()
-        .items_center()
-        .justify_center()
-        .when(checked, |square| square.bg(c.primary).child(icons::symbol("check", 9.).text_color(white())))
-        .when(!checked, |square| {
-            square.bg(Surface::Popover.next().color(c)).border_1().border_color(c.border_secondary)
-        })
+        .when(removed > 0, |counts| counts.child(div().text_color(c.destructive).child(format!("−{removed}"))))
 }
 
 impl Render for CommitSheet {
@@ -505,15 +539,10 @@ impl Render for CommitSheet {
         let c = colors(cx);
         let git = self.project.git.clone();
         let nothing = self.included().is_empty();
-        let button = |id: &'static str, title: &'static str| ActionButton::new(id, title).surface(Surface::Popover);
+        let button = |id: &'static str, title: &'static str| ActionButton::new(id, title);
         let content = div()
             .id("commit-sheet")
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                if event.keystroke.key == "escape" {
-                    this.dismiss(cx);
-                }
-            }))
             .p(px(20.))
             .flex()
             .flex_col()
@@ -523,11 +552,11 @@ impl Render for CommitSheet {
                     .flex()
                     .flex_col()
                     .gap(px(4.))
-                    .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("Commit changes"))
+                    .child(div().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child("Commit Changes"))
                     .child(
                         div()
                             .text_size(px(12.))
-                            .text_color(c.secondary)
+                            .text_color(c.muted_foreground)
                             .child("Review and confirm your commit. Leave the message empty to have one written."),
                     ),
             )
@@ -536,7 +565,7 @@ impl Render for CommitSheet {
                     .flex()
                     .gap(px(8.))
                     .text_size(px(12.5))
-                    .child(div().text_color(c.secondary).child("Branch"))
+                    .child(div().text_color(c.muted_foreground).child("Branch"))
                     .child(
                         div()
                             .font_weight(FontWeight::MEDIUM)
@@ -554,26 +583,7 @@ impl Render for CommitSheet {
                     .flex_col()
                     .gap(px(6.))
                     .child(div().text_size(px(12.5)).font_weight(FontWeight::MEDIUM).child("Commit message (optional)"))
-                    .child(
-                        div()
-                            .h(px(84.))
-                            .px(px(4.))
-                            .py(px(6.))
-                            .bg(Surface::Popover.next().color(c))
-                            .rounded(px(Radius::CONTROL))
-                            .border_1()
-                            .border_color(c.border)
-                            .text_size(px(12.5))
-                            .child(
-                                Textarea::new(&self.message)
-                                    .appearance(false)
-                                    .xsmall()
-                                    .text_size(px(12.5))
-                                    .px_0()
-                                    .py_0()
-                                    .h_full(),
-                            ),
-                    ),
+                    .child(TextArea::new(&self.message)),
             )
             .child(
                 div()
@@ -593,6 +603,15 @@ impl Render for CommitSheet {
                             .on_click(cx.listener(|this, _, _, cx| this.commit(false, cx))),
                     ),
             );
-        sheet("commit", 460., content, cx)
+        let close = cx.entity().downgrade();
+        let commit = cx.entity().downgrade();
+        modal("commit", content, move |_, cx| {
+            close.update(cx, |sheet, cx| sheet.dismiss(cx)).ok();
+        })
+        .on_return(move |_, cx| {
+            commit.update(cx, |sheet, cx| sheet.commit(false, cx)).ok();
+        })
+        .width(460.)
+        .leaving(self.leaving)
     }
 }

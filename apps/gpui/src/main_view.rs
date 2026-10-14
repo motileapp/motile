@@ -12,28 +12,41 @@ use crate::store::Store;
 use crate::theme::{self, colors};
 use crate::thread::ThreadPane;
 use crate::ui::{ActionButton, TOOLBAR_MARGIN, TOOLBAR_WIDTH, even};
+use crate::usage::UsageRoute;
 
 const SIDEBAR_WIDTHS: (f32, f32) = (240., 420.);
 /// What the sidebar always leaves to the thread, however wide it was dragged.
 const THREAD_MIN_WIDTH: f32 = 500.;
+/// The sidebar's width when it hasn't been dragged.
+pub const SIDEBAR_WIDTH: f32 = 280.;
+/// The line between a pane and what is beside it is grabbed this far into each.
+pub const THREAD_REACH: f32 = 8.;
+pub const PANE_REACH: f32 = 4.;
+
+/// How narrow and how wide the sidebar may be in a window this wide. The settings' sections are
+/// as wide.
+pub fn sidebar_widths(window_width: f32) -> (f32, f32) {
+    let widest = SIDEBAR_WIDTHS.1.min(window_width - 1. - THREAD_MIN_WIDTH);
+    (SIDEBAR_WIDTHS.0, SIDEBAR_WIDTHS.0.max(widest))
+}
+
+/// The sidebar's width as the user dragged it, within what the window allows.
+pub fn shown_sidebar_width(store: &Store, window_width: f32) -> f32 {
+    let widths = sidebar_widths(window_width);
+    store.prefs.f32_or("sidebar.width", SIDEBAR_WIDTH).clamp(widths.0, widths.1)
+}
 /// What the side panel leaves to the thread. Without that much room, it lies over the thread.
 const THREAD_BESIDE_PANEL: f32 = 400.;
-/// How far the top bar's content starts from the window's left edge while the sidebar is
-/// hidden: past the window's buttons and the ones beside them.
-const PAST_WINDOW_BUTTONS: f32 = 240.;
-/// Where the button that hides the sidebar starts, past the window's buttons.
-const NAVIGATION_LEFT: f32 = 90.;
+/// How far the top bar's content starts past the sidebar's button while the sidebar is hidden.
+const PAST_SIDEBAR_BUTTON: f32 = 46.;
 const PANEL_BUTTONS_INSET: f32 = 10.;
-pub const ROW_INSET: f32 = 10.;
-/// A divider is grabbed mostly from the thread's side: the pane's rows light up close to the
-/// line, and the grab must not take their clicks.
-const THREAD_REACH: f32 = 8.;
-const PANE_REACH: f32 = 4.;
 
+/// A drag of the line beside the sidebar or the side panel: where it started, the width then,
+/// and how narrow and how wide the window lets it be.
 #[derive(Clone, Copy, PartialEq)]
 enum Resizing {
-    Sidebar { start_x: f32, start_width: f32 },
-    Panel { start_x: f32, start_width: f32 },
+    Sidebar { start_x: f32, start_width: f32, widths: (f32, f32) },
+    Panel { start_x: f32, start_width: f32, widths: (f32, f32) },
 }
 
 pub struct MainView {
@@ -41,6 +54,8 @@ pub struct MainView {
     sidebar: Entity<Sidebar>,
     thread: Entity<ThreadPane>,
     panel: Entity<SidePanelView>,
+    /// What the agents spent, in place of the thread and the side panel while it is open.
+    usage: Option<Entity<UsageRoute>>,
     resizing: Option<Resizing>,
     /// A press in the top bar that moves the window once it drags.
     moving: std::rc::Rc<std::cell::Cell<bool>>,
@@ -63,6 +78,7 @@ impl MainView {
             sidebar,
             thread,
             panel,
+            usage: None,
             resizing: None,
             moving: Default::default(),
             _subscriptions: subscriptions,
@@ -81,42 +97,19 @@ impl MainView {
         });
     }
 
-    /// Drawn by the sidebar in the top bar while it is shown, so that they end where its rows
-    /// do; beside the sidebar's button while it is hidden.
-    fn project_buttons(&self, _: &mut Context<Self>) -> Div {
-        let new_project = self.store.clone();
-        let new_thread = self.store.clone();
-        div()
-            .flex()
-            .child(toolbar_button("add-project", "folder-plus", "Add a project").on_click(move |_, _, cx| {
-                new_project.update(cx, |store, cx| {
-                    store.add_project();
-                    cx.notify();
-                })
-            }))
-            .child(
-                toolbar_button("new-thread", "square-pen", "New thread (⌘N). ⇧-click starts one in this project")
-                    .on_click(move |event, _, cx| {
-                        let shift = event.modifiers().shift;
-                        new_thread.update(cx, |store, cx| {
-                            if shift {
-                                let project = store.composer_project().map(|project| project.id);
-                                store.start_new_thread(project, cx);
-                            } else {
-                                store.new_thread(cx);
-                            }
-                            cx.notify();
-                        })
-                    }),
-            )
-    }
-
     /// Drawn over the top bar's end: the side panel's buttons.
     fn panel_buttons(&self, cx: &mut Context<Self>) -> Div {
         let store = self.store.read(cx);
         let open = store.side_panel.is_open;
         let maximized = store.panel_maximized();
-        let can_maximize = open && store.panel_target().is_some();
+        let can_maximize = store.can_maximize_panel();
+        let maximize_help = if maximized {
+            "Restore the side panel (Esc)".to_string()
+        } else {
+            store.shortcuts.help("Maximize the side panel", "rightPanel.toggleMaximized")
+        };
+        let side_help =
+            store.shortcuts.help(if open { "Hide the side panel" } else { "Show the side panel" }, "rightPanel.toggle");
         let maximize = self.store.clone();
         let side = self.store.clone();
         div()
@@ -126,11 +119,7 @@ impl MainView {
                     toolbar_button(
                         "maximize-panel",
                         if maximized { "minimize-2" } else { "maximize-2" },
-                        if maximized {
-                            "Restore the side panel (⇧⌥⌘B)"
-                        } else {
-                            "Maximize the side panel (⇧⌥⌘B)"
-                        },
+                        maximize_help,
                     )
                     .disabled(!can_maximize)
                     .on_click(move |_, _, cx| {
@@ -141,27 +130,20 @@ impl MainView {
                     }),
                 )
             })
-            .child(
-                toolbar_button(
-                    "toggle-panel",
-                    "panel-right",
-                    if open { "Hide the side panel (⌥⌘B)" } else { "Show the side panel (⌥⌘B)" },
-                )
-                .on_click(move |_, _, cx| {
-                    side.update(cx, |store, cx| {
-                        let open = !store.side_panel.is_open;
-                        store.set_panel_open(open);
-                        cx.notify();
-                    })
-                }),
-            )
+            .child(toolbar_button("toggle-panel", "panel-right", side_help).on_click(move |_, _, cx| {
+                side.update(cx, |store, cx| {
+                    let open = !store.side_panel.is_open;
+                    store.set_panel_open(open);
+                    cx.notify();
+                })
+            }))
     }
 
     fn resize(&mut self, x: f32, cx: &mut Context<Self>) {
         let Some(resizing) = self.resizing else { return };
         let (key, width, bounds) = match resizing {
-            Resizing::Sidebar { start_x, start_width } => ("sidebar.width", start_width + x - start_x, SIDEBAR_WIDTHS),
-            Resizing::Panel { start_x, start_width } => ("panel.width", start_width - (x - start_x), PANEL_WIDTHS),
+            Resizing::Sidebar { start_x, start_width, widths } => ("sidebar.width", start_width + x - start_x, widths),
+            Resizing::Panel { start_x, start_width, widths } => ("panel.width", start_width - (x - start_x), widths),
         };
         let width = width.clamp(bounds.0, bounds.1);
         self.store.update(cx, |store, cx| {
@@ -205,17 +187,18 @@ impl MainView {
 impl Render for MainView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
-        let window_width = f32::from(window.viewport_size().width);
+        let window_width = f32::from(crate::window_frame::content_size(window).width);
         let store = self.store.read(cx);
         let hidden = store.prefs.bool("sidebar.hidden");
-        let sidebar_width = store.prefs.f32_or("sidebar.width", 280.);
         let panel_width = store.prefs.f32_or("panel.width", 460.);
         let panel_open = store.side_panel.is_open;
         let maximized = store.panel_maximized();
+        let trailing_room = crate::window_frame::trailing_room(window, cx);
+        let leading_room = crate::window_frame::leading_room(window, cx);
+        let past_window_buttons = leading_room + PAST_SIDEBAR_BUTTON;
 
-        let widest = SIDEBAR_WIDTHS.1.min(window_width - 1. - THREAD_MIN_WIDTH);
-        let widths = (SIDEBAR_WIDTHS.0, SIDEBAR_WIDTHS.0.max(widest));
-        let shown_width = sidebar_width.clamp(widths.0, widths.1);
+        let sidebar_widths = sidebar_widths(window_width);
+        let shown_width = shown_sidebar_width(store, window_width);
         let rest = window_width - if hidden { 0. } else { shown_width + 1. };
         let fits = panel_open && rest - 1. - THREAD_BESIDE_PANEL >= PANEL_WIDTHS.0;
         let beside = fits && !maximized;
@@ -224,15 +207,40 @@ impl Render for MainView {
         let shown_panel = panel_width.clamp(panel_widths.0, panel_widths.1);
 
         let thread_width = if beside || (maximized && fits) { rest - 1. - shown_panel } else { rest };
+        let shows_usage = self.store.read(cx).shows_usage;
+        let covered = if maximized || shows_usage {
+            f32::INFINITY
+        } else if panel_open && !beside {
+            shown_panel + 1.
+        } else {
+            0.
+        };
         self.thread.update(cx, |thread, cx| {
-            thread.title_inset = if hidden { PAST_WINDOW_BUTTONS } else { 20. };
+            thread.title_inset = if hidden { past_window_buttons } else { 20. };
             thread.beside_panel = beside;
+            thread.trailing_room = trailing_room;
+            thread.covered = covered;
             thread.set_width(thread_width, cx);
         });
-        self.panel.update(cx, |panel, _| panel.tab_inset = if maximized && hidden { PAST_WINDOW_BUTTONS } else { 0. });
+        self.panel.update(cx, |panel, _| {
+            panel.tab_inset = (maximized && hidden).then_some(past_window_buttons);
+            panel.trailing_room = trailing_room;
+        });
 
+        if !shows_usage {
+            self.usage = None;
+        } else if self.usage.is_none() {
+            let store = self.store.clone();
+            self.usage = Some(cx.new(|cx| UsageRoute::new(store, cx)));
+        }
+        if let Some(usage) = &self.usage {
+            usage.update(cx, |usage, _| {
+                usage.title_inset = if hidden { past_window_buttons } else { 20. };
+                usage.width = rest;
+                usage.trailing_room = trailing_room;
+            });
+        }
         let toggle_sidebar = cx.listener(|this, _, _, cx| this.toggle_sidebar(cx));
-        let store_handle = self.store.clone();
         let panel = self.panel.clone();
 
         // Behind the maximized panel the thread keeps the width it has beside it, so the
@@ -251,36 +259,31 @@ impl Render for MainView {
                     .when(maximized, |pane| pane.invisible())
                     .child(self.thread.clone()),
             )
-            .when(maximized, |area| area.child(div().absolute().inset_0().child(panel.clone())))
-            .when(panel_open && !beside && !maximized, |area| {
+            .when(maximized && !shows_usage, |area| area.child(div().absolute().inset_0().child(panel.clone())))
+            .when(panel_open && !beside && !maximized && !shows_usage, |area| {
                 area.child(
                     div()
                         .absolute()
                         .top_0()
                         .bottom_0()
                         .right_0()
+                        .occlude()
                         .flex()
                         .bg(c.background)
-                        .shadow(vec![BoxShadow {
-                            color: hsla(0., 0., 0., 0.18),
-                            offset: point(px(-4.), px(0.)),
-                            blur_radius: px(14.),
-                            spread_radius: px(0.),
-                            inset: false,
-                        }])
+                        .shadow(c.shadow(theme::ShadowSize::Lg, theme::Opacity::ShadowStronger))
                         .child(self.pane_divider(
                             "panel-divider-over",
                             true,
-                            move |x| Resizing::Panel { start_x: x, start_width: shown_panel },
+                            move |x| Resizing::Panel { start_x: x, start_width: shown_panel, widths: panel_widths },
                             cx,
                         ))
                         .child(div().w(px(shown_panel)).h_full().child(panel.clone())),
                 )
-            });
+            })
+            .when_some(self.usage.clone(), |area, usage| area.child(div().absolute().inset_0().child(usage)));
 
         div()
             .id("main")
-            .group("main-drop")
             .size_full()
             .relative()
             .flex()
@@ -302,32 +305,31 @@ impl Render for MainView {
                         }),
                     )
             })
+            // Put away while hidden, not dropped, so that it keeps its scroll and its search.
+            .child(
+                div()
+                    .relative()
+                    .w(px(if hidden { 0. } else { shown_width }))
+                    .h_full()
+                    .flex_shrink_0()
+                    .overflow_hidden()
+                    .when(hidden, |sidebar| sidebar.invisible())
+                    .child(div().w(px(shown_width)).h_full().child(self.sidebar.clone())),
+            )
             .when(!hidden, |main| {
-                main.child(
-                    div().relative().w(px(shown_width)).h_full().flex_shrink_0().child(self.sidebar.clone()).child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .right(px(ROW_INSET - TOOLBAR_MARGIN))
-                            .h(px(theme::TOP_BAR))
-                            .flex()
-                            .items_center()
-                            .child(self.project_buttons(cx)),
-                    ),
-                )
-                .child(self.pane_divider(
+                main.child(self.pane_divider(
                     "sidebar-divider",
                     false,
-                    move |x| Resizing::Sidebar { start_x: x, start_width: shown_width },
+                    move |x| Resizing::Sidebar { start_x: x, start_width: shown_width, widths: sidebar_widths },
                     cx,
                 ))
             })
             .child(thread)
-            .when(beside, |main| {
+            .when(beside && !shows_usage, |main| {
                 main.child(self.pane_divider(
                     "panel-divider",
                     true,
-                    move |x| Resizing::Panel { start_x: x, start_width: shown_panel },
+                    move |x| Resizing::Panel { start_x: x, start_width: shown_panel, widths: panel_widths },
                     cx,
                 ))
                 .child(div().w(px(shown_panel)).h_full().flex_shrink_0().child(panel.clone()))
@@ -338,7 +340,7 @@ impl Render for MainView {
                 div()
                     .absolute()
                     .top_0()
-                    .left(px(NAVIGATION_LEFT))
+                    .left(px(leading_room))
                     .h(px(theme::TOP_BAR))
                     .w(px(3. * TOOLBAR_WIDTH))
                     .flex()
@@ -347,11 +349,13 @@ impl Render for MainView {
                         toolbar_button(
                             "toggle-sidebar",
                             "panel-left",
-                            if hidden { "Show the sidebar (⌃⌘S)" } else { "Hide the sidebar (⌃⌘S)" },
+                            self.store
+                                .read(cx)
+                                .shortcuts
+                                .help(if hidden { "Show the sidebar" } else { "Hide the sidebar" }, "sidebar.toggle"),
                         )
                         .on_click(toggle_sidebar),
-                    )
-                    .when(hidden, |bar| bar.child(self.project_buttons(cx))),
+                    ),
             )
             // Drawn over the top bar's end, so that the side panel's button keeps its place
             // when the one beside it comes and goes.
@@ -359,19 +363,11 @@ impl Render for MainView {
                 div()
                     .absolute()
                     .top_0()
-                    .right(px(PANEL_BUTTONS_INSET))
+                    .right(px(PANEL_BUTTONS_INSET + trailing_room))
                     .h(px(theme::TOP_BAR))
                     .flex()
                     .items_center()
-                    .child(self.panel_buttons(cx)),
+                    .when(!shows_usage, |bar| bar.child(self.panel_buttons(cx))),
             )
-            .on_drop(move |paths: &ExternalPaths, _, cx| {
-                let files = paths.paths().to_vec();
-                store_handle.update(cx, |store, cx| {
-                    store.drop_targeted = false;
-                    store.attach(files);
-                    cx.notify();
-                });
-            })
     }
 }

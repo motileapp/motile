@@ -53,9 +53,9 @@ impl State {
     pub fn color(self, c: &Colors) -> Hsla {
         match self {
             State::Open => c.success,
-            State::Draft => c.secondary,
+            State::Draft => c.muted_foreground,
             State::Merged => c.merged,
-            State::Closed => c.danger,
+            State::Closed => c.destructive,
         }
     }
 }
@@ -75,10 +75,10 @@ impl Tone {
     pub fn color(self, c: &Colors) -> Hsla {
         match self {
             Tone::Success => c.success,
-            Tone::Danger => c.danger,
+            Tone::Danger => c.destructive,
             Tone::Warning => c.warning,
-            Tone::Pending => c.working,
-            Tone::Neutral => c.secondary,
+            Tone::Pending => c.process,
+            Tone::Neutral => c.muted_foreground,
             Tone::Merged => c.merged,
         }
     }
@@ -555,8 +555,9 @@ pub struct CommentedLine {
 
 pub struct PullRequests {
     pub page: Loaded<Page>,
-    /// The key of the button whose action runs, which is pending meanwhile.
-    pub working: Option<String>,
+    /// The key of the button whose action runs, which is pending meanwhile, by the pull request
+    /// it runs on.
+    working: HashMap<String, String>,
     pub list: Loaded<Vec<Row>>,
     /// The comments on lines kept for the next review, by pull request.
     pub pending: HashMap<u64, Vec<PendingLineComment>>,
@@ -580,7 +581,7 @@ impl Default for PullRequests {
     fn default() -> Self {
         Self {
             page: Loaded::Loading,
-            working: None,
+            working: HashMap::new(),
             list: Loaded::Loading,
             pending: HashMap::new(),
             notice: None,
@@ -602,6 +603,17 @@ impl PullRequests {
         self.page.value().filter(|page| page.number == number)
     }
 
+    /// The page, when it was read in the folder the panel looks into.
+    pub fn shown_page(&self, target: &PanelTarget) -> Option<&Page> {
+        self.page.value().filter(|_| self.shown.as_ref().is_some_and(|shown| shown.key == target.key))
+    }
+
+    /// The key of the action that runs on the pull request shown.
+    pub fn working(&self) -> Option<String> {
+        let (shown, number) = (self.shown.as_ref()?, self.shown_number?);
+        self.working.get(&work_key(shown, number)).cloned()
+    }
+
     pub fn pending_for(&self, number: u64) -> Vec<PendingLineComment> {
         self.pending.get(&number).cloned().unwrap_or_default()
     }
@@ -610,6 +622,11 @@ impl PullRequests {
         self.next_id += 1;
         self.next_id
     }
+}
+
+/// Names the pull request an action runs on.
+fn work_key(target: &PanelTarget, number: u64) -> String {
+    format!("{}/{}/{number}", target.server_id, target.project_id)
 }
 
 fn target_request(target: &PanelTarget) -> (String, String, Option<String>) {
@@ -626,7 +643,7 @@ fn action_key(action: PullRequestAction) -> String {
 
 impl Store {
     /// Forgets what was shown when the folder is another one than before.
-    fn look_at_pull_requests(&mut self, target: &PanelTarget) {
+    pub(crate) fn look_at_pull_requests(&mut self, target: &PanelTarget) {
         let state = &mut self.pull_requests;
         if state.shown.as_ref() == Some(target) {
             return;
@@ -661,7 +678,7 @@ impl Store {
     /// Asks the server for the pull request. What is shown of it stays until the answer is
     /// there, unless it is another one.
     pub fn load_pull_request(&mut self, target: &PanelTarget, number: u64) {
-        self.look_at_pull_requests(target);
+        self.look_into(target);
         if self.pull_requests.shown_number != Some(number) {
             self.pull_requests.shown_number = Some(number);
             self.pull_requests.page = Loaded::Loading;
@@ -672,12 +689,12 @@ impl Store {
         let method = self.merge_method(&project_id);
         let command = Command::PullRequest { server_id, project_id, thread_id, number, method };
         let target = target.clone();
-        self.ask_read(command, read_page, move |store, result: Result<Result<Page, String>, String>, _| {
+        self.ask_read(command, read_page, move |store, result: Result<Result<Page, String>, super::CoreError>, _| {
             let state = &mut store.pull_requests;
             if state.shown.as_ref() != Some(&target) || state.shown_number != Some(number) {
                 return;
             }
-            match result.and_then(|read| read) {
+            match result.map_err(String::from).and_then(|read| read) {
                 Ok(page) => state.page = Loaded::Ready(page),
                 // A pull request that was read stays; only its notice says what went wrong.
                 Err(error) if state.page.value().is_some() => {
@@ -700,10 +717,11 @@ impl Store {
         target: &PanelTarget,
         number: u64,
     ) {
-        if self.pull_requests.working.is_some() {
+        let work = work_key(target, number);
+        if self.pull_requests.working.contains_key(&work) {
             return;
         }
-        self.pull_requests.working = Some(key.clone());
+        self.pull_requests.working.insert(work.clone(), key.clone());
         self.pull_requests.notice = None;
         if let (PullRequestAction::Merge | PullRequestAction::EnableAutoMerge, Some(method)) = (action, method) {
             self.remember_merge_method(method, &target.project_id);
@@ -725,12 +743,12 @@ impl Store {
             read_page(answer["view"].clone()).map(|page| (title, url, page))
         };
         self.ask_read(command, read, move |store, result, cx| {
-            store.pull_requests.working = None;
+            store.pull_requests.working.remove(&work);
             let state = &store.pull_requests;
             if state.shown.as_ref() != Some(&target) || state.shown_number != Some(number) {
                 return;
             }
-            match result.and_then(|read| read) {
+            match result.map_err(String::from).and_then(|read| read) {
                 Ok((title, url, page)) => {
                     store.pull_requests.page = Loaded::Ready(page);
                     store.pull_requests.reads += 1;
@@ -747,11 +765,24 @@ impl Store {
     /// Changes the pull request as `edit` says. A `key` names the control that waits for it;
     /// without one it goes like a reaction.
     pub fn pull_request_edit(&mut self, edit: PullRequestEdit, key: Option<String>, target: &PanelTarget, number: u64) {
-        if key.is_some() {
-            if self.pull_requests.working.is_some() {
+        self.edit_pull_request_then(edit, key, target, number, |_| {});
+    }
+
+    /// Changes the pull request, and calls `done` once it has.
+    fn edit_pull_request_then(
+        &mut self,
+        edit: PullRequestEdit,
+        key: Option<String>,
+        target: &PanelTarget,
+        number: u64,
+        done: impl FnOnce(&mut Self) + 'static,
+    ) {
+        let work = work_key(target, number);
+        if let Some(key) = &key {
+            if self.pull_requests.working.contains_key(&work) {
                 return;
             }
-            self.pull_requests.working = key.clone();
+            self.pull_requests.working.insert(work.clone(), key.clone());
             self.pull_requests.notice = None;
         }
         let (server_id, project_id, thread_id) = target_request(target);
@@ -761,19 +792,20 @@ impl Store {
         let read = |answer: Value| read_page(answer["view"].clone());
         self.ask_read(command, read, move |store, result, cx| {
             if key.is_some() {
-                store.pull_requests.working = None;
+                store.pull_requests.working.remove(&work);
             }
             let state = &store.pull_requests;
             if state.shown.as_ref() != Some(&target) || state.shown_number != Some(number) {
                 return;
             }
-            match result.and_then(|read| read) {
+            match result.map_err(String::from).and_then(|read| read) {
                 Ok(page) => {
                     store.pull_requests.page = Loaded::Ready(page);
                     store.pull_requests.reads += 1;
                     if let Some(key) = key {
                         store.finish_pull_request_work(key);
                     }
+                    done(store);
                 }
                 Err(error) => store.say_pull_request(error, true, None, cx),
             }
@@ -819,13 +851,14 @@ impl Store {
             })
             .collect();
         let edit = PullRequestEdit::Review { verdict, body, comments };
-        self.pull_requests.pending.remove(&number);
-        self.pull_request_edit(edit, Some(key), target, number);
+        self.edit_pull_request_then(edit, Some(key), target, number, move |store| {
+            store.pull_requests.pending.remove(&number);
+        });
     }
 
     /// Asks the server for the repository's pull requests in that state.
     pub fn load_pull_requests(&mut self, target: &PanelTarget, state: PullRequestState) {
-        self.look_at_pull_requests(target);
+        self.look_into(target);
         let (server_id, project_id, thread_id) = target_request(target);
         let command = Command::PullRequests { server_id, project_id, thread_id, state };
         let target = target.clone();
@@ -837,7 +870,7 @@ impl Store {
             if store.pull_requests.shown.as_ref() != Some(&target) {
                 return;
             }
-            match result.and_then(|read| read) {
+            match result.map_err(String::from).and_then(|read| read) {
                 Ok(rows) => store.pull_requests.list = Loaded::Ready(rows),
                 Err(error) if store.pull_requests.list.value().is_none() => {
                     store.pull_requests.list = Loaded::Failed(error)
@@ -858,7 +891,7 @@ impl Store {
                 };
                 store.say_pull_request(said, false, None, cx);
             }
-            Err(error) => store.say_pull_request(error, true, None, cx),
+            Err(error) => store.say_pull_request(error.into(), true, None, cx),
         });
     }
 
@@ -874,7 +907,7 @@ impl Store {
                 };
                 store.say_pull_request(said.to_string(), false, None, cx);
             }
-            Err(error) => store.say_pull_request(error, true, None, cx),
+            Err(error) => store.say_pull_request(error.into(), true, None, cx),
         });
     }
 

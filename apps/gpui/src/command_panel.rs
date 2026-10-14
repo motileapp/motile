@@ -1,24 +1,26 @@
-//! The panel that opens over the window to start a thread, open one, add a project or run a
-//! command, all from the keyboard. ⌘N and the new-thread button open it on the projects when
+//! The panel that opens over the window to start a thread, open one, add a project, choose a
+//! project's icon or run a command, all from the keyboard. ⌘N and the new-thread button open it on the projects when
 //! there is more than one, ⌘P on the threads and ⌘K on the commands.
 
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::time::Duration;
 
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_protocol::wire::{GitHubState, Repo};
+use motile_protocol::wire::{GitHubState, Repo, RestartWhen};
 
-use crate::models::{FolderListing, Project, Server, ago, last_component};
+use crate::models::{FolderListing, Project, Server, ago, ask_phrase, interruption_label, last_component};
+use crate::store::settings::SettingsSection;
 use crate::store::{AddingProject, PanelPage, Selection, Store};
-use crate::theme::{Colors, ControlSize, Surface, colors};
-use crate::ui::{ActionButton, InputField, InputVariant, Spinner, icons, logos};
+use crate::theme::{Colors, ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
+use crate::ui::{ActionButton, InputField, InputVariant, KeyCaps, Spinner, icons, logos};
 
 const WIDTH: f32 = 620.;
-const RADIUS: f32 = 16.;
-const ROW_HEIGHT: f32 = 46.;
-const ROW_RADIUS: f32 = 9.;
+const RADIUS: f32 = Radius::XL;
+const ROW_HEIGHT: f32 = 52.;
+const ROW_RADIUS: f32 = Radius::MD;
 const SIDE_MARGIN: f32 = 8.;
 const TITLE_HEIGHT: f32 = 17.;
 const DETAIL_HEIGHT: f32 = 15.;
@@ -43,8 +45,10 @@ struct Item {
     /// Shown instead of `detail`, each part after its symbol.
     detail_parts: Vec<(&'static str, String)>,
     icon: ItemIcon,
-    /// The digit that runs it with ⌘.
+    /// The digit that runs it with ⌘, or Ctrl off the Mac.
     shortcut: Option<usize>,
+    /// The keys of the command it runs, as the shortcuts have them.
+    keys: Option<String>,
     /// It leads to another page of the panel.
     keeps_open: bool,
     /// Its place among what can be selected, for moving through with the arrow keys.
@@ -58,7 +62,7 @@ struct Item {
     busy: bool,
     /// Stands in for a row that is on its way, with as many lines of text.
     placeholder_lines: usize,
-    /// What ⌘↩ does instead.
+    /// What ⌘↩, or Ctrl+Enter off the Mac, does instead.
     alternate: Option<Action>,
     action: Action,
 }
@@ -78,6 +82,7 @@ impl Item {
             detail_parts: Vec::new(),
             icon,
             shortcut: None,
+            keys: None,
             keeps_open: false,
             index: None,
             note: None,
@@ -92,6 +97,11 @@ impl Item {
 
     fn keeps_open(mut self) -> Self {
         self.keeps_open = true;
+        self
+    }
+
+    fn keys(mut self, keys: Option<String>) -> Self {
+        self.keys = keys;
         self
     }
 
@@ -112,6 +122,19 @@ struct Section {
     items: Vec<Item>,
 }
 
+/// A row of the list.
+enum Entry {
+    /// What is said when nothing was found.
+    Empty(String),
+    Title(usize),
+    /// An item, by its section and its place in it.
+    Row(usize, usize),
+    /// What a server refused.
+    Notice(String),
+    /// The room under the last row.
+    End,
+}
+
 pub struct CommandPanel {
     store: Entity<Store>,
     pub start: PanelPage,
@@ -124,7 +147,13 @@ pub struct CommandPanel {
     browses_asked: u64,
     browses_answered: u64,
     copied: bool,
-    scroll: ScrollHandle,
+    /// What is offered, as it was last worked out, and whether it has to be worked out again.
+    shown: Rc<Vec<Section>>,
+    stale: bool,
+    /// The list's rows: only the ones on screen are built.
+    entries: Rc<Vec<Entry>>,
+    list: ListState,
+    entries_signature: u64,
     projects_added: u64,
     _subscriptions: Vec<Subscription>,
 }
@@ -136,10 +165,7 @@ impl CommandPanel {
         let subscriptions = vec![
             cx.subscribe_in(&query, window, |this, _, event: &InputEvent, window, cx| {
                 if let InputEvent::Change = event {
-                    this.highlighted = 0;
-                    this.store.update(cx, |store, _| store.panel_notice = None);
-                    this.browse(window, cx);
-                    cx.notify();
+                    this.query_changed(window, cx);
                 }
             }),
             cx.observe_in(&store, window, |this, store, window, cx| {
@@ -149,7 +175,7 @@ impl CommandPanel {
                     return this.close(cx);
                 }
                 this.follow_github(window, cx);
-                cx.notify();
+                this.refresh(cx);
             }),
         ];
         let projects_added = store.read(cx).projects_added;
@@ -164,7 +190,11 @@ impl CommandPanel {
             browses_asked: 0,
             browses_answered: 0,
             copied: false,
-            scroll: ScrollHandle::new(),
+            shown: Rc::default(),
+            stale: true,
+            entries: Rc::default(),
+            list: ListState::new(0, ListAlignment::Top, px(ROW_HEIGHT * 4.)),
+            entries_signature: 0,
             projects_added,
             _subscriptions: subscriptions,
         };
@@ -180,12 +210,40 @@ impl CommandPanel {
         self.query.read(cx).value().to_string()
     }
 
+    /// Types the text, the cursor after it, which a long path is scrolled to.
     fn set_query(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.query.update(cx, |query, cx| query.set_value(text, window, cx));
+        self.query.update(cx, |query, cx| {
+            query.set_value(text, window, cx);
+            query.set_scroll_offset(point(px(-f32::MAX), px(0.)), cx);
+        });
+        self.query_changed(window, cx);
+    }
+
+    /// What is offered starts over from the first, and the folders under a typed path are asked for.
+    fn query_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.highlighted = 0;
+        self.store.update(cx, |store, _| store.panel_notice = None);
+        self.browse(window, cx);
+        self.refresh(cx);
     }
 
     fn server_name(&self, id: &str, cx: &App) -> String {
         self.store.read(cx).server(Some(id)).map_or("your server".into(), |server| server.name.clone())
+    }
+
+    /// What is offered has changed: it is worked out again when it is next needed.
+    fn refresh(&mut self, cx: &mut Context<Self>) {
+        self.stale = true;
+        cx.notify();
+    }
+
+    /// What is offered now.
+    fn current(&mut self, cx: &App) -> Rc<Vec<Section>> {
+        if self.stale {
+            self.shown = Rc::new(self.sections(cx));
+            self.stale = false;
+        }
+        self.shown.clone()
     }
 
     fn close(&mut self, cx: &mut Context<Self>) {
@@ -202,7 +260,7 @@ impl CommandPanel {
         let mut narrows = true;
         let section = |title: &str, items: Vec<Item>| Section { title: title.to_string(), items };
         let sections = match self.page() {
-            PanelPage::Projects => {
+            PanelPage::Projects | PanelPage::DraftProject => {
                 let mut items = self.project_items(cx);
                 items.push(self.add_project());
                 vec![section("Projects", items)]
@@ -248,6 +306,12 @@ impl CommandPanel {
                 narrows = false;
                 vec![section(&format!("Folders on {}", self.server_name(&id, cx)), self.folder_items(&id, cx))]
             }
+            PanelPage::Icon(id) => {
+                narrows = false;
+                let name =
+                    self.store.read(cx).project(Some(&id)).map_or("the project".into(), |project| project.name.clone());
+                vec![section(&format!("Icon for {name}"), self.icon_items(&id, cx))]
+            }
         };
         let lower = query.to_lowercase();
         let matches = |item: &Item| {
@@ -273,18 +337,23 @@ impl CommandPanel {
             .collect()
     }
 
-    /// The projects, the one the open thread works in first, then by when a thread last started.
+    /// The projects, the one the open thread works in first, then by when a thread last started,
+    /// and "No project" of each server last.
     fn projects(&self, cx: &App) -> Vec<Project> {
         let store = self.store.read(cx);
-        let recent: Vec<Project> = store.recent_projects().into_iter().cloned().collect();
-        let Some(current) = store.composer_project() else { return recent };
-        let mut projects = vec![current.clone()];
-        projects.extend(recent.into_iter().filter(|project| project.id != current.id));
+        let mut projects: Vec<Project> = store.recent_projects().into_iter().cloned().collect();
+        if let Some(current) = store.composer_project().filter(|project| !project.no_project) {
+            projects.retain(|project| project.id != current.id);
+            projects.insert(0, current);
+        }
+        projects.extend(store.no_projects.iter().cloned());
         projects
     }
 
     fn project_items(&self, cx: &App) -> Vec<Item> {
-        let on_projects = self.page() == PanelPage::Projects;
+        let page = self.page();
+        let on_projects = matches!(page, PanelPage::Projects | PanelPage::DraftProject);
+        let for_draft = page == PanelPage::DraftProject;
         self.projects(cx)
             .into_iter()
             .enumerate()
@@ -293,22 +362,33 @@ impl CommandPanel {
                     .store
                     .read(cx)
                     .server(Some(&project.server_id))
-                    .map(|server| server.name.clone())
+                    .map(|server| server.short_name.clone())
                     .unwrap_or_default();
-                let parts = if server.is_empty() {
-                    vec![("folder", project.path.clone())]
+                let location = if project.no_project {
+                    "A folder of its own for each thread".into()
                 } else {
-                    vec![("server", server.clone()), ("folder", project.path.clone())]
+                    project.path.clone()
+                };
+                let parts = if server.is_empty() {
+                    vec![("folder", location.clone())]
+                } else {
+                    vec![("server", server.clone()), ("folder", location.clone())]
                 };
                 let id = project.id.clone();
                 let mut item = Item::new(
                     format!("project-{}", project.id),
                     project.name.clone(),
-                    format!("{server} {}", project.path),
+                    format!("{server} {location}"),
                     ItemIcon::Project(Box::new(Some(project))),
                     move |this, _, cx| {
-                        let id = id.clone();
-                        this.store.update(cx, |store, cx| store.start_new_thread(Some(id), cx));
+                        let id = Some(id.clone());
+                        this.store.update(cx, |store, cx| {
+                            if for_draft {
+                                store.set_new_thread_project(id, cx);
+                            } else {
+                                store.start_new_thread(id, cx);
+                            }
+                        });
                     },
                 );
                 item.detail_parts = parts;
@@ -321,7 +401,7 @@ impl CommandPanel {
     fn add_project(&self) -> Item {
         Item::new(
             "add-project",
-            "Add a project…",
+            "Add a project",
             "A new one, one of your GitHub's or a folder",
             ItemIcon::Symbol("folder-plus"),
             |this, window, cx| {
@@ -510,7 +590,7 @@ impl CommandPanel {
             |this, _, cx| {
                 cx.write_to_clipboard(ClipboardItem::new_string("gh auth login".into()));
                 this.copied = true;
-                cx.notify();
+                this.refresh(cx);
             },
         )
         .keeps_open();
@@ -576,23 +656,86 @@ impl CommandPanel {
         items
     }
 
+    /// The icon in the project's folder, the folder above the typed one, and the folders and
+    /// images in it.
+    fn icon_items(&self, id: &str, cx: &App) -> Vec<Item> {
+        let Some(project) = self.store.read(cx).project(Some(id)).cloned() else { return Vec::new() };
+        let Some(listing) = &self.listing else {
+            if self.browse_error.is_some() {
+                return Vec::new();
+            }
+            return (0..8).map(|position| Item::placeholder(position, 1)).collect();
+        };
+        let set_icon = |path: Option<String>| {
+            let project = project.clone();
+            move |this: &mut CommandPanel, _: &mut Window, cx: &mut Context<CommandPanel>| {
+                let (project, path) = (project.clone(), path.clone());
+                this.store.update(cx, |store, _| store.set_icon(&project, path));
+            }
+        };
+        let query = self.query_text(cx);
+        let mut items = Vec::new();
+        if query.ends_with('/') || query == "~" {
+            items.push(Item::new(
+                "folder-icon",
+                "Use the icon in its folder",
+                project.path.clone(),
+                ItemIcon::Symbol("undo-2"),
+                set_icon(None),
+            ));
+            if let Some(parent) = listing.parent.clone() {
+                items.push(
+                    Item::new("parent", "..", "", ItemIcon::Symbol("corner-left-up"), move |this, window, cx| {
+                        this.set_query(parent.clone(), window, cx)
+                    })
+                    .keeps_open(),
+                );
+            }
+        }
+        for folder in &listing.folders {
+            let typed = folder.typed.clone();
+            items.push(
+                Item::new(
+                    folder.path.clone(),
+                    folder.name.clone(),
+                    "",
+                    ItemIcon::Symbol("folder"),
+                    move |this, window, cx| this.set_query(typed.clone(), window, cx),
+                )
+                .keeps_open(),
+            );
+        }
+        for image in &listing.images {
+            items.push(Item::new(
+                image.path.clone(),
+                image.name.clone(),
+                "",
+                ItemIcon::Symbol("image"),
+                set_icon(Some(image.path.clone())),
+            ));
+        }
+        items
+    }
+
     fn thread_items(&self, cx: &App) -> Vec<Item> {
         let store = self.store.read(cx);
         store
             .active_threads()
-            .into_iter()
+            .iter()
             .chain(store.done_threads())
             .map(|thread| {
                 let project = store.project(Some(&thread.project_id)).cloned();
                 let name = project.as_ref().map_or_else(|| last_component(&thread.cwd), |project| project.name.clone());
                 let state = if thread.is_done() {
                     "done".to_string()
-                } else if thread.needs_approval {
-                    "needs approval".into()
+                } else if let Some(ask) = thread.asking() {
+                    ask_phrase(ask).into()
                 } else if thread.running {
                     "working".into()
                 } else if thread.monitoring {
                     "monitoring".into()
+                } else if let Some(interruption) = thread.interruption {
+                    interruption_label(interruption).0.to_lowercase()
                 } else {
                     ago(thread.updated_at)
                 };
@@ -613,74 +756,105 @@ impl CommandPanel {
 
     /// What can be done with the open thread.
     fn thread_commands(&self, cx: &App) -> Vec<Item> {
-        let Some(thread) = self.store.read(cx).selected_thread() else { return Vec::new() };
+        let store = self.store.read(cx);
+        let Some(thread) = store.selected_thread() else { return Vec::new() };
         if thread.busy() {
-            return vec![Item::new(
+            let stop = Item::new(
                 "stop",
                 "Stop the agent",
                 thread.title.clone(),
                 ItemIcon::Symbol("circle-stop"),
                 |this, _, cx| this.store.update(cx, |store, _| store.stop_thread()),
-            )];
+            );
+            return vec![stop.keys(store.shortcuts.label("thread.stop"))];
+        }
+        let mut items = Vec::new();
+        if thread.interruption.is_some() {
+            items.push(Item::new(
+                "continue",
+                "Continue the agent",
+                thread.title.clone(),
+                ItemIcon::Symbol("play"),
+                |this, _, cx| this.store.update(cx, |store, _| store.continue_thread()),
+            ));
         }
         let done = thread.is_done();
-        vec![Item::new(
+        let mark = Item::new(
             "done",
             if done { "Mark undone" } else { "Mark done" },
             thread.title.clone(),
             ItemIcon::Symbol(if done { "undo-2" } else { "circle-check" }),
             |this, _, cx| this.store.update(cx, |store, cx| store.toggle_done(cx)),
-        )]
+        );
+        items.push(mark.keys(store.shortcuts.label("thread.done")));
+        items
     }
 
-    /// The servers that run an older version than the newest release.
+    /// The servers that run an older version than the newest release. One whose agents work is
+    /// updated once they finish, or now, with their threads going on after.
     fn server_updates(&self, cx: &App) -> Vec<Item> {
         let store = self.store.read(cx);
         let latest = store.updater.latest.clone().unwrap_or_default();
+        let update = |id: String, title: String, detail: String, server: &Server, when: RestartWhen| {
+            let server = server.clone();
+            Item::new(id, title, detail, ItemIcon::Symbol("circle-arrow-down"), move |this, _, cx| {
+                this.store.update(cx, |store, _| store.update_server(&server, when))
+            })
+        };
         store
             .servers
             .iter()
-            .filter(|server| store.is_outdated(server) && !store.server_updates.contains_key(&server.id))
-            .map(|server| {
-                let server = server.clone();
-                Item::new(
-                    format!("update-{}", server.id),
-                    format!("Update {}", server.name),
-                    format!("From version {} to {latest}", server.version),
-                    ItemIcon::Symbol("circle-arrow-down"),
-                    move |this, _, cx| this.store.update(cx, |store, _| store.update_server(&server)),
-                )
+            .filter(|server| store.is_outdated(server) && store.server_update(server).is_none())
+            .flat_map(|server| {
+                let detail = format!("From version {} to {latest}", server.version);
+                let (id, name) = (format!("update-{}", server.id), &server.name);
+                if !store.is_busy(server) || !server.can_choose_restart() {
+                    return vec![update(id, format!("Update {name}"), detail, server, RestartWhen::Idle)];
+                }
+                vec![
+                    update(id, format!("Update {name} when agents finish"), detail, server, RestartWhen::Idle),
+                    update(
+                        format!("update-now-{}", server.id),
+                        format!("Update {name} now"),
+                        "Its agents stop and continue once it is back".into(),
+                        server,
+                        RestartWhen::Now,
+                    ),
+                ]
             })
             .collect()
     }
 
     fn commands(&self, cx: &App) -> Vec<Item> {
         let store = self.store.read(cx);
+        let keys = |command: &str| store.shortcuts.label(command);
         let mut items = self.server_updates(cx);
         items.push(
             Item::new(
                 "new-thread",
-                "New thread…",
+                "New thread",
                 "Choose a project to start in",
                 ItemIcon::Symbol("square-pen"),
                 |this, window, cx| this.open(PanelPage::Projects, window, cx),
             )
-            .keeps_open(),
+            .keeps_open()
+            .keys(keys("chat.new")),
         );
         items.push(
             Item::new(
                 "go-to-thread",
-                "Go to thread…",
+                "Go to thread",
                 format!("{} threads", store.threads.len()),
                 ItemIcon::Symbol("message-square-text"),
                 |this, window, cx| this.open(PanelPage::Threads, window, cx),
             )
-            .keeps_open(),
+            .keeps_open()
+            .keys(keys("threadPicker.toggle")),
         );
         items.push(self.add_project());
         items.push(Item::new(
             "add-server",
-            "Add a server…",
+            "Add a server",
             "A machine that runs your agents",
             ItemIcon::Symbol("server"),
             |this, _, cx| this.store.update(cx, |store, _| store.shows_add_server = true),
@@ -692,13 +866,33 @@ impl CommandPanel {
             ItemIcon::Symbol("refresh-cw"),
             |this, _, cx| this.store.update(cx, |store, cx| store.updater.check(true, cx)),
         ));
+        items.push(
+            Item::new(
+                "settings",
+                "Settings",
+                "Appearance, servers and projects",
+                ItemIcon::Symbol("settings"),
+                |_, window, cx| window.dispatch_action(Box::new(crate::app_menu::Perform("settings.open")), cx),
+            )
+            .keys(keys("settings.open")),
+        );
         items.push(Item::new(
-            "settings",
-            "Settings…",
-            "Appearance, servers and projects",
-            ItemIcon::Symbol("settings"),
-            |_, window, cx| window.dispatch_action(Box::new(crate::OpenSettings), cx),
+            "shortcuts",
+            "Keybindings",
+            "Change the keys of every command",
+            ItemIcon::Symbol("keyboard"),
+            |this, _, cx| this.store.update(cx, |store, _| store.open_settings(SettingsSection::Keyboard, None)),
         ));
+        items.push(
+            Item::new(
+                "usage",
+                "Usage",
+                "Limits, cost and tokens",
+                ItemIcon::Symbol("chart-column"),
+                |_, window, cx| window.dispatch_action(Box::new(crate::app_menu::Perform("usage.open")), cx),
+            )
+            .keys(keys("usage.open")),
+        );
         items
     }
 
@@ -732,13 +926,18 @@ impl CommandPanel {
     }
 
     fn arrive(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.highlighted = 0;
         self.copied = false;
         self.listing = None;
         self.browse_error = None;
-        self.store.update(cx, |store, _| store.panel_notice = None);
-        let query = if matches!(self.page(), PanelPage::Folder(_)) { "~/" } else { "" };
-        self.set_query(query.into(), window, cx);
+        let query = match self.page() {
+            PanelPage::Folder(_) => "~/".into(),
+            PanelPage::Icon(id) => {
+                let path = self.store.read(cx).project(Some(&id)).map_or("~".into(), |project| project.path.clone());
+                format!("{path}/")
+            }
+            _ => String::new(),
+        };
+        self.set_query(query, window, cx);
         let prompt = self.prompt(cx);
         self.query.update(cx, |query, cx| query.set_placeholder(prompt, window, cx));
         let lists_repos = match self.page() {
@@ -749,20 +948,19 @@ impl CommandPanel {
         if let Some(id) = lists_repos {
             self.store.update(cx, |store, _| store.load_repos(&id, false));
         }
-        self.browse(window, cx);
-        cx.notify();
+        self.refresh(cx);
     }
 
     /// Asks for the folders under the typed path. Placeholders take the place of the folders that
     /// are shown when the answer takes a while.
     fn browse(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        let PanelPage::Folder(id) = self.page() else { return };
+        let Some((id, icons)) = self.browsed(cx) else { return };
         self.browses_asked += 1;
         let asked = self.browses_asked;
         let query = self.query_text(cx);
         let panel = cx.entity().downgrade();
         self.store.update(cx, |store, _| {
-            store.browse(&id, query, move |_, result, cx| {
+            store.browse(&id, query, icons, move |_, result, cx| {
                 let _ = panel.update(cx, |this, cx| {
                     if asked != this.browses_asked {
                         return;
@@ -778,7 +976,7 @@ impl CommandPanel {
                             this.browse_error = Some(error);
                         }
                     }
-                    cx.notify();
+                    this.refresh(cx);
                 });
             });
         });
@@ -788,11 +986,20 @@ impl CommandPanel {
                 if asked == this.browses_asked && this.browses_answered < asked {
                     this.listing = None;
                     this.browse_error = None;
-                    cx.notify();
+                    this.refresh(cx);
                 }
             });
         })
         .detach();
+    }
+
+    /// The server whose folders the page lists, and whether with the images that can be an icon.
+    fn browsed(&self, cx: &App) -> Option<(String, bool)> {
+        match self.page() {
+            PanelPage::Folder(id) => Some((id, false)),
+            PanelPage::Icon(id) => Some((self.store.read(cx).project(Some(&id))?.server_id.clone(), true)),
+            _ => None,
+        }
     }
 
     fn run(&mut self, item: &Item, window: &mut Window, cx: &mut Context<Self>) {
@@ -807,7 +1014,7 @@ impl CommandPanel {
     }
 
     fn run_highlighted(&mut self, alternate: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let sections = self.sections(cx);
+        let sections = self.current(cx);
         let Some(item) =
             sections.iter().flat_map(|section| &section.items).find(|item| item.index == Some(self.highlighted))
         else {
@@ -823,14 +1030,18 @@ impl CommandPanel {
     }
 
     fn move_highlight(&mut self, step: isize, cx: &mut Context<Self>) {
-        let sections = self.sections(cx);
+        let sections = self.current(cx);
         let count = sections.iter().flat_map(|section| &section.items).filter(|item| item.selectable()).count();
         if count == 0 {
             return;
         }
         self.highlighted = (self.highlighted as isize + step).clamp(0, count as isize - 1) as usize;
-        if let Some(child) = child_of(&sections, self.highlighted) {
-            self.scroll.scroll_to_item(child);
+        let highlighted = self.highlighted;
+        let entry = self.entries.iter().position(|entry| {
+            matches!(entry, Entry::Row(section, item) if sections[*section].items[*item].index == Some(highlighted))
+        });
+        if let Some(entry) = entry {
+            self.list.scroll_to_reveal_item(entry);
         }
         cx.notify();
     }
@@ -846,7 +1057,7 @@ impl CommandPanel {
 
     /// Takes the keys the panel is steered with before the search field does.
     fn key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let command = event.keystroke.modifiers.platform;
+        let command = event.keystroke.modifiers.secondary();
         let handled = match event.keystroke.key.as_str() {
             "escape" => {
                 self.close(cx);
@@ -877,7 +1088,7 @@ impl CommandPanel {
             }
             digit if command => {
                 let Ok(digit) = digit.parse::<usize>() else { return };
-                let sections = self.sections(cx);
+                let sections = self.current(cx);
                 let Some(item) =
                     sections.iter().flat_map(|section| &section.items).find(|item| item.shortcut == Some(digit))
                 else {
@@ -897,21 +1108,27 @@ impl CommandPanel {
 
     fn prompt(&self, cx: &App) -> String {
         match self.page() {
-            PanelPage::Commands => "Search threads, projects and commands…".into(),
-            PanelPage::Projects => "Start a thread in…".into(),
-            PanelPage::Threads => "Go to thread…".into(),
-            PanelPage::Servers => "Add a project on…".into(),
-            PanelPage::Sources(_) => "Add a project…".into(),
+            PanelPage::Commands => "Search threads, projects and commands".into(),
+            PanelPage::Projects => "Start a thread in".into(),
+            PanelPage::DraftProject => "Search projects".into(),
+            PanelPage::Threads => "Go to thread".into(),
+            PanelPage::Servers => "Add a project on".into(),
+            PanelPage::Sources(_) => "Add a project".into(),
             PanelPage::NewProject(_) => "Project name".into(),
-            PanelPage::Github(_) => "Search your repositories…".into(),
-            PanelPage::GithubSetup(_) => "Set up GitHub…".into(),
+            PanelPage::Github(_) => "Search your repositories".into(),
+            PanelPage::GithubSetup(_) => "Set up GitHub".into(),
             PanelPage::Folder(id) => format!("Path on {}", self.server_name(&id, cx)),
+            PanelPage::Icon(id) => {
+                let server = self.store.read(cx).project(Some(&id)).map(|project| project.server_id.clone());
+                format!("Path to an image on {}", self.server_name(&server.unwrap_or_default(), cx))
+            }
         }
     }
 
     fn empty_text(&self, cx: &App) -> String {
         match self.page() {
             PanelPage::Folder(_) => self.browse_error.clone().unwrap_or("No folders found".into()),
+            PanelPage::Icon(_) => self.browse_error.clone().unwrap_or("No folders or images found".into()),
             PanelPage::Github(id) => {
                 self.store.read(cx).repo_errors.get(&id).cloned().unwrap_or("No repository found".into())
             }
@@ -931,7 +1148,7 @@ impl CommandPanel {
 
     /// The pages that fill as the server answers keep one height, so nothing moves when it does.
     fn height(&self, sections: &[Section], rows: usize, notice: bool) -> f32 {
-        if matches!(self.page(), PanelPage::Github(_) | PanelPage::Folder(_)) {
+        if matches!(self.page(), PanelPage::Github(_) | PanelPage::Folder(_) | PanelPage::Icon(_)) {
             return MAX_HEIGHT;
         }
         let notice = if notice { NOTICE_HEIGHT } else { 0. };
@@ -952,10 +1169,11 @@ impl CommandPanel {
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(icons::symbol("search", 15.).text_color(c.tertiary))
+                .child(icons::symbol("search", 15.).text_color(c.muted_stronger_foreground))
                 .into_any_element()
         };
         let field_size = ControlSize::Large;
+        let refresh_help = format!("Refresh ({})", self.store.read(cx).shortcuts.keys_label("mod+r"));
         let refresh = match self.page() {
             PanelPage::Github(id) => Some(self.store.read(cx).repo_listing.listing.contains(&id)),
             _ => None,
@@ -968,16 +1186,17 @@ impl CommandPanel {
             .gap(px(10.))
             .child(leading)
             .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .mx(px(-(field_size.padding() - 2.)))
-                    .child(InputField::new(&self.query).variant(InputVariant::Bare).size(field_size).surface(SURFACE)),
+                div().flex_1().min_w_0().h_full().mx(px(-(field_size.padding() - 2.))).child(
+                    InputField::new(&self.query)
+                        .variant(InputVariant::Bare)
+                        .size(field_size)
+                        .text_size(16.)
+                        .surface(SURFACE),
+                ),
             )
             .when_some(refresh, |header, listing| {
                 header.child(
-                    ActionButton::icon("refresh-repos", "rotate-cw", "Refresh (⌘R)")
+                    ActionButton::icon("refresh-repos", "rotate-cw", refresh_help)
                         .surface(SURFACE)
                         .pending(listing)
                         .on_click(cx.listener(|this, _, _, cx| this.refresh_repos(cx))),
@@ -985,106 +1204,122 @@ impl CommandPanel {
             })
     }
 
-    fn results(
-        &self,
-        sections: &[Section],
-        rows: usize,
-        notice: Option<String>,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let c = colors(cx);
-        let height = self.height(sections, rows, notice.is_some());
-        let empty = (rows == 0).then(|| self.empty_text(cx));
-        let mut children: Vec<AnyElement> = Vec::new();
-        for section in sections {
-            children.push(
-                div()
-                    .px(px(SIDE_MARGIN + 10.))
-                    .pt(px(10.))
-                    .pb(px(4.))
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(c.tertiary)
-                    .child(section.title.clone())
-                    .into_any_element(),
-            );
-            for item in &section.items {
-                children.push(self.row(item, cx));
+    /// The list's rows: the sections' titles and items, what is said when nothing was found, and
+    /// what a server refused. The list starts over at the top when they change.
+    fn follow_entries(&mut self, sections: &[Section], notice: Option<String>, cx: &App) {
+        let mut entries = Vec::new();
+        if sections.iter().all(|section| section.items.is_empty()) {
+            entries.push(Entry::Empty(self.empty_text(cx)));
+        }
+        for (position, section) in sections.iter().enumerate() {
+            entries.push(Entry::Title(position));
+            entries.extend((0..section.items.len()).map(|item| Entry::Row(position, item)));
+        }
+        entries.extend(notice.map(Entry::Notice));
+        entries.push(Entry::End);
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for entry in &entries {
+            match entry {
+                Entry::Row(section, item) => sections[*section].items[*item].id.hash(&mut hasher),
+                Entry::Title(section) => sections[*section].title.hash(&mut hasher),
+                Entry::Empty(text) | Entry::Notice(text) => text.hash(&mut hasher),
+                Entry::End => {}
             }
         }
-        div()
-            .id("panel-results")
-            .h(px(height))
-            .overflow_y_scroll()
-            .track_scroll(&self.scroll)
-            .pb(px(8.))
-            .when_some(empty, |results, empty| {
-                results.child(
-                    div()
-                        .w_full()
-                        .px(px(24.))
-                        .py(px(28.))
-                        .text_size(px(13.))
-                        .text_color(c.tertiary)
-                        .text_center()
-                        .child(empty),
-                )
-            })
-            .children(children)
-            .when_some(notice, |results, notice| {
-                results.child(
-                    div()
-                        .h(px(NOTICE_HEIGHT))
-                        .px(px(SIDE_MARGIN + 10.))
-                        .flex()
-                        .items_center()
-                        .text_size(px(12.))
-                        .text_color(c.danger)
-                        .line_clamp(2)
-                        .child(notice),
-                )
-            })
+        let signature = hasher.finish();
+        if signature != self.entries_signature || entries.len() != self.list.item_count() {
+            self.entries_signature = signature;
+            self.list.reset(entries.len());
+        }
+        self.entries = Rc::new(entries);
+    }
+
+    fn entry(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+        let c = colors(cx);
+        let Some(entry) = self.entries.get(index) else { return div().into_any_element() };
+        match entry {
+            Entry::Empty(text) => div()
+                .w_full()
+                .px(px(24.))
+                .py(px(28.))
+                .text_size(px(13.))
+                .text_color(c.muted_stronger_foreground)
+                .text_center()
+                .child(text.clone())
+                .into_any_element(),
+            Entry::Title(section) => div()
+                .px(px(SIDE_MARGIN + 10.))
+                .pt(px(10.))
+                .pb(px(4.))
+                .text_size(px(12.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.muted_stronger_foreground)
+                .child(self.shown[*section].title.clone())
+                .into_any_element(),
+            Entry::Row(section, item) => {
+                let shown = self.shown.clone();
+                self.row(&shown[*section].items[*item], cx)
+            }
+            Entry::Notice(notice) => div()
+                .h(px(NOTICE_HEIGHT))
+                .px(px(SIDE_MARGIN + 10.))
+                .flex()
+                .items_center()
+                .text_size(px(12.))
+                .text_color(c.destructive)
+                .line_clamp(2)
+                .child(notice.clone())
+                .into_any_element(),
+            Entry::End => div().h(px(8.)).into_any_element(),
+        }
     }
 
     fn row(&self, item: &Item, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
-        let light = SURFACE.next().color(c);
+        let light = SURFACE.layer(Layer::Control, c);
         let lit = item.selectable() && item.index == Some(self.highlighted);
         let placeholder = item.placeholder_lines > 0;
         let icon: AnyElement = match &item.icon {
-            ItemIcon::Symbol(_) if placeholder => div().size(px(20.)).rounded(px(5.)).bg(light).into_any_element(),
-            ItemIcon::Symbol(name) => icons::symbol(name, 15.).text_color(c.secondary).into_any_element(),
-            ItemIcon::GitHub => logos::github_mark(16., cx).text_color(c.secondary).into_any_element(),
+            ItemIcon::Symbol(_) if placeholder => {
+                div().size(px(20.)).rounded(px(Radius::XS)).bg(light).into_any_element()
+            }
+            ItemIcon::Symbol(name) => icons::symbol(name, 15.).text_color(c.muted_foreground).into_any_element(),
+            ItemIcon::GitHub => logos::github_mark(16., cx).text_color(c.muted_foreground).into_any_element(),
             ItemIcon::Project(project) => logos::project_icon(project.as_ref().as_ref(), 20., cx),
         };
         let text = if placeholder { placeholder_lines(item, light) } else { lines(item, c) };
         let trailing: Option<AnyElement> = if item.busy {
-            Some(div().text_color(c.secondary).child(Spinner::regular().render(cx)).into_any_element())
+            Some(div().text_color(c.muted_foreground).child(Spinner::regular().render(cx)).into_any_element())
         } else if let Some(note) = &item.note {
             Some(
                 div()
                     .text_size(px(12.))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(if item.warns { c.warning } else { c.tertiary })
-                    .when(item.warns, |note| note.px(px(8.)).py(px(3.)).rounded_full().bg(c.warning.opacity(0.14)))
+                    .text_color(if item.warns { c.warning } else { c.muted_stronger_foreground })
+                    .when(item.warns, |note| note.px(px(8.)).py(px(3.)).rounded_full().bg(c.wash(c.warning, false)))
                     .child(note.clone())
                     .into_any_element(),
             )
         } else {
-            item.shortcut.map(|shortcut| {
+            let shortcuts = &self.store.read(cx).shortcuts;
+            let digit = |digit: usize| shortcuts.keys_label(&format!("mod+{digit}"));
+            item.keys.clone().or_else(|| item.shortcut.map(digit)).map(|keys| {
                 div()
                     .text_size(px(12.))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c.tertiary)
-                    .child(format!("⌘{shortcut}"))
+                    .text_color(c.muted_stronger_foreground)
+                    .child(keys)
                     .into_any_element()
             })
         };
         let index = item.index;
         let selectable = item.selectable();
         let id = item.id.clone();
+        let row_light = SURFACE.layer(Layer::Row, c);
+        // Every row lights under the pointer, as a button does, though only some can be run.
         let row = div()
             .id(SharedString::from(format!("panel-{}", item.id)))
+            .group("panel-row")
             .px(px(SIDE_MARGIN))
             .child(
                 div()
@@ -1094,8 +1329,9 @@ impl CommandPanel {
                     .items_center()
                     .gap(px(12.))
                     .rounded(px(ROW_RADIUS))
-                    .when(lit, |row| row.bg(light))
-                    .when(item.off, |row| row.opacity(0.45))
+                    .when(lit, |row| row.bg(row_light))
+                    .when(!lit, |row| row.group_hover("panel-row", move |row| row.bg(row_light)))
+                    .when(item.off, |row| row.opacity(c.opacity(Opacity::Disabled)))
                     .child(div().size(px(22.)).flex_shrink_0().flex().items_center().justify_center().child(icon))
                     .child(div().flex_1().min_w_0().child(text))
                     .children(trailing.map(|trailing| div().ml(px(8.)).flex_shrink_0().child(trailing))),
@@ -1110,18 +1346,19 @@ impl CommandPanel {
             }))
             .when(selectable, |row| {
                 row.on_click(cx.listener(move |this, _, window, cx| {
-                    let sections = this.sections(cx);
+                    let sections = this.current(cx);
                     if let Some(item) = sections.iter().flat_map(|section| &section.items).find(|item| item.id == id) {
                         this.run(item, window, cx);
                     }
                 }))
             });
         if placeholder {
+            let faded = c.opacity(Opacity::Disabled);
             return row
                 .with_animation(
                     SharedString::from(format!("placeholder-{}", item.id)),
                     Animation::new(Duration::from_millis(1600)).repeat(),
-                    |row, delta| row.opacity(1. - 0.55 * (1. - (delta * 2. - 1.).abs())),
+                    move |row, delta| row.opacity(1. - (1. - faded) * (1. - (delta * 2. - 1.).abs())),
                 )
                 .into_any_element();
         }
@@ -1130,30 +1367,20 @@ impl CommandPanel {
 
     fn hints(&self, cx: &App) -> impl IntoElement {
         let c = colors(cx);
-        let cap = SURFACE.next().color(c);
+        let shortcuts = &self.store.read(cx).shortcuts;
+        // Each of `keys` as `keybindings.json` writes it, its caps drawn for the system.
         let hint = |keys: &[&str], text: &str| {
+            let caps: Vec<String> = keys.iter().flat_map(|keys| shortcuts.caps_of(keys)).collect();
             div()
                 .flex()
                 .items_center()
                 .gap(px(5.))
-                .text_color(c.secondary)
-                .children(keys.iter().map(|key| {
-                    div()
-                        .min_w(px(22.))
-                        .h(px(20.))
-                        .px(px(6.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(5.))
-                        .bg(cap)
-                        .text_size(px(11.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .child(key.to_string())
-                }))
+                .text_color(c.muted_foreground)
+                .child(KeyCaps::new(caps).surface(SURFACE))
                 .child(div().text_size(px(12.)).child(text.to_string()))
         };
         let folder = matches!(self.page(), PanelPage::Folder(_));
+        let icon = matches!(self.page(), PanelPage::Icon(_));
         let github = matches!(self.page(), PanelPage::Github(_));
         div()
             .h(px(40.))
@@ -1161,12 +1388,13 @@ impl CommandPanel {
             .flex()
             .items_center()
             .gap(px(14.))
-            .child(hint(&["↑", "↓"], "Navigate"))
-            .when(folder, |hints| hints.child(hint(&["↩"], "Open")).child(hint(&["⌘", "↩"], "Add")))
-            .when(!folder, |hints| hints.child(hint(&["↩"], "Select")))
-            .when(github, |hints| hints.child(hint(&["⌘", "R"], "Refresh")))
-            .when(self.pages.len() > 1, |hints| hints.child(hint(&["⌫"], "Back")))
-            .child(hint(&["esc"], "Close"))
+            .child(hint(&["up", "down"], "Navigate"))
+            .when(folder, |hints| hints.child(hint(&["enter"], "Open")).child(hint(&["mod+enter"], "Add")))
+            .when(icon, |hints| hints.child(hint(&["enter"], "Open")))
+            .when(!folder && !icon, |hints| hints.child(hint(&["enter"], "Select")))
+            .when(github, |hints| hints.child(hint(&["mod+r"], "Refresh")))
+            .when(self.pages.len() > 1, |hints| hints.child(hint(&["backspace"], "Back")))
+            .child(hint(&["escape"], "Close"))
     }
 }
 
@@ -1188,13 +1416,11 @@ fn lines(item: &Item, c: &Colors) -> Div {
         .when(!item.detail_parts.is_empty(), |text| text.child(detail_parts(&item.detail_parts, c)))
         .when(item.detail_parts.is_empty() && !item.detail.is_empty(), |text| {
             text.child(
-                div()
+                crate::ui::middle_truncated(item.detail.clone())
                     .h(px(DETAIL_HEIGHT))
                     .text_size(px(12.))
                     .line_height(px(DETAIL_HEIGHT))
-                    .text_color(c.secondary)
-                    .truncate()
-                    .child(item.detail.clone()),
+                    .text_color(c.muted_foreground),
             )
         })
 }
@@ -1207,20 +1433,22 @@ fn detail_parts(parts: &[(&'static str, String)], c: &Colors) -> Div {
         .gap(px(4.))
         .text_size(px(12.))
         .line_height(px(DETAIL_HEIGHT))
-        .text_color(c.secondary);
+        .text_color(c.muted_foreground);
     for (position, (symbol, text)) in parts.iter().enumerate() {
         if position > 0 {
-            row = row.child("·");
+            row = row.child(div().text_color(c.muted_stronger_foreground).child("·"));
         }
+        // Lucide's server fills more of its square than the icons beside it.
+        let size = if *symbol == "server" { 11. } else { 12. };
         row = row.child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(4.))
+                .gap(px(3.))
                 .min_w_0()
                 .when(position == 0, |part| part.flex_shrink_0())
-                .child(icons::symbol(symbol, 11.).text_color(c.tertiary))
-                .child(div().truncate().child(text.clone())),
+                .child(icons::symbol(symbol, size))
+                .child(crate::ui::middle_truncated(text.clone())),
         );
     }
     row
@@ -1244,22 +1472,6 @@ fn placeholder_lines(item: &Item, light: Hsla) -> Div {
         .gap(px(2.))
         .child(bar(TITLES[position], 10., TITLE_HEIGHT))
         .when(item.placeholder_lines > 1, |text| text.child(bar(DETAILS[position], 8., DETAIL_HEIGHT)))
-}
-
-/// Where the selectable item `index` is among the list's children, which are the sections'
-/// titles and their rows.
-fn child_of(sections: &[Section], index: usize) -> Option<usize> {
-    let mut child = 0;
-    for section in sections {
-        child += 1;
-        for item in &section.items {
-            if item.index == Some(index) {
-                return Some(child);
-            }
-            child += 1;
-        }
-    }
-    None
 }
 
 /// The repositories that answer the search, the best first and the last pushed among equals.
@@ -1298,22 +1510,21 @@ fn is_repo_name(text: &str) -> bool {
 }
 
 fn divider(c: &Colors) -> Div {
-    div().h(px(1.)).w_full().flex_shrink_0().bg(c.border_secondary)
+    div().h(px(1.)).w_full().flex_shrink_0().bg(SURFACE.border(c))
 }
 
 impl Render for CommandPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
-        let sections = self.sections(cx);
+        let sections = self.current(cx);
         let rows: usize = sections.iter().map(|section| section.items.len()).sum();
         let notice = self.notice(cx);
-        let size = window.viewport_size();
-        // The scrim fades in over 200ms; the card is there at once.
-        let scrim = div().absolute().inset_0().bg(hsla(0., 0., 0., 0.32)).with_animation(
-            "command-panel-scrim",
-            Animation::new(Duration::from_millis(200)),
-            |scrim, delta| scrim.opacity(delta),
-        );
+        let height = self.height(&sections, rows, notice.is_some());
+        self.follow_entries(&sections, notice, cx);
+        let results =
+            list(self.list.clone(), cx.processor(|this, index, _, cx| this.entry(index, cx))).h(px(height)).w_full();
+        let size = crate::window_frame::content_size(window);
+        // The card is there at once; its scrim is the window's, which stays from page to page.
         let card = div()
             .id("command-panel-card")
             .w(px(WIDTH))
@@ -1323,16 +1534,16 @@ impl Render for CommandPanel {
             .bg(SURFACE.color(c))
             .rounded(px(RADIUS))
             .border_1()
-            .border_color(c.border_secondary)
-            .shadow(crate::ui::shadow(hsla(0., 0., 0., 0.3), 14., 60.))
+            .border_color(c.border_popover)
+            .shadow(c.shadow(ShadowSize::Xl, Opacity::ShadowStrongest))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .child(self.header(cx))
             .child(divider(c))
-            .child(self.results(&sections, rows, notice, cx))
+            .child(results)
             .child(divider(c))
             .child(self.hints(cx));
         deferred(
-            anchored().position(point(px(0.), px(0.))).child(
+            anchored().position(crate::window_frame::content_origin(window)).child(
                 div()
                     .id("command-panel")
                     .w(size.width)
@@ -1345,7 +1556,6 @@ impl Render for CommandPanel {
                     .pt(px(crate::theme::TOP_BAR + 70.))
                     .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| this.key(event, window, cx)))
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.close(cx)))
-                    .child(scrim)
                     .child(card),
             ),
         )

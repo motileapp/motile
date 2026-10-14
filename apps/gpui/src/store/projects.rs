@@ -9,7 +9,7 @@ use motile_core::api::Command;
 use motile_protocol::wire::{GitHubState, Repo, Request};
 
 use super::{AddingProject, PanelPage, Store};
-use crate::models::{FolderListing, Project, RemoteFolder, Server};
+use crate::models::{FolderListing, Project, Server};
 
 /// Which servers are listing their GitHub repositories now, and when each last did.
 #[derive(Default)]
@@ -34,10 +34,17 @@ fn github_state(value: &serde_json::Value) -> Option<GitHubState> {
 impl Store {
     pub(super) fn apply_projects(&mut self, new: Vec<Project>, server_id: &str, cx: &mut Context<Self>) {
         let git_before = self.git_project().and_then(|project| project.git);
+        let (none, folders): (Vec<Project>, Vec<Project>) = new.into_iter().partition(|project| project.no_project);
         self.projects.retain(|project| project.server_id != server_id);
-        self.projects.extend(new);
+        self.projects.extend(folders);
         self.projects.sort_by(|a, b| a.created_at.total_cmp(&b.created_at));
+        self.no_projects.retain(|project| project.server_id != server_id);
+        self.no_projects.extend(none);
+        let order: Vec<&str> = self.servers.iter().map(|server| server.id.as_str()).collect();
+        let place = |project: &Project| order.iter().position(|id| *id == project.server_id).unwrap_or(order.len());
+        self.no_projects.sort_by_key(|project| place(project));
         self.ensure_draft_project();
+        self.pick_awaited_folder(cx);
         self.open_awaited_project(cx);
         // A server that has just started hasn't read the repository yet.
         if let Some(project) = self.git_project()
@@ -55,20 +62,8 @@ impl Store {
         }
     }
 
-    pub fn list_folder(
-        &mut self,
-        server_id: &str,
-        path: Option<String>,
-        icons: bool,
-        done: impl FnOnce(&mut Store, Result<RemoteFolder, String>, &mut Context<Store>) + 'static,
-    ) {
-        let request = Request::ListDir { path, icons, hidden: false };
-        self.request_then(server_id, request, move |store, result, cx| {
-            let folder = result.map(|value| serde_json::from_value::<RemoteFolder>(value).unwrap_or_default());
-            done(store, folder, cx);
-        });
-    }
-
+    /// Adds the folder as a project. It is the one the next thread starts in, once the server
+    /// has told about it.
     pub fn add_project_at(&mut self, server_id: &str, path: String) {
         let server = server_id.to_string();
         self.request_then(server_id, Request::AddProject { path: path.clone() }, move |store, result, cx| {
@@ -76,21 +71,18 @@ impl Store {
                 store.fail(error);
                 return;
             }
-            // The new project is the one the next thread starts in.
-            cx.spawn(async move |this, cx| {
-                cx.background_executor().timer(Duration::from_millis(300)).await;
-                let _ = this.update(cx, |store, cx| {
-                    let trimmed =
-                        if path.len() > 1 && path.ends_with('/') { &path[..path.len() - 1] } else { &path[..] };
-                    let found =
-                        store.projects.iter().find(|project| project.server_id == server && project.path == trimmed);
-                    let Some(id) = found.map(|project| project.id.clone()) else { return };
-                    store.set_new_thread_project(Some(id), cx);
-                    cx.notify();
-                });
-            })
-            .detach();
+            let trimmed = if path.len() > 1 && path.ends_with('/') { &path[..path.len() - 1] } else { &path[..] };
+            store.awaited_folder = Some((server, trimmed.to_string()));
+            store.pick_awaited_folder(cx);
         });
+    }
+
+    fn pick_awaited_folder(&mut self, cx: &mut Context<Self>) {
+        let Some((server_id, path)) = &self.awaited_folder else { return };
+        let found = self.projects.iter().find(|project| &project.server_id == server_id && &project.path == path);
+        let Some(id) = found.map(|project| project.id.clone()) else { return };
+        self.awaited_folder = None;
+        self.set_new_thread_project(Some(id), cx);
     }
 
     /// Opens the panel on the ways to add a project, after the servers when there is a choice.
@@ -112,15 +104,19 @@ impl Store {
         server.map_or(0, |server| server.protocol_version) >= 5
     }
 
+    /// Lists the folders under the typed path, with the images that can be an icon when `icons`.
     pub fn browse(
         &mut self,
         server_id: &str,
         query: String,
+        icons: bool,
         done: impl FnOnce(&mut Store, Result<FolderListing, String>, &mut Context<Store>) + 'static,
     ) {
-        let command = Command::Browse { server_id: server_id.to_string(), query };
+        let command = Command::Browse { server_id: server_id.to_string(), query, icons };
         self.ask(command, move |store, result, cx| {
-            let listing = result.map(|value| serde_json::from_value::<FolderListing>(value).unwrap_or_default());
+            let listing = result
+                .map_err(String::from)
+                .map(|value| serde_json::from_value::<FolderListing>(value).unwrap_or_default());
             done(store, listing, cx);
         });
     }
@@ -164,7 +160,7 @@ impl Store {
                     store.heard_github(&answer, &server);
                 }
                 Err(error) => {
-                    store.repo_errors.insert(server, error);
+                    store.repo_errors.insert(server, error.into());
                 }
             }
         });
@@ -192,7 +188,7 @@ impl Store {
                     store.awaited_project_id = answer["project_id"].as_str().map(String::from);
                     store.open_awaited_project(cx);
                 }
-                Err(error) if store.panel.is_some() => store.panel_notice = Some(error),
+                Err(error) if store.panel.is_some() => store.panel_notice = Some(error.into()),
                 Err(error) => store.fail(error),
             }
         });

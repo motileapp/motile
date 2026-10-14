@@ -29,16 +29,28 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSMenu", "NSMenuItem", "NSView", "NSImage", "NSResponder", "NSApplication", "NSAppearance", "NSWindow", "objc2-core-foundation"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSMenu", "NSMenuItem", "NSEvent", "block2", "NSView", "NSImage", "NSResponder", "NSApplication", "NSAppearance", "NSWindow", "objc2-core-foundation", "NSSavePanel", "NSPanel", "NSPasteboard", "NSWorkspace", "NSAccessibility", "NSColor"] }
 raw-window-handle = "0.6"
 block2 = "0.6"
 objc2-authentication-services = { version = "0.3", default-features = false, features = ["std", "block2", "ASFoundation", "ASWebAuthenticationSession"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL", "NSDictionary", "NSValue", "NSGeometry", "NSError", "NSArray"] }
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVPlayer", "AVPlayerItem", "AVPlayerItemOutput", "AVAsset", "objc2-core-media", "objc2-core-video"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSURL", "NSDictionary", "NSValue", "NSGeometry", "NSError", "NSArray", "NSDistributedNotificationCenter", "NSNotification", "NSOperation", "NSByteCountFormatter", "NSNumberFormatter", "NSDateFormatter", "NSDate", "NSFormatter", "NSLocale", "NSCalendar", "block2"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "AVPlayer", "AVPlayerItem", "AVPlayerItemOutput", "AVAsset", "AVAssetImageGenerator", "objc2-core-graphics", "objc2-core-media", "objc2-core-video"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGImage", "CGContext", "CGBitmapContext", "CGColorSpace"] }
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMTime"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVPixelBuffer", "CVBuffer", "CVImageBuffer", "CVReturn"] }
 core-video = "0.5"
 core-foundation = "0.10"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+netwatch = "0.19"
+n0-watcher = "1"
+
+[target.'cfg(windows)'.dependencies]
+uds_windows = "1"
+windows-registry = "0.6"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
+raw-window-handle = "0.6"
 
 [profile.release]
 strip = true

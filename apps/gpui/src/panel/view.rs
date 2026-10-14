@@ -1,26 +1,37 @@
 //! The panel beside the thread: its tabs in the window's top bar, and under them what the open
 //! tab shows of the folder the thread works in.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::agents::AgentView;
-use motile_protocol::wire::{DiffScope, PullRequestEdit, Side, ToolStatus};
+use motile_protocol::wire::{DiffScope, Side, ToolStatus};
 
 use super::code_view::{CodeActions, CodeSnapshot, CodeView, counts_text};
-use super::state::{CodeDocument, CodeMarks, FileContent, Loaded, PanelTab, PanelTarget, REMOVED, file_symbol};
+use super::state::{
+    CodeDocument, CodeMarks, CodeMedia, FileContent, FileNode, Loaded, PanelTab, PanelTarget, REMOVED, file_symbol,
+};
+use crate::media::zoom::ZoomableImage;
 use crate::models::{AgentViewExt, duration, elapsed};
 use crate::panel::line_comment::{self, LineCommentSheet};
 use crate::panel::linear::LinearView;
 use crate::panel::pull_request::PullRequestView;
 use crate::panel::pull_request_list::PullRequestListView;
 use crate::store::Store;
-use crate::theme::{self, ControlSize, Radius, Surface, colors};
+use crate::theme::{self, ControlSize, Layer, Radius, colors};
 use crate::transcript::view::TranscriptView;
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, ActionMenu, Spinner, TOOLBAR_WIDTH, Variant, edges, icons};
+use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, edges, icons};
+
+/// How far the tabs keep from the strip's ends.
+const TAB_EDGE: f32 = 8.;
+/// The room on each side of a tab that looks empty but is the tab's, so no click falls between
+/// tabs.
+const TAB_MARGIN: f32 = 1.;
 
 /// What makes a tab ask its server again: another folder or scope, a turn that ended there, or
 /// the button that asks.
@@ -33,19 +44,32 @@ struct Trigger {
     asked: u64,
 }
 
+/// A tab of a thread or a draft, by what its tabs are kept under.
+type TabOf = (String, PanelTab);
+
 pub struct SidePanelView {
     store: Entity<Store>,
-    /// The views of the pull request tabs, by tab, and of the list and the Linear tabs.
-    pull_requests: HashMap<PanelTab, Entity<PullRequestView>>,
+    /// The view of the open pull request or Linear tab, which starts afresh when another tab or
+    /// another thread's is shown, as the Mac's does.
+    pull_request: Option<(TabOf, Entity<PullRequestView>)>,
     pull_request_list: Option<Entity<PullRequestListView>>,
-    linear_tabs: HashMap<PanelTab, Entity<LinearView>>,
+    linear: Option<(TabOf, Entity<LinearView>)>,
     line_comment: Option<Entity<LineCommentSheet>>,
-    /// How far the tabs start from the panel's left edge: past the window's buttons when the
-    /// panel reaches them.
-    pub tab_inset: f32,
+    /// Where the tabs start from the panel's left edge in place of the strip's own margin: past
+    /// the window's buttons when the panel reaches them.
+    pub tab_inset: Option<f32>,
+    /// What the window's buttons take of the top bar's end, where the app draws them.
+    pub trailing_room: f32,
     diff: Entity<CodeView>,
     /// The views of the tabs that show one file, by tab.
     files: HashMap<PanelTab, Entity<CodeView>>,
+    /// The images and the videos of the tabs that show such a file, by tab, with the file.
+    zooms: HashMap<PanelTab, (std::path::PathBuf, Entity<ZoomableImage>)>,
+    #[cfg(target_os = "macos")]
+    players: HashMap<PanelTab, (std::path::PathBuf, Entity<crate::media::video::VideoPlayer>)>,
+    /// The videos the tabs handed to the system's player, by tab.
+    #[cfg(not(target_os = "macos"))]
+    played_elsewhere: HashMap<PanelTab, std::path::PathBuf>,
     agent: Entity<TranscriptView>,
     asked: u64,
     /// What each tab last asked its server with, by tab.
@@ -54,10 +78,24 @@ pub struct SidePanelView {
     /// The tab the strip was last scrolled to.
     scrolled_to: Option<String>,
     hovered_tab: Option<String>,
-    copied: bool,
-    /// A change tab's one file is closed.
-    change_closed: bool,
+    /// The file tab whose path was just copied.
+    copied: Option<PanelTab>,
+    /// The change tab whose one file is closed, until another tab is shown.
+    change_closed: Option<PanelTab>,
+    /// The marks of the pull request's diff, and what they were worked out from.
+    marks: Option<(MarksMadeOf, CodeMarks)>,
+    agents: ListState,
+    listed_agents: Vec<String>,
     _ticks: Task<()>,
+}
+
+/// What a pull request diff's marks are worked out from: the document, the read of the page, and
+/// the comments waiting for a review.
+#[derive(PartialEq)]
+struct MarksMadeOf {
+    document: usize,
+    reads: u64,
+    pending: Vec<u64>,
 }
 
 /// Runs something on the store from a click.
@@ -88,26 +126,18 @@ fn choose(
     }
 }
 
-/// The light under what the pointer is over and under what is selected, a layer further up the
-/// page than the element `group` names.
+/// The light of a row under the pointer, behind what the element `group` names shows.
 fn light(group: impl Into<SharedString>, radius: f32, inset: Edges<f32>, selected: bool, cx: &App) -> Div {
-    let c = colors(cx);
-    let lit = Surface::Background.next().color(c);
-    let chosen = Surface::Background.further().color(c);
-    div()
-        .absolute()
-        .top(px(inset.top))
-        .left(px(inset.left))
-        .right(px(inset.right))
-        .bottom(px(inset.bottom))
-        .rounded(px(radius))
-        .when(selected, |light| light.bg(chosen))
-        .when(!selected, |light| light.group_hover(group, move |light| light.bg(lit)))
+    Highlight::new().radius(radius).inset(inset).selected(selected).render(group, cx)
 }
 
 impl SidePanelView {
     pub fn new(store: Entity<Store>, _window: &mut Window, cx: &mut Context<Self>) -> Self {
-        cx.observe(&store, |_, _, cx| cx.notify()).detach();
+        cx.observe(&store, |this, _, cx| {
+            this.pause_hidden_videos(cx);
+            cx.notify()
+        })
+        .detach();
         let model = store.read(cx).agent_transcript.clone();
         let agent = cx.new(|cx| TranscriptView::new(store.clone(), model, true, cx));
         // The times of the agents that work go on.
@@ -126,21 +156,30 @@ impl SidePanelView {
         });
         Self {
             store,
-            pull_requests: HashMap::new(),
+            pull_request: None,
             pull_request_list: None,
-            linear_tabs: HashMap::new(),
+            linear: None,
             line_comment: None,
-            tab_inset: 0.,
+            tab_inset: None,
+            trailing_room: 0.,
             diff: cx.new(CodeView::new),
             files: HashMap::new(),
+            zooms: HashMap::new(),
+            #[cfg(target_os = "macos")]
+            players: HashMap::new(),
+            #[cfg(not(target_os = "macos"))]
+            played_elsewhere: HashMap::new(),
             agent,
             asked: 0,
             triggers: HashMap::new(),
             strip: ScrollHandle::new(),
             scrolled_to: None,
             hovered_tab: None,
-            copied: false,
-            change_closed: false,
+            copied: None,
+            change_closed: None,
+            marks: None,
+            agents: ListState::new(0, ListAlignment::Top, px(400.)),
+            listed_agents: Vec::new(),
             _ticks: ticks,
         }
     }
@@ -179,11 +218,12 @@ impl SidePanelView {
         }
         let chips: Vec<AnyElement> =
             tabs.tabs.iter().map(|tab| self.tab_chip(tab, tabs.active.as_ref() == Some(tab), cx)).collect();
+        let leading = self.tab_inset.unwrap_or(TAB_EDGE);
         div()
             .absolute()
             .top_0()
-            .left(px(self.tab_inset))
-            .right(px(2. * TOOLBAR_WIDTH + 14.))
+            .left_0()
+            .right(px(2. * TOOLBAR_WIDTH + 14. + self.trailing_room))
             .h(px(theme::TOP_BAR))
             .child(
                 div()
@@ -191,10 +231,10 @@ impl SidePanelView {
                     .size_full()
                     .overflow_x_scroll()
                     .track_scroll(&self.strip)
-                    .px(px(8.))
+                    .pl(px(leading - TAB_MARGIN))
+                    .pr(px(TAB_EDGE - TAB_MARGIN))
                     .flex()
                     .items_center()
-                    .gap(px(2.))
                     .when(!blank, |strip| strip.children(chips))
                     .when(available && !blank, |strip| {
                         strip.child(
@@ -219,43 +259,43 @@ impl SidePanelView {
         let path = tab.path().map(str::to_string);
         let (hover_key, menu_tab, close_tab, activate_tab) = (key.clone(), tab.clone(), tab.clone(), tab.clone());
         let menu_store = self.store.clone();
+        let close_help = self.store.read(cx).shortcuts.help("Close", "rightPanel.close");
         div()
             .id(SharedString::from(key.clone()))
             .group(group.clone())
             .relative()
             .flex_shrink_0()
-            .max_w(px(180.))
+            .max_w(px(180. + 2. * TAB_MARGIN))
             .h(px(height))
-            .pl(px(9.))
-            .pr(px(close_margin))
+            .pl(px(9. + TAB_MARGIN))
+            .pr(px(close_margin + TAB_MARGIN))
             .flex()
             .items_center()
             .gap(px(6.))
-            .child(light(group, Radius::CONTROL, edges(0., 0., 0., 0.), active, cx))
             .child(
-                div()
-                    .relative()
-                    .w(px(14.))
-                    .flex()
-                    .justify_center()
-                    .child(icons::symbol(tab.symbol(), 11.).text_color(if lit { c.text } else { c.secondary })),
+                Highlight::new()
+                    .selected(active)
+                    .lit(hovering)
+                    .small(true)
+                    .inset(edges(0., TAB_MARGIN, 0., TAB_MARGIN))
+                    .render(group, cx),
             )
+            .child(div().relative().w(px(14.)).flex().justify_center().child(
+                icons::symbol(tab.symbol(), 11.).text_color(if lit { c.foreground } else { c.muted_foreground }),
+            ))
             .child(
-                div()
+                crate::ui::middle_truncated(tab.title())
                     .relative()
-                    .min_w_0()
                     .text_size(px(12.))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(if lit { c.text } else { c.secondary })
-                    .truncate()
-                    .child(tab.title()),
+                    .text_color(if lit { c.foreground } else { c.muted_foreground }),
             )
             .child(div().relative().size(px(close_size)).flex_shrink_0().when(lit, |close| {
                 close.child(
-                    ActionButton::icon(SharedString::from(format!("close-{key}")), "x", "Close (⌘W)")
+                    ActionButton::icon(SharedString::from(format!("close-{key}")), "x", close_help)
                         .small()
                         .symbol_size(ControlSize::Small.small_symbol())
-                        .surface(if active { Surface::Background.further() } else { Surface::Background.next() })
+                        .row(Some(if active { Layer::ControlLit } else { Layer::Control }))
                         .on_click(act(&self.store, move |store, _| store.close_tab(&close_tab))),
                 )
             }))
@@ -288,17 +328,39 @@ impl SidePanelView {
 
     /// What a tab says in the middle of the panel when it has nothing to show.
     fn message(text: impl Into<SharedString>, failed: bool, cx: &App) -> AnyElement {
+        super::pull_request::panel_message(text, failed, cx)
+    }
+
+    /// What the changes tab says of a folder that is no git repository, with the button that
+    /// makes it one.
+    fn no_repository(&self, project_id: &str, cx: &App) -> AnyElement {
         let c = colors(cx);
+        let store = self.store.read(cx);
+        let project = store.project(Some(project_id)).filter(|project| store.can_initialize_git(project)).cloned();
+        let pending = project.as_ref().is_some_and(|project| store.initializing_git.contains(&project.id));
         div()
             .size_full()
             .p(px(24.))
             .flex()
+            .flex_col()
             .items_center()
             .justify_center()
-            .text_size(px(12.5))
-            .text_color(if failed { c.danger } else { c.secondary })
-            .text_center()
-            .child(text.into())
+            .gap(px(12.))
+            .child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(c.muted_foreground)
+                    .text_center()
+                    .child("This folder isn't a git repository."),
+            )
+            .when_some(project, |message, project| {
+                message.child(
+                    ActionButton::new("initialize-git-panel", "Initialize git")
+                        .symbol("git-branch")
+                        .pending(pending)
+                        .on_click(act(&self.store, move |store, _| store.initialize_git(&project))),
+                )
+            })
             .into_any_element()
     }
 
@@ -309,7 +371,7 @@ impl SidePanelView {
             .flex()
             .items_center()
             .justify_center()
-            .text_color(c.tertiary)
+            .text_color(c.muted_stronger_foreground)
             .child(Spinner::new(ControlSize::Large.symbol()).render(cx))
             .into_any_element()
     }
@@ -331,15 +393,7 @@ impl SidePanelView {
             .flex_shrink_0()
             .flex()
             .flex_col()
-            .child(
-                div()
-                    .px(px(12.))
-                    .py(px(7.))
-                    .bg(c.warning_background)
-                    .text_size(px(12.))
-                    .text_color(c.warning)
-                    .child(text),
-            )
+            .child(div().px(px(12.)).py(px(7.)).bg(c.warning_tint).text_size(px(12.)).text_color(c.warning).child(text))
             .child(crate::ui::divider(cx))
     }
 
@@ -369,10 +423,11 @@ impl SidePanelView {
         let row = |id: &'static str,
                    symbol: &'static str,
                    title: &'static str,
-                   keys: Option<&'static str>,
+                   command: &'static str,
                    reason: Option<String>,
                    open: Box<dyn Fn(&mut Store)>| {
             let enabled = reason.is_none();
+            let keys = store.shortcuts.caps(command);
             let group: SharedString = format!("launch-{id}").into();
             div()
                 .id(id)
@@ -384,32 +439,19 @@ impl SidePanelView {
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .when(enabled, |row| row.child(light(group, Radius::CONTROL, edges(0., 0., 0., 0.), false, cx)))
-                .when(!enabled, |row| row.opacity(0.45))
+                .when(enabled, |row| row.child(light(group, Radius::MD, edges(0., 0., 0., 0.), false, cx)))
+                .when(!enabled, |row| row.opacity(c.opacity(theme::Opacity::Disabled)))
                 .child(
                     div()
                         .relative()
                         .w(px(18.))
                         .flex()
                         .justify_center()
-                        .child(icons::symbol(symbol, 13.).text_color(c.text)),
+                        .child(icons::symbol(symbol, 13.).text_color(c.foreground)),
                 )
-                .child(div().relative().flex_1().text_size(px(13.)).text_color(c.text).child(title))
+                .child(div().relative().flex_1().text_size(px(13.)).text_color(c.foreground).child(title))
                 .when_some(keys, |row, keys| {
-                    row.child(
-                        div()
-                            .relative()
-                            .h(px(20.))
-                            .px(px(6.))
-                            .rounded(px(5.))
-                            .bg(c.background_tertiary)
-                            .flex()
-                            .items_center()
-                            .text_size(px(11.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(c.secondary)
-                            .child(keys),
-                    )
+                    row.child(div().relative().text_color(c.muted_foreground).child(KeyCaps::new(keys).joined(true)))
                 })
                 .when_some(reason, |row, reason| row.tooltip(crate::ui::tooltip(reason)))
                 .when(enabled, |row| row.on_click(act(&self.store, move |store, _| open(store))))
@@ -421,7 +463,7 @@ impl SidePanelView {
             .items_center()
             .justify_center()
             .gap(px(12.))
-            .child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c.text).child("Open"))
+            .child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("Open"))
             .child(
                 div()
                     .w(px(250.))
@@ -432,7 +474,7 @@ impl SidePanelView {
                         "launch-files",
                         "folder",
                         "Files",
-                        Some("⇧⌘E"),
+                        "rightPanel.files",
                         None,
                         Box::new(|store| store.open_tab(PanelTab::Files)),
                     ))
@@ -440,7 +482,7 @@ impl SidePanelView {
                         "launch-diff",
                         "diff",
                         "Diff",
-                        Some("⌘D"),
+                        "rightPanel.diff",
                         (!target.repository).then(|| "Available in git repositories.".to_string()),
                         Box::new(|store| store.show_diff(None, None)),
                     ))
@@ -448,7 +490,7 @@ impl SidePanelView {
                         "launch-agents",
                         "users",
                         "Agents",
-                        Some("⇧⌘A"),
+                        "rightPanel.agents",
                         None,
                         Box::new(|store| store.open_tab(PanelTab::Agents)),
                     ))
@@ -456,7 +498,7 @@ impl SidePanelView {
                         "launch-pull-request",
                         "git-pull-request",
                         "Pull Request",
-                        Some("⇧⌘R"),
+                        "rightPanel.pullRequest",
                         pull_requests_unavailable.clone(),
                         Box::new(|store| store.open_tab(PanelTab::PullRequest)),
                     ))
@@ -465,7 +507,7 @@ impl SidePanelView {
                             "launch-pull-requests",
                             "list",
                             "All Pull Requests",
-                            Some("⌥⇧⌘R"),
+                            "rightPanel.pullRequests",
                             pull_requests_unavailable,
                             Box::new(|store| store.open_tab(PanelTab::PullRequests)),
                         ))
@@ -474,7 +516,7 @@ impl SidePanelView {
                         "launch-linear",
                         "linear",
                         linear_title,
-                        None,
+                        "rightPanel.linear",
                         linear_unavailable,
                         Box::new(|store| store.open_tab(PanelTab::Linear)),
                     )),
@@ -484,14 +526,24 @@ impl SidePanelView {
 
     /// What the diff shows of the pull request besides its lines: which files were viewed and
     /// where its conversations and the comments waiting for a review are.
-    fn marks(&self, document: &CodeDocument, scope: &DiffScope, cx: &App) -> CodeMarks {
+    fn marks(&mut self, document: &Arc<CodeDocument>, scope: &DiffScope, target: &PanelTarget, cx: &App) -> CodeMarks {
         let store = self.store.read(cx);
         let DiffScope::PullRequest { number } = scope else { return CodeMarks::default() };
-        let Some(page) = store.pull_requests.page.value().filter(|page| page.number == *number) else {
+        let Some(page) = store.pull_requests.shown_page(target).filter(|page| page.number == *number) else {
             return CodeMarks::default();
         };
         if !store.pull_requests_extended() {
             return CodeMarks::default();
+        }
+        let made_of = MarksMadeOf {
+            document: Arc::as_ptr(document) as usize,
+            reads: store.pull_requests.reads,
+            pending: store.pull_requests.pending.get(number).into_iter().flatten().map(|comment| comment.id).collect(),
+        };
+        if let Some((made, marks)) = &self.marks
+            && *made == made_of
+        {
+            return marks.clone();
         }
         let mut marks = CodeMarks {
             viewable: true,
@@ -518,12 +570,13 @@ impl SidePanelView {
                 marks.marked.entry(path).or_default().insert(index);
             }
         }
+        self.marks = Some((made_of, marks.clone()));
         marks
     }
 
     /// The changes in the thread's folder: what isn't committed, what the branch adds, or what
     /// one turn did.
-    fn diff_surface(&mut self, target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
+    fn diff_surface(&mut self, target: &PanelTarget, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let store = self.store.read(cx);
         let scope = store.diff_scope(target);
         let trigger = Trigger {
@@ -541,7 +594,7 @@ impl SidePanelView {
                 move |store| {
                     if let DiffScope::PullRequest { number } = load_scope
                         && store.pull_requests_extended()
-                        && store.pull_requests.page.value().map(|page| page.number) != Some(number)
+                        && store.pull_requests.shown_page(&load_target).map(|page| page.number) != Some(number)
                     {
                         store.load_pull_request(&load_target, number);
                     }
@@ -558,10 +611,12 @@ impl SidePanelView {
             let (text, runs) = counts_text(document.added(), document.removed(), colors(cx));
             div().pl(px(4.)).text_size(px(11.5)).child(StyledText::new(text).with_runs(runs))
         });
-        let viewed = match (&scope, store.pull_requests.page.value()) {
-            (DiffScope::PullRequest { number }, Some(page)) if page.number == *number && !page.viewed.is_empty() => {
+        let viewed = match (&scope, store.pull_requests.shown_page(target)) {
+            (DiffScope::PullRequest { number }, Some(page))
+                if page.number == *number && store.pull_requests_extended() && !page.viewed.is_empty() =>
+            {
                 let done = page.viewed.iter().filter(|file| file.viewed).count();
-                Some(format!("{done} of {} viewed", page.viewed.len()))
+                Some((format!("{done} of {} viewed", page.viewed.len()), page.can_review_lines))
             }
             _ => None,
         };
@@ -573,12 +628,21 @@ impl SidePanelView {
                 .w_full()
                 .gap(px(4.))
                 .child(div().ml(px(-8.)).child(self.scope_menu(target, &scope, cx)))
-                .when_some(viewed, |bar, viewed| {
+                .children(counts)
+                .when_some(viewed, |bar, (viewed, comments)| {
                     bar.child(
-                        div().text_size(px(11.5)).text_color(colors(cx).tertiary).whitespace_nowrap().child(viewed),
+                        div()
+                            .id("viewed-count")
+                            .pl(px(6.))
+                            .text_size(px(12.))
+                            .text_color(colors(cx).muted_stronger_foreground)
+                            .whitespace_nowrap()
+                            .child(viewed)
+                            .when(comments, |viewed| {
+                                viewed.tooltip(crate::ui::tooltip("Click a line's number to comment on it"))
+                            }),
                     )
                 })
-                .children(counts)
                 .child(div().flex_1().min_w(px(4.)))
                 .when(several, |bar| {
                     bar.child(
@@ -594,7 +658,7 @@ impl SidePanelView {
             cx,
         );
         let body: AnyElement = if !target.repository {
-            Self::message("This folder isn't a git repository.", false, cx)
+            self.no_repository(&target.project_id, cx)
         } else if target.awaits_worktree {
             Self::message("Nothing has changed.", false, cx)
         } else {
@@ -609,7 +673,8 @@ impl SidePanelView {
                 Loaded::Ready(document) => {
                     let truncated = document.truncated;
                     let store = self.store.clone();
-                    let marks = self.marks(document, &scope, cx);
+                    let document = document.clone();
+                    let marks = self.marks(&document, &scope, target, cx);
                     let (viewed_target, viewed_marks) = (target.clone(), marks.clone());
                     let viewed_scope = scope.clone();
                     let actions = CodeActions::default()
@@ -618,23 +683,24 @@ impl SidePanelView {
                         .viewed(act_path(&self.store, move |store, path| {
                             let DiffScope::PullRequest { number } = viewed_scope else { return };
                             let viewed = !viewed_marks.viewed.contains(path);
-                            let edit = PullRequestEdit::Viewed { path: path.to_string(), viewed };
-                            store.pull_request_edit(edit, None, &viewed_target, number);
+                            store.set_viewed(path, viewed, &viewed_target, number);
                         }))
-                        .comment(act_line(&self.store, |store, line| store.comment_on_line(Some(line.into()))));
+                        .comment(act_line(&self.store, |store, line| store.comment_on_line(Some(line.into()))))
+                        .media(load_media(&self.store, target), open_media(&self.store));
                     let code = self.diff.update(cx, |view, cx| {
-                        let state = store.read(cx);
-                        let Loaded::Ready(document) = &state.side_panel.diff else { return div().into_any_element() };
-                        let (document, collapsed, reveal) =
-                            (document.clone(), state.side_panel.collapsed.clone(), state.side_panel.reveal.clone());
+                        let panel = &store.read(cx).side_panel;
+                        let (collapsed, reveal, media) =
+                            (panel.collapsed.clone(), panel.reveal.clone(), panel.media_files.clone());
                         view.element(
                             CodeSnapshot {
                                 document: &document,
                                 collapsed: &collapsed,
                                 reveal: reveal.as_ref(),
                                 marks: &marks,
+                                media: &media,
                             },
                             actions,
+                            window,
                             cx,
                         )
                     });
@@ -666,21 +732,26 @@ impl SidePanelView {
             DiffScope::Commit { sha } => format!("Commit {}", sha.chars().take(7).collect::<String>()),
             DiffScope::Turn { item_id } => store.turn_name(item_id),
         };
-        // The pull request the menu offers: the thread's, or the one the scope shows.
+        // The pull request the menu offers: the one the scope shows, the thread's, or the one the
+        // panel shows.
+        let page = store.pull_requests.shown_page(target);
         let pull_request = match scope {
             DiffScope::PullRequest { number } => Some(*number),
-            _ => target.pull_request,
+            _ => target.pull_request.or(page.map(|page| page.number)),
         }
         .filter(|_| store.pull_requests_unavailable().is_none());
-        let commits: Vec<(String, String)> = match (pull_request, store.pull_requests.page.value()) {
+        let commits: Vec<(String, String)> = match (pull_request, page) {
             (Some(number), Some(page)) if page.number == number => page
                 .activity
                 .iter()
                 .flat_map(|entry| entry.commits.iter())
-                .map(|commit| (commit.sha.clone(), commit.headline.clone()))
+                .filter(|commit| !commit.sha.is_empty())
+                .map(|commit| (commit.sha.clone(), format!("{}  {}", commit.oid, commit.headline)))
                 .collect(),
             _ => Vec::new(),
         };
+        let first_commit = commits.first().map(|(sha, _)| DiffScope::Commit { sha: sha.clone() });
+        let lists_commits = commits.len() > 1 || first_commit.as_ref() == Some(scope);
         let turns: Vec<(DiffScope, String)> = store
             .side_panel
             .turns
@@ -701,9 +772,13 @@ impl SidePanelView {
             if let Some(number) = pull_request {
                 let scope = DiffScope::PullRequest { number };
                 menu = menu.checked(chosen == scope, format!("Pull request #{number}"), pick(scope));
-                for (sha, headline) in &commits {
-                    let scope = DiffScope::Commit { sha: sha.clone() };
-                    menu = menu.checked(chosen == scope, headline.clone(), pick(scope));
+                if lists_commits {
+                    let mut its = Menu::new();
+                    for (sha, label) in &commits {
+                        let scope = DiffScope::Commit { sha: sha.clone() };
+                        its = its.checked(chosen == scope, label.clone(), pick(scope));
+                    }
+                    menu = menu.submenu("Its Commits", its);
                 }
             }
             if !turns.is_empty() {
@@ -735,13 +810,13 @@ impl SidePanelView {
                 .items_center()
                 .w_full()
                 .gap(px(4.))
-                .child(icons::symbol("folder", 11.).text_color(c.secondary))
+                .child(icons::symbol("folder", 11.).text_color(c.muted_foreground))
                 .child(
                     div()
                         .pl(px(3.))
                         .text_size(px(12.5))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.text)
+                        .text_color(c.foreground)
                         .truncate()
                         .child(target.name.clone()),
                 )
@@ -756,70 +831,76 @@ impl SidePanelView {
             if top.is_empty() {
                 Self::message("This folder is empty.", false, cx)
             } else {
-                let nodes = store.side_panel.nodes();
-                div()
-                    .id("file-tree")
-                    .size_full()
-                    .overflow_y_scroll()
-                    .py(px(6.))
-                    .children(nodes.into_iter().map(|node| {
-                        let group: SharedString = format!("node-{}", node.path).into();
-                        let (path, folder, copy) = (node.path.clone(), node.folder, node.path.clone());
-                        div()
-                            .id(SharedString::from(format!("file-{}", node.path)))
-                            .group(group.clone())
-                            .relative()
-                            .h(px(26.))
-                            .pl(px(12. + node.depth as f32 * 14.))
-                            .pr(px(10.))
-                            .flex()
-                            .items_center()
-                            .gap(px(6.))
-                            .child(light(group, Radius::SMALL, edges(0., 6., 0., 6.), false, cx))
-                            .when(node.ignored, |row| row.opacity(0.5))
-                            .child(div().relative().w(px(10.)).flex().justify_center().when(node.folder, |chevron| {
-                                chevron.child(
-                                    icons::symbol(if node.open { "chevron-down" } else { "chevron-right" }, 8.)
-                                        .text_color(c.tertiary),
-                                )
-                            }))
-                            .child(
-                                div().relative().w(px(16.)).flex().justify_center().child(
-                                    icons::symbol(if node.folder { "folder" } else { file_symbol(&node.path) }, 11.)
-                                        .text_color(c.secondary),
-                                ),
-                            )
-                            .child(
-                                div()
-                                    .relative()
-                                    .min_w_0()
-                                    .text_size(px(12.5))
-                                    .text_color(c.text)
-                                    .truncate()
-                                    .child(node.name.clone()),
-                            )
-                            .on_click(act(&self.store, move |store, _| {
-                                if folder {
-                                    store.toggle_folder(&path);
-                                } else {
-                                    store.open_tab(PanelTab::File(path.clone()));
-                                }
-                            }))
-                            .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                                let path = copy.clone();
-                                Menu::new()
-                                    .item("Copy Path", move |_, cx| {
-                                        cx.write_to_clipboard(ClipboardItem::new_string(path.clone()))
-                                    })
-                                    .show(event.position, window, cx);
-                            })
-                    }))
-                    .into_any_element()
+                let nodes = std::rc::Rc::new(store.side_panel.nodes());
+                let store = self.store.clone();
+                uniform_list("file-tree", nodes.len(), move |range, _, cx| {
+                    range.map(|index| file_row(&nodes[index], &store, cx)).collect::<Vec<_>>()
+                })
+                .size_full()
+                .py(px(6.))
+                .into_any_element()
             }
         } else {
             Self::loading(cx)
         };
         Self::surface(bar, body)
+    }
+
+    /// The image of a tab that shows an image file, kept for as long as the tab shows it.
+    fn zoomable(&mut self, tab: &PanelTab, file: &std::path::Path, cx: &mut Context<Self>) -> Entity<ZoomableImage> {
+        if let Some((shown, image)) = self.zooms.get(tab)
+            && shown == file
+        {
+            return image.clone();
+        }
+        let image = cx.new(|_| ZoomableImage::new(file, size(16., 16.), 0.));
+        self.zooms.insert(tab.clone(), (file.to_path_buf(), image.clone()));
+        image
+    }
+
+    /// A video file of the folder, which plays where it is.
+    #[cfg(target_os = "macos")]
+    fn video(&mut self, tab: &PanelTab, file: &std::path::Path, cx: &mut Context<Self>) -> AnyElement {
+        let player = match self.players.get(tab) {
+            Some((shown, player)) if shown == file => player.clone(),
+            _ => {
+                let player = cx.new(|cx| crate::media::video::VideoPlayer::new(file, cx));
+                self.players.insert(tab.clone(), (file.to_path_buf(), player.clone()));
+                player
+            }
+        };
+        div().size_full().p(px(16.)).child(player).into_any_element()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn video(&mut self, tab: &PanelTab, file: &std::path::Path, cx: &mut Context<Self>) -> AnyElement {
+        if self.played_elsewhere.get(tab).is_none_or(|played| played != file) {
+            self.played_elsewhere.insert(tab.clone(), file.to_path_buf());
+            cx.open_with_system(file);
+        }
+        Self::message("This video opened in the app your system has for it.", false, cx)
+    }
+
+    /// The videos of tabs out of sight stop, as the Mac's do when they disappear.
+    #[cfg(target_os = "macos")]
+    fn pause_hidden_videos(&mut self, cx: &mut Context<Self>) {
+        let store = self.store.read(cx);
+        let shown = store.side_panel.is_open.then(|| store.panel_tabs().active).flatten();
+        let tabs = store.panel_tabs().tabs;
+        self.players.retain(|tab, _| tabs.contains(tab));
+        self.zooms.retain(|tab, _| tabs.contains(tab));
+        for (tab, (_, player)) in &self.players {
+            if Some(tab) != shown.as_ref() {
+                player.update(cx, |player, _| player.pause());
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn pause_hidden_videos(&mut self, cx: &mut Context<Self>) {
+        let tabs = self.store.read(cx).panel_tabs().tabs;
+        self.played_elsewhere.retain(|tab, _| tabs.contains(tab));
+        self.zooms.retain(|tab, _| tabs.contains(tab));
     }
 
     /// The code view of a tab that shows one file, kept for as long as the tab is.
@@ -830,7 +911,13 @@ impl SidePanelView {
     }
 
     /// One file of the folder the thread works in.
-    fn file_surface(&mut self, target: &PanelTarget, path: &str, cx: &mut Context<Self>) -> AnyElement {
+    fn file_surface(
+        &mut self,
+        target: &PanelTarget,
+        path: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let trigger = Trigger {
@@ -847,38 +934,45 @@ impl SidePanelView {
             .map(|parent| parent.to_string_lossy().to_string())
             .filter(|folder| !folder.is_empty());
         let name = crate::models::last_component(path);
-        let copied = self.copied;
-        let (copy_path, this) = (path.to_string(), cx.entity().downgrade());
+        let tab = PanelTab::File(path.to_string());
+        let copied = self.copied.as_ref() == Some(&tab);
+        let (copy_path, copied_tab, this) = (path.to_string(), tab.clone(), cx.entity().downgrade());
         let bar = Self::bar(
             div()
                 .flex()
                 .items_center()
                 .w_full()
                 .gap(px(4.))
-                .child(
+                .child({
+                    let folder = folder.map(|folder| format!("{folder}/")).unwrap_or_default();
+                    let muted = HighlightStyle { color: Some(c.muted_foreground), ..Default::default() };
+                    let title = StyledText::new(format!("{folder}{name}")).with_highlights([(0..folder.len(), muted)]);
                     div()
                         .min_w_0()
-                        .flex()
                         .text_size(px(12.5))
                         .font_weight(FontWeight::MEDIUM)
-                        .when_some(folder, |title, folder| {
-                            title.child(div().text_color(c.secondary).truncate().child(format!("{folder}/")))
-                        })
-                        .child(div().text_color(c.text).flex_shrink_0().child(name)),
-                )
+                        .text_color(c.foreground)
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .text_ellipsis_start()
+                        .child(title)
+                })
                 .child(div().flex_1().min_w(px(4.)))
                 .child(
                     ActionButton::icon("copy-path", if copied { "check" } else { "copy" }, "Copy the path").on_click(
                         move |_, _, cx| {
                             cx.write_to_clipboard(ClipboardItem::new_string(copy_path.clone()));
+                            let copied_tab = copied_tab.clone();
                             let _ = this.update(cx, |this, cx| {
-                                this.copied = true;
+                                this.copied = Some(copied_tab.clone());
                                 cx.notify();
                                 cx.spawn(async move |this, cx| {
                                     cx.background_executor().timer(Duration::from_millis(1200)).await;
                                     let _ = this.update(cx, |this, cx| {
-                                        this.copied = false;
-                                        cx.notify();
+                                        if this.copied.as_ref() == Some(&copied_tab) {
+                                            this.copied = None;
+                                            cx.notify();
+                                        }
                                     });
                                 })
                                 .detach();
@@ -889,7 +983,6 @@ impl SidePanelView {
                 .child(Self::refresh_button("refresh-file", "Read the file again", cx)),
             cx,
         );
-        let tab = PanelTab::File(path.to_string());
         let content = self.store.read(cx).side_panel.contents.get(&tab).cloned();
         let body: AnyElement = match content {
             None | Some(Loaded::Loading) => Self::loading(cx),
@@ -899,11 +992,18 @@ impl SidePanelView {
                     Self::message("This file is empty.", false, cx)
                 } else {
                     let view = self.file_view(&tab, cx);
-                    let (collapsed, marks) = (Default::default(), CodeMarks::default());
+                    let (collapsed, marks, media) = (Default::default(), CodeMarks::default(), HashMap::new());
                     let code = view.update(cx, |view, cx| {
                         view.element(
-                            CodeSnapshot { document: &document, collapsed: &collapsed, reveal: None, marks: &marks },
+                            CodeSnapshot {
+                                document: &document,
+                                collapsed: &collapsed,
+                                reveal: None,
+                                marks: &marks,
+                                media: &media,
+                            },
                             CodeActions::default(),
+                            window,
                             cx,
                         )
                     });
@@ -918,19 +1018,16 @@ impl SidePanelView {
                         .into_any_element()
                 }
             }
-            Some(Loaded::Ready(FileContent::Image(file))) => div()
-                .size_full()
-                .p(px(16.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(img(std::path::PathBuf::from(file)).max_w_full().max_h_full().object_fit(ObjectFit::ScaleDown))
-                .into_any_element(),
+            Some(Loaded::Ready(FileContent::Image(file))) => {
+                let image = self.zoomable(&tab, &file, cx);
+                if self.store.read(cx).viewing.is_none() {
+                    ZoomableImage::take_keys(Some(&image), cx);
+                }
+                div().size_full().child(image).into_any_element()
+            }
+            Some(Loaded::Ready(FileContent::Video(file))) => self.video(&tab, &file, cx),
             Some(Loaded::Ready(FileContent::Binary(size))) => Self::message(
-                format!(
-                    "This file isn't text, so it isn't shown. It is {}.",
-                    crate::composer::attachments::file_size(size)
-                ),
+                format!("This file can't be shown here. It is {}.", crate::composer::attachments::file_size(size)),
                 false,
                 cx,
             ),
@@ -939,7 +1036,14 @@ impl SidePanelView {
     }
 
     /// What one turn changed in one file.
-    fn change_surface(&mut self, target: &PanelTarget, turn: &str, path: &str, cx: &mut Context<Self>) -> AnyElement {
+    fn change_surface(
+        &mut self,
+        target: &PanelTarget,
+        turn: &str,
+        path: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let c = colors(cx);
         let tab = PanelTab::Change { turn: turn.to_string(), path: path.to_string() };
         let trigger = Trigger { target: target.clone(), scope: None, path: Some(tab.id()), version: 0, asked: 0 };
@@ -958,7 +1062,7 @@ impl SidePanelView {
                         .min_w_0()
                         .text_size(px(12.5))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(c.text)
+                        .text_color(c.foreground)
                         .truncate()
                         .child(store.turn_name(turn)),
                 )
@@ -977,21 +1081,31 @@ impl SidePanelView {
             Some(Loaded::Failed(message)) => Self::message(message, true, cx),
             Some(Loaded::Ready(FileContent::Text(document, truncated))) if !document.files.is_empty() => {
                 let view = self.file_view(&tab, cx);
-                let collapsed = if self.change_closed { [path.to_string()].into() } else { Default::default() };
+                let closed = self.change_closed.as_ref() == Some(&tab);
+                let collapsed = Rc::new(if closed { [path.to_string()].into() } else { HashSet::new() });
                 let marks = CodeMarks::default();
-                let this = cx.entity().downgrade();
+                let (this, toggled) = (cx.entity().downgrade(), tab.clone());
                 let actions = CodeActions::default()
                     .toggle(move |_, _, cx| {
                         let _ = this.update(cx, |this, cx| {
-                            this.change_closed = !this.change_closed;
+                            this.change_closed = if closed { None } else { Some(toggled.clone()) };
                             cx.notify();
                         });
                     })
-                    .open(act_path(&self.store, |store, path| store.open_tab(PanelTab::File(path.to_string()))));
+                    .open(act_path(&self.store, |store, path| store.open_tab(PanelTab::File(path.to_string()))))
+                    .media(load_media(&self.store, target), open_media(&self.store));
+                let media = self.store.read(cx).side_panel.media_files.clone();
                 let code = view.update(cx, |view, cx| {
                     view.element(
-                        CodeSnapshot { document: &document, collapsed: &collapsed, reveal: None, marks: &marks },
+                        CodeSnapshot {
+                            document: &document,
+                            collapsed: &collapsed,
+                            reveal: None,
+                            marks: &marks,
+                            media: &media,
+                        },
                         actions,
+                        window,
                         cx,
                     )
                 });
@@ -1039,7 +1153,7 @@ impl SidePanelView {
                             .min_w_0()
                             .text_size(px(12.))
                             .font_weight(FontWeight::MEDIUM)
-                            .text_color(c.text)
+                            .text_color(c.foreground)
                             .truncate()
                             .child(agent.title.clone()),
                     )
@@ -1057,95 +1171,38 @@ impl SidePanelView {
                 div()
                     .text_size(px(12.))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c.secondary)
+                    .text_color(c.muted_foreground)
                     .child(summary(&agents)),
             ),
             cx,
         );
-        let list = div().id("agents").size_full().overflow_y_scroll().p(px(8.)).flex().flex_col().gap(px(2.)).children(
-            agents.iter().map(|agent| {
-                let group: SharedString = format!("agent-{}", agent.id).into();
-                let id = agent.id.clone();
-                div()
-                    .id(group.clone())
-                    .group(group.clone())
-                    .relative()
-                    .px(px(10.))
-                    .py(px(8.))
-                    // An agent that another agent started stands in from it.
-                    .when(agent.parent.is_some(), |row| row.pl(px(28.)))
-                    .child(light(group, Radius::CONTROL, edges(0., 0., 0., 0.), false, cx))
-                    .child(
-                        div()
-                            .relative()
-                            .flex()
-                            .items_start()
-                            .gap(px(9.))
-                            .child(
-                                div()
-                                    .w(px(16.))
-                                    .h(px(18.))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .child(status_icon(agent.status, cx)),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(3.))
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(6.))
-                                            .child(
-                                                div()
-                                                    .min_w_0()
-                                                    .text_size(px(13.))
-                                                    .font_weight(FontWeight::MEDIUM)
-                                                    .text_color(c.text)
-                                                    .truncate()
-                                                    .child(agent.title.clone()),
-                                            )
-                                            .when_some(agent.kind.clone(), |line, kind| {
-                                                line.child(
-                                                    div()
-                                                        .min_w_0()
-                                                        .text_size(px(11.))
-                                                        .text_color(c.secondary)
-                                                        .truncate()
-                                                        .child(kind),
-                                                )
-                                            })
-                                            .child(div().flex_1().min_w(px(6.)))
-                                            .child(agent_time(agent, cx)),
-                                    )
-                                    .when(!agent.detail.is_empty(), |text| {
-                                        text.child(
-                                            div()
-                                                .text_size(px(12.))
-                                                .line_height(px(16.))
-                                                .text_color(c.secondary)
-                                                .line_clamp(2)
-                                                .child(agent.detail.clone()),
-                                        )
-                                    })
-                                    .when_some(agent.usage(), |text, usage| {
-                                        text.child(div().text_size(px(11.)).text_color(c.tertiary).child(usage))
-                                    }),
-                            ),
-                    )
-                    .on_click(act(&self.store, move |store, cx| store.show_agent(id.clone(), cx)))
-            }),
-        );
+        let keys = agents
+            .iter()
+            .map(|agent| {
+                let usage = agent.usage().unwrap_or_default();
+                format!(
+                    "{}:{}:{:?}:{}:{usage}:{}",
+                    agent.id,
+                    agent.title,
+                    agent.kind,
+                    agent.detail,
+                    agent.parent.is_some()
+                )
+            })
+            .collect();
+        crate::ui::relist(&self.agents, &mut self.listed_agents, keys);
+        let (agents, store) = (Rc::new(agents), self.store.clone());
+        let list = list(self.agents.clone(), move |index, _, cx| {
+            let Some(agent) = agents.get(index) else { return div().into_any_element() };
+            div().py(px(1.)).child(agent_row(agent, &store, cx)).into_any_element()
+        })
+        .size_full()
+        .px(px(8.))
+        .py(px(7.));
         Self::surface(bar, list.into_any_element())
     }
 
-    /// The issues of a Linear workspace the server is connected to, or how to connect one.
+    /// The issues of a Linear workspace the server is connected to, or one issue of it.
     fn linear_tab(
         &mut self,
         tab: PanelTab,
@@ -1154,12 +1211,19 @@ impl SidePanelView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let store = self.store.clone();
-        let view = self
-            .linear_tabs
-            .entry(tab)
-            .or_insert_with(|| cx.new(|cx| LinearView::new(store, workspace, issue, window, cx)))
-            .clone();
+        let Some(key) = self.store.read(cx).panel_target().map(|target| target.key) else {
+            return div().into_any_element();
+        };
+        let wanted = (key, tab);
+        let view = match &self.linear {
+            Some((shown, view)) if *shown == wanted => view.clone(),
+            _ => {
+                let store = self.store.clone();
+                let view = cx.new(|cx| LinearView::new(store, workspace, issue, window, cx));
+                self.linear = Some((wanted, view.clone()));
+                view
+            }
+        };
         div().size_full().child(view).into_any_element()
     }
 
@@ -1170,12 +1234,19 @@ impl SidePanelView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let store = self.store.clone();
-        let view = self
-            .pull_requests
-            .entry(tab)
-            .or_insert_with(|| cx.new(|cx| PullRequestView::new(store, number, window, cx)))
-            .clone();
+        let Some(key) = self.store.read(cx).panel_target().map(|target| target.key) else {
+            return div().into_any_element();
+        };
+        let wanted = (key, tab);
+        let view = match &self.pull_request {
+            Some((shown, view)) if *shown == wanted => view.clone(),
+            _ => {
+                let store = self.store.clone();
+                let view = cx.new(|cx| PullRequestView::new(store, number, window, cx));
+                self.pull_request = Some((wanted, view.clone()));
+                view
+            }
+        };
         div().size_full().child(view).into_any_element()
     }
 
@@ -1188,13 +1259,24 @@ impl SidePanelView {
         div().size_full().child(view).into_any_element()
     }
 
-    /// Lets go of the views of tabs that are closed.
+    /// Lets go of what the tabs that aren't shown kept, as the Mac's views go once another tab
+    /// is shown: their drafts, their editors and what was closed in them.
     fn prune_tabs(&mut self, cx: &App) {
-        let tabs = self.store.read(cx).panel_tabs().tabs;
-        self.pull_requests.retain(|tab, _| tabs.contains(tab));
-        self.linear_tabs.retain(|tab, _| tabs.contains(tab));
-        if !tabs.contains(&PanelTab::PullRequests) {
+        let store = self.store.read(cx);
+        let active = store.panel_target().map(|target| target.key).zip(store.panel_tabs().active);
+        let shown = |tab: &TabOf| Some(tab) == active.as_ref();
+        if !self.pull_request.as_ref().is_some_and(|(tab, _)| shown(tab)) {
+            self.pull_request = None;
+        }
+        if !self.linear.as_ref().is_some_and(|(tab, _)| shown(tab)) {
+            self.linear = None;
+        }
+        let active = active.map(|(_, tab)| tab);
+        if active != Some(PanelTab::PullRequests) {
             self.pull_request_list = None;
+        }
+        if self.change_closed.is_some() && self.change_closed != active {
+            self.change_closed = None;
         }
     }
 
@@ -1227,7 +1309,7 @@ impl SidePanelView {
                     .flex_col()
                     .items_center()
                     .gap(px(16.))
-                    .child(icons::symbol("linear", 28.).text_color(c.text))
+                    .child(icons::symbol("linear", 28.).text_color(c.foreground))
                     .child(
                         div()
                             .flex()
@@ -1238,10 +1320,10 @@ impl SidePanelView {
                                 div()
                                     .text_size(px(15.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c.text)
+                                    .text_color(c.foreground)
                                     .child("Connect Linear"),
                             )
-                            .child(div().text_size(px(12.5)).text_color(c.secondary).text_center().child(
+                            .child(div().text_size(px(12.5)).text_color(c.muted_foreground).text_center().child(
                                 "See your issues and hand them to your agents. The connection is kept on your server.",
                             )),
                     )
@@ -1252,10 +1334,88 @@ impl SidePanelView {
                             .on_click(act(&self.store, move |store, _| store.linear_connect(&server_id))),
                     )
                     .when_some(error, |prompt, error| {
-                        prompt.child(div().text_size(px(12.5)).text_color(c.danger).text_center().child(error))
+                        prompt.child(
+                            div().w_full().text_size(px(12.5)).text_color(c.destructive).text_center().child(error),
+                        )
                     }),
             )
             .into_any_element()
+    }
+}
+
+/// A file or a folder of the files tab: a folder opens and closes, a file opens in a tab.
+fn file_row(node: &FileNode, store: &Entity<Store>, cx: &App) -> Stateful<Div> {
+    let c = colors(cx);
+    let group: SharedString = format!("node-{}", node.path).into();
+    let (path, folder, copy) = (node.path.clone(), node.folder, node.path.clone());
+    div()
+        .id(SharedString::from(format!("file-{}", node.path)))
+        .group(group.clone())
+        .relative()
+        .w_full()
+        .h(px(26.))
+        .pl(px(12. + node.depth as f32 * 14.))
+        .pr(px(10.))
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .child(light(group, Radius::SM, edges(0., 6., 0., 6.), false, cx))
+        .child(div().relative().w(px(10.)).flex().justify_center().when(node.folder, |chevron| {
+            chevron.child(
+                icons::symbol(if node.open { "chevron-down" } else { "chevron-right" }, 8.)
+                    .text_color(c.muted_stronger_foreground),
+            )
+        }))
+        .child(
+            div().relative().w(px(16.)).flex().justify_center().child(
+                icons::symbol(if node.folder { "folder" } else { file_symbol(&node.path) }, 11.)
+                    .text_color(if node.ignored { c.muted_strongest_foreground } else { c.muted_foreground }),
+            ),
+        )
+        .child(
+            crate::ui::middle_truncated(node.name.clone()).relative().text_size(px(12.5)).text_color(if node.ignored {
+                c.muted_strongest_foreground
+            } else {
+                c.foreground
+            }),
+        )
+        .on_click(act(store, move |store, _| {
+            if folder {
+                store.toggle_folder(&path);
+            } else {
+                store.open_tab(PanelTab::File(path.clone()));
+            }
+        }))
+        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+            let path = copy.clone();
+            Menu::new()
+                .item("Copy Path", move |_, cx| cx.write_to_clipboard(ClipboardItem::new_string(path.clone())))
+                .show(event.position, window, cx);
+        })
+}
+
+/// Fetches the file of an image or a video a code view is to draw.
+fn load_media(
+    store: &Entity<Store>,
+    target: &PanelTarget,
+) -> impl Fn(&str, &CodeMedia, &mut Window, &mut App) + 'static {
+    let (store, target) = (store.clone(), target.clone());
+    move |path, media, _, cx| {
+        store.update(cx, |store, cx| {
+            store.load_media(path, media, &target);
+            cx.notify();
+        })
+    }
+}
+
+/// Opens an image or a video a code view shows in the viewer.
+fn open_media(store: &Entity<Store>) -> impl Fn(&str, &CodeMedia, &mut Window, &mut App) + 'static {
+    let store = store.clone();
+    move |path, media, _, cx| {
+        store.update(cx, |store, cx| {
+            store.view_diff_media(path, media);
+            cx.notify();
+        })
     }
 }
 
@@ -1287,12 +1447,94 @@ fn act_path(
     }
 }
 
+/// An agent the thread's agent started: how it went, what it is, what it does and what it took.
+/// A click opens what it did.
+fn agent_row(agent: &AgentView, store: &Entity<Store>, cx: &App) -> Stateful<Div> {
+    let c = colors(cx);
+    let group: SharedString = format!("agent-{}", agent.id).into();
+    let id = agent.id.clone();
+    div()
+        .id(group.clone())
+        .group(group.clone())
+        .relative()
+        .px(px(10.))
+        .py(px(8.))
+        // An agent that another agent started stands in from it.
+        .when(agent.parent.is_some(), |row| row.pl(px(28.)))
+        .child(light(group, Radius::MD, edges(0., 0., 0., 0.), false, cx))
+        .child(
+            div()
+                .relative()
+                .flex()
+                .items_start()
+                .gap(px(9.))
+                .child(
+                    div()
+                        .w(px(16.))
+                        .h(px(18.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(status_icon(agent.status, cx)),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(3.))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(6.))
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .text_size(px(13.))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(c.foreground)
+                                        .truncate()
+                                        .child(agent.title.clone()),
+                                )
+                                .when_some(agent.kind.clone(), |line, kind| {
+                                    line.child(
+                                        div()
+                                            .min_w_0()
+                                            .text_size(px(11.))
+                                            .text_color(c.muted_foreground)
+                                            .truncate()
+                                            .child(kind),
+                                    )
+                                })
+                                .child(div().flex_1().min_w(px(6.)))
+                                .child(agent_time(agent, cx)),
+                        )
+                        .when(!agent.detail.is_empty(), |text| {
+                            text.child(
+                                div()
+                                    .text_size(px(12.))
+                                    .line_height(px(16.))
+                                    .text_color(c.muted_foreground)
+                                    .line_clamp(2)
+                                    .child(agent.detail.clone()),
+                            )
+                        })
+                        .when_some(agent.usage(), |text, usage| {
+                            text.child(div().text_size(px(11.)).text_color(c.muted_stronger_foreground).child(usage))
+                        }),
+                ),
+        )
+        .on_click(act(store, move |store, cx| store.show_agent(id.clone(), cx)))
+}
+
 fn status_icon(status: ToolStatus, cx: &App) -> impl IntoElement {
     let c = colors(cx);
     match status {
-        ToolStatus::Running => icons::symbol("circle-dashed", 11.).text_color(c.working),
-        ToolStatus::Succeeded => icons::symbol("check", 11.).text_color(c.secondary),
-        ToolStatus::Failed => icons::symbol("x", 11.).text_color(c.danger),
+        ToolStatus::Running => icons::symbol("circle-dashed", 11.).text_color(c.process),
+        ToolStatus::Succeeded => icons::symbol("check", 11.).text_color(c.muted_foreground),
+        ToolStatus::Failed => icons::symbol("x", 11.).text_color(c.destructive),
     }
 }
 
@@ -1304,15 +1546,16 @@ fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
             .flex_shrink_0()
             .text_size(px(11.))
             .font_weight(FontWeight::MEDIUM)
+            .font_features(crate::ui::tabular_numbers())
             .text_color(color)
             .child(text)
             .into_any_element()
     };
     if agent.working() {
-        return time(elapsed(agent.started_at), c.working);
+        return time(elapsed(agent.started_at), c.process);
     }
     match agent.duration_ms {
-        Some(milliseconds) => time(duration(milliseconds), c.tertiary),
+        Some(milliseconds) => time(duration(milliseconds), c.muted_stronger_foreground),
         None => div().into_any_element(),
     }
 }
@@ -1336,6 +1579,7 @@ impl Render for SidePanelView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         self.prune_tabs(cx);
+        ZoomableImage::take_keys(None, cx);
         let line_comment = line_comment::follow(&mut self.line_comment, &self.store, window, cx);
         let store = self.store.read(cx);
         let unavailable = store.panel_unavailable();
@@ -1345,10 +1589,10 @@ impl Render for SidePanelView {
             Self::message(reason, false, cx)
         } else if let Some(target) = target {
             match active {
-                Some(PanelTab::Diff) => self.diff_surface(&target, cx),
+                Some(PanelTab::Diff) => self.diff_surface(&target, window, cx),
                 Some(PanelTab::Files) => self.files_surface(&target, cx),
-                Some(PanelTab::File(path)) => self.file_surface(&target, &path, cx),
-                Some(PanelTab::Change { turn, path }) => self.change_surface(&target, &turn, &path, cx),
+                Some(PanelTab::File(path)) => self.file_surface(&target, &path, window, cx),
+                Some(PanelTab::Change { turn, path }) => self.change_surface(&target, &turn, &path, window, cx),
                 Some(PanelTab::Agents) => self.agents_surface(cx),
                 Some(tab @ PanelTab::PullRequest) => self.pull_request_tab(tab, None, window, cx),
                 Some(tab @ PanelTab::PullRequestNumber(number)) => self.pull_request_tab(tab, Some(number), window, cx),
