@@ -143,7 +143,7 @@ function File({
         type="button"
         onClick={onToggle}
         className={cn(
-          "flex h-[34px] w-full items-center border-b bg-background-secondary pr-1.5 text-left text-[12.5px]",
+          "flex h-[34px] w-full items-center border-b bg-background-secondary pr-1.5 text-left text-[12.5px] hover:bg-background-secondary-accent",
           !first && "border-t"
         )}
       >
@@ -166,7 +166,7 @@ function File({
           <LineCounts added={file.added} removed={file.removed} />
         </span>
         <span className="flex size-7 items-center justify-center">
-          <span className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-background-secondary-accent hover:text-foreground">
+          <span className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-background-secondary-accent-stronger hover:text-foreground">
             <SquareArrowOutUpRightIcon className="size-3" />
           </span>
         </span>
