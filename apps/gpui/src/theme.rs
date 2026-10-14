@@ -271,7 +271,7 @@ impl ControlSize {
         }
     }
 
-    pub fn radius(self) -> f32 {
+    pub const fn radius(self) -> f32 {
         match self {
             ControlSize::Small => Radius::SM,
             ControlSize::Regular | ControlSize::Large => Radius::MD,
