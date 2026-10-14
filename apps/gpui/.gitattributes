@@ -1,1 +1,1 @@
-patches/*.patch -text
+patches/** -text
