@@ -508,7 +508,11 @@ final class AppStore {
 
     private func apply(servers: [Server]) {
         let composerWasConnected = composerServer?.state == .connected
+        let wereConnected = Set(self.servers.filter { $0.state == .connected }.map(\.id))
         self.servers = servers
+        for server in servers where server.state == .connected && !wereConnected.contains(server.id) {
+            linear.read(server.id)
+        }
         if !composerWasConnected, composerServer?.state == .connected {
             readGit(fetch: true)
             readWorktreeStart(fetch: true)
@@ -1286,6 +1290,12 @@ final class AppStore {
     var linearUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
         return server.protocolVersion >= 12 ? nil : "Update \(server.name) to connect it to Linear."
+    }
+
+    /// The panel's server is connected to a Linear workspace.
+    var linearConnected: Bool {
+        guard let target = panelTarget, linearUnavailable == nil else { return false }
+        return !linear.connected(target.serverID).isEmpty
     }
 
     /// Asks the server for its GitHub repositories, unless it listed them in the last minute or

@@ -299,7 +299,7 @@ private struct PanelLauncher: View {
                         store.rightPanel.open(.pullRequests)
                     }
                 }
-                row(.linear, store.linear.connected(target.serverID).isEmpty ? "Connect Linear" : "Linear", command: "rightPanel.linear", reason: store.linearUnavailable) {
+                row(.linear, store.linearConnected ? "Linear" : "Connect Linear", command: store.linearConnected ? "rightPanel.linear" : nil, reason: store.linearUnavailable) {
                     store.rightPanel.open(.linear)
                 }
             }
@@ -309,7 +309,7 @@ private struct PanelLauncher: View {
         .task(id: target.serverID) { store.linear.read(target.serverID) }
     }
 
-    private func row(_ symbol: Symbol, _ title: String, command: String, reason: String?, action: @escaping () -> Void) -> some View {
+    private func row(_ symbol: Symbol, _ title: String, command: String?, reason: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(symbol, size: 13)
@@ -318,7 +318,7 @@ private struct PanelLauncher: View {
                     .font(.ui(size: 13))
                 Spacer()
                 #if os(macOS)
-                if let caps = store.shortcuts.effective(command).first?.caps {
+                if let command, let caps = store.shortcuts.effective(command).first?.caps {
                     KeyCaps(caps, joined: true)
                         .foregroundStyle(Color.themeMutedForeground)
                 }
