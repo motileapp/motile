@@ -106,9 +106,10 @@ struct SidebarScreen: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("Motile")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+            Mark()
+                .fill(Color.themeForeground)
+                .frame(width: 30, height: 30)
+                .accessibilityLabel("Motile")
             Spacer()
             Button {
                 store.openPanel(.commands)

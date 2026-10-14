@@ -10,7 +10,7 @@ import {
   SquareTerminalIcon,
 } from "lucide-react"
 import { Fragment, useRef, useState, type ReactNode } from "react"
-import { AgentIcon, MenuChevron, ProjectIcon } from "./icons"
+import { AgentIcon, EffortHighIcon, MenuChevron, ProjectIcon } from "./icons"
 import type { Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
@@ -107,7 +107,7 @@ export function Composer({
             <Dotted text={thread.model} />
           </Control>
           <span className="mx-1 h-3.5 w-px bg-border-composer" />
-          <Control>High</Control>
+          <Control icon={<EffortHighIcon />}>High</Control>
           <span className="mx-1 h-3.5 w-px bg-border-composer" />
           <Control
             icon={

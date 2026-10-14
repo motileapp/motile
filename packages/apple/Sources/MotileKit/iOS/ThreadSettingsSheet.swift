@@ -8,6 +8,7 @@ struct ThreadSettingsSheet: View {
     @Environment(\.surface) private var surface
     /// The accounts whose models are listed. The others are only their names until they are tapped.
     @State private var listed: Set<String> = []
+    @State private var tmpReasoning = false
 
     var body: some View {
         @Bindable var store = store
@@ -26,6 +27,15 @@ struct ThreadSettingsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
             }
+            .navigationDestination(isPresented: $tmpReasoning) {
+                if let model = store.composerModel {
+                    ChoiceList(
+                        title: "Reasoning", options: model.effortChoices, chosen: store.composerEffort ?? "", label: ComposerView.effortLabel,
+                        symbol: ComposerView.effortSymbol
+                    ) { store.setEffort($0) }
+                }
+            }
+            .onAppear { tmpReasoning = UserDefaults.standard.bool(forKey: "tmpReasoning") }
             .navigationDestination(isPresented: $store.showsBranches) {
                 if let project = store.composerProject {
                     BranchPicker(project: project, base: store.draftUsesWorktree ? store.draftBase : nil)
@@ -84,15 +94,20 @@ struct ThreadSettingsSheet: View {
             if let model = store.composerModel, !model.efforts.isEmpty {
                 let effort = store.composerEffort ?? ""
                 NavigationLink {
-                    ChoiceList(title: "Reasoning", options: model.effortChoices, chosen: effort, label: ComposerView.effortLabel) { store.setEffort($0) }
+                    ChoiceList(
+                        title: "Reasoning", options: model.effortChoices, chosen: effort, label: ComposerView.effortLabel,
+                        symbol: ComposerView.effortSymbol
+                    ) { store.setEffort($0) }
                 } label: {
-                    LabeledContent("Reasoning", value: ComposerView.effortLabel(effort))
+                    LabeledContent("Reasoning") { SymbolValue(ComposerView.effortLabel(effort), symbol: ComposerView.effortSymbol(effort)) }
                 }
             }
             NavigationLink {
-                ChoiceList(title: "Access", options: Access.allCases, chosen: store.composerAccess, label: \.label) { store.setAccess($0) }
+                ChoiceList(title: "Access", options: Access.allCases, chosen: store.composerAccess, label: \.label, symbol: \.symbol) {
+                    store.setAccess($0)
+                }
             } label: {
-                LabeledContent("Access", value: store.composerAccess.label)
+                LabeledContent("Access") { SymbolValue(store.composerAccess.label, symbol: store.composerAccess.symbol) }
             }
         } header: {
             Text("Options")
@@ -153,6 +168,24 @@ struct ThreadSettingsSheet: View {
 }
 
 /// A setting's options on a page of their own, drawn like the sheet's list. Picking one goes back.
+/// Words with their symbol before them, as a row's value or a choice.
+private struct SymbolValue: View {
+    let title: String
+    let symbol: Symbol
+
+    init(_ title: String, symbol: Symbol) {
+        self.title = title
+        self.symbol = symbol
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(symbol, size: 13)
+            Text(title)
+        }
+    }
+}
+
 private struct ChoiceList<Option: Hashable>: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.surface) private var surface
@@ -160,6 +193,7 @@ private struct ChoiceList<Option: Hashable>: View {
     let options: [Option]
     let chosen: Option
     let label: (Option) -> String
+    let symbol: (Option) -> Symbol
     let choose: (Option) -> Void
 
     var body: some View {
@@ -171,7 +205,7 @@ private struct ChoiceList<Option: Hashable>: View {
                         dismiss()
                     } label: {
                         HStack {
-                            Text(label(option))
+                            SymbolValue(label(option), symbol: symbol(option))
                                 .foregroundStyle(Color.themeForeground)
                             Spacer()
                             if option == chosen {
