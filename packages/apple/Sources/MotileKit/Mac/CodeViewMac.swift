@@ -131,6 +131,7 @@ final class CodeView: NSView {
 
     @objc private func scrolled() {
         place()
+        pointerMoved()
         // What stays at the left edge is drawn again where the edge is now.
         let x = scrollView.contentView.bounds.minX
         guard x != lastX else { return }
@@ -167,6 +168,29 @@ final class CodeView: NSView {
         pinned.needsDisplay = true
     }
 
+    /// Lights the open button of the heading under the pointer, where the pointer is now.
+    fileprivate func pointerMoved() {
+        guard let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        let lit = bounds.contains(point) ? openButton(at: point) : nil
+        guard lit != sheet.litOpen else { return }
+        sheet.litOpen = lit
+        canvas.needsDisplay = true
+        pinned.needsDisplay = true
+    }
+
+    /// The file whose heading has its open button at the point.
+    private func openButton(at point: NSPoint) -> Int? {
+        if !pinned.isHidden, pinned.frame.contains(point) {
+            let press = sheet.headingPress(at: point.x, width: pinned.bounds.width, file: pinned.file)
+            return press == .open ? pinned.file : nil
+        }
+        let visible = canvas.visibleRect
+        let inCanvas = canvas.convert(point, from: self)
+        guard sheet.document?.headed == true, let block = sheet.block(at: inCanvas.y), inCanvas.y < block.linesTop else { return nil }
+        return sheet.headingPress(at: inCanvas.x - visible.minX, width: visible.width, file: block.file) == .open ? block.file : nil
+    }
+
     fileprivate func pressedHeading(of file: Int, at x: CGFloat, width: CGFloat) {
         guard let document = sheet.document else { return }
         let path = document.files[file].path
@@ -193,6 +217,15 @@ private final class PinnedHeading: NSView {
     override func draw(_ dirtyRect: NSRect) {
         canvas?.sheet.drawHeading(of: file, in: bounds, lineAbove: false)
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    override func mouseMoved(with event: NSEvent) { canvas?.owner?.pointerMoved() }
+    override func mouseExited(with event: NSEvent) { canvas?.owner?.pointerMoved() }
 
     override func mouseDown(with event: NSEvent) {
         canvas?.owner?.pressedHeading(of: file, at: convert(event.locationInWindow, from: nil).x, width: bounds.width)
@@ -242,6 +275,7 @@ private final class CodeCanvas: NSView, NSMenuItemValidation {
     /// The line under the pointer shows that it can be commented on, while the pointer is on
     /// the numbers.
     override func mouseMoved(with event: NSEvent) {
+        owner?.pointerMoved()
         let point = convert(event.locationInWindow, from: nil)
         var hovered: (file: Int, line: Int)?
         if sheet.marks.commentable, sheet.inGutter(point.x - visibleRect.minX), let block = sheet.block(at: point.y),
@@ -256,6 +290,7 @@ private final class CodeCanvas: NSView, NSMenuItemValidation {
     }
 
     override func mouseExited(with event: NSEvent) {
+        owner?.pointerMoved()
         guard sheet.hovered != nil else { return }
         sheet.hovered = nil
         needsDisplay = true

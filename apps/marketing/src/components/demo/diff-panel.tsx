@@ -165,8 +165,10 @@ function File({
         <span className="mr-1 ml-auto pl-2.5">
           <LineCounts added={file.added} removed={file.removed} />
         </span>
-        <span className="flex size-7 items-center justify-center text-muted-foreground">
-          <SquareArrowOutUpRightIcon className="size-3" />
+        <span className="flex size-7 items-center justify-center">
+          <span className="flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-background-secondary-accent hover:text-foreground">
+            <SquareArrowOutUpRightIcon className="size-3" />
+          </span>
         </span>
       </button>
       {!closed && (

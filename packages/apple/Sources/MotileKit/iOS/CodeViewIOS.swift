@@ -34,7 +34,7 @@ struct CodeViewRepresentable: UIViewRepresentable {
 /// the document moves a canvas as large as the screen, which draws the lines that are on it, so
 /// a document of any length costs what is seen of it. Holding a line selects it, and dragging
 /// on selects the lines down to the finger.
-final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegate {
+final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegate, UIGestureRecognizerDelegate {
     var onToggle: (String) -> Void = { _ in }
     var onOpenFile: (String) -> Void = { _ in }
     var onViewed: (String) -> Void = { _ in }
@@ -51,6 +51,7 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
     /// The line a selection set out from.
     private var held: CodeSheet.Place?
     private lazy var editMenu = UIEditMenuInteraction(delegate: self)
+    private let touch = UILongPressGestureRecognizer()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -67,6 +68,11 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         let hold = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
         hold.minimumPressDuration = 0.35
         scrollView.addGestureRecognizer(hold)
+        touch.addTarget(self, action: #selector(touched(_:)))
+        touch.minimumPressDuration = 0
+        touch.cancelsTouchesInView = false
+        touch.delegate = self
+        scrollView.addGestureRecognizer(touch)
         addInteraction(editMenu)
         NotificationCenter.default.addObserver(self, selector: #selector(coloured(_:)), name: .codeColoured, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(pictured(_:)), name: .codeMedia, object: nil)
@@ -200,6 +206,34 @@ final class CodeView: UIView, UIScrollViewDelegate, UIEditMenuInteractionDelegat
         guard sheet.selection != nil else { return }
         sheet.selection = nil
         canvas.setNeedsDisplay()
+    }
+
+    /// Lights the open button of a heading while a finger is on it, until it scrolls.
+    @objc private func touched(_ recognizer: UILongPressGestureRecognizer) {
+        let down = recognizer.state == .began || (recognizer.state == .changed && !scrollView.isDragging)
+        let lit = down ? openButton(at: recognizer.location(in: scrollView)) : nil
+        guard lit != sheet.litOpen else { return }
+        sheet.litOpen = lit
+        canvas.setNeedsDisplay()
+    }
+
+    override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+        guard recognizer === touch else { return super.gestureRecognizerShouldBegin(recognizer) }
+        return openButton(at: recognizer.location(in: scrollView)) != nil
+    }
+
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    /// The file whose heading has its open button at the point, in the document.
+    private func openButton(at point: CGPoint) -> Int? {
+        let left = scrollView.contentOffset.x
+        if let pinned = pinnedHeading, pinned.frame.contains(point) {
+            return sheet.headingPress(at: point.x - left, width: bounds.width, file: pinned.file) == .open ? pinned.file : nil
+        }
+        guard sheet.document?.headed == true, let block = sheet.block(at: point.y), point.y < block.linesTop else { return nil }
+        return sheet.headingPress(at: point.x - left, width: bounds.width, file: block.file) == .open ? block.file : nil
     }
 
     private func pressedHeading(of file: Int, at x: CGFloat) {

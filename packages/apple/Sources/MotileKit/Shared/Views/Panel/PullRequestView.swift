@@ -65,7 +65,7 @@ struct PullRequestSurface: View {
             ActionButton(icon: .squareArrowOutUpRight, help: "Open on GitHub") { Platform.open(url) }
         }
         if shown != nil, store.pullRequestsUnavailable == nil {
-            ActionButton(icon: .rotateCw, help: "Read the pull request again") { asked += 1 }
+            ActionButton(icon: .rotateCw, help: "Read the pull request again", pending: store.rightPanel.reading.contains(.pullRequest)) { asked += 1 }
         }
     }
 
