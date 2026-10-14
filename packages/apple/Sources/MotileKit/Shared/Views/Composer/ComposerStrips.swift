@@ -64,18 +64,22 @@ private struct StripShape: Shape {
 #if os(macOS)
 /// Where the composer's thread works: the server, the folder or a worktree of its own, and the
 /// branch checked out there, which opens the picker to switch. A thread that starts in a new
-/// worktree picks the branch it starts from there instead. On iOS the thread's settings say it.
+/// worktree picks the branch it starts from there instead. When it is too narrow for all of it,
+/// the workspace is only its icon. On iOS the thread's settings say it.
 struct ContextStrip: View {
     @Environment(AppStore.self) private var store
     let project: Project
     let server: Server?
 
     var body: some View {
-        parts
-            .modifier(ComposerStrip(edge: .bottom))
+        ViewThatFits(in: .horizontal) {
+            parts(workspaceLabel: true)
+            parts(workspaceLabel: false)
+        }
+        .modifier(ComposerStrip(edge: .bottom))
     }
 
-    private var parts: some View {
+    private func parts(workspaceLabel: Bool) -> some View {
         HStack(spacing: 0) {
             if let server {
                 part(server.shortName) {
@@ -93,7 +97,7 @@ struct ContextStrip: View {
             .padding(.leading, server == nil ? 14 : 0)
             .help(project.path)
             Spacer(minLength: 8)
-            workspace
+            workspace(labeled: workspaceLabel)
             if hasWorkspace, branch != nil {
                 ComposerDivider()
             }
@@ -146,18 +150,19 @@ struct ContextStrip: View {
     }
 
     /// Where a new thread starts, to choose, and where a thread that has started works.
-    @ViewBuilder private var workspace: some View {
+    @ViewBuilder private func workspace(labeled: Bool) -> some View {
         if let worktree = project.worktree {
-            working(in: "Worktree", symbol: .folderGit2)
+            working(in: labeled ? "Worktree" : nil, symbol: .folderGit2)
                 .help(worktree.path)
         } else if store.selectedThread != nil, project.branch != nil {
-            working(in: "Local checkout", symbol: .folder)
+            working(in: labeled ? "Local checkout" : nil, symbol: .folder)
                 .help("The thread works in the project's folder")
         } else if store.selectedThread == nil, store.canUseWorktrees(of: project) {
             let inWorktree = store.draftUsesWorktree
             let margin = EdgeInsets(top: ComposerStrip.inset, leading: 4, bottom: ComposerStrip.inset, trailing: 4)
+            let title = inWorktree ? "New worktree" : "Current checkout"
             ActionMenu(
-                inWorktree ? "New worktree" : "Current checkout", icon: inWorktree ? .folderGit2 : .folder,
+                labeled ? title : nil, icon: inWorktree ? .folderGit2 : .folder,
                 help: store.shortcuts.help(
                     inWorktree ? "The thread works in a folder and on a branch of its own" : "The thread works in the project's folder", "composer.workspace"
                 ),
@@ -174,25 +179,27 @@ struct ContextStrip: View {
             }
             .shortcutTarget("composer.workspace")
         } else if store.selectedThread == nil, let branch = project.branch, project.git?.hasCommit == false {
-            working(in: "Current checkout", symbol: .folder)
+            working(in: labeled ? "Current checkout" : nil, symbol: .folder)
                 .help("A worktree can start once \(branch) has a commit")
         }
     }
 
-    private func working(in title: String, symbol: Symbol) -> some View {
+    private func working(in title: String?, symbol: Symbol) -> some View {
         part(title) {
             Image(symbol, size: 11)
         }
         .padding(.horizontal, 13)
     }
 
-    private func part(_ title: String, @ViewBuilder icon: () -> some View) -> some View {
+    private func part(_ title: String?, @ViewBuilder icon: () -> some View) -> some View {
         HStack(spacing: 5) {
             icon()
-            Text(title)
-                .font(.ui(size: 12))
-                .lineLimit(1)
-                .truncationMode(.middle)
+            if let title {
+                Text(title)
+                    .font(.ui(size: 12))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
         .foregroundStyle(Color.themeMutedForeground)
     }
