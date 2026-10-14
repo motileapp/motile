@@ -192,6 +192,7 @@ impl Render for Root {
         div()
             .size_full()
             .relative()
+            .track_focus(&crate::ui::rich_text::selection_focus(cx))
             // Before any row says a press fell in it.
             .capture_any_mouse_down(|event, _, cx| {
                 if event.button == MouseButton::Left {
