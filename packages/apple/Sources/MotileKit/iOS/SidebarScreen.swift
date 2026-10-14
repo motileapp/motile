@@ -108,7 +108,7 @@ struct SidebarScreen: View {
         HStack(spacing: 10) {
             Mark()
                 .fill(Color.themeForeground)
-                .frame(width: 30, height: 30)
+                .frame(width: 24, height: 24)
                 .accessibilityLabel("Motile")
             Spacer()
             Button {
