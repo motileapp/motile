@@ -1,0 +1,4 @@
+# The oldest macOS the Mac app and the GPUI app run on (LSMinimumSystemVersion), for Rust and for the
+# C that build scripts compile, which would otherwise target the SDK's own version.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "14.0"

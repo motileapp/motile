@@ -31,7 +31,10 @@ jobs:
           rustup default stable
           rustup target add aarch64-apple-ios
 
+      # A key of its own: the macOS workflow's job is called build too.
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-app
 
       - name: Build the core for devices
         run: apps/ios/scripts/build-core.sh device
