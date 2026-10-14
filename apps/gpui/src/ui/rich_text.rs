@@ -27,6 +27,8 @@ pub struct RichText {
     tint: Hsla,
     /// The height of the tint's glyphs, when they are smaller than the text's.
     tint_glyphs: Option<Pixels>,
+    /// The names of skills, drawn on a chip's box with room left for it around them.
+    skills: Vec<Range<usize>>,
     /// The transcript row it is in.
     row: Option<u64>,
 }
@@ -83,6 +85,7 @@ impl RichText {
             tinted: Vec::new(),
             tint: Hsla::transparent_black(),
             tint_glyphs: None,
+            skills: Vec::new(),
             row: None,
         }
     }
@@ -102,6 +105,11 @@ impl RichText {
     /// Sizes the tint for glyphs `size` big rather than the text's.
     pub fn tint_size(mut self, size: Pixels) -> Self {
         self.tint_glyphs = Some(size * 1.22);
+        self
+    }
+
+    pub fn skills(mut self, names: Vec<Range<usize>>) -> Self {
+        self.skills = names;
         self
     }
 
@@ -312,6 +320,15 @@ impl Element for RichText {
             self.tint_glyphs.unwrap_or_else(|| window.text_style().font_size.to_pixels(window.rem_size()) * 1.22);
         for range in self.tinted.clone() {
             Self::paint_tint(&self.text, &layout, range, glyphs, self.tint, window);
+        }
+        for name in &self.skills {
+            let (Some(start), Some(end)) = (layout.position_for_index(name.start), layout.position_for_index(name.end))
+            else {
+                continue;
+            };
+            if start.y == end.y {
+                crate::ui::skill_chip::paint_box(start, end, layout.line_height(), window, cx);
+            }
         }
         let color = gpui_kit::base::Theme::global(cx).tokens.colors.selection;
         for range in projection.ranges().iter().flatten().cloned() {

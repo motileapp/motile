@@ -788,7 +788,11 @@ mod tests {
             created_at: 0.0,
             media: vec![],
             parent: None,
-            kind: motile_protocol::wire::ItemKind::User { text: "Earlier".into(), attachments: vec![] },
+            kind: motile_protocol::wire::ItemKind::User {
+                text: "Earlier".into(),
+                attachments: vec![],
+                skills: Vec::new(),
+            },
         };
         let range = crate::handoff::Range::Full;
         crate::handoff::build("t", &[item], range, 1, crate::handoff::HANDOFF_CAP).unwrap().unwrap()

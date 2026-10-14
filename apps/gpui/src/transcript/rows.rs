@@ -220,10 +220,18 @@ fn paragraph(id: ElementId, para: &TextPara, look: ParaLook, cx: &App) -> AnyEle
 /// The room the Mac keeps after each line of a message, an error or a thought.
 const PLAIN_PARAGRAPH_GAP: f32 = 6.;
 
-/// Plain text, selectable, with its web addresses clickable, and room after each of its lines
-/// as the Mac keeps after a paragraph. Each line is text of its own, and the blank lines after it
-/// go with it, so that a copied selection has them.
-fn plain(id: &str, text: &str, links: &[(Range<usize>, String)], color: Hsla, key: u64, cx: &App) -> Div {
+/// Plain text, selectable, with its web addresses clickable, the names of its skills on chips,
+/// and room after each of its lines as the Mac keeps after a paragraph. Each line is text of its
+/// own, and the blank lines after it go with it, so that a copied selection has them.
+fn plain(
+    id: &str,
+    text: &str,
+    links: &[(Range<usize>, String)],
+    skills: &[Range<usize>],
+    color: Hsla,
+    key: u64,
+    cx: &App,
+) -> Div {
     let column = div().flex().flex_col();
     if text.is_empty() {
         return column;
@@ -236,21 +244,122 @@ fn plain(id: &str, text: &str, links: &[(Range<usize>, String)], color: Hsla, ke
             let end = range.end.min(part.end) - part.start;
             start..end
         };
-        let links: Vec<(Range<usize>, String)> = links
-            .iter()
-            .filter(|(range, _)| range.start < part.end && range.end > part.start)
-            .map(|(range, url)| (shift(range), url.clone()))
-            .collect();
+        let inside = |range: &Range<usize>| range.start < part.end && range.end > part.start;
+        let links: Vec<(Range<usize>, String)> =
+            links.iter().filter(|(range, _)| inside(range)).map(|(range, url)| (shift(range), url.clone())).collect();
+        let skills: Vec<Range<usize>> = skills.iter().filter(|range| inside(range)).map(shift).collect();
         let words: SharedString = text[part.clone()].to_string().into();
         let breaks = 1 + words.len() - words.trim_end_matches('\n').len();
         let plain = Plain { family: theme::UI_FONT, size: 0., color, weight: FontWeight::NORMAL, heading: false };
-        let runs = text_runs(&words, &[], &links, plain, cx);
+        let runs = with_skill_names(text_runs(&words, &[], &links, plain, cx), &skills, cx);
         div().when(index + 1 < count, |line| line.mb(px(PLAIN_PARAGRAPH_GAP * breaks as f32))).child(
             crate::ui::rich_text::RichText::with_runs(SharedString::from(format!("{id}-{index}")), words, runs)
                 .row(key)
-                .links(links, open_link),
+                .links(links, open_link)
+                .skills(skills),
         )
     }))
+}
+
+/// The runs with the names of skills in the skill colour, as a chip has them.
+fn with_skill_names(runs: Vec<TextRun>, names: &[Range<usize>], cx: &App) -> Vec<TextRun> {
+    if names.is_empty() {
+        return runs;
+    }
+    let skill = colors(cx).skill;
+    let mut split = Vec::new();
+    let mut at = 0;
+    for run in runs {
+        let end = at + run.len;
+        let mut cuts = vec![at, end];
+        cuts.extend(names.iter().flat_map(|name| [name.start, name.end]).filter(|cut| *cut > at && *cut < end));
+        cuts.sort_unstable();
+        for pair in cuts.windows(2) {
+            let mut piece = run.clone();
+            piece.len = pair[1] - pair[0];
+            if names.iter().any(|name| name.start <= pair[0] && name.end >= pair[1]) {
+                piece.font.weight = FontWeight::MEDIUM;
+                piece.color = skill;
+            }
+            split.push(piece);
+        }
+        at = end;
+    }
+    split
+}
+
+/// A message's text as it is drawn, with its links and the labels of its skills as bytes of it.
+struct Shown {
+    text: String,
+    links: Vec<(Range<usize>, String)>,
+    labels: Vec<Range<usize>>,
+}
+
+/// Each skill's `$name` is its label, which no line breaks, between the room its chip takes. The
+/// links move with the text.
+fn with_skill_chips(message: Message, window: &mut Window) -> Shown {
+    let Message { text, links, skills } = message;
+    if skills.is_empty() {
+        return Shown { text: text.to_string(), links, labels: Vec::new() };
+    }
+    let (before, after) = crate::ui::skill_chip::room();
+    let (lead, trail) = (spacer(before, window), spacer(after, window));
+    let mut shown = String::new();
+    let mut labels = Vec::new();
+    let mut shifts: Vec<(usize, usize)> = Vec::new();
+    let mut at = 0;
+    for (range, label) in &skills {
+        if range.start < at || range.end > text.len() {
+            continue;
+        }
+        shown.push_str(&text[at..range.start]);
+        shown.push_str(&lead);
+        let start = shown.len();
+        shown.push_str(&label.replace(' ', "\u{a0}"));
+        labels.push(start..shown.len());
+        shown.push_str(&trail);
+        at = range.end;
+        shifts.push((at, shown.len()));
+    }
+    shown.push_str(&text[at..]);
+    let moved = |offset: usize| {
+        shifts.iter().rev().find(|(end, _)| *end <= offset).map_or(offset, |(end, shown)| shown + offset - end)
+    };
+    let links = links
+        .into_iter()
+        .filter(|(link, _)| !skills.iter().any(|(skill, _)| skill.start < link.end && link.start < skill.end))
+        .map(|(link, url)| (moved(link.start)..moved(link.end), url))
+        .collect();
+    Shown { text: shown, links, labels }
+}
+
+thread_local! {
+    static SPACERS: std::cell::RefCell<HashMap<u32, String>> = std::cell::RefCell::default();
+}
+
+/// Spaces that no line breaks, as near `width` wide in a message's text as they come, short of
+/// it by no more than the room a chip keeps from the text.
+fn spacer(width: f32, window: &mut Window) -> String {
+    if let Some(kept) = SPACERS.with_borrow(|kept| kept.get(&width.to_bits()).cloned()) {
+        return kept;
+    }
+    let (wide, narrow) = ('\u{a0}', '\u{202f}');
+    let measure = |space: char, window: &mut Window| {
+        let text = SharedString::from(space.to_string());
+        let runs = [run(text.len(), font(theme::UI_FONT, FontWeight::NORMAL, false), Hsla::default())];
+        f32::from(window.text_system().shape_line(text, px(theme::PROSE_SIZE), &runs, None).width)
+    };
+    let (wide_width, narrow_width) = (measure(wide, window), measure(narrow, window));
+    let fits = (0..=8usize)
+        .flat_map(|wides| (0..=16usize).map(move |narrows| (wides, narrows)))
+        .map(|(wides, narrows)| (wides as f32 * wide_width + narrows as f32 * narrow_width, wides, narrows))
+        .filter(|(room, ..)| *room >= width - crate::ui::skill_chip::MARGIN)
+        .min_by(|a, b| (a.0 - width).abs().total_cmp(&(b.0 - width).abs()).then((a.1 + a.2).cmp(&(b.1 + b.2))));
+    let spaces = fits.map_or(String::new(), |(_, wides, narrows)| {
+        std::iter::repeat_n(wide, wides).chain(std::iter::repeat_n(narrow, narrows)).collect()
+    });
+    SPACERS.with_borrow_mut(|kept| kept.insert(width.to_bits(), spaces.clone()));
+    spaces
 }
 
 /// The lines of plain text, each with the blank lines after it but the last.
@@ -579,16 +688,25 @@ fn message_meta(
 /// How long the time and copy button of a message take to show and to go.
 pub const META_FADE: Duration = Duration::from_millis(120);
 
+/// What a bubble shows of a message: its text, its links and its skills.
+struct Message<'a> {
+    text: &'a str,
+    links: Vec<(Range<usize>, String)>,
+    skills: Vec<(Range<usize>, String)>,
+}
+
 /// The message and the files of a bubble, as wide as they are up to the widest a bubble may be.
 fn bubble_content(
     model: &RowModel,
-    text: &str,
-    links: Vec<(Range<usize>, String)>,
+    message: Message,
     attachments: &[AttachedFile],
     color: Hsla,
     ctx: &RowContext,
+    window: &mut Window,
     cx: &App,
 ) -> Div {
+    let text = message.text;
+    let shown = with_skill_chips(message, window);
     let has_files = !attachments.is_empty();
     div()
         .px(px(BUBBLE_PADDING))
@@ -601,8 +719,9 @@ fn bubble_content(
             let id = format!("{}-text", model.row.id);
             bubble.child(text_box(theme::PROSE_SIZE, 22.).text_color(color).child(plain(
                 &id,
-                text,
-                &links,
+                &shown.text,
+                &shown.links,
+                &shown.labels,
                 color,
                 row_key(&model.row.id),
                 cx,
@@ -614,14 +733,15 @@ fn bubble_content(
 /// the images and files it came with above the text, and when it was sent under it.
 fn user_row(
     model: &RowModel,
-    text: &str,
-    links: Vec<(Range<usize>, String)>,
+    message: Message,
     attachments: &[AttachedFile],
     at: f64,
     ctx: &RowContext,
+    window: &mut Window,
     cx: &App,
 ) -> AnyElement {
     let c = colors(cx);
+    let text = message.text;
     let copied_text = text.to_string();
     div()
         .pt(px(14.))
@@ -630,7 +750,7 @@ fn user_row(
         .flex_col()
         .items_end()
         .child(
-            bubble_content(model, text, links, attachments, c.foreground, ctx, cx)
+            bubble_content(model, message, attachments, c.foreground, ctx, window, cx)
                 .max_w(relative(0.8))
                 .min_w(px(12. + BUBBLE_PADDING * 2.))
                 .pb(px(if text.is_empty() { BUBBLE_PADDING } else { 10. }))
@@ -655,10 +775,11 @@ fn user_row(
 /// dotted around instead of filled.
 fn queued_row(
     model: &RowModel,
-    text: &str,
+    shown: Message,
     attachments: &[AttachedFile],
     status: &str,
     ctx: &RowContext,
+    window: &mut Window,
     cx: &App,
 ) -> AnyElement {
     let c = colors(cx);
@@ -745,7 +866,7 @@ fn queued_row(
                 .flex()
                 .flex_col()
                 .child(dotted_outline(QUEUED_RADIUS, c.border))
-                .child(bubble_content(model, text, Vec::new(), attachments, c.muted_foreground, ctx, cx))
+                .child(bubble_content(model, shown, attachments, c.muted_foreground, ctx, window, cx))
                 .child(foot),
         )
         .into_any_element()
@@ -872,7 +993,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         RowKind::Thinking { text } => {
             if expanded_here {
                 let id = format!("{row_id}-detail");
-                let thought = plain(&id, text, &[], c.muted_foreground, row_key(&row_id), cx);
+                let thought = plain(&id, text, &[], &[], c.muted_foreground, row_key(&row_id), cx);
                 detail = Some(detail_box(inset, text_box(13., 20.5).text_color(c.muted_foreground).child(thought), cx));
             }
             ToolLine {
@@ -1062,6 +1183,7 @@ fn error_row(model: &RowModel, message: &str, cx: &App) -> AnyElement {
                 .child(text_box(13., 20.5).flex_1().min_w_0().text_color(c.destructive).child(plain(
                     &format!("{}-error", model.row.id),
                     message,
+                    &[],
                     &[],
                     c.destructive,
                     row_key(&model.row.id),
@@ -1393,10 +1515,11 @@ fn fitted(from: f32, to: f32, room: f32) -> (f32, f32) {
 
 pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> AnyElement {
     match &model.row.kind {
-        RowKind::User { text, links, attachments, at } => {
+        RowKind::User { text, links, skills, attachments, at } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
-            let links = prose::link_ranges(text, links);
-            user_row(model, text, links, &files, *at, ctx, cx)
+            let message =
+                Message { text, links: prose::link_ranges(text, links), skills: prose::skill_ranges(text, skills) };
+            user_row(model, message, &files, *at, ctx, window, cx)
         }
         RowKind::Prose { .. } => prose_row(model, ctx, cx),
         RowKind::Code { language, code, .. } => code_row(model, language, code, ctx, cx),
@@ -1413,9 +1536,10 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
             turn_end_row(model, *stopped, *duration_ms, *folded, *at, ctx, cx)
         }
         RowKind::Handoff { from, to } => handoff_row(from, to, ctx, window, cx),
-        RowKind::Queued { text, attachments, status } => {
+        RowKind::Queued { text, skills, attachments, status } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
-            queued_row(model, text, &files, status, ctx, cx)
+            let message = Message { text, links: Vec::new(), skills: prose::skill_ranges(text, skills) };
+            queued_row(model, message, &files, status, ctx, window, cx)
         }
     }
 }

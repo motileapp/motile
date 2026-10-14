@@ -54,12 +54,14 @@ enum CodeBoxes {
 }
 
 /// Keeps a shell command's words whole: its lines break only after a space, or inside a word
-/// longer than the line.
+/// longer than the line. A skill's chip never breaks.
 final class ShellWords: NSObject, NSLayoutManagerDelegate {
     static let shared = ShellWords()
 
     func layoutManager(_ layoutManager: NSLayoutManager, shouldBreakLineByWordBeforeCharacterAt charIndex: Int) -> Bool {
         guard let storage = layoutManager.textStorage, charIndex > 0, charIndex < storage.length else { return true }
+        var chip = NSRange()
+        if storage.attribute(.motileSkill, at: charIndex, effectiveRange: &chip) != nil, charIndex > chip.location { return false }
         guard storage.attribute(.motileShellWords, at: charIndex, effectiveRange: nil) != nil else { return true }
         let before = (storage.string as NSString).character(at: charIndex - 1)
         return before == 0x20 || before == 0x09
@@ -104,6 +106,21 @@ final class DecoratingLayoutManager: NSLayoutManager {
                 self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
                     let box = CGRect(x: rect.minX - 2, y: top, width: rect.width + 4, height: bottom - top)
                     RoundedBox.fill(box.offsetBy(dx: origin.x, dy: origin.y), radius: Radius.xs)
+                }
+            }
+        }
+
+        storage.enumerateAttribute(.motileSkill, in: characters) { value, range, _ in
+            guard value != nil else { return }
+            let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let unselected = NSRange(location: NSNotFound, length: 0)
+            let font = Typesetter.messageFont
+            enumerateLineFragments(forGlyphRange: glyphs) { line, _, container, lineGlyphs, _ in
+                guard let onLine = lineGlyphs.intersection(glyphs), onLine.length > 0 else { return }
+                let baseline = line.minY + self.location(forGlyphAt: onLine.location).y
+                self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
+                    let box = SkillChip.box(from: rect.minX, to: rect.maxX, baseline: baseline, beside: font)
+                    SkillChip.drawBox(in: box.offsetBy(dx: origin.x, dy: origin.y))
                 }
             }
         }

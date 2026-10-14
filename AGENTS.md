@@ -45,6 +45,7 @@ What the programs agree on.
 - `auth_api.rs`, `auth_client.rs`: the auth server's JSON and the client for it.
 - `identity.rs`: the device key and request signing.
 - `media.rs`: names an image, a video or a file an agent sends by its contents.
+- `skills.rs`: how a message names the skills it starts, `$name` at the start of a word.
 
 ### apps/auth (Rust, Axum, sqlx on Postgres)
 
@@ -110,7 +111,10 @@ shadcn's own colours, opacities and radii are gone from the theme.
   any thread of the server with, by the token of their own thread, for what a handoff left out.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
-  (`claude.rs`, `codex.rs`). `models.rs` asks each account's CLI what its picker lists and the
+  (`claude.rs`, `codex.rs`). `skills.rs` asks each account's CLI for the skills it offers in a
+  project (Claude Code's `initialize`, Codex's `skills/list`), which `hub.rs` keeps for half a
+  minute; a message's `$name`s of them are kept with it, Codex reads them itself and Claude Code is
+  given the last as the `/name` command it runs, with the rest of the message as its arguments. `models.rs` asks each account's CLI what its picker lists and the
   effort each model runs at by default (`ask.rs` asks a CLI without running a turn); `hub.rs`
   keeps the answer and asks again when a client connects or opens a draft, at most once a minute.
 - `store.rs`: SQLite. Every item has a position (`seq`) and the revision that last changed it
@@ -172,6 +176,8 @@ for tests.
 - `linear.rs`: the Linear tabs: issues under their statuses, as Linear lists them, one issue
   with its description and comments set, and the prompt that hands it to an agent.
 - `browse.rs`: browsing a server's folders by typing a path.
+- `skills.rs`: the skills the composer offers while the word before its cursor starts with `$`
+  or `/`, best match first, and the chips a message's `$name`s become.
 - `search.rs`: the sidebar's search through every server's messages, asked a moment after the
   search stops changing. What was found stays while it still fits the search, so the list never
   empties and fills again, and its excerpts come in parts that set off the match.
@@ -202,7 +208,10 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
   rows on screen, `Rows.swift` builds their text and measures them off the main thread,
   `RowViews.swift` are the rows.
-- `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI. While the sidebar
+- `Shared/Views/Sidebar`, `Composer`, `Onboarding`, `Thread`: SwiftUI. In the composer a skill is
+  picked from `SkillMenuStrip.swift`, a strip over it, and becomes a chip (`SkillChip.swift`): an
+  attachment in the composer's text, which is written `$name`, and in a message a box its layout
+  manager draws; `Shared/Core/Skills.swift` is their state. While the sidebar
   searches it is one flat list (`SearchResults.swift`): the threads found by their title, project
   or pull request, then the ones found by a message, each row as tall whatever it shows.
 - `Shared/Views/UI`: the components every view is made of. `ActionButton` and `ActionMenu` (a
@@ -274,7 +283,9 @@ a second launch hands its link to the running one (`instance.rs`).
 - `transcript/`: `model.rs` (the rows and their splices into GPUI's list), `prose.rs`,
   `rows.rs`, `view.rs`.
 - `composer/`, `sidebar/`, `thread/`, `git.rs`, `command_panel.rs`, `media/`,
-  `onboarding.rs`: the views of the same names in the Apple kit. `app_window.rs` keeps the
+  `onboarding.rs`: the views of the same names in the Apple kit. The skills' menu and chips are
+  `composer/skills.rs`, `store/skills.rs` and `ui/skill_chip.rs`; GPUI Kit's inline tokens are the
+  composer's chips. `app_window.rs` keeps the
   window invisible until it has something to show and its frame across launches, `lifecycle.rs`
   tells the core when the Mac wakes or changes networks. `window_frame.rs` is the window's
   buttons in the top bar where the desktop draws no title bar (GNOME under Wayland); GPUI Kit
@@ -413,7 +424,7 @@ app. A change to a view both clients share is then looked at in both.
     MOTILE_SIM="iPad Pro 13-inch (M5)" scripts/dev-app.sh    # another simulator
 
 Both are signed in as `demo@motile.app` on an auth server with the dev login, never a real
-account. Their server, `studio`, runs `scripts/fake-agent` and starts with a project and three
+account. Their server, `studio`, runs `scripts/fake-agent` and starts with a project, which has two skills of its own, and three
 finished threads. All of it lives in `apps/macos/build/dev` and keeps running until you stop it,
 which you do when your task is done; its ports are in `build/dev/ports`. Other sessions run
 their own dev apps from other trees at the same time: each tree claims its ports in
@@ -443,6 +454,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "plan the hello" | Presents a plan to approve |
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
 | "crash before taking this" | Exits before it takes the prompt (Claude Code) |
+| "$ship-it", "$review" | Says it followed the skill: the project's in `.claude/skills` (`.agents/skills` for Codex), or one it makes up |
 
 A message sent now while it works is read after its next tool call, or stops a reply that
 streams (Claude Code). Asked for a title, a commit message, a pull request's text or a branch's

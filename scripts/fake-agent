@@ -44,7 +44,11 @@ the limit" is stopped by the usage limit.
 Asked for its login and the limits of its plan (`initialize` and `get_usage` for Claude Code,
 `account/read` and `account/rateLimits/read` for Codex) it answers with made-up ones. Asked for its
 models (`list_models` and `get_settings` for Claude Code, `model/list` and `config/read` for Codex)
-it lists made-up ones, Fable and gpt-6.1-sol with a default effort of their own.
+it lists made-up ones, Fable and gpt-6.1-sol with a default effort of their own. Asked for its skills
+(`initialize` for Claude Code, `skills/list` for Codex) it lists the project's, in `.claude/skills`
+for Claude Code and `.agents/skills` for Codex, and made-up ones of the user's, of a plugin and of
+its own. A message that starts one has it say that it followed the skill: Claude Code's last part
+starts with `/name`, Codex's text names `$name`.
 
 A prompt that tells what the thread said before ends with its message after "User message:", which
 is what picks its turn. "crash before taking this" has it exit before it takes the prompt. With
@@ -101,6 +105,55 @@ def session_exists(session):
         return True
     with open(sessions_file) as f:
         return json.dumps(session) in f.read().splitlines()
+
+
+def text_of(content):
+    """A prompt's text: Claude Code's content is a string, or text blocks, which start a skill."""
+    if isinstance(content, str):
+        return content
+    return "\n\n".join(block["text"] for block in content if block.get("type") == "text")
+
+
+def described(folder):
+    """The skills in `folder`, each a folder with a SKILL.md, and the description it gives."""
+    found = []
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        path = os.path.join(folder, name, "SKILL.md")
+        if not os.path.isfile(path):
+            continue
+        with open(path) as f:
+            match = re.search(r"^description:\s*(.*)$", f.read(), re.M)
+        found.append((name, match.group(1).strip() if match else ""))
+    return found
+
+
+# Claude Code ends a description with where the skill comes from; Codex says its scope.
+MADE_UP_SKILLS = [
+    ("review", "Review the changes on this branch for bugs", "user"),
+    ("pdf", "Read, fill in and make PDF files", "documents"),
+]
+
+
+def claude_commands():
+    builtin = [{"name": "compact", "description": "Free up context by summarizing the conversation so far",
+                "argumentHint": "", "builtin": True}]
+    project = [(name, description, "project") for name, description in described(os.path.join(".claude", "skills"))]
+    skills = [{"name": name, "description": f"{description} ({source})", "argumentHint": ""}
+              for name, description, source in project + MADE_UP_SKILLS]
+    return builtin + skills
+
+
+def codex_skills(folder):
+    def skill(name, description, scope, display=None, plugin=None):
+        interface = {"displayName": display, "shortDescription": description} if display else None
+        return {"name": name, "description": description, "shortDescription": None, "interface": interface,
+                "path": os.path.join(folder, name, "SKILL.md"), "scope": scope, "enabled": True, "pluginId": plugin}
+
+    project = [skill(name, description, "repo") for name, description in described(os.path.join(folder, ".agents", "skills"))]
+    made_up = [skill("imagegen", "Generate or edit images", "system", display="Image Gen"),
+               skill("review", MADE_UP_SKILLS[0][1], "user"),
+               skill("pdf", MADE_UP_SKILLS[1][1], "user", plugin="documents@openai")]
+    return project + made_up
 
 
 def message_of(prompt):
@@ -162,7 +215,7 @@ def answer_control(message):
     """Answers what Claude Code is asked about its login and the limits of its plan."""
     subtype = message["request"].get("subtype")
     if subtype == "initialize":
-        answer = {"account": {"email": "demo@motile.app", "subscriptionType": "Claude Max"}}
+        answer = {"account": {"email": "demo@motile.app", "subscriptionType": "Claude Max"}, "commands": claude_commands()}
     elif subtype == "get_usage":
         limits = [claude_limit("session", 34, 3.5), claude_limit("weekly", 61, 98), claude_limit("weekly", 82, 98, "Fable")]
         answer = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {"limits": limits}}
@@ -189,7 +242,7 @@ def take(message):
     content = message["message"]["content"]
     record(content, prompts_file)
     emit(dict(message, isReplay=True))
-    return content
+    return text_of(content)
 
 
 def take_waiting():
@@ -226,7 +279,7 @@ def read_prompt():
     message = prompts.get()
     if message is None:
         sys.exit(0)
-    if "crash before taking this" in message_of(message["message"]["content"]):
+    if "crash before taking this" in message_of(text_of(message["message"]["content"])):
         sys.exit(1)
     return take(message)
 
@@ -792,6 +845,10 @@ class Codex:
                 emit({"id": message["id"], "result": self.limits()})
             if method == "model/list":
                 emit({"id": message["id"], "result": {"data": self.models(), "nextCursor": None}})
+            if method == "skills/list":
+                folders = params.get("cwds") or [os.getcwd()]
+                listed = [{"cwd": folder, "skills": codex_skills(folder), "errors": []} for folder in folders]
+                emit({"id": message["id"], "result": {"data": listed}})
             if method == "config/read":
                 emit({"id": message["id"], "result": {"config": {"model_reasoning_effort": None}, "origins": {}}})
             if method in ("thread/start", "thread/resume"):
@@ -827,7 +884,7 @@ class Codex:
         self.prompts.put(None)
         self.answers.put(None)
 
-    METHODS = {"initialize", "account/read", "account/rateLimits/read", "model/list", "config/read", "thread/start",
+    METHODS = {"initialize", "account/read", "account/rateLimits/read", "model/list", "skills/list", "config/read", "thread/start",
                "thread/resume", "thread/inject_items", "turn/start", "turn/steer", "turn/interrupt"}
 
     def limits(self):
@@ -1022,7 +1079,11 @@ class Codex:
         turn = {"id": self.turn_id(), "status": "inProgress", "error": None}
         self.notify("turn/started", turn=turn)
         said = self.user_message(params).lower()
+        names = {skill["name"] for skill in codex_skills(os.getcwd())}
+        started = [name for name in re.findall(r"(?:^|\s)\$([\w:-]+)", said) if name in names]
         script = next((script for words, script in self.SCRIPTED.items() if words in said), Codex.replay_fixture)
+        if started:
+            script = lambda codex, params: codex.text(f"I followed the `{started[-1]}` skill.")
         error = None
         try:
             script(self, params)
@@ -1083,8 +1144,20 @@ def replay_fixture():
                 take_waiting()
 
 
+def follow_skill(name, arguments):
+    turn = Turn("00000000-0000-4000-8000-00000005c111")
+    turn.tool("Read", {"file_path": os.path.join(os.getcwd(), "greet.py")}, "1\tdef greet(name):\n", seconds=0.1)
+    told = f" for: {arguments}" if arguments else ""
+    turn.text(f"I followed the `{name}` skill{told}.")
+    turn.done()
+
+
 def answer(prompt):
     said = message_of(prompt).lower()
+    names = [command["name"] for command in claude_commands() if not command.get("builtin")]
+    started = re.search(r"(?:\A|\n\n)/([\w:-]+)[ \t]*(.*)\Z", message_of(prompt), re.S)
+    if started and started.group(1) in names:
+        return follow_skill(started.group(1), started.group(2).strip())
     scripted = next((turn for words, turn in SCRIPTED.items() if words in said), replay_fixture)
     try:
         scripted()

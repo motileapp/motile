@@ -17,4 +17,5 @@ pub mod media;
 pub mod pull_request;
 pub mod render;
 pub mod search;
+pub mod skills;
 pub mod usage;

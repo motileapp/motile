@@ -39,6 +39,8 @@ final class ShortcutMonitor {
         let responder = window.firstResponder
         let editing = (responder as? NSTextView)?.isEditable == true
         let composing = (responder as? ComposerNSTextView)?.sends == true
+        // The skills' menu takes its own keys.
+        if composing, store.skillMenu != nil, SkillMenuKey(event) != nil { return false }
         let flags = event.modifierFlags
         let command = store.shortcuts.command(
             for: KeyNames.names(of: event),

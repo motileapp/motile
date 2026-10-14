@@ -13,8 +13,8 @@ use motile_protocol::wire::{
     DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind,
     LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction,
     PullRequestDetail, PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict,
-    ServerInfo, ServerUpdate, Side, Thread, ThreadChange, Tokens, ToolCall, ToolStatus, TurnChanges, TurnSummary,
-    UsageBucket, Variable,
+    ServerInfo, ServerUpdate, Side, Skill, SkillMention, SkillSource, Thread, ThreadChange, Tokens, ToolCall,
+    ToolStatus, TurnChanges, TurnSummary, UsageBucket, Variable,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -475,6 +475,73 @@ async fn a_codex_turn_shows_its_commands_and_edits() {
     assert_eq!(resumed["threadId"], "01a0f557-4a9b-74a0-b330-f6c4d13b2880");
     assert_eq!((&resumed["approvalPolicy"], &resumed["sandbox"]), (&json!("never"), &json!("danger-full-access")));
     assert_eq!(asked[3]["turn/start"]["effort"], "low");
+}
+
+#[tokio::test]
+async fn a_message_starts_the_skills_the_agent_lists_in_the_project() {
+    let harness = Harness::with_sessions("fixtures/edit-and-run.jsonl", &[]).await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await.unwrap();
+    let skill = Path::new(&harness.folder("project")).join(".claude/skills/ship-it");
+    std::fs::create_dir_all(&skill).unwrap();
+    std::fs::write(skill.join("SKILL.md"), "---\nname: ship-it\ndescription: Commit and open a pull request\n---\n")
+        .unwrap();
+
+    let request = Request::Skills { project_id: new_thread.project_id.clone() };
+    let Message::Skills { accounts } = connection.request(&request).await.unwrap() else { panic!("skills answer") };
+    let claude = accounts.iter().find(|listed| listed.account == "claude").unwrap();
+    let skill = |name: &str, description: &str, source| Skill {
+        name: name.into(),
+        label: name.into(),
+        description: description.into(),
+        source,
+    };
+    assert_eq!(
+        claude.skills,
+        [
+            skill("ship-it", "Commit and open a pull request", SkillSource::Project),
+            skill("review", "Review the changes on this branch for bugs", SkillSource::Personal),
+            skill("pdf", "Read, fill in and make PDF files", SkillSource::Plugin),
+        ]
+    );
+    let codex = accounts.iter().find(|listed| listed.account == "codex").unwrap();
+    assert_eq!(codex.skills[0].label, "Image Gen");
+
+    let text = "First $review it, then $ship-it with $HOME";
+    let thread_id = send(&connection, None, Some(new_thread), text).await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    let mention = |name: &str| SkillMention { name: name.into(), label: name.into() };
+    let message = transcript.items.iter().find_map(|item| match &item.kind {
+        ItemKind::User { skills, .. } => Some(skills.clone()),
+        _ => None,
+    });
+    assert_eq!(message, Some(vec![mention("review"), mention("ship-it")]));
+    assert_eq!(transcript.texts().last().unwrap(), &"I followed the `ship-it` skill for: with $HOME.");
+    let prompts = std::fs::read_to_string(harness.dir.path().join("prompts.txt")).unwrap();
+    let given: serde_json::Value = serde_json::from_str(prompts.lines().next().unwrap()).unwrap();
+    assert_eq!(
+        given,
+        json!([{"type": "text", "text": "First /review it, then"}, {"type": "text", "text": "/ship-it with $HOME"}])
+    );
+}
+
+#[tokio::test]
+async fn codex_reads_the_skills_a_message_starts_from_its_text() {
+    let harness = Harness::start("fixtures/codex-edit-and-run.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Codex).await;
+
+    let thread_id = send(&connection, None, new_thread, "Draw it with $imagegen").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    let message = transcript.items.iter().find_map(|item| match &item.kind {
+        ItemKind::User { skills, .. } => Some(skills.clone()),
+        _ => None,
+    });
+    assert_eq!(message, Some(vec![SkillMention { name: "imagegen".into(), label: "Image Gen".into() }]));
+    assert_eq!(transcript.texts().last().unwrap(), &"I followed the `imagegen` skill.");
+    assert_eq!(harness.recorded_requests("turn/start")[0]["input"][0]["text"], "Draw it with $imagegen");
 }
 
 #[tokio::test]

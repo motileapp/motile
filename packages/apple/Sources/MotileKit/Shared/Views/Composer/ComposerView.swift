@@ -33,10 +33,19 @@ struct ComposerView: View {
                 }
                 #endif
             }
+            .overlay(alignment: .top) {
+                // Hangs above the composer from its top edge, over the transcript.
+                if let menu = store.skillMenu {
+                    Color.clear
+                        .frame(height: 0)
+                        .overlay(alignment: .bottom) { SkillMenuStrip(menu: menu) }
+                }
+            }
         }
         .composerOutlineShadow()
         .frame(maxWidth: Theme.composerWidth)
         .task(id: store.draftWorktreeKey) { store.readWorktreeStart(fetch: true) }
+        .onChange(of: store.draftKey) { store.closeSkillMenu() }
         .onChange(of: store.composerProject?.git) { store.readWorktreeStart(fetch: false) }
     }
 
@@ -49,7 +58,8 @@ struct ComposerView: View {
             focusKey: "\(store.draftKey)#\(store.composerFocus)#\(pressed)",
             onSubmit: { store.send() },
             onFiles: { store.attach($0) },
-            onFileDrag: { store.composerDropTargeted = $0 }
+            onFileDrag: { store.composerDropTargeted = $0 },
+            skills: store.skillTyping
         )
         return VStack(alignment: .leading, spacing: 0) {
             #if os(macOS)

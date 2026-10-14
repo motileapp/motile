@@ -8,10 +8,11 @@ pub mod claude;
 pub mod codex;
 pub mod environment;
 pub mod models;
+pub mod skills;
 
 use std::collections::HashMap;
 
-use motile_protocol::wire::{Access, Agent, Approval, Subagent, Tokens, ToolCall, TurnSummary};
+use motile_protocol::wire::{Access, Agent, Approval, SkillMention, Subagent, Tokens, ToolCall, TurnSummary};
 
 use crate::handoff::Handoff;
 use crate::mcp::McpAccess;
@@ -209,28 +210,42 @@ impl Turn<'_> {
 
 /// The first line a new process is given. Claude Code takes the prompt at once; Codex is given
 /// it by its parser, once the thread is there.
-pub fn opening(agent: Agent, prompt: &str, id: &str) -> String {
+pub fn opening(agent: Agent, prompt: &str, skills: &[SkillMention], id: &str) -> String {
     match agent {
-        Agent::Claude => claude::input(prompt, id),
+        Agent::Claude => claude::input(prompt, skills, id),
         Agent::Codex => codex::opening(),
     }
 }
 
 /// A prompt for a process whose turn has ended; it starts the next one with `settings`, which
 /// Claude Code is told apart. `id` comes back in `Taken`. `None` while the agent's own session
-/// isn't known yet.
-pub fn input(agent: Agent, session_id: Option<&str>, prompt: &str, id: &str, settings: Settings) -> Option<String> {
+/// isn't known yet. `skills` are those the thread's messages started.
+pub fn input(
+    agent: Agent,
+    session_id: Option<&str>,
+    prompt: &str,
+    skills: &[SkillMention],
+    id: &str,
+    settings: Settings,
+) -> Option<String> {
     match agent {
-        Agent::Claude => Some(claude::input(prompt, id)),
+        Agent::Claude => Some(claude::input(prompt, skills, id)),
         Agent::Codex => Some(codex::input(session_id?, prompt, id, settings)),
     }
 }
 
 /// A prompt for a process whose turn runs, to take at once. `None` while the turn it is for
 /// isn't known yet.
-pub fn steer(agent: Agent, session_id: Option<&str>, turn_id: Option<&str>, prompt: &str, id: &str) -> Option<String> {
+pub fn steer(
+    agent: Agent,
+    session_id: Option<&str>,
+    turn_id: Option<&str>,
+    prompt: &str,
+    skills: &[SkillMention],
+    id: &str,
+) -> Option<String> {
     match agent {
-        Agent::Claude => Some(claude::steer(prompt, id)),
+        Agent::Claude => Some(claude::steer(prompt, skills, id)),
         Agent::Codex => Some(codex::steer(session_id?, turn_id?, prompt, id)),
     }
 }

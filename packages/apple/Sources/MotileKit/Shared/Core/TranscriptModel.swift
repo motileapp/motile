@@ -23,6 +23,8 @@ final class TranscriptModel {
     /// The view still shows the rows of the thread that was open before.
     private var keepsRows = false
     private var pending: RowModel?
+    /// The text of the message on its way.
+    private var pendingText: String?
     private var hooks: Hooks?
     private var owner: ObjectIdentifier?
 
@@ -106,9 +108,16 @@ final class TranscriptModel {
         hooks?.splice(start, remove, new)
     }
 
-    func setPending(_ text: String?, attachments: [AttachedFile] = [], queued: Bool = false) {
-        pending = text.map { RowModel.pending(text: $0, attachments: attachments, queued: queued) }
+    func setPending(_ text: String?, attachments: [AttachedFile] = [], queued: Bool = false, skills: [SkillSpan] = []) {
+        pendingText = text
+        pending = text.map { RowModel.pending(text: $0, attachments: attachments, queued: queued, skills: skills) }
         hooks?.pending(pending)
+    }
+
+    /// Shows the skills of the message on its way as chips, while it is still the one shown.
+    func setPendingSkills(_ skills: [SkillSpan], of text: String, attachments: [AttachedFile], queued: Bool) {
+        guard !skills.isEmpty, pending != nil, pendingText == text else { return }
+        setPending(text, attachments: attachments, queued: queued, skills: skills)
     }
 
     func setActivity(_ activity: Activity) {

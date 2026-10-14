@@ -189,6 +189,14 @@ final class AppStore {
     @ObservationIgnored private var awaitedFolder: (serverID: String, path: String)?
     /// Counts up when the composer should take the keyboard back.
     private(set) var composerFocus = 0
+    /// The skills that fit the word being typed in the composer, and the one lit.
+    var skillMenu: SkillMenu?
+    var skillHighlight = 0
+    /// The skill the composer's text puts in place of the word typed, once.
+    var skillPick: SkillPick?
+    @ObservationIgnored var skillMenusAsked = 0
+    /// The word whose menu was put away, which stays away until another is typed.
+    @ObservationIgnored var skillMenuDismissed: String?
     /// Counts up when a thread or a draft is brought to the front, which puts away a sidebar
     /// that lies over it.
     private(set) var threadsShown = 0
@@ -1959,7 +1967,11 @@ final class AppStore {
         draft = ""
         attachmentsByKey[key] = nil
         // The server queues what is sent while the agent works, unless the message steers it.
-        transcript.setPending(text, attachments: attached.map(\.attached), queued: existing != nil && activity.running && !steers)
+        let queued = existing != nil && activity.running && !steers
+        transcript.setPending(text, attachments: attached.map(\.attached), queued: queued)
+        readSkillSpans(in: text) { [weak self] spans in
+            self?.transcript.setPendingSkills(spans, of: text, attachments: attached.map(\.attached), queued: queued)
+        }
         transcriptIsEmpty = false
 
         core.send("send", command) { [weak self] result in

@@ -39,7 +39,7 @@ pub fn margin() -> Edges<f32> {
 
 /// A strip of `height`, or as tall as what is in it with none. Its outline is inside it, so it is
 /// a line taller.
-fn strip(top: bool, height: Option<f32>, cx: &App) -> Div {
+pub(super) fn strip(top: bool, height: Option<f32>, cx: &App) -> Div {
     let c = colors(cx);
     div()
         .mx(px(RADIUS))

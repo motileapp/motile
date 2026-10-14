@@ -5,6 +5,7 @@
 
 pub mod attachments;
 mod questions;
+mod skills;
 mod strips;
 
 use std::cell::Cell;
@@ -109,6 +110,7 @@ pub struct Composer {
     project_git: Option<motile_protocol::wire::GitStatus>,
     /// How wide the composer is, as the thread lays it out.
     pub width: f32,
+    skills: skills::SkillTyping,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -117,13 +119,18 @@ impl Composer {
         let text = cx.new(|cx| TextareaState::new(window, cx).auto_grow(2, 11).placeholder("Ask anything"));
         let subscriptions = vec![
             cx.observe_in(&store, window, |this, _, window, cx| this.follow_store(window, cx)),
-            cx.subscribe_in(&text, window, |this, text, event: &InputEvent, _, cx| {
-                if let InputEvent::Change = event {
+            cx.subscribe_in(&text, window, |this, text, event: &InputEvent, window, cx| match event {
+                InputEvent::Change => {
                     let value = text.read(cx).value().to_string();
                     this.write(value, cx);
+                    this.chipify_typed(window, cx);
                 }
+                InputEvent::Focus | InputEvent::Blur => this.report(window, cx),
+                _ => {}
             }),
+            cx.observe_in(&text, window, |this, _, window, cx| this.report(window, cx)),
         ];
+        let picked = store.read(cx).skills.pick.as_ref().map_or(0, |pick| pick.id);
         let mut composer = Self {
             store,
             text,
@@ -138,6 +145,7 @@ impl Composer {
             worktree_key: None,
             project_git: None,
             width: theme::CONTENT_WIDTH,
+            skills: skills::SkillTyping::after(picked),
             _subscriptions: subscriptions,
         };
         composer.follow_store(window, cx);
@@ -208,8 +216,9 @@ impl Composer {
             let draft = store.draft();
             let (focus, blur) = (key.0 != self.loaded.0 || key.2 != self.loaded.2, key.3 != self.loaded.3);
             self.loaded = key;
-            self.text.update(cx, |text, cx| {
-                if text.value().as_ref() != draft {
+            let loads = self.text.update(cx, |text, cx| {
+                let loads = text.value().as_ref() != draft;
+                if loads {
                     let end = draft.len();
                     text.set_value(draft, window, cx);
                     text.set_selected_range(end..end, cx);
@@ -217,11 +226,16 @@ impl Composer {
                 if focus {
                     text.focus(window, cx);
                 }
+                loads
             });
             if blur {
                 window.blur(cx);
             }
+            if loads || focus {
+                self.loaded_text(window, cx);
+            }
         }
+        self.follow_skills(window, cx);
         if self.placeholder_shown != placeholder {
             self.placeholder_shown = placeholder.clone();
             self.text.update(cx, |text, cx| text.set_placeholder(placeholder, window, cx));
@@ -641,6 +655,7 @@ impl Composer {
         let store = self.store.read(cx);
         let has_attachments = !store.attachments().is_empty();
         let store_handle = self.store.clone();
+        let pasted = self.skills.pasted.clone();
         let text = Textarea::new(&self.text)
             .appearance(false)
             .xsmall()
@@ -650,6 +665,9 @@ impl Composer {
             .pt(px(TEXT_TOP))
             .pb(px(TEXT_BOTTOM))
             .max_h(px(MAX_TEXT_HEIGHT))
+            .token(|token, _, cx| {
+                crate::ui::skill_chip::chip(token.token().label().clone(), token.is_selected(), token.line_height(), cx)
+            })
             .on_paste(move |clipboard, _, cx| {
                 let mut files = Vec::new();
                 let mut images = Vec::new();
@@ -667,6 +685,7 @@ impl Composer {
                     .find_map(|format| images.iter().find(|image| image.format == format).cloned());
                 let has_text = clipboard.text().is_some();
                 if files.is_empty() && (image.is_none() || has_text) {
+                    pasted.set(true);
                     return false;
                 }
                 store_handle.update(cx, |store, cx| {
@@ -878,6 +897,7 @@ impl Render for Composer {
                         )
                     }),
             )
+            .children(self.skill_menu(cx))
             .children(top_strip.map(|strip| div().relative().child(measure(true, self.strips.clone())).child(strip)))
             .child(self.box_(thread.as_ref(), labels, window, cx))
             .children(

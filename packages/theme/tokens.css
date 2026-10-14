@@ -34,6 +34,7 @@
   --process-foreground: #ffffff;
   --merged: #8250df;
   --merged-foreground: #ffffff;
+  --skill: #47730d;
   --border: #e2e3e5;
   --border-card: #e9ebf0;
   --border-input: #eaecf0;
@@ -119,6 +120,7 @@
   --process-foreground: #ffffff;
   --merged: #b480ff;
   --merged-foreground: #ffffff;
+  --skill: #a3e635;
   --border: #191a1e;
   --border-card: #1e1f25;
   --border-input: #1a1b21;
