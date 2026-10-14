@@ -41,12 +41,11 @@ enum Symbol: String {
     case cornerLeftUp = "\u{e0a4}"
     case diff = "\u{e30c}"
     case download = "\u{e0b2}"
-    /// The reasoning efforts up to extra: a ring round a pie a quarter, half, three quarters or
-    /// nine tenths full, which Lucide doesn't have.
+    /// The reasoning efforts up to high: a ring round a pie a quarter, half or three quarters
+    /// full, which Lucide doesn't have.
     case effortLow = "effortLow"
     case effortMedium = "effortMedium"
     case effortHigh = "effortHigh"
-    case effortExtra = "effortExtra"
     case ellipsis = "\u{e0b6}"
     case eye = "\u{e0ba}"
     case eyeOff = "\u{e0bb}"
@@ -126,6 +125,7 @@ enum Symbol: String {
     case users = "\u{e1a4}"
     case wrench = "\u{e1b1}"
     case x = "\u{e1b2}"
+    case zap = "\u{e1b4}"
 
     /// An arrow that goes round, which turns in place of the spinner while it waits.
     var turns: Bool { self == .refreshCw || self == .rotateCw }
@@ -220,7 +220,6 @@ extension PlatformImage {
         case .effortLow: gauge(0.25, side: side)
         case .effortMedium: gauge(0.5, side: side)
         case .effortHigh: gauge(0.75, side: side)
-        case .effortExtra: gauge(0.9, side: side)
         default: glyph(symbol, side: side)
         }
     }

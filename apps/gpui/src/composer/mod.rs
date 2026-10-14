@@ -760,7 +760,7 @@ pub fn effort_symbol(effort: &str) -> &'static str {
         "none" | "minimal" | "low" => "effort-low",
         "medium" => "effort-medium",
         "high" => "effort-high",
-        "xhigh" => "effort-extra",
+        "xhigh" => "zap",
         "max" => "rocket",
         "ultracode" => "bot-message-square",
         _ => "gauge",
