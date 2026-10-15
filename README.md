@@ -34,7 +34,7 @@ The clients share the Rust core they are all built on (`crates/core`).
 
 Download **Motile.zip** from [motile.app](https://motile.app) or the [latest release](https://github.com/motileapp/motile/releases/latest), unzip it and move Motile to Applications. It needs an Apple silicon Mac with macOS 14 or later. The client is signed and notarized, and updates itself from then on.
 
-On Android (10 or later), install Motile from Google Play's testing track, or build it from `apps/android` (see AGENTS.md).
+On Android (10 or later), download **Motile-android.apk** from the [latest release](https://github.com/motileapp/motile/releases/latest) and open it; Android asks to let your browser install it. The client updates itself from then on.
 
 ### 2. Sign in
 

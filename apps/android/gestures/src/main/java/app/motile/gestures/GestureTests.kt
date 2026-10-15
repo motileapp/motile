@@ -248,9 +248,10 @@ class GestureTests {
         device.wait(Until.findObject(By.textStartsWith("New project")), 3_000).click()
         assertTrue(shown(By.text("New Project")))
         assertTrue(waitForKeyboard(true))
-        // The sheet rises over the keyboard first.
+        // The sheet rises over the keyboard first; a tap while it still moves can miss the button.
         Thread.sleep(600)
         device.findObject(By.desc("Back")).click()
+        if (!shown(By.text("Add a Project"), 1_500)) device.wait(Until.findObject(By.desc("Back")), 1_000)?.click()
         assertTrue(shown(By.text("Add a Project")))
         // The system's back, as iOS's swipe from the edge.
         device.pressBack()

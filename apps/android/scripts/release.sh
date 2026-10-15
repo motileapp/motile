@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
-# Builds the client for release, for phones and for x86_64 devices, as an app bundle for Google
-# Play and an APK, into build/release, with the version in Cargo.toml and a version code that counts
-# up by the minute. It is signed with the upload key in ANDROID_KEYSTORE_BASE64 (a keystore in
-# base64), or, without one, left signed with the debug key, which no store takes.
+# Builds the client for release as build/release/Motile-android.apk, for phones and for x86_64
+# devices, with the version in Cargo.toml: in CI, the release's, which scripts/release-version.sh
+# writes there first. Its third number, the commit count, is the version code, so that every
+# release replaces the one before. It is signed with the key in ANDROID_KEYSTORE_BASE64 (a keystore
+# in base64), which every release must share for the client to update itself; without one it is
+# signed with the debug key.
 #
 #   ANDROID_KEYSTORE_BASE64=… ANDROID_KEYSTORE_PASSWORD=… ANDROID_KEY_ALIAS=… scripts/release.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}"
 
-export MOTILE_VERSION_CODE="$(( ($(date -u +%s) - 1735689600) / 60 ))"
+VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' ../../Cargo.toml | head -1)"
+export MOTILE_VERSION_CODE="${VERSION##*.}"
 if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
-    export ANDROID_KEYSTORE="$(mktemp -d)/upload.jks"
+    export ANDROID_KEYSTORE="$(mktemp -d)/release.jks"
     echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE"
 else
     echo "No ANDROID_KEYSTORE_BASE64: the release is signed with the debug key." >&2
 fi
 
 MOTILE_ABIS=arm64-v8a,x86_64 scripts/build-core.sh
-./gradlew -Pmotile.skipCore bundleRelease assembleRelease
+./gradlew -Pmotile.skipCore assembleRelease
 mkdir -p build/release
-cp app/build/outputs/bundle/release/app-release.aab build/release/Motile.aab
-cp app/build/outputs/apk/release/app-release.apk build/release/Motile.apk
-echo "✓ Built Motile $(sed -n 's/^version = "\(.*\)"/\1/p' ../../Cargo.toml | head -1) ($MOTILE_VERSION_CODE) in build/release"
+cp app/build/outputs/apk/release/app-release.apk build/release/Motile-android.apk
+echo "✓ Built Motile $VERSION ($MOTILE_VERSION_CODE) in build/release"

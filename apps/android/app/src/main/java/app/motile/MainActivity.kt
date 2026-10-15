@@ -9,9 +9,9 @@ import app.motile.core.SignInSession
 import app.motile.platform.Platform
 
 /**
- * The one activity. The dev scripts start it with the variables the Apple clients read from their
- * environment, as extras: `MOTILE_AUTH_URL`, `MOTILE_LOCAL`, `MOTILE_SERVER_ADDR`,
- * `MOTILE_DEMO_SIGN_IN` and `MOTILE_DEMO_SCRIPT`.
+ * The one activity. The dev scripts start a development build with the variables the Apple
+ * clients read from their environment, as extras: `MOTILE_AUTH_URL`, `MOTILE_LOCAL`,
+ * `MOTILE_SERVER_ADDR`, `MOTILE_DEMO_SIGN_IN`, `MOTILE_DEMO_SCRIPT` and `MOTILE_RELEASES_URL`.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,7 +22,9 @@ class MainActivity : ComponentActivity() {
             started = true
             // A phone opens on the thread, not on the panel that was open last time.
             if (Platform.panelCoversThread) application.store.rightPanel.isOpen = false
-            val environment = ENVIRONMENT.mapNotNull { name -> intent.getStringExtra(name)?.let { name to it } }.toMap()
+            // Only a development build takes them: any app can start this one with extras.
+            val environment = if (!BuildConfig.DEBUG) emptyMap()
+            else ENVIRONMENT.mapNotNull { name -> intent.getStringExtra(name)?.let { name to it } }.toMap()
             application.store.start(environment)
             DemoDriver.startIfRequested(application.store, environment)
         }
@@ -51,7 +53,7 @@ class MainActivity : ComponentActivity() {
         private var started = false
         private val ENVIRONMENT = listOf(
             "MOTILE_AUTH_URL", "MOTILE_LOCAL", "MOTILE_SERVER_ADDR", "MOTILE_DATA_DIR", "MOTILE_DEMO",
-            "MOTILE_DEMO_SIGN_IN", "MOTILE_DEMO_SCRIPT",
+            "MOTILE_DEMO_SIGN_IN", "MOTILE_DEMO_SCRIPT", "MOTILE_RELEASES_URL",
         )
     }
 }

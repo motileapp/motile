@@ -1,5 +1,6 @@
 package app.motile.sidebar
 
+import app.motile.core.AppUpdater
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -509,6 +510,12 @@ private fun Footer(
             .drawBehind { drawLine(border, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
             .padding(bottom = 8.dp),
     ) {
+        // A new version of the client, where the sidebar ends, as on the Mac.
+        val update = store.updater.state
+        if (update != AppUpdater.State.Idle && update != AppUpdater.State.Checking && update != AppUpdater.State.UpToDate) {
+            AppUpdateRow(store.updater, Modifier.padding(horizontal = sidebarEdge, vertical = 8.dp))
+            ThemeDivider()
+        }
         if (store.servers.isNotEmpty()) {
             Servers(store, serversExpanded, toggleServers)
             ThemeDivider()

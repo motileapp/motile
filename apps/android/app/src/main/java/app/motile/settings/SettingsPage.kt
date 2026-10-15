@@ -1,5 +1,7 @@
 package app.motile.settings
 
+import app.motile.sidebar.AppUpdateRow
+import app.motile.core.AppUpdater
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -93,8 +95,12 @@ private fun SettingsGroups.general(store: AppStore, steers: Boolean, setSteers: 
             SettingsButton("Clear Images and Videos", destructive = true, enabled = (store.mediaStorage?.used ?: 0) > 0) { store.clearMedia() }
         }
     }
-    group("updates", header = "About") {
+    group("updates", header = "Updates") {
         row { SettingsLabeled("Version", store.updater.current) }
+        row { SettingsButton("Check for Updates", enabled = store.updater.state != AppUpdater.State.Checking) { store.updater.check(asked = true) } }
+        if (store.updater.state != AppUpdater.State.Idle) row {
+            SettingsRow { AppUpdateRow(store.updater, Modifier.weight(1f), variant = ButtonVariant.Outline) }
+        }
     }
 }
 

@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Installs the new versions it downloads from the releases, which the user allows once. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
         <!-- The browser that signs in, as a Custom Tab. -->
@@ -42,6 +44,11 @@
                 <data android:host="linear" />
             </intent-filter>
         </activity>
+
+        <!-- Hears what Android's installer did with an update. -->
+        <receiver
+            android:name=".core.UpdateReceiver"
+            android:exported="false" />
 
         <!-- Hands the camera a file to take a photo into, and other apps the files agents send. -->
         <provider

@@ -352,6 +352,7 @@ class AppStore(private val context: Context) {
         rightPanel.store = this
         linear.store = this
         updater.onFound = { asked -> showServerUpdates(asked) }
+        AppUpdater.shared = updater
     }
 
     // Starting
@@ -374,6 +375,7 @@ class AppStore(private val context: Context) {
         if (!core.start(context, jsonOf(config) as JSON)) {
             errorMessage = "Motile couldn't start. Its data folder may not be writable."
         }
+        environment["MOTILE_RELEASES_URL"]?.let { updater.releases = it }
         if (environment["MOTILE_DEMO"] != "1") updater.start()
         lifecycle.start(context, this)
     }

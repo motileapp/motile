@@ -264,7 +264,9 @@ gesture for what Esc does. Its package is `app.motile`, its application `app.mot
   every build, and `-Pmotile.skipCore` leaves the one built last.
 - `app/src/main/java/app/motile/`: `core/` is `Shared/Core` in Kotlin (`CoreBridge.kt`, `Models.kt`,
   `AppStore.kt`, whose state is Compose state, `Preferences.kt` for what UserDefaults keeps,
-  `SignInSession.kt` for a Custom Tab that returns a `motile://` address), `theme/` is `Theme.swift`,
+  `SignInSession.kt` for a Custom Tab that returns a `motile://` address, `AppUpdater.kt`, which
+  updates the client from the latest release as the Mac app's does: it downloads the release's APK,
+  checks that it is signed with the client's own key, and hands it to Android's installer), `theme/` is `Theme.swift`,
   `platform/` is `Platform.swift` and `Symbol.swift`, `ui/` is the component kit of `Shared/Views/UI`
   and `Shared/Views/Shared`, and `transcript/`, `composer/`, `sidebar/`, `thread/`, `panel/`,
   `commandpanel/`, `settings/`, `usage/`, `onboarding/` and `media/` are the views of the same names.
@@ -275,7 +277,9 @@ gesture for what Esc does. Its package is `app.motile`, its application `app.mot
 - `app/src/test` tests the models. `gestures/` uses the client with fingers (`GestureTests.kt`, the
   iOS app's gesture tests): a test module of its own that runs in a process of its own, so that it
   can stop the client and open it again, as the iOS app's UI tests do.
-- `scripts/release.sh` builds the signed app bundle and APK. The dev app scripts are under Development.
+- `scripts/release.sh` builds the signed APK. Only a development build takes the dev scripts'
+  variables (launch extras: `MOTILE_AUTH_URL`, `MOTILE_RELEASES_URL` and the others), since any app
+  can start the client with extras. The dev app scripts are under Development.
 
 ### apps/macos and apps/ios
 
@@ -529,9 +533,10 @@ Linear the real one, to connect a workspace of your own.
 
 ## Releasing and deploying
 
-Every push to `main` that touches the server, the auth server, the Mac app or the GPUI app is a
-release. The `Release` workflow publishes the server and the auth server for Linux, the server,
-the client and the GPUI app for Macs, and the GPUI app for Linux and Windows, as a GitHub release. Its
+Every push to `main` that touches the server, the auth server, the Mac app, the GPUI app or the
+Android app is a release. The `Release` workflow publishes the server and the auth server for Linux,
+the server, the client and the GPUI app for Macs, the GPUI app for Linux and Windows, and the Android
+app (`Motile-android.apk`), as a GitHub release. Its
 version is the first two numbers of `version` in `Cargo.toml` and the number of commits as the third
 (`scripts/release-version.sh`), so set `version` only to change the first two. The installer and the
 download button always fetch the latest release, and clients and servers compare their own version
@@ -540,9 +545,11 @@ and notarized, using the repository's `APPLE_*` secrets; running the `macOS` wor
 `sign` does the same without a release.
 
 Every push and pull request that touches the Android app lints, tests and builds it (the `Android`
-workflow); on `main` it also builds the release with `apps/android/scripts/release.sh`, signed with the
-upload key in the `ANDROID_KEYSTORE*` secrets, and uploads it to Google Play's internal testing track
-when the `PLAY_SERVICE_ACCOUNT` secret is there. Its version is the one in `Cargo.toml`.
+workflow). Its release is built by `apps/android/scripts/release.sh` with the release's version, the
+commit count as its version code, and signed with the key in the `ANDROID_KEYSTORE`,
+`ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` secrets. Every release must be signed with that
+one key: the client only installs an update signed as it is, and Android refuses one that isn't.
+Without the secrets, a release carries no Android app.
 
 Every push to `main` that touches the iOS app uploads it to TestFlight
 (`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID`

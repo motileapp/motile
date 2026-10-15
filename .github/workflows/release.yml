@@ -1,7 +1,7 @@
 name: Release
 
-# Builds the server and the auth server for Linux, the server, the client and the GPUI app for Macs, and
-# the GPUI app for Linux and Windows, and publishes them as a GitHub release, on every push to main that touches
+# Builds the server and the auth server for Linux, the server, the client and the GPUI app for Macs,
+# the GPUI app for Linux and Windows, and the Android app, and publishes them as a GitHub release, on every push to main that touches
 # them. The version is the one scripts/release-version.sh gives the commit. The installer downloads the
 # server from the latest release, and the download button on motile.app links to the clients in it. A
 # newer push takes the place of a release that is still on its way.
@@ -11,6 +11,7 @@ on:
     paths:
       - apps/macos/**
       - apps/gpui/**
+      - apps/android/**
       - packages/apple/**
       - crates/**
       - apps/server/**
@@ -103,6 +104,51 @@ jobs:
           name: gpui-${{ matrix.target }}
           path: apps/gpui/build/Motile-GPUI-*
 
+  # Signed with the key every release shares, which the client checks an update against. Without
+  # the key there is no Android release to carry.
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        with:
+          fetch-depth: 0
+      - name: Version
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: scripts/release-version.sh
+      - uses: actions/setup-java@v4
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Toolchain
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add aarch64-linux-android x86_64-linux-android
+          cargo install cargo-ndk --locked
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;28.2.13676358" "platforms;android-37.0" >/dev/null
+      - uses: Swatinem/rust-cache@v2
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        with:
+          key: android-release
+      - uses: gradle/actions/setup-gradle@v4
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+      - name: Build
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: apps/android/scripts/release.sh
+      - uses: actions/upload-artifact@v4
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        with:
+          name: android
+          path: apps/android/build/release/Motile-android.apk
+
   macos:
     uses: ./.github/workflows/macos.yml
     with:
@@ -111,7 +157,7 @@ jobs:
 
   # The release is the latest one as soon as it exists, so it is made once, with every file.
   publish:
-    needs: [linux, gpui, macos]
+    needs: [linux, gpui, macos, android]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -126,4 +172,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v$(scripts/release-version.sh)"
-          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --generate-notes artifacts/*.tar.gz artifacts/*.zip
+          shopt -s nullglob
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --generate-notes artifacts/*.tar.gz artifacts/*.zip artifacts/*.apk

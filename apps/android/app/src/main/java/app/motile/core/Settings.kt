@@ -49,7 +49,7 @@ data class SettingsEntry(
     companion object {
         val all = listOf(
             SettingsEntry("account", "Account", SettingsSection.General, "signed in email sign out"),
-            SettingsEntry("updates", "Version", SettingsSection.General, "version check for updates release"),
+            SettingsEntry("updates", "Updates", SettingsSection.General, "version check for updates release download install"),
             SettingsEntry("appearance", "Theme", SettingsSection.General, "appearance light dark system mode"),
             SettingsEntry("messages", "Sent while the agent works", SettingsSection.General, "messages queue steer interrupt"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
