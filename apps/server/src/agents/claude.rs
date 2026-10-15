@@ -11,7 +11,9 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use motile_protocol::wire::{Access, Approval, SkillMention, Subagent, Tokens, ToolStatus, TurnSummary};
+use motile_protocol::wire::{
+    Access, Approval, SkillMention, Subagent, Tokens, ToolStatus, TurnSummary, Workflow, WorkflowAgent,
+};
 use serde_json::{Value, json};
 
 use super::{AgentEvent, Background, ModelUsage, Turn};
@@ -20,6 +22,8 @@ use super::{AgentEvent, Background, ModelUsage, Turn};
 const WATCH_TASKS: [&str; 4] = ["local_bash", "shell", "monitor", "monitor_mcp"];
 /// Background tasks that are only bookkeeping.
 const IDLE_TASKS: [&str; 2] = ["plan", "dream"];
+/// A background task that runs a workflow, a script that starts agents of its own.
+const WORKFLOW_TASK: &str = "local_workflow";
 /// What Claude Code says when the session it was told to resume isn't in its folder.
 pub const NO_CONVERSATION: &str = "No conversation found";
 /// How claude.ai's connectors are named among the MCP servers.
@@ -312,7 +316,9 @@ impl Parser {
         // An agent that is sent a message later starts again; it stays with the call that made it.
         let task = self.tasks.entry(task_id.to_string()).or_insert_with(|| (tool_id.to_string(), true));
         task.1 = true;
-        let agent = Subagent { kind: text(&object["subagent_type"]), ..subagent(ToolStatus::Running, object) };
+        let workflow = (kind == WORKFLOW_TASK).then(|| workflow(&object["description"], &[]));
+        let agent =
+            Subagent { kind: text(&object["subagent_type"]), workflow, ..subagent(ToolStatus::Running, object) };
         vec![AgentEvent::Task { tool_id: task.0.clone(), agent }]
     }
 
@@ -320,7 +326,10 @@ impl Parser {
         let Some((tool_id, true)) = self.tasks.get(object["task_id"].as_str().unwrap_or_default()) else {
             return vec![];
         };
-        let agent = Subagent { progress: text(&object["description"]), ..subagent(ToolStatus::Running, object) };
+        let progress = object["workflow_progress"].as_array();
+        let workflow = progress.map(|progress| workflow(&object["summary"], progress));
+        let agent =
+            Subagent { progress: text(&object["description"]), workflow, ..subagent(ToolStatus::Running, object) };
         vec![AgentEvent::Task { tool_id: tool_id.clone(), agent }]
     }
 
@@ -476,6 +485,35 @@ fn subagent(status: ToolStatus, object: &Value) -> Subagent {
         tokens: usage["total_tokens"].as_u64(),
         tool_uses: usage["tool_uses"].as_u64(),
         duration_ms: usage["duration_ms"].as_u64(),
+        workflow: None,
+    }
+}
+
+/// A workflow as its progress lists it, whole each time: its phases, then its agents.
+fn workflow(title: &Value, progress: &[Value]) -> Workflow {
+    let listed = |kind: &'static str| progress.iter().filter(move |entry| entry["type"] == kind);
+    let phases = listed("workflow_phase").filter_map(|phase| text(&phase["title"])).collect();
+    let agents = listed("workflow_agent").map(workflow_agent).collect();
+    Workflow { title: text(title).unwrap_or_default(), phases, agents }
+}
+
+fn workflow_agent(agent: &Value) -> WorkflowAgent {
+    let status = match agent["state"].as_str() {
+        Some("done") => ToolStatus::Succeeded,
+        Some("error") => ToolStatus::Failed,
+        _ => ToolStatus::Running,
+    };
+    WorkflowAgent {
+        label: text(&agent["label"]).unwrap_or_default(),
+        phase: text(&agent["phaseTitle"]),
+        status,
+        model: text(&agent["model"]),
+        prompt: text(&agent["promptPreview"]),
+        result: text(&agent["error"]).or_else(|| text(&agent["resultPreview"])),
+        started_at: agent["startedAt"].as_f64().map(|millis| millis / 1000.0),
+        tokens: agent["tokens"].as_u64(),
+        tool_uses: agent["toolCalls"].as_u64(),
+        duration_ms: agent["durationMs"].as_u64(),
     }
 }
 
@@ -620,6 +658,7 @@ mod tests {
             tokens: None,
             tool_uses: None,
             duration_ms: None,
+            workflow: None,
         };
         let task = |agent| vec![AgentEvent::Task { tool_id: "toolu_1".to_string(), agent }];
 
@@ -650,6 +689,59 @@ mod tests {
         };
         assert_eq!(parser.parse(ended), task(done));
         assert_eq!(parser.parse(progress), vec![]);
+    }
+
+    #[test]
+    fn a_workflow_it_starts_reports_its_phases_and_each_of_its_agents() {
+        let mut parser = Parser::default();
+        let started = r#"{"type":"system","subtype":"task_started","task_id":"w1","tool_use_id":"toolu_1",
+            "description":"Say colours","task_type":"local_workflow","workflow_name":"colours"}"#;
+        let progress = r#"{"type":"system","subtype":"task_progress","task_id":"w1","description":"Ask: red",
+            "summary":"Say colours","usage":{"total_tokens":900,"tool_uses":0,"duration_ms":1600},"workflow_progress":[
+            {"type":"workflow_phase","index":1,"title":"Ask"},{"type":"workflow_phase","index":2,"title":"Join"},
+            {"type":"workflow_agent","index":1,"label":"red","phaseTitle":"Ask","model":"claude-haiku-5-5",
+             "state":"done","startedAt":1792074641616,"promptPreview":"Say red","resultPreview":"red",
+             "tokens":900,"toolCalls":0,"durationMs":1608},
+            {"type":"workflow_agent","index":2,"label":"blue","phaseTitle":"Ask","state":"error",
+             "error":"blocked","promptPreview":"Say blue"},
+            {"type":"workflow_agent","index":3,"label":"join","phaseTitle":"Join","state":"start"}]}"#;
+        let agent = |label: &str, status, phase: &str| WorkflowAgent {
+            label: label.into(),
+            phase: Some(phase.into()),
+            status,
+            model: None,
+            prompt: None,
+            result: None,
+            started_at: None,
+            tokens: None,
+            tool_uses: None,
+            duration_ms: None,
+        };
+        let red = WorkflowAgent {
+            model: Some("claude-haiku-5-5".into()),
+            prompt: Some("Say red".into()),
+            result: Some("red".into()),
+            started_at: Some(1792074641.616),
+            tokens: Some(900),
+            tool_uses: Some(0),
+            duration_ms: Some(1608),
+            ..agent("red", ToolStatus::Succeeded, "Ask")
+        };
+        let blue = WorkflowAgent {
+            prompt: Some("Say blue".into()),
+            result: Some("blocked".into()),
+            ..agent("blue", ToolStatus::Failed, "Ask")
+        };
+        let workflow =
+            |agents| Workflow { title: "Say colours".into(), phases: vec!["Ask".into(), "Join".into()], agents };
+
+        let [AgentEvent::Task { agent: begun, .. }] = &parser.parse(started)[..] else { panic!() };
+        let begun = begun.workflow.as_ref();
+        assert_eq!(begun, Some(&Workflow { title: "Say colours".into(), ..Workflow::default() }));
+        let [AgentEvent::Task { tool_id, agent: going }] = &parser.parse(progress)[..] else { panic!() };
+        assert_eq!((tool_id.as_str(), going.tokens), ("toolu_1", Some(900)));
+        let going = going.workflow.clone().unwrap();
+        assert_eq!(going, workflow(vec![red, blue, agent("join", ToolStatus::Running, "Join")]));
     }
 
     #[test]

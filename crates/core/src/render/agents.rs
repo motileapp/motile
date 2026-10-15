@@ -1,9 +1,10 @@
 //! The agents a thread's agent started, as the list a client shows. Each has a transcript of its
-//! own: the items whose `parent` is the tool call that started it.
+//! own: the items whose `parent` is the tool call that started it. A workflow's is its agents,
+//! under the phases they run in.
 
-use motile_protocol::wire::{Item, ItemKind, ToolStatus};
+use motile_protocol::wire::{Item, ItemKind, ToolCall, ToolStatus, Workflow, WorkflowAgent};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// What is shown of what an agent is doing or reported, at most.
 const MAX_DETAIL_CHARS: usize = 280;
@@ -36,27 +37,120 @@ pub fn view(item: &Item) -> Option<AgentView> {
     let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
     let text = |key: &str| input[key].as_str().unwrap_or_default().trim().to_string();
     let prompt = text("prompt");
-    let named = Some(text("description")).filter(|title| !title.is_empty());
-    let title = named.unwrap_or_else(|| prompt.lines().next().unwrap_or("Agent").to_string());
     let working = agent.status == ToolStatus::Running;
-    let reported = agent.result.as_deref().or(call.output.as_deref());
-    let detail = match working {
-        true => agent.progress.as_deref().or(reported),
-        false => reported.or(agent.progress.as_deref()),
+    let (title, kind, detail) = match &agent.workflow {
+        Some(workflow) => {
+            (workflow_name(call, workflow), Some("Workflow".to_string()), workflow_progress(workflow, working))
+        }
+        None => {
+            let named = Some(text("description")).filter(|title| !title.is_empty());
+            let title = named.unwrap_or_else(|| prompt.lines().next().unwrap_or("Agent").to_string());
+            let reported = agent.result.as_deref().or(call.output.as_deref());
+            let detail = match working {
+                true => agent.progress.as_deref().or(reported),
+                false => reported.or(agent.progress.as_deref()),
+            };
+            (title, agent.kind.clone(), detail.unwrap_or_default().to_string())
+        }
     };
     Some(AgentView {
         id: item.id.clone(),
         parent: item.parent.clone(),
         title,
-        kind: agent.kind.clone(),
+        kind,
         status: agent.status,
-        detail: one_line(detail.unwrap_or_default()),
+        detail: one_line(&detail),
         prompt,
         started_at: item.created_at,
         duration_ms: agent.duration_ms.filter(|_| !working),
         tokens: agent.tokens,
         tool_uses: agent.tool_uses,
     })
+}
+
+/// The workflow's name as the call gave it, or what its script says it does.
+pub fn workflow_name(call: &ToolCall, workflow: &Workflow) -> String {
+    let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
+    let named = input["name"].as_str().filter(|name| !name.is_empty());
+    let described = Some(workflow.title.as_str()).filter(|title| !title.is_empty());
+    named.or(described).unwrap_or("Workflow").to_string()
+}
+
+/// How far the workflow is: the phase it works in and how many of its agents are done, or once
+/// it has ended, how many it ran and how many of them failed.
+pub fn workflow_progress(workflow: &Workflow, working: bool) -> String {
+    let agents = &workflow.agents;
+    let done = agents.iter().filter(|agent| agent.status != ToolStatus::Running).count();
+    let failed = agents.iter().filter(|agent| agent.status == ToolStatus::Failed).count();
+    let of = |count: usize| format!("{count} {}", if count == 1 { "agent" } else { "agents" });
+    if !working {
+        return match failed {
+            0 => format!("Ran {}", of(agents.len())),
+            _ => format!("Ran {}, {failed} failed", of(agents.len())),
+        };
+    }
+    let latest = agents.iter().rev().find(|agent| agent.status == ToolStatus::Running).or(agents.last());
+    let counted = format!("{done} of {} done", of(agents.len()));
+    match latest.and_then(|agent| agent.phase.as_deref()) {
+        Some(phase) => format!("{phase} · {counted}"),
+        None if agents.is_empty() => "Starting".to_string(),
+        None => counted,
+    }
+}
+
+/// What the workflow the item's tool call started has done, as a transcript: each phase, then the
+/// agents that ran in it. Empty when the call started no workflow.
+pub fn workflow_items(item: &Item) -> Vec<Item> {
+    let ItemKind::Tool { call } = &item.kind else { return Vec::new() };
+    let Some(agent) = &call.agent else { return Vec::new() };
+    let Some(workflow) = &agent.workflow else { return Vec::new() };
+    let ended = agent.status != ToolStatus::Running;
+    let phase_of = |agent: &WorkflowAgent| {
+        let known = agent.phase.as_ref().and_then(|phase| workflow.phases.iter().position(|known| known == phase));
+        known.unwrap_or(workflow.phases.len())
+    };
+    let mut agents: Vec<(usize, &WorkflowAgent)> = workflow.agents.iter().enumerate().collect();
+    agents.sort_by_key(|(_, agent)| phase_of(agent));
+    let mut items: Vec<Item> = Vec::new();
+    let mut phase = None;
+    for (index, agent) in agents {
+        let child = |id: String, created_at: f64, kind: ItemKind| Item {
+            id: format!("{}/{id}", item.id),
+            seq: 0,
+            rev: item.rev,
+            created_at,
+            media: Vec::new(),
+            parent: Some(item.id.clone()),
+            kind,
+        };
+        if agent.phase.is_some() && agent.phase != phase {
+            let title = agent.phase.clone().unwrap_or_default();
+            items.push(child(
+                format!("phase/{title}"),
+                item.created_at,
+                ItemKind::Assistant { text: format!("**{title}**") },
+            ));
+        }
+        phase = agent.phase.clone();
+        let status = match agent.status {
+            ToolStatus::Running if ended => ToolStatus::Failed,
+            status => status,
+        };
+        let call = ToolCall {
+            id: format!("{}/agent/{index}", item.id),
+            name: "Agent".to_string(),
+            input: json!({"description": agent.label, "prompt": agent.prompt}).to_string(),
+            output: agent.result.clone(),
+            status,
+            agent: None,
+        };
+        let started_at = agent.started_at.unwrap_or(item.created_at);
+        items.push(child(format!("agent/{index}"), started_at, ItemKind::Tool { call }));
+    }
+    for (seq, item) in items.iter_mut().enumerate() {
+        item.seq = seq as u64;
+    }
+    items
 }
 
 fn one_line(text: &str) -> String {
@@ -70,7 +164,7 @@ fn one_line(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use motile_protocol::wire::{Subagent, ToolCall};
+    use motile_protocol::wire::Subagent;
 
     use super::*;
 
@@ -83,6 +177,7 @@ mod tests {
             tokens: Some(2100),
             tool_uses: Some(3),
             duration_ms: Some(30_000),
+            workflow: None,
         };
         let call = ToolCall {
             id: "t".into(),
@@ -104,6 +199,67 @@ mod tests {
 
         let ended = view(&started(ToolStatus::Succeeded, Some("Reading a.txt"), Some("Three\n\nfiles"))).unwrap();
         assert_eq!((ended.detail.as_str(), ended.duration_ms), ("Three files", Some(30_000)));
+    }
+
+    fn workflow_call(status: ToolStatus, agents: &[(&str, &str, ToolStatus)]) -> Item {
+        let mut item = started(status, None, None);
+        let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+        call.name = "Workflow".into();
+        call.input = r#"{"name":"colours"}"#.into();
+        let agents = agents.iter().map(|(label, phase, status)| WorkflowAgent {
+            label: label.to_string(),
+            phase: Some(phase.to_string()),
+            status: *status,
+            model: None,
+            prompt: Some(format!("Say {label}")),
+            result: None,
+            started_at: None,
+            tokens: None,
+            tool_uses: None,
+            duration_ms: None,
+        });
+        let workflow = Workflow {
+            title: "Say colours".into(),
+            phases: vec!["Ask".into(), "Join".into()],
+            agents: agents.collect(),
+        };
+        call.agent.as_mut().unwrap().workflow = Some(workflow);
+        item
+    }
+
+    #[test]
+    fn a_workflow_says_its_phase_and_how_many_of_its_agents_are_done() {
+        let running = [("red", "Ask", ToolStatus::Succeeded), ("blue", "Ask", ToolStatus::Running)];
+        let working = view(&workflow_call(ToolStatus::Running, &running)).unwrap();
+        assert_eq!((working.title.as_str(), working.kind.as_deref()), ("colours", Some("Workflow")));
+        assert_eq!(working.detail, "Ask · 1 of 2 agents done");
+
+        let ran = [("red", "Ask", ToolStatus::Succeeded), ("blue", "Ask", ToolStatus::Failed)];
+        assert_eq!(view(&workflow_call(ToolStatus::Succeeded, &ran)).unwrap().detail, "Ran 2 agents, 1 failed");
+    }
+
+    #[test]
+    fn a_workflow_s_transcript_is_its_agents_under_their_phases() {
+        let agents = [
+            ("join", "Join", ToolStatus::Running),
+            ("red", "Ask", ToolStatus::Succeeded),
+            ("blue", "Ask", ToolStatus::Running),
+        ];
+        let shown = |item: &Item| match &item.kind {
+            ItemKind::Assistant { text } => text.clone(),
+            ItemKind::Tool { call } => {
+                format!("{} {:?}", serde_json::from_str::<Value>(&call.input).unwrap()["description"], call.status)
+            }
+            _ => String::new(),
+        };
+        let working: Vec<String> =
+            workflow_items(&workflow_call(ToolStatus::Running, &agents)).iter().map(shown).collect();
+        assert_eq!(working, ["**Ask**", "\"red\" Succeeded", "\"blue\" Running", "**Join**", "\"join\" Running"]);
+
+        let stopped = workflow_items(&workflow_call(ToolStatus::Failed, &agents));
+        assert_eq!(shown(&stopped[2]), "\"blue\" Failed", "an agent the workflow left behind no longer runs");
+        assert!(stopped.iter().all(|item| item.parent.as_deref() == Some("t")));
+        assert!(workflow_items(&started(ToolStatus::Running, None, None)).is_empty());
     }
 
     #[test]

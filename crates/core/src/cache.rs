@@ -477,6 +477,7 @@ mod tests {
             tokens: None,
             tool_uses: None,
             duration_ms: None,
+            workflow: None,
         };
         let call = |id: &str, agent| ToolCall {
             id: id.into(),

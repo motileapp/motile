@@ -25,8 +25,6 @@ struct ClaudeCommand {
     builtin: bool,
 }
 
-const WORKFLOW: &str = "(dynamic workflow)";
-
 /// What Claude Code lists in `folder` besides its own commands. `None` when it doesn't answer.
 pub async fn claude_skills(environment: &Environment, folder: &Path) -> Option<Vec<Skill>> {
     let arguments = ["--strict-mcp-config"];
@@ -37,10 +35,9 @@ pub async fn claude_skills(environment: &Environment, folder: &Path) -> Option<V
 }
 
 /// A command as the composer offers it, by the shortest name it answers to, unless Claude Code
-/// has it built in or it is a plugin's workflow, which the plugin's skills start.
+/// has it built in.
 fn claude_skill(command: ClaudeCommand) -> Option<Skill> {
-    let plugin_workflow = command.name.contains(':') && command.description.trim_end().ends_with(WORKFLOW);
-    if command.builtin || plugin_workflow {
+    if command.builtin {
         return None;
     }
     let (description, source) = claude_source(&command.description);
@@ -187,7 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_code_s_commands_are_offered_by_their_shortest_name_without_plugins_workflows() {
+    fn claude_code_s_commands_are_offered_by_their_shortest_name() {
         let listed = json!([
             {"name": "claude-security:claude-security", "description": "(claude-security) Scan code", "aliases": ["claude-security"]},
             {"name": "claude-security:scan", "description": "Scan pipeline (dynamic workflow)"},
@@ -204,7 +201,12 @@ mod tests {
         let offer = |name: &str, description: &str| (name.to_string(), name.to_string(), description.to_string());
         assert_eq!(
             offered,
-            [offer("claude-security", "Scan code"), offer("mine", "My own workflow"), offer("docs", "Edit docs")]
+            [
+                offer("claude-security", "Scan code"),
+                offer("claude-security:scan", "Scan pipeline"),
+                offer("mine", "My own workflow"),
+                offer("docs", "Edit docs"),
+            ]
         );
     }
 

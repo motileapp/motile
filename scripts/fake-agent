@@ -33,6 +33,8 @@ made up on the spot instead:
   FAKE_AGENT_RESET seconds later.
 - "ask two agents": a turn that starts two agents at once. Each says what it does, a step every
   FAKE_AGENT_STEP seconds, and reports.
+- "run the workflow": a turn that runs a workflow of two phases and waits for it. Its agents start
+  and finish a step every FAKE_AGENT_STEP seconds, and the last one fails.
 
 Called as `app-server` it is Codex: it answers the requests that start a thread and its turns,
 takes a prompt steered into a running turn after the turn's next tool call, and stops a turn when
@@ -661,6 +663,42 @@ def ask_two_agents():
     turn.done()
 
 
+def run_the_workflow():
+    turn = Turn("00000000-0000-4000-8000-00000000f10e")
+    turn.tool("Workflow", {"name": "review"}, "Workflow launched in background. Task ID: w1")
+    tool_id = f"toolu_{Turn.messages:04d}"
+    task = {"task_id": "w1", "tool_use_id": tool_id}
+    emit({"type": "system", "subtype": "background_tasks_changed",
+          "tasks": [{"task_id": "w1", "task_type": "local_workflow", "description": "Review the changes"}]})
+    emit({"type": "system", "subtype": "task_started", **task, "description": "Review the changes",
+          "task_type": "local_workflow", "workflow_name": "review"})
+    phases = [{"type": "workflow_phase", "index": 1, "title": "Read"}, {"type": "workflow_phase", "index": 2, "title": "Judge"}]
+    planned = [("greet.py", "Read", "Read greet.py", "Greets by name."),
+               ("tests", "Read", "Read the tests", "Two tests, both pass."),
+               ("verdict", "Judge", "Judge the change", None)]
+    agents = []
+
+    def progress(description):
+        tokens = sum(agent.get("tokens", 0) for agent in agents)
+        emit({"type": "system", "subtype": "task_progress", **task, "description": description, "summary": "Review the changes",
+              "usage": {"total_tokens": tokens, "tool_uses": len(agents), "duration_ms": 1000},
+              "workflow_progress": phases + agents}, AGENT_STEP)
+
+    for index, (label, phase, prompt, result) in enumerate(planned, 1):
+        agent = {"type": "workflow_agent", "index": index, "label": label, "phaseTitle": phase,
+                 "model": "claude-haiku-5-5", "state": "start", "startedAt": int(time.time() * 1000), "promptPreview": prompt}
+        agents.append(agent)
+        progress(f"{phase}: {label}")
+        finished = {"state": "done", "resultPreview": result} if result else {"state": "error", "error": "It ran out of time."}
+        agent.update(finished, tokens=4200, toolCalls=2, durationMs=int(1000 * AGENT_STEP))
+        progress(f"{phase}: {label}")
+    emit({"type": "system", "subtype": "task_notification", **task, "status": "completed",
+          "summary": 'Dynamic workflow "Review the changes" completed'})
+    emit({"type": "system", "subtype": "background_tasks_changed", "tasks": []})
+    turn.text("The review read `greet.py` and its tests, but its verdict ran out of time.")
+    turn.done()
+
+
 def run_greet():
     asks = "default" in sys.argv
     turn = Turn("00000000-0000-4000-8000-00000000a5c0")
@@ -1120,6 +1158,7 @@ SCRIPTED = {
     "show the recording": show_the_recording,
     "greet by name": greet_by_name,
     "ask two agents": ask_two_agents,
+    "run the workflow": run_the_workflow,
     "run greet.py": run_greet,
     "which color": which_color,
     "plan the hello": plan_hello,

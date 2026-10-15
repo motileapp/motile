@@ -15,6 +15,7 @@ use motile_protocol::wire::{
 use serde::Serialize;
 use serde_json::Value;
 
+use super::agents::{workflow_name, workflow_progress};
 use super::highlight::{self, Incremental, Spans};
 use super::markdown::{self, Block, ParaKind, Prose};
 
@@ -1102,6 +1103,7 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
     let text = |key: &str| input[key].as_str().unwrap_or_default().to_string();
     let status = call.agent.as_ref().map_or(call.status, |agent| agent.status);
     let running = status == ToolStatus::Running;
+    let workflow = call.agent.as_ref().and_then(|agent| agent.workflow.as_ref());
     let verb = |doing: &str, did: &str| if running { doing.to_string() } else { did.to_string() };
     let path = short_path(&text("file_path"), cwd);
 
@@ -1140,6 +1142,12 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
         "WebFetch" => ("web", verb("Fetching", "Fetched"), text("url"), text("prompt"), String::new()),
         "Task" | "Agent" => {
             ("agent", verb("Running an agent:", "Ran an agent:"), text("description"), text("prompt"), String::new())
+        }
+        "Workflow" => {
+            let name = workflow.map_or_else(|| text("name"), |workflow| workflow_name(call, workflow));
+            let arguments = serde_json::to_string_pretty(&input["args"]).unwrap_or_default();
+            let shown = if input["args"].is_null() { String::new() } else { arguments };
+            ("agent", verb("Running a workflow:", "Ran a workflow:"), name, shown, "json".to_string())
         }
         PLAN_TOOL => ("todo", verb("Proposing", "Proposed"), "a plan".to_string(), String::new(), String::new()),
         QUESTION_TOOL => {
@@ -1188,7 +1196,10 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
         output: call.output.as_deref().filter(|output| !output.trim().is_empty()).map(cap),
         started_at: running.then_some(at),
         agent: call.agent.is_some(),
-        progress: call.agent.as_ref().filter(|_| running).and_then(|agent| agent.progress.clone()),
+        progress: match workflow {
+            Some(workflow) => running.then(|| workflow_progress(workflow, true)),
+            None => call.agent.as_ref().filter(|_| running).and_then(|agent| agent.progress.clone()),
+        },
     }
 }
 
@@ -1575,6 +1586,7 @@ mod tests {
             tokens: None,
             tool_uses: None,
             duration_ms: None,
+            workflow: None,
         });
         item
     }
@@ -1594,6 +1606,35 @@ mod tests {
         assert_eq!(outline(&transcript), ["[Ran an agent: Test]"]);
         let RowKind::Group { running, started_at, .. } = &transcript.rows()[0].kind else { panic!() };
         assert_eq!((*running, *started_at), (false, None));
+    }
+
+    #[test]
+    fn a_workflow_says_its_name_and_how_far_it_is() {
+        let mut item = agent_call("t1", 0, "", None, ToolStatus::Running);
+        let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+        call.name = "Workflow".into();
+        call.input = serde_json::json!({"name": "colours"}).to_string();
+        let agent = |label: &str, status| motile_protocol::wire::WorkflowAgent {
+            label: label.into(),
+            phase: Some("Ask".into()),
+            status,
+            model: None,
+            prompt: None,
+            result: None,
+            started_at: None,
+            tokens: None,
+            tool_uses: None,
+            duration_ms: None,
+        };
+        let agents = vec![agent("red", ToolStatus::Succeeded), agent("blue", ToolStatus::Running)];
+        let workflow =
+            motile_protocol::wire::Workflow { title: "Say colours".into(), phases: vec!["Ask".into()], agents };
+        call.agent.as_mut().unwrap().workflow = Some(workflow);
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![item]);
+        let RowKind::Tool { tool } = &transcript.rows()[0].kind else { panic!() };
+        assert_eq!((tool.verb.as_str(), tool.target.as_str(), tool.agent), ("Running a workflow:", "colours", true));
+        assert_eq!(tool.progress.as_deref(), Some("Ask · 1 of 2 agents done"));
     }
 
     #[test]

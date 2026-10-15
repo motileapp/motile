@@ -3570,6 +3570,7 @@ impl Live {
                 tokens: update.tokens.or(known.tokens),
                 tool_uses: update.tool_uses.or(known.tool_uses),
                 duration_ms: update.duration_ms.or(known.duration_ms),
+                workflow: update.workflow.or(known.workflow),
             },
             None => update,
         };

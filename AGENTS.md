@@ -511,6 +511,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "send the report" | Sends a file to download |
 | "greet by name" | Really changes files in its folder |
 | "ask two agents" (Claude Code), "ask an agent" (Codex) | Starts agents that say what they do and report |
+| "run the workflow" | Runs a workflow of two phases, whose last agent fails (Claude Code) |
 | "which color" | Asks the user a question |
 | "plan the hello" | Presents a plan to approve |
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
