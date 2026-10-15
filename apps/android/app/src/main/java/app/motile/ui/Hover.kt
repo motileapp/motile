@@ -41,7 +41,8 @@ import kotlin.math.max
  * empty but is the view's, so neighbours leave no gap to miss. What is `faded` is in the muted
  * colour until it lights up. A view that follows the press itself passes `hovered`. What is
  * `small`, like a tab, lights as a control does, not as a row. A `fill` lights it in that colour
- * instead of the surface's accent.
+ * instead of the surface's accent. What is `opaque` lies on the surface's own colour when unlit, so
+ * what slides under it stays hidden.
  */
 @Composable
 fun HoverHighlight(
@@ -60,7 +61,7 @@ fun HoverHighlight(
     val interaction = remember { MutableInteractionSource() }
     val tracked by interaction.collectIsHoveredAsState()
     val tracking = if (hovered == null) Modifier.hoverable(interaction) else Modifier
-    Lighted(modifier.then(tracking), radius, selected, lit, inset, faded, hovered ?: tracked, small, fill, contentAlignment, content)
+    Lighted(modifier.then(tracking), radius, selected, lit, inset, faded, hovered ?: tracked, small, fill, opaque = false, contentAlignment, content)
 }
 
 /**
@@ -81,6 +82,7 @@ fun HighlightButton(
     hovered: Boolean? = null,
     small: Boolean = false,
     fill: Color? = null,
+    opaque: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     contentAlignment: Alignment = Alignment.TopStart,
     content: @Composable BoxScope.() -> Unit,
@@ -98,7 +100,7 @@ fun HighlightButton(
         onClick = onClick,
     )
     CompositionLocalProvider(LocalEnabled provides usable) {
-        Lighted(pressing, radius, selected, lit || pressed, inset, faded, hovered ?: tracked, small, fill, contentAlignment, content)
+        Lighted(pressing, radius, selected, lit || pressed, inset, faded, hovered ?: tracked, small, fill, opaque, contentAlignment, content)
     }
 }
 
@@ -113,6 +115,7 @@ private fun Lighted(
     hovering: Boolean,
     small: Boolean,
     fill: Color?,
+    opaque: Boolean,
     contentAlignment: Alignment,
     content: @Composable BoxScope.() -> Unit,
 ) {
@@ -130,6 +133,9 @@ private fun Lighted(
         else -> palette.mutedForeground
     }
     Box(modifier, contentAlignment = contentAlignment) {
+        if (opaque) {
+            Box(Modifier.matchParentSize().padding(inset).background(surface.color(palette), RoundedCornerShape(radius)))
+        }
         if (light != null) {
             Box(Modifier.matchParentSize().padding(inset).background(fill ?: surface.color(light, palette), RoundedCornerShape(radius)))
         }

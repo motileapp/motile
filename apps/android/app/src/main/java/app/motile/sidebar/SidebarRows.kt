@@ -214,6 +214,7 @@ fun ThreadRow(
         lit = lit,
         inset = rowMargin,
         hovered = hovering,
+        opaque = true,
         onLongClick = onLongClick,
     ) {
         Column(
@@ -347,6 +348,7 @@ private fun DraftRow(listed: ListedDraft, modifier: Modifier = Modifier, onLongC
         selected = selected,
         inset = rowMargin,
         hovered = hovering,
+        opaque = true,
         onLongClick = onLongClick,
     ) {
         Column(
@@ -420,6 +422,7 @@ fun DoneRow(
         selected = selected,
         inset = rowMargin,
         hovered = hovering,
+        opaque = true,
         onLongClick = onLongClick,
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -457,7 +460,7 @@ private fun OnRowSurface(modifier: Modifier = Modifier, content: @Composable () 
 @Composable
 fun NewThreadRow(modifier: Modifier = Modifier) {
     val store = LocalStore.current
-    HighlightButton(onClick = { store.newThread() }, modifier = modifier, radius = Radius.md, inset = rowMargin, faded = true, contentAlignment = Alignment.CenterStart) {
+    HighlightButton(onClick = { store.newThread() }, modifier = modifier, radius = Radius.md, inset = rowMargin, faded = true, opaque = true, contentAlignment = Alignment.CenterStart) {
         Row(Modifier.fillMaxWidth().padding(rowMargin).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(14.dp), contentAlignment = Alignment.Center) { Icon(Symbol.Plus, 14f) }
             Text("Create a thread", Modifier.padding(start = 7.dp), size = 13f, maxLines = 1)

@@ -123,7 +123,14 @@ impl Sidebar {
             .pt(px(margin.top))
             .pb(px(margin.bottom))
             .px(px(margin.left))
-            .child(Highlight::new().radius(Radius::MD).inset(margin).hovered(highlighted).render(key.clone(), cx))
+            .child(
+                Highlight::new()
+                    .radius(Radius::MD)
+                    .inset(margin)
+                    .hovered(highlighted)
+                    .opaque(true)
+                    .render(key.clone(), cx),
+            )
             .child(
                 div()
                     .relative()

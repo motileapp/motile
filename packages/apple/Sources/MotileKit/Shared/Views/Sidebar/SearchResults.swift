@@ -156,9 +156,9 @@ struct SearchResultRow: View {
         #if os(macOS)
         // The table the row is in takes the click.
         .contentShape(Rectangle())
-        .hoverHighlight(radius: Radius.md, inset: rowMargin, hovered: highlighted)
+        .hoverHighlight(radius: Radius.md, inset: rowMargin, hovered: highlighted, opaque: true)
         #else
-        .button(.highlight(radius: Radius.md, lit: highlighted, inset: rowMargin)) { open(result) }
+        .button(.highlight(radius: Radius.md, lit: highlighted, inset: rowMargin, opaque: true)) { open(result) }
         #endif
     }
 

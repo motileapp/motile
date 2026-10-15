@@ -27,7 +27,13 @@ pub const EMPTY_LINE_HEIGHT: f32 = 15.;
 /// The light under a row: the row layer when the pointer is over it, the selected one when it is
 /// selected, drawn inside the row's margin.
 pub fn row_light(group: &str, selected: bool, lit: bool, cx: &App) -> Div {
-    Highlight::new().radius(Radius::MD).inset(row_margin()).selected(selected).lit(lit).render(group.to_string(), cx)
+    Highlight::new()
+        .radius(Radius::MD)
+        .inset(row_margin())
+        .selected(selected)
+        .lit(lit)
+        .opaque(true)
+        .render(group.to_string(), cx)
 }
 
 /// Where a thread works, on the last line of its row.
@@ -473,7 +479,7 @@ impl Sidebar {
         let key = "new-thread-row";
         let margin = row_margin();
         let store = self.store.clone();
-        let light = Highlight::new().radius(Radius::MD).inset(margin).lit(self.hovering(key));
+        let light = Highlight::new().radius(Radius::MD).inset(margin).lit(self.hovering(key)).opaque(true);
         div()
             .id(key)
             .group(key)

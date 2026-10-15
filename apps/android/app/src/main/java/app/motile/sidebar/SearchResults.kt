@@ -134,7 +134,7 @@ fun SearchResultRow(
         is SearchResult.Thread -> result.thread.title
     }
     val isDone = result.threadInfo?.isDone == true
-    HighlightButton(onClick = { open(result) }, modifier = modifier, radius = Radius.md, lit = highlighted, inset = rowMargin, onLongClick = onLongClick) {
+    HighlightButton(onClick = { open(result) }, modifier = modifier, radius = Radius.md, lit = highlighted, inset = rowMargin, opaque = true, onLongClick = onLongClick) {
         Column(
             Modifier
                 .fillMaxWidth()

@@ -5,6 +5,7 @@ import SwiftUI
 /// is the view's, so neighbours leave no gap to miss. What is `faded` is in the muted colour
 /// until it lights up. A view that follows the pointer itself passes `hovered`, so that the
 /// pointer is followed once. What is `small`, like a tab, lights as a control does, not as a row.
+/// What is `opaque` lies on the surface's own colour when unlit, so what slides under it stays hidden.
 private struct HoverHighlight: ViewModifier {
     let radius: CGFloat
     let selected: Bool
@@ -13,6 +14,7 @@ private struct HoverHighlight: ViewModifier {
     let faded: Bool
     let hovered: Bool?
     let small: Bool
+    let opaque: Bool
     @State private var tracked = false
     @Environment(\.surface) private var surface
     @Environment(\.isEnabled) private var enabled
@@ -21,11 +23,14 @@ private struct HoverHighlight: ViewModifier {
 
     @ViewBuilder func body(content: Content) -> some View {
         let light = self.light
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         let lighted = tinted(content)
             .background {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(light.map { surface.color($0) } ?? Color.clear)
-                    .padding(inset)
+                ZStack {
+                    if opaque { shape.fill(surface.color) }
+                    shape.fill(light.map { surface.color($0) } ?? Color.clear)
+                }
+                .padding(inset)
             }
             .environment(\.row, light)
         if hovered == nil {
@@ -59,10 +64,12 @@ private struct HoverHighlight: ViewModifier {
 extension View {
     func hoverHighlight(
         radius: CGFloat = Radius.md, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false,
-        hovered: Bool? = nil, small: Bool = false
+        hovered: Bool? = nil, small: Bool = false, opaque: Bool = false
     ) -> some View {
         modifier(
-            HoverHighlight(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded, hovered: hovered, small: small)
+            HoverHighlight(
+                radius: radius, selected: selected, lit: lit, inset: inset, faded: faded, hovered: hovered, small: small, opaque: opaque
+            )
         )
     }
 }
@@ -78,13 +85,14 @@ struct HighlightButtonStyle: ButtonStyle {
     var faded = false
     var hovered: Bool?
     var small = false
+    var opaque = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
             .hoverHighlight(
                 radius: radius, selected: selected, lit: lit || configuration.isPressed, inset: inset, faded: faded, hovered: hovered,
-                small: small
+                small: small, opaque: opaque
             )
     }
 }
@@ -102,9 +110,11 @@ struct DimButtonStyle: ButtonStyle {
 extension ButtonStyle where Self == HighlightButtonStyle {
     static func highlight(
         radius: CGFloat = Radius.md, selected: Bool = false, lit: Bool = false, inset: EdgeInsets = EdgeInsets(), faded: Bool = false,
-        hovered: Bool? = nil, small: Bool = false
+        hovered: Bool? = nil, small: Bool = false, opaque: Bool = false
     ) -> HighlightButtonStyle {
-        HighlightButtonStyle(radius: radius, selected: selected, lit: lit, inset: inset, faded: faded, hovered: hovered, small: small)
+        HighlightButtonStyle(
+            radius: radius, selected: selected, lit: lit, inset: inset, faded: faded, hovered: hovered, small: small, opaque: opaque
+        )
     }
 }
 
