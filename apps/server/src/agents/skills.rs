@@ -20,8 +20,12 @@ struct ClaudeCommand {
     #[serde(default)]
     description: String,
     #[serde(default)]
+    aliases: Vec<String>,
+    #[serde(default)]
     builtin: bool,
 }
+
+const WORKFLOW: &str = "(dynamic workflow)";
 
 /// What Claude Code lists in `folder` besides its own commands. `None` when it doesn't answer.
 pub async fn claude_skills(environment: &Environment, folder: &Path) -> Option<Vec<Skill>> {
@@ -29,19 +33,29 @@ pub async fn claude_skills(environment: &Environment, folder: &Path) -> Option<V
     let mut answers = ask::claude_in(environment, folder, &arguments, &["initialize"]).await.ok()?;
     let commands = answers.remove("initialize")?.ok()?["commands"].take();
     let commands: Vec<ClaudeCommand> = serde_json::from_value(commands).ok()?;
-    let skills = commands.into_iter().filter(|command| !command.builtin).map(|command| {
-        let (description, source) = claude_source(&command.description);
-        Skill { label: command.name.clone(), description: description.to_string(), source, name: command.name }
-    });
-    Some(skills.collect())
+    Some(commands.into_iter().filter_map(claude_skill).collect())
+}
+
+/// A command as the composer offers it, by the shortest name it answers to, unless Claude Code
+/// has it built in or it is a plugin's workflow, which the plugin's skills start.
+fn claude_skill(command: ClaudeCommand) -> Option<Skill> {
+    let plugin_workflow = command.name.contains(':') && command.description.trim_end().ends_with(WORKFLOW);
+    if command.builtin || plugin_workflow {
+        return None;
+    }
+    let (description, source) = claude_source(&command.description);
+    let description = description.to_string();
+    let name = [command.name].into_iter().chain(command.aliases).min_by_key(String::len)?;
+    Some(Skill { label: name.clone(), description, source, name })
 }
 
 /// Claude Code ends a description with where the command comes from: "(user)", "(project)" or
-/// the plugin's name.
+/// the plugin's name, or starts it with the plugin's name.
 fn claude_source(description: &str) -> (&str, SkillSource) {
-    let trimmed = description.trim_end();
+    let trimmed = description.trim();
     let Some((description, from)) = trimmed.strip_suffix(')').and_then(|rest| rest.rsplit_once('(')) else {
-        return (trimmed, SkillSource::Plugin);
+        let unprefixed = trimmed.strip_prefix('(').and_then(|rest| rest.split_once(") ")).map(|(_, rest)| rest);
+        return (unprefixed.unwrap_or(trimmed), SkillSource::Plugin);
     };
     let source = match from {
         "user" => SkillSource::Personal,
@@ -169,6 +183,29 @@ mod tests {
         assert_eq!(claude_source("Mine (user)"), ("Mine", SkillSource::Personal));
         assert_eq!(claude_source("Edit documents (claude.ai sync)"), ("Edit documents", SkillSource::Plugin));
         assert_eq!(claude_source("Plain"), ("Plain", SkillSource::Plugin));
+        assert_eq!(claude_source("(claude-security) Scan code"), ("Scan code", SkillSource::Plugin));
+    }
+
+    #[test]
+    fn claude_code_s_commands_are_offered_by_their_shortest_name_without_plugins_workflows() {
+        let listed = json!([
+            {"name": "claude-security:claude-security", "description": "(claude-security) Scan code", "aliases": ["claude-security"]},
+            {"name": "claude-security:scan", "description": "Scan pipeline (dynamic workflow)"},
+            {"name": "mine", "description": "My own workflow (dynamic workflow)"},
+            {"name": "docs", "description": "Edit docs (claude.ai sync)", "aliases": ["anthropic-skills:docs"]},
+            {"name": "clear", "description": "Start over", "aliases": ["new"], "builtin": true},
+        ]);
+        let commands: Vec<ClaudeCommand> = serde_json::from_value(listed).unwrap();
+        let offered: Vec<_> = commands
+            .into_iter()
+            .filter_map(claude_skill)
+            .map(|skill| (skill.name, skill.label, skill.description))
+            .collect();
+        let offer = |name: &str, description: &str| (name.to_string(), name.to_string(), description.to_string());
+        assert_eq!(
+            offered,
+            [offer("claude-security", "Scan code"), offer("mine", "My own workflow"), offer("docs", "Edit docs")]
+        );
     }
 
     #[test]
