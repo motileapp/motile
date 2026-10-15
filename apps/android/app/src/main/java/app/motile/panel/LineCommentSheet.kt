@@ -100,7 +100,7 @@ fun LineCommentSheet(target: PanelTarget, page: PullRequestPage, commented: Comm
         }
         TextArea(
             if (threads.isEmpty()) "Comment on this line" else "Reply, or say something new", text, { text = it },
-            Modifier.fillMaxWidth().editsText(), lines = 5,
+            Modifier.fillMaxWidth(), lines = 5,
         )
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionButton("Add to Review", variant = ButtonVariant.Primary, size = ControlSize.Large, fills = true, disabled = written.isEmpty(), onClick = addToReview)

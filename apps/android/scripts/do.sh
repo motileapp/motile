@@ -10,7 +10,7 @@ source scripts/emulator.sh
 SERIAL="$(serial)"
 [ -n "$SERIAL" ] || { echo "The emulator $AVD isn't running: scripts/dev-app.sh starts it" >&2; exit 1; }
 for step in "$@"; do
-    printf '%s\n' "$step" | "$ADB" -s "$SERIAL" shell run-as "$PACKAGE" sh -c "'cat >> files/demo.steps'"
+    printf '%s\n' "$step" | "$ADB" -s "$SERIAL" shell "run-as $PACKAGE sh -c 'cat >> files/demo.steps'"
 done
 # The client reads the steps a few times a second.
 sleep 1

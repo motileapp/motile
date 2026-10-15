@@ -1,5 +1,7 @@
 package app.motile.transcript
 
+import app.motile.composer.SkillChip
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -190,13 +192,17 @@ fun ShimmerText(text: AnnotatedString, style: TextStyle, color: Color, bright: C
     val dark = LocalDark.current
     val shines = sweeps && !Platform.reducesMotion
     val time = frameTime(shines)
+    /** The same words in the same fonts, all in the bright colour. */
+    val brightText = remember(text) {
+        AnnotatedString(text.text, text.spanStyles.map { AnnotatedString.Range(it.item.copy(color = Color.Unspecified), it.start, it.end) })
+    }
     Box(modifier) {
         Text(text, style = style, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (!shines) return@Box
         val edge = Opacity.ShimmerBandEdge.value(dark)
         val middle = Opacity.ShimmerBandMiddle.value(dark)
         Text(
-            AnnotatedString(text.text), style = style, color = bright, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            brightText, style = style, color = bright, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithContent {
@@ -232,10 +238,9 @@ fun MarkedText(text: AnnotatedString, style: TextStyle, modifier: Modifier = Mod
     val marks = remember(text) {
         text.getStringAnnotations(TextMarks.code, 0, text.length) + text.getStringAnnotations(TextMarks.skill, 0, text.length)
     }
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var layout by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
     val drawn = if (marks.isEmpty()) modifier else modifier.drawBehind {
         val shown = layout ?: return@drawBehind
-        if (shown.layoutInput.text != text) return@drawBehind
         for (mark in marks) drawMark(shown, mark.start, mark.end, mark.tag == TextMarks.skill, palette, dark)
     }
     Text(text, drawn, style = style, onTextLayout = { layout = it })
@@ -243,7 +248,9 @@ fun MarkedText(text: AnnotatedString, style: TextStyle, modifier: Modifier = Mod
 
 private fun DrawScope.drawMark(layout: TextLayoutResult, start: Int, end: Int, skill: Boolean, palette: Palette, dark: Boolean) {
     if (end <= start || end > layout.layoutInput.text.length) return
-    val fontSize = (if (skill) Theme.proseSize else Theme.inlineCodeFont.fontSize).toPx()
+    if (skill) return with(SkillChip) { drawBox(layout, start, end, 0f, palette, dark) }
+    val fontSize = Theme.inlineCodeFont.fontSize.toPx()
+    val pad = 2.dp.toPx()
     for (line in layout.getLineForOffset(start)..layout.getLineForOffset(end - 1)) {
         val from = max(start, layout.getLineStart(line))
         val to = min(end, layout.getLineEnd(line, visibleEnd = true))
@@ -251,27 +258,11 @@ private fun DrawScope.drawMark(layout: TextLayoutResult, start: Int, end: Int, s
         val left = layout.getHorizontalPosition(from, usePrimaryDirection = true)
         val right = layout.getBoundingBox(to - 1).right
         val baseline = layout.getLineBaseline(line)
-        if (!skill) {
-            val pad = 2.dp.toPx()
-            drawRoundRect(
-                palette.backgroundAccent,
-                topLeft = Offset(left - pad, baseline - fontSize * 0.95f),
-                size = Size(right - left + pad * 2, fontSize * 1.2f),
-                cornerRadius = CornerRadius(Radius.xs.toPx()),
-            )
-            continue
-        }
-        val margin = Typesetter.CHIP_MARGIN.dp.toPx()
-        val top = baseline - fontSize * 0.93f
-        val height = fontSize * 1.17f
-        val box = Size(right - left - margin * 2, height)
-        val corner = CornerRadius(Radius.sm.toPx())
-        drawRoundRect(palette.skill.at(Opacity.ColorTint, dark), Offset(left + margin, top), box, corner)
-        drawRoundRect(palette.skill.at(Opacity.ColorTintChart, dark), Offset(left + margin, top), box, corner, style = Stroke(1.dp.toPx()))
-        if (from != start) continue
-        val side = symbolSide(Typesetter.CHIP_SYMBOL).toPx()
-        translate(left + margin + Typesetter.CHIP_PADDING.dp.toPx(), top + (height - side) / 2) {
-            drawSymbol(Symbol.Box, side, palette.skill)
-        }
+        drawRoundRect(
+            palette.backgroundAccent,
+            topLeft = Offset(left - pad, baseline - fontSize * 0.95f),
+            size = Size(right - left + pad * 2, fontSize * 1.2f),
+            cornerRadius = CornerRadius(Radius.xs.toPx()),
+        )
     }
 }

@@ -35,7 +35,6 @@ android {
         targetSdk = 36
         versionName = cargoVersion
         versionCode = (System.getenv("MOTILE_VERSION_CODE") ?: "1").toInt()
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The auth server the client signs in with; the dev app is given another when it starts.
         buildConfigField("String", "AUTH_URL", "\"https://auth.motile.app\"")
     }
@@ -80,14 +79,6 @@ kotlin {
     jvmToolchain(21)
 }
 
-configurations.configureEach {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "org.rustls" && requested.name == "rustls-platform-verifier") {
-            useVersion(verifierVersion)
-        }
-    }
-}
-
 /** Builds the Rust core into build/jniLibs. `-Pmotile.skipCore` leaves the one built last. */
 val skipCore = providers.gradleProperty("motile.skipCore").isPresent
 val buildCore = tasks.register<Exec>("buildCore") {
@@ -114,14 +105,9 @@ dependencies {
     implementation(libs.serialization.json)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
-    implementation(libs.rustls.platform.verifier)
+    implementation("org.rustls:rustls-platform-verifier:$verifierVersion")
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
-    androidTestImplementation(platform(libs.compose.bom))
-    androidTestImplementation(libs.compose.ui.test)
-    androidTestImplementation(libs.androidx.test.runner)
-    androidTestImplementation(libs.androidx.test.junit)
-    androidTestImplementation(libs.uiautomator)
 }

@@ -6,10 +6,7 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.util.LruCache
 import android.webkit.MimeTypeMap
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
@@ -115,14 +112,15 @@ object FileDownloads {
     private val failures = mutableStateMapOf<String, String>()
     /** Goes up when a fetch is stopped, so that its answer is not taken for a later one's. */
     private val generations = HashMap<String, Int>()
-    private var downloads by mutableStateOf<Map<String, String>?>(null)
+    /** Where the files downloaded in earlier launches are, and those downloaded since. */
+    private val saved by lazy { Preferences.strings(KEY) }
+    private val added = mutableStateMapOf<String, String>()
 
-    private val downloaded: Map<String, String>
-        get() = downloads ?: Preferences.strings(KEY).also { downloads = it }
+    private fun path(id: String): String? = added[id] ?: saved[id]
 
     fun state(id: String, store: AppStore): State {
         if (id in fetching) return State.Fetching(store.mediaProgress[id] ?: 0.0)
-        downloaded[id]?.let(::File)?.takeIf { it.exists() }?.let { return State.Downloaded(it) }
+        path(id)?.let(::File)?.takeIf { it.exists() }?.let { return State.Downloaded(it) }
         failures[id]?.let { return State.Failed(it) }
         return State.Remote
     }
@@ -130,9 +128,8 @@ object FileDownloads {
     /** Fetches the file and keeps it as a download. */
     fun download(file: SentFile, store: AppStore, then: ((File) -> Unit)? = null) {
         fetch(file, store) { fetched ->
-            val kept = downloaded + (file.id to fetched.path)
-            downloads = kept
-            Preferences.set(KEY, kept)
+            added[file.id] = fetched.path
+            Preferences.set(KEY, saved + added)
             then?.invoke(fetched)
         }
     }

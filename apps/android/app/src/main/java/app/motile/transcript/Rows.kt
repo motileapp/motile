@@ -221,7 +221,7 @@ class CodeContent(val language: String, val code: String, spans: IntArray?) {
     /** The highlighting, as `[start, length, palette index]`; null until it has arrived. */
     var spans by mutableStateOf(spans)
         private set
-    var text by mutableStateOf(typeset(spans))
+    var text by mutableStateOf(typeset(spans).warm())
         private set
 
     private fun typeset(spans: IntArray?) = Typeset { palette -> Typesetter.code(code, spans ?: IntArray(0), palette) }

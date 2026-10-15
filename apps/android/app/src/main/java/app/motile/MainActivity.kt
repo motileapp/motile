@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import app.motile.core.SignInSession
+import app.motile.platform.Platform
 
 /**
  * The one activity. The dev scripts start it with the variables the Apple clients read from their
@@ -19,6 +20,8 @@ class MainActivity : ComponentActivity() {
         val application = application as MotileApplication
         if (!started) {
             started = true
+            // A phone opens on the thread, not on the panel that was open last time.
+            if (Platform.panelCoversThread) application.store.rightPanel.isOpen = false
             val environment = ENVIRONMENT.mapNotNull { name -> intent.getStringExtra(name)?.let { name to it } }.toMap()
             application.store.start(environment)
             DemoDriver.startIfRequested(application.store, environment)

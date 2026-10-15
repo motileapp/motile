@@ -451,10 +451,11 @@ private fun ThreadRowWithMenu(
             thread,
             store.projectsByID[thread.projectID]?.seen(thread),
             selected = store.selection == Selection.Thread(thread.id),
-            modifier = Modifier
-                .pressPosition(menu)
-                .reorders(movable, thread.id, reorder, keys, movableKeys, openMenu = { menu.openAtPress() }, closeMenu = { menu.close() }, put = put)
-                .peeks(thread.id, peek),
+            modifier = Modifier.pressPosition(menu).peeks(thread.id, peek),
+            // Inside the press, which takes every move after a hold for itself.
+            contentModifier = Modifier.reorders(
+                movable, thread.id, reorder, keys, movableKeys, openMenu = { menu.openAtPress() }, closeMenu = { menu.close() }, put = put,
+            ),
             jump = place?.let(store::jumpHint),
             lit = lifted,
             // A hold on a row that moves lifts it, and its menu comes up from there.
@@ -600,7 +601,7 @@ private fun RenameDialog(thread: ThreadInfo, onDismiss: () -> Unit) {
                 Text("Rename thread", size = 15f, weight = FontWeight.SemiBold)
                 InputField(
                     "Title", title, { title = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, focusRequester = field,
-                    onFocusChange = { KeyboardFocus.editable = it }, onSubmit = ::rename,
+                    onSubmit = ::rename,
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                     ActionButton("Cancel", size = ControlSize.Large, onClick = onDismiss)

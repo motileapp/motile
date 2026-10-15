@@ -307,7 +307,7 @@ fun SettingsField(placeholder: String, text: String, onTextChange: (String) -> U
         Box(Modifier.weight(1f).height(ControlSize.Large.height)) {
             InputField(
                 placeholder, text, onTextChange, variant = InputVariant.Bare, size = ControlSize.Large, monospaced = monospaced, secure = secure,
-                keyboardOptions = plainKeyboard, onFocusChange = { KeyboardFocus.editable = it },
+                keyboardOptions = plainKeyboard,
             )
         }
     }
@@ -318,7 +318,7 @@ fun SettingsField(placeholder: String, text: String, onTextChange: (String) -> U
 fun SettingsTextEditor(placeholder: String, text: String, onTextChange: (String) -> Unit, monospaced: Boolean = false) {
     Box(Modifier.fillMaxWidth().padding(scaled(6f).dp)) {
         TextArea(
-            placeholder, text, onTextChange, Modifier.fillMaxWidth().onFocusChanged { KeyboardFocus.editable = it.isFocused },
+            placeholder, text, onTextChange, Modifier.fillMaxWidth(),
             size = ControlSize.Large, monospaced = monospaced, lines = 6, maxLines = 16,
         )
     }

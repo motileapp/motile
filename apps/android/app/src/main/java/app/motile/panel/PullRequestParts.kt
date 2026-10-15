@@ -81,9 +81,6 @@ val PullRequest.State.title: String
         PullRequest.State.Closed -> "Closed"
     }
 
-/** Tells the shortcuts that a field of the panel takes the keys while it is focused. */
-internal fun Modifier.editsText(): Modifier = onFocusChanged { KeyboardFocus.editable = it.isFocused }
-
 /** Lets the demo give the tab's search field the keyboard and type in it, while the tab is shown. */
 @Composable
 internal fun DemoSearch(focus: FocusRequester, type: (String) -> Unit) {
@@ -267,7 +264,7 @@ fun DescriptionEditor(original: String, save: (String) -> Unit) {
                 }
             }
         } else {
-            TextArea("Say what this changes and why", text, { text = it }, Modifier.weight(1f).fillMaxWidth().editsText(), lines = 4, fills = true)
+            TextArea("Say what this changes and why", text, { text = it }, Modifier.weight(1f).fillMaxWidth(), lines = 4, fills = true)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Spacer(Modifier.weight(1f))

@@ -1,5 +1,7 @@
 package app.motile.transcript
 
+import app.motile.composer.SkillChip
+
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -99,20 +101,8 @@ object Typesetter {
 
     private fun sized(size: Float) = (size * Platform.scale).sp
 
-    /** The size of a message's text, which its skills' chips are as tall as. */
-    val messageSize: Float get() = 14f
-
     /** A message's line height: its text with five points between its lines. */
     val messageLineHeight: TextUnit get() = (14f * Platform.scale * 1.2f + 5f).sp
-
-    // Skill chips: the skill's symbol and its name in the skill colour, on its wash.
-    const val CHIP_PADDING = 5f
-    const val CHIP_GAP = 4f
-    const val CHIP_MARGIN = 1f
-    const val CHIP_SYMBOL = 11f
-    private const val CHIP_TEXT = 13f
-    /** About how wide a no-break space of the chip's font is. */
-    private val noBreakSpace: Float get() = CHIP_TEXT * Platform.scale * 0.25f
 
     /** A message's text with its links, and its skills' `$name`s as chips that the transcript draws behind their names. */
     fun message(message: MessageText, color: androidx.compose.ui.graphics.Color, palette: Palette): AnnotatedString {
@@ -123,24 +113,19 @@ object Typesetter {
         /** Where a place in the message's text went: past every chip before it, which is longer than its `$name`. */
         val moves = mutableListOf<Pair<Int, Int>>()
         var at = 0
-        val lead = CHIP_MARGIN + CHIP_PADDING + symbolSide(CHIP_SYMBOL).value + CHIP_GAP - noBreakSpace
-        val trail = CHIP_PADDING + CHIP_MARGIN - noBreakSpace
-        val chipStyle = SpanStyle(fontSize = sized(CHIP_TEXT), fontWeight = FontWeight.Medium, color = palette.skill)
+        // A chip shows as the composer shows it: its symbol and its name, in the skill colour.
+        val (chipStyle, symbolStyle) = SkillChip.styles(palette)
         for (chip in chips) {
             if (chip.start < at) continue
             builder.append(text.substring(at, chip.start))
             val start = builder.length
+            val shown = SkillChip.shown(chip.label)
             builder.pushStyle(chipStyle)
-            builder.pushStyle(SpanStyle(letterSpacing = lead.sp))
-            builder.append(' ')
+            builder.append(shown)
             builder.pop()
-            builder.append(chip.label)
-            builder.pushStyle(SpanStyle(letterSpacing = trail.sp))
-            builder.append(' ')
-            builder.pop()
-            builder.pop()
+            builder.addStyle(symbolStyle, start + 1, start + 2)
             builder.addStringAnnotation(TextMarks.skill, chip.name, start, builder.length)
-            moves += chip.end to (builder.length - start - chip.length)
+            moves += chip.end to (shown.length - chip.length)
             at = chip.end
         }
         builder.append(text.substring(at))

@@ -199,6 +199,8 @@ fun ThreadRow(
     jump: String? = null,
     lit: Boolean = false,
     onLongClick: (() -> Unit)? = null,
+    /** On what the row shows, inside its press: it sees a touch before the press does. */
+    contentModifier: Modifier = Modifier,
     open: (Selection) -> Unit,
 ) {
     val palette = Theme.colors
@@ -215,7 +217,7 @@ fun ThreadRow(
         onLongClick = onLongClick,
     ) {
         Column(
-            Modifier
+            contentModifier
                 .fillMaxWidth()
                 .padding(rowMargin)
                 .padding(start = ThreadRow.sidePadding, end = ThreadRow.sidePadding, top = ThreadRow.topPadding, bottom = ThreadRow.bottomPadding),

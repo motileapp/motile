@@ -191,7 +191,6 @@ private fun SearchField(state: PanelState, field: FocusRequester) {
             size = ControlSize.Large,
             clearable = true,
             focusRequester = field,
-            onFocusChange = { KeyboardFocus.editable = it },
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
                 autoCorrectEnabled = false,

@@ -67,6 +67,7 @@ import app.motile.theme.Radius
 import app.motile.theme.Theme
 import app.motile.theme.symbolSide
 import app.motile.transcript.TranscriptView
+import app.motile.ui.FileDrop
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.DimButton
@@ -95,27 +96,29 @@ fun ThreadScreen(overSidebar: Boolean = true) {
     val isStart = store.isStart
     val below = WindowInsets.ime.union(WindowInsets.navigationBars).only(WindowInsetsSides.Bottom)
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + barHeight
-    Box(Modifier.fillMaxSize().background(Theme.colors.background)) {
-        if (!isStart) {
-            val bottom = below.asPaddingValues().calculateBottomPadding() + composerHeight
-            TranscriptView(store.transcript, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom))
-        }
-        Column(Modifier.fillMaxSize()) {
-            TopBar(overSidebar)
-            Box(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(below)) {
-                if (isStart) Start(composerHeight)
-                if (!isStart || store.projects.isNotEmpty() || store.noProjects.isNotEmpty()) {
-                    ComposerView(
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .onSizeChanged { composerHeight = with(density) { it.height.toDp() } }
-                            .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = composerGap, bottom = composerBottomGap),
-                    )
+    FileDrop(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(Theme.colors.background)) {
+            if (!isStart) {
+                val bottom = below.asPaddingValues().calculateBottomPadding() + composerHeight
+                TranscriptView(store.transcript, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom))
+            }
+            Column(Modifier.fillMaxSize()) {
+                TopBar(overSidebar)
+                Box(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(below)) {
+                    if (isStart) Start(composerHeight)
+                    if (!isStart || store.projects.isNotEmpty() || store.noProjects.isNotEmpty()) {
+                        ComposerView(
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .onSizeChanged { composerHeight = with(density) { it.height.toDp() } }
+                                .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = composerGap, bottom = composerBottomGap),
+                        )
+                    }
                 }
             }
+            OpenNotice(Modifier.align(Alignment.TopEnd).padding(top = top + 6.dp, start = 14.dp, end = 14.dp))
         }
-        OpenNotice(Modifier.align(Alignment.TopEnd).padding(top = top + 6.dp, start = 14.dp, end = 14.dp))
     }
 }
 

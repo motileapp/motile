@@ -8,6 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import app.motile.layout.KeyboardFocus
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.layout.Box
 import app.motile.theme.ControlSize
@@ -40,7 +42,8 @@ fun TextArea(
         modifier = modifier
             .then(if (fills) Modifier.fillMaxHeight() else Modifier)
             .fieldFrame(size)
-            .focusRequester(focus),
+            .focusRequester(focus)
+            .onFocusChanged { KeyboardFocus.editable = it.isFocused },
         enabled = LocalEnabled.current,
         textStyle = style,
         minLines = lines,

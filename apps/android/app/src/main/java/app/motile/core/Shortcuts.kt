@@ -119,8 +119,8 @@ data class Shortcuts(
         return found
     }
 
-    /** The keys of the command, as said in a tooltip: "⌘B". */
-    fun label(command: String, context: Set<String> = emptySet()): String? = effective(command, context).firstOrNull()?.caps?.joinToString("")
+    /** The keys of the command, as said in a tooltip: "Ctrl+B". */
+    fun label(command: String, context: Set<String> = emptySet()): String? = effective(command, context).firstOrNull()?.caps?.joinToString("+")
 
     /** The text with the command's keys after it in parentheses, as a tooltip says them. */
     fun help(text: String, command: String, context: Set<String> = emptySet()): String = label(command, context)?.let { "$text ($it)" } ?: text

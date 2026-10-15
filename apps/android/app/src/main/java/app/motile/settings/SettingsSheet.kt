@@ -243,7 +243,6 @@ private fun SettingsSections(selected: SettingsSection?, choose: (SettingsSectio
                 "Search", store.settingsQuery, { store.settingsQuery = it },
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 4.dp),
                 icon = Symbol.Search, size = app.motile.theme.ControlSize.Large, clearable = true, focusRequester = focus,
-                onFocusChange = { KeyboardFocus.editable = it },
             )
             val query = store.settingsQuery
             if (query.isEmpty()) {

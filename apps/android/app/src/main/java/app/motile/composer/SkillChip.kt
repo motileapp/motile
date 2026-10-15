@@ -80,11 +80,8 @@ object SkillChip {
 data class ChipRange(val start: Int, val written: String, val name: String, val label: String) {
     val end: Int get() = start + written.length
 
-    fun holds(text: CharSequence): Boolean = end <= text.length && text.regionMatches(start, written, 0, written.length)
+    fun holds(text: CharSequence): Boolean = end <= text.length && text.regionMatches(start, written, 0, written.length, ignoreCase = false)
 }
-
-private fun CharSequence.regionMatches(start: Int, other: String, otherStart: Int, length: Int): Boolean =
-    toString().regionMatches(start, other, otherStart, length)
 
 /**
  * The word that ends at `cursor` when it starts with `$` or `/`, which a skill picked from the menu

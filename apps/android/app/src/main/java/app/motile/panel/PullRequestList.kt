@@ -77,7 +77,7 @@ fun PullRequestListSurface(target: PanelTarget) {
             }
             DemoSearch(focus) { search += it }
             InputField(
-                "Search", search, { search = it }, Modifier.weight(1f, fill = false).widthIn(max = 220.dp).editsText(),
+                "Search", search, { search = it }, Modifier.weight(1f, fill = false).widthIn(max = 220.dp),
                 icon = Symbol.Search, clearable = true, focusRequester = focus,
             )
             Spacer(Modifier.weight(0.001f).widthIn(min = 4.dp))

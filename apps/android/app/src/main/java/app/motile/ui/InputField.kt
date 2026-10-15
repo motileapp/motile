@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import app.motile.layout.KeyboardFocus
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -87,7 +88,11 @@ fun InputField(
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focus)
-                .onFocusChanged { onFocusChange?.invoke(it.isFocused) }
+                .onFocusChanged {
+                    // Keybindings read whether a field has the keys.
+                    KeyboardFocus.editable = it.isFocused
+                    onFocusChange?.invoke(it.isFocused)
+                }
                 .onEscape(if (clears) ({ onTextChange("") }) else null),
             enabled = enabled,
             singleLine = true,

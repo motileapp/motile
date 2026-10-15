@@ -17,4 +17,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Motile"
-include(":app")
+include(":app", ":gestures")

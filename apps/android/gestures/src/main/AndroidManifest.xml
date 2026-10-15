@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Sees the client, to start it. -->
+    <queries>
+        <package android:name="app.motile.android" />
+    </queries>
+</manifest>

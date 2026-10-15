@@ -372,7 +372,7 @@ private fun ErrorRow(message: String) {
 private fun ChangesRow(row: RowModel, changes: ChangesContent) {
     val palette = LocalPalette.current
     val actions = LocalTranscript.current
-    val buttonMargin = 14.dp - ControlSize.Regular.padding + 3.dp
+    val buttonMargin = 6.dp
     SurfaceBox(RoundedCornerShape(Radius.lg), Modifier.padding(top = 12.dp, bottom = 14.dp).fillMaxWidth(), bordered = true) {
         Column(Modifier.padding(bottom = 6.dp)) {
             Row(Modifier.height(scaled(40f).dp), verticalAlignment = Alignment.CenterVertically) {

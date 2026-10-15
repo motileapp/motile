@@ -23,7 +23,7 @@ object KeyCaps {
 
 @Composable
 fun KeyCaps(caps: List<String>, modifier: Modifier = Modifier, joined: Boolean = false) {
-    val shown = if (joined) listOf(caps.joinToString("")) else caps
+    val shown = if (joined) listOf(caps.joinToString("+")) else caps
     val fill = LocalSurface.current.color(Surface.Layer.Control)
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
         for (cap in shown) {

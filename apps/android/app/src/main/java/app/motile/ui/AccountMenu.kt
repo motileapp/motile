@@ -48,7 +48,7 @@ fun AccountMenu(modifier: Modifier = Modifier) {
             divider()
             item("Sign Out") { store.signOut() }
         },
-        modifier = modifier.size(GlassButton.side).glassButton(CircleShape).semantics { contentDescription = "Account" },
+        modifier = modifier.size(GlassButton.side).glassButton(CircleShape).semantics(mergeDescendants = true) { contentDescription = "Account" },
     ) {
         AccountPicture(store.account, Modifier.size(34.dp))
     }

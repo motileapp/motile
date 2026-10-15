@@ -20,15 +20,15 @@ serial() {
 }
 
 boot_emulator() {
-    if [ ! -d "$HOME/.android/avd/$AVD.avd" ]; then
-        echo "▸ Making the emulator $AVD…"
+    if [ ! -d "$HOME/.android/avd/${AVD}.avd" ]; then
+        echo "▸ Making the emulator ${AVD}…"
         "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$IMAGE" >/dev/null
         echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n "$AVD" -k "$IMAGE" -d pixel_8 >/dev/null
-        sed -i '' 's/^hw.ramSize=.*/hw.ramSize=2048/; s/^hw.keyboard=.*/hw.keyboard=yes/' "$HOME/.android/avd/$AVD.avd/config.ini"
+        sed -i '' 's/^hw.ramSize=.*/hw.ramSize=2048/; s/^hw.keyboard=.*/hw.keyboard=yes/' "$HOME/.android/avd/${AVD}.avd/config.ini"
     fi
     SERIAL="$(serial)"
     if [ -z "$SERIAL" ]; then
-        echo "▸ Starting the emulator $AVD…"
+        echo "▸ Starting the emulator ${AVD}…"
         nohup "$ANDROID_HOME/emulator/emulator" -avd "$AVD" -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
             -no-snapshot-save > "${DEV:-/tmp}/emulator.log" 2>&1 &
         for _ in $(seq 1 120); do
@@ -45,4 +45,10 @@ boot_emulator() {
 stop_emulator() {
     SERIAL="$(serial)"
     [ -z "$SERIAL" ] || "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
+    # It shuts down on its own in a few seconds; one that doesn't is stopped.
+    for _ in $(seq 1 20); do
+        pgrep -f "emulator.*-avd $AVD( |$)" >/dev/null || return 0
+        sleep 1
+    done
+    pkill -f "emulator.*-avd $AVD( |$)" || true
 }

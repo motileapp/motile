@@ -7,6 +7,7 @@
 #   ANDROID_KEYSTORE_BASE64=… ANDROID_KEYSTORE_PASSWORD=… ANDROID_KEY_ALIAS=… scripts/release.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}"
 
 export MOTILE_VERSION_CODE="$(( ($(date -u +%s) - 1735689600) / 60 ))"
 if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then

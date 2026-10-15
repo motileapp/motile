@@ -1,4 +1,4 @@
-package app.motile
+package app.motile.gestures
 
 import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -13,6 +13,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -25,6 +28,17 @@ class GestureTests {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val device = UiDevice.getInstance(instrumentation)
     private val packageName = "app.motile.android"
+
+    /** What the screen showed when a test failed: a picture and its views, in /data/local/tmp/motile-failures. */
+    @get:Rule
+    val failures = object : TestWatcher() {
+        override fun failed(error: Throwable?, description: Description) {
+            val name = "/data/local/tmp/motile-failures/${description.methodName}"
+            device.executeShellCommand("mkdir -p /data/local/tmp/motile-failures")
+            device.executeShellCommand("screencap -p $name.png")
+            device.executeShellCommand("uiautomator dump $name.xml")
+        }
+    }
 
     @Before
     fun launch() {
@@ -53,9 +67,17 @@ class GestureTests {
             ?: device.wait(Until.findObject(By.textContains(title)), 5_000)
     }
 
-    private fun swipeRight() = device.swipe(device.displayWidth / 10, device.displayHeight / 2, device.displayWidth * 9 / 10, device.displayHeight / 2, 20)
+    /** Where the swipes go across: the height of the top bars, where nothing scrolls sideways, as code and tables do and take the swipe first. */
+    private val swipeY: Int get() = device.displayHeight * 9 / 100
 
-    private fun swipeLeft() = device.swipe(device.displayWidth * 9 / 10, device.displayHeight / 2, device.displayWidth / 10, device.displayHeight / 2, 20)
+    private fun swipeRight() = device.swipe(device.displayWidth / 10, swipeY, device.displayWidth * 9 / 10, swipeY, 20)
+
+    private fun swipeLeft() = device.swipe(device.displayWidth * 9 / 10, swipeY, device.displayWidth / 10, swipeY, 20)
+
+    /** Types in the field that has the keyboard, as its keys would. */
+    private fun type(text: String) {
+        device.executeShellCommand("input text $text")
+    }
 
     private fun keyboardShown(): Boolean = device.executeShellCommand("dumpsys input_method").contains("mInputShown=true")
 
@@ -102,7 +124,7 @@ class GestureTests {
         assertTrue(shown(By.desc("Back")))
         swipeRight()
         assertTrue(gone(By.desc("Back")))
-        assertTrue(device.hasObject(By.desc("Threads")))
+        assertTrue(shown(By.desc("Threads")))
         assertFalse(device.hasObject(newThread))
     }
 
@@ -112,7 +134,7 @@ class GestureTests {
         assertTrue(shown(By.desc("Back")))
         device.findObject(By.desc("Back")).click()
         assertTrue(gone(By.desc("Back")))
-        assertTrue(device.hasObject(By.desc("Threads")))
+        assertTrue(shown(By.desc("Threads")))
     }
 
     @Test
@@ -127,7 +149,7 @@ class GestureTests {
     fun aTapOnALinearIssueOpensIt() {
         openSidebar()
         (row("Add API Rate Limiting") ?: return fail("no row")).click()
-        device.findObject(By.desc("Files and changes")).click()
+        device.wait(Until.findObject(By.desc("Files and changes")), 3_000).click()
         assertTrue(shown(By.desc("Back")))
         val linear = device.wait(Until.findObject(By.desc("Linear")), 5_000) ?: device.wait(Until.findObject(By.text("Linear")), 5_000)
         assertNotNull(linear)
@@ -147,8 +169,9 @@ class GestureTests {
     fun aSwipeToTheRightOnAThreadInTheSidebarMarksItDone() {
         openSidebar()
         val thread = row("Use an F-String in Greet") ?: return fail("no row")
-        val bounds = thread.visibleBounds
-        device.swipe(bounds.left + bounds.width() / 10, bounds.centerY(), bounds.right - bounds.width() / 20, bounds.centerY(), 15)
+        // Across the whole row, as a finger does, not only its title.
+        val y = thread.visibleBounds.centerY()
+        device.swipe(device.displayWidth / 10, y, device.displayWidth * 19 / 20, y, 15)
         val undo = By.descContains("Undo")
         assertTrue(shown(undo) || shown(By.textContains("Undo")))
         // The swipe was the row's, so the sidebar is where it was.
@@ -210,7 +233,7 @@ class GestureTests {
         assertTrue(shown(By.desc("Back")) || shown(By.desc("Settings")))
         device.pressBack()
         assertTrue(shown(By.text("General")))
-        device.findObject(By.desc("Close")).click()
+        device.wait(Until.findObject(By.desc("Close")), 3_000).click()
         assertTrue(gone(By.text("General")))
         assertTrue(shown(newThread))
     }
@@ -225,10 +248,14 @@ class GestureTests {
         device.wait(Until.findObject(By.textStartsWith("New project")), 3_000).click()
         assertTrue(shown(By.text("New Project")))
         assertTrue(waitForKeyboard(true))
+        // The sheet rises over the keyboard first.
+        Thread.sleep(600)
+        device.findObject(By.desc("Back")).click()
+        assertTrue(shown(By.text("Add a Project")))
+        // The system's back, as iOS's swipe from the edge.
         device.pressBack()
-        device.pressBack()
-        assertTrue(shown(By.text("Add a Project")) || shown(By.text("Commands")))
-        device.findObject(By.desc("Close")).click()
+        if (!shown(By.text("Commands"), 1_000)) device.pressBack()
+        device.wait(Until.findObject(By.desc("Close")), 3_000).click()
         assertTrue(gone(By.text("Commands")))
         assertTrue(shown(newThread))
     }
@@ -238,7 +265,7 @@ class GestureTests {
         openSidebar()
         searchField().click()
         assertTrue(waitForKeyboard(true))
-        device.findObject(By.text("Motile")).click()
+        device.findObject(By.desc("Motile")).click()
         assertTrue(waitForKeyboard(false))
         assertTrue(device.hasObject(newThread))
     }
@@ -247,7 +274,7 @@ class GestureTests {
     fun theSidebarsSearchTakesItsLineUntilItIsClosed() {
         openSidebar()
         searchField().click()
-        searchField().text = "api"
+        type("api")
         val close = By.desc("Close search")
         assertTrue(shown(close))
         assertFalse(device.hasObject(newThread))
@@ -260,7 +287,7 @@ class GestureTests {
     fun theSidebarsSearchFindsAThreadByItsMessagesAndOpensIt() {
         openSidebar()
         searchField().click()
-        searchField().text = "handlers"
+        type("handlers")
         val found = device.wait(Until.findObject(By.textContains("reach the handlers")), 5_000) ?: return fail("nothing found")
         found.click()
         assertTrue(gone(newThread))

@@ -32,7 +32,7 @@ class ShortcutsTest {
     @Test
     fun aKeyTakenByALaterRuleIsNotTheEarliersWhereItHolds() {
         assertEquals(emptyList<ShortcutRule>(), shortcuts.effective("commandPalette.toggle", setOf("turnRunning")))
-        assertEquals("CtrlK", shortcuts.label("commandPalette.toggle"))
-        assertEquals("New thread (CtrlN)", shortcuts.help("New thread", "chat.new"))
+        assertEquals("Ctrl+K", shortcuts.label("commandPalette.toggle"))
+        assertEquals("New thread (Ctrl+N)", shortcuts.help("New thread", "chat.new"))
     }
 }

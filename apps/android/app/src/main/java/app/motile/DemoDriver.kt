@@ -188,6 +188,7 @@ object DemoDriver {
                 store.showBranches(project)
             }
             "steers" -> Preferences.set(AppStore.STEERS_KEY, rest == "on")
+            "drop" -> store.dropTargeted = rest == "on"
         }
     }
 }

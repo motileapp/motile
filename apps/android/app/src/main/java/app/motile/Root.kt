@@ -1,6 +1,9 @@
 package app.motile
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -104,7 +107,15 @@ fun Root(store: AppStore) {
     val drawer = remember { Drawer() }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
     SideEffect {
+        // The system's bars draw their icons for the appearance the app is in, which may not be the system's.
+        (view.context as? Activity)?.window?.let { window ->
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+        }
         Platform.endEditing = {
             focus.clearFocus()
             keyboard?.hide()

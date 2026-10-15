@@ -144,6 +144,10 @@ class AppStore(private val context: Context) {
     var settingsQuery by mutableStateOf("")
     /** The thread's settings are open over the client, where they aren't around the composer. */
     var showsThreadSettings by mutableStateOf(false)
+    /** Files are being dragged over the thread. */
+    var dropTargeted by mutableStateOf(false)
+    /** Files are being dragged over the composer's text, which takes drops itself. */
+    var composerDropTargeted by mutableStateOf(false)
     /** The branch picker is open. Its branches are `null` until your server has listed them. */
     var showsBranches by mutableStateOf(false)
     var listedBranches by mutableStateOf<Result<List<Branch>>?>(null)

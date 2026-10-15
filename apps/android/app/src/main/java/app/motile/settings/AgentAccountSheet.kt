@@ -169,15 +169,14 @@ private fun VariableRow(edited: EditedVariable, kept: Boolean, server: Server, r
             Box(Modifier.fillMaxWidth().height(ControlSize.Small.height)) {
                 InputField(
                     "NAME", variable.name, { edited.variable = variable.copy(name = it) }, variant = InputVariant.Bare, size = ControlSize.Small,
-                    monospaced = true, keyboardOptions = plainKeyboard, onFocusChange = { KeyboardFocus.editable = it },
+                    monospaced = true, keyboardOptions = plainKeyboard,
                 )
             }
             Box(Modifier.fillMaxWidth().height(ControlSize.Regular.height)) {
                 InputField(
                     if (kept) "••••••••" else "value", variable.value, { edited.variable = variable.copy(value = it) }, variant = InputVariant.Bare,
                     monospaced = true, secure = variable.sensitive, keyboardOptions = plainKeyboard,
-                    onFocusChange = { KeyboardFocus.editable = it },
-                )
+                    )
             }
         }
         ActionButton(

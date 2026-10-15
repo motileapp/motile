@@ -37,8 +37,9 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="motile" android:host="auth" />
-                <data android:scheme="motile" android:host="linear" />
+                <data android:scheme="motile" />
+                <data android:host="auth" />
+                <data android:host="linear" />
             </intent-filter>
         </activity>
 

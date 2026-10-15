@@ -270,8 +270,9 @@ gesture for what Esc does. Its package is `app.motile`, its application `app.mot
   swipe slides aside (`Drawer.kt`), on a tablet all three are side by side (`MainScreen.kt`).
   `Keyboard.kt` runs the core's keybindings from a keyboard with keys, where `mod` is Ctrl.
   `Root.kt` shows the sheets, the viewer and the alerts. `DemoDriver.kt` runs the steps `do.sh` writes.
-- `app/src/test` tests the models, `app/src/androidTest` uses the client with fingers
-  (`GestureTests.kt`, the iOS app's gesture tests).
+- `app/src/test` tests the models. `gestures/` uses the client with fingers (`GestureTests.kt`, the
+  iOS app's gesture tests): a test module of its own that runs in a process of its own, so that it
+  can stop the client and open it again, as the iOS app's UI tests do.
 - `scripts/release.sh` builds the signed app bundle and APK. The dev app scripts are under Development.
 
 ### apps/macos and apps/ios

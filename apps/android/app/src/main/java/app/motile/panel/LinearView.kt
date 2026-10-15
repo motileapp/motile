@@ -169,7 +169,7 @@ private fun androidx.compose.foundation.layout.RowScope.Tools(target: PanelTarge
     DemoSearch(focus) { setSearch(search + it) }
     InputField(
         "Search", search, setSearch,
-        (if (narrow) Modifier.weight(1f) else Modifier.weight(1f, fill = false).widthIn(max = 180.dp)).editsText(),
+        (if (narrow) Modifier.weight(1f) else Modifier.weight(1f, fill = false).widthIn(max = 180.dp)),
         icon = Symbol.Search, clearable = true, focusRequester = focus,
     )
     ActionMenu(icon = Symbol.ListFilter, help = "Which issues to show") {
@@ -326,7 +326,7 @@ private fun IssuePage(page: LinearPage, target: PanelTarget, workspace: String, 
         item("writing") {
             val words = comment.trim()
             Column(Modifier.padding(top = if (page.comments.isEmpty()) 16.dp else 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.End) {
-                TextArea("Leave a comment", comment, { comment = it }, Modifier.fillMaxWidth().editsText(), lines = 4)
+                TextArea("Leave a comment", comment, { comment = it }, Modifier.fillMaxWidth(), lines = 4)
                 ActionButton("Comment", variant = ButtonVariant.Secondary, pending = "comment:$id" in linear.working, disabled = words.isEmpty()) {
                     linear.loadIssue(id, workspace, target.serverID, comment = words) { comment = "" }
                 }
@@ -380,8 +380,8 @@ private fun LinearNewIssue(target: PanelTarget, workspace: String, team: String?
     val users = linear.users[workspace] ?: emptyList()
     Column(Modifier.fillMaxSize().navigationBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("New Issue", size = 15f, weight = FontWeight.SemiBold)
-        InputField("Title", title, { title = it }, Modifier.fillMaxWidth().editsText())
-        TextArea("Add a description", description, { description = it }, Modifier.weight(1f).fillMaxWidth().editsText(), lines = 4, fills = true)
+        InputField("Title", title, { title = it }, Modifier.fillMaxWidth())
+        TextArea("Add a description", description, { description = it }, Modifier.weight(1f).fillMaxWidth(), lines = 4, fills = true)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             ActionMenu(picked?.name ?: "Team", help = "Team", variant = ButtonVariant.Secondary, size = ControlSize.Small) {
                 for (each in teams) {

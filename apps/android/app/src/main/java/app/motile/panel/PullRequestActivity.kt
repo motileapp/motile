@@ -201,7 +201,7 @@ private fun ConversationFooter(thread: PullRequestPage.Thread, actions: PullRequ
     val busy = actions.working != null
     if (replying) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextArea("Reply", reply, { reply = it }, Modifier.fillMaxWidth().editsText())
+            TextArea("Reply", reply, { reply = it }, Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Spacer(Modifier.weight(1f))
                 ActionButton("Cancel") {

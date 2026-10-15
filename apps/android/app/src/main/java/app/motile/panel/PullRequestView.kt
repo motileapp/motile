@@ -183,7 +183,7 @@ fun LinkPullRequestField(text: String, onTextChange: (String) -> Unit, modifier:
     }
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         InputField(
-            "Link a PR by number or address", text, onTextChange, Modifier.weight(1f).editsText(), onSubmit = submit,
+            "Link a PR by number or address", text, onTextChange, Modifier.weight(1f), onSubmit = submit,
         )
         ActionButton("Link", disabled = number == null, onClick = submit)
     }
@@ -370,7 +370,7 @@ private fun androidx.compose.foundation.layout.RowScope.TitleEditor(page: PullRe
     LaunchedEffect(Unit) { focus.requestFocus() }
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         InputField(
-            "Title", editing, { setTitle(it) }, Modifier.fillMaxWidth().editsText().onEscape { setTitle(null) },
+            "Title", editing, { setTitle(it) }, Modifier.fillMaxWidth().onEscape { setTitle(null) },
             size = ControlSize.Large, focusRequester = focus, onSubmit = save,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -518,7 +518,7 @@ private fun CommentBox(page: PullRequestPage, target: PanelTarget, number: Int, 
         if (pending.isNotEmpty()) PendingComments(pending) { state.removePending(it, number) }
         TextArea(
             if (pending.isEmpty()) "Leave a comment" else "Say something with your review (optional)", comment, setComment,
-            Modifier.fillMaxWidth().editsText(), lines = 4,
+            Modifier.fillMaxWidth(), lines = 4,
         )
         FlowRow(
             Modifier.fillMaxWidth(),
