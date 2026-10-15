@@ -45,7 +45,7 @@ pub fn chip(label: SharedString, selected: bool, height: Pixels, cx: &App) -> Di
         .child(
             div()
                 .text_size(px(TEXT_SIZE))
-                .font_weight(FontWeight::MEDIUM)
+                .font_weight(FontWeight::NORMAL)
                 .text_color(c.skill)
                 .whitespace_nowrap()
                 .child(label),
