@@ -18,6 +18,7 @@ These programs make it up, plus the code the clients share:
 | iOS app (`apps/ios`) | The user's iPhone and iPad | The interface |
 | Apple kit (`packages/apple`) | Inside the Mac and the iOS app | Their state and their views |
 | GPUI app (`apps/gpui`) | The user's Linux machines and Windows PCs | The Mac app again, in Rust with GPUI |
+| Android app (`apps/android`) | The user's Android phones and tablets | The iOS app again, in Kotlin with Jetpack Compose |
 | Core (`crates/core`) | Inside every client | Account, connections, sync, the local cache, rendering transcripts |
 
 Every device is an ed25519 key, which is also its iroh address. The auth server only says which
@@ -66,7 +67,8 @@ What the programs agree on.
 The design tokens. `tokens.json` is the one source of every colour, opacity, shadow and radius
 in the repo; `pnpm tokens` (`build.mjs`) writes it out as `tokens.css` (plain variables, for the
 auth page), `theme.css` (Tailwind, for the web projects), the clients' `Tokens.swift` and the
-GPUI app's `apps/gpui/src/tokens.rs`. A colour that only one place needs, like the window buttons
+GPUI app's `apps/gpui/src/tokens.rs`, and the Android app's `Tokens.kt` with the few colours Android
+itself draws before the app does (`res/values/tokens.xml` and `res/values-night/tokens.xml`). A colour that only one place needs, like the window buttons
 of the demo or the icons' tile, is added to the JSON, never written where it is used.
 
 ### apps/marketing (Astro, static) and apps/web (TanStack Start)
@@ -245,6 +247,36 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   thread, `PanelScreen.swift`, `ThreadScreen.swift`, `SidebarScreen.swift`, `Tables.swift`,
   `DemoDriverIOS.swift` the steps `do.sh` runs.
 
+### apps/android (Kotlin, Jetpack Compose)
+
+The iOS app ported to Android, for phones and tablets, from Android 10. A Gradle project of its own:
+run `./gradlew` from `apps/android`, with a JDK 21 (`JAVA_HOME`). It does what the iOS app does, the
+way iOS does it, with Android's own facilities where iOS uses the system's: Custom Tabs for signing
+in, the photo picker and the camera for attachments, the share sheet, Media3 for videos, the back
+gesture for what Esc does. Its package is `app.motile`, its application `app.motile.android`.
+
+- `core/`: the Rust core's JNI crate (`motile-android`, a member of the workspace), which wraps
+  `crates/core/src/ffi.rs`. Its events wait in a queue the app's event thread takes them from, so no
+  thread of the core calls into Java. It gives the JVM to `rustls-platform-verifier`, whose Kotlin
+  half comes from its Maven repository at the version in `Cargo.lock`, and to `ndk-context`, which
+  iroh's resolver reads the system's nameservers through, and sends the core's log to logcat.
+  `scripts/build-core.sh` builds it with cargo-ndk into `app/build/jniLibs`; Gradle runs it before
+  every build, and `-Pmotile.skipCore` leaves the one built last.
+- `app/src/main/java/app/motile/`: `core/` is `Shared/Core` in Kotlin (`CoreBridge.kt`, `Models.kt`,
+  `AppStore.kt`, whose state is Compose state, `Preferences.kt` for what UserDefaults keeps,
+  `SignInSession.kt` for a Custom Tab that returns a `motile://` address), `theme/` is `Theme.swift`,
+  `platform/` is `Platform.swift` and `Symbol.swift`, `ui/` is the component kit of `Shared/Views/UI`
+  and `Shared/Views/Shared`, and `transcript/`, `composer/`, `sidebar/`, `thread/`, `panel/`,
+  `commandpanel/`, `settings/`, `usage/`, `onboarding/` and `media/` are the views of the same names.
+  `layout/` lays out the screen: on a phone the sidebar and the panel are under the thread, which a
+  swipe slides aside (`Drawer.kt`), on a tablet all three are side by side (`MainScreen.kt`).
+  `Keyboard.kt` runs the core's keybindings from a keyboard with keys, where `mod` is Ctrl.
+  `Root.kt` shows the sheets, the viewer and the alerts. `DemoDriver.kt` runs the steps `do.sh` writes.
+- `app/src/test` tests the models. `gestures/` uses the client with fingers (`GestureTests.kt`, the
+  iOS app's gesture tests): a test module of its own that runs in a process of its own, so that it
+  can stop the client and open it again, as the iOS app's UI tests do.
+- `scripts/release.sh` builds the signed app bundle and APK. The dev app scripts are under Development.
+
 ### apps/macos and apps/ios
 
 - `apps/macos`: the Mac app's executable and what builds it (`scripts/build-app.sh`).
@@ -333,12 +365,14 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - The marketing site's demo (`apps/marketing/src/components/demo`) shows the Mac app as it is.
   When a change alters anything it shows (a view, a colour, a label, a state), update the demo in
   the same change.
-- The Mac app, the iOS app and the GPUI app do the same things. What one gets, the others get in
-  the same change. What the two Apple clients do is written once, in
+- The Mac app, the iOS app, the GPUI app and the Android app do the same things. What one gets, the
+  others get in the same change. What the two Apple clients do is written once, in
   `packages/apple/Sources/MotileKit/Shared`, and only what a system does differently is written
-  twice; the GPUI app writes it again in Rust, as the Mac app does it.
+  twice; the GPUI app writes it again in Rust, as the Mac app does it, and the Android app in Kotlin,
+  as the iOS app does it.
 - A button, a menu, a spinner, a chip or a field in the clients comes from
-  `packages/apple/Sources/MotileKit/Shared/Views/UI`, or `apps/gpui/src/ui` in the GPUI app. Its
+  `packages/apple/Sources/MotileKit/Shared/Views/UI`, `apps/gpui/src/ui` in the GPUI app, or
+  `apps/android/app/src/main/java/app/motile/ui` in the Android app. Its
   size is a `ControlSize`, never a number, and nothing is smaller than `.small`. A view does not
   style a control by hand; what is missing is added to the component. A button inside something is
   as far from its top and bottom as from its side. A button that waits is `pending`: it shows the
@@ -350,7 +384,8 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - Use guard statement patterns in any code you write.
 - Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
   and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css`,
-  `Tokens.swift` and `apps/gpui/src/tokens.rs`.
+  `Tokens.swift`, `apps/gpui/src/tokens.rs`, the Android app's `Tokens.kt` and its
+  `res/values*/tokens.xml`.
   The shadcn components in `src/components/ui` are ours once added: they are rewritten on the
   design tokens and edited like any view. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.
@@ -372,9 +407,9 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - Do not slow the machine to a crawl. Other sessions work on it at the same time. Before you
   start a dev app, a simulator or a big build, look at what already runs and how much memory is
   free (`memory_pressure`, `xcrun simctl list devices booted`, `pgrep -fl build/dev`). If there
-  is headroom, go ahead. If not, wait for it instead of adding to the pile. Use one simulator at
-  a time, and when you are done, stop what you started: `scripts/dev-app.sh --stop`, which on iOS
-  also shuts its simulator down.
+  is headroom, go ahead. If not, wait for it instead of adding to the pile. Use one simulator or
+  emulator at a time, and when you are done, stop what you started: `scripts/dev-app.sh --stop`,
+  which on iOS also shuts its simulator down, and on Android its emulator.
 - After you make code changes, run the checks below and fix what they raise.
 - A change must not break what CI runs on it: the checks, the e2e tests, the iOS UI tests and
   the Mac app's demo (`DemoDriver.swift`, run by `scripts/ci-demo.sh` in the `Release` and
@@ -388,7 +423,9 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 
 Needs Rust stable, Docker (for Postgres), and Node 24 with pnpm for the marketing site and the
 web app. The Mac app and the iOS app need a Mac with Xcode 26 or later, the iOS app also
-`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`.
+`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`. The Android app needs a JDK 21, the
+Android SDK with platform 37, the NDK and an emulator image (`sdkmanager`), `cargo install cargo-ndk`
+and `rustup target add aarch64-linux-android x86_64-linux-android`.
 
     docker compose up -d                        # Postgres on localhost:5435
     cargo run -p motile-auth                    # with the variables from .env.example exported
@@ -408,6 +445,8 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
     packages/apple/scripts/check-ui.sh                    # after changing the clients' views
     (cd apps/gpui && scripts/patch-crates.sh && cargo fmt && cargo clippy --all-targets && cargo test)
                                                           # after changing the GPUI app, crates/core or crates/protocol
+    (cd apps/android && ./gradlew lintDebug testDebugUnitTest assembleDebug)
+                                                          # after changing the Android app, crates/core or crates/protocol
 
 The `Release` workflow runs the demo on every push to `main` that touches the client or the server:
 
@@ -432,6 +471,14 @@ app. A change to a view both clients share is then looked at in both.
     scripts/do.sh "type run greet.py" send
     scripts/ui-test.sh                      # the tests that swipe and tap (MotileUITests)
     MOTILE_SIM="iPad Pro 13-inch (M5)" scripts/dev-app.sh    # another simulator
+
+    # from apps/android, in the emulator, which has no window; works with the Mac's screen locked
+    scripts/dev-app.sh                      # builds what changed and opens the client
+    scripts/shot.sh shot.png                # a picture of its screen
+    scripts/do.sh "sidebar open"            # has the client do something; the steps are in DemoDriver.kt
+    scripts/ui-test.sh                      # the tests that swipe and tap (GestureTests.kt)
+    scripts/check.sh [path]                 # compiles the Kotlin and lists its errors
+    MOTILE_AVD=tablet scripts/dev-app.sh    # another emulator, made the first time
 
 Both are signed in as `demo@motile.app` on an auth server with the dev login, never a real
 account. Their server, `studio`, runs `scripts/fake-agent` and starts with a project, which has two skills of its own, and three
@@ -492,6 +539,11 @@ with it to offer an update. The Mac app in a release is signed with the Develope
 and notarized, using the repository's `APPLE_*` secrets; running the `macOS` workflow by hand with
 `sign` does the same without a release.
 
+Every push and pull request that touches the Android app lints, tests and builds it (the `Android`
+workflow); on `main` it also builds the release with `apps/android/scripts/release.sh`, signed with the
+upload key in the `ANDROID_KEYSTORE*` secrets, and uploads it to Google Play's internal testing track
+when the `PLAY_SERVICE_ACCOUNT` secret is there. Its version is the one in `Cargo.toml`.
+
 Every push to `main` that touches the iOS app uploads it to TestFlight
 (`apps/ios/scripts/testflight.sh`, with the repository's `APPLE_TEAM_ID` and `IOS_BUNDLE_ID`
 variables), with the version in `Cargo.toml` as it is. It is signed with the Apple Distribution
@@ -510,7 +562,7 @@ sentence describing the change:
     server | core | macos: Stream replies in finished blocks
 
 The parts are the folders in `apps`, `crates` and `packages`: `auth`, `marketing`, `web`, `server`,
-`macos`, `ios`, `apple`, `gpui`, `core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
+`macos`, `ios`, `android`, `apple`, `gpui`, `core` and `protocol`. Use `ci` for the workflows and `docs` for README.md and AGENTS.md.
 
 The title should be concise. Description should explain the work in more detail (only if
 required) while still being concise. Use simple language, do not try to sound smart.

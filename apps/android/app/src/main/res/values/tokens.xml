@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The design tokens Android itself draws with. Generated from tokens.json by build.mjs: edit tokens.json and run `pnpm tokens`. -->
+<resources>
+    <color name="background">#f6f7f9</color>
+    <color name="icon_background">#0a0b0f</color>
+    <color name="icon_mark">#ffffff</color>
+</resources>

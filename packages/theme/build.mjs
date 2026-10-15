@@ -1,6 +1,6 @@
-// Writes the design tokens of tokens.json out as tokens.css, theme.css, the clients' Tokens.swift
-// and the GPUI app's tokens.rs. Run it with `pnpm tokens` after changing tokens.json; the four are
-// generated and never edited by hand.
+// Writes the design tokens of tokens.json out as tokens.css, theme.css, the clients' Tokens.swift,
+// the GPUI app's tokens.rs and the Android app's Tokens.kt and colour resources. Run it with
+// `pnpm tokens` after changing tokens.json; what it writes is never edited by hand.
 import { readFileSync, writeFileSync } from "node:fs"
 
 const here = (path) => new URL(path, import.meta.url)
@@ -236,7 +236,67 @@ ${shadows.map(([name, [, , blur]]) => `            ShadowSize::${pascal(name)} =
 `
 }
 
+function kotlin() {
+  const shadows = Object.entries(shadow).map(([name, value]) => [name, value.split(" ").map(parseFloat)])
+  const color = (value) => `Color(0xFF${value.slice(1).toUpperCase()})`
+  const palette = (mode) => names.map((name) => `            ${camel(name)} = ${color(colors[mode][name])},`).join("\n")
+  const kotlinName = (name) => (name === "2xl" ? "xxl" : camel(name))
+  return `// ${generated("The design tokens of the Android app.")}
+package app.motile.theme
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+
+/** Every colour of the design, in one appearance. */
+class Palette(
+${names.map((name) => `    val ${camel(name)}: Color,`).join("\n")}
+) {
+    companion object {
+        val light = Palette(
+${palette("light")}
+        )
+
+        val dark = Palette(
+${palette("dark")}
+        )
+    }
+}
+
+/** How much of a colour shows: every opacity in the app is one of these. */
+enum class Opacity(val light: Float, val dark: Float) {
+${opacities.map((name) => `    ${pascal(name)}(${opacity.light[name]}f, ${opacity.dark[name]}f),`).join("\n")}
+}
+
+/** How round corners are: every radius is one of these. */
+object Radius {
+${Object.entries(radius)
+  .map(([name, value]) => `    val ${kotlinName(name)} = ${value}.dp`)
+  .join("\n")}
+}
+
+/** A shadow's size: how far down it falls and its blur, as CSS gives them. */
+enum class ShadowSize(val down: Float, val blur: Float) {
+${shadows.map(([name, [, down, blur]]) => `    ${pascal(name)}(${down}f, ${blur}f),`).join("\n")}
+}
+`
+}
+
+/** The colours Android draws before the app does: the window behind it and the launcher icon. */
+function androidResources(mode) {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!-- ${generated("The design tokens Android itself draws with.")} -->
+<resources>
+    <color name="background">${colors[mode].background}</color>
+    <color name="icon_background">${colors.dark.background}</color>
+    <color name="icon_mark">${colors.dark["emphasized-foreground"]}</color>
+</resources>
+`
+}
+
 writeFileSync(here("tokens.css"), tokensCSS())
 writeFileSync(here("theme.css"), themeCSS())
 writeFileSync(here("../apple/Sources/MotileKit/Shared/Theme/Tokens.swift"), swift())
 writeFileSync(here("../../apps/gpui/src/tokens.rs"), rust())
+writeFileSync(here("../../apps/android/app/src/main/java/app/motile/theme/Tokens.kt"), kotlin())
+writeFileSync(here("../../apps/android/app/src/main/res/values/tokens.xml"), androidResources("light"))
+writeFileSync(here("../../apps/android/app/src/main/res/values-night/tokens.xml"), androidResources("dark"))
