@@ -5,12 +5,13 @@ export const TAGLINE = "The command center for coding agents"
 const LATEST_RELEASE = `${GITHUB_URL}/releases/latest/download`
 
 /** A system a client is built for. */
-export type Platform = "macos" | "linux" | "windows"
+export type Platform = "macos" | "linux" | "windows" | "android"
 
 export const PLATFORMS: { platform: Platform; name: string }[] = [
   { platform: "macos", name: "macOS" },
   { platform: "linux", name: "Linux" },
   { platform: "windows", name: "Windows" },
+  { platform: "android", name: "Android" },
 ]
 
 export type Download = {
@@ -52,5 +53,11 @@ export const DOWNLOADS: Download[] = [
     title: "ARM",
     detail: "Snapdragon PCs",
     url: `${LATEST_RELEASE}/Motile-GPUI-windows-aarch64.zip`,
+  },
+  {
+    platform: "android",
+    title: "Phones and tablets",
+    detail: "Android 10 or later. It updates itself",
+    url: `${LATEST_RELEASE}/Motile-android.apk`,
   },
 ]

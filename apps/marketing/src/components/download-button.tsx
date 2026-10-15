@@ -31,6 +31,7 @@ function offered(): Download {
         download.platform === system &&
         (!download.arch || (download.arch === "arm64") === arm)
     ) ?? DOWNLOADS.find((download) => download.platform === system)
+  if (/Android/.test(agent)) return of("android") ?? DOWNLOADS[0]
   if (/Win/.test(platform)) return of("windows") ?? DOWNLOADS[0]
   if (/Linux/.test(platform) && !/Android/.test(agent))
     return of("linux") ?? DOWNLOADS[0]
