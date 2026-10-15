@@ -47,7 +47,7 @@ object SkillChip {
 
     /** The style of what the chip shows, and of its symbol, the second character of it. */
     fun styles(palette: Palette): Pair<SpanStyle, SpanStyle> {
-        val text = SpanStyle(color = palette.skill, fontSize = (textSize * Platform.scale).sp, fontWeight = FontWeight.Medium)
+        val text = SpanStyle(color = palette.skill, fontSize = (textSize * Platform.scale).sp, fontWeight = FontWeight.Normal)
         val mark = SpanStyle(fontFamily = lucide, fontSize = symbolSide(symbolSize).value.sp, baselineShift = BaselineShift(-0.12f))
         return text to mark
     }

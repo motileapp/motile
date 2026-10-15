@@ -9,7 +9,7 @@ import UIKit
 /// A skill a message starts, drawn as a chip in the composer and in the transcript: the skill's
 /// symbol and its name in the skill colour, on its wash.
 enum SkillChip {
-    static let font = PlatformFont.ui(13, weight: .medium)
+    static let font = PlatformFont.ui(13, weight: .regular)
     static let symbol = Symbol.box
     static let symbolSize: CGFloat = 11
     static let padding: CGFloat = 5
