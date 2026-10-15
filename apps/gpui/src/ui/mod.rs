@@ -29,7 +29,8 @@ pub type OnClick = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 /// selected and what is `lit`. What is selected is lit no further. The light is drawn `inset`
 /// from the edges of the element its group names: that margin looks empty but is the element's,
 /// so neighbours leave no gap to miss. What is `small`, like a tab, lights as a control does, not
-/// as a row. A `fill` lights it in that colour instead of the surface's accent.
+/// as a row. A `fill` lights it in that colour instead of the surface's accent. What is `opaque`
+/// lies on the surface's own colour when unlit, so what slides under it stays hidden.
 #[derive(Clone, Copy)]
 pub struct Highlight {
     radius: f32,
@@ -42,6 +43,7 @@ pub struct Highlight {
     enabled: bool,
     surface: Surface,
     fill: Option<Hsla>,
+    opaque: bool,
 }
 
 impl Default for Highlight {
@@ -62,6 +64,7 @@ impl Highlight {
             enabled: true,
             surface: Surface::Background,
             fill: None,
+            opaque: false,
         }
     }
 
@@ -114,6 +117,11 @@ impl Highlight {
         self
     }
 
+    pub fn opaque(mut self, opaque: bool) -> Self {
+        self.opaque = opaque;
+        self
+    }
+
     fn lit_layer(&self) -> Layer {
         if self.small { Layer::Control } else { Layer::Row }
     }
@@ -151,6 +159,7 @@ impl Highlight {
             .right(px(inset.right))
             .bottom(px(inset.bottom))
             .rounded(px(self.radius))
+            .when(self.opaque, |light| light.bg(self.surface.color(colors(cx))))
             .when_some(self.layer(), |light, layer| light.bg(self.color(layer, cx)))
             .when(self.layer().is_none() && self.enabled && self.follows_pointer, |light| {
                 light.group_hover(group.clone(), move |light| light.bg(lit))

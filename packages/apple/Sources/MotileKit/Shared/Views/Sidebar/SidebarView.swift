@@ -448,10 +448,10 @@ struct ThreadRow: View, Equatable {
         // The table the row is in takes the click, so that it can drag the row as well. The menu
         // still comes up anywhere on the row.
         .contentShape(Rectangle())
-        .hoverHighlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering)
+        .hoverHighlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering, opaque: true)
         #else
         // The list the row is in brings up its menu, so that a hold can drag the row as well.
-        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering, opaque: true)) { open(.thread(thread.id)) }
         #endif
         .onHover { hovering = $0 }
         #if os(macOS)
@@ -641,7 +641,7 @@ private struct DraftRow: View {
         .padding(.bottom, ThreadRow.bottomPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering)) {
+        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering, opaque: true)) {
             open(.draft(listed.id))
         }
         .onHover { hovering = $0 }
@@ -879,7 +879,7 @@ struct DoneRow: View, Equatable {
             .allowsHitTesting(hovering)
         }
         .padding(rowMargin)
-        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering)) { open(.thread(thread.id)) }
+        .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering, opaque: true)) { open(.thread(thread.id)) }
         .onHover { hovering = $0 }
         #if os(macOS)
         .contextMenu { ThreadMenu(thread: thread, rename: rename, delete: delete) }
@@ -903,7 +903,7 @@ struct NewThreadRow: View {
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(rowMargin)
-        .button(.highlight(radius: Radius.md, inset: rowMargin, faded: true)) { store.newThread() }
+        .button(.highlight(radius: Radius.md, inset: rowMargin, faded: true, opaque: true)) { store.newThread() }
     }
 }
 
