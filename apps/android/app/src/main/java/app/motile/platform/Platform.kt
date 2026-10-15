@@ -1,12 +1,12 @@
 package app.motile.platform
 
+import androidx.core.net.toUri
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.lifecycle.Lifecycle
@@ -60,7 +60,7 @@ object Platform {
         get() = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
 
     fun open(url: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent = Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(intent)
         } catch (_: ActivityNotFoundException) {

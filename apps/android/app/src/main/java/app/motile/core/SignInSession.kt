@@ -1,8 +1,8 @@
 package app.motile.core
 
+import androidx.core.net.toUri
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.browser.customtabs.CustomTabsIntent
@@ -22,9 +22,9 @@ class SignInSession {
         val intent = CustomTabsIntent.Builder().setShowTitle(true).build()
         intent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-            intent.launchUrl(context, Uri.parse(url))
+            intent.launchUrl(context, url.toUri())
         } catch (_: Exception) {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
     }
 

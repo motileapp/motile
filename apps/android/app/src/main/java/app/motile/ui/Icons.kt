@@ -1,5 +1,6 @@
 package app.motile.ui
 
+import androidx.core.graphics.createBitmap
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -158,7 +159,7 @@ object ImageFiles {
     private fun filling(image: Bitmap): Bitmap {
         if (image.width <= 0 || image.height <= 0) return image
         val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
-        val canvas = Bitmap.createBitmap(drawn, drawn, Bitmap.Config.ARGB_8888)
+        val canvas = createBitmap(drawn, drawn)
         val fit = min(drawn.toFloat() / image.width, drawn.toFloat() / image.height)
         val width = image.width * fit
         val height = image.height * fit
@@ -169,7 +170,7 @@ object ImageFiles {
         val scale = min(side.toFloat() / bounds.width(), side.toFloat() / bounds.height())
         val targetWidth = bounds.width() * scale
         val targetHeight = bounds.height() * scale
-        val result = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+        val result = createBitmap(side, side)
         val x = (side - targetWidth) / 2
         val y = (side - targetHeight) / 2
         Canvas(result).drawBitmap(canvas, bounds, RectF(x, y, x + targetWidth, y + targetHeight), paint)

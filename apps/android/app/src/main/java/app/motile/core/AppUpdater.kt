@@ -1,5 +1,6 @@
 package app.motile.core
 
+import androidx.core.net.toUri
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -7,7 +8,6 @@ import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -133,7 +133,7 @@ class AppUpdater {
 
     /** Opens the system's page that lets this client install apps. */
     fun allowInstalling() {
-        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${Platform.context.packageName}"))
+        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${Platform.context.packageName}".toUri())
         Platform.context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 

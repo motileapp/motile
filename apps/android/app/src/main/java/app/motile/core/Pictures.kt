@@ -1,5 +1,6 @@
 package app.motile.core
 
+import androidx.core.graphics.scale
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
@@ -35,7 +36,7 @@ object Pictures {
         val longer = max(bitmap.width, bitmap.height)
         if (longer <= maxPixels) return bitmap
         val scale = maxPixels.toFloat() / longer
-        return Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+        return bitmap.scale((bitmap.width * scale).toInt(), (bitmap.height * scale).toInt())
     }
 
     /** Writes the picture as a JPEG in the cache, for sending. */

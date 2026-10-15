@@ -211,7 +211,7 @@ private fun SwipeButton(
                 Modifier.padding(start = sidebarEdge).size(width = size + stretch, height = size).background(tint, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(symbol, size.value * 0.37f, Modifier.offset(x = shift), color = Theme.colors.background)
+                Icon(symbol, size.value * 0.37f, Modifier.offset { IntOffset(shift.roundToPx(), 0) }, color = Theme.colors.background)
             }
         }
     }
