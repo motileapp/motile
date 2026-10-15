@@ -338,6 +338,7 @@ impl Parser {
                 tokens: None,
                 tool_uses: None,
                 duration_ms: params["turn"]["durationMs"].as_u64(),
+                workflow: None,
             };
             vec![AgentEvent::Task { tool_id: parent.clone(), agent }]
         };
@@ -522,6 +523,7 @@ impl Parser {
                     tokens: None,
                     tool_uses: None,
                     duration_ms: None,
+                    workflow: None,
                 };
                 let description = agent_title(item["agentPath"].as_str().unwrap_or_default());
                 let call = ToolCall {

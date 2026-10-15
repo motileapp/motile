@@ -1235,9 +1235,12 @@ impl Core {
                     if let Some(agent) = agents::view(item) {
                         agents_changed = true;
                         note_agent(&mut open.agents, item);
-                        let shown = open.agent.as_mut().filter(|(id, _)| id == &item.id);
-                        let settled = agent.status != ToolStatus::Running;
-                        agent_splices.extend(shown.and_then(|(_, transcript)| transcript.set_settled(settled)));
+                        if let Some((_, transcript)) = open.agent.as_mut().filter(|(id, _)| id == &item.id) {
+                            agent_splices.extend(transcript.set_settled(agent.status != ToolStatus::Running));
+                            let workflow = agents::workflow_items(item);
+                            agent_splices
+                                .extend(workflow.into_iter().filter_map(|child| transcript.upsert(child, false)));
+                        }
                     }
                     // What an agent did only goes to the cache, unless that agent is being shown.
                     if let Some(parent) = &item.parent {
@@ -1334,7 +1337,8 @@ impl Core {
         let Some(open) = self.open.get_mut(thread_id) else { return };
         let call = open.agents.iter().find(|item| item.id == agent_id);
         let started = call.and_then(agents::view);
-        let mut items = self.cache.agent_items(thread_id, agent_id);
+        let workflow = call.map(agents::workflow_items).filter(|items| !items.is_empty());
+        let mut items = workflow.unwrap_or_else(|| self.cache.agent_items(thread_id, agent_id));
         // What the agent was asked to do is the message its transcript starts with.
         if let (Some(call), Some(agent)) = (call, &started)
             && !agent.prompt.is_empty()

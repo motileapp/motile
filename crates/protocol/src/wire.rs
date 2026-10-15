@@ -233,6 +233,36 @@ pub struct Subagent {
     pub tokens: Option<u64>,
     pub tool_uses: Option<u64>,
     pub duration_ms: Option<u64>,
+    /// Set when it is a workflow, which runs agents of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<Workflow>,
+}
+
+/// A workflow's phases, in order, and the agents it has started so far.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct Workflow {
+    /// What its script says it does.
+    pub title: String,
+    pub phases: Vec<String>,
+    pub agents: Vec<WorkflowAgent>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct WorkflowAgent {
+    pub label: String,
+    /// One of the workflow's `phases`.
+    pub phase: Option<String>,
+    pub status: ToolStatus,
+    pub model: Option<String>,
+    /// The start of what it was asked to do.
+    pub prompt: Option<String>,
+    /// The start of what it returned, or why it failed.
+    pub result: Option<String>,
+    /// Seconds since the Unix epoch.
+    pub started_at: Option<f64>,
+    pub tokens: Option<u64>,
+    pub tool_uses: Option<u64>,
+    pub duration_ms: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]

@@ -1300,6 +1300,39 @@ async fn an_agent_that_monitors_takes_messages_and_wakes_by_itself() {
 }
 
 #[tokio::test]
+async fn a_workflow_claude_runs_keeps_its_phases_and_how_each_of_its_agents_ended() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Run the workflow").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+
+    let ran = transcript.items.iter().find_map(|item| match &item.kind {
+        ItemKind::Tool { call } if call.name == "Workflow" => call.agent.clone(),
+        _ => None,
+    });
+    let ran = ran.expect("the call started a workflow");
+    let workflow = ran.workflow.expect("it is a workflow");
+    assert_eq!(
+        (ran.status, workflow.title.as_str(), workflow.phases.clone()),
+        (ToolStatus::Succeeded, "Review the changes", vec!["Read".to_string(), "Judge".to_string()])
+    );
+    let agents: Vec<(&str, Option<&str>, ToolStatus, Option<&str>)> = workflow
+        .agents
+        .iter()
+        .map(|agent| (agent.label.as_str(), agent.phase.as_deref(), agent.status, agent.result.as_deref()))
+        .collect();
+    assert_eq!(
+        agents,
+        [
+            ("greet.py", Some("Read"), ToolStatus::Succeeded, Some("Greets by name.")),
+            ("tests", Some("Read"), ToolStatus::Succeeded, Some("Two tests, both pass.")),
+            ("verdict", Some("Judge"), ToolStatus::Failed, Some("It ran out of time.")),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn what_the_agents_claude_starts_do_is_kept_apart_under_the_calls_that_started_them() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;
