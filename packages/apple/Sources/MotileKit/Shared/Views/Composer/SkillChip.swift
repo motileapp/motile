@@ -29,8 +29,6 @@ enum SkillChip {
 
     static var symbolSide: CGFloat { PlatformImage.symbolSide(symbolSize) }
 
-    private static let noBreakSpace = ("\u{00A0}" as NSString).size(withAttributes: [.font: font]).width
-
     /// The room before the name: the padding, the symbol and the gap after it.
     static var lead: CGFloat { padding + symbolSide + gap }
 
@@ -89,13 +87,16 @@ enum SkillChip {
         for span in spans.sorted(by: { $0.range.location > $1.range.location }) {
             guard span.range.location >= 0, NSMaxRange(span.range) <= text.length else { continue }
             var attributes = text.attributes(at: span.range.location, effectiveRange: nil)
+            let textFont = attributes[.font] as? PlatformFont ?? font
             attributes[.font] = font
             attributes[.foregroundColor] = Theme.skill
             attributes[.motileSkill] = span.name
             attributes[.link] = nil
-            // A no-break space keeps the room for the symbol on the line of the name.
+            // A no-break space keeps the room for the symbol on the line of the name. It keeps the
+            // text's font, so that a line of chips alone is as tall as their boxes.
             let chip = NSMutableAttributedString(string: "\u{00A0}" + span.label, attributes: attributes)
-            chip.addAttribute(.kern, value: max(0, margin + lead - noBreakSpace), range: NSRange(location: 0, length: 1))
+            let space = ("\u{00A0}" as NSString).size(withAttributes: [.font: textFont]).width
+            chip.addAttributes([.font: textFont, .kern: max(0, margin + lead - space)], range: NSRange(location: 0, length: 1))
             chip.addAttribute(.kern, value: padding + margin, range: NSRange(location: chip.length - 1, length: 1))
             text.replaceCharacters(in: span.range, with: chip)
         }
