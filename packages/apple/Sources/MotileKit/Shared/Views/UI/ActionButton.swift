@@ -82,6 +82,7 @@ struct ControlLook {
         switch row {
         case .rowSelected, .controlLit: surface.color(.controlLitOnSelected)
         case .row, .control: surface.color(.controlLit)
+        case .chip: .themeBorderAccent
         default: surface.color(.control)
         }
     }

@@ -149,6 +149,7 @@ data class ControlLook(
     private fun ghostLit(palette: Palette): Color = when (row) {
         Surface.Layer.RowSelected, Surface.Layer.ControlLit -> surface.color(Surface.Layer.ControlLitOnSelected, palette)
         Surface.Layer.Row, Surface.Layer.Control -> surface.color(Surface.Layer.ControlLit, palette)
+        Surface.Layer.Chip -> palette.borderAccent
         else -> surface.color(Surface.Layer.Control, palette)
     }
 
