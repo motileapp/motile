@@ -93,6 +93,7 @@ object DemoDriver {
                 "pull request" -> store.rightPanel.open(PanelTab.PullRequest)
                 "pull requests" -> store.rightPanel.open(PanelTab.PullRequests)
                 "linear" -> store.rightPanel.open(PanelTab.Linear)
+                "ricrac" -> store.rightPanel.open(PanelTab.Ricrac)
                 "max" -> store.rightPanel.toggleMaximized()
                 "open" -> store.rightPanel.isOpen = true
                 else -> store.rightPanel.isOpen = false
@@ -103,6 +104,11 @@ object DemoDriver {
                 val named = rest.split(' ')
                 if (named.size != 3) return
                 store.rightPanel.open(PanelTab.LinearIssue(named[0], named[1], named[2]))
+            }
+            "ricrac-issue" -> {
+                val named = rest.split(' ')
+                if (named.size != 3) return
+                store.rightPanel.open(PanelTab.RicracIssue(named[0], named[1], named[2]))
             }
             "change" -> {
                 val turn = store.rightPanel.turns.lastOrNull() ?: return

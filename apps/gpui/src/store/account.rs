@@ -61,6 +61,7 @@ impl Store {
             .collect();
         for server_id in connected {
             self.linear_read(&server_id);
+            self.ricrac_read(&server_id);
         }
         if !composer_was_connected && self.composer_server().is_some_and(Server::connected) {
             self.read_git(

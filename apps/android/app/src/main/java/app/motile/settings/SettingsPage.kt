@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -28,16 +29,20 @@ import app.motile.core.Agent
 import app.motile.core.AgentAccount
 import app.motile.core.AppStore
 import app.motile.core.Appearance
+import app.motile.core.Integration
 import app.motile.core.Preferences
 import app.motile.core.Server
 import app.motile.core.SettingsSection
 import app.motile.core.pullDefaultBranchCaption
 import app.motile.onboarding.ConnectServerView
 import app.motile.platform.Platform
+import app.motile.platform.scaled
 import app.motile.sidebar.ServerUpdateStatus
 import app.motile.theme.ControlSize
 import app.motile.platform.Symbol
 import app.motile.theme.LocalPalette
+import app.motile.theme.Radius
+import app.motile.theme.SurfaceBox
 import app.motile.ui.ActionButton
 import app.motile.ui.AgentIcon
 import app.motile.ui.ButtonVariant
@@ -45,6 +50,7 @@ import app.motile.ui.Icon
 import app.motile.ui.Modal
 import app.motile.ui.MenuPopup
 import app.motile.ui.ProjectIcon
+import app.motile.ui.Switch
 import app.motile.ui.Text
 import app.motile.ui.pressPosition
 import app.motile.ui.rememberMenuState
@@ -69,6 +75,7 @@ fun SettingsPage(section: SettingsSection) {
             SettingsSection.Projects -> projects(store, navigator)
             SettingsSection.TextGeneration -> textGeneration(store, navigator)
             SettingsSection.PullRequests -> pullRequests(store)
+            SettingsSection.Integrations -> integrations(store)
             SettingsSection.Keyboard -> Unit
         }
     }
@@ -244,6 +251,25 @@ private fun SettingsGroups.pullRequests(store: AppStore) {
     if (pulling.isEmpty()) return
     toggles("pull", pull, pulling, caption = pullDefaultBranchCaption, isOn = { it.pullDefaultBranch }) { server, on ->
         store.setPullRequestSettings(server, pullDefaultBranch = on)
+    }
+}
+
+private fun SettingsGroups.integrations(store: AppStore) {
+    group("integration-linear", also = listOf("integration-ricrac"), header = "Issue trackers", footer = "Each one that is on has a tab in the right panel.") {
+        for (integration in Integration.entries) row {
+            SettingsRow {
+                SettingsItem(integration.title, integration.summary, lines = Int.MAX_VALUE) { IntegrationLogo(integration) }
+                Switch(store.isOn(integration), { store.setIntegration(integration, on = it) })
+            }
+        }
+    }
+}
+
+/** An integration's logo on a tile of its own, as an app's icon sits. */
+@Composable
+private fun IntegrationLogo(integration: Integration) {
+    SurfaceBox(RoundedCornerShape(Radius.md), Modifier.size(scaled(32f).dp), bordered = true) {
+        Icon(integration.symbol, 18f, Modifier.align(Alignment.Center), color = LocalPalette.current.foreground)
     }
 }
 

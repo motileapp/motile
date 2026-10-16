@@ -39,6 +39,7 @@ use crate::linear::Linear;
 use crate::mcp::{self, McpAccess};
 use crate::media::MediaStore;
 use crate::pricing::{self, Prices};
+use crate::ricrac::Ricrac;
 use crate::store::{Continuation, Purpose, Session, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, pull_requests, title};
 use motile_protocol::wire::{
@@ -111,6 +112,7 @@ pub struct Hub {
     store: Arc<Store>,
     pub media: MediaStore,
     pub linear: Linear,
+    pub ricrac: Ricrac,
     environment: Environment,
     threads: Mutex<HashMap<String, Live>>,
     /// Locked after `threads` when both are needed.
@@ -359,6 +361,7 @@ impl Hub {
             store: Arc::new(store),
             media,
             linear: Linear::from_environment(),
+            ricrac: Ricrac::from_environment(),
             environment,
             projects,
             git,

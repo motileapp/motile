@@ -2,7 +2,7 @@ import Foundation
 
 /// A page of the settings, listed in the settings' sidebar.
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case general, keyboard, servers, agents, projects, textGeneration, pullRequests
+    case general, keyboard, servers, agents, projects, textGeneration, pullRequests, integrations
 
     var id: String { rawValue }
 
@@ -20,6 +20,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .projects: "Projects"
         case .textGeneration: "Text Generation"
         case .pullRequests: "Pull Requests"
+        case .integrations: "Integrations"
         }
     }
 
@@ -32,6 +33,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .projects: .folder
         case .textGeneration: .pencilLine
         case .pullRequests: .gitPullRequest
+        case .integrations: .blocks
         }
     }
 }
@@ -64,6 +66,8 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "merged", title: "Mark the thread done after merge or close", section: .pullRequests, keywords: "merge close finished"),
         SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),
         SettingsEntry(id: "pull", title: "Automatically pull", section: .pullRequests, keywords: "default branch main merge sync fetch fast-forward"),
+        SettingsEntry(id: "integration-linear", title: "Linear", section: .integrations, keywords: "issues tracker tab connect"),
+        SettingsEntry(id: "integration-ricrac", title: "Ricrac", section: .integrations, keywords: "issues tracker tab connect"),
     ]
 
     /// The groups every word of the query is found in, by title, section or keywords, and the

@@ -17,6 +17,7 @@ pub mod media;
 pub mod pacing;
 pub mod pricing;
 pub mod pull_requests;
+pub mod ricrac;
 pub mod serve;
 pub mod service;
 pub mod setup;

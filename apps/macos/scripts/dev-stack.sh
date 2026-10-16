@@ -1,8 +1,9 @@
 # The account the dev apps are signed in to, which only exists on this Mac: PostgreSQL, an auth
 # server with the dev login, and a server whose agent is scripts/fake-agent, whose GitHub is
-# scripts/fake-gh and whose Linear is scripts/fake-linear, with a project and a few threads.
-# MOTILE_DEV_LINEAR=real leaves Linear the real one, to connect a workspace of yours; it takes
-# hold when the server starts, so stop the stack first. It lives in apps/macos/build/dev and is left
+# scripts/fake-gh, whose Linear is scripts/fake-linear and whose Ricrac is scripts/fake-ricrac, with
+# a project and a few threads. MOTILE_DEV_LINEAR=real leaves Linear the real one, and
+# MOTILE_DEV_RICRAC=real Ricrac, to connect a workspace of yours; it takes hold when the server
+# starts, so stop the stack first. It lives in apps/macos/build/dev and is left
 # running, so the Mac's and the iOS dev app in one tree share it. Sourced by their dev-app.sh;
 # `start_stack` brings it up.
 
@@ -25,14 +26,14 @@ source "$STACK_HOME/scripts/claims.sh"
 # claimed them; then the stack restarts on new ones.
 # shellcheck disable=SC1091
 [ ! -f "$DEV/ports" ] || source "$DEV/ports"
-KEPT="PG_PORT=${PG_PORT:-} AUTH_PORT=${AUTH_PORT:-} SERVER_PORT=${SERVER_PORT:-} LINEAR_PORT=${LINEAR_PORT:-}"
-PORTS="PG_PORT=$(claim_port TCP "${PG_PORT:-5436}") AUTH_PORT=$(claim_port TCP "${AUTH_PORT:-3112}") SERVER_PORT=$(claim_port UDP "${SERVER_PORT:-47614}") LINEAR_PORT=$(claim_port TCP "${LINEAR_PORT:-3212}")"
+KEPT="PG_PORT=${PG_PORT:-} AUTH_PORT=${AUTH_PORT:-} SERVER_PORT=${SERVER_PORT:-} LINEAR_PORT=${LINEAR_PORT:-} RICRAC_PORT=${RICRAC_PORT:-}"
+PORTS="PG_PORT=$(claim_port TCP "${PG_PORT:-5436}") AUTH_PORT=$(claim_port TCP "${AUTH_PORT:-3112}") SERVER_PORT=$(claim_port UDP "${SERVER_PORT:-47614}") LINEAR_PORT=$(claim_port TCP "${LINEAR_PORT:-3212}") RICRAC_PORT=$(claim_port TCP "${RICRAC_PORT:-3213}")"
 PORTS_MOVED=0
 if [ -n "${PG_PORT:-}" ] && [ "$PORTS" != "$KEPT" ]; then PORTS_MOVED=1; fi
 echo "$PORTS" > "$DEV/ports"
 # shellcheck disable=SC1091
 source "$DEV/ports"
-release_ports "$PG_PORT" "$AUTH_PORT" "$SERVER_PORT" "$LINEAR_PORT"
+release_ports "$PG_PORT" "$AUTH_PORT" "$SERVER_PORT" "$LINEAR_PORT" "$RICRAC_PORT"
 AUTH_URL="http://127.0.0.1:$AUTH_PORT"
 
 # A pid file holds the process and the version of the program it runs.
@@ -66,6 +67,7 @@ post() { curl -fsS "$AUTH_URL$1" -H 'content-type: application/json' "${@:2}"; }
 stop_stack() {
     stop server
     stop linear
+    stop ricrac
     stop auth
     [ -d "$DEV/pg" ] && pg_ctl -D "$DEV/pg" stop -m fast >/dev/null 2>&1 || true
 }
@@ -124,20 +126,37 @@ start_stack() {
         fi
     fi
 
+    local ricrac_url=""
+    if [ "${MOTILE_DEV_RICRAC:-}" != real ]; then
+        ricrac_url="http://127.0.0.1:$RICRAC_PORT"
+        if ! current ricrac "$ROOT/scripts/fake-ricrac"; then
+            stop ricrac
+            FAKE_RICRAC_STATE="$DEV/ricrac.json" nohup "$ROOT/scripts/fake-ricrac" "$RICRAC_PORT" > "$DEV/ricrac.log" 2>&1 &
+            started ricrac $! "$ROOT/scripts/fake-ricrac"
+        fi
+    fi
+
     if ! current server "$BIN/motile"; then
         echo "▸ Starting the server…"
         stop server
-        MOTILE_LINEAR_URL="$linear_url" MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
+        MOTILE_LINEAR_URL="$linear_url" MOTILE_RICRAC_URL="$ricrac_url" MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
             MOTILE_GH_PATH="$ROOT/scripts/fake-gh" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6 \
             nohup "$BIN/motile" run --local --port "$SERVER_PORT" > "$DEV/server.log" 2>&1 &
         started server $! "$BIN/motile"
     fi
 
-    # The server starts out connected to the stand-in's workspace.
+    # The server starts out connected to the stand-ins' workspaces.
     if [ -n "$linear_url" ]; then
         grant='[{"access_token":"dev","refresh_token":"dev","expires_at":4102444800,"connection":{"id":"motile","workspace":"Motile","user":"Demo"}}]'
         for _ in $(seq 1 50); do
             sqlite3 "$DEV/server/motile.sqlite" "INSERT OR IGNORE INTO settings (name, value) VALUES ('linear', '$grant')" 2>/dev/null && break
+            sleep 0.2
+        done
+    fi
+    if [ -n "$ricrac_url" ]; then
+        grant='[{"access_token":"dev","refresh_token":"dev","expires_at":4102444800,"connection":{"id":"studio","workspace":"Studio","user":"Demo"}}]'
+        for _ in $(seq 1 50); do
+            sqlite3 "$DEV/server/motile.sqlite" "INSERT OR IGNORE INTO settings (name, value) VALUES ('ricrac', '$grant')" 2>/dev/null && break
             sleep 0.2
         done
     fi

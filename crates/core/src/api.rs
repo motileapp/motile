@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use motile_protocol::auth_api::User;
 use motile_protocol::wire::{
     Activity, ContinueSettings, DiffScope, GitAction, GitStage, LinearStateKind, MergeMethod, NewThread, Project,
-    PullRequestAction, PullRequestEdit, PullRequestSettings, PullRequestState, Request, RestartWhen, ServerInfo,
-    Thread,
+    PullRequestAction, PullRequestEdit, PullRequestSettings, PullRequestState, Request, RestartWhen, RicracStateKind,
+    ServerInfo, Thread,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -259,6 +259,29 @@ pub enum Command {
     /// One issue as its tab shows it: `page`, a `linear::Page`. With `comment` that is said on
     /// the issue first.
     LinearIssue {
+        server_id: String,
+        workspace: String,
+        issue: String,
+        #[serde(default)]
+        comment: Option<String>,
+    },
+    /// The issues of a Ricrac workspace the server is connected to, as the list shows them:
+    /// `groups`, each a `ricrac::Group`, chosen as `LinearIssues` chooses them.
+    RicracIssues {
+        server_id: String,
+        workspace: String,
+        #[serde(default)]
+        team: Option<String>,
+        mine: bool,
+        closed: bool,
+        #[serde(default)]
+        states: Vec<RicracStateKind>,
+        #[serde(default)]
+        search: Option<String>,
+    },
+    /// One Ricrac issue as its tab shows it: `page`, a `ricrac::Page`. With `comment` that is
+    /// said on the issue first.
+    RicracIssue {
         server_id: String,
         workspace: String,
         issue: String,

@@ -39,6 +39,7 @@ use crate::render::agents;
 use crate::render::diff;
 use crate::render::highlight::{self, Spans};
 use crate::render::rows::{Splice, Transcript, Uncoloured, short_model_name};
+use crate::ricrac;
 use crate::search;
 use crate::skills;
 use crate::usage;
@@ -1822,6 +1823,43 @@ impl Core {
                         link.request(&Request::LinearIssues { workspace, team, mine, closed, states, search }).await;
                     let answer = match answer {
                         Ok(Message::LinearIssues { issues }) => Ok(json!({ "groups": linear::groups(&issues) })),
+                        Ok(other) => Err(unexpected(&other)),
+                        Err(error) => Err(error_text(error)),
+                    };
+                    reply(&sink, id, answer);
+                });
+            }
+            Command::RicracIssue { server_id, workspace, issue, comment } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let request = match comment {
+                        Some(body) => Request::RicracComment { workspace, issue, body },
+                        None => Request::RicracIssue { workspace, issue },
+                    };
+                    let detail = match link.request(&request).await {
+                        Ok(Message::RicracIssueDetail { detail }) => detail,
+                        Ok(other) => return reply(&sink, id, Err(unexpected(&other))),
+                        Err(error) => return reply(&sink, id, Err(error_text(error))),
+                    };
+                    let page = tokio::task::spawn_blocking(move || ricrac::page(&detail)).await;
+                    reply(&sink, id, page.map(|page| json!({ "page": page })).map_err(|error| error.to_string()));
+                });
+            }
+            Command::RicracIssues { server_id, workspace, team, mine, closed, states, search } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let answer =
+                        link.request(&Request::RicracIssues { workspace, team, mine, closed, states, search }).await;
+                    let answer = match answer {
+                        Ok(Message::RicracIssues { issues }) => Ok(json!({ "groups": ricrac::groups(&issues) })),
                         Ok(other) => Err(unexpected(&other)),
                         Err(error) => Err(error_text(error)),
                     };

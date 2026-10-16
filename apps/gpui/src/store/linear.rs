@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::Store;
+use super::integrations::Integration;
 use super::pull_requests::{Text, read_text};
 use crate::panel::state::{Loaded, PanelTab, PanelTarget};
 use crate::prefs::Prefs;
@@ -239,6 +240,9 @@ impl Store {
 
     /// The panel's server is connected to a Linear workspace.
     pub fn linear_connected(&self) -> bool {
+        if !self.is_on(Integration::Linear) {
+            return false;
+        }
         let Some(target) = self.panel_target().filter(|_| self.linear_unavailable().is_none()) else { return false };
         !self.linear.connected(&target.server_id).is_empty()
     }
@@ -662,7 +666,7 @@ fn read_page(answer: Value) -> Result<Page, String> {
 }
 
 /// The names and values of a URL's query.
-fn query_items(url: &str) -> Vec<(String, String)> {
+pub(super) fn query_items(url: &str) -> Vec<(String, String)> {
     let Some((_, query)) = url.split_once('?') else { return Vec::new() };
     let query = query.split('#').next().unwrap_or_default();
     query

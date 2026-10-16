@@ -5,9 +5,11 @@ mod account;
 mod attachments;
 mod commands;
 mod git;
+pub mod integrations;
 pub mod linear;
 mod projects;
 pub mod pull_requests;
+pub mod ricrac;
 pub mod settings;
 pub mod shortcuts;
 mod sidebar;
@@ -284,6 +286,7 @@ pub struct Store {
     pub right_panel: RightPanel,
     pub settings: SettingsState,
     pub linear: linear::Linear,
+    pub ricrac: ricrac::Ricrac,
     pub pull_requests: PullRequests,
     pub repo_listing: RepoListing,
     pub sidebar: SidebarState,
@@ -324,6 +327,7 @@ impl Store {
             prefs.get::<BTreeMap<String, PanelTabs>>("panel.tabs").unwrap_or_default(),
         );
         let linear = linear::Linear::kept(&prefs);
+        let ricrac = ricrac::Ricrac::kept(&prefs);
         let mut store = Self {
             bridge: None,
             answers: HashMap::new(),
@@ -393,6 +397,7 @@ impl Store {
             right_panel,
             settings: SettingsState::default(),
             linear,
+            ricrac,
             pull_requests: PullRequests::default(),
             repo_listing: RepoListing::default(),
             sidebar: SidebarState::default(),

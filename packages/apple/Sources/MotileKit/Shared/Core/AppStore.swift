@@ -291,6 +291,8 @@ final class AppStore {
     let updater = AppUpdater()
     let rightPanel = RightPanel()
     let linear = Linear()
+    let ricrac = Ricrac()
+    private(set) var integrations = Integration.kept(in: .standard)
     @ObservationIgnored let core = CoreBridge()
     @ObservationIgnored let transcript = TranscriptModel()
     /// What the agent did that the right panel shows.
@@ -310,6 +312,7 @@ final class AppStore {
         loadPreferences()
         rightPanel.store = self
         linear.store = self
+        ricrac.store = self
         updater.onFound = { [weak self] asked in self?.showServerUpdates(asked: asked) }
     }
 
@@ -523,6 +526,7 @@ final class AppStore {
         self.servers = servers
         for server in servers where server.state == .connected && !wereConnected.contains(server.id) {
             linear.read(server.id)
+            ricrac.read(server.id)
         }
         if !composerWasConnected, composerServer?.state == .connected {
             readGit(fetch: true)
@@ -1297,6 +1301,15 @@ final class AppStore {
         defaults.set(state.rawValue, forKey: "github-\(serverID)")
     }
 
+    func isOn(_ integration: Integration) -> Bool {
+        integrations.contains(integration)
+    }
+
+    func setIntegration(_ integration: Integration, on: Bool) {
+        if on { integrations.insert(integration) } else { integrations.remove(integration) }
+        defaults.set(on, forKey: integration.defaultsKey)
+    }
+
     /// Why Linear can't be shown here, when it can't.
     var linearUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
@@ -1305,8 +1318,20 @@ final class AppStore {
 
     /// The panel's server is connected to a Linear workspace.
     var linearConnected: Bool {
-        guard let target = panelTarget, linearUnavailable == nil else { return false }
+        guard isOn(.linear), let target = panelTarget, linearUnavailable == nil else { return false }
         return !linear.connected(target.serverID).isEmpty
+    }
+
+    /// Why Ricrac can't be shown here, when it can't.
+    var ricracUnavailable: String? {
+        guard let target = panelTarget, let server = server(target.serverID) else { return nil }
+        return server.protocolVersion >= 29 ? nil : "Update \(server.name) to connect it to Ricrac."
+    }
+
+    /// The panel's server is connected to a Ricrac workspace.
+    var ricracConnected: Bool {
+        guard isOn(.ricrac), let target = panelTarget, ricracUnavailable == nil else { return false }
+        return !ricrac.connected(target.serverID).isEmpty
     }
 
     /// Asks the server for its GitHub repositories, unless it listed them in the last minute or

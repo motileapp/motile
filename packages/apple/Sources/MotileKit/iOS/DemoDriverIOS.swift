@@ -75,6 +75,7 @@ enum DemoDriver {
             case "pull request": store.rightPanel.open(.pullRequest)
             case "pull requests": store.rightPanel.open(.pullRequests)
             case "linear": store.rightPanel.open(.linear)
+            case "ricrac": store.rightPanel.open(.ricrac)
             case "max": store.rightPanel.toggleMaximized()
             case "open": store.rightPanel.isOpen = true
             default: store.rightPanel.isOpen = false
@@ -85,6 +86,10 @@ enum DemoDriver {
             let named = rest.split(separator: " ").map(String.init)
             guard named.count == 3 else { return }
             store.rightPanel.open(.linearIssue(workspace: named[0], id: named[1], identifier: named[2]))
+        case "ricrac-issue":
+            let named = rest.split(separator: " ").map(String.init)
+            guard named.count == 3 else { return }
+            store.rightPanel.open(.ricracIssue(workspace: named[0], id: named[1], identifier: named[2]))
         case "change":
             guard let turn = store.rightPanel.turns.last else { return }
             store.rightPanel.showChange(turn: turn.id, path: rest)

@@ -6,6 +6,7 @@ use std::time::Duration;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use super::integrations::Integration;
 use super::shortcuts::ShortcutContext;
 use super::usage::{UsagePeriod, UsageTab};
 use super::{PanelPage, Selection, Store};
@@ -256,10 +257,22 @@ impl Store {
                 self.open_tab(if all { PanelTab::PullRequests } else { PanelTab::PullRequest });
             }
             "rightPanel.linear" => {
-                if self.panel_unavailable().is_some() || !self.linear_connected() {
+                if self.panel_unavailable().is_some()
+                    || !self.is_on(Integration::Linear)
+                    || self.linear_unavailable().is_some()
+                {
                     return false;
                 }
                 self.open_tab(PanelTab::Linear);
+            }
+            "rightPanel.ricrac" => {
+                if self.panel_unavailable().is_some()
+                    || !self.is_on(Integration::Ricrac)
+                    || self.ricrac_unavailable().is_some()
+                {
+                    return false;
+                }
+                self.open_tab(PanelTab::Ricrac);
             }
             _ => return false,
         }

@@ -250,13 +250,19 @@ fun SettingsTile(symbol: Symbol) {
     Box(Modifier.size(SettingsTile.size.dp), contentAlignment = Alignment.Center) { Icon(symbol, 16f, color = LocalPalette.current.foreground) }
 }
 
-/** What names something, with what it is under it and its picture before it. */
+/** What names something, with what it is under it, in as many lines as `lines`, and its picture before it. */
 @Composable
-fun RowScope.SettingsItem(title: String, description: String, truncates: TextOverflow = TextOverflow.Ellipsis, picture: @Composable () -> Unit) {
+fun RowScope.SettingsItem(
+    title: String,
+    description: String,
+    truncates: TextOverflow = TextOverflow.Ellipsis,
+    lines: Int = 1,
+    picture: @Composable () -> Unit,
+) {
     picture()
     Column(Modifier.weight(1f).padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         RowText(title, color = LocalPalette.current.foreground, maxLines = 1)
-        Text(description, size = NOTE_TEXT, color = LocalPalette.current.mutedForeground, maxLines = 1, overflow = truncates)
+        Text(description, size = NOTE_TEXT, color = LocalPalette.current.mutedForeground, maxLines = lines, overflow = truncates)
     }
 }
 

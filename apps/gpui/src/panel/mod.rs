@@ -6,6 +6,7 @@ pub mod line_comment;
 pub mod linear;
 pub mod pull_request;
 pub mod pull_request_list;
+pub mod ricrac;
 pub mod state;
 pub mod view;
 

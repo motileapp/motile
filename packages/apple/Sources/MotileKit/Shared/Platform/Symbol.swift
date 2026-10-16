@@ -96,6 +96,8 @@ enum Symbol: String {
     case play = "\u{e13c}"
     case plus = "\u{e13d}"
     case refreshCw = "\u{e145}"
+    /// Ricrac's logo, which Lucide doesn't have.
+    case ricrac = "ricrac"
     case rocket = "\u{e286}"
     case rotateCw = "\u{e149}"
     case search = "\u{e151}"
@@ -203,6 +205,25 @@ extension PlatformImage {
         return logo.copy(using: &placed) ?? logo
     }
 
+    /// Three half rings that open to the right, three bars, and three half rings that open to the
+    /// left, in a glyph of 20 by 12 placed in a square of 24.
+    private static func ricracLogo(side: CGFloat) -> CGPath {
+        let mark = CGMutablePath()
+        for radius: CGFloat in [5.5, 3.5, 1.5] {
+            mark.move(to: CGPoint(x: 6, y: 6 + radius))
+            mark.addArc(center: CGPoint(x: 6, y: 6), radius: radius, startAngle: .pi / 2, endAngle: .pi * 3 / 2, clockwise: false)
+            mark.move(to: CGPoint(x: 14, y: 6 - radius))
+            mark.addArc(center: CGPoint(x: 14, y: 6), radius: radius, startAngle: -.pi / 2, endAngle: .pi / 2, clockwise: false)
+        }
+        for x: CGFloat in [8, 10, 12] {
+            mark.move(to: CGPoint(x: x, y: 0.5))
+            mark.addLine(to: CGPoint(x: x, y: 11.5))
+        }
+        let logo = mark.copy(strokingWithWidth: 1, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        var placed = CGAffineTransform(scaleX: side / 24, y: side / 24).translatedBy(x: 2, y: 6)
+        return logo.copy(using: &placed) ?? logo
+    }
+
     /// A ring as Lucide draws a circle, round a pie that fills `share` of it clockwise from the
     /// top, in a square of 24.
     private static func gauge(_ share: CGFloat, side: CGFloat) -> CGPath {
@@ -220,6 +241,7 @@ extension PlatformImage {
     private static func outline(_ symbol: Symbol, side: CGFloat) -> CGPath? {
         switch symbol {
         case .linear: linearLogo(side: side)
+        case .ricrac: ricracLogo(side: side)
         case .effortLow: gauge(0.25, side: side)
         case .effortMedium: gauge(0.5, side: side)
         case .effortHigh: gauge(0.75, side: side)

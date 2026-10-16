@@ -26,6 +26,7 @@ struct SettingsPage: View {
                     case .textGeneration: textGeneration
                     case .pullRequests: pullRequests
                     case .keyboard: ShortcutSettings()
+                    case .integrations: IntegrationSettings()
                     }
                 }
                 .frame(maxWidth: Self.contentWidth)

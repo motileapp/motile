@@ -19,10 +19,11 @@ pub enum SettingsSection {
     Projects,
     TextGeneration,
     PullRequests,
+    Integrations,
 }
 
 impl SettingsSection {
-    pub const ALL: [SettingsSection; 7] = [
+    pub const ALL: [SettingsSection; 8] = [
         SettingsSection::General,
         SettingsSection::Keyboard,
         SettingsSection::Servers,
@@ -30,6 +31,7 @@ impl SettingsSection {
         SettingsSection::Projects,
         SettingsSection::TextGeneration,
         SettingsSection::PullRequests,
+        SettingsSection::Integrations,
     ];
 
     pub fn title(self) -> &'static str {
@@ -41,6 +43,7 @@ impl SettingsSection {
             SettingsSection::Projects => "Projects",
             SettingsSection::TextGeneration => "Text Generation",
             SettingsSection::PullRequests => "Pull Requests",
+            SettingsSection::Integrations => "Integrations",
         }
     }
 
@@ -53,6 +56,7 @@ impl SettingsSection {
             SettingsSection::Projects => "folder",
             SettingsSection::TextGeneration => "pencil-line",
             SettingsSection::PullRequests => "git-pull-request",
+            SettingsSection::Integrations => "blocks",
         }
     }
 }
@@ -71,7 +75,7 @@ pub struct SettingsEntry {
     pub keywords: &'static str,
 }
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 16] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 18] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -113,6 +117,8 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 16] = [
         "merge pushed branch clean up",
     ),
     ("pull", "Automatically pull", SettingsSection::PullRequests, "default branch main merge sync fetch fast-forward"),
+    ("integration-linear", "Linear", SettingsSection::Integrations, "issues tracker tab connect"),
+    ("integration-ricrac", "Ricrac", SettingsSection::Integrations, "issues tracker tab connect"),
 ];
 
 impl SettingsEntry {

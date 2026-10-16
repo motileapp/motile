@@ -117,8 +117,11 @@ extension AppStore {
             guard panelUnavailable == nil, pullRequestsUnavailable == nil, !all || pullRequestsExtended else { return false }
             rightPanel.open(all ? .pullRequests : .pullRequest)
         case "rightPanel.linear":
-            guard panelUnavailable == nil, linearConnected else { return false }
+            guard panelUnavailable == nil, isOn(.linear), linearUnavailable == nil else { return false }
             rightPanel.open(.linear)
+        case "rightPanel.ricrac":
+            guard panelUnavailable == nil, isOn(.ricrac), ricracUnavailable == nil else { return false }
+            rightPanel.open(.ricrac)
         default: return performOnThisSystem(command)
         }
         return true

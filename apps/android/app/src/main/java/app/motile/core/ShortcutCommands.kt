@@ -118,8 +118,12 @@ fun AppStore.perform(command: String): Boolean {
             rightPanel.open(if (all) PanelTab.PullRequests else PanelTab.PullRequest)
         }
         "rightPanel.linear" -> {
-            if (panelUnavailable != null || !linearConnected) return false
+            if (panelUnavailable != null || !isOn(Integration.Linear) || linearUnavailable != null) return false
             rightPanel.open(PanelTab.Linear)
+        }
+        "rightPanel.ricrac" -> {
+            if (panelUnavailable != null || !isOn(Integration.Ricrac) || ricracUnavailable != null) return false
+            rightPanel.open(PanelTab.Ricrac)
         }
         "rightPanel.close" -> return rightPanel.closeActive()
         "sidebar.toggle" -> {

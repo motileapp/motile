@@ -331,6 +331,9 @@ class AppStore(private val context: Context) {
     val updater = AppUpdater()
     val rightPanel = RightPanel()
     val linear = Linear()
+    val ricrac = Ricrac()
+    var integrations by mutableStateOf(Integration.kept())
+        private set
     val core = CoreBridge()
     val transcript = TranscriptModel()
     /** What the agent did that the right panel shows. */
@@ -351,6 +354,7 @@ class AppStore(private val context: Context) {
         loadPreferences()
         rightPanel.store = this
         linear.store = this
+        ricrac.store = this
         updater.onFound = { asked -> showServerUpdates(asked) }
         AppUpdater.shared = updater
     }
@@ -577,7 +581,9 @@ class AppStore(private val context: Context) {
         val wereConnected = this.servers.filter { it.state == Server.State.Connected }.map { it.id }.toSet()
         this.servers = servers
         for (server in servers) {
-            if (server.state == Server.State.Connected && server.id !in wereConnected) linear.read(server.id)
+            if (server.state != Server.State.Connected || server.id in wereConnected) continue
+            linear.read(server.id)
+            ricrac.read(server.id)
         }
         if (!composerWasConnected && composerServer?.state == Server.State.Connected) {
             readGit(fetch = true)
@@ -1280,6 +1286,13 @@ class AppStore(private val context: Context) {
         Preferences.set("github-$serverID", state.raw)
     }
 
+    fun isOn(integration: Integration): Boolean = integration in integrations
+
+    fun setIntegration(integration: Integration, on: Boolean) {
+        integrations = if (on) integrations + integration else integrations - integration
+        Preferences.set(integration.preferencesKey, on)
+    }
+
     /** Why Linear can't be shown here, when it can't. */
     val linearUnavailable: String?
         get() {
@@ -1291,9 +1304,27 @@ class AppStore(private val context: Context) {
     /** The panel's server is connected to a Linear workspace. */
     val linearConnected: Boolean
         get() {
+            if (!isOn(Integration.Linear)) return false
             val target = panelTarget ?: return false
             if (linearUnavailable != null) return false
             return linear.connected(target.serverID).isNotEmpty()
+        }
+
+    /** Why Ricrac can't be shown here, when it can't. */
+    val ricracUnavailable: String?
+        get() {
+            val target = panelTarget ?: return null
+            val server = server(target.serverID) ?: return null
+            return if (server.protocolVersion >= 29) null else "Update ${server.name} to connect it to Ricrac."
+        }
+
+    /** The panel's server is connected to a Ricrac workspace. */
+    val ricracConnected: Boolean
+        get() {
+            if (!isOn(Integration.Ricrac)) return false
+            val target = panelTarget ?: return false
+            if (ricracUnavailable != null) return false
+            return ricrac.connected(target.serverID).isNotEmpty()
         }
 
     /** Asks the server for its GitHub repositories, unless it listed them in the last minute or `fresh` asks again anyway. The ones it listed before stay until it answers. */

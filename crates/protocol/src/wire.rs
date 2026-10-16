@@ -481,6 +481,62 @@ pub enum Request {
         workspace: String,
         issue: NewLinearIssue,
     },
+    /// The Ricrac workspaces the server is connected to. `Ricrac` answers.
+    RicracStatus,
+    /// Starts connecting the server to a Ricrac workspace. `RicracAuthorize` answers with the page
+    /// where the user picks the workspace and approves, which ends at `RICRAC_REDIRECT` with a
+    /// `code` and a `state`.
+    RicracConnect,
+    /// Finishes connecting with what Ricrac sent the browser back with. `Ricrac` answers.
+    RicracFinish {
+        code: String,
+        state: String,
+    },
+    /// Takes back what Ricrac granted for the workspace and forgets it. `Ricrac` answers.
+    RicracDisconnect {
+        workspace: String,
+    },
+    /// The workspace's teams with their statuses, and its users. `RicracTeams` answers.
+    RicracTeams {
+        workspace: String,
+    },
+    /// The workspace's issues, the last updated first: of one team or of all, assigned to the
+    /// user or to anyone, and in a status of one of the kinds in `states`, or without them open
+    /// unless `closed`. With `search` they are the team's issues that have the words, whoever has
+    /// them and whatever their status. `RicracIssues` answers.
+    RicracIssues {
+        workspace: String,
+        #[serde(default)]
+        team: Option<String>,
+        mine: bool,
+        closed: bool,
+        #[serde(default)]
+        states: Vec<RicracStateKind>,
+        #[serde(default)]
+        search: Option<String>,
+    },
+    /// One issue with its description and comments. `RicracIssueDetail` answers.
+    RicracIssue {
+        workspace: String,
+        issue: String,
+    },
+    /// Changes the issue's status, assignee or priority. `RicracIssue` answers.
+    RicracUpdate {
+        workspace: String,
+        issue: String,
+        change: RicracChange,
+    },
+    /// Comments on the issue. `RicracIssueDetail` answers.
+    RicracComment {
+        workspace: String,
+        issue: String,
+        body: String,
+    },
+    /// Files a new issue. `RicracIssue` answers.
+    RicracCreate {
+        workspace: String,
+        issue: NewRicracIssue,
+    },
     /// Takes the folder off the list. Its threads stay.
     RemoveProject {
         project_id: String,
@@ -937,6 +993,119 @@ pub struct LinearChange {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct NewLinearIssue {
+    pub team: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub assignee: Option<String>,
+    #[serde(default)]
+    pub priority: u8,
+}
+
+/// A Ricrac workspace a server is connected to, and the user who connected it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RicracConnection {
+    /// Names the workspace in requests.
+    pub id: String,
+    pub workspace: String,
+    pub user: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RicracTeam {
+    pub id: String,
+    /// What its issues' identifiers start with: `ENG`.
+    pub key: String,
+    pub name: String,
+    pub states: Vec<RicracState>,
+}
+
+/// A status a team's issues can have.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RicracState {
+    pub id: String,
+    pub name: String,
+    pub kind: RicracStateKind,
+    /// Hex without the `#`.
+    pub color: String,
+    /// Where it stands among the team's statuses of its kind.
+    pub position: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum RicracStateKind {
+    Triage,
+    Backlog,
+    Unstarted,
+    Started,
+    Completed,
+    Canceled,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RicracIssue {
+    pub id: String,
+    /// `ENG-123`.
+    pub identifier: String,
+    pub title: String,
+    pub url: String,
+    /// 0 is none, 1 urgent, 2 high, 3 medium and 4 low.
+    pub priority: u8,
+    pub state: RicracState,
+    /// Its team's id.
+    pub team: String,
+    pub assignee: Option<RicracUser>,
+    pub labels: Vec<Label>,
+    /// What Ricrac would call a branch for it.
+    pub branch_name: String,
+    pub updated_at: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RicracUser {
+    pub id: String,
+    pub name: String,
+    /// The one who connected the workspace.
+    #[serde(default)]
+    pub me: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RicracIssueDetail {
+    pub issue: RicracIssue,
+    /// Markdown.
+    pub description: String,
+    /// The oldest first.
+    pub comments: Vec<RicracComment>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RicracComment {
+    pub id: String,
+    pub author: String,
+    /// Markdown.
+    pub body: String,
+    pub created_at: f64,
+}
+
+/// What to change of an issue; `None` leaves it as it is.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct RicracChange {
+    #[serde(default)]
+    pub state: Option<String>,
+    /// A user's id, or nothing in it for nobody.
+    #[serde(default)]
+    pub assignee: Option<String>,
+    #[serde(default)]
+    pub priority: Option<u8>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct NewRicracIssue {
     pub team: String,
     pub title: String,
     #[serde(default)]
@@ -1817,6 +1986,25 @@ pub enum Message {
     },
     LinearIssueDetail {
         detail: Box<LinearIssueDetail>,
+    },
+    Ricrac {
+        connections: Vec<RicracConnection>,
+    },
+    RicracAuthorize {
+        url: String,
+    },
+    RicracTeams {
+        teams: Vec<RicracTeam>,
+        users: Vec<RicracUser>,
+    },
+    RicracIssues {
+        issues: Vec<RicracIssue>,
+    },
+    RicracIssue {
+        issue: RicracIssue,
+    },
+    RicracIssueDetail {
+        detail: Box<RicracIssueDetail>,
     },
     /// Local branches first, then the ones only on the remote.
     Branches {

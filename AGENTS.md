@@ -156,6 +156,8 @@ shadcn's own colours, opacities and radii are gone from the theme.
   workspace's teams, users and issues, searches them, reads one with its comments, changes its
   status, assignee and priority, comments on it and files new ones. `MOTILE_LINEAR_URL` stands
   in for Linear.
+- `ricrac.rs`: the same for Ricrac (ricrac.app, our own tracker), through its REST operations
+  (`POST /v1/ops/<name>`) where Linear's is GraphQL. `MOTILE_RICRAC_URL` stands in for Ricrac.
 - `icons.rs`: finds a project's icon in its folder.
 - `access.rs`: asks the auth server which clients belong to the account.
 - `setup.rs`, `service.rs`: what the installer runs, and the systemd or launchd service.
@@ -179,7 +181,8 @@ for tests.
   for, its menu, its activity and conversations with the Markdown set, the list's rows, and the
   prompts that hand conflicts, failures and lines to the agent.
 - `linear.rs`: the Linear tabs: issues under their statuses, as Linear lists them, one issue
-  with its description and comments set, and the prompt that hands it to an agent.
+  with its description and comments set, and the prompt that hands it to an agent. `ricrac.rs`
+  is the same for the Ricrac tabs.
 - `browse.rs`: browsing a server's folders by typing a path.
 - `skills.rs`: the skills the composer offers while the word before its cursor starts with `$`
   or `/`, best match first, and the chips a message's `$name`s become.
@@ -207,9 +210,11 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   Sizes are written as they are on the Mac; `Platform.scale` enlarges them on iOS.
 - `Shared/Platform/Symbol.swift`: the icons, drawn from Lucide's font (`Fonts/lucide.ttf`), not
   SF Symbols. A new one is a case with the character it has in lucide-static's
-  `font/codepoints.json`. Linear's logo, which Lucide doesn't have, is drawn by hand there.
+  `font/codepoints.json`. Linear's and Ricrac's logos, which Lucide doesn't have, are drawn by
+  hand there.
 - `Shared/Core`: `CoreBridge.swift` calls the Rust core, `AppStore.swift` is the state the
-  views show, `RightPanel.swift` the right panel's state, `Linear.swift` the Linear tab's.
+  views show, `RightPanel.swift` the right panel's state, `Linear.swift` the Linear tab's and `Ricrac.swift`
+  the Ricrac tab's.
 - `Shared/Views/Transcript`: the transcript. `TranscriptView.swift` only keeps views for the
   rows on screen, `Rows.swift` builds their text and measures them off the main thread,
   `RowViews.swift` are the rows.
@@ -231,7 +236,8 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
 - `Shared/Views/Settings`: the settings, a route over the whole client with a way back: the
   sections and a search of their groups in a sidebar (`SettingsSidebar.swift`) and the open
   section's page (`SettingsPage.swift`). The Mac lays them out in `Mac/SettingsRoute.swift`, iOS
-  in `iOS/SettingsSheet.swift`, a sheet.
+  in `iOS/SettingsSheet.swift`, a sheet. The Integrations page turns each issue tracker's tab on
+  or off on this device (`Shared/Core/Integration.swift`; Linear is on to start with, Ricrac off).
 - `Shared/Views/Usage`: the usage, a route of its own opened from the sidebar's footer, with the
   servers it counts picked in its title. `UsageView.swift` holds its tabs and what they read,
   `LimitsView.swift` is the Limits tab, what the agents' plans have used, and `SpendingView.swift`
@@ -239,7 +245,8 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   The Mac lays it out in `Mac/UsageRoute.swift`, iOS in `iOS/UsageSheet.swift`.
 - `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
   requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
-  `LineCommentSheet.swift`, `PullRequestParts.swift`) and Linear (`LinearView.swift`).
+  `LineCommentSheet.swift`, `PullRequestParts.swift`), Linear (`LinearView.swift`) and Ricrac
+  (`RicracView.swift`).
   `CodeView.swift` draws a diff or a file.
 - `Mac/`: `MotileApp.swift` lays out the window, `MediaViewer.swift`, `AppUpdater.swift`,
   `Glass.swift`, `Demo/DemoDriver.swift`.
@@ -311,7 +318,7 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 
 - `bridge.rs`: runs the core and prepares a transcript's rows off the main thread. `store/` is
   the state the views show, as `AppStore.swift` is, a module per area (`threads.rs`, `git.rs`,
-  `projects.rs`, `pull_requests.rs`, `linear.rs`, `settings.rs`, `sidebar.rs`).
+  `projects.rs`, `pull_requests.rs`, `linear.rs`, `ricrac.rs`, `settings.rs`, `sidebar.rs`).
 - `root.rs`, `main_view.rs`, `app_menu.rs`: the window, its layout and the menu bar.
   `keyboard.rs` runs the core's keybindings ahead of the menus and the focused view, as
   `ShortcutMonitor.swift` does, with the commands in `store/commands.rs` and the rules in
@@ -338,7 +345,7 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
   draws the edges that resize it.
 - `panel/`: the right panel: `state.rs` (the tabs, as `RightPanel.swift`), `view.rs` (the chrome
   and the changes, files and agents tabs), `code_view.rs`, `pull_request.rs`,
-  `pull_request_list.rs`, `line_comment.rs` and `linear.rs`.
+  `pull_request_list.rs`, `line_comment.rs`, `linear.rs` and `ricrac.rs`.
 - `scripts/dev-app.sh` opens its dev app on the Mac's dev stack (`apps/macos/scripts/dev-stack.sh`),
   a device of its own with its data in `apps/macos/build/dev/gpui`; `--mac` opens the Mac's dev
   app beside it to compare. `scripts/shot.sh` takes a picture of it, and `scripts/do.sh "click 85
@@ -530,7 +537,8 @@ a review, have conversations on its lines or sit in a stack, and set `delay` to 
 `scripts/fake-linear` stands in for Linear in the dev apps (through `MOTILE_LINEAR_URL`), whose
 server starts out connected to its workspace. It keeps its team, users and issues in
 `build/dev/linear.json`. `MOTILE_DEV_LINEAR=real scripts/dev-app.sh`, after a `--stop`, leaves
-Linear the real one, to connect a workspace of your own.
+Linear the real one, to connect a workspace of your own. `scripts/fake-ricrac` does the same for
+Ricrac (`MOTILE_RICRAC_URL`, `build/dev/ricrac.json`, `MOTILE_DEV_RICRAC=real`).
 
 ## Releasing and deploying
 
