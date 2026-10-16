@@ -12,7 +12,7 @@ use crate::ui::{ActionButton, Variant, icons};
 
 pub const TILE: f32 = 64.;
 
-pub fn attachments(store: &Entity<Store>, window: &mut Window, cx: &mut App) -> impl IntoElement {
+pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
     let attached = store.read(cx).attachments();
     let pictured: Vec<Attachment> = attached.iter().filter(|attachment| attachment.pictured).cloned().collect();
     let viewed: Vec<_> = pictured.iter().filter_map(Attachment::viewed).collect();
@@ -30,7 +30,7 @@ pub fn attachments(store: &Entity<Store>, window: &mut Window, cx: &mut App) -> 
         items.push(tile.into_any_element());
     }
     for attachment in attached.iter().filter(|attachment| !attachment.pictured) {
-        items.push(chip(attachment, store, window, cx).into_any_element());
+        items.push(chip(attachment, store, cx).into_any_element());
     }
     div()
         .id("attachments")
@@ -110,16 +110,11 @@ fn tile(attachment: &Attachment, store: Entity<Store>, cx: &mut App) -> Stateful
 
 /// A file that isn't shown as a picture: its name, its size, and how far it is on its way to the
 /// server.
-fn chip(attachment: &Attachment, store: &Entity<Store>, window: &mut Window, cx: &mut App) -> impl IntoElement {
+fn chip(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> impl IntoElement {
     let c = colors(cx);
     let remove = store.clone();
     let id = attachment.id.clone();
-    let chip_id = ElementId::from(SharedString::from(format!("chip-{}", attachment.id)));
-    let hovered = crate::ui::hover_state(&chip_id, window, cx);
-    let layer = if *hovered.read(cx) { Layer::ControlLit } else { Layer::Control };
     div()
-        .id(chip_id)
-        .on_hover(crate::ui::track_hover(&hovered))
         .flex_shrink_0()
         .cursor_default()
         .flex()
@@ -129,7 +124,7 @@ fn chip(attachment: &Attachment, store: &Entity<Store>, window: &mut Window, cx:
         .pr(px(2.))
         .py(px(2.))
         .rounded_full()
-        .bg(Surface::Composer.layer(layer, c))
+        .bg(Surface::Composer.layer(Layer::Chip, c))
         .border_1()
         .border_color(c.border_accent)
         .text_size(px(12.))
@@ -144,7 +139,7 @@ fn chip(attachment: &Attachment, store: &Entity<Store>, window: &mut Window, cx:
                 .small()
                 .round(true)
                 .surface(Surface::Composer)
-                .row(Some(layer))
+                .row(Some(Layer::Chip))
                 .on_click(move |_, _, cx| {
                     remove.update(cx, |store, cx| {
                         store.remove_attachment(&id);

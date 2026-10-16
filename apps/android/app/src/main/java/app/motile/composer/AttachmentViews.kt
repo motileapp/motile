@@ -105,7 +105,7 @@ fun AttachmentChip(attachment: Attachment) {
     val store = LocalStore.current
     val palette = Theme.colors
     val surface = LocalSurface.current
-    val layer = Surface.Layer.Control
+    val layer = Surface.Layer.Chip
     Row(
         Modifier
             .background(surface.color(layer), CircleShape)

@@ -658,13 +658,7 @@ impl Composer {
     }
 
     /// The box: the done banner, the attachments, the text and the controls under it.
-    fn box_(
-        &self,
-        thread: Option<&ThreadInfo>,
-        labels: Labels,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    fn box_(&self, thread: Option<&ThreadInfo>, labels: Labels, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let has_attachments = !store.attachments().is_empty();
@@ -733,7 +727,7 @@ impl Composer {
                     .when_some(thread.filter(|thread| thread.is_done()), |composer, thread| {
                         composer.child(self.done_banner(thread, cx))
                     })
-                    .when(has_attachments, |composer| composer.child(attachments::attachments(&self.store, window, cx)))
+                    .when(has_attachments, |composer| composer.child(attachments::attachments(&self.store, cx)))
                     .child(
                         div()
                             .px(px(TEXT_SIDE))
@@ -913,7 +907,7 @@ impl Render for Composer {
             )
             .child(self.skill_menu(cx))
             .children(top_strip.map(|strip| div().relative().child(measure(true, self.strips.clone())).child(strip)))
-            .child(self.box_(thread.as_ref(), labels, window, cx))
+            .child(self.box_(thread.as_ref(), labels, cx))
             .children(
                 bottom_strip.map(|strip| div().relative().child(measure(false, self.strips.clone())).child(strip)),
             )

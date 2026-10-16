@@ -267,6 +267,8 @@ enum Surface {
         case rowSelected
         /// A box on it: code, a message, a notice, a quoted line.
         case box
+        /// A chip's fill, edged in the accent border, which a control on it lights by.
+        case chip
     }
 
     var platform: PlatformColor {
@@ -295,7 +297,7 @@ enum Surface {
         switch self {
         case .background:
             switch layer {
-            case .control: Theme.backgroundAccent
+            case .control, .chip: Theme.backgroundAccent
             case .controlLit: Theme.backgroundAccentStronger
             case .controlLitOnSelected: Theme.backgroundAccentStrongest
             case .row: Theme.backgroundAccentLarger
@@ -304,7 +306,7 @@ enum Surface {
             }
         case .secondary:
             switch layer {
-            case .control, .row, .box: Theme.backgroundSecondaryAccent
+            case .control, .row, .box, .chip: Theme.backgroundSecondaryAccent
             case .controlLit, .controlLitOnSelected, .rowSelected: Theme.backgroundSecondaryAccentStronger
             }
         case .card: Theme.cardAccent

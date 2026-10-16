@@ -158,6 +158,8 @@ pub enum Layer {
     RowSelected,
     /// A box on it: code, a message, a notice, a quoted line.
     Box,
+    /// A chip's fill, edged in the accent border, which a control on it lights by.
+    Chip,
 }
 
 impl Surface {
@@ -184,7 +186,7 @@ impl Surface {
     pub fn layer(self, layer: Layer, c: &Colors) -> Hsla {
         match self {
             Surface::Background => match layer {
-                Layer::Control => c.background_accent,
+                Layer::Control | Layer::Chip => c.background_accent,
                 Layer::ControlLit => c.background_accent_stronger,
                 Layer::ControlLitOnSelected => c.background_accent_strongest,
                 Layer::Row => c.background_accent_larger,
@@ -192,7 +194,7 @@ impl Surface {
                 Layer::Box => c.background_secondary,
             },
             Surface::Secondary => match layer {
-                Layer::Control | Layer::Row | Layer::Box => c.background_secondary_accent,
+                Layer::Control | Layer::Row | Layer::Box | Layer::Chip => c.background_secondary_accent,
                 Layer::ControlLit | Layer::ControlLitOnSelected | Layer::RowSelected => {
                     c.background_secondary_accent_stronger
                 }

@@ -257,6 +257,8 @@ enum class Surface {
         RowSelected,
         /** A box on it: code, a message, a notice, a quoted line. */
         Box,
+        /** A chip's fill, edged in the accent border, which a control on it lights by. */
+        Chip,
     }
 
     fun color(palette: Palette): Color = when (this) {
@@ -275,7 +277,7 @@ enum class Surface {
 
     fun color(layer: Layer, palette: Palette): Color = when (this) {
         Background -> when (layer) {
-            Layer.Control -> palette.backgroundAccent
+            Layer.Control, Layer.Chip -> palette.backgroundAccent
             Layer.ControlLit -> palette.backgroundAccentStronger
             Layer.ControlLitOnSelected -> palette.backgroundAccentStrongest
             Layer.Row -> palette.backgroundAccentLarger
@@ -283,7 +285,7 @@ enum class Surface {
             Layer.Box -> palette.backgroundSecondary
         }
         Secondary -> when (layer) {
-            Layer.Control, Layer.Row, Layer.Box -> palette.backgroundSecondaryAccent
+            Layer.Control, Layer.Row, Layer.Box, Layer.Chip -> palette.backgroundSecondaryAccent
             Layer.ControlLit, Layer.ControlLitOnSelected, Layer.RowSelected -> palette.backgroundSecondaryAccentStronger
         }
         Card -> palette.cardAccent

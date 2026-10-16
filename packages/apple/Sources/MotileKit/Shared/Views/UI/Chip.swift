@@ -50,7 +50,7 @@ struct Chip: View {
     private var layer: Surface.Layer {
         switch row {
         case .rowSelected, .controlLit, .controlLitOnSelected: .controlLitOnSelected
-        case .row, .control: .controlLit
+        case .row, .control, .chip: .controlLit
         case .box, nil: .control
         }
     }

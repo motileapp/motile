@@ -148,6 +148,7 @@ impl Look {
         let layer = match self.row {
             Some(Layer::RowSelected | Layer::ControlLit) => Layer::ControlLitOnSelected,
             Some(Layer::Row | Layer::Control) => Layer::ControlLit,
+            Some(Layer::Chip) => return c.border_accent,
             _ => Layer::Control,
         };
         self.surface.layer(layer, c)
@@ -903,7 +904,7 @@ impl Chip {
     fn layer(&self) -> Layer {
         match self.row {
             Some(Layer::RowSelected | Layer::ControlLit | Layer::ControlLitOnSelected) => Layer::ControlLitOnSelected,
-            Some(Layer::Row | Layer::Control) => Layer::ControlLit,
+            Some(Layer::Row | Layer::Control | Layer::Chip) => Layer::ControlLit,
             Some(Layer::Box) | None => Layer::Control,
         }
     }
