@@ -205,22 +205,23 @@ extension PlatformImage {
         return logo.copy(using: &placed) ?? logo
     }
 
-    /// Three half rings that open to the right, three bars, and three half rings that open to the
-    /// left, in a glyph of 20 by 12 placed in a square of 24.
+    /// Three half rings that open to the right, each ending a unit left of the middle, beside three
+    /// bars, in a square of 24 with the room Lucide leaves around its icons.
     private static func ricracLogo(side: CGFloat) -> CGPath {
+        let center = CGPoint(x: 12, y: 12)
         let mark = CGMutablePath()
-        for radius: CGFloat in [5.5, 3.5, 1.5] {
-            mark.move(to: CGPoint(x: 6, y: 6 + radius))
-            mark.addArc(center: CGPoint(x: 6, y: 6), radius: radius, startAngle: .pi / 2, endAngle: .pi * 3 / 2, clockwise: false)
-            mark.move(to: CGPoint(x: 14, y: 6 - radius))
-            mark.addArc(center: CGPoint(x: 14, y: 6), radius: radius, startAngle: -.pi / 2, endAngle: .pi / 2, clockwise: false)
+        for radius: CGFloat in [11, 7, 3] {
+            let end = acos(-1 / radius)
+            mark.move(to: CGPoint(x: 11, y: center.y + radius * sin(end)))
+            mark.addArc(center: center, radius: radius, startAngle: end, endAngle: -end, clockwise: false)
         }
-        for x: CGFloat in [8, 10, 12] {
-            mark.move(to: CGPoint(x: x, y: 0.5))
-            mark.addLine(to: CGPoint(x: x, y: 11.5))
+        for x: CGFloat in [15, 19, 23] {
+            mark.move(to: CGPoint(x: x, y: 1))
+            mark.addLine(to: CGPoint(x: x, y: 23))
         }
-        let logo = mark.copy(strokingWithWidth: 1, lineCap: .round, lineJoin: .round, miterLimit: 10)
-        var placed = CGAffineTransform(scaleX: side / 24, y: side / 24).translatedBy(x: 2, y: 6)
+        let logo = mark.copy(strokingWithWidth: 2, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        let scale = side / 24 * 20 / 24
+        var placed = CGAffineTransform(translationX: side / 2, y: side / 2).scaledBy(x: scale, y: scale).translatedBy(x: -12, y: -12)
         return logo.copy(using: &placed) ?? logo
     }
 

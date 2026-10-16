@@ -122,18 +122,22 @@ private fun linearLogo(side: Float): Path {
     return placed
 }
 
-/** Ricrac's mark, 20 by 12. */
+/** Ricrac's mark, three half rings that open to the right beside three bars, in a square of 24. */
 private val ricracMark: Path by lazy {
     PathParser().parsePathString(
-        "M6 0a.5.5 0 0 1 0 1 5 5 0 0 0 0 10 .5.5 0 0 1 0 1A6 6 0 1 1 6 0zm2 0a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0V.5A.5.5 0 0 1 8 0zm2 0a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0V.5A.5.5 0 0 1 10 0zm2 0a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0V.5A.5.5 0 0 1 12 0zm2 0a6 6 0 0 1 0 12 .5.5 0 0 1 0-1 5 5 0 0 0 0-10 .5.5 0 0 1 0-1zM6 2a.5.5 0 0 1 0 1 3 3 0 0 0 0 6 .5.5 0 0 1 0 1 4 4 0 1 1 0-8zm8 0a4 4 0 0 1 0 8 .5.5 0 0 1 0-1 3 3 0 1 0 0-6 .5.5 0 0 1 0-1zM6 4a.5.5 0 0 1 0 1 1 1 0 0 0 0 2 .5.5 0 0 1 0 1 2 2 0 1 1 0-4zm8 0a2 2 0 1 1 0 4 .5.5 0 0 1 0-1 1 1 0 1 0 0-2 .5.5 0 0 1 0-1z",
+        "M15 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1m4 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1m4 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1M10.91.049a1 1 0 0 1 .18 1.992C5.994 2.501 2 6.784 2 12s3.994 9.5 9.09 9.959a1 1 0 0 1-.18 1.992C4.793 23.4 0 18.261 0 12 0 5.74 4.793.6 10.91.049m-.052 4.032a1 1 0 0 1 .284 1.98 6.001 6.001 0 0 0 0 11.878 1 1 0 0 1-.284 1.98 8.003 8.003 0 0 1 0-15.838m-.191 4.148a1 1 0 1 1 .666 1.884 2.002 2.002 0 0 0 0 3.774 1 1 0 0 1-.666 1.886 4.002 4.002 0 0 1 0-7.544",
     ).toPath()
 }
 
-/** Ricrac's mark in the middle of a square of 24, 20 of it wide as Lucide leaves room around its icons. */
+/** Ricrac's mark in a square of 24, 20 of it as Lucide leaves room around its icons. */
 private fun ricracLogo(side: Float): Path {
     val placed = Path()
-    placed.addPath(ricracMark, Offset(2f, 6f))
-    placed.transform(androidx.compose.ui.graphics.Matrix().apply { scale(side / 24, side / 24) })
+    placed.addPath(ricracMark)
+    placed.transform(androidx.compose.ui.graphics.Matrix().apply {
+        scale(side / 24, side / 24)
+        translate(2f, 2f)
+        scale(20f / 24, 20f / 24)
+    })
     return placed
 }
 
