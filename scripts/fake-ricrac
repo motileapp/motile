@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+"""Stand-in for Ricrac, for the dev apps.
+
+    scripts/fake-ricrac <port>
+
+It approves every connection and answers the server's operations from FAKE_RICRAC_STATE, a JSON
+file it writes on its first run: a workspace, its users, a team with its statuses and a few issues.
+Edit the file to see other issues, and change one in a client to see it change there.
+"""
+
+import datetime
+import json
+import os
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlencode, urlparse
+
+STATE = os.environ.get("FAKE_RICRAC_STATE") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "ricrac.json")
+
+
+def ago(hours):
+    at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=hours)
+    return at.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def first_state():
+    states = [
+        ("triage", "Triage", "triage", "#fc7840"),
+        ("backlog", "Backlog", "backlog", "#bec2c8"),
+        ("todo", "Todo", "unstarted", "#e2e2e2"),
+        ("progress", "In Progress", "started", "#f2c94c"),
+        ("review", "In Review", "started", "#0f783c"),
+        ("done", "Done", "completed", "#5e6ad2"),
+        ("canceled", "Canceled", "canceled", "#95a2b3"),
+    ]
+    issues = [
+        ("Greet in the terminal's colours", "progress", 2, "demo", ["Feature"], 2),
+        ("Time how long a greeting takes", "review", 3, "demo", [], 6),
+        ("greet.py prints twice when piped", "todo", 1, "demo", ["Bug"], 1),
+        ("Greet a list of names", "todo", 3, "grace", ["Feature"], 40),
+        ("An agent asked for a quieter greeting", "triage", 0, None, [], 3),
+        ("Greet over HTTP", "backlog", 4, None, ["Feature"], 300),
+        ("Set up the issue tracker", "done", 0, "demo", [], 500),
+    ]
+    colors = {"Feature": "#bb87fc", "Bug": "#eb5757"}
+    description = (
+        "Colour the greeting when it goes to a terminal, and leave it plain when it doesn't.\n\n"
+        "- Read `NO_COLOR`\n- Check `isatty` on stdout"
+    )
+    comments = [
+        {"id": "comment-1", "user": "grace", "body": "Which colour?", "createdAt": ago(20), "replies": [
+            {"id": "comment-2", "user": "demo", "body": "Green, like a passing test.", "createdAt": ago(19)},
+        ]},
+    ]
+    return {
+        "workspace": {"id": "studio", "name": "Studio"},
+        "viewer": "demo",
+        "users": [{"id": "demo", "name": "Demo"}, {"id": "grace", "name": "Grace Hopper"}],
+        "teams": [
+            {
+                "id": "app",
+                "key": "APP",
+                "name": "App",
+                "states": [
+                    {"id": id, "name": name, "type": kind, "color": color, "position": position, "archivedAt": None}
+                    for position, (id, name, kind, color) in enumerate(states)
+                ],
+            }
+        ],
+        "issues": [
+            {
+                "id": f"issue-{number}",
+                "number": number,
+                "title": title,
+                "description": description if number == 1 else "",
+                "priority": priority,
+                "updatedAt": ago(hours),
+                "team": "app",
+                "state": state,
+                "assignee": assignee,
+                "labels": [{"id": label, "name": label, "color": colors[label], "parent": None} for label in labels],
+                "comments": comments if number == 1 else [],
+            }
+            for number, (title, state, priority, assignee, labels, hours) in enumerate(issues, start=1)
+        ],
+    }
+
+
+def load():
+    if not os.path.exists(STATE):
+        save(first_state())
+    with open(STATE) as file:
+        return json.load(file)
+
+
+def save(state):
+    with open(STATE, "w") as file:
+        json.dump(state, file, indent=2)
+
+
+def user(id, state):
+    found = next((user for user in state["users"] if user["id"] == id), None)
+    return found and {**found, "displayName": found["name"].split()[0].lower(), "isMe": id == state["viewer"], "active": True}
+
+
+def person(id, state):
+    """A person as Ricrac refers to one inside an issue or a comment, which doesn't say who is you."""
+    found = user(id, state)
+    return found and {key: found[key] for key in ("id", "name", "displayName")}
+
+
+def team_of(issue, state):
+    return next(team for team in state["teams"] if team["id"] == issue["team"])
+
+
+def shown(issue, state):
+    """The issue as Ricrac's operations give it, with its status, its team and its people in full."""
+    team = team_of(issue, state)
+    status = next(status for status in team["states"] if status["id"] == issue["state"])
+    identifier = f"{team['key']}-{issue['number']}"
+    slug = "-".join("".join(letter if letter.isalnum() else " " for letter in issue["title"].lower()).split())
+    comment = lambda comment: {**comment, "user": person(comment["user"], state)}
+    threads = [{**comment(thread), "replies": [comment(reply) for reply in thread.get("replies", [])]} for thread in issue["comments"]]
+    return {
+        **issue,
+        "identifier": identifier,
+        "url": f"https://ricrac.app/studio/issue/{identifier}",
+        "branchName": f"{identifier.lower()}-{slug}"[:48],
+        "team": {"id": team["id"], "key": team["key"], "name": team["name"]},
+        "state": {key: status[key] for key in ("id", "name", "type", "color")},
+        "assignee": person(issue.get("assignee"), state),
+        "comments": threads,
+    }
+
+
+def page(nodes):
+    return {"nodes": nodes, "pageInfo": {"hasNextPage": False, "endCursor": None}}
+
+
+def find_state(team, value):
+    return next(status["id"] for status in team["states"] if value in (status["id"], status["name"], status["type"]))
+
+
+def wanted(issue, asked, state):
+    if asked.get("team") and issue["team"] != asked["team"]:
+        return False
+    if asked.get("query"):
+        words = asked["query"].lower()
+        identifier = f"{team_of(issue, state)['key']}-{issue['number']}".lower()
+        return words in f"{issue['title']} {issue['description']}".lower() or words == identifier
+    if asked.get("assignee") == "me" and issue.get("assignee") != state["viewer"]:
+        return False
+    kind = shown(issue, state)["state"]["type"]
+    kinds = (asked.get("filter") or {}).get("state", {}).get("type", {})
+    if "in" in kinds:
+        return kind in kinds["in"]
+    return kind not in kinds.get("nin", [])
+
+
+def answer(operation, asked):
+    state = load()
+    find = lambda id: next(issue for issue in state["issues"] if id in (issue["id"], shown(issue, state)["identifier"]))
+    if operation == "get_workspace":
+        teams = [{"id": team["id"], "key": team["key"], "name": team["name"], "private": False} for team in state["teams"]]
+        return {**state["workspace"], "teams": teams}
+    if operation == "get_user":
+        return user(state["viewer"], state)
+    if operation == "list_users":
+        return page([user(found["id"], state) for found in state["users"]])
+    if operation == "list_issue_statuses":
+        return page(next(team for team in state["teams"] if team["id"] == asked["team"])["states"])
+    if operation == "list_issues":
+        found = [issue for issue in state["issues"] if wanted(issue, asked, state)]
+        found.sort(key=lambda issue: issue["updatedAt"], reverse=True)
+        return page([shown(issue, state) for issue in found])
+    if operation == "get_issue":
+        return shown(find(asked["id"]), state)
+    if operation == "save_comment":
+        issue = find(asked["issueId"])
+        comment = {"id": f"comment-{ago(0)}", "user": state["viewer"], "body": asked["body"], "createdAt": ago(0), "replies": []}
+        issue["comments"].append(comment)
+        issue["updatedAt"] = ago(0)
+        save(state)
+        return {**comment, "user": person(comment["user"], state)}
+    if operation == "save_issue" and "id" in asked:
+        issue = find(asked["id"])
+        if "state" in asked:
+            issue["state"] = find_state(team_of(issue, state), asked["state"])
+        for field in ("assignee", "priority"):
+            if field in asked:
+                issue[field] = asked[field]
+        issue["updatedAt"] = ago(0)
+        save(state)
+        return shown(issue, state)
+    if operation == "save_issue":
+        team = next(team for team in state["teams"] if asked["team"] in (team["id"], team["key"], team["name"]))
+        number = max(issue["number"] for issue in state["issues"]) + 1
+        issue = {
+            "id": f"issue-{number}",
+            "number": number,
+            "title": asked["title"],
+            "description": asked.get("description", ""),
+            "priority": asked.get("priority", 0),
+            "updatedAt": ago(0),
+            "team": team["id"],
+            "state": find_state(team, asked["state"]) if asked.get("state") else team["states"][0]["id"],
+            "assignee": asked.get("assignee"),
+            "labels": [],
+            "comments": [],
+        }
+        state["issues"].append(issue)
+        save(state)
+        return shown(issue, state)
+    return None
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+    def reply(self, body, status=200):
+        body = json.dumps(body).encode()
+        self.send_response(status)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        asked = parse_qs(urlparse(self.path).query)
+        back = {"code": "dev", "state": asked.get("state", [""])[0]}
+        self.send_response(302)
+        self.send_header("location", f"{asked.get('redirect_uri', ['motile://ricrac'])[0]}?{urlencode(back)}")
+        self.end_headers()
+
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("content-length") or 0))
+        if self.path.startswith("/v1/ops/"):
+            answered = answer(self.path.removeprefix("/v1/ops/"), json.loads(body or b"{}"))
+            return self.reply(answered) if answered is not None else self.reply({"error": "No such operation"}, 404)
+        if self.path == "/oauth/token":
+            return self.reply({"access_token": "dev", "refresh_token": "dev", "expires_in": 86400})
+        self.reply({})
+
+
+if __name__ == "__main__":
+    load()
+    ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()

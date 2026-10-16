@@ -15,6 +15,7 @@ const OWN: &[(&str, &[u8])] = &[
     ("icons/google-red.svg", include_bytes!("../assets/icons/google-red.svg")),
     ("icons/smile-plus.svg", include_bytes!("../assets/icons/smile-plus.svg")),
     ("icons/linear.svg", include_bytes!("../assets/icons/linear.svg")),
+    ("icons/ricrac.svg", include_bytes!("../assets/icons/ricrac.svg")),
     ("icons/effort-low.svg", include_bytes!("../assets/icons/effort-low.svg")),
     ("icons/effort-medium.svg", include_bytes!("../assets/icons/effort-medium.svg")),
     ("icons/effort-high.svg", include_bytes!("../assets/icons/effort-high.svg")),

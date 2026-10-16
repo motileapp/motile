@@ -115,9 +115,16 @@ struct MotileCommands: Commands {
             Button("Show All Pull Requests") { store.rightPanel.open(.pullRequests) }
                 .shortcut("rightPanel.pullRequests", in: keys)
                 .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil || !store.pullRequestsExtended)
-            Button("Show Linear") { store.rightPanel.open(.linear) }
-                .shortcut("rightPanel.linear", in: keys)
-                .disabled(store.panelUnavailable != nil || !store.linearConnected)
+            if store.isOn(.linear) {
+                Button("Show Linear") { store.rightPanel.open(.linear) }
+                    .shortcut("rightPanel.linear", in: keys)
+                    .disabled(store.panelUnavailable != nil || store.linearUnavailable != nil)
+            }
+            if store.isOn(.ricrac) {
+                Button("Show Ricrac") { store.rightPanel.open(.ricrac) }
+                    .shortcut("rightPanel.ricrac", in: keys)
+                    .disabled(store.panelUnavailable != nil || store.ricracUnavailable != nil)
+            }
             PanelTabCommands(store: store)
         }
         CommandMenu("Thread") {

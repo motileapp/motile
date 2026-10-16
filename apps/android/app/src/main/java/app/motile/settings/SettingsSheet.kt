@@ -216,6 +216,7 @@ private val sectionGroups = listOf(
     listOf(SettingsSection.General),
     listOf(SettingsSection.Servers, SettingsSection.Agents, SettingsSection.Projects),
     listOf(SettingsSection.TextGeneration, SettingsSection.PullRequests),
+    listOf(SettingsSection.Integrations),
 )
 
 /**

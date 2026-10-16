@@ -5,6 +5,7 @@ use gpui_kit::component::input;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+use crate::store::integrations::Integration;
 use crate::store::{PanelPage, Store};
 
 actions!(
@@ -125,7 +126,7 @@ fn on_window<A: Action + Clone>(cx: &mut App, run: impl Fn(&A, &mut Window, &mut
 }
 
 /// The commands the menus run, whose keys they show.
-const COMMANDS: [&str; 24] = [
+const COMMANDS: [&str; 25] = [
     "settings.open",
     "usage.open",
     "chat.new",
@@ -143,6 +144,7 @@ const COMMANDS: [&str; 24] = [
     "rightPanel.pullRequest",
     "rightPanel.pullRequests",
     "rightPanel.linear",
+    "rightPanel.ricrac",
     "rightPanel.new",
     "rightPanel.nextTab",
     "rightPanel.previousTab",
@@ -164,7 +166,9 @@ struct State {
     panel_available: bool,
     shows_pull_request: bool,
     shows_pull_requests: bool,
-    shows_linear: bool,
+    /// Whether Linear's and Ricrac's tabs can be shown, while their integrations are on.
+    shows_linear: Option<bool>,
+    shows_ricrac: Option<bool>,
     switchable_tabs: bool,
     /// The project of "New Thread in …", and whether it is a server's "No project".
     project: Option<(String, bool)>,
@@ -193,7 +197,8 @@ fn follow(store: &Entity<Store>, shown: &mut Option<State>, cx: &mut App) {
         panel_available: available,
         shows_pull_request: available && store.pull_requests_unavailable().is_none(),
         shows_pull_requests: available && store.pull_requests_unavailable().is_none() && store.pull_requests_extended(),
-        shows_linear: available && store.linear_connected(),
+        shows_linear: store.is_on(Integration::Linear).then(|| available && store.linear_unavailable().is_none()),
+        shows_ricrac: store.is_on(Integration::Ricrac).then(|| available && store.ricrac_unavailable().is_none()),
         switchable_tabs: store.right_panel.is_open && store.panel_tabs().tabs.len() > 1,
         project: store.composer_project().map(|project| (project.name, project.no_project)),
         no_projects: !store.no_projects.is_empty(),
@@ -287,29 +292,35 @@ fn menus(state: &State) -> Vec<Menu> {
             MenuItem::action("Delete", input::Delete),
             MenuItem::os_action("Select All", input::SelectAll, OsAction::SelectAll),
         ]),
-        Menu::new("View").items([
-            item(if state.sidebar_hidden { "Show Sidebar" } else { "Hide Sidebar" }, "sidebar.toggle"),
-            item(if state.panel_open { "Hide Right Panel" } else { "Show Right Panel" }, "rightPanel.toggle"),
-            item(
-                if state.panel_maximized { "Restore Right Panel" } else { "Maximize Right Panel" },
-                "rightPanel.toggleMaximized",
-            )
-            .disabled(!state.can_maximize),
-            item("Show Changes", "rightPanel.diff").disabled(!state.shows_changes),
-            item("Show Files", "rightPanel.files").disabled(!state.panel_available),
-            item("Show Agents", "rightPanel.agents").disabled(!state.panel_available),
-            item("Show Pull Request", "rightPanel.pullRequest").disabled(!state.shows_pull_request),
-            item("Show All Pull Requests", "rightPanel.pullRequests").disabled(!state.shows_pull_requests),
-            item("Show Linear", "rightPanel.linear").disabled(!state.shows_linear),
-            item("New Tab", "rightPanel.new").disabled(!state.panel_available),
-            item("Show Next Tab", "rightPanel.nextTab").disabled(!state.switchable_tabs),
-            item("Show Previous Tab", "rightPanel.previousTab").disabled(!state.switchable_tabs),
-            MenuItem::separator(),
-            MenuItem::action(
-                if state.full_screen { "Exit Full Screen" } else { "Enter Full Screen" },
-                ToggleFullScreen,
-            ),
-        ]),
+        Menu::new("View").items(
+            [
+                item(if state.sidebar_hidden { "Show Sidebar" } else { "Hide Sidebar" }, "sidebar.toggle"),
+                item(if state.panel_open { "Hide Right Panel" } else { "Show Right Panel" }, "rightPanel.toggle"),
+                item(
+                    if state.panel_maximized { "Restore Right Panel" } else { "Maximize Right Panel" },
+                    "rightPanel.toggleMaximized",
+                )
+                .disabled(!state.can_maximize),
+                item("Show Changes", "rightPanel.diff").disabled(!state.shows_changes),
+                item("Show Files", "rightPanel.files").disabled(!state.panel_available),
+                item("Show Agents", "rightPanel.agents").disabled(!state.panel_available),
+                item("Show Pull Request", "rightPanel.pullRequest").disabled(!state.shows_pull_request),
+                item("Show All Pull Requests", "rightPanel.pullRequests").disabled(!state.shows_pull_requests),
+            ]
+            .into_iter()
+            .chain(state.shows_linear.map(|shows| item("Show Linear", "rightPanel.linear").disabled(!shows)))
+            .chain(state.shows_ricrac.map(|shows| item("Show Ricrac", "rightPanel.ricrac").disabled(!shows)))
+            .chain([
+                item("New Tab", "rightPanel.new").disabled(!state.panel_available),
+                item("Show Next Tab", "rightPanel.nextTab").disabled(!state.switchable_tabs),
+                item("Show Previous Tab", "rightPanel.previousTab").disabled(!state.switchable_tabs),
+                MenuItem::separator(),
+                MenuItem::action(
+                    if state.full_screen { "Exit Full Screen" } else { "Enter Full Screen" },
+                    ToggleFullScreen,
+                ),
+            ]),
+        ),
         Menu::new("Thread").items([
             item(if state.thread == Some(true) { "Mark Undone" } else { "Mark Done" }, "thread.done")
                 .disabled(state.thread.is_none()),

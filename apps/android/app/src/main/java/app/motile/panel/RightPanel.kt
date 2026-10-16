@@ -9,6 +9,7 @@ import app.motile.core.JSON
 import app.motile.core.Preferences
 import app.motile.core.Time
 import app.motile.core.bool
+import app.motile.core.integration
 import app.motile.core.int
 import app.motile.core.json
 import app.motile.core.jsonOf
@@ -77,6 +78,10 @@ sealed interface PanelTab {
     data object Linear : PanelTab
     /** One issue of a workspace, by its id there, titled with its identifier. */
     data class LinearIssue(val workspace: String, val issueID: String, val identifier: String) : PanelTab
+    /** The issues of the Ricrac workspace the server is connected to, or how to connect it. */
+    data object Ricrac : PanelTab
+    /** One issue of a Ricrac workspace, by its id there, titled with its identifier. */
+    data class RicracIssue(val workspace: String, val issueID: String, val identifier: String) : PanelTab
     /** A tab that offers what there is to open. A thread can have several, told apart by number. */
     data class Blank(val number: Int) : PanelTab
 
@@ -91,6 +96,8 @@ sealed interface PanelTab {
             PullRequests -> "pull_requests"
             Linear -> "linear"
             is LinearIssue -> "linear:$issueID"
+            Ricrac -> "ricrac"
+            is RicracIssue -> "ricrac:$issueID"
             is File -> "file:$path"
             is Change -> "change:$path"
         }
@@ -110,6 +117,8 @@ sealed interface PanelTab {
             PullRequests -> "Pull Requests"
             Linear -> "Linear"
             is LinearIssue -> identifier
+            Ricrac -> "Ricrac"
+            is RicracIssue -> identifier
             is Blank -> "New Tab"
             is File -> path.substringAfterLast('/')
             is Change -> path.substringAfterLast('/')
@@ -122,6 +131,7 @@ sealed interface PanelTab {
             Agents -> Symbol.Users
             PullRequest, is PullRequestNumber, PullRequests -> Symbol.GitPullRequest
             Linear, is LinearIssue -> Symbol.Linear
+            Ricrac, is RicracIssue -> Symbol.Ricrac
             is Blank -> Symbol.Plus
             is File -> FileSymbol.symbol(path)
         }
@@ -134,10 +144,12 @@ sealed interface PanelTab {
             PullRequest -> mapOf("tab" to "pull_request")
             PullRequests -> mapOf("tab" to "pull_requests")
             Linear -> mapOf("tab" to "linear")
+            Ricrac -> mapOf("tab" to "ricrac")
             is File -> mapOf("tab" to "file", "path" to path)
             is Change -> mapOf("tab" to "change", "turn" to turn, "path" to path)
             is PullRequestNumber -> mapOf("tab" to "pull_request_number", "number" to number)
             is LinearIssue -> mapOf("tab" to "linear_issue", "workspace" to workspace, "id" to issueID, "identifier" to identifier)
+            is RicracIssue -> mapOf("tab" to "ricrac_issue", "workspace" to workspace, "id" to issueID, "identifier" to identifier)
             is Blank -> mapOf("tab" to "blank", "number" to number)
         }
 
@@ -149,10 +161,12 @@ sealed interface PanelTab {
             "pull_request" -> PullRequest
             "pull_requests" -> PullRequests
             "linear" -> Linear
+            "ricrac" -> Ricrac
             "file" -> File(json.string("path"))
             "change" -> Change(json.string("turn"), json.string("path"))
             "pull_request_number" -> PullRequestNumber(json.int("number"))
             "linear_issue" -> LinearIssue(json.string("workspace"), json.string("id"), json.string("identifier"))
+            "ricrac_issue" -> RicracIssue(json.string("workspace"), json.string("id"), json.string("identifier"))
             "blank" -> Blank(json.int("number"))
             else -> null
         }
@@ -274,6 +288,8 @@ class RightPanel {
     val tabs: PanelTabs
         get() {
             var tabs = key?.let { tabsByKey[it] } ?: PanelTabs()
+            tabs = tabs.copy(tabs = tabs.tabs.filter { tab -> tab.integration?.let { store?.isOn(it) != false } ?: true })
+            if (tabs.active != null && tabs.active !in tabs.tabs) tabs = tabs.copy(active = null)
             if (tabs.tabs.isEmpty()) tabs = tabs.copy(tabs = listOf(PanelTab.Blank(0)))
             if (tabs.active == null) tabs = tabs.copy(active = tabs.tabs.first())
             return tabs

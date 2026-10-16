@@ -10,13 +10,14 @@ use motile_protocol::wire::{Agent, AgentAccount, ContinueSettings, PullRequestSe
 
 use super::account_sheet::AccountSheet;
 use super::keybindings::KeybindingsPage;
-use super::layout::{Cut, INSET, Targets, group, label, large_outset, more, note, row};
+use super::layout::{Cut, INSET, Targets, group, label, large_outset, more, note, row, target};
 use crate::format;
 use crate::models::{AgentAccountExt, Project, Server, agent_name, new_account};
 use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
+use crate::store::integrations::Integration;
 use crate::store::settings::{PULL_DEFAULT_BRANCH_CAPTION, SettingsSection};
 use crate::store::{PanelPage, Store};
-use crate::theme::{self, Appearance, ControlSize, Surface, colors};
+use crate::theme::{self, Appearance, ControlSize, Layer, Radius, Surface, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, modal, present_sheet, presented};
 use crate::ui::motion::{SPRING, Tween, spring};
@@ -30,6 +31,9 @@ type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// How far the page fades in under the top bar.
 const FADE: f32 = 20.;
+/// The side of an integration's logo tile, and the room between it and the integration's name.
+const LOGO_TILE: f32 = 32.;
+const LOGO_GAP: f32 = 12.;
 
 /// What the settings take away once the user says so: a server, a project or an agent's account.
 #[derive(Clone)]
@@ -652,6 +656,42 @@ impl SettingsPage {
         vec![page.clone().into_any_element()]
     }
 
+    /// Each integration's switch.
+    fn integrations(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let mut rows = Vec::new();
+        for (index, integration) in Integration::ALL.into_iter().enumerate() {
+            let on = self.store.read(cx).is_on(integration);
+            let store = self.store.clone();
+            let switch = Switch::new(("integration", index), on).on_change(move |on, _, cx| {
+                store.update(cx, |store, cx| {
+                    store.set_integration(integration, on);
+                    cx.notify();
+                })
+            });
+            let leading = div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .items_center()
+                .gap(px(LOGO_GAP))
+                .child(integration_logo(integration, cx))
+                .child(label(integration.title(), Some(integration.summary().into()), None, Cut::Wraps, cx))
+                .into_any_element();
+            rows.push(
+                div()
+                    .relative()
+                    .child(target(format!("integration-{}", integration.id())))
+                    .child(row(vec![leading], vec![switch.into_any_element()]))
+                    .into_any_element(),
+            );
+            if index + 1 < Integration::ALL.len() {
+                rows.push(divider_on(Surface::Card, cx).into_any_element());
+            }
+        }
+        let caption = "Each one that is on has a tab in the right panel.";
+        vec![group("integrations", "Issue trackers", Some(caption), true, rows, cx)]
+    }
+
     /// Scrolls the target a search picked to the middle of the page, once the page has been drawn
     /// with it.
     fn scroll_to(&self, target: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -725,6 +765,7 @@ impl Render for SettingsPage {
             SettingsSection::Projects => self.projects(cx),
             SettingsSection::TextGeneration => self.text_generation(cx),
             SettingsSection::PullRequests => self.pull_requests(cx),
+            SettingsSection::Integrations => self.integrations(cx),
         };
         if let Some(target) = self.store.read(cx).settings.target.clone() {
             self.store.update(cx, |store, _| store.settings.target = None);
@@ -764,6 +805,24 @@ pub fn top_fade(background: Hsla) -> Div {
         linear_color_stop(background, 0.),
         linear_color_stop(background.opacity(0.), 1.),
     ))
+}
+
+/// An integration's logo on a tile of its own, as an app's icon sits.
+fn integration_logo(integration: Integration, cx: &App) -> AnyElement {
+    let c = colors(cx);
+    div()
+        .size(px(LOGO_TILE))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(Radius::MD))
+        .bg(Surface::Card.layer(Layer::Box, c))
+        .border_1()
+        .border_color(Surface::Card.border(c))
+        .text_color(c.foreground)
+        .child(icons::symbol(integration.symbol(), 18.))
+        .into_any_element()
 }
 
 /// A settings control: outline, large, on the card.

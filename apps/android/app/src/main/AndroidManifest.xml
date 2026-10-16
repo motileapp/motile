@@ -42,6 +42,7 @@
                 <data android:scheme="motile" />
                 <data android:host="auth" />
                 <data android:host="linear" />
+                <data android:host="ricrac" />
             </intent-filter>
         </activity>
 

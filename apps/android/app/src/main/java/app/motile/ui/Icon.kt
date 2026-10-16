@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,7 @@ fun DrawScope.drawSymbol(symbol: Symbol, side: Float, color: Color, trimmed: Boo
     val drawn = color.takeOrElse(Color.Black)
     when (symbol) {
         Symbol.Linear -> drawPath(linearLogo(side), drawn)
+        Symbol.Ricrac -> drawPath(ricracLogo(side), drawn)
         Symbol.EffortLow -> gauge(0.25f, side, drawn)
         Symbol.EffortMedium -> gauge(0.5f, side, drawn)
         Symbol.EffortHigh -> gauge(0.75f, side, drawn)
@@ -117,6 +119,21 @@ private fun linearLogo(side: Float): Path {
         translate(-12f, -12f)
     }
     placed.transform(matrix)
+    return placed
+}
+
+/** Ricrac's mark, 20 by 12. */
+private val ricracMark: Path by lazy {
+    PathParser().parsePathString(
+        "M6 0a.5.5 0 0 1 0 1 5 5 0 0 0 0 10 .5.5 0 0 1 0 1A6 6 0 1 1 6 0zm2 0a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0V.5A.5.5 0 0 1 8 0zm2 0a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0V.5A.5.5 0 0 1 10 0zm2 0a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0V.5A.5.5 0 0 1 12 0zm2 0a6 6 0 0 1 0 12 .5.5 0 0 1 0-1 5 5 0 0 0 0-10 .5.5 0 0 1 0-1zM6 2a.5.5 0 0 1 0 1 3 3 0 0 0 0 6 .5.5 0 0 1 0 1 4 4 0 1 1 0-8zm8 0a4 4 0 0 1 0 8 .5.5 0 0 1 0-1 3 3 0 1 0 0-6 .5.5 0 0 1 0-1zM6 4a.5.5 0 0 1 0 1 1 1 0 0 0 0 2 .5.5 0 0 1 0 1 2 2 0 1 1 0-4zm8 0a2 2 0 1 1 0 4 .5.5 0 0 1 0-1 1 1 0 1 0 0-2 .5.5 0 0 1 0-1z",
+    ).toPath()
+}
+
+/** Ricrac's mark in the middle of a square of 24, 20 of it wide as Lucide leaves room around its icons. */
+private fun ricracLogo(side: Float): Path {
+    val placed = Path()
+    placed.addPath(ricracMark, Offset(2f, 6f))
+    placed.transform(androidx.compose.ui.graphics.Matrix().apply { scale(side / 24, side / 24) })
     return placed
 }
 

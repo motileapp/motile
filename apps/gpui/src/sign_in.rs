@@ -1,6 +1,6 @@
-//! Signing in, or connecting Linear, in the browser. On the Mac it is the browser sheet the Mac
-//! app shows, the system's web authentication session, which hands back the `motile://` address
-//! it ends on. Elsewhere it is the browser itself, whose address the system starts the client with
+//! Signing in, or connecting Linear or Ricrac, in the browser. On the Mac it is the browser sheet
+//! the Mac app shows, the system's web authentication session, which hands back the `motile://`
+//! address it ends on. Elsewhere it is the browser itself, whose address the system starts the client with
 //! (`instance.rs`), and the copy that runs hands it to the sign-in waiting for it.
 
 use futures::channel::oneshot;
@@ -128,6 +128,7 @@ mod browser {
             assert!(ends_at("motile://linear", "motile://linear"));
             assert!(!ends_at("motile://auth.evil?code=a", "motile://auth"));
             assert!(!ends_at("motile://linear?code=a", "motile://auth"));
+            assert!(!ends_at("motile://ricrac?code=a", "motile://linear"));
         }
     }
 }

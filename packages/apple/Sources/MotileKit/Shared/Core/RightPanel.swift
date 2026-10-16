@@ -47,6 +47,10 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case linear
     /// One issue of a workspace, by its id there, titled with its identifier.
     case linearIssue(workspace: String, id: String, identifier: String)
+    /// The issues of the Ricrac workspace the server is connected to, or how to connect it.
+    case ricrac
+    /// One issue of a workspace, by its id there, titled with its identifier.
+    case ricracIssue(workspace: String, id: String, identifier: String)
     /// A tab that offers what there is to open. A thread can have several, told apart by number.
     case blank(Int)
 
@@ -61,6 +65,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .pullRequests: "pull_requests"
         case .linear: "linear"
         case .linearIssue(_, let id, _): "linear:\(id)"
+        case .ricrac: "ricrac"
+        case .ricracIssue(_, let id, _): "ricrac:\(id)"
         case .file(let path): "file:\(path)"
         case .change(_, let path): "change:\(path)"
         }
@@ -75,7 +81,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
     var path: String? {
         switch self {
         case .file(let path), .change(_, let path): path
-        case .diff, .files, .agents, .pullRequest, .pullRequestNumber, .pullRequests, .linear, .linearIssue, .blank: nil
+        case .diff, .files, .agents, .pullRequest, .pullRequestNumber, .pullRequests, .linear, .linearIssue, .ricrac, .ricracIssue, .blank: nil
         }
     }
 
@@ -88,7 +94,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .pullRequestNumber(let number): "PR #\(number)"
         case .pullRequests: "Pull Requests"
         case .linear: "Linear"
-        case .linearIssue(_, _, let identifier): identifier
+        case .linearIssue(_, _, let identifier), .ricracIssue(_, _, let identifier): identifier
+        case .ricrac: "Ricrac"
         case .blank: "New Tab"
         case .file(let path), .change(_, let path): URL(fileURLWithPath: path).lastPathComponent
         }
@@ -101,6 +108,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .agents: .users
         case .pullRequest, .pullRequestNumber, .pullRequests: .gitPullRequest
         case .linear, .linearIssue: .linear
+        case .ricrac, .ricracIssue: .ricrac
         case .blank: .plus
         case .file(let path): FileSymbol.symbol(for: path)
         }
@@ -271,6 +279,8 @@ final class RightPanel {
     /// The thread's tabs. There is always one: a blank one when none was opened.
     var tabs: PanelTabs {
         var tabs = key.flatMap { tabsByKey[$0] } ?? PanelTabs()
+        tabs.tabs.removeAll { tab in tab.integration.map { store?.isOn($0) == false } ?? false }
+        if let active = tabs.active, !tabs.tabs.contains(active) { tabs.active = nil }
         if tabs.tabs.isEmpty { tabs.tabs = [.blank(0)] }
         if tabs.active == nil { tabs.active = tabs.tabs.first }
         return tabs

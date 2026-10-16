@@ -5,7 +5,7 @@ import app.motile.platform.Symbol
 /** A page of the settings, listed in the settings' sidebar. */
 enum class SettingsSection(val raw: String) {
     General("general"), Keyboard("keyboard"), Servers("servers"), Agents("agents"), Projects("projects"),
-    TextGeneration("textGeneration"), PullRequests("pullRequests");
+    TextGeneration("textGeneration"), PullRequests("pullRequests"), Integrations("integrations");
 
     val title: String
         get() = when (this) {
@@ -16,6 +16,7 @@ enum class SettingsSection(val raw: String) {
             Projects -> "Projects"
             TextGeneration -> "Text Generation"
             PullRequests -> "Pull Requests"
+            Integrations -> "Integrations"
         }
 
     val symbol: Symbol
@@ -27,6 +28,7 @@ enum class SettingsSection(val raw: String) {
             Projects -> Symbol.Folder
             TextGeneration -> Symbol.PencilLine
             PullRequests -> Symbol.GitPullRequest
+            Integrations -> Symbol.Blocks
         }
 
     companion object {
@@ -64,6 +66,8 @@ data class SettingsEntry(
             SettingsEntry("merged", "Mark the thread done after merge or close", SettingsSection.PullRequests, "merge close finished"),
             SettingsEntry("worktrees", "Remove the thread's worktree after merge", SettingsSection.PullRequests, "merge pushed branch clean up"),
             SettingsEntry("pull", "Automatically pull", SettingsSection.PullRequests, "default branch main merge sync fetch fast-forward"),
+            SettingsEntry("integration-linear", "Linear", SettingsSection.Integrations, "issues tracker tab connect"),
+            SettingsEntry("integration-ricrac", "Ricrac", SettingsSection.Integrations, "issues tracker tab connect"),
         )
 
         /** The groups every word of the query is found in, by title, section or keywords, and the shortcuts' commands it finds by name. */

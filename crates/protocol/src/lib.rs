@@ -13,12 +13,14 @@ pub mod tls;
 pub mod wire;
 
 pub const ALPN: &[u8] = b"motile/1";
-pub const PROTOCOL_VERSION: u32 = 28;
+pub const PROTOCOL_VERSION: u32 = 29;
 pub const DEFAULT_AUTH_URL: &str = "https://auth.motile.app";
 /// Where the auth server sends the browser once a sign-in is done; the client owns this scheme.
 pub const APP_REDIRECT: &str = "motile://auth";
 /// Where Linear sends the browser once the user has approved a connection.
 pub const LINEAR_REDIRECT: &str = "motile://linear";
+/// Where Ricrac sends the browser once the user has approved a connection.
+pub const RICRAC_REDIRECT: &str = "motile://ricrac";
 
 pub fn now() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)

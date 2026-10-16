@@ -4,7 +4,7 @@ import SwiftUI
 /// The settings' sections in groups, each pushing its page, or selected beside it on a wide
 /// sheet. While a search is typed, the groups it finds take their place.
 struct SettingsSections: View {
-    private static let groups: [[SettingsSection]] = [[.general], [.servers, .agents, .projects], [.textGeneration, .pullRequests]]
+    private static let groups: [[SettingsSection]] = [[.general], [.servers, .agents, .projects], [.textGeneration, .pullRequests], [.integrations]]
 
     @Environment(AppStore.self) private var store
     /// The section shown beside the list, on a wide sheet, lit in it. Without one, each pushes.
@@ -96,6 +96,7 @@ struct SettingsPage: View {
                 case .textGeneration: textGeneration
                 case .pullRequests: pullRequests
                 case .keyboard: EmptyView()
+                case .integrations: integrations
                 }
             }
             .onChange(of: store.settingsTarget, initial: true) {
@@ -323,6 +324,29 @@ struct SettingsPage: View {
                 }
                 .id("branch-names")
             }
+        }
+    }
+
+    private var integrations: some View {
+        Section {
+            ForEach(Integration.allCases) { integration in
+                Toggle(isOn: Binding { store.isOn(integration) } set: { store.setIntegration(integration, on: $0) }) {
+                    HStack(spacing: 12) {
+                        IntegrationLogo(integration: integration)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(integration.title)
+                            Text(integration.summary)
+                                .font(.footnote)
+                                .foregroundStyle(Color.themeMutedForeground)
+                        }
+                    }
+                }
+                .id("integration-\(integration.rawValue)")
+            }
+        } header: {
+            Text("Issue trackers")
+        } footer: {
+            Text("Each one that is on has a tab in the right panel.").foregroundStyle(Color.themeMutedForeground)
         }
     }
 

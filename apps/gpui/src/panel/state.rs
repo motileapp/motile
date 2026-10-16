@@ -48,6 +48,14 @@ pub enum PanelTab {
         id: String,
         identifier: String,
     },
+    /// The issues of the Ricrac workspace the server is connected to, or how to connect it.
+    Ricrac,
+    /// One issue of a Ricrac workspace, by its id there, titled with its identifier.
+    RicracIssue {
+        workspace: String,
+        id: String,
+        identifier: String,
+    },
     /// A tab that offers what there is to open. A thread can have several, told apart by number.
     Blank(u32),
 }
@@ -64,6 +72,8 @@ impl PanelTab {
             PanelTab::PullRequests => "pull_requests".into(),
             PanelTab::Linear => "linear".into(),
             PanelTab::LinearIssue { id, .. } => format!("linear:{id}"),
+            PanelTab::Ricrac => "ricrac".into(),
+            PanelTab::RicracIssue { id, .. } => format!("ricrac:{id}"),
             PanelTab::File(path) => format!("file:{path}"),
             PanelTab::Change { path, .. } => format!("change:{path}"),
         }
@@ -94,6 +104,8 @@ impl PanelTab {
             PanelTab::PullRequests => "Pull Requests".into(),
             PanelTab::Linear => "Linear".into(),
             PanelTab::LinearIssue { identifier, .. } => identifier.clone(),
+            PanelTab::Ricrac => "Ricrac".into(),
+            PanelTab::RicracIssue { identifier, .. } => identifier.clone(),
             PanelTab::Blank(_) => "New Tab".into(),
             PanelTab::File(path) | PanelTab::Change { path, .. } => crate::models::last_component(path),
         }
@@ -106,6 +118,7 @@ impl PanelTab {
             PanelTab::Agents => "users",
             PanelTab::PullRequest | PanelTab::PullRequestNumber(_) | PanelTab::PullRequests => "git-pull-request",
             PanelTab::Linear | PanelTab::LinearIssue { .. } => "linear",
+            PanelTab::Ricrac | PanelTab::RicracIssue { .. } => "ricrac",
             PanelTab::Blank(_) => "plus",
             PanelTab::File(path) => file_symbol(path),
         }
@@ -565,6 +578,10 @@ impl Store {
     pub fn panel_tabs(&self) -> PanelTabs {
         let mut tabs =
             self.panel_key().and_then(|key| self.right_panel.tabs_by_key.get(&key).cloned()).unwrap_or_default();
+        tabs.tabs.retain(|tab| tab.integration().is_none_or(|integration| self.is_on(integration)));
+        if tabs.active.as_ref().is_some_and(|active| !tabs.tabs.contains(active)) {
+            tabs.active = None;
+        }
         if tabs.tabs.is_empty() {
             tabs.tabs = vec![PanelTab::Blank(0)];
         }

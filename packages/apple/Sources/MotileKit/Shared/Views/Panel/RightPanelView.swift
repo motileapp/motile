@@ -50,6 +50,8 @@ struct PanelContent: View {
             case .pullRequests: PullRequestListSurface(target: target)
             case .linear: LinearSurface(target: target)
             case .linearIssue(let workspace, let id, _): LinearIssueSurface(target: target, workspace: workspace, id: id).id(id)
+            case .ricrac: RicracSurface(target: target)
+            case .ricracIssue(let workspace, let id, _): RicracIssueSurface(target: target, workspace: workspace, id: id).id(id)
             case .blank, nil: PanelLauncher(target: target)
             }
         }
@@ -299,14 +301,24 @@ private struct PanelLauncher: View {
                         store.rightPanel.open(.pullRequests)
                     }
                 }
-                row(.linear, store.linearConnected ? "Linear" : "Connect Linear", command: store.linearConnected ? "rightPanel.linear" : nil, reason: store.linearUnavailable) {
-                    store.rightPanel.open(.linear)
+                if store.isOn(.linear) {
+                    row(.linear, store.linearConnected ? "Linear" : "Connect Linear", command: Integration.linear.command, reason: store.linearUnavailable) {
+                        store.rightPanel.open(.linear)
+                    }
+                }
+                if store.isOn(.ricrac) {
+                    row(.ricrac, store.ricracConnected ? "Ricrac" : "Connect Ricrac", command: Integration.ricrac.command, reason: store.ricracUnavailable) {
+                        store.rightPanel.open(.ricrac)
+                    }
                 }
             }
             .frame(width: 250)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: target.serverID) { store.linear.read(target.serverID) }
+        .task(id: target.serverID) {
+            store.linear.read(target.serverID)
+            store.ricrac.read(target.serverID)
+        }
     }
 
     private func row(_ symbol: Symbol, _ title: String, command: String?, reason: String?, action: @escaping () -> Void) -> some View {

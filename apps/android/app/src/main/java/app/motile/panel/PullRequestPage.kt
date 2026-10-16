@@ -225,7 +225,7 @@ class PullRequestPage(json: JSON) {
     fun threads(path: String): List<Thread> = threads.filter { it.path == path }
 
     companion object {
-        /** A label's colour, from GitHub's or Linear's hex; nothing when it isn't one. */
+        /** A label's colour, from GitHub's, Linear's or Ricrac's hex; nothing when it isn't one. */
         fun color(hex: String): Color? {
             val value = hex.removePrefix("#").toLongOrNull(16) ?: return null
             return Color(0xFF000000 or value)

@@ -20,7 +20,7 @@ use tokio::sync::{Notify, watch};
 use crate::access::Access;
 use crate::hub::{GitRun, Hub, ListSubscription, ThreadSubscription};
 use crate::media::MediaStore;
-use crate::{files, linear, update};
+use crate::{files, linear, ricrac, update};
 
 const NOT_LINKED: u32 = 403;
 const RECHECK_ACCESS_EVERY: Duration = Duration::from_secs(30);
@@ -251,6 +251,41 @@ impl Server {
             Request::LinearCreate { workspace, issue } => {
                 let filed = hub.linear.create(hub.store(), &workspace, &issue).await;
                 filed.map(|issue| Message::LinearIssue { issue })
+            }
+            Request::RicracStatus => Ok(Message::Ricrac { connections: hub.ricrac.connections(hub.store()) }),
+            Request::RicracConnect => hub.ricrac.connect().map(|url| Message::RicracAuthorize { url }),
+            Request::RicracFinish { code, state } => {
+                let connected = hub.ricrac.finish(hub.store(), &code, &state).await;
+                connected.map(|connections| Message::Ricrac { connections })
+            }
+            Request::RicracDisconnect { workspace } => {
+                let left = hub.ricrac.disconnect(hub.store(), &workspace).await;
+                left.map(|connections| Message::Ricrac { connections })
+            }
+            Request::RicracTeams { workspace } => {
+                let found = hub.ricrac.teams(hub.store(), &workspace).await;
+                found.map(|(teams, users)| Message::RicracTeams { teams, users })
+            }
+            Request::RicracIssues { workspace, team, mine, closed, states, search } => {
+                let wanted = ricrac::Wanted { team, mine, closed, states, search };
+                let found = hub.ricrac.issues(hub.store(), &workspace, &wanted).await;
+                found.map(|issues| Message::RicracIssues { issues })
+            }
+            Request::RicracIssue { workspace, issue } => {
+                let read = hub.ricrac.issue(hub.store(), &workspace, &issue).await;
+                read.map(|detail| Message::RicracIssueDetail { detail: Box::new(detail) })
+            }
+            Request::RicracUpdate { workspace, issue, change } => {
+                let changed = hub.ricrac.update(hub.store(), &workspace, &issue, &change).await;
+                changed.map(|issue| Message::RicracIssue { issue })
+            }
+            Request::RicracComment { workspace, issue, body } => {
+                let read = hub.ricrac.comment(hub.store(), &workspace, &issue, &body).await;
+                read.map(|detail| Message::RicracIssueDetail { detail: Box::new(detail) })
+            }
+            Request::RicracCreate { workspace, issue } => {
+                let filed = hub.ricrac.create(hub.store(), &workspace, &issue).await;
+                filed.map(|issue| Message::RicracIssue { issue })
             }
             Request::ListDir { path, icons, hidden } => {
                 files::list_dir(path.as_deref(), &hub.server_info().home, icons, hidden)

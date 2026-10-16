@@ -1,0 +1,471 @@
+import SwiftUI
+
+/// The issues of a Ricrac workspace the server is connected to, or how to connect one.
+struct RicracSurface: View {
+    @Environment(AppStore.self) private var store
+    let target: PanelTarget
+
+    var body: some View {
+        if let reason = store.ricracUnavailable {
+            PanelMessage(text: reason)
+        } else {
+            Group {
+                if store.ricrac.connected(target.serverID).isEmpty {
+                    RicracConnect(target: target)
+                } else {
+                    RicracIssues(target: target)
+                }
+            }
+            .panelTask(id: target.serverID) { store.ricrac.read(target.serverID) }
+        }
+    }
+}
+
+private struct RicracConnect: View {
+    @Environment(AppStore.self) private var store
+    let target: PanelTarget
+
+    var body: some View {
+        let ricrac = store.ricrac
+        VStack(spacing: 16) {
+            Image(.ricrac, size: 28)
+                .foregroundStyle(Color.themeForeground)
+            VStack(spacing: 6) {
+                Text("Connect Ricrac")
+                    .font(.ui(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.themeForeground)
+                Text("See your issues and hand them to your agents. The connection is kept on your server.")
+                    .font(.ui(size: 12.5))
+                    .foregroundStyle(Color.themeMutedForeground)
+                    .multilineTextAlignment(.center)
+            }
+            ActionButton("Connect Ricrac", variant: .primary, pending: ricrac.connecting == target.serverID) {
+                ricrac.connect(target.serverID)
+            }
+            if let error = ricrac.error {
+                Text(error)
+                    .font(.ui(size: 12.5))
+                    .foregroundStyle(Color.themeDestructive)
+                    .multilineTextAlignment(.center)
+                    .textSelection(.enabled)
+            }
+        }
+        .frame(maxWidth: 320)
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A workspace's issues under their statuses, with what chooses them over the list.
+private struct RicracIssues: View {
+    @Environment(AppStore.self) private var store
+    let target: PanelTarget
+    @State private var asked = 0
+    @State private var filing = false
+    @State private var offered: [Choice] = []
+    /// The panel is under the width the bar and the labels beside the titles need.
+    @State private var tight = false
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    /// Under this the bar is two rows.
+    private static let wraps = 520 * Platform.scale
+
+    /// A phone, or a panel too narrow for the search and the buttons beside the workspace and the
+    /// team, and for the labels beside the titles.
+    private var narrow: Bool {
+        #if os(iOS)
+        if sizeClass == .compact { return true }
+        #endif
+        return tight
+    }
+
+    private var search: Binding<String> {
+        let ricrac = store.ricrac
+        let project = target.projectID
+        return Binding { ricrac.searches[project] ?? "" } set: { ricrac.searches[project] = $0 }
+    }
+
+    private struct Trigger: Equatable {
+        let target: PanelTarget
+        let choice: RicracChoice
+        let search: String
+        let asked: Int
+    }
+
+    var body: some View {
+        let ricrac = store.ricrac
+        let choice = ricrac.choice(for: target)
+        let search = self.search.wrappedValue
+        VStack(spacing: 0) {
+            if narrow {
+                PanelBar {
+                    pickers(choice)
+                    Spacer(minLength: 0)
+                } second: {
+                    tools(choice)
+                }
+            } else {
+                PanelBar {
+                    pickers(choice)
+                    Spacer(minLength: 4)
+                    tools(choice)
+                }
+            }
+            if let error = ricrac.error {
+                PanelNote(text: error)
+            }
+            content(choice, search: search)
+                .panelTask(id: Trigger(target: target, choice: choice, search: search, asked: asked)) {
+                    // Ricrac is asked once the typing has stopped.
+                    if !search.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
+                    guard !Task.isCancelled else { return }
+                    ricrac.load(target, search: search)
+                }
+        }
+        .onGeometryChange(for: Bool.self) { $0.size.width < Self.wraps } action: { tight = $0 }
+        .modal(isPresented: $filing) {
+            if let workspace = choice.workspace {
+                RicracNewIssue(target: target, workspace: workspace, team: choice.team)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func pickers(_ choice: RicracChoice) -> some View {
+        let ricrac = store.ricrac
+        let connected = ricrac.connected(target.serverID)
+        let workspace = connected.first { $0.id == choice.workspace }
+        let teams = ricrac.teams[choice.workspace ?? ""] ?? []
+        ActionMenu(workspace?.workspace ?? "Ricrac", help: "Which workspace to show") {
+            ForEach(connected) { connection in
+                Toggle(connection.workspace, isOn: Binding { connection.id == choice.workspace } set: { _ in
+                    ricrac.pick(connection.id, for: target)
+                })
+            }
+            Divider()
+            Button("Add Workspace") { ricrac.connect(target.serverID) }
+            if let workspace {
+                Button("Disconnect \(workspace.workspace)", role: .destructive) { ricrac.disconnect(workspace.id, on: target.serverID) }
+            }
+        }
+        .padding(.leading, -8)
+        ActionMenu(teams.first { $0.id == choice.team }?.name ?? "All Teams", help: "Which team's issues to show") {
+            Toggle("All Teams", isOn: Binding { choice.team == nil } set: { _ in ricrac.pick(choice.workspace, for: target) })
+            ForEach(teams) { team in
+                Toggle(team.name, isOn: Binding { choice.team == team.id } set: { _ in
+                    ricrac.pick(choice.workspace, team: team.id, for: target)
+                })
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tools(_ choice: RicracChoice) -> some View {
+        let ricrac = store.ricrac
+        InputField("Search", text: search, icon: .search, clearable: true)
+            .frame(maxWidth: narrow ? .infinity : 180)
+        ActionMenu(icon: .listFilter, help: "Which issues to show") {
+            Toggle("Assigned to Me", isOn: Binding { choice.mine } set: { mine in ricrac.changeFilter { $0.mine = mine } })
+            Divider()
+            ForEach(RicracState.kinds, id: \.kind) { kind in
+                Toggle(kind.name, isOn: Binding { choice.states.contains(kind.kind) } set: { listed in
+                    ricrac.changeFilter { filter in
+                        filter.states.removeAll { $0 == kind.kind }
+                        if listed { filter.states.append(kind.kind) }
+                    }
+                })
+            }
+        }
+        ActionButton(icon: .rotateCw, help: "Read the issues again", pending: ricrac.working.contains("issues")) { asked += 1 }
+        ActionButton(icon: .plus, help: "New Issue") { filing = true }
+    }
+
+    @ViewBuilder
+    private func content(_ choice: RicracChoice, search: String) -> some View {
+        let workspace = choice.workspace ?? ""
+        let teams = store.ricrac.teams[workspace] ?? []
+        switch store.ricrac.issues {
+        case .loading:
+            PanelLoading()
+        case .failed(let message):
+            PanelMessage(text: message, failed: true)
+        case .ready(let groups) where groups.isEmpty:
+            let filtered = choice.mine || !choice.states.isEmpty
+            PanelMessage(text: !search.isEmpty ? "None have “\(search)”." : filtered ? "No issues match the filter." : "No issues.")
+        case .ready(let groups):
+            let ricrac = store.ricrac
+            let entries = groups.flatMap { group -> [RicracListEntry] in
+                let folded = store.ricrac.filter.folded.contains(group.state.id)
+                let header = RicracListEntry.header(state: group.state, count: group.rows.count, folded: folded)
+                guard !folded else { return [header] }
+                return [header] + group.rows.map { row in
+                    .issue(row: row, state: group.state, states: teams.first { $0.id == row.team }?.states ?? [])
+                }
+            }
+            RicracList(
+                entries: entries, pending: ricrac.working, narrow: narrow, users: ricrac.users[workspace] ?? [], offered: $offered,
+                open: { row in store.rightPanel.open(.ricracIssue(workspace: workspace, id: row.id, identifier: row.identifier)) },
+                fold: { ricrac.fold($0) },
+                change: { row, change in ricrac.change(row.id, change, of: workspace, on: target.serverID) }
+            )
+            .choices($offered)
+        }
+    }
+}
+
+/// What the menus that change an issue offer.
+private enum RicracChoices {
+    @ViewBuilder
+    static func states(_ states: [RicracState], current: String?, pick: @escaping (RicracState) -> Void) -> some View {
+        ForEach(states) { state in
+            Toggle(state.name, isOn: Binding { state.id == current } set: { _ in pick(state) })
+        }
+    }
+
+    @ViewBuilder
+    static func priorities(current: Int, pick: @escaping (Int) -> Void) -> some View {
+        ForEach(RicracRow.priorities, id: \.value) { priority in
+            Toggle(priority.name, isOn: Binding { priority.value == current } set: { _ in pick(priority.value) })
+        }
+    }
+
+    /// `pick` is given nothing for nobody.
+    @ViewBuilder
+    static func assignees(_ users: [RicracUser], current: String?, pick: @escaping (String?) -> Void) -> some View {
+        Toggle("Unassigned", isOn: Binding { current == nil } set: { _ in pick(nil) })
+        Divider()
+        ForEach(users) { user in
+            Toggle(user.me ? "\(user.name) (you)" : user.name, isOn: Binding { user.id == current } set: { _ in pick(user.id) })
+        }
+    }
+}
+
+private struct RicracInitials: View {
+    let initials: String
+    let name: String
+
+    var body: some View {
+        Text(verbatim: initials)
+            .font(.ui(size: 9, weight: .semibold))
+            .foregroundStyle(Color.themeMutedForeground)
+            .frame(width: scaled(18), height: scaled(18))
+            .background(Color.themeBackgroundAccent, in: Circle())
+            .help(name)
+    }
+}
+
+/// One issue: what it is and who has it, which menus change, what it asks for, and what was said
+/// of it, with a field to say more.
+struct RicracIssueSurface: View {
+    @Environment(AppStore.self) private var store
+    let target: PanelTarget
+    let workspace: String
+    let id: String
+    @State private var comment = ""
+    @State private var asked = 0
+
+    private struct Trigger: Equatable {
+        let serverID: String
+        let asked: Int
+    }
+
+    var body: some View {
+        let ricrac = store.ricrac
+        let page = ricrac.pages[id] ?? .loading
+        VStack(spacing: 0) {
+            PanelBar {
+                Text(verbatim: page.value?.row.identifier ?? "")
+                    .font(.ui(size: 12.5, weight: .medium))
+                    .foregroundStyle(Color.themeMutedForeground)
+                Spacer(minLength: 4)
+                if let url = page.value?.row.url {
+                    ActionButton(icon: .squareArrowOutUpRight, help: "Open in Ricrac") { Platform.open(url) }
+                }
+                ActionButton(icon: .rotateCw, help: "Read the issue again", pending: ricrac.working.contains("read:\(id)")) { asked += 1 }
+            }
+            if let error = ricrac.error {
+                PanelNote(text: error)
+            }
+            Group {
+                switch page {
+                case .loading: PanelLoading()
+                case .failed(let message): PanelMessage(text: message, failed: true)
+                case .ready(let page): content(page)
+                }
+            }
+            .panelTask(id: Trigger(serverID: target.serverID, asked: asked)) {
+                ricrac.needTeams(of: workspace, on: target.serverID)
+                ricrac.loadIssue(id, of: workspace, on: target.serverID)
+            }
+        }
+    }
+
+    private func content(_ page: RicracPage) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(page.row.title)
+                    .font(.ui(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.themeForeground)
+                    .textSelection(.enabled)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) { properties(page) }
+                    VStack(alignment: .leading, spacing: 6) { properties(page) }
+                }
+                if !page.row.labels.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(page.row.labels, id: \.name) { label in
+                            Chip(label.name, dot: label.color)
+                        }
+                    }
+                }
+                ActionButton("Work on Issue", icon: .play, help: "Start a thread on this issue", variant: .primary) {
+                    store.ricrac.work(on: page, of: workspace, in: target)
+                }
+                if page.description.isEmpty {
+                    Text("No description.")
+                        .font(.ui(size: 12.5))
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
+                } else {
+                    PullRequestTextView(blocks: page.description)
+                }
+                PanelLine()
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(page.comments) { comment in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 6) {
+                                RicracInitials(initials: comment.initials, name: comment.author)
+                                (Text(comment.author).fontWeight(.semibold).foregroundStyle(Color.themeForeground)
+                                    + Text(" · \(Time.ago(comment.at))").foregroundStyle(Color.themeMutedStrongerForeground))
+                                    .font(.ui(size: 12.5))
+                            }
+                            PullRequestTextView(blocks: comment.body)
+                        }
+                    }
+                    writing
+                }
+            }
+            .padding([.horizontal, .top], 16)
+            .padding(.bottom, panelEndRoom)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func properties(_ page: RicracPage) -> some View {
+        let ricrac = store.ricrac
+        let states = ricrac.teams[workspace]?.first { $0.id == page.row.team }?.states ?? []
+        let change = { (change: JSON) in ricrac.change(id, change, of: workspace, on: target.serverID) }
+        let status = AnyView(Image(page.state.symbol, size: ControlSize.small.symbol).foregroundStyle(page.state.color))
+        ActionMenu(page.state.name, picture: status, help: "Status", variant: .secondary, size: .small, pending: ricrac.working.contains(id)) {
+            RicracChoices.states(states, current: page.state.id) { change(["state": $0.id]) }
+        }
+        ActionMenu(
+            RicracRow.priorities.first { $0.value == page.row.priority }?.name, icon: page.row.prioritySymbol, help: "Priority",
+            variant: .secondary, size: .small
+        ) {
+            RicracChoices.priorities(current: page.row.priority) { change(["priority": $0]) }
+        }
+        ActionMenu(page.row.assignee ?? "Unassigned", icon: .circleUser, help: "Assignee", variant: .secondary, size: .small) {
+            RicracChoices.assignees(ricrac.users[workspace] ?? [], current: page.row.assigneeID) { change(["assignee": $0 ?? ""]) }
+        }
+    }
+
+    private var writing: some View {
+        let ricrac = store.ricrac
+        let words = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+        return VStack(alignment: .trailing, spacing: 8) {
+            TextArea("Leave a comment", text: $comment, lines: 4)
+            ActionButton("Comment", variant: .secondary, pending: ricrac.working.contains("comment:\(id)")) {
+                ricrac.loadIssue(id, of: workspace, on: target.serverID, comment: words) { comment = "" }
+            }
+            .disabled(words.isEmpty)
+        }
+    }
+}
+
+/// The sheet that files an issue.
+private struct RicracNewIssue: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.closeModal) private var close
+    let target: PanelTarget
+    let workspace: String
+    /// The team the list shows, when it shows one.
+    let team: String?
+    @State private var title = ""
+    @State private var description = ""
+    @State private var teamID: String?
+    @State private var stateID: String?
+    @State private var assigneeID: String?
+    @State private var priority = 0
+
+    var body: some View {
+        let ricrac = store.ricrac
+        let teams = ricrac.teams[workspace] ?? []
+        let picked = teams.first { $0.id == (teamID ?? team) } ?? teams.first
+        let states = picked?.states ?? []
+        let state = states.first { $0.id == stateID } ?? states.first { $0.kind == "unstarted" } ?? states.first
+        let users = ricrac.users[workspace] ?? []
+        VStack(alignment: .leading, spacing: 12) {
+            Text("New Issue")
+                .font(.ui(size: 15, weight: .semibold))
+            InputField("Title", text: $title)
+            TextArea("Add a description", text: $description, lines: 4, fills: true)
+            FlowRow { properties(teams: teams, picked: picked, states: states, state: state, users: users) }
+            if let error = ricrac.error {
+                Text(error)
+                    .font(.ui(size: 12.5))
+                    .foregroundStyle(Color.themeDestructive)
+            }
+            HStack(spacing: 8) {
+                Spacer()
+                ActionButton("Cancel") { close() }
+                    .keyboardShortcut(.cancelAction)
+                ActionButton("Create Issue", variant: .primary, pending: ricrac.working.contains("create")) {
+                    guard let picked else { return }
+                    var issue: JSON = ["team": picked.id, "title": title, "description": description, "priority": priority]
+                    if let state { issue["state"] = state.id }
+                    if let assigneeID { issue["assignee"] = assigneeID }
+                    ricrac.create(issue, in: workspace, on: target.serverID) { id, identifier in
+                        close()
+                        store.rightPanel.open(.ricracIssue(workspace: workspace, id: id, identifier: identifier))
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(picked == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        #if os(macOS)
+        .frame(width: 520, height: 400)
+        #else
+        .presentationDetents([.large])
+        #endif
+        .onAppear { ricrac.needTeams(of: workspace, on: target.serverID) }
+    }
+
+    @ViewBuilder
+    private func properties(teams: [RicracTeam], picked: RicracTeam?, states: [RicracState], state: RicracState?, users: [RicracUser]) -> some View {
+        ActionMenu(picked?.name ?? "Team", help: "Team", variant: .secondary, size: .small) {
+            ForEach(teams) { team in
+                Toggle(team.name, isOn: Binding { team.id == picked?.id } set: { _ in
+                    teamID = team.id
+                    stateID = nil
+                })
+            }
+        }
+        ActionMenu(state?.name ?? "Status", icon: state?.symbol, help: "Status", variant: .secondary, size: .small) {
+            RicracChoices.states(states, current: state?.id) { stateID = $0.id }
+        }
+        ActionMenu(
+            RicracRow.priorities.first { $0.value == priority }?.name, icon: RicracRow.symbol(priority: priority), help: "Priority",
+            variant: .secondary, size: .small
+        ) {
+            RicracChoices.priorities(current: priority) { priority = $0 }
+        }
+        ActionMenu(users.first { $0.id == assigneeID }?.name ?? "Unassigned", icon: .circleUser, help: "Assignee", variant: .secondary, size: .small) {
+            RicracChoices.assignees(users, current: assigneeID) { assigneeID = $0 }
+        }
+    }
+}

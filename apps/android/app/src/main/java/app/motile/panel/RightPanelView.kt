@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
+import app.motile.core.Integration
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
@@ -69,6 +70,8 @@ fun PanelTabContent(active: PanelTab?) {
         PanelTab.PullRequests -> PullRequestListSurface(target)
         PanelTab.Linear -> LinearSurface(target)
         is PanelTab.LinearIssue -> key(active.issueID) { LinearIssueSurface(target, active.workspace, active.issueID) }
+        PanelTab.Ricrac -> RicracSurface(target)
+        is PanelTab.RicracIssue -> key(active.issueID) { RicracIssueSurface(target, active.workspace, active.issueID) }
         is PanelTab.Blank, null -> PanelLauncher(target)
     }
 }
@@ -237,7 +240,10 @@ fun PanelTabChip(tab: PanelTab, active: Boolean) {
 private fun PanelLauncher(target: PanelTarget) {
     val store = LocalStore.current
     val panel = store.rightPanel
-    LaunchedEffect(target.serverID) { store.linear.read(target.serverID) }
+    LaunchedEffect(target.serverID) {
+        store.linear.read(target.serverID)
+        store.ricrac.read(target.serverID)
+    }
     Column(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
@@ -252,7 +258,12 @@ private fun PanelLauncher(target: PanelTarget) {
             if (store.pullRequestsExtended) {
                 LauncherRow(Symbol.List, "All Pull Requests", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequests) }
             }
-            LauncherRow(Symbol.Linear, if (store.linearConnected) "Linear" else "Connect Linear", store.linearUnavailable) { panel.open(PanelTab.Linear) }
+            if (store.isOn(Integration.Linear)) {
+                LauncherRow(Symbol.Linear, if (store.linearConnected) "Linear" else "Connect Linear", store.linearUnavailable) { panel.open(PanelTab.Linear) }
+            }
+            if (store.isOn(Integration.Ricrac)) {
+                LauncherRow(Symbol.Ricrac, if (store.ricracConnected) "Ricrac" else "Connect Ricrac", store.ricracUnavailable) { panel.open(PanelTab.Ricrac) }
+            }
         }
     }
 }

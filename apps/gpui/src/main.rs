@@ -90,8 +90,8 @@ fn main() {
         keyboard::install(&store, cx);
         dev_drive::start(&store, cx);
         lifecycle::start(&store, cx);
-        // The browser sends a sign-in back to `motile://auth`, and Linear's to `motile://linear`,
-        // which the system hands to the app. A launch with nothing to hand over brings it forward.
+        // The browser sends a sign-in back to `motile://auth`, Linear's to `motile://linear` and
+        // Ricrac's to `motile://ricrac`, which the system hands to the app. A launch with nothing to hand over brings it forward.
         let signing_in = store.downgrade();
         cx.spawn(async move |cx| {
             while let Some(urls) = opened_urls.next().await {

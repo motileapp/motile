@@ -21,7 +21,9 @@ use crate::panel::line_comment::{self, LineCommentSheet};
 use crate::panel::linear::LinearView;
 use crate::panel::pull_request::PullRequestView;
 use crate::panel::pull_request_list::PullRequestListView;
+use crate::panel::ricrac::RicracView;
 use crate::store::Store;
+use crate::store::integrations::Integration;
 use crate::theme::{self, ControlSize, Layer, Radius, colors};
 use crate::transcript::view::TranscriptView;
 use crate::ui::menu::Menu;
@@ -49,11 +51,12 @@ type TabOf = (String, PanelTab);
 
 pub struct RightPanelView {
     store: Entity<Store>,
-    /// The view of the open pull request or Linear tab, which starts afresh when another tab or
-    /// another thread's is shown, as the Mac's does.
+    /// The view of the open pull request, Linear or Ricrac tab, which starts afresh when another
+    /// tab or another thread's is shown, as the Mac's does.
     pull_request: Option<(TabOf, Entity<PullRequestView>)>,
     pull_request_list: Option<Entity<PullRequestListView>>,
     linear: Option<(TabOf, Entity<LinearView>)>,
+    ricrac: Option<(TabOf, Entity<RicracView>)>,
     line_comment: Option<Entity<LineCommentSheet>>,
     /// Where the tabs start from the panel's left edge in place of the strip's own margin: past
     /// the window's buttons when the panel reaches them.
@@ -159,6 +162,7 @@ impl RightPanelView {
             pull_request: None,
             pull_request_list: None,
             linear: None,
+            ricrac: None,
             line_comment: None,
             tab_inset: None,
             trailing_room: 0.,
@@ -421,13 +425,19 @@ impl RightPanelView {
         let c = colors(cx);
         let trigger = Trigger { target: target.clone(), scope: None, path: None, version: 0, asked: 0 };
         let server_id = target.server_id.clone();
-        self.follow("linear", trigger, move |store| store.linear_read(&server_id), cx);
+        self.follow("linear", trigger.clone(), move |store| store.linear_read(&server_id), cx);
+        let server_id = target.server_id.clone();
+        self.follow("ricrac", trigger, move |store| store.ricrac_read(&server_id), cx);
         let store = self.store.read(cx);
         let pull_requests_unavailable = store.pull_requests_unavailable();
         let extended = store.pull_requests_extended();
+        let (linear_on, ricrac_on) = (store.is_on(Integration::Linear), store.is_on(Integration::Ricrac));
         let linear_unavailable = store.linear_unavailable();
         let linear_connected = store.linear_connected();
         let linear_title = if linear_connected { "Linear" } else { "Connect Linear" };
+        let ricrac_unavailable = store.ricrac_unavailable();
+        let ricrac_connected = store.ricrac_connected();
+        let ricrac_title = if ricrac_connected { "Ricrac" } else { "Connect Ricrac" };
         let row = |id: &'static str,
                    symbol: &'static str,
                    title: &'static str,
@@ -520,14 +530,26 @@ impl RightPanelView {
                             Box::new(|store| store.open_tab(PanelTab::PullRequests)),
                         ))
                     })
-                    .child(row(
-                        "launch-linear",
-                        "linear",
-                        linear_title,
-                        linear_connected.then_some("rightPanel.linear"),
-                        linear_unavailable,
-                        Box::new(|store| store.open_tab(PanelTab::Linear)),
-                    )),
+                    .when(linear_on, |rows| {
+                        rows.child(row(
+                            "launch-linear",
+                            "linear",
+                            linear_title,
+                            Some("rightPanel.linear"),
+                            linear_unavailable,
+                            Box::new(|store| store.open_tab(PanelTab::Linear)),
+                        ))
+                    })
+                    .when(ricrac_on, |rows| {
+                        rows.child(row(
+                            "launch-ricrac",
+                            "ricrac",
+                            ricrac_title,
+                            Some("rightPanel.ricrac"),
+                            ricrac_unavailable,
+                            Box::new(|store| store.open_tab(PanelTab::Ricrac)),
+                        ))
+                    }),
             )
             .into_any_element()
     }
@@ -1237,6 +1259,31 @@ impl RightPanelView {
         div().size_full().child(view).into_any_element()
     }
 
+    /// The issues of a Ricrac workspace the server is connected to, or one issue of it.
+    fn ricrac_tab(
+        &mut self,
+        tab: PanelTab,
+        workspace: String,
+        issue: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(target) = self.store.read(cx).panel_target() else {
+            return div().into_any_element();
+        };
+        let wanted = (target.key, tab);
+        let view = match &self.ricrac {
+            Some((shown, view)) if *shown == wanted => view.clone(),
+            _ => {
+                let store = self.store.clone();
+                let view = cx.new(|cx| RicracView::new(store, workspace, issue, target.project_id, window, cx));
+                self.ricrac = Some((wanted, view.clone()));
+                view
+            }
+        };
+        div().size_full().child(view).into_any_element()
+    }
+
     fn pull_request_tab(
         &mut self,
         tab: PanelTab,
@@ -1280,6 +1327,9 @@ impl RightPanelView {
         }
         if !self.linear.as_ref().is_some_and(|(tab, _)| shown(tab)) {
             self.linear = None;
+        }
+        if !self.ricrac.as_ref().is_some_and(|(tab, _)| shown(tab)) {
+            self.ricrac = None;
         }
         let active = active.map(|(_, tab)| tab);
         if active != Some(PanelTab::PullRequests) {
@@ -1342,6 +1392,68 @@ impl RightPanelView {
                             .variant(Variant::Primary)
                             .pending(connecting)
                             .on_click(act(&self.store, move |store, _| store.linear_connect(&server_id))),
+                    )
+                    .when_some(error, |prompt, error| {
+                        prompt.child(
+                            div().w_full().text_size(px(12.5)).text_color(c.destructive).text_center().child(error),
+                        )
+                    }),
+            )
+            .into_any_element()
+    }
+
+    fn ricrac_surface(&mut self, target: &PanelTarget, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let c = colors(cx);
+        let store = self.store.read(cx);
+        if let Some(reason) = store.ricrac_unavailable() {
+            return Self::message(reason, false, cx);
+        }
+        if !store.ricrac.connected(&target.server_id).is_empty() {
+            return self.ricrac_tab(PanelTab::Ricrac, String::new(), None, window, cx);
+        }
+        let trigger = Trigger { target: target.clone(), scope: None, path: None, version: 0, asked: 0 };
+        let read_id = target.server_id.clone();
+        self.follow("ricrac", trigger, move |store| store.ricrac_read(&read_id), cx);
+        let store = self.store.read(cx);
+        let server_id = target.server_id.clone();
+        let connecting = store.ricrac.connecting.as_deref() == Some(&target.server_id);
+        let error = store.ricrac.error.clone();
+        div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .p(px(24.))
+            .child(
+                div()
+                    .max_w(px(320.))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(px(16.))
+                    .child(icons::symbol("ricrac", 28.).text_color(c.foreground))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(
+                                div()
+                                    .text_size(px(15.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c.foreground)
+                                    .child("Connect Ricrac"),
+                            )
+                            .child(div().text_size(px(12.5)).text_color(c.muted_foreground).text_center().child(
+                                "See your issues and hand them to your agents. The connection is kept on your server.",
+                            )),
+                    )
+                    .child(
+                        ActionButton::new("connect-ricrac", "Connect Ricrac")
+                            .variant(Variant::Primary)
+                            .pending(connecting)
+                            .on_click(act(&self.store, move |store, _| store.ricrac_connect(&server_id))),
                     )
                     .when_some(error, |prompt, error| {
                         prompt.child(
@@ -1614,6 +1726,11 @@ impl Render for RightPanelView {
                 Some(tab @ PanelTab::LinearIssue { .. }) => {
                     let PanelTab::LinearIssue { workspace, id, .. } = tab.clone() else { unreachable!() };
                     self.linear_tab(tab, workspace, Some(id), window, cx)
+                }
+                Some(PanelTab::Ricrac) => self.ricrac_surface(&target, window, cx),
+                Some(tab @ PanelTab::RicracIssue { .. }) => {
+                    let PanelTab::RicracIssue { workspace, id, .. } = tab.clone() else { unreachable!() };
+                    self.ricrac_tab(tab, workspace, Some(id), window, cx)
                 }
                 Some(PanelTab::Blank(_)) | None => self.launcher(&target, cx),
             }
