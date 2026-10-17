@@ -184,45 +184,15 @@ extension PlatformImage {
         return CTFontCreatePathForGlyph(font, glyph, nil)
     }
 
-    /// A disc cut into stripes that fall to the right, in a square of 24 with the room Lucide
-    /// leaves around its icons. A stripe is where `x + y` lies between two numbers.
-    private static func linearLogo(side: CGFloat) -> CGPath {
-        let stripes: [(CGFloat, CGFloat)] = [(22.706, 72), (17.674, 20.191), (12.642, 15.159), (-24, 10.127)]
-        let disc = CGPath(ellipseIn: CGRect(x: 0, y: 0, width: 24, height: 24), transform: nil)
-        let far: CGFloat = 48
-        let logo = CGMutablePath()
-        for (from, to) in stripes {
-            let stripe = CGMutablePath()
-            stripe.addLines(between: [
-                CGPoint(x: from / 2 + far, y: from / 2 - far), CGPoint(x: to / 2 + far, y: to / 2 - far),
-                CGPoint(x: to / 2 - far, y: to / 2 + far), CGPoint(x: from / 2 - far, y: from / 2 + far)
-            ])
-            stripe.closeSubpath()
-            logo.addPath(disc.intersection(stripe))
-        }
-        let scale = side / 24 * 20 / 24
-        var placed = CGAffineTransform(translationX: side / 2, y: side / 2).scaledBy(x: scale, y: scale).translatedBy(x: -12, y: -12)
-        return logo.copy(using: &placed) ?? logo
-    }
+    private static let linearLogo = "M2.3 14.4 9.6 21.7a10 10 0 0 1-7.3-7.3ZM2 11.4 12.6 22a10 10 0 0 0 2.6-.6L2.6 8.8a10 10 0 0 0-.6 2.6ZM3.3 7 17 20.7a10 10 0 0 0 1.9-1.4L4.7 5.1A10 10 0 0 0 3.3 7ZM5.8 3.8a10 10 0 0 1 14.4 14.4Z"
+    private static let ricracLogo = "M10 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1zM5.454 1.941a1 1 0 0 1 1.092 1.676A9.991 9.991 0 0 0 2 12a9.992 9.992 0 0 0 4.546 8.384 1 1 0 0 1-1.092 1.676A11.993 11.993 0 0 1 0 12C0 7.787 2.173 4.08 5.454 1.941zm11.708.292a1 1 0 0 1 1.384-.292A11.992 11.992 0 0 1 24 12c0 4.213-2.173 7.92-5.454 10.06a1.001 1.001 0 0 1-1.092-1.676A9.992 9.992 0 0 0 22 12a9.99 9.99 0 0 0-4.546-8.383 1 1 0 0 1-.292-1.384zM5.435 7.428a1 1 0 0 1 1.64 1.144A5.968 5.968 0 0 0 6 12c0 1.276.398 2.456 1.075 3.428a1 1 0 0 1-1.64 1.144A7.968 7.968 0 0 1 4 12c0-1.698.53-3.276 1.435-4.572zm11.738-.248a1 1 0 0 1 1.392.248A7.968 7.968 0 0 1 20 12c0 1.698-.53 3.276-1.435 4.572a1 1 0 0 1-1.64-1.144A5.967 5.967 0 0 0 18 12a5.968 5.968 0 0 0-1.075-3.428 1 1 0 0 1 .248-1.392z"
 
-    /// Three half rings that open to the right, each ending a unit left of the middle, beside three
-    /// bars, in a square of 24 with the room Lucide leaves around its icons.
-    private static func ricracLogo(side: CGFloat) -> CGPath {
-        let center = CGPoint(x: 12, y: 12)
-        let mark = CGMutablePath()
-        for radius: CGFloat in [11, 7, 3] {
-            let end = acos(-1 / radius)
-            mark.move(to: CGPoint(x: 11, y: center.y + radius * sin(end)))
-            mark.addArc(center: center, radius: radius, startAngle: end, endAngle: -end, clockwise: false)
-        }
-        for x: CGFloat in [15, 19, 23] {
-            mark.move(to: CGPoint(x: x, y: 1))
-            mark.addLine(to: CGPoint(x: x, y: 23))
-        }
-        let logo = mark.copy(strokingWithWidth: 2, lineCap: .round, lineJoin: .round, miterLimit: 10)
-        let scale = side / 24 * 20 / 24
-        var placed = CGAffineTransform(translationX: side / 2, y: side / 2).scaledBy(x: scale, y: scale).translatedBy(x: -12, y: -12)
-        return logo.copy(using: &placed) ?? logo
+    /// An SVG's path in a square of 24, `share` of it across, turned for drawing with y running up.
+    private static func logo(_ data: String, side: CGFloat, share: CGFloat = 1) -> CGPath {
+        let path = SVGPath.path(data)
+        let scale = side / 24 * share
+        var placed = CGAffineTransform(translationX: side / 2, y: side / 2).scaledBy(x: scale, y: -scale).translatedBy(x: -12, y: -12)
+        return path.copy(using: &placed) ?? path
     }
 
     /// A ring as Lucide draws a circle, round a pie that fills `share` of it clockwise from the
@@ -241,8 +211,8 @@ extension PlatformImage {
 
     private static func outline(_ symbol: Symbol, side: CGFloat) -> CGPath? {
         switch symbol {
-        case .linear: linearLogo(side: side)
-        case .ricrac: ricracLogo(side: side)
+        case .linear: logo(linearLogo, side: side)
+        case .ricrac: logo(ricracLogo, side: side, share: 20 / 24)
         case .effortLow: gauge(0.25, side: side)
         case .effortMedium: gauge(0.5, side: side)
         case .effortHigh: gauge(0.75, side: side)
