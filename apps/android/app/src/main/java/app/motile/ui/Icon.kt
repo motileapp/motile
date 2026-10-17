@@ -9,10 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
@@ -67,8 +65,8 @@ fun Icon(symbol: Symbol, size: Float = 13f, modifier: Modifier = Modifier, color
 fun DrawScope.drawSymbol(symbol: Symbol, side: Float, color: Color, trimmed: Boolean = false) {
     val drawn = color.takeOrElse(Color.Black)
     when (symbol) {
-        Symbol.Linear -> drawPath(linearLogo(side), drawn)
-        Symbol.Ricrac -> drawPath(ricracLogo(side), drawn)
+        Symbol.Linear -> drawPath(logo(linearLogo, side), drawn)
+        Symbol.Ricrac -> drawPath(logo(ricracLogo, side, share = 20f / 24), drawn)
         Symbol.EffortLow -> gauge(0.25f, side, drawn)
         Symbol.EffortMedium -> gauge(0.5f, side, drawn)
         Symbol.EffortHigh -> gauge(0.75f, side, drawn)
@@ -92,51 +90,18 @@ fun DrawScope.drawSymbol(symbol: Symbol, side: Float, color: Color, trimmed: Boo
 
 private fun Color.takeOrElse(other: Color) = if (this == Color.Unspecified) other else this
 
-/** A disc cut into stripes that fall to the right, in a square of 24 with the room Lucide leaves around its icons. A stripe is where `x + y` lies between two numbers. */
-private fun linearLogo(side: Float): Path {
-    val stripes = listOf(22.706f to 72f, 17.674f to 20.191f, 12.642f to 15.159f, -24f to 10.127f)
-    val disc = Path().apply { addOval(ComposeRect(0f, 0f, 24f, 24f)) }
-    val far = 48f
-    val logo = Path()
-    for ((from, to) in stripes) {
-        val stripe = Path().apply {
-            moveTo(from / 2 + far, from / 2 - far)
-            lineTo(to / 2 + far, to / 2 - far)
-            lineTo(to / 2 - far, to / 2 + far)
-            lineTo(from / 2 - far, from / 2 + far)
-            close()
-        }
-        val piece = Path().apply { op(disc, stripe, PathOperation.Intersect) }
-        logo.addPath(piece)
-    }
-    // The disc is 20 of the square's 24, as Lucide leaves room around its icons; y runs down here, so the stripes are mirrored to fall right.
-    val scale = side / 24 * 20 / 24
-    val placed = Path()
-    placed.addPath(logo)
-    val matrix = androidx.compose.ui.graphics.Matrix().apply {
-        translate(side / 2, side / 2)
-        scale(scale, -scale)
-        translate(-12f, -12f)
-    }
-    placed.transform(matrix)
-    return placed
-}
+private val linearLogo: Path by lazy { PathParser().parsePathString("M2.3 14.4 9.6 21.7a10 10 0 0 1-7.3-7.3ZM2 11.4 12.6 22a10 10 0 0 0 2.6-.6L2.6 8.8a10 10 0 0 0-.6 2.6ZM3.3 7 17 20.7a10 10 0 0 0 1.9-1.4L4.7 5.1A10 10 0 0 0 3.3 7ZM5.8 3.8a10 10 0 0 1 14.4 14.4Z").toPath() }
 
-/** Ricrac's mark, three half rings that open to the right beside three bars, in a square of 24. */
-private val ricracMark: Path by lazy {
-    PathParser().parsePathString(
-        "M15 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1m4 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1m4 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1M10.91.049a1 1 0 0 1 .18 1.992C5.994 2.501 2 6.784 2 12s3.994 9.5 9.09 9.959a1 1 0 0 1-.18 1.992C4.793 23.4 0 18.261 0 12 0 5.74 4.793.6 10.91.049m-.052 4.032a1 1 0 0 1 .284 1.98 6.001 6.001 0 0 0 0 11.878 1 1 0 0 1-.284 1.98 8.003 8.003 0 0 1 0-15.838m-.191 4.148a1 1 0 1 1 .666 1.884 2.002 2.002 0 0 0 0 3.774 1 1 0 0 1-.666 1.886 4.002 4.002 0 0 1 0-7.544",
-    ).toPath()
-}
+private val ricracLogo: Path by lazy { PathParser().parsePathString("M10 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v22a1 1 0 1 1-2 0V1a1 1 0 0 1 1-1zM5.454 1.941a1 1 0 0 1 1.092 1.676A9.991 9.991 0 0 0 2 12a9.992 9.992 0 0 0 4.546 8.384 1 1 0 0 1-1.092 1.676A11.993 11.993 0 0 1 0 12C0 7.787 2.173 4.08 5.454 1.941zm11.708.292a1 1 0 0 1 1.384-.292A11.992 11.992 0 0 1 24 12c0 4.213-2.173 7.92-5.454 10.06a1.001 1.001 0 0 1-1.092-1.676A9.992 9.992 0 0 0 22 12a9.99 9.99 0 0 0-4.546-8.383 1 1 0 0 1-.292-1.384zM5.435 7.428a1 1 0 0 1 1.64 1.144A5.968 5.968 0 0 0 6 12c0 1.276.398 2.456 1.075 3.428a1 1 0 0 1-1.64 1.144A7.968 7.968 0 0 1 4 12c0-1.698.53-3.276 1.435-4.572zm11.738-.248a1 1 0 0 1 1.392.248A7.968 7.968 0 0 1 20 12c0 1.698-.53 3.276-1.435 4.572a1 1 0 0 1-1.64-1.144A5.967 5.967 0 0 0 18 12a5.968 5.968 0 0 0-1.075-3.428 1 1 0 0 1 .248-1.392z").toPath() }
 
-/** Ricrac's mark in a square of 24, 20 of it as Lucide leaves room around its icons. */
-private fun ricracLogo(side: Float): Path {
+/** An SVG's path in a square of 24, `share` of it across, in a square of `side`. */
+private fun logo(mark: Path, side: Float, share: Float = 1f): Path {
     val placed = Path()
-    placed.addPath(ricracMark)
+    placed.addPath(mark)
     placed.transform(androidx.compose.ui.graphics.Matrix().apply {
-        scale(side / 24, side / 24)
-        translate(2f, 2f)
-        scale(20f / 24, 20f / 24)
+        translate(side / 2, side / 2)
+        scale(side / 24 * share, side / 24 * share)
+        translate(-12f, -12f)
     })
     return placed
 }
