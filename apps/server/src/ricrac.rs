@@ -195,7 +195,7 @@ impl Ricrac {
     }
 
     pub async fn issues(&self, store: &Store, workspace: &str, wanted: &Wanted) -> anyhow::Result<Vec<RicracIssue>> {
-        let mut asked = json!({ "limit": 100, "orderBy": "updatedAt" });
+        let mut asked = json!({ "limit": 200, "orderBy": "updatedAt" });
         if let Some(team) = &wanted.team {
             asked["team"] = json!(team);
         }
@@ -212,8 +212,16 @@ impl Ricrac {
                 }
             }
         }
-        let found = self.ask(store, workspace, "list_issues", asked).await?;
-        Ok(nodes(&found).iter().filter_map(read_issue).collect())
+        let mut issues = Vec::new();
+        loop {
+            let found = self.ask(store, workspace, "list_issues", asked.clone()).await?;
+            issues.extend(nodes(&found).iter().filter_map(read_issue));
+            let more = found["pageInfo"]["hasNextPage"] == true;
+            let Some(cursor) = found["pageInfo"]["endCursor"].as_str().filter(|_| more) else {
+                return Ok(issues);
+            };
+            asked["cursor"] = json!(cursor);
+        }
     }
 
     pub async fn issue(&self, store: &Store, workspace: &str, issue: &str) -> anyhow::Result<RicracIssueDetail> {
@@ -547,6 +555,10 @@ mod tests {
                             { "id": "ada", "name": "Ada", "isMe": true, "active": true },
                         ])),
                     ),
+                    "/v1/ops/list_issues" if body.contains("\"team\":\"paged\"") && !body.contains("cursor") => (
+                        "200 OK",
+                        json!({ "nodes": [issue("done")], "pageInfo": { "hasNextPage": true, "endCursor": "next" } }),
+                    ),
                     "/v1/ops/list_issues" => ("200 OK", page(json!([issue("todo")]))),
                     "/v1/ops/get_issue" => ("200 OK", issue("todo")),
                     "/v1/ops/save_issue" if body.contains("\"id\"") => ("200 OK", issue("done")),
@@ -711,14 +723,14 @@ mod tests {
         let issues = ricrac.issues(&store, "acme", &wanted(Some("team"), true, false, None)).await.unwrap();
         assert_eq!(issues, std::slice::from_ref(&greet()));
         let arguments = json!({
-            "limit": 100, "orderBy": "updatedAt", "team": "team", "assignee": "me",
+            "limit": 200, "orderBy": "updatedAt", "team": "team", "assignee": "me",
             "filter": { "state": { "type": { "nin": ["completed", "canceled"] } } },
         });
         assert_eq!(last_arguments(&asked), ("/v1/ops/list_issues".to_string(), arguments));
         assert_eq!(asked.lock().unwrap().last().unwrap().2, "access");
 
         ricrac.issues(&store, "acme", &wanted(None, false, true, None)).await.unwrap();
-        assert_eq!(last_arguments(&asked).1, json!({ "limit": 100, "orderBy": "updatedAt" }));
+        assert_eq!(last_arguments(&asked).1, json!({ "limit": 200, "orderBy": "updatedAt" }));
 
         let kinds = vec![RicracStateKind::Unstarted, RicracStateKind::Started];
         ricrac.issues(&store, "acme", &Wanted { states: kinds, ..wanted(None, false, false, None) }).await.unwrap();
@@ -726,8 +738,22 @@ mod tests {
         assert_eq!(last_arguments(&asked).1["filter"], filter);
 
         ricrac.issues(&store, "acme", &wanted(Some("team"), true, false, Some(" eng-7 "))).await.unwrap();
-        let searched = json!({ "limit": 100, "orderBy": "updatedAt", "team": "team", "query": "eng-7" });
+        let searched = json!({ "limit": 200, "orderBy": "updatedAt", "team": "team", "query": "eng-7" });
         assert_eq!(last_arguments(&asked).1, searched);
+    }
+
+    #[tokio::test]
+    async fn the_issues_of_every_page_are_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = store(&dir);
+        let (ricrac, asked) = fake_ricrac().await;
+        connected(&ricrac, &store).await;
+
+        let issues = ricrac.issues(&store, "acme", &wanted(Some("paged"), false, true, None)).await.unwrap();
+        let done = RicracIssue { state: RicracState { id: "done".to_string(), ..todo() }, ..greet() };
+        assert_eq!(issues, vec![done, greet()]);
+        let next = json!({ "limit": 200, "orderBy": "updatedAt", "team": "paged", "cursor": "next" });
+        assert_eq!(last_arguments(&asked).1, next);
     }
 
     #[tokio::test]
