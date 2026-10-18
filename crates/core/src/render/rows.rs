@@ -315,7 +315,7 @@ pub enum After {
     Table,
     Code,
     Media,
-    /// A tool call, thinking, or the row that stands for several of them.
+    /// A tool call, thinking, an agent it started, or the row that stands for several of them.
     Work,
 }
 
@@ -329,9 +329,12 @@ impl After {
             }),
             RowKind::Code { .. } => Some(Self::Code),
             RowKind::Media { .. } | RowKind::File { .. } => Some(Self::Media),
-            RowKind::Tool { .. } | RowKind::Thinking { .. } | RowKind::Group { .. } | RowKind::Fold { .. } => {
-                Some(Self::Work)
-            }
+            RowKind::Tool { .. }
+            | RowKind::Thinking { .. }
+            | RowKind::Group { .. }
+            | RowKind::Fold { .. }
+            | RowKind::Agent { .. }
+            | RowKind::Agents { .. } => Some(Self::Work),
             _ => None,
         }
     }
@@ -1872,6 +1875,19 @@ mod tests {
         transcript.upsert(stopped, true);
         assert_eq!(outline(&transcript)[0], "(2 agents: 1 done · 1 stopped) open");
         assert!(agent_row(&transcript, 2).flagged, "a stopped agent says so beside its title");
+    }
+
+    #[test]
+    fn a_paragraph_after_agents_is_as_far_from_them_as_from_work() {
+        let after = |agents: u64| {
+            let mut items: Vec<Item> =
+                (0..agents).map(|n| agent_call(&format!("t{n}"), n, "Look", None, ToolStatus::Succeeded)).collect();
+            items.push(assistant("a", agents, "They found nothing."));
+            let mut transcript = Transcript::new("");
+            transcript.load(items);
+            transcript.rows().last().unwrap().after
+        };
+        assert_eq!([after(1), after(2)], [Some(After::Work), Some(After::Work)]);
     }
 
     #[test]
