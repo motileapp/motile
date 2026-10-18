@@ -770,7 +770,7 @@ impl CommandPanel {
                 "Stop the agent",
                 thread.title.clone(),
                 ItemIcon::Symbol("circle-stop"),
-                |this, _, cx| this.store.update(cx, |store, _| store.stop_thread()),
+                |this, _, cx| this.store.update(cx, |store, cx| store.stop_thread(cx)),
             );
             return vec![stop.keys(store.shortcuts.label("thread.stop"))];
         }

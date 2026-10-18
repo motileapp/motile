@@ -79,7 +79,7 @@ pub fn monitoring_strip(store: &Entity<Store>, thread: &ThreadInfo, cx: &App) ->
                 .margin(margin())
                 .on_click(move |_, _, cx| {
                     store.update(cx, |store, cx| {
-                        store.stop_thread();
+                        store.stop_thread(cx);
                         cx.notify();
                     })
                 }),
@@ -112,7 +112,7 @@ pub fn agents_strip(store: &Entity<Store>, text: String, cx: &App) -> impl IntoE
                 .margin(margin())
                 .on_click(move |_, _, cx| {
                     store.update(cx, |store, cx| {
-                        store.stop_thread();
+                        store.stop_thread(cx);
                         cx.notify();
                     })
                 }),

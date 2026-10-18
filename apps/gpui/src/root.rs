@@ -8,7 +8,7 @@ use crate::main_view::MainView;
 use crate::onboarding::{ConnectServer, SignIn};
 use crate::store::Store;
 use crate::theme::{self, Appearance, colors};
-use crate::ui::modal::{Confirmation, confirmation, error_alert, modal};
+use crate::ui::modal::{Answer, Confirmation, confirmation, error_alert, modal};
 
 pub struct Root {
     store: Entity<Store>,
@@ -162,7 +162,9 @@ impl Render for Root {
         let ready = store.ready;
         let first_server = store.account.signed_in && store.servers.is_empty();
         let error = store.error_message.clone();
+        let stopping = store.stopping.clone();
         let error = crate::ui::modal::presented("error", error, window, cx);
+        let stopping = crate::ui::modal::presented("stop", stopping, window, cx);
         let adding_server = self.connect.clone().filter(|_| !first_server);
         let adding_server = crate::ui::modal::presented("add-server", adding_server, window, cx);
         // One scrim for every page of the command panel, which fades as it opens and closes.
@@ -249,6 +251,24 @@ impl Render for Root {
                     )
                     .leaving(leaving),
                 )
+            })
+            .when_some(stopping, |root, (stopping, leaving)| {
+                let (stops, closes) = (self.store.clone(), self.store.clone());
+                let shown = Confirmation::new(stopping.question)
+                    .message("What they did so far stays in their threads.")
+                    .answer(
+                        Answer::new("Stop", move |_, cx| {
+                            stops.update(cx, |store, _| store.stop_now(&stopping.thread_id));
+                        })
+                        .danger(),
+                    );
+                let close = move |_: &mut Window, cx: &mut App| {
+                    closes.update(cx, |store, cx| {
+                        store.stopping = None;
+                        cx.notify();
+                    })
+                };
+                root.child(confirmation("stop", shown, close, cx).leaving(leaving))
             })
             .child(crate::ui::modal::Scrim)
             .child(

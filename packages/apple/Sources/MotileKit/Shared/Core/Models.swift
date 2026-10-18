@@ -947,6 +947,8 @@ struct ThreadChildren: Equatable {
     let waitingText: String?
     /// "Waiting on Run greet.py", "Waiting on 3 agents", while they work.
     let runningText: String?
+    /// "Stop 1 agent?", "Stop 3 agents?", while they work.
+    let stopQuestion: String?
 
     init(json: JSON) {
         running = json.int("running")
@@ -955,6 +957,22 @@ struct ThreadChildren: Equatable {
         }
         waitingText = json.optionalString("waiting_text")
         runningText = json.optionalString("running_text")
+        stopQuestion = json.optionalString("stop_question")
+    }
+}
+
+/// A stop that asks first, since it ends the agents the thread started.
+struct StopQuestion: Identifiable {
+    let threadID: String
+    let question: String
+
+    var id: String { threadID }
+
+    func confirmation(_ store: AppStore) -> Confirmation {
+        Confirmation(
+            title: question, message: "What they did so far stays in their threads.",
+            answers: [Answer(title: "Stop", variant: .danger) { store.stopNow(threadID: threadID) }]
+        )
     }
 }
 

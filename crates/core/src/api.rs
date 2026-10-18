@@ -665,6 +665,9 @@ pub struct Children {
     /// "Waiting on 3 agents".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub running_text: Option<String>,
+    /// What stopping the thread asks first while they work: "Stop 1 agent?", "Stop 3 agents?".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_question: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

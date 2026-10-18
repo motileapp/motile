@@ -269,6 +269,8 @@ final class AppStore {
     /// The drafts whose first message is on its way to the server, by draft.
     private(set) var sendingDrafts: [String: SendingDraft] = [:]
     var errorMessage: String?
+    /// The stop that waits for the user to say it may end the agents a thread started.
+    var stopping: StopQuestion?
     /// What deleting a thread takes with it.
     func deletionNote(_ thread: ThreadInfo?) -> String {
         let inWorktree = thread.map { project($0.projectID)?.seen(from: $0).worktree != nil } ?? false
@@ -2222,8 +2224,14 @@ final class AppStore {
         stop(threadID: thread.id)
     }
 
-    /// Stops the thread's agent, and the agents it started.
+    /// Stops the thread's agent, and the agents it started, asking first while those work.
     func stop(threadID: String) {
+        guard let thread = anyThread(threadID), !onRemovedServer(thread) else { return }
+        guard let question = thread.children?.stopQuestion else { return stopNow(threadID: threadID) }
+        stopping = StopQuestion(threadID: threadID, question: question)
+    }
+
+    func stopNow(threadID: String) {
         guard let thread = anyThread(threadID), !onRemovedServer(thread) else { return }
         request(thread.serverID, ["type": "stop", "thread_id": thread.id])
     }

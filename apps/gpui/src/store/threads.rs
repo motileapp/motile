@@ -8,7 +8,7 @@ use motile_protocol::wire::{
     Access, AgentAccount, CopiedThread, Interruption, ModelInfo, NewThread, NewWorktree, Request, ThreadChange,
 };
 
-use super::{Continuation, PanelPage, Selection, SendingDraft, Store, ThreadDraft, UndoNotice};
+use super::{Continuation, PanelPage, Selection, SendingDraft, StopQuestion, Store, ThreadDraft, UndoNotice};
 use crate::models::*;
 use crate::panel::state::PanelTab;
 use crate::transcript::model::RowModel;
@@ -413,14 +413,23 @@ impl Store {
         self.selected_thread().filter(|thread| !self.on_removed_server(thread))
     }
 
-    pub fn stop_thread(&mut self) {
+    pub fn stop_thread(&mut self, cx: &mut Context<Self>) {
         let Some(thread) = self.selected_thread() else { return };
         let id = thread.id.clone();
-        self.stop_thread_id(&id);
+        self.stop_thread_id(&id, cx);
     }
 
-    /// Stops the thread's agent, and the agents it started.
-    pub fn stop_thread_id(&mut self, id: &str) {
+    /// Stops the thread's agent, and the agents it started, asking first while those work.
+    pub fn stop_thread_id(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(thread) = self.threads.get(id).filter(|thread| !self.on_removed_server(thread)) else { return };
+        let Some(question) = thread.children.as_ref().and_then(|children| children.stop_question.clone()) else {
+            return self.stop_now(id);
+        };
+        self.stopping = Some(StopQuestion { thread_id: id.to_string(), question });
+        cx.notify();
+    }
+
+    pub fn stop_now(&mut self, id: &str) {
         let Some(thread) = self.threads.get(id).filter(|thread| !self.on_removed_server(thread)) else { return };
         let (server_id, thread_id) = (thread.server_id.clone(), thread.id.clone());
         self.request(&server_id, Request::Stop { thread_id });
