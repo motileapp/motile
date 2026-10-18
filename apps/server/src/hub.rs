@@ -3012,14 +3012,20 @@ impl Hub {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
         let was_running = live.stored.thread.running;
-        let ended = events.iter().any(|event| matches!(event, AgentEvent::Completed { .. }));
+        // A turn that ended while its agents worked settles once they are done, which they can
+        // be without waking the agent, when the usage limit stopped them all.
+        let settles = events.iter().any(|event| match event {
+            AgentEvent::Completed { .. } => true,
+            AgentEvent::Background(_) => was_running,
+            _ => false,
+        });
         for event in events {
             if let Err(error) = self.apply_event(live, event) {
                 tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
             }
         }
         // Decided once everything the agent said with the turn's end is known.
-        if ended && let Err(error) = self.rest(live) {
+        if settles && let Err(error) = self.rest(live) {
             tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
         }
         self.read_changes(live);
