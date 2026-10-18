@@ -31,8 +31,8 @@ struct ComposerView: View {
                 } else if store.selectedThread != nil, store.activity.monitoring {
                     monitoringStrip
                 } else if let thread = store.selectedThread, thread.waitsOnAgents, !store.activity.running,
-                          let text = thread.children?.runningText {
-                    agentsStrip(text)
+                          let children = thread.children, let text = children.runningText {
+                    agentsStrip(text, children: children)
                 } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {
                     InterruptionStrip(interruption: interruption)
                 }
@@ -155,34 +155,60 @@ struct ComposerView: View {
                 .padding(.trailing, 8)
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(monitoringLabel(now: context.date.timeIntervalSince1970))
-                    .font(.ui(size: 12.5, weight: .medium))
+                    .font(ControlSize.regular.font)
                     .foregroundStyle(Color.themeForeground)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            if let children = store.selectedThread?.children, let text = children.runningText {
+                // The button's own room before its avatars is the dot's on its other side.
+                Circle()
+                    .fill(Color.themeMutedStrongerForeground)
+                    .frame(width: 3, height: 3)
+                    .padding(.leading, Self.agentsButtonLead)
+                agentsButton(text, children: children)
             }
             Spacer(minLength: 8)
-            ActionButton("Stop", help: store.shortcuts.help("Stop monitoring", "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
+            ActionButton("Stop", help: store.shortcuts.help(stopHelp, "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
         }
         .modifier(ComposerStrip(edge: .top))
     }
 
+    private var stopHelp: String {
+        store.selectedThread?.children?.runningText == nil ? "Stop monitoring" : "Stop monitoring and its agents"
+    }
+
     /// While the agents the thread's agent started work on after its turn: which, and the way to
     /// stop them.
-    private func agentsStrip(_ text: String) -> some View {
+    private func agentsStrip(_ text: String, children: ThreadChildren) -> some View {
         HStack(spacing: 0) {
-            Circle()
-                .fill(Color.themeProcess)
-                .frame(width: 6, height: 6)
-                .padding(.leading, 14)
-                .padding(.trailing, 8)
-            Text(text)
-                .font(.ui(size: 12.5, weight: .medium))
-                .foregroundStyle(Color.themeForeground)
-                .lineLimit(1)
-                .help(text)
+            agentsButton(text, children: children)
+                .padding(.leading, ComposerStrip.inset)
             Spacer(minLength: 8)
             ActionButton("Stop", help: store.shortcuts.help("Stop its agents", "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
         }
         .modifier(ComposerStrip(edge: .top))
     }
+
+    /// The agents that work, side by side, as the way to the Agents tab.
+    private func agentsButton(_ text: String, children: ThreadChildren) -> some View {
+        let avatars = AgentAvatars(
+            avatars: children.working.map { ($0, nil) }, more: max(0, children.running - children.working.count),
+            side: ComposerView.avatarSide)
+        // A narrow composer only counts them.
+        return ViewThatFits(in: .horizontal) {
+            ForEach([text, "\(children.running)"], id: \.self) { words in
+                ActionButton(
+                    words, pictures: AnyView(avatars), help: text, variant: .ghost, tint: .themeForeground,
+                    margin: EdgeInsets(top: ComposerStrip.inset, leading: 0, bottom: ComposerStrip.inset, trailing: 0)
+                ) { store.rightPanel.open(.agents) }
+            }
+        }
+    }
+
+    private static let avatarSide: CGFloat = 16
+    /// The room between the agents button's side and its avatars.
+    private static let agentsButtonLead = ControlSize.regular.padding - ControlSize.regular.symbolOutset
 
     private var placeholder: String {
         guard let server = store.composerServer else { return "Ask anything" }

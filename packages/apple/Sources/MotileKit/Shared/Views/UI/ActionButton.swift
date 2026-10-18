@@ -22,10 +22,12 @@ enum ButtonVariant {
     case overlay
 }
 
-/// What a button shows before its words: a symbol, or a picture of its own like a logo.
+/// What a button shows before its words: a symbol, a picture of its own like a logo, or
+/// pictures side by side, as wide as they are.
 enum ControlIcon {
     case symbol(Symbol)
     case picture(AnyView)
+    case pictures(AnyView)
 }
 
 /// The colours and the shape of a button or a menu. Pressed looks as under the pointer does.
@@ -194,6 +196,7 @@ struct ControlLabel: View {
         case .picture(let picture):
             let side = symbolSize ?? size.symbolSide
             picture.frame(width: side, height: side)
+        case .pictures(let pictures): pictures.fixedSize()
         }
     }
 }
@@ -295,7 +298,7 @@ struct ActionButton: View {
     private let action: () -> Void
 
     init(
-        _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, detail: Symbol? = nil, help: String? = nil,
+        _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil, help: String? = nil,
         variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil,
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
@@ -305,7 +308,7 @@ struct ActionButton: View {
         chevron = opens
         self.inline = inline
         self.title = title
-        self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture)
+        self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture) ?? pictures.map(ControlIcon.pictures)
         self.detail = detail
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)

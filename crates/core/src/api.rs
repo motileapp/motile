@@ -655,14 +655,16 @@ pub struct ThreadView {
 pub struct Children {
     /// How many of them work.
     pub running: u32,
+    /// The agents of the first few that work, the first started first, whose avatars stand side
+    /// by side.
+    pub working: Vec<motile_protocol::wire::Agent>,
     /// The ones that wait for the user, the one that has waited longest first.
     pub waiting: Vec<WaitingChild>,
     /// What the thread says of those that wait: "Run greet.py needs your approval",
     /// "2 agents need you".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub waiting_text: Option<String>,
-    /// What the thread says while they work and it doesn't: "Waiting on Run greet.py",
-    /// "Waiting on 3 agents".
+    /// What the thread says while they work: "1 agent working", "3 agents working".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub running_text: Option<String>,
     /// What stopping the thread asks first while they work: "Stop 1 agent?", "Stop 3 agents?".

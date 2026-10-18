@@ -140,7 +140,7 @@ start_stack() {
         echo "▸ Starting the server…"
         stop server
         MOTILE_LINEAR_URL="$linear_url" MOTILE_RICRAC_URL="$ricrac_url" MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
-            MOTILE_GH_PATH="$ROOT/scripts/fake-gh" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH=6 \
+            MOTILE_GH_PATH="$ROOT/scripts/fake-gh" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH="${FAKE_AGENT_WATCH:-6}" \
             nohup "$BIN/motile" run --local --port "$SERVER_PORT" > "$DEV/server.log" 2>&1 &
         started server $! "$BIN/motile"
     fi

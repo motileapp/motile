@@ -885,7 +885,7 @@ data class ThreadChildren(
     val waiting: List<Waiting>,
     /** "Run greet.py needs your approval", "2 agents need you". */
     val waitingText: String?,
-    /** "Waiting on Run greet.py", "Waiting on 3 agents", while they work. */
+    /** "1 agent working", "3 agents working", while they work. */
     val runningText: String?,
     /** "Stop 1 agent?", "Stop 3 agents?", while they work. */
     val stopQuestion: String?,

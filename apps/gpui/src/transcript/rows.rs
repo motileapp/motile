@@ -1297,7 +1297,8 @@ fn agents_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
     };
     let c = colors(cx);
     let group: SharedString = format!("{}-agents", model.row.id).into();
-    let avatars = crate::ui::AgentAvatars::new(avatars.iter().map(|avatar| avatar.agent).collect(), *more);
+    let avatars =
+        crate::ui::AgentAvatars::new(avatars.iter().map(|avatar| avatar.agent).collect(), *more).lit_in(group.clone());
     let title = div()
         .text_size(px(13.))
         .font_weight(FontWeight::SEMIBOLD)

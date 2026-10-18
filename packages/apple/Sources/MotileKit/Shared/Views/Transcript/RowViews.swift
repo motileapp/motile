@@ -1148,6 +1148,8 @@ final class AgentsRowView: RowView {
         onHover = { [weak self] point in
             guard let self else { return }
             self.highlight.fill = point != nil ? Theme.backgroundAccentLarger : .clear
+            // The ring that sets each avatar apart is of what it lies on.
+            self.avatars.forEach { $0.ground = point != nil ? Theme.backgroundAccentLarger : Theme.background }
         }
         onPress = { [weak self] _ in
             guard let self else { return }
