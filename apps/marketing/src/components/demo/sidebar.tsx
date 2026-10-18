@@ -558,7 +558,7 @@ function ThreadStatus({
             <BotIcon className="size-[11px]" />
             {thread.status.count}
           </span>
-          <span className={cn(label, "text-muted-foreground")}>
+          <span className={cn(label, "text-process")}>
             <CircleDotDashedIcon className="size-[10px]" />
             {elapsed(thread.status.since)}
           </span>

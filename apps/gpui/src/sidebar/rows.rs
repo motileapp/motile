@@ -587,7 +587,7 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
             .child(label(agents.to_string(), c.pending, symbol("bot")))
             .child(label(
                 elapsed(thread.monitoring_since()),
-                c.muted_foreground,
+                c.process,
                 icons::symbol("circle-dot-dashed", 10.).into_any_element(),
             ))
             .tooltip(tooltip(help))

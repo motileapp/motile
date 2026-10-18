@@ -1299,7 +1299,7 @@ final class LineageView: FlippedView {
     }
 
     private func light(_ lit: Bool) {
-        pill.fill = lit ? Theme.backgroundAccentLarger : Theme.backgroundAccent
+        pill.fill = lit ? Theme.borderAccent : Theme.backgroundAccent
     }
 
     private func placeParts() {

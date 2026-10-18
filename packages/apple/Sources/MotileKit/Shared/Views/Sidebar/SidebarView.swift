@@ -965,7 +965,7 @@ struct ThreadStatus: View {
                     symbol(.bot)
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeMutedForeground) {
+                    label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeProcess) {
                         Image(.circleDotDashed, size: 10)
                     }
                 }

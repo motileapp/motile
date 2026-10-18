@@ -491,7 +491,7 @@ fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StatusLabel("${thread.children?.running ?: 0}", palette.pending) { Icon(Symbol.Bot, 11f) }
-            StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.mutedForeground) { Icon(Symbol.CircleDotDashed, 10f) }
+            StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.process) { Icon(Symbol.CircleDotDashed, 10f) }
         }
         thread.working -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
             val agents = maxOf(thread.agents, thread.children?.running ?: 0)

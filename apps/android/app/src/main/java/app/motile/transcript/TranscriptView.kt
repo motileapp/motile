@@ -531,7 +531,7 @@ private fun StartedByLine(title: String, open: () -> Unit) {
                 .padding(horizontal = ControlSize.Regular.padding)
                 .weight(1f, fill = false)
                 .height(size.height)
-                .background(if (pressed) palette.backgroundAccentLarger else palette.backgroundAccent, CircleShape)
+                .background(if (pressed) palette.borderAccent else palette.backgroundAccent, CircleShape)
                 .border(1.dp, palette.borderAccent, CircleShape)
                 .clickable(interaction, indication = null, role = Role.Button, onClick = open)
                 .padding(start = size.padding - size.symbolOutset, end = size.padding),
