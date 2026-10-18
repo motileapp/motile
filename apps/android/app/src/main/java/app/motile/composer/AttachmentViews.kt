@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Attachment
+import app.motile.core.ContinuedThread
 import app.motile.core.Pictures
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
@@ -104,24 +106,42 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
 fun AttachmentChip(attachment: Attachment) {
     val store = LocalStore.current
     val palette = Theme.colors
-    val surface = LocalSurface.current
-    val layer = Surface.Layer.Chip
-    Row(
-        Modifier
-            .background(surface.color(layer), CircleShape)
-            .border(1.dp, palette.borderAccent, CircleShape)
-            .padding(start = 9.dp, top = 2.dp, bottom = 2.dp, end = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    ComposerChip {
         Icon(Symbol.File, 12f)
         Text(attachment.name, size = 12f, maxLines = 1)
         attachment.bytes?.let { Text(Formatter.formatShortFileSize(Platform.context, it), size = 12f, color = palette.mutedForeground, maxLines = 1) }
         AttachmentProgress(attachment, onPicture = false)
-        CompositionLocalProvider(LocalRow provides layer) {
+        CompositionLocalProvider(LocalRow provides Surface.Layer.Chip) {
             ActionButton(icon = Symbol.X, help = "Remove", size = ControlSize.Small, round = true) { store.removeAttachment(attachment.id) }
         }
     }
+}
+
+/** The thread of a removed server that a new thread goes on from, and the button that starts it without it. */
+@Composable
+fun ContinuedThreadChip(from: ContinuedThread, modifier: Modifier = Modifier) {
+    val store = LocalStore.current
+    ComposerChip(modifier) {
+        Icon(Symbol.MessageSquareText, 12f)
+        Text("Continues “${from.title}”", Modifier.weight(1f, fill = false), size = 12f, maxLines = 1)
+        CompositionLocalProvider(LocalRow provides Surface.Layer.Chip) {
+            ActionButton(icon = Symbol.X, help = "Start without it", size = ControlSize.Small, round = true) { store.dropContinuation() }
+        }
+    }
+}
+
+/** The capsule of what a message goes with in the composer: a file, or the thread it continues. */
+@Composable
+private fun ComposerChip(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier
+            .background(LocalSurface.current.color(Surface.Layer.Chip), CircleShape)
+            .border(1.dp, Theme.colors.borderAccent, CircleShape)
+            .padding(start = 9.dp, top = 2.dp, bottom = 2.dp, end = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
 }
 
 /** How far an attachment is on its way to the server, or the button that tries again when it didn't get there. Nothing once it is there. */

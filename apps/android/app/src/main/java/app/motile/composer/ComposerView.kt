@@ -138,6 +138,7 @@ private fun ComposerBox(model: ComposerTextModel, focus: FocusRequester, press: 
     ) {
         val thread = store.selectedThread
         if (thread != null && thread.isDone) DoneBanner(thread)
+        store.selectedDraft?.from?.let { ContinuedThreadChip(it, Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp)) }
         if (store.attachments.isNotEmpty()) Attachments()
         ComposerRows(
             collapsed,

@@ -23,7 +23,7 @@ use crate::ui::icons;
 pub const TOP_PADDING: f32 = 20.;
 /// The room under the composer, which its box doesn't reach.
 const COMPOSER_BOTTOM_GAP: f32 = 16.;
-/// The jump button floats this far above the composer.
+/// The jump button floats this far above the composer, or above the transcript's end without one.
 const JUMP_BUTTON_GAP: f32 = 10.;
 const JUMP_BUTTON_SIDE: f32 = 32.;
 /// How close to the end the viewport has to be to go to the end when the room under the rows grows.
@@ -414,6 +414,7 @@ impl Render for TranscriptView {
         let activity = model.activity.clone();
         let fresh = Rc::new(model.fresh_rows());
         let grown = Rc::new(model.grown_rows());
+        let removed = self.store.read(cx).open_thread_removed();
         let ctx = RowContext {
             view: cx.entity().downgrade(),
             store: self.store.clone(),
@@ -426,6 +427,7 @@ impl Render for TranscriptView {
             width: (f32::from(list_state.viewport_bounds().size.width) - theme::CONTENT_PADDING * 2.)
                 .clamp(0., theme::CONTENT_WIDTH),
             agent: self.agent,
+            removed,
         };
         let needs_highlight = self.needs_highlight.clone();
         let requested = self.requested_highlight.clone();
@@ -507,7 +509,10 @@ impl Render for TranscriptView {
             linear_color_stop(c.background, 0.),
             linear_color_stop(c.background.opacity(0.), 1.),
         ));
-        let jump_bottom = bottom - crate::thread::COMPOSER_GAP + JUMP_BUTTON_GAP;
+        // Above the composer, which starts `COMPOSER_GAP` into the inset, or above the inset.
+        let under_composer = self.agent || !removed;
+        let composer = if under_composer { crate::thread::COMPOSER_GAP } else { 0. };
+        let jump_bottom = bottom - composer + JUMP_BUTTON_GAP;
 
         div()
             .size_full()

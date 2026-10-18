@@ -30,6 +30,9 @@ pub struct Server {
     /// The name cut short, for the places a long name crowds.
     pub short_name: String,
     pub platform: String,
+    /// The server was removed from the account: its threads are copies, read from the other
+    /// servers, which go on only on another server.
+    pub removed: bool,
     pub state: State,
     pub error: Option<String>,
     /// "relay" or "direct".
@@ -76,6 +79,7 @@ impl From<ServerView> for Server {
             name: view.name,
             short_name: view.short_name,
             platform: view.platform,
+            removed: view.removed,
             state: view.state,
             error: view.error,
             path,
@@ -1033,5 +1037,28 @@ mod tests {
         assert_eq!(duration(12_000), "12s");
         assert_eq!(duration(185_000), "3m 5s");
         assert_eq!(duration(3_720_000), "1h 2m");
+    }
+
+    #[test]
+    fn a_removed_server_keeps_its_last_name_and_is_not_connected() {
+        let view = ServerView {
+            id: "key".into(),
+            name: "build-box".into(),
+            short_name: "build-box".into(),
+            platform: "linux".into(),
+            removed: true,
+            state: State::Disconnected,
+            error: None,
+            path: None,
+            rtt_ms: None,
+            info: None,
+            short_model_names: HashMap::new(),
+        };
+        let server = Server::from(view);
+        assert!(server.removed);
+        assert!(!server.connected());
+        assert!(!server.known);
+        assert_eq!(server.name, "build-box");
+        assert_eq!(server.accounts(Agent::Claude).len(), 1);
     }
 }

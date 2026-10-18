@@ -18,6 +18,7 @@ use super::prose::{self, CodeBox, ParaStyle, ProseBlock, TableCell, TextPara};
 use super::view::TranscriptView;
 use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
+use crate::store::settings::SettingsSection;
 use crate::theme::{self, Colors, ControlSize, Radius, Surface, colors};
 use crate::ui::{ActionButton, Highlight, edges, icons};
 
@@ -59,6 +60,8 @@ pub struct RowContext {
     pub width: f32,
     /// It is the transcript of an agent the thread started, whose turns' changes don't open.
     pub agent: bool,
+    /// The thread's server was removed from the account, so what only it had can't be fetched.
+    pub removed: bool,
 }
 
 /// What the text of a row is known by, so that a selection keeps to the row.
@@ -1497,6 +1500,96 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
         .into_any_element()
 }
 
+/// Under this inner width the two buttons of an unlinked server's thread share the row in halves.
+const REMOVED_HALVES_BELOW: f32 = 420.;
+const REMOVED_PADDING: f32 = 16.;
+
+/// The end of a thread whose server was unlinked, in place of the composer: why the thread can
+/// only be read, and the ways on from it.
+fn removed_row(model: &RowModel, title: &str, message: &str, ctx: &RowContext, cx: &App) -> AnyElement {
+    let c = colors(cx);
+    let halves = ctx.width - REMOVED_PADDING * 2. < REMOVED_HALVES_BELOW;
+    let (settings, elsewhere) = (ctx.store.clone(), ctx.store.clone());
+    let button = |id: &'static str, title: &'static str, help: &'static str| {
+        let button = RowButton::new(id, title, help).bordered().hover(c.border).rest(c.background);
+        if halves { button.grows() } else { button }
+    };
+    let (size, line) = (13., 20.5);
+    div()
+        .py(px(12.))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .bg(c.background_secondary)
+                .border_1()
+                .border_color(c.border)
+                .rounded(px(Radius::LG))
+                .p(px(REMOVED_PADDING - 1.))
+                .child(
+                    div()
+                        .h(px(18.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child(icons::symbol("unlink", 13.).text_color(c.muted_foreground))
+                        .child(
+                            div()
+                                .min_w_0()
+                                .text_size(px(13.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c.foreground)
+                                .truncate()
+                                .child(title.to_string()),
+                        ),
+                )
+                .child(text_box(size, line).mt(px(6. - trim(size, line))).text_color(c.muted_foreground).child(plain(
+                    &format!("{}-message", model.row.id),
+                    message,
+                    &[],
+                    &[],
+                    c.muted_foreground,
+                    row_key(&model.row.id),
+                    cx,
+                )))
+                .child(
+                    div()
+                        .mt(px(14.))
+                        .flex()
+                        .justify_end()
+                        .gap(px(ControlSize::Regular.gap()))
+                        .child(
+                            button(
+                                "open-server-settings",
+                                "Open Settings",
+                                "Unlinked servers are deleted with their threads in settings",
+                            )
+                            .on_click(move |_, _, cx| {
+                                settings.update(cx, |store, cx| {
+                                    store.open_settings(SettingsSection::Servers, None);
+                                    cx.notify();
+                                })
+                            }),
+                        )
+                        .child(
+                            button(
+                                "continue-elsewhere",
+                                "Continue Thread",
+                                "Start a thread on another server with everything that happened here",
+                            )
+                            .primary()
+                            .on_click(move |_, _, cx| {
+                                elsewhere.update(cx, |store, cx| {
+                                    store.continue_on_another_server(cx);
+                                    cx.notify();
+                                })
+                            }),
+                        ),
+                ),
+        )
+        .into_any_element()
+}
+
 /// The widths of the two labels: as wide as they are where they fit, else the shorter one whole
 /// and the other what is left, or each half.
 fn fitted(from: f32, to: f32, room: f32) -> (f32, f32) {
@@ -1536,6 +1629,7 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
             turn_end_row(model, *stopped, *duration_ms, *folded, *at, ctx, cx)
         }
         RowKind::Handoff { from, to } => handoff_row(from, to, ctx, window, cx),
+        RowKind::Removed { title, message, .. } => removed_row(model, title, message, ctx, cx),
         RowKind::Queued { text, skills, attachments, status } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
             let message = Message { text, links: Vec::new(), skills: prose::skill_ranges(text, skills) };

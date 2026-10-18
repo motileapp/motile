@@ -59,12 +59,28 @@ pub struct Server {
 
 impl Server {
     pub async fn run(self, endpoint: Endpoint) {
+        tokio::spawn(self.clone().keep_deleted_dropped());
         while let Some(incoming) = endpoint.accept().await {
             let server = self.clone();
             tokio::spawn(async move {
                 let Ok(connection) = incoming.await else { return };
                 server.handle_connection(connection).await;
             });
+        }
+    }
+
+    /// Drops the copies of the servers the account deleted completely, as soon as the account says.
+    async fn keep_deleted_dropped(self) {
+        loop {
+            tokio::time::sleep(RECHECK_ACCESS_EVERY).await;
+            let deleted = self.access.deleted().await;
+            if deleted.is_empty() {
+                continue;
+            }
+            let hub = self.hub.clone();
+            if let Ok(Err(error)) = tokio::task::spawn_blocking(move || hub.store().drop_origins(&deleted)).await {
+                tracing::warn!("couldn't drop the copies of deleted servers: {error:#}");
+            }
         }
     }
 
@@ -168,8 +184,8 @@ impl Server {
             Request::PullRequests { project_id, thread_id, state } => {
                 hub.pull_requests(&project_id, thread_id.as_deref(), state).await
             }
-            Request::Usage { since, until, bucket_secs, utc_offset_secs } => {
-                hub.usage(since, until, bucket_secs, utc_offset_secs)
+            Request::Usage { since, until, bucket_secs, utc_offset_secs, removed } => {
+                hub.usage(since, until, bucket_secs, utc_offset_secs, &removed)
             }
             Request::Limits { refresh } => Ok(hub.limits(refresh).await),
             Request::RefreshModels => {
@@ -178,11 +194,43 @@ impl Server {
             }
             Request::SaveAgentAccount { account } => hub.save_agent_account(account).await.map(|_| Message::Ok),
             Request::RemoveAgentAccount { id } => hub.remove_agent_account(&id).await.map(|_| Message::Ok),
-            Request::SearchThreads { query, limit } => {
+            Request::SearchThreads { query, limit, removed } => {
                 let store = hub.clone();
-                let found = tokio::task::spawn_blocking(move || store.store().search_threads(&query, limit)).await?;
+                let found =
+                    tokio::task::spawn_blocking(move || store.store().search_threads_with(&query, limit, &removed))
+                        .await?;
                 found.map(|matches| Message::ThreadMatches { matches }).map_err(Into::into)
             }
+            Request::Watermarks => {
+                let (hub, deleted) = (hub.clone(), self.access.deleted().await);
+                tokio::task::spawn_blocking(move || {
+                    hub.store().drop_origins(&deleted)?;
+                    hub.watermarks()
+                })
+                .await?
+            }
+            Request::Changes { origin, after } => {
+                let hub = hub.clone();
+                tokio::task::spawn_blocking(move || hub.changes(origin.as_deref(), after)).await?
+            }
+            Request::Apply { origin, name, platform, batch, reset } => {
+                if self.access.is_deleted(&origin).await {
+                    Err(anyhow::anyhow!("That server was deleted completely."))
+                } else {
+                    let hub = hub.clone();
+                    tokio::task::spawn_blocking(move || {
+                        hub.store().apply(&origin, &name, &platform, &batch, reset)?;
+                        hub.watermarks()
+                    })
+                    .await?
+                }
+            }
+            Request::Copies { origin } => {
+                let hub = hub.clone();
+                let copies = tokio::task::spawn_blocking(move || hub.store().copies(&origin)).await?;
+                copies.map(|(projects, threads)| Message::Copies { projects, threads }).map_err(Into::into)
+            }
+            Request::OpenCopy { origin, thread_id } => return open_copy(send, hub.clone(), origin, thread_id).await,
             Request::LinkPullRequest { thread_id, number } => {
                 hub.link_pull_request(&thread_id, number).await.map(|_| Message::Ok)
             }
@@ -459,6 +507,21 @@ async fn send_file(
     };
     write_frame(&mut send, &Message::File { kind, size, sent }).await?;
     tokio::io::copy(&mut file.take(sent), &mut send).await?;
+    send.finish()?;
+    Ok(())
+}
+
+/// Sends the transcript of a removed server's thread from the copy, in pieces, and ends.
+async fn open_copy(mut send: SendStream, hub: Arc<Hub>, origin: String, thread_id: String) -> anyhow::Result<()> {
+    let pieces = tokio::task::spawn_blocking(move || hub.store().copied_transcript(&origin, &thread_id)).await?;
+    match pieces {
+        Ok(pieces) => {
+            for items in pieces {
+                write_frame(&mut send, &Message::Items { items }).await?;
+            }
+        }
+        Err(error) => write_frame(&mut send, &Message::Error { message: error.to_string() }).await?,
+    }
     send.finish()?;
     Ok(())
 }

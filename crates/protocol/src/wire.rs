@@ -320,6 +320,17 @@ pub struct NewThread {
     /// works in the project's folder, or in a folder of its own in the server's "No project".
     #[serde(default)]
     pub worktree: Option<NewWorktree>,
+    /// The thread goes on from a thread of a removed server, which this server holds a copy of:
+    /// its agent is told everything that happened in it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<CopiedThread>,
+}
+
+/// A thread of another server, by the server it started on.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct CopiedThread {
+    pub origin: String,
+    pub thread_id: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -761,6 +772,9 @@ pub enum Request {
         until: f64,
         bucket_secs: u32,
         utc_offset_secs: i32,
+        /// Removed servers whose copied usage to answer with too, each on its own.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        removed: Vec<String>,
     },
     /// How much of their plans the agents' accounts have used. What was read in the last minutes
     /// is answered again unless `refresh`. `Limits` answers.
@@ -785,7 +799,127 @@ pub enum Request {
     SearchThreads {
         query: String,
         limit: u32,
+        /// Removed servers whose copied threads to search too.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        removed: Vec<String>,
     },
+
+    /// How far the server's own change log goes, and its copy of each other server's. `Watermarks`
+    /// answers.
+    Watermarks,
+    /// What changed in a log after `after`: the server's own, or with `origin` its copy of that
+    /// server's. `Changes` answers with one batch; ask again from its `up_to` while it has `more`.
+    Changes {
+        origin: Option<String>,
+        after: u64,
+    },
+    /// Keeps a batch of another server's log in this server's copy of it. `Watermarks` answers with
+    /// where the copies now go. A batch that would leave a gap, or that is this server's own, is
+    /// refused. With `reset` the copy is made again from the batch, which starts the log: its
+    /// origin's log went back, as a database restored from a backup does.
+    Apply {
+        origin: String,
+        name: String,
+        platform: String,
+        batch: ChangeBatch,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        reset: bool,
+    },
+    /// The projects and threads of a removed server, from this server's copy. `Copies` answers.
+    Copies {
+        origin: String,
+    },
+    /// The transcript of a removed server's thread, from this server's copy: `Items` in pieces, then
+    /// the stream ends.
+    OpenCopy {
+        origin: String,
+        thread_id: String,
+    },
+}
+
+/// Where a log goes: which log it is, and its last change.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct Watermark {
+    pub log_id: String,
+    pub change: u64,
+}
+
+/// How far a server's copy of another server's log goes.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct OriginWatermark {
+    pub origin: String,
+    #[serde(flatten)]
+    pub watermark: Watermark,
+}
+
+/// The changes in a log after `after`, up to `up_to`. `data` is the `ChangeSet` as zstd-compressed
+/// JSON in base64, which the client carries from one server to another without reading.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ChangeBatch {
+    pub log_id: String,
+    pub after: u64,
+    pub up_to: u64,
+    /// More changes follow `up_to`.
+    pub more: bool,
+    pub data: String,
+}
+
+/// What a batch holds, each with the change that last wrote it.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct ChangeSet {
+    pub projects: Vec<Logged<Project>>,
+    pub threads: Vec<Logged<Thread>>,
+    pub items: Vec<LoggedItem>,
+    pub usage: Vec<Logged<UsageRecord>>,
+    pub tombstones: Vec<Tombstone>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Logged<T> {
+    pub change: u64,
+    pub value: T,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct LoggedItem {
+    pub change: u64,
+    pub thread_id: String,
+    pub item: Item,
+}
+
+/// What an agent spent on a model, once.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct UsageRecord {
+    pub at: f64,
+    pub thread_id: String,
+    pub project_id: String,
+    pub agent: Agent,
+    pub agent_account: String,
+    pub model: String,
+    pub tokens: Tokens,
+    pub cost_usd: Option<f64>,
+    pub purpose: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Tombstone {
+    pub kind: TombstoneKind,
+    pub id: String,
+    pub change: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum TombstoneKind {
+    Project,
+    Thread,
+}
+
+/// What a server's copy of a removed server's usage says, in the buckets that were asked for.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct OriginUsage {
+    pub origin: String,
+    pub buckets: Vec<UsageBucket>,
 }
 
 /// Who wrote the message a search found in a thread.
@@ -803,6 +937,9 @@ pub struct ThreadMatch {
     pub thread_id: String,
     pub speaker: Speaker,
     pub excerpt: String,
+    /// The removed server the thread is a copy of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
 }
 
 /// One of an agent's accounts on a server: the folder its CLI keeps the sign-in in.
@@ -2088,12 +2225,25 @@ pub enum Message {
     },
     Usage {
         buckets: Vec<UsageBucket>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        copies: Vec<OriginUsage>,
     },
     Limits {
         agents: Vec<AgentLimits>,
     },
     ThreadMatches {
         matches: Vec<ThreadMatch>,
+    },
+    Watermarks {
+        own: Watermark,
+        copies: Vec<OriginWatermark>,
+    },
+    Changes {
+        batch: ChangeBatch,
+    },
+    Copies {
+        projects: Vec<Project>,
+        threads: Vec<Thread>,
     },
     Error {
         message: String,

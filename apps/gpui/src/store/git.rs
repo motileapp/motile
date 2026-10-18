@@ -93,8 +93,10 @@ impl Store {
             .any(|thread| thread.project_id == project.id && thread.running && thread.cwd == project.path)
     }
 
+    /// The protocol of the project's server; none for a removed one, which nothing is asked of.
     fn protocol_of(&self, project: &Project) -> u32 {
-        self.server(Some(&project.server_id)).map_or(0, |server| server.protocol_version)
+        let server = self.server(Some(&project.server_id)).filter(|server| !server.removed);
+        server.map_or(0, |server| server.protocol_version)
     }
 
     /// Whether the project's server is new enough to start threads in worktrees of their own, and

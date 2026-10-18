@@ -121,7 +121,8 @@ struct SettingsPage: View {
                 } trailing: {
                     ServerUpdateStatus(server: server, variant: .outline, size: .large) { EmptyView() }
                     more("What to do with \(server.name)") {
-                        item("Remove Server", symbol: .trash2, role: .destructive) { removal = .server(server) }
+                        item("Unlink Server", symbol: .unlink, role: .destructive) { removal = .server(server) }
+                        item("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
                     }
                 }
                 ThemeDivider()
@@ -133,7 +134,28 @@ struct SettingsPage: View {
                 EmptyView()
             }
         }
+        removedServers
         continuing
+    }
+
+    /// The servers removed from the account, whose threads stay from the copies until they are
+    /// deleted completely.
+    @ViewBuilder private var removedServers: some View {
+        let removed = store.removedServers
+        if !removed.isEmpty {
+            SettingsGroup("removed-servers", "Unlinked") {
+                ForEach(removed) { server in
+                    SettingsRow {
+                        serverName(server)
+                    } trailing: {
+                        more("What to do with \(server.name)") {
+                            item("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                        }
+                    }
+                    if server.id != removed.last?.id { ThemeDivider() }
+                }
+            }
+        }
     }
 
     /// What each server goes on with by itself: threads whose usage limit reset, and threads whose

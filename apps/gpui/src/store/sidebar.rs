@@ -174,13 +174,13 @@ impl Store {
         if self.is_searching_threads() || !drafts.is_empty() || !self.active_threads().is_empty() {
             return false;
         }
-        !self.projects.is_empty() || !self.no_projects.is_empty()
+        !self.recent_projects().is_empty() || self.live_no_projects().next().is_some()
     }
 
     /// The agent a draft starts with: its model's, or its server's first model's.
     pub fn agent_of(&self, draft: &super::ThreadDraft) -> Option<Agent> {
         let project = self.project(draft.project_id.as_deref());
-        let server = self.server(project.map(|project| project.server_id.as_str())).or(self.servers.first())?;
+        let server = self.server(project.map(|project| project.server_id.as_str())).or(self.live_servers().next())?;
         let model = server.models.iter().find(|model| Some(&model.id) == draft.model.as_ref());
         model.or(server.models.first()).map(|model| model.agent)
     }
@@ -203,7 +203,9 @@ impl Store {
 
     /// Whether the user can move the thread among the active ones.
     pub fn moves(&self, thread: &ThreadInfo) -> bool {
-        !thread.is_done() && self.server(Some(&thread.server_id)).is_some_and(Server::moves_threads)
+        !thread.is_done()
+            && !self.on_removed_server(thread)
+            && self.server(Some(&thread.server_id)).is_some_and(Server::moves_threads)
     }
 
     /// Puts the thread where `index` is among the sidebar's rows without it: `rows` has the id

@@ -10,7 +10,7 @@ use std::time::Duration;
 use futures_lite::StreamExt;
 use iroh::Endpoint;
 use iroh::endpoint::PathEvent;
-use motile_protocol::wire::{FileKind, GitStage, Message, Request, RestartWhen};
+use motile_protocol::wire::{FileKind, GitStage, Item, Message, Request, RestartWhen};
 use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
@@ -398,6 +398,21 @@ impl Link {
 
     pub async fn file(&self, request: &Request, shown: &Path) -> anyhow::Result<(FileKind, u64, Vec<u8>)> {
         self.connection()?.file(request, shown).await
+    }
+
+    /// The transcript of a removed server's thread, from this server's copy of it.
+    pub async fn open_copy(&self, origin: &str, thread_id: &str) -> anyhow::Result<Vec<Item>> {
+        let request = Request::OpenCopy { origin: origin.to_string(), thread_id: thread_id.to_string() };
+        let mut follow = self.connection()?.follow(&request).await?;
+        let mut items = Vec::new();
+        while let Some(message) = follow.next().await? {
+            match message {
+                Message::Items { items: piece } => items.extend(piece),
+                Message::Error { message } => anyhow::bail!(message),
+                _ => {}
+            }
+        }
+        Ok(items)
     }
 
     pub async fn media(&self, id: &str, file: &Path, progress: impl FnMut(u64, u64)) -> anyhow::Result<()> {

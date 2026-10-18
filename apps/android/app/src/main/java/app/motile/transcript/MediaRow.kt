@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
+import app.motile.core.AppStore
 import app.motile.core.ViewedMedia
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
@@ -33,6 +34,7 @@ import app.motile.theme.Theme
 import app.motile.ui.ContextMenuArea
 import app.motile.ui.Spinner
 import app.motile.ui.Text
+import java.io.File
 import kotlin.math.max
 
 private sealed interface MediaState {
@@ -58,9 +60,10 @@ fun MediaRow(media: MediaContent) {
         val pictureID = media.picture ?: return@LaunchedEffect
         if (picture != null) return@LaunchedEffect
         state = MediaState.Loading
-        val file = store.mediaFile(pictureID)
+        val fetched = store.fetchedMedia(pictureID)
+        val file = fetched.getOrNull()
         if (file == null) {
-            state = if (media.video) MediaState.Shown else MediaState.Failed("This image couldn't be loaded.")
+            state = if (media.video) MediaState.Shown else MediaState.Failed(store.fetchFailure(fetched))
             return@LaunchedEffect
         }
         val image = PictureCache.decode(file, pictureID, maxPixels)
@@ -102,13 +105,19 @@ fun MediaRow(media: MediaContent) {
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(shown.why, style = Theme.smallFont, color = palette.mutedForeground, align = TextAlign.Center, maxLines = 1)
-                        RowButton("Try again", "Load the image again", bordered = true) { attempt += 1 }
+                        if (store.fetchesAgain) RowButton("Try again", "Load the image again", bordered = true) { attempt += 1 }
                     }
                     MediaState.Shown -> Unit
                 }
             }
         }
     }
+}
+
+/** Why an image isn't shown: what the core said when it can't be asked for again, as from a removed server, or else that it can be tried again. */
+private fun AppStore.fetchFailure(fetched: Result<File>): String {
+    if (fetchesAgain) return "This image couldn't be loaded."
+    return fetched.exceptionOrNull()?.message ?: "This image couldn't be loaded."
 }
 
 private fun mediaViewed(media: MediaContent) = ViewedMedia(media.name, media.video, ViewedMedia.Source.Media(media.id))

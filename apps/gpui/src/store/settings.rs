@@ -87,7 +87,12 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 18] = [
         SettingsSection::Keyboard,
         "keys keyboard shortcuts hotkeys commands record keybindings.json",
     ),
-    ("servers", "Servers", SettingsSection::Servers, "add remove machine agents connected"),
+    (
+        "servers",
+        "Servers",
+        SettingsSection::Servers,
+        "add remove unlink unlinked delete copies machine agents connected",
+    ),
     ("continue-limits", "Continue after usage limits", SettingsSection::Servers, "rate limit reset resume quota wait"),
     (
         "continue-restarts",

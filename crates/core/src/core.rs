@@ -17,7 +17,7 @@ use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
     AccountSkills, Activity, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Message, Project,
-    PullRequestSettings, Request, ServerInfo, Skill, Thread, ToolStatus, Worktree,
+    PullRequestSettings, Request, ServerInfo, Skill, Thread, ThreadMatch, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -42,6 +42,7 @@ use crate::render::rows::{Splice, Transcript, Uncoloured, short_model_name};
 use crate::ricrac;
 use crate::search;
 use crate::skills;
+use crate::sync::{self as relay, Origin, SYNC_PROTOCOL};
 use crate::usage;
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
@@ -80,6 +81,12 @@ const LIMITS_STALE: Duration = Duration::from_secs(5 * 60);
 const STALE_AFTER: Duration = Duration::from_secs(10);
 /// An endpoint that reached no server for this long is replaced, in case the fault is its own.
 const WEDGED_AFTER: Duration = Duration::from_secs(60);
+/// How long after a server connects or the account changes the servers' threads are copied.
+const RELAY_SOON: Duration = Duration::from_secs(2);
+/// How long after a thread changes the servers' threads are copied, so a turn's changes go together.
+const RELAY_AFTER_CHANGE: Duration = Duration::from_secs(10);
+/// How many ticks pass between rounds of copying when nothing asks for one, about five minutes.
+const RELAY_TICKS: u64 = 150;
 
 pub type EventSink = Arc<dyn Fn(Event) + Send + Sync>;
 
@@ -156,6 +163,20 @@ enum Input {
         query: String,
         found: Vec<search::Found>,
     },
+    /// Time to copy the servers' threads between them.
+    Relay,
+    Relayed(relay::Round),
+    /// A server's copy of a removed server's projects and threads.
+    CopiesFetched {
+        origin: String,
+        projects: Vec<Project>,
+        threads: Vec<Thread>,
+    },
+    /// A server's copy of the transcript of a removed server's thread.
+    CopyOpened {
+        thread_id: String,
+        result: Result<Vec<Item>, String>,
+    },
     Uploaded {
         key: String,
         result: Result<Value, String>,
@@ -172,6 +193,9 @@ enum Input {
 
 struct Server {
     device: Device,
+    /// The server was removed from the account. Its threads are the copies its account's other
+    /// servers keep.
+    removed: bool,
     link: Option<Arc<Link>>,
     status: Status,
     /// Since when the server hasn't been reached, while it isn't.
@@ -241,6 +265,22 @@ struct Core {
     skills: Skills,
     keybindings: Keybindings,
     search: Search,
+    relay: Relay,
+}
+
+/// The rounds that copy the servers' threads between them.
+#[derive(Default)]
+struct Relay {
+    running: bool,
+    /// Something changed while a round ran: another follows it.
+    again: bool,
+    timer: Option<AbortHandle>,
+    /// The device is on a network that costs by the byte.
+    metered: bool,
+    /// How far each server's logs went at the last round.
+    marks: HashMap<String, relay::Marks>,
+    /// The removed servers whose copies have been read since the client started.
+    read: HashSet<String>,
 }
 
 type Skills = Arc<tokio::sync::Mutex<HashMap<(String, String), (Instant, Vec<AccountSkills>)>>>;
@@ -313,6 +353,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         ticks: 0,
         icons_asked: HashSet::new(),
         search: Search::default(),
+        relay: Relay::default(),
     };
     // Loading the syntax definitions takes a moment; better now than at the first code block.
     tokio::task::spawn_blocking(|| highlight::highlight("rust", "fn main() {}"));
@@ -495,6 +536,10 @@ impl Core {
                 self.emit_search(false);
             }
             Input::Keep { key, value } => self.cache.keep(&key, &value),
+            Input::Relay => self.start_relay(),
+            Input::Relayed(round) => self.relayed(round),
+            Input::CopiesFetched { origin, projects, threads } => self.copies_fetched(&origin, projects, threads),
+            Input::CopyOpened { thread_id, result } => self.copy_opened(&thread_id, result),
             Input::Render => self.render(),
             Input::Stop => {}
             Input::Tick => {
@@ -507,6 +552,9 @@ impl Core {
                 }
                 if self.watch_servers || self.ticks.is_multiple_of(ACCOUNT_CHECK_TICKS) {
                     self.check_account();
+                }
+                if self.ticks.is_multiple_of(RELAY_TICKS) {
+                    self.schedule_relay(RELAY_SOON);
                 }
                 if self.ticks.is_multiple_of(LIMITS_CHECK_TICKS) {
                     let servers: Vec<String> =
@@ -530,6 +578,9 @@ impl Core {
             if let Some(link) = &server.link {
                 link.shutdown();
             }
+        }
+        if let Some(timer) = self.relay.timer.take() {
+            timer.abort();
         }
         if let Some(endpoint) = self.endpoint.take() {
             endpoint.close().await;
@@ -732,9 +783,9 @@ impl Core {
     /// Opens a new endpoint when the one there is has long reached none of the servers. They may
     /// all be down, but an endpoint can also get stuck for good, and only a new one tells.
     fn replace_wedged_endpoint(&mut self) {
-        let reaches =
-            self.servers.iter().any(|server| matches!(server.status.state, State::Connected | State::Refused));
-        if reaches || self.servers.is_empty() || self.endpoint.is_none() {
+        let linked: Vec<&Server> = self.servers.iter().filter(|server| !server.removed).collect();
+        let reaches = linked.iter().any(|server| matches!(server.status.state, State::Connected | State::Refused));
+        if reaches || linked.is_empty() || self.endpoint.is_none() {
             self.reached_at = Instant::now();
             return;
         }
@@ -771,13 +822,35 @@ impl Core {
         }
     }
 
-    /// Makes the servers match the account's: drops the ones that are gone, adds the new ones.
+    /// The account's servers and the ones it removed, which aren't deleted completely, each with
+    /// whether it was removed.
+    fn wanted_servers(&self) -> Vec<(Device, bool)> {
+        let linked = self.me.devices.iter().filter(|device| device.kind == DeviceKind::Server);
+        let mut wanted: Vec<(Device, bool)> = linked.map(|device| (device.clone(), false)).collect();
+        for gone in &self.me.removed {
+            let known = wanted.iter().any(|(device, _)| device.public_key == gone.public_key);
+            if known || self.me.deleted.contains(&gone.public_key) {
+                continue;
+            }
+            let device = Device {
+                public_key: gone.public_key.clone(),
+                kind: DeviceKind::Server,
+                name: gone.name.clone(),
+                platform: gone.platform.clone(),
+                created_at: gone.removed_at,
+            };
+            wanted.push((device, true));
+        }
+        wanted
+    }
+
+    /// Makes the servers match the account's: drops the ones that are gone, adds the new ones,
+    /// and keeps the ones it removed as removed.
     fn sync_servers(&mut self) {
-        let wanted: Vec<Device> =
-            self.me.devices.iter().filter(|device| device.kind == DeviceKind::Server).cloned().collect();
+        let wanted = self.wanted_servers();
         let (kept, gone): (Vec<Server>, Vec<Server>) = std::mem::take(&mut self.servers)
             .into_iter()
-            .partition(|server| wanted.iter().any(|device| device.public_key == server.device.public_key));
+            .partition(|server| wanted.iter().any(|(device, _)| device.public_key == server.device.public_key));
         self.servers = kept;
         for server in gone {
             let server_id = server.device.public_key;
@@ -792,9 +865,18 @@ impl Core {
         }
 
         let mut added = Vec::new();
-        for device in wanted {
+        let mut turned = Vec::new();
+        for (device, removed) in wanted {
             if let Some(server) = self.servers.iter_mut().find(|server| server.device.public_key == device.public_key) {
                 server.device = device;
+                if server.removed != removed {
+                    server.removed = removed;
+                    turned.push(server.device.public_key.clone());
+                    if let Some(link) = server.link.take().filter(|_| removed) {
+                        link.shutdown();
+                        server.status = Status { state: State::Disconnected, ..Status::default() };
+                    }
+                }
                 continue;
             }
             let server_id = device.public_key.clone();
@@ -810,6 +892,7 @@ impl Core {
             let threads = cached.into_iter().map(|cached| (cached.thread.id.clone(), cached.thread)).collect();
             self.servers.push(Server {
                 device,
+                removed,
                 link: None,
                 status: Status::default(),
                 away_since: Some(Instant::now()),
@@ -826,14 +909,33 @@ impl Core {
             self.emit_projects(&server_id, projects);
             self.emit(Event::Threads { server_id, threads });
         }
+        for server_id in turned {
+            self.mark_removed(&server_id);
+        }
+        self.schedule_relay(RELAY_SOON);
+    }
+
+    /// Ends the open threads of the server with the row that says it was removed, or takes the row
+    /// away once it is back.
+    fn mark_removed(&mut self, server_id: &str) {
+        let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else { return };
+        let removed = server.removed.then(|| server.device.name.clone());
+        let mut splices = Vec::new();
+        for (thread_id, open) in self.open.iter_mut().filter(|(_, open)| open.server_id == server_id) {
+            splices.extend(open.transcript.set_removed(removed.clone()).map(|splice| (thread_id.clone(), splice)));
+        }
+        for (thread_id, splice) in splices {
+            self.emit_rows(&thread_id, false, splice);
+        }
     }
 
     fn connect_servers(&mut self) {
         let Some(endpoint) = &self.endpoint else { return };
-        let direct = self.config.direct_addr.as_deref().and_then(|address| address.parse().ok());
-        for server in self.servers.iter_mut().filter(|server| server.link.is_none()) {
+        for server in self.servers.iter_mut().filter(|server| server.link.is_none() && !server.removed) {
             let server_id = server.device.public_key.clone();
-            let address = ServerAddr { key: server_id.clone(), direct };
+            let direct = self.config.direct_addrs.get(&server_id).or(self.config.direct_addr.as_ref());
+            let address =
+                ServerAddr { key: server_id.clone(), direct: direct.and_then(|address| address.parse().ok()) };
             let link = Link::connect(endpoint.clone(), address, self.link_events.clone());
             // Threads the client opened before there was a connection to follow them on.
             for (thread_id, open) in self.open.iter().filter(|(_, open)| open.server_id == server_id) {
@@ -852,6 +954,7 @@ impl Core {
             name: server.device.name.clone(),
             short_name: short_name(&server.device.name),
             platform: server.device.platform.clone(),
+            removed: server.removed,
             state: server.status.state,
             error: server.status.error.clone(),
             path: server.status.path,
@@ -893,6 +996,12 @@ impl Core {
 
     fn link(&self, server_id: &str) -> Result<Arc<Link>, String> {
         let server = self.servers.iter().find(|server| server.device.public_key == server_id);
+        if let Some(server) = server.filter(|server| server.removed) {
+            let name = &server.device.name;
+            return Err(format!(
+                "“{name}” is unlinked, so its threads are read-only. You can delete “{name}” in settings to remove them."
+            ));
+        }
         server.and_then(|server| server.link.clone()).ok_or_else(|| NOT_CONNECTED.to_string())
     }
 
@@ -961,6 +1070,11 @@ impl Core {
         let Some(unfinished) = self.media.unfinished(&media_id) else {
             return self.reply(id, Err("That isn't the name of a file your server keeps.".to_string()));
         };
+        let server = self.servers.iter().find(|server| server.device.public_key == server_id);
+        if let Some(server) = server.filter(|server| server.removed) {
+            let only_there = format!("Only “{}” had this, and it's unlinked.", server.device.name);
+            return self.reply(id, Err(only_there));
+        }
         let link = match self.link(server_id) {
             Ok(link) => link,
             Err(error) => return self.reply(id, Err(error)),
@@ -1051,6 +1165,147 @@ impl Core {
         }
     }
 
+    // ---- copies of the servers' threads ----
+
+    fn schedule_relay(&mut self, delay: Duration) {
+        if self.relay.timer.is_some() || !self.signed_in_now() {
+            return;
+        }
+        let inputs = self.inputs.clone();
+        let timer = tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            let _ = inputs.send(Input::Relay);
+        });
+        self.relay.timer = Some(timer.abort_handle());
+    }
+
+    /// The connected servers that keep copies of the others' threads.
+    fn peers(&self) -> HashMap<String, Arc<Link>> {
+        let syncs = |server: &&Server| {
+            server.status.state == State::Connected
+                && server.info.as_ref().is_some_and(|info| info.protocol >= SYNC_PROTOCOL)
+        };
+        let peers = self.servers.iter().filter(syncs);
+        peers.filter_map(|server| Some((server.device.public_key.clone(), server.link.clone()?))).collect()
+    }
+
+    /// Copies what each connected server lacks of the account's threads, one round at a time.
+    fn start_relay(&mut self) {
+        self.relay.timer = None;
+        if self.relay.running {
+            self.relay.again = true;
+            return;
+        }
+        let peers = self.peers();
+        if peers.is_empty() {
+            return;
+        }
+        let origin = |server: &Server| {
+            let origin = Origin { name: server.device.name.clone(), platform: server.device.platform.clone() };
+            (server.device.public_key.clone(), origin)
+        };
+        let origins = self.servers.iter().map(origin).collect();
+        let (inputs, metered) = (self.inputs.clone(), self.relay.metered);
+        self.relay.running = true;
+        tokio::spawn(async move {
+            let round = relay::round(peers, origins, metered).await;
+            let _ = inputs.send(Input::Relayed(round));
+        });
+    }
+
+    fn relayed(&mut self, round: relay::Round) {
+        self.relay.running = false;
+        self.relay.marks = round.marks;
+        let removed: Vec<String> = self
+            .servers
+            .iter()
+            .filter(|server| server.removed)
+            .map(|server| server.device.public_key.clone())
+            .collect();
+        for origin in removed {
+            if round.changed.contains(&origin) || !self.relay.read.contains(&origin) {
+                self.fetch_copies(&origin);
+            }
+        }
+        if std::mem::take(&mut self.relay.again) {
+            self.schedule_relay(RELAY_SOON);
+        }
+    }
+
+    /// The connected server whose copy of the removed server's threads goes furthest.
+    fn holder(&self, origin: &str) -> Option<Arc<Link>> {
+        let peers = self.peers();
+        let holder = relay::best_holder(&self.relay.marks, origin).and_then(|holder| peers.get(&holder).cloned());
+        holder.or_else(|| {
+            let mut ids: Vec<&String> = peers.keys().collect();
+            ids.sort();
+            ids.first().and_then(|id| peers.get(*id).cloned())
+        })
+    }
+
+    fn fetch_copies(&mut self, origin: &str) {
+        let Some(link) = self.holder(origin) else { return };
+        let (inputs, origin) = (self.inputs.clone(), origin.to_string());
+        tokio::spawn(async move {
+            match link.request(&Request::Copies { origin: origin.clone() }).await {
+                Ok(Message::Copies { projects, threads }) => {
+                    let _ = inputs.send(Input::CopiesFetched { origin, projects, threads });
+                }
+                Ok(other) => tracing::debug!("unexpected answer to copies: {other:?}"),
+                Err(error) => tracing::debug!(origin, "couldn't read a removed server's threads: {error:#}"),
+            }
+        });
+    }
+
+    /// Shows a removed server's threads as the copy has them. None of them works any more.
+    fn copies_fetched(&mut self, origin: &str, projects: Vec<Project>, threads: Vec<Thread>) {
+        if !self.servers.iter().any(|server| server.device.public_key == origin && server.removed) {
+            return;
+        }
+        self.relay.read.insert(origin.to_string());
+        let threads: Vec<Thread> = threads.into_iter().map(stopped).collect();
+        self.cache.set_threads(origin, &threads);
+        self.cache.set_projects(origin, &projects);
+        let views = threads.iter().map(|thread| self.thread_view(origin, thread)).collect();
+        let behind: Vec<String> = threads
+            .iter()
+            .filter(|thread| self.open.contains_key(&thread.id) && self.cache.synced_rev(&thread.id) < thread.rev)
+            .map(|thread| thread.id.clone())
+            .collect();
+        let Some(server) = self.server_mut(origin) else { return };
+        server.threads = threads.into_iter().map(|thread| (thread.id.clone(), thread)).collect();
+        self.emit(Event::Threads { server_id: origin.to_string(), threads: views });
+        self.emit_projects(origin, projects);
+        for thread_id in behind {
+            self.open_copy(origin, &thread_id);
+        }
+    }
+
+    /// Reads the transcript of a removed server's thread from a server's copy of it.
+    fn open_copy(&self, origin: &str, thread_id: &str) {
+        let Some(link) = self.holder(origin) else { return };
+        let (inputs, origin, thread_id) = (self.inputs.clone(), origin.to_string(), thread_id.to_string());
+        tokio::spawn(async move {
+            let result = link.open_copy(&origin, &thread_id).await.map_err(error_text);
+            let _ = inputs.send(Input::CopyOpened { thread_id, result });
+        });
+    }
+
+    /// Shows the transcript the copy has, in place of what the cache had.
+    fn copy_opened(&mut self, thread_id: &str, result: Result<Vec<Item>, String>) {
+        let Some(open) = self.open.get(thread_id) else { return };
+        let items = match result {
+            Ok(items) => items,
+            Err(error) => return tracing::debug!(thread_id, "couldn't read a removed server's thread: {error}"),
+        };
+        let server = self.servers.iter().find(|server| server.device.public_key == open.server_id);
+        let rev = server.and_then(|server| server.threads.get(thread_id)).map_or(0, |thread| thread.rev);
+        let rev = items.iter().map(|item| item.rev).max().unwrap_or(0).max(rev);
+        self.thread_message(thread_id, Message::Opened { reset: true, activity: Activity::default() });
+        self.thread_message(thread_id, Message::Items { items });
+        self.thread_message(thread_id, Message::Synced { rev });
+    }
+
     // ---- what the servers say ----
 
     fn link_event(&mut self, server_id: &str, event: LinkEvent) {
@@ -1099,6 +1354,7 @@ impl Core {
                     self.refollow(server_id, &thread_id);
                 }
                 self.read_limits(server_id);
+                self.schedule_relay(RELAY_SOON);
             }
             Message::Server { server: info } => {
                 self.cache.set_server_info(server_id, &info);
@@ -1123,6 +1379,7 @@ impl Core {
                     self.emit_projects(server_id, projects);
                 }
                 self.refollow(server_id, &thread_id);
+                self.schedule_relay(RELAY_AFTER_CHANGE);
             }
             Message::ThreadDeleted { thread_id } => {
                 self.cache.remove_thread(&thread_id);
@@ -1132,6 +1389,7 @@ impl Core {
                     server.threads.remove(&thread_id);
                 }
                 self.emit(Event::ThreadDeleted { thread_id });
+                self.schedule_relay(RELAY_AFTER_CHANGE);
             }
             other => tracing::debug!("unexpected message on the thread list: {other:?}"),
         }
@@ -1457,6 +1715,23 @@ impl Core {
                     let _ = inputs.send(Input::AccountChecked { key: key.public(), result });
                     reply(&sink, id, removed.map(|_| json!({})));
                 });
+            }
+            Command::DeleteServerCompletely { server_id } => {
+                let (auth, key, sink, inputs) =
+                    (self.auth.clone(), self.key.clone(), self.sink.clone(), self.inputs.clone());
+                tokio::spawn(async move {
+                    let deleted = auth.delete_server_completely(&key, &server_id).await.map_err(error_text);
+                    let result = auth.me(&key).await.map_err(error_text);
+                    let _ = inputs.send(Input::AccountChecked { key: key.public(), result });
+                    reply(&sink, id, deleted.map(|_| json!({})));
+                });
+            }
+            Command::SetMetered { metered } => {
+                let was = std::mem::replace(&mut self.relay.metered, metered);
+                if was && !metered {
+                    self.schedule_relay(RELAY_SOON);
+                }
+                self.reply(id, Ok(json!({})));
             }
             Command::OpenThread { server_id, thread_id } => {
                 let result = self.open_thread(&server_id, &thread_id);
@@ -1873,14 +2148,28 @@ impl Core {
                     return self.reply(id, last.ok_or_else(|| "Nothing was kept.".to_string()));
                 }
                 let window = usage::Window::ending(now(), bucket_secs, buckets, utc_offset_secs);
+                let mut project_names = HashMap::new();
+                let mut server_names = HashMap::new();
+                let (removed, holder) = self.removed_and_holder();
+                let removed: Vec<String> = removed
+                    .into_iter()
+                    .filter(|origin| servers.as_ref().is_none_or(|ids| ids.contains(origin)))
+                    .collect();
+                for origin in &removed {
+                    for project in self.cache.projects(origin) {
+                        project_names.insert((origin.clone(), project.id), project.name);
+                    }
+                    let name = self.servers.iter().find(|server| &server.device.public_key == origin);
+                    server_names
+                        .insert(origin.clone(), name.map(|server| server.device.name.clone()).unwrap_or_default());
+                }
+                let holder_link = holder.as_ref().and_then(|holder| self.peers().get(holder).cloned());
                 let asked = self
                     .servers
                     .iter()
                     .filter(|server| servers.as_ref().is_none_or(|ids| ids.contains(&server.device.public_key)))
                     .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= USAGE_PROTOCOL));
                 let mut links: Vec<(String, Arc<Link>)> = Vec::new();
-                let mut project_names = HashMap::new();
-                let mut server_names = HashMap::new();
                 for server in asked {
                     let Some(link) = server.link.clone() else { continue };
                     let server_id = server.device.public_key.clone();
@@ -1890,29 +2179,42 @@ impl Core {
                     server_names.insert(server_id.clone(), server.device.name.clone());
                     links.push((server_id, link));
                 }
+                let holder = holder_link.and(holder).filter(|_| !removed.is_empty());
+                if let Some(holder) = holder.as_ref().filter(|holder| !links.iter().any(|(id, _)| id == *holder)) {
+                    links.extend(self.peers().get(holder).map(|link| (holder.clone(), link.clone())));
+                }
                 if links.is_empty() {
                     return self.reply(id, Err("None of the servers is connected.".to_string()));
                 }
-                let request = Request::Usage {
-                    since: window.since,
-                    until: window.until,
-                    bucket_secs: window.bucket_secs,
-                    utc_offset_secs: window.utc_offset_secs,
-                };
                 let mut asked = tokio::task::JoinSet::new();
+                let chosen = |server_id: &String| servers.as_ref().is_none_or(|ids| ids.contains(server_id));
                 for (server_id, link) in links {
-                    let request = request.clone();
-                    asked.spawn(async move { (server_id, link.request(&request).await) });
+                    // The server that answers for the removed servers counts only its own when it wasn't chosen.
+                    let own = chosen(&server_id);
+                    let request = Request::Usage {
+                        since: window.since,
+                        until: window.until,
+                        bucket_secs: window.bucket_secs,
+                        utc_offset_secs: window.utc_offset_secs,
+                        removed: if holder.as_ref() == Some(&server_id) { removed.clone() } else { Vec::new() },
+                    };
+                    asked.spawn(async move { (server_id, own, link.request(&request).await) });
                 }
                 let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
                 tokio::spawn(async move {
                     let mut spent = Vec::new();
                     let mut failure = None;
-                    while let Some(Ok((server_id, answer))) = asked.join_next().await {
+                    while let Some(Ok((server_id, own, answer))) = asked.join_next().await {
                         match answer {
-                            Ok(Message::Usage { buckets }) => {
+                            Ok(Message::Usage { buckets, copies }) => {
                                 let of_server = |bucket| usage::Spent { server_id: server_id.clone(), bucket };
-                                spent.extend(buckets.into_iter().map(of_server));
+                                if own {
+                                    spent.extend(buckets.into_iter().map(of_server));
+                                }
+                                for copy in copies {
+                                    let of_origin = |bucket| usage::Spent { server_id: copy.origin.clone(), bucket };
+                                    spent.extend(copy.buckets.into_iter().map(of_origin));
+                                }
                             }
                             Ok(other) => failure = Some(unexpected(&other)),
                             Err(error) => failure = Some(error_text(error)),
@@ -1933,6 +2235,7 @@ impl Core {
                 let chosen = self
                     .servers
                     .iter()
+                    .filter(|server| !server.removed)
                     .filter(|server| servers.as_ref().is_none_or(|ids| ids.contains(&server.device.public_key)));
                 let mut asked = tokio::task::JoinSet::new();
                 let mut notes = Vec::new();
@@ -2140,6 +2443,7 @@ impl Core {
             .filter(|server| server.info.as_ref().is_some_and(|info| info.protocol >= SEARCH_PROTOCOL))
             .filter_map(|server| Some((server.device.public_key.clone(), server.link.clone()?)))
             .collect();
+        let (removed, holder) = self.removed_and_holder();
         if query.chars().count() < search::MIN_QUERY || links.is_empty() {
             self.search.found.clear();
             return self.emit_search(false);
@@ -2148,14 +2452,19 @@ impl Core {
         let inputs = self.inputs.clone();
         let asking = tokio::spawn(async move {
             tokio::time::sleep(SEARCH_DELAY).await;
-            let request = Request::SearchThreads { query: query.clone(), limit: search::LIMIT };
             let mut asked = tokio::task::JoinSet::new();
             for (server_id, link) in links {
-                let request = request.clone();
+                // One server searches its copies of the removed servers' threads too.
+                let removed = if holder.as_ref() == Some(&server_id) { removed.clone() } else { Vec::new() };
+                let request = Request::SearchThreads { query: query.clone(), limit: search::LIMIT, removed };
                 asked.spawn(async move {
                     let answer = tokio::time::timeout(SEARCH_TIMEOUT, link.request(&request)).await;
                     let Ok(Ok(Message::ThreadMatches { matches })) = answer else { return Vec::new() };
-                    matches.into_iter().map(|thread| search::Found { server_id: server_id.clone(), thread }).collect()
+                    let found = |thread: ThreadMatch| search::Found {
+                        server_id: thread.origin.clone().unwrap_or_else(|| server_id.clone()),
+                        thread,
+                    };
+                    matches.into_iter().map(found).collect()
                 });
             }
             let mut found = Vec::new();
@@ -2165,6 +2474,28 @@ impl Core {
             let _ = inputs.send(Input::Searched { query, found });
         });
         self.search.asking = Some(asking.abort_handle());
+    }
+
+    /// The removed servers, and the connected server that answers for their threads.
+    fn removed_and_holder(&self) -> (Vec<String>, Option<String>) {
+        let removed: Vec<String> = self
+            .servers
+            .iter()
+            .filter(|server| server.removed)
+            .map(|server| server.device.public_key.clone())
+            .collect();
+        let peers = self.peers();
+        let holder = removed
+            .iter()
+            .find_map(|origin| {
+                relay::best_holder(&self.relay.marks, origin).filter(|holder| peers.contains_key(holder))
+            })
+            .or_else(|| {
+                let mut ids: Vec<&String> = peers.keys().collect();
+                ids.sort();
+                ids.first().map(|id| (*id).clone())
+            });
+        (removed, holder.filter(|_| !self.servers.iter().all(|server| !server.removed)))
     }
 
     fn emit_search(&self, searching: bool) {
@@ -2210,11 +2541,13 @@ impl Core {
         });
         let cwd = thread.as_ref().map(|thread| thread.cwd.clone()).unwrap_or_default();
         let link = server.link.clone();
+        let removed = server.removed.then(|| server.device.name.clone());
 
         let Page { mut items, earlier } = self.cache.page(thread_id, None);
         let since = self.cache.synced_rev(thread_id);
         let newest = items.split_off(items.len().saturating_sub(FIRST_ITEMS));
         let mut transcript = Transcript::new(&cwd);
+        transcript.set_removed(removed.clone());
         transcript.load(newest);
         let rows = |reset, splice: Splice| Event::Rows {
             thread_id: thread_id.to_string(),
@@ -2231,8 +2564,11 @@ impl Core {
             self.emit(rows(false, rest));
         }
         // What the agent was last seen doing, until the server says what it does now.
-        if let Some(thread) = thread {
-            let activity = restored_activity(&thread, self.cache.activity(thread_id));
+        if let Some(thread) = &thread {
+            let activity = match removed {
+                Some(_) => Activity::default(),
+                None => restored_activity(thread, self.cache.activity(thread_id)),
+            };
             let (queued, event) = activity_changed(thread_id, &mut transcript, activity);
             if let Some(queued) = queued {
                 self.emit(rows(false, queued));
@@ -2260,6 +2596,10 @@ impl Core {
         }
         if let Some(link) = link {
             link.open(thread_id.to_string(), since);
+        }
+        let behind = thread.as_ref().is_none_or(|thread| since < thread.rev);
+        if removed.is_some() && behind {
+            self.open_copy(server_id, thread_id);
         }
         Ok(())
     }
@@ -2403,6 +2743,19 @@ fn restored_activity(thread: &Thread, cached: Option<Activity>) -> Activity {
         activity.approvals.clear();
     }
     activity
+}
+
+/// A thread of a removed server, which nothing works on any more.
+fn stopped(thread: Thread) -> Thread {
+    Thread {
+        running: false,
+        monitoring: false,
+        needs_approval: false,
+        asking: None,
+        agents: 0,
+        git_stage: None,
+        ..thread
+    }
 }
 
 /// A turn ended after the user last looked. A thread never opened here doesn't nag.

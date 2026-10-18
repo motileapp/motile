@@ -18,6 +18,7 @@ struct TranscriptRepresentable {
         let view = TranscriptView()
         let (store, model) = (store, model)
         view.topInset = topInset
+        view.underComposer = ofAgent || store.openThreadRemovedServer == nil
         view.bottomInset = bottomInset
         view.bottomFade = bottomFade
         view.measuresAhead = !ofAgent
@@ -36,6 +37,9 @@ struct TranscriptRepresentable {
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
         view.onOpenAgent = { itemID in store.rightPanel.showAgent(itemID) }
+        view.canFetchAgain = { store.openThreadRemovedServer == nil }
+        view.onContinueElsewhere = { store.continueOnAnotherServer() }
+        view.onOpenServerSettings = { store.openSettings(.servers) }
         if !ofAgent {
             view.onNeedEarlier = { done in
                 guard let threadID = model.threadID else { return done() }
@@ -66,6 +70,7 @@ struct TranscriptRepresentable {
 
     private func update(_ view: TranscriptView) {
         view.topInset = topInset
+        view.underComposer = ofAgent || store.openThreadRemovedServer == nil
         view.bottomInset = bottomInset
         view.bottomFade = bottomFade
     }

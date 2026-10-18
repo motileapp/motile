@@ -94,19 +94,21 @@ fun ThreadScreen(overSidebar: Boolean = true) {
     val density = LocalDensity.current
     var composerHeight by remember { mutableStateOf(120.dp) }
     val isStart = store.isStart
+    // A thread whose server was removed ends with the row that says so, in the composer's place.
+    val removed = store.openThreadRemovedServer != null
     val below = WindowInsets.ime.union(WindowInsets.navigationBars).only(WindowInsetsSides.Bottom)
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + barHeight
     FileDrop(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(Theme.colors.background)) {
             if (!isStart) {
-                val bottom = below.asPaddingValues().calculateBottomPadding() + composerHeight
-                TranscriptView(store.transcript, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom))
+                val bottom = below.asPaddingValues().calculateBottomPadding() + if (removed) composerBottomGap else composerHeight
+                TranscriptView(store.transcript, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), underComposer = !removed)
             }
             Column(Modifier.fillMaxSize()) {
                 TopBar(overSidebar)
                 Box(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(below)) {
                     if (isStart) Start(composerHeight)
-                    if (!isStart || store.projects.isNotEmpty() || store.noProjects.isNotEmpty()) {
+                    if (!removed && (!isStart || store.projects.isNotEmpty() || store.noProjects.isNotEmpty())) {
                         ComposerView(
                             Modifier
                                 .align(Alignment.BottomCenter)

@@ -19,6 +19,8 @@ pub struct Access {
     /// Keys given on the command line.
     fixed: HashSet<String>,
     linked: RwLock<HashSet<String>>,
+    /// The servers the account deleted completely, whose copies this server drops.
+    deleted: RwLock<HashSet<String>>,
     account: Option<AccountAccess>,
 }
 
@@ -45,7 +47,12 @@ impl Access {
             cache: account.cache,
             last_refresh: Mutex::default(),
         });
-        Arc::new(Self { fixed: fixed.into_iter().collect(), linked: RwLock::new(cached), account })
+        Arc::new(Self {
+            fixed: fixed.into_iter().collect(),
+            linked: RwLock::new(cached),
+            deleted: RwLock::default(),
+            account,
+        })
     }
 
     pub async fn allows(&self, public_key: &str) -> bool {
@@ -64,6 +71,14 @@ impl Access {
     /// Whether the device is allowed as far as the server knows right now.
     pub async fn is_listed(&self, public_key: &str) -> bool {
         self.fixed.contains(public_key) || self.linked.read().await.contains(public_key)
+    }
+
+    pub async fn deleted(&self) -> Vec<String> {
+        self.deleted.read().await.iter().cloned().collect()
+    }
+
+    pub async fn is_deleted(&self, public_key: &str) -> bool {
+        self.deleted.read().await.contains(public_key)
     }
 
     async fn refreshed_recently(&self) -> bool {
@@ -86,6 +101,7 @@ impl Access {
         if me.user.is_none() {
             tracing::warn!("this server is no longer linked to an account; no client may connect");
         }
+        *self.deleted.write().await = me.deleted.into_iter().collect();
         let clients = me.devices.into_iter().filter(|device| device.kind == DeviceKind::Client);
         let keys: HashSet<String> = clients.map(|device| device.public_key).collect();
         if let Ok(text) = serde_json::to_string(&keys) {

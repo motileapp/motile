@@ -150,6 +150,8 @@ data class Server(
     /** The name cut short, for the places a long name crowds. */
     val shortName: String,
     val platform: String,
+    /** The server was removed from the account. Its threads are the copies the account's other servers keep, to read and to go on with on another server. */
+    val removed: Boolean,
     val state: State,
     val error: String?,
     /** "relay" or "direct". */
@@ -240,6 +242,7 @@ data class Server(
                 name = json.string("name"),
                 shortName = json.string("short_name"),
                 platform = json.string("platform"),
+                removed = json.bool("removed"),
                 state = State.of(json.string("state")),
                 error = json.optionalString("error"),
                 path = json.optionalString("path"),

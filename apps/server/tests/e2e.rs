@@ -7,11 +7,12 @@ use std::time::Duration;
 
 use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
+use motile_core::sync::{self as relay, Origin};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change, CheckStatus,
-    DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind,
-    LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction,
+    CopiedThread, DiffScope, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item,
+    ItemKind, LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction,
     PullRequestDetail, PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict,
     ServerInfo, ServerUpdate, Side, Skill, SkillMention, SkillSource, Thread, ThreadChange, Tokens, ToolCall,
     ToolStatus, TurnChanges, TurnSummary, UsageBucket, Variable,
@@ -45,6 +46,12 @@ impl Harness {
         Self::start_with(fixture, delay, &[]).await
     }
 
+    /// `with_sessions`, as another server of `account`'s account.
+    async fn with_sessions_as(fixture: &str, account: &Harness) -> Self {
+        let variables = [("FAKE_AGENT_SESSIONS_FILE", "sessions.txt"), ("FAKE_AGENT_PROMPTS_FILE", "prompts.txt")];
+        Self::start_as(fixture, "0", &variables, DeviceKey::from_bytes(account.app_key.to_bytes())).await
+    }
+
     /// A server whose agents keep a session of their own for each thread, refuse to resume one
     /// they never started, and record the prompts they are given.
     async fn with_sessions(fixture: &str, more: &[(&str, &str)]) -> Self {
@@ -54,8 +61,18 @@ impl Harness {
         Self::start_with(fixture, "0", &variables).await
     }
 
+    /// Another server of the same account, which takes this one's client.
+    async fn another(&self, fixture: &str) -> Self {
+        let app_key = DeviceKey::from_bytes(self.app_key.to_bytes());
+        Self::start_as(fixture, "0", &[], app_key).await
+    }
+
     /// With `more` variables for the agents; a value that names a file names it in the server's folder.
     async fn start_with(fixture: &str, delay: &str, more: &[(&str, &str)]) -> Self {
+        Self::start_as(fixture, delay, more, DeviceKey::generate()).await
+    }
+
+    async fn start_as(fixture: &str, delay: &str, more: &[(&str, &str)], app_key: DeviceKey) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let arguments_file = dir.path().join("arguments.txt");
         let mut variables = HashMap::from([
@@ -75,7 +92,6 @@ impl Harness {
             variables.insert(name.to_string(), value);
         }
         let server_key = DeviceKey::generate();
-        let app_key = DeviceKey::generate();
         let (endpoint, address) = serve(&dir, &server_key, &app_key, &variables, None).await;
         Self { dir, server_key, app_key, address, endpoint: Some(endpoint), variables }
     }
@@ -125,6 +141,7 @@ impl Harness {
             effort: None,
             access: AgentAccess::Supervised,
             worktree: None,
+            from: None,
         })
     }
 
@@ -1501,6 +1518,7 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
         effort: Some("xhigh".to_string()),
         access: AgentAccess::Full,
         worktree: None,
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "What is in README.md?").await;
     finished_transcript(&connection, &thread_id).await;
@@ -1585,6 +1603,7 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
         effort: None,
         access: AgentAccess::Full,
         worktree: None,
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "What is in README.md?").await;
     finished_transcript(&connection, &thread_id).await;
@@ -1715,6 +1734,7 @@ async fn a_project_is_started_from_a_name_or_cloned_from_github() {
         effort: None,
         access: AgentAccess::Full,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
     finished_transcript(&connection, &thread_id).await;
@@ -1840,6 +1860,7 @@ async fn a_projects_branches_are_listed_switched_and_created() {
         effort: None,
         access: AgentAccess::Supervised,
         worktree: None,
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Look at the README").await;
     let Message::Error { message } = switch(&connection, &project.id, "main", false).await else {
@@ -2428,6 +2449,7 @@ async fn a_worktree_asked_for_with_a_branch_is_made_on_it() {
         effort: None,
         access: AgentAccess::Full,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: Some("ada/eng-7-greet-by-name".to_string()) }),
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
     finished_transcript(&connection, &thread_id).await;
@@ -2453,6 +2475,7 @@ async fn a_branch_a_threads_worktree_took_is_given_back_when_the_project_switche
         effort: None,
         access: AgentAccess::Full,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: Some("ada/checkout-main".to_string()) }),
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
     finished_transcript(&connection, &thread_id).await;
@@ -2499,6 +2522,7 @@ async fn a_worktree_whose_pull_request_merged_is_removed_when_nothing_in_it_is_l
         effort: None,
         access: AgentAccess::Full,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
     finished_transcript(&connection, &thread_id).await;
@@ -2665,6 +2689,7 @@ async fn where_a_new_worktree_starts_is_said_and_so_is_a_remote_that_cannot_be_f
         effort: None,
         access: AgentAccess::Full,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Show the screenshot").await;
     let transcript = finished_transcript(&connection, &thread_id).await;
@@ -2712,6 +2737,7 @@ async fn a_thread_works_in_a_worktree_of_its_own_on_a_branch_named_for_it() {
         effort: None,
         access: AgentAccess::Full,
         worktree: Some(NewWorktree { base: "main".to_string(), branch: None }),
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Show the screenshot").await;
     let transcript = finished_transcript(&connection, &thread_id).await;
@@ -2833,6 +2859,7 @@ async fn what_a_turn_changed_is_listed_with_the_turn_and_shown_as_a_diff() {
         effort: None,
         access: AgentAccess::Full,
         worktree: None,
+        from: None,
     };
     let thread_id = send(&connection, None, Some(new_thread), "Greet by name").await;
     let (turn, changes) = last_turns_changes(&connection, &thread_id).await;
@@ -3151,8 +3178,9 @@ async fn attached_images_and_videos_are_shown_in_the_message_and_go_with_its_thr
 }
 
 async fn usage(connection: &Connection, agent: Agent, writing: bool) -> Vec<UsageBucket> {
-    let request = Request::Usage { since: 0.0, until: f64::MAX, bucket_secs: 86400, utc_offset_secs: 3600 };
-    let Message::Usage { buckets } = connection.request(&request).await.unwrap() else { panic!("no usage came") };
+    let request =
+        Request::Usage { since: 0.0, until: f64::MAX, bucket_secs: 86400, utc_offset_secs: 3600, removed: Vec::new() };
+    let Message::Usage { buckets, .. } = connection.request(&request).await.unwrap() else { panic!("no usage came") };
     buckets.into_iter().filter(|bucket| bucket.agent == agent && bucket.writing == writing).collect()
 }
 
@@ -3285,6 +3313,7 @@ async fn a_thread_without_a_project_works_in_a_folder_of_its_own() {
         effort: None,
         access: AgentAccess::Supervised,
         worktree: None,
+        from: None,
     };
     let first_id = send(&connection, None, Some(new_thread.clone()), "Sketch a parser, for JSON").await;
     let first = thread_where(&mut list, |thread| thread.id == first_id).await;
@@ -3597,4 +3626,182 @@ async fn an_agent_reads_any_thread_of_its_server_with_its_threads_token() {
         offset = page["items"][0]["next_text_offset"].clone();
     }
     assert_eq!(read, "What is in README.md?");
+}
+
+// ---- copies of the account's threads on its other servers ----
+
+/// The servers as a client connected to all of them sees them, by their keys.
+async fn peers(servers: &[&Harness]) -> HashMap<String, Connection> {
+    let mut peers = HashMap::new();
+    for server in servers {
+        peers.insert(server.server_key.public(), server.connect().await);
+    }
+    peers
+}
+
+fn named(servers: &[&Harness]) -> HashMap<String, Origin> {
+    let origin = |(index, server): (usize, &&Harness)| {
+        (server.server_key.public(), Origin { name: format!("server-{index}"), platform: "linux".into() })
+    };
+    servers.iter().enumerate().map(origin).collect()
+}
+
+async fn copies(connection: &Connection, origin: &Harness) -> (Vec<Project>, Vec<Thread>) {
+    let request = Request::Copies { origin: origin.server_key.public() };
+    match connection.request(&request).await.unwrap() {
+        Message::Copies { projects, threads } => (projects, threads),
+        other => panic!("unexpected answer to copies: {other:?}"),
+    }
+}
+
+async fn copied_transcript(connection: &Connection, origin: &Harness, thread_id: &str) -> Vec<Item> {
+    let request = Request::OpenCopy { origin: origin.server_key.public(), thread_id: thread_id.to_string() };
+    let mut follow = connection.follow(&request).await.unwrap();
+    let mut items = Vec::new();
+    while let Some(message) = follow.next().await.unwrap() {
+        let Message::Items { items: piece } = message else { panic!("a copy's transcript comes as items") };
+        items.extend(piece);
+    }
+    items
+}
+
+#[tokio::test]
+async fn a_servers_threads_are_copied_to_the_accounts_other_servers_and_their_deletes_too() {
+    let a = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let b = a.another("fixtures/read-and-bash.jsonl").await;
+    let on_a = a.connect().await;
+    let kept = send(&on_a, None, a.new_thread(&on_a, Agent::Claude).await, "Look around").await;
+    let deleted = send(&on_a, None, a.new_thread(&on_a, Agent::Claude).await, "Look again").await;
+    let transcript = finished_transcript(&on_a, &kept).await;
+    finished_transcript(&on_a, &deleted).await;
+
+    let round = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    assert!(round.changed.contains(&a.server_key.public()));
+
+    let on_b = b.connect().await;
+    let (projects, threads) = copies(&on_b, &a).await;
+    let shown: Vec<(&str, bool)> = projects.iter().map(|project| (project.name.as_str(), project.no_project)).collect();
+    assert_eq!(shown, vec![("No project", true), ("project", false)]);
+    let mut ids: Vec<&str> = threads.iter().map(|thread| thread.id.as_str()).collect();
+    ids.sort();
+    let mut expected = vec![kept.as_str(), deleted.as_str()];
+    expected.sort();
+    assert_eq!(ids, expected);
+    assert_eq!(copied_transcript(&on_b, &a, &kept).await, transcript.items);
+
+    assert_eq!(update(&on_a, &deleted, ThreadChange::default()).await, Message::Ok);
+    assert_eq!(on_a.request(&Request::Delete { thread_id: deleted.clone() }).await.unwrap(), Message::Ok);
+    let again = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    assert!(again.changed.contains(&a.server_key.public()));
+    let (_, threads) = copies(&on_b, &a).await;
+    assert_eq!(threads.iter().map(|thread| thread.id.as_str()).collect::<Vec<_>>(), vec![kept.as_str()]);
+    assert!(copied_transcript(&on_b, &a, &deleted).await.is_empty());
+
+    // A round with nothing new moves nothing.
+    let quiet = relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+    assert!(quiet.changed.is_empty());
+}
+
+#[tokio::test]
+async fn a_removed_servers_threads_reach_a_new_server_from_a_copy_and_are_searched_there() {
+    let a = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let b = a.another("fixtures/read-and-bash.jsonl").await;
+    let on_a = a.connect().await;
+    let thread_id = send(&on_a, None, a.new_thread(&on_a, Agent::Claude).await, "Find the needle").await;
+    let transcript = finished_transcript(&on_a, &thread_id).await;
+    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+
+    // A is removed: no client reaches it any more, and a new server joins.
+    let c = a.another("fixtures/read-and-bash.jsonl").await;
+    let round = relay::round(peers(&[&b, &c]).await, named(&[&a, &b, &c]), false).await;
+    assert!(round.changed.contains(&a.server_key.public()));
+    assert_eq!(relay::best_holder(&round.marks, &a.server_key.public()), Some(b.server_key.public()));
+
+    let on_c = c.connect().await;
+    assert_eq!(copied_transcript(&on_c, &a, &thread_id).await, transcript.items);
+    let search = |removed: Vec<String>| Request::SearchThreads { query: "needle".into(), limit: 10, removed };
+    let Message::ThreadMatches { matches } = on_c.request(&search(Vec::new())).await.unwrap() else { panic!() };
+    assert!(matches.is_empty(), "a copy is searched only when asked to");
+    let Message::ThreadMatches { matches } = on_c.request(&search(vec![a.server_key.public()])).await.unwrap() else {
+        panic!("a search answers with matches")
+    };
+    assert_eq!(matches.len(), 1);
+    assert_eq!(
+        (matches[0].thread_id.as_str(), matches[0].origin.clone()),
+        (thread_id.as_str(), Some(a.server_key.public()))
+    );
+
+    let usage = Request::Usage {
+        since: 0.0,
+        until: f64::MAX,
+        bucket_secs: 86400,
+        utc_offset_secs: 0,
+        removed: vec![a.server_key.public()],
+    };
+    let Message::Usage { buckets, copies } = on_c.request(&usage).await.unwrap() else { panic!("no usage came") };
+    assert!(buckets.is_empty());
+    assert_eq!(copies[0].origin, a.server_key.public());
+    assert!(copies[0].buckets.iter().any(|bucket| bucket.tokens.output > 0), "{copies:?}");
+}
+
+#[tokio::test]
+async fn two_clients_relaying_at_once_leave_the_same_copy_as_one() {
+    let a = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let b = a.another("fixtures/read-and-bash.jsonl").await;
+    let on_a = a.connect().await;
+    for text in ["One", "Two", "Three"] {
+        let thread_id = send(&on_a, None, a.new_thread(&on_a, Agent::Claude).await, text).await;
+        finished_transcript(&on_a, &thread_id).await;
+    }
+
+    tokio::join!(
+        relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false),
+        relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false),
+    );
+
+    let Message::Watermarks { own, .. } = on_a.request(&Request::Watermarks).await.unwrap() else { panic!() };
+    let Message::Watermarks { copies: held, .. } = b.connect().await.request(&Request::Watermarks).await.unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(held[0].watermark, own);
+    let (_, threads) = copies(&b.connect().await, &a).await;
+    assert_eq!(threads.len(), 3);
+}
+
+#[tokio::test]
+async fn a_removed_servers_thread_goes_on_on_another_server_with_its_history() {
+    let a = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let b = Harness::with_sessions_as("fixtures/read-and-bash.jsonl", &a).await;
+    let on_a = a.connect().await;
+    let thread_id = send(&on_a, None, a.new_thread(&on_a, Agent::Claude).await, "Remember the word heron").await;
+    let history = finished_transcript(&on_a, &thread_id).await;
+    relay::round(peers(&[&a, &b]).await, named(&[&a, &b]), false).await;
+
+    let on_b = b.connect().await;
+    let new_thread = b.new_thread(&on_b, Agent::Claude).await.map(|new_thread| NewThread {
+        from: Some(CopiedThread { origin: a.server_key.public(), thread_id: thread_id.clone() }),
+        ..new_thread
+    });
+    let continued = send(&on_b, None, new_thread, "Which word was it?").await;
+    let transcript = finished_transcript(&on_b, &continued).await;
+
+    assert_eq!(transcript.user_texts(), vec!["Remember the word heron", "Which word was it?"]);
+    assert_eq!(transcript.items[0].id, history.items[0].id);
+    let prompts = b.recorded_prompts();
+    assert!(prompts.last().unwrap().contains("Remember the word heron"), "{prompts:?}");
+    assert!(prompts.last().unwrap().contains("Which word was it?"));
+
+    let missing = b.new_thread(&on_b, Agent::Claude).await.map(|new_thread| NewThread {
+        from: Some(CopiedThread { origin: "elsewhere".into(), thread_id: thread_id.clone() }),
+        ..new_thread
+    });
+    let request = Request::Send {
+        thread_id: None,
+        new_thread: missing,
+        text: "Go on".into(),
+        attachments: Vec::new(),
+        now: false,
+    };
+    assert!(matches!(on_b.request(&request).await.unwrap(), Message::Error { .. }));
 }

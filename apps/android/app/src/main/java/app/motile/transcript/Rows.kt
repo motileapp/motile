@@ -59,6 +59,8 @@ class RowModel(
         class TurnEnd(val content: TurnEndContent) : Kind
         class Handoff(val content: HandoffContent) : Kind
         class Queued(val content: QueuedContent) : Kind
+        /** The thread's server was unlinked from the account: the last row, in place of the composer, which says why the thread can only be read. */
+        class Removed(val content: RemovedContent) : Kind
     }
 
     val isUser: Boolean get() = kind is Kind.User
@@ -116,6 +118,7 @@ class RowModel(
                 "turn_end" -> Kind.TurnEnd(TurnEndContent(json))
                 "handoff" -> Kind.Handoff(HandoffContent(json))
                 "queued" -> Kind.Queued(QueuedContent(MessageText(json, muted = true), json.objects("attachments").map(::AttachedFile), json.string("status")))
+                "removed" -> Kind.Removed(RemovedContent(json.string("server"), json.string("title"), json.string("message")))
                 else -> return null
             }
             return RowModel(json.string("id"), json.string("item"), json.bool("nested"), kind, Typesetter.spaceAbove(json))
@@ -129,6 +132,9 @@ class RowModel(
         }
     }
 }
+
+/** What the end of an unlinked server's thread says, as the core wrote it. */
+data class RemovedContent(val server: String, val title: String, val message: String)
 
 /** Text typeset for one palette, and again for another when the appearance changes. */
 class Typeset<T>(private val build: (Palette) -> T) {

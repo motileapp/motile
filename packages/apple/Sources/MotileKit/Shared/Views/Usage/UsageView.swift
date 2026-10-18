@@ -122,7 +122,7 @@ final class UsageModel {
         asked += 1
         let number = asked
         refreshing = true
-        let counted = picked(among: store.servers)
+        let counted = picked(among: store.usageServers)
         if tab == .limits {
             store.loadLimits(refresh: refresh, kept: !refresh, servers: counted) { [weak self] result in
                 guard let self, number == asked else { return }
@@ -176,8 +176,8 @@ struct UsageTitle: View {
             Text("/")
                 .foregroundStyle(Color.themeMutedStrongerForeground)
             CheckMenu(
-                model.serversLabel(among: store.servers), help: "The servers counted", size: Self.size, tint: .themeForeground,
-                checks: model.serverChecks(among: store.servers)
+                model.serversLabel(among: store.usageServers), help: "The servers counted", size: Self.size, tint: .themeForeground,
+                checks: model.serverChecks(among: store.usageServers)
             )
             .padding(.leading, -Self.size.padding)
         }
@@ -193,8 +193,8 @@ struct UsageServersMenu: View {
 
     var body: some View {
         CheckMenu(
-            model.serversLabel(among: store.servers), icon: .server, help: "The servers counted", variant: .secondary,
-            checks: model.serverChecks(among: store.servers)
+            model.serversLabel(among: store.usageServers), icon: .server, help: "The servers counted", variant: .secondary,
+            checks: model.serverChecks(among: store.usageServers)
         )
     }
 }

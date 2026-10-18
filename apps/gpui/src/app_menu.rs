@@ -75,7 +75,7 @@ pub fn install(store: &Entity<Store>, cx: &mut App) {
         }
     });
     on_store(store, cx, |_: &AddProject, store, _| {
-        if !store.servers.is_empty() {
+        if store.has_live_servers() {
             store.add_project();
         }
     });
@@ -174,6 +174,8 @@ struct State {
     project: Option<(String, bool)>,
     no_projects: bool,
     thread: Option<bool>,
+    /// The open thread's server was unlinked, so nothing can be done to it.
+    read_only: bool,
     busy: bool,
     jumps: bool,
     has_servers: bool,
@@ -200,12 +202,16 @@ fn follow(store: &Entity<Store>, shown: &mut Option<State>, cx: &mut App) {
         shows_linear: store.is_on(Integration::Linear).then(|| available && store.linear_unavailable().is_none()),
         shows_ricrac: store.is_on(Integration::Ricrac).then(|| available && store.ricrac_unavailable().is_none()),
         switchable_tabs: store.right_panel.is_open && store.panel_tabs().tabs.len() > 1,
-        project: store.composer_project().map(|project| (project.name, project.no_project)),
-        no_projects: !store.no_projects.is_empty(),
+        project: store
+            .composer_project()
+            .filter(|project| store.is_live(project))
+            .map(|project| (project.name, project.no_project)),
+        no_projects: store.live_no_projects().next().is_some(),
         thread: store.selected_thread().map(|thread| thread.is_done()),
+        read_only: store.open_thread_removed(),
         busy: store.activity.busy(),
         jumps: store.has_jump_threads(),
-        has_servers: !store.servers.is_empty(),
+        has_servers: store.has_live_servers(),
         signed_in: store.account.signed_in,
         full_screen: store.full_screen,
     };
@@ -323,8 +329,8 @@ fn menus(state: &State) -> Vec<Menu> {
         ),
         Menu::new("Thread").items([
             item(if state.thread == Some(true) { "Mark Undone" } else { "Mark Done" }, "thread.done")
-                .disabled(state.thread.is_none()),
-            item("Stop", "thread.stop").disabled(!state.busy),
+                .disabled(state.thread.is_none() || state.read_only),
+            item("Stop", "thread.stop").disabled(!state.busy || state.read_only),
             item("Previous Thread", "thread.previous").disabled(!state.jumps),
             item("Next Thread", "thread.next").disabled(!state.jumps),
             MenuItem::separator(),

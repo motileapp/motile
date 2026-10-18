@@ -147,6 +147,13 @@ async fn a_session_adds_servers_and_removes_devices_of_its_own_account_only(db: 
     assert_eq!(call(&auth, Method::DELETE, &path, &ann).await.status(), StatusCode::OK);
     assert_eq!(me(&auth, &ann).await.devices, vec![]);
     assert_eq!(auth.client.me(&server).await.unwrap().user, None);
+
+    let path = format!("/api/servers/{}", server.public());
+    assert_eq!(call(&auth, Method::DELETE, &path, &bob).await.status(), StatusCode::NOT_FOUND);
+    assert_eq!(me(&auth, &ann).await.removed.len(), 1);
+    assert_eq!(call(&auth, Method::DELETE, &path, &ann).await.status(), StatusCode::OK);
+    let account = me(&auth, &ann).await;
+    assert_eq!((account.removed, account.deleted), (vec![], vec![server.public()]));
 }
 
 #[sqlx::test]

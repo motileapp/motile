@@ -24,8 +24,11 @@ import java.io.File
 import kotlin.coroutines.resume
 
 /** The file of an image or a video the open thread shows, which the core fetches from its server if this device doesn't have it. */
-suspend fun AppStore.mediaFile(id: String): File? = suspendCancellableCoroutine { waiting ->
-    media(id) { file -> if (waiting.isActive) waiting.resume(file) }
+suspend fun AppStore.mediaFile(id: String): File? = fetchedMedia(id).getOrNull()
+
+/** The file, or why it can't be had. */
+suspend fun AppStore.fetchedMedia(id: String): Result<File> = suspendCancellableCoroutine { waiting ->
+    fetchMedia(id) { result -> if (waiting.isActive) waiting.resume(result) }
 }
 
 /** Decodes pictures off the main thread, at the size they are shown, and keeps the latest ones. */

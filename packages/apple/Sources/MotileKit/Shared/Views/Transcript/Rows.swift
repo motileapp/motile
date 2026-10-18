@@ -36,6 +36,9 @@ final class RowModel {
         case turnEnd(TurnEnd)
         case handoff(HandoffContent)
         case queued(QueuedContent)
+        /// The thread's server was unlinked from the account: the last row, in place of the
+        /// composer, which says why the thread can only be read.
+        case removed(RemovedContent)
     }
 
     let id: String
@@ -92,6 +95,8 @@ final class RowModel {
             kind = .handoff(HandoffContent(json: json))
         case "queued":
             kind = .queued(QueuedContent(json: json))
+        case "removed":
+            kind = .removed(RemovedContent(json: json))
         default:
             return nil
         }
@@ -730,3 +735,14 @@ struct TableSetter {
     func finished(_ text: NSMutableAttributedString, paras: [JSON]) -> NSAttributedString { text }
 }
 #endif
+
+/// What the end of an unlinked server's thread says.
+struct RemovedContent {
+    let title: String
+    let message: NSAttributedString
+
+    init(json: JSON) {
+        title = json.string("title")
+        message = Typesetter.plain(json.string("message"), color: Theme.mutedForeground, size: 13 * Platform.scale)
+    }
+}

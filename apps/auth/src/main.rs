@@ -47,6 +47,7 @@ fn router(state: AppState) -> Router {
         .route("/api/enroll-tokens", post(api::create_enroll_token))
         .route("/api/enroll", post(api::enroll))
         .route("/api/devices/{public_key}", delete(api::remove_device))
+        .route("/api/servers/{public_key}", delete(api::delete_server_completely))
         .fallback(pages::not_found)
         .layer(header(X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header(X_FRAME_OPTIONS, "DENY"))

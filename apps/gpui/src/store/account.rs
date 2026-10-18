@@ -275,6 +275,15 @@ impl Store {
             }
         });
     }
+
+    /// Removes the server if it is still linked, and deletes every copy of its threads.
+    pub fn delete_server_completely(&mut self, server: &Server) {
+        self.ask(Command::DeleteServerCompletely { server_id: server.id.clone() }, |store, result, _| {
+            if let Err(error) = result {
+                store.fail(error);
+            }
+        });
+    }
 }
 
 fn picture_key(url: &str) -> u64 {

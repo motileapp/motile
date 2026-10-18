@@ -130,10 +130,10 @@ struct MotileCommands: Commands {
         CommandMenu("Thread") {
             Button(store.selectedThread?.isDone == true ? "Mark Undone" : "Mark Done") { store.toggleDone() }
                 .shortcut("thread.done", in: keys)
-                .disabled(store.selectedThread == nil)
+                .disabled(store.selectedThread == nil || store.openThreadRemovedServer != nil)
             Button("Stop") { store.stop() }
                 .shortcut("thread.stop", in: keys)
-                .disabled(!store.activity.busy)
+                .disabled(!store.activity.busy || store.openThreadRemovedServer != nil)
             Button("Previous Thread") { _ = store.perform("thread.previous") }
                 .shortcut("thread.previous", in: keys)
                 .disabled(store.jumpThreads.isEmpty)
@@ -194,7 +194,7 @@ struct RootView: View {
                 Color.clear
             } else if !store.account.signedIn {
                 SignInView()
-            } else if store.servers.isEmpty {
+            } else if store.servers.isEmpty && store.removedServers.isEmpty {
                 ConnectServerView(isFirst: true)
             } else {
                 MainScreen()

@@ -35,6 +35,20 @@ pub struct Me {
     pub user: Option<User>,
     #[serde(default)]
     pub devices: Vec<Device>,
+    /// The servers removed from the account, whose threads live on as copies on its other servers.
+    #[serde(default)]
+    pub removed: Vec<RemovedServer>,
+    /// The servers deleted completely: no copy of their threads is kept anywhere.
+    #[serde(default)]
+    pub deleted: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RemovedServer {
+    pub public_key: String,
+    pub name: String,
+    pub platform: String,
+    pub removed_at: f64,
 }
 
 /// Finishes a sign-in: the code the browser was sent back with, the secret whose hash started

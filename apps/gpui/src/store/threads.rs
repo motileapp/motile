@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use gpui_kit::prelude::*;
 use motile_core::api::Command;
 use motile_protocol::wire::{
-    Access, AgentAccount, Interruption, ModelInfo, NewThread, NewWorktree, Request, ThreadChange,
+    Access, AgentAccount, CopiedThread, Interruption, ModelInfo, NewThread, NewWorktree, Request, ThreadChange,
 };
 
-use super::{Selection, SendingDraft, Store, ThreadDraft, UndoNotice};
+use super::{Continuation, PanelPage, Selection, SendingDraft, Store, ThreadDraft, UndoNotice};
 use crate::models::*;
 use crate::transcript::model::RowModel;
 
@@ -168,11 +168,30 @@ impl Store {
     /// What the toolbar button and ⌘N do: with one project there is nothing to pick and the draft
     /// opens at once, without one it starts without a project, and with more the panel asks which.
     pub fn new_thread(&mut self, cx: &mut Context<Self>) {
-        if self.projects.len() > 1 {
-            return self.open_panel(super::PanelPage::Projects);
+        if self.recent_projects().len() > 1 {
+            return self.open_panel(PanelPage::Projects);
         }
-        let first = self.projects.first().or(self.no_projects.first()).map(|project| project.id.clone());
+        let first = self.first_live_project().map(|project| project.id.clone());
         self.start_new_thread(first, cx);
+    }
+
+    /// Opens a draft of a new thread that goes on from the open thread, whose server was removed,
+    /// on the server of the project the user picks in it.
+    pub fn continue_on_another_server(&mut self, cx: &mut Context<Self>) {
+        let Some(thread) = self.selected_thread().filter(|thread| self.is_removed(&thread.server_id)) else { return };
+        let from = Continuation {
+            origin: thread.server_id.clone(),
+            thread_id: thread.id.clone(),
+            title: thread.title.clone(),
+        };
+        self.start_new_thread(None, cx);
+        self.update_draft(|draft| draft.from = Some(from));
+        self.composer_focus += 1;
+    }
+
+    /// The open draft no longer goes on from a removed server's thread.
+    pub fn drop_continuation(&mut self) {
+        self.update_draft(|draft| draft.from = None);
     }
 
     /// Opens an empty draft. The one that was open stays in the sidebar if something was written
@@ -290,6 +309,10 @@ impl Store {
                 effort: self.composer_effort(),
                 access: draft.access,
                 worktree,
+                from: draft
+                    .from
+                    .as_ref()
+                    .map(|from| CopiedThread { origin: from.origin.clone(), thread_id: from.thread_id.clone() }),
             };
             self.activity = Activity::starting();
             let activity = self.activity.clone();
@@ -384,8 +407,13 @@ impl Store {
         self.send(Command::MarkSeen { thread_id: id });
     }
 
+    /// The open thread, unless it is a removed server's, which nothing can be asked of.
+    pub fn changeable_thread(&self) -> Option<&ThreadInfo> {
+        self.selected_thread().filter(|thread| !self.on_removed_server(thread))
+    }
+
     pub fn stop_thread(&mut self) {
-        let Some(thread) = self.selected_thread() else { return };
+        let Some(thread) = self.changeable_thread() else { return };
         let (server_id, thread_id) = (thread.server_id.clone(), thread.id.clone());
         self.request(&server_id, Request::Stop { thread_id });
     }
@@ -393,21 +421,21 @@ impl Store {
     /// Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by
     /// question, when the call asks questions.
     pub fn answer(&mut self, approval_id: &str, allow: bool, answers: HashMap<String, String>) {
-        let Some(thread) = self.selected_thread() else { return };
+        let Some(thread) = self.changeable_thread() else { return };
         let (server_id, thread_id) = (thread.server_id.clone(), thread.id.clone());
         self.request(&server_id, Request::Answer { thread_id, approval_id: approval_id.to_string(), allow, answers });
     }
 
     /// Gives the agent a queued message now, in the turn that runs.
     pub fn send_now(&mut self, message_id: &str) {
-        let Some(thread) = self.selected_thread() else { return };
+        let Some(thread) = self.changeable_thread() else { return };
         let (server_id, thread_id) = (thread.server_id.clone(), thread.id.clone());
         self.request(&server_id, Request::SendQueued { thread_id, message_id: message_id.to_string() });
     }
 
     /// Takes a queued message back into the composer of its thread, after what is written there.
     pub fn take_back(&mut self, message_id: &str) {
-        let Some(thread) = self.selected_thread().cloned() else { return };
+        let Some(thread) = self.changeable_thread().cloned() else { return };
         let Some(message) = self.activity.queued.iter().find(|queued| queued.id == message_id).cloned() else { return };
         let key = thread.id.clone();
         let request = Request::CancelQueued { thread_id: thread.id.clone(), message_id: message_id.to_string() };
@@ -458,7 +486,7 @@ impl Store {
     }
 
     pub fn delete(&mut self, thread_id: &str) {
-        let Some(thread) = self.threads.get(thread_id) else { return };
+        let Some(thread) = self.threads.get(thread_id).filter(|thread| !self.on_removed_server(thread)) else { return };
         let server_id = thread.server_id.clone();
         self.request(&server_id, Request::Delete { thread_id: thread_id.to_string() });
     }
@@ -511,7 +539,7 @@ impl Store {
 
     /// Has the agent of the open thread go on with what it was doing when it was interrupted.
     pub fn continue_thread(&mut self) {
-        let Some(thread) = self.selected_thread() else { return };
+        let Some(thread) = self.changeable_thread() else { return };
         let (server_id, thread_id) = (thread.server_id.clone(), thread.id.clone());
         self.request(&server_id, Request::Continue { thread_id });
     }
@@ -532,7 +560,7 @@ impl Store {
         let changed: Vec<ThreadInfo> = ids
             .iter()
             .filter_map(|id| self.threads.get(id))
-            .filter(|thread| thread.is_done() != done && !(done && thread.busy()))
+            .filter(|thread| thread.is_done() != done && !(done && thread.busy()) && !self.on_removed_server(thread))
             .cloned()
             .collect();
         if changed.is_empty() {
@@ -567,7 +595,7 @@ impl Store {
     }
 
     pub fn toggle_done(&mut self, cx: &mut Context<Self>) {
-        let Some(thread) = self.selected_thread() else { return };
+        let Some(thread) = self.changeable_thread() else { return };
         let (id, done) = (thread.id.clone(), thread.is_done());
         self.set_done(&[id], !done, false, cx);
     }
@@ -589,6 +617,9 @@ impl Store {
         change: ThreadChange,
         locally: impl FnOnce(&mut ThreadInfo),
     ) {
+        if self.on_removed_server(thread) {
+            return;
+        }
         let mut changed = thread.clone();
         locally(&mut changed);
         self.set_thread(Some(changed), &thread.id);

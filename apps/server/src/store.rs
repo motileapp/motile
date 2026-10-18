@@ -9,7 +9,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::agents::ModelUsage;
 
-const MIGRATIONS: &[&str] = &[
+pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_init.sql"),
     include_str!("../migrations/0002_project_icons.sql"),
     include_str!("../migrations/0003_media.sql"),
@@ -27,6 +27,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0015_thread_sessions.sql"),
     include_str!("../migrations/0016_session_accounts.sql"),
     include_str!("../migrations/0017_drop_plan.sql"),
+    include_str!("../migrations/0018_sync.sql"),
 ];
 
 pub struct Store {
@@ -147,11 +148,11 @@ pub struct ThreadSummary {
     pub model: Option<String>,
 }
 
-fn as_text<T: serde::Serialize>(value: &T) -> String {
+pub(crate) fn as_text<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_value(value).ok().and_then(|value| value.as_str().map(String::from)).unwrap_or_default()
 }
 
-fn from_text<T: serde::de::DeserializeOwned>(text: &str) -> Option<T> {
+pub(crate) fn from_text<T: serde::de::DeserializeOwned>(text: &str) -> Option<T> {
     serde_json::from_value(serde_json::Value::String(text.to_string())).ok()
 }
 
@@ -165,63 +166,13 @@ impl Store {
         Ok(Self { connection: Mutex::new(connection) })
     }
 
-    fn connection(&self) -> std::sync::MutexGuard<'_, Connection> {
+    pub(crate) fn connection(&self) -> std::sync::MutexGuard<'_, Connection> {
         self.connection.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub fn load_threads(&self) -> rusqlite::Result<Vec<StoredThread>> {
-        let connection = self.connection();
-        let mut statement = connection.prepare(
-            "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access,
-                    t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.position,
-                    COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
-                    t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account
-             FROM threads t LEFT JOIN items i ON i.thread_id = t.id
-             GROUP BY t.id",
-        )?;
-        let threads = statement.query_map([], |row| {
-            let rev: i64 = row.get(16)?;
-            let next_seq: i64 = row.get(17)?;
-            let worktree: (Option<String>, Option<String>) = (row.get(18)?, row.get(19)?);
-            let pull_request: Option<String> = row.get(20)?;
-            let interruption: Option<String> = row.get(24)?;
-            Ok(StoredThread {
-                thread: Thread {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    project_id: row.get(3)?,
-                    cwd: row.get(4)?,
-                    agent: from_text(&row.get::<_, String>(5)?).unwrap_or(Agent::Claude),
-                    agent_account: row.get(25)?,
-                    model: row.get(6)?,
-                    effort: row.get(7)?,
-                    access: from_text(&row.get::<_, String>(8)?).unwrap_or(Access::Full),
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
-                    done_at: row.get(12)?,
-                    position: row.get(15)?,
-                    running: row.get(22)?,
-                    monitoring: row.get(23)?,
-                    needs_approval: row.get(13)?,
-                    asking: None,
-                    agents: 0,
-                    turn_ended_at: row.get(14)?,
-                    pull_request: pull_request.and_then(|json| serde_json::from_str(&json).ok()),
-                    watching: row.get(21)?,
-                    git_stage: None,
-                    interruption: interruption.and_then(|json| serde_json::from_str(&json).ok()),
-                    rev: rev as u64,
-                },
-                session_id: row.get(9)?,
-                title_source: TitleSource::parse(&row.get::<_, String>(2)?),
-                next_seq: next_seq as u64,
-                worktree: match worktree {
-                    (Some(branch), Some(base)) => Some(StoredWorktree { branch, base }),
-                    _ => None,
-                },
-            })
-        })?;
-        threads.collect()
+        let threads = threads_where(&self.connection(), "", "", [])?;
+        Ok(threads.into_iter().map(|(thread, _)| thread).collect())
     }
 
     pub fn save_thread(&self, stored: &StoredThread) -> rusqlite::Result<()> {
@@ -584,16 +535,33 @@ impl Store {
         bucket_secs: u32,
         utc_offset_secs: i32,
     ) -> rusqlite::Result<Vec<UsageBucket>> {
+        self.usage_of(None, since, until, bucket_secs, utc_offset_secs)
+    }
+
+    /// `usage`, from the copy of `origin`'s usage when there is one.
+    pub fn usage_of(
+        &self,
+        origin: Option<&str>,
+        since: f64,
+        until: f64,
+        bucket_secs: u32,
+        utc_offset_secs: i32,
+    ) -> rusqlite::Result<Vec<UsageBucket>> {
+        let source = match origin {
+            Some(_) => "copied_usage",
+            None => "(SELECT *, '' AS origin FROM usage)",
+        };
         let connection = self.connection();
-        let mut statement = connection.prepare(
+        let mut statement = connection.prepare(&format!(
             "SELECT CAST((at + ?3) / ?4 AS INTEGER) AS bucket, agent, model, project_id,
                     SUM(input), SUM(cache_read), SUM(cache_write), SUM(output), SUM(cost_usd),
                     purpose != 'turn' AS writing, agent_account
-             FROM usage WHERE at >= ?1 AND at < ?2
-             GROUP BY bucket, agent, agent_account, model, project_id, writing ORDER BY bucket",
-        )?;
+             FROM {source} WHERE at >= ?1 AND at < ?2 AND origin = ?5
+             GROUP BY bucket, agent, agent_account, model, project_id, writing ORDER BY bucket"
+        ))?;
         let (size, offset) = (f64::from(bucket_secs.max(60)), f64::from(utc_offset_secs));
-        let buckets = statement.query_map(params![since, until, offset, size], |row| {
+        let origin = origin.unwrap_or_default();
+        let buckets = statement.query_map(params![since, until, offset, size, origin], |row| {
             Ok(UsageBucket {
                 start: row.get::<_, i64>(0)? as f64 * size - offset,
                 agent: from_text(&row.get::<_, String>(1)?).unwrap_or(Agent::Claude),
@@ -639,6 +607,16 @@ impl Store {
     /// started, the last updated first. Each comes with its best message: the user's before the
     /// agent's, then the latest. Letters match whatever their case, as SQLite's `LIKE` has it.
     pub fn search_threads(&self, query: &str, limit: u32) -> rusqlite::Result<Vec<ThreadMatch>> {
+        self.search_threads_with(query, limit, &[])
+    }
+
+    /// `search_threads`, through the copies of the `removed` servers' threads too.
+    pub fn search_threads_with(
+        &self,
+        query: &str,
+        limit: u32,
+        removed: &[String],
+    ) -> rusqlite::Result<Vec<ThreadMatch>> {
         let query = query.split_whitespace().collect::<Vec<_>>().join(" ");
         if query.is_empty() {
             return Ok(Vec::new());
@@ -649,14 +627,25 @@ impl Store {
         let raw = if query.contains(['"', '\\']) { "%".to_string() } else { pattern.clone() };
         let connection = self.connection();
         let mut statement = connection.prepare(
-            "SELECT thread_id, kind, text FROM (
-                SELECT items.thread_id, json_extract(items.payload, '$.type') AS kind,
+            "SELECT origin, thread_id, kind, text FROM (
+                SELECT items.origin, items.thread_id, json_extract(items.payload, '$.type') AS kind,
                        json_extract(items.payload, '$.text') AS text, threads.updated_at,
                        ROW_NUMBER() OVER (
-                           PARTITION BY items.thread_id
+                           PARTITION BY items.origin, items.thread_id
                            ORDER BY json_extract(items.payload, '$.type') = 'user' DESC, items.seq DESC
                        ) AS rank
-                FROM items JOIN threads ON threads.id = items.thread_id
+                FROM (
+                    SELECT '' AS origin, thread_id, seq, payload FROM items
+                    UNION ALL
+                    SELECT origin, thread_id, seq, payload FROM copied_items
+                    WHERE origin IN (SELECT value FROM json_each(?4))
+                ) AS items
+                JOIN (
+                    SELECT '' AS origin, id, updated_at FROM threads
+                    UNION ALL
+                    SELECT origin, id, json_extract(payload, '$.updated_at') FROM copied_threads
+                    WHERE origin IN (SELECT value FROM json_each(?4))
+                ) AS threads ON threads.origin = items.origin AND threads.id = items.thread_id
                 WHERE items.payload LIKE ?2 ESCAPE '\\'
                   AND json_valid(items.payload)
                   AND json_extract(items.payload, '$.type') IN ('user', 'assistant')
@@ -667,14 +656,16 @@ impl Store {
              ORDER BY updated_at DESC
              LIMIT ?3",
         )?;
-        let rows = statement.query_map(params![pattern, raw, limit], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        let removed = serde_json::to_string(removed).unwrap_or_default();
+        let rows = statement.query_map(params![pattern, raw, limit, removed], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?))
         })?;
         let mut matches = Vec::new();
         for row in rows {
-            let (thread_id, kind, text) = row?;
+            let (origin, thread_id, kind, text) = row?;
             let speaker = if kind == "user" { Speaker::User } else { Speaker::Agent };
-            matches.push(ThreadMatch { thread_id, speaker, excerpt: excerpt(&text, &query) });
+            let origin = Some(origin).filter(|origin| !origin.is_empty());
+            matches.push(ThreadMatch { thread_id, speaker, excerpt: excerpt(&text, &query), origin });
         }
         Ok(matches)
     }
@@ -723,13 +714,78 @@ impl Store {
     }
 }
 
+/// The threads, with `filter` after their `WHERE` and `tail` after their `GROUP BY`, each with the
+/// change that last wrote it.
+pub(crate) fn threads_where<P: rusqlite::Params>(
+    connection: &Connection,
+    filter: &str,
+    tail: &str,
+    parameters: P,
+) -> rusqlite::Result<Vec<(StoredThread, u64)>> {
+    let filter = if filter.is_empty() { String::new() } else { format!("WHERE {filter}") };
+    let mut statement = connection.prepare(&format!(
+        "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access,
+                t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.position,
+                COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
+                t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account, t.change
+         FROM threads t LEFT JOIN items i ON i.thread_id = t.id
+         {filter}
+         GROUP BY t.id {tail}"
+    ))?;
+    let threads = statement.query_map(parameters, |row| {
+        let rev: i64 = row.get(16)?;
+        let next_seq: i64 = row.get(17)?;
+        let worktree: (Option<String>, Option<String>) = (row.get(18)?, row.get(19)?);
+        let pull_request: Option<String> = row.get(20)?;
+        let interruption: Option<String> = row.get(24)?;
+        let change: i64 = row.get(26)?;
+        let stored = StoredThread {
+            thread: Thread {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                project_id: row.get(3)?,
+                cwd: row.get(4)?,
+                agent: from_text(&row.get::<_, String>(5)?).unwrap_or(Agent::Claude),
+                agent_account: row.get(25)?,
+                model: row.get(6)?,
+                effort: row.get(7)?,
+                access: from_text(&row.get::<_, String>(8)?).unwrap_or(Access::Full),
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+                done_at: row.get(12)?,
+                position: row.get(15)?,
+                running: row.get(22)?,
+                monitoring: row.get(23)?,
+                needs_approval: row.get(13)?,
+                asking: None,
+                agents: 0,
+                turn_ended_at: row.get(14)?,
+                pull_request: pull_request.and_then(|json| serde_json::from_str(&json).ok()),
+                watching: row.get(21)?,
+                git_stage: None,
+                interruption: interruption.and_then(|json| serde_json::from_str(&json).ok()),
+                rev: rev as u64,
+            },
+            session_id: row.get(9)?,
+            title_source: TitleSource::parse(&row.get::<_, String>(2)?),
+            next_seq: next_seq as u64,
+            worktree: match worktree {
+                (Some(branch), Some(base)) => Some(StoredWorktree { branch, base }),
+                _ => None,
+            },
+        };
+        Ok((stored, change as u64))
+    })?;
+    threads.collect()
+}
+
 /// How much of a message comes before what was searched for in its excerpt, at most.
 const EXCERPT_LEAD: usize = 24;
 const EXCERPT_LENGTH: usize = 240;
 
 /// The message on one line, from a little before the first `query` in it: at a word's start, after
 /// "…" when the message started earlier.
-fn excerpt(text: &str, query: &str) -> String {
+pub(crate) fn excerpt(text: &str, query: &str) -> String {
     let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
     let found = find_ignoring_case(&line, query).unwrap_or(0);
     let before: Vec<(usize, char)> = line[..found].char_indices().collect();
@@ -785,7 +841,7 @@ fn insert_usage(
     Ok(())
 }
 
-fn tokens_at(row: &rusqlite::Row, first: usize) -> rusqlite::Result<Tokens> {
+pub(crate) fn tokens_at(row: &rusqlite::Row, first: usize) -> rusqlite::Result<Tokens> {
     let count = |index: usize| row.get::<_, i64>(first + index).map(|count| count as u64);
     Ok(Tokens { input: count(0)?, cache_read: count(1)?, cache_write: count(2)?, output: count(3)? })
 }
@@ -890,8 +946,18 @@ mod tests {
         assert_eq!(
             found,
             [
-                ThreadMatch { thread_id: "new".into(), speaker: Speaker::User, excerpt: "Deploy again".into() },
-                ThreadMatch { thread_id: "old".into(), speaker: Speaker::Agent, excerpt: "The DEPLOY failed".into() },
+                ThreadMatch {
+                    thread_id: "new".into(),
+                    speaker: Speaker::User,
+                    excerpt: "Deploy again".into(),
+                    origin: None
+                },
+                ThreadMatch {
+                    thread_id: "old".into(),
+                    speaker: Speaker::Agent,
+                    excerpt: "The DEPLOY failed".into(),
+                    origin: None
+                },
             ]
         );
         assert_eq!(store.search_threads("deploy", 1).unwrap().len(), 1);

@@ -67,19 +67,19 @@ extension AppStore {
         case "thread.previous": return showThread(offset: -1)
         case "thread.next": return showThread(offset: 1)
         case "thread.done":
-            guard selectedThread != nil else { return false }
+            guard let thread = selectedThread, !onRemovedServer(thread) else { return false }
             toggleDone()
         case "thread.undo":
             guard undo != nil else { return false }
             performUndo()
         case "thread.stop":
-            guard activity.busy else { return false }
+            guard activity.busy, openThreadRemovedServer == nil else { return false }
             stop()
         case "thread.steerQueuedMessage":
-            guard let queued = activity.queued.first else { return false }
+            guard openThreadRemovedServer == nil, let queued = activity.queued.first else { return false }
             sendNow(queued: queued.id)
         case "thread.editQueuedMessage":
-            guard let queued = activity.queued.last else { return false }
+            guard openThreadRemovedServer == nil, let queued = activity.queued.last else { return false }
             takeBack(queued: queued.id)
         case "pullRequest.copyLink":
             guard let url = shownPullRequest?.url else { return false }
@@ -145,7 +145,7 @@ extension AppStore {
             closePanel()
             return true
         }
-        guard account.signedIn, !servers.isEmpty else { return false }
+        guard account.signedIn, !servers.isEmpty || !removedServers.isEmpty else { return false }
         openPanel(page)
         return true
     }

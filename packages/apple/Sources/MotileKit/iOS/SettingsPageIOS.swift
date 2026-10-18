@@ -168,7 +168,7 @@ struct SettingsPage: View {
         Section {
             ForEach(store.servers) { server in
                 NavigationLink {
-                    ServerSettingsPage(serverID: server.id)
+                    ServerSettingsPage(serverID: server.id, removed: false)
                 } label: {
                     SettingsItem(server.name, description: server.state == .connected ? "Connected · version \(server.version)" : server.stateLabel) {
                         SettingsTile(symbol: .server)
@@ -182,6 +182,20 @@ struct SettingsPage: View {
             }
         }
         .id("servers")
+        if !store.removedServers.isEmpty {
+            Section("Unlinked") {
+                ForEach(store.removedServers) { server in
+                    NavigationLink {
+                        ServerSettingsPage(serverID: server.id, removed: true)
+                    } label: {
+                        SettingsItem(server.name, description: "Its threads stay readable from the copies") {
+                            SettingsTile(symbol: .server)
+                        }
+                    }
+                }
+            }
+            .id("removed-servers")
+        }
         let continuing = store.servers.filter { $0.state == .connected && store.canChooseRestart($0) }
         if !continuing.isEmpty {
             SettingsToggles(
@@ -403,11 +417,18 @@ private struct ServerSettingsPage: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     let serverID: String
+    /// The server was removed from the account, so all that is left to do is delete its copies.
+    let removed: Bool
     @State private var removal: Removal?
 
     var body: some View {
         SettingsList {
-            if let server = store.server(serverID) {
+            if let server = store.server(serverID), removed {
+                Section {
+                    Button("Delete", role: .destructive) { removal = .serverCompletely(server) }
+                        .foregroundStyle(Color.themeDestructive)
+                }
+            } else if let server = store.server(serverID) {
                 Section {
                     LabeledContent("Status", value: server.stateLabel)
                     if server.state == .connected {
@@ -425,7 +446,9 @@ private struct ServerSettingsPage: View {
                     }
                 }
                 Section {
-                    Button("Remove Server", role: .destructive) { removal = .server(server) }
+                    Button("Unlink Server", role: .destructive) { removal = .server(server) }
+                        .foregroundStyle(Color.themeDestructive)
+                    Button("Delete", role: .destructive) { removal = .serverCompletely(server) }
                         .foregroundStyle(Color.themeDestructive)
                 }
             }
@@ -433,8 +456,8 @@ private struct ServerSettingsPage: View {
         .navigationTitle(store.server(serverID)?.name ?? "Server")
         .navigationBarTitleDisplayMode(.inline)
         .confirmsRemoval($removal)
-        .onChange(of: store.server(serverID) == nil) { _, gone in
-            guard gone else { return }
+        .onChange(of: store.server(serverID)?.removed != removed) { _, left in
+            guard left else { return }
             dismiss()
         }
     }

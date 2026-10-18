@@ -65,7 +65,6 @@ struct AttachmentTile: View {
 /// its way to the server.
 struct AttachmentChip: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.surface) private var surface
     let attachment: Attachment
 
     var body: some View {
@@ -81,11 +80,40 @@ struct AttachmentChip: View {
             ActionButton(icon: .x, help: "Remove", size: .small, round: true) { store.removeAttachment(attachment.id) }
                 .environment(\.row, .chip)
         }
-        .font(.ui(size: 12))
-        .padding(.leading, 9)
-        .padding([.vertical, .trailing], 2)
-        .background(surface.color(.chip), in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.themeBorderAccent, lineWidth: 1))
+        .modifier(ComposerChipLook())
+    }
+}
+
+/// The thread of a removed server that a new thread goes on from, and the button that starts it
+/// without it.
+struct ContinuedThreadChip: View {
+    @Environment(AppStore.self) private var store
+    let from: ContinuedThread
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(.messageSquareText, size: 12)
+            Text("Continues “\(from.title)”")
+                .lineLimit(1)
+            ActionButton(icon: .x, help: "Start without it", size: .small, round: true) { store.dropContinuation() }
+                .environment(\.row, .chip)
+        }
+        .modifier(ComposerChipLook())
+        .help("The new thread starts with everything that happened in “\(from.title)”")
+    }
+}
+
+/// The capsule of what a message goes with in the composer: a file, or the thread it continues.
+private struct ComposerChipLook: ViewModifier {
+    @Environment(\.surface) private var surface
+
+    func body(content: Content) -> some View {
+        content
+            .font(.ui(size: 12))
+            .padding(.leading, 9)
+            .padding([.vertical, .trailing], 2)
+            .background(surface.color(.chip), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.themeBorderAccent, lineWidth: 1))
     }
 }
 

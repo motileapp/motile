@@ -25,6 +25,8 @@ struct ThreadPane: View {
         ZStack(alignment: .bottom) {
             if isStart {
                 start
+            } else if store.openThreadRemovedServer != nil {
+                RoomWithoutComposer(bottomGap: Self.composerBottomGap)
             } else {
                 ComposerView()
                     .padding(.horizontal, Theme.composerPadding)

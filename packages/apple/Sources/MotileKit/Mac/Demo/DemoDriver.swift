@@ -564,6 +564,7 @@ extension RowModel {
         case .turnEnd: "turn_end"
         case .handoff: "handoff"
         case .queued: "queued"
+        case .removed: "removed"
         }
     }
 }

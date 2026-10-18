@@ -4,7 +4,7 @@ import { getAccount } from "@/lib/account"
 import { cn } from "@/lib/utils"
 import { AccountMenu } from "@/components/account-menu"
 import { AddServer } from "@/components/add-server"
-import { DeviceList } from "@/components/device-list"
+import { DeviceList, RemovedServerList } from "@/components/device-list"
 import { Header } from "@/components/header"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
@@ -59,6 +59,9 @@ function Account() {
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
+          )}
+          {account.removed.length > 0 && (
+            <RemovedServerList servers={account.removed} />
           )}
         </section>
         <section className="flex flex-col gap-4">

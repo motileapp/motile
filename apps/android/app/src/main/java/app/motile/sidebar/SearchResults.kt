@@ -180,9 +180,11 @@ private fun ResultStatus(result: SearchResult, jump: String?) {
         }
         is SearchResult.Thread -> {
             val thread = result.thread
-            store.project(thread.projectID)?.seen(thread)?.pullRequest(thread)?.let { PullRequestLabel(it, colored = !thread.isDone) }
+            val readOnly = store.onRemovedServer(thread)
+            if (!readOnly) store.project(thread.projectID)?.seen(thread)?.pullRequest(thread)?.let { PullRequestLabel(it, colored = !thread.isDone) }
             when {
                 jump != null -> CompositionLocalProvider(LocalForeground provides palette.foreground) { KeyCaps(listOf(jump)) }
+                readOnly -> ThreadStatus(thread, readOnly = true)
                 thread.isDone -> Text(Time.ago(thread.doneAt ?: thread.updatedAt, AgoClock.now), size = 11f, color = palette.mutedStrongerForeground)
                 else -> ThreadStatus(thread)
             }

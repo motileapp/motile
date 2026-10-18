@@ -34,6 +34,9 @@ pub struct Config {
     pub local_only: bool,
     #[serde(default)]
     pub direct_addr: Option<String>,
+    /// The address each server is dialed at, by its key, in place of `direct_addr`.
+    #[serde(default)]
+    pub direct_addrs: HashMap<String, String>,
     /// How many bytes the fetched images and videos may take on this device. Two gigabytes
     /// without it.
     #[serde(default)]
@@ -74,8 +77,20 @@ pub enum Command {
     },
     /// Answers with `token`, `command` and `expires_at`.
     CreateEnrollToken,
+    /// Removes the server from the account. Its threads stay readable from the copies the
+    /// account's other servers keep, and it shows as `removed`.
     RemoveServer {
         server_id: String,
+    },
+    /// Removes the server if it is still linked and drops every copy of its threads, on every
+    /// server and client.
+    DeleteServerCompletely {
+        server_id: String,
+    },
+    /// Whether the device is on a network that costs by the byte, where a server's copy of
+    /// another isn't started from the beginning.
+    SetMetered {
+        metered: bool,
     },
     /// Sends the thread's rows from the cache, then keeps them current.
     OpenThread {
@@ -598,6 +613,9 @@ pub struct ServerView {
     /// The name cut short, for the places a long name crowds.
     pub short_name: String,
     pub platform: String,
+    /// The server was removed from the account: its threads are copies, which can be read and
+    /// searched and go on only on another server.
+    pub removed: bool,
     pub state: State,
     pub error: Option<String>,
     pub path: Option<PathKind>,

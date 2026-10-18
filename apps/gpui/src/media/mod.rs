@@ -341,8 +341,8 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
         Some(Picture::Ready(shown)) => Some(shown.image.clone()),
         _ => None,
     };
-    let failure = match picture {
-        Some(Picture::Failed(failure)) if !video => Some(failure),
+    let failure = match &picture {
+        Some(Picture::Failed(failure)) if !video => Some(failure.clone()),
         _ => None,
     };
     let loading = matches!(picture, Some(Picture::Loading));
@@ -365,10 +365,12 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
     let play = open.clone();
     let retry_key = picture_id.clone().unwrap_or_default();
     let (menu_store, menu_media, menu_name) = (ctx.store.clone(), media.clone(), name.clone());
-    let message = match failure {
-        Some(Failure::Fetch) => "This image couldn't be loaded.",
-        Some(Failure::Decode) => "This image couldn't be shown.",
-        None => "",
+    let retries = !ctx.removed;
+    let message: SharedString = match failure.clone() {
+        Some(Failure::Fetch(reason)) if ctx.removed => reason,
+        Some(Failure::Fetch(_)) => "This image couldn't be loaded.".into(),
+        Some(Failure::Decode) => "This image couldn't be shown.".into(),
+        None => "".into(),
     };
 
     let states = div()
@@ -413,21 +415,23 @@ pub fn media_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &m
                         .truncate()
                         .child(message),
                 )
-                .child(
-                    div().mt(px(STACK_GAP)).child(
-                        RowButton::new(
-                            SharedString::from(format!("retry-{row_id}")),
-                            "Try again",
-                            "Load the image again",
-                        )
-                        .bordered()
-                        .hover(c.background_secondary_accent)
-                        .on_click(move |_, _, cx| {
-                            Pictures::retry(&retry_key, cx);
-                            cx.refresh_windows();
-                        }),
-                    ),
-                )
+                .when(retries, |states| {
+                    states.child(
+                        div().mt(px(STACK_GAP)).child(
+                            RowButton::new(
+                                SharedString::from(format!("retry-{row_id}")),
+                                "Try again",
+                                "Load the image again",
+                            )
+                            .bordered()
+                            .hover(c.background_secondary_accent)
+                            .on_click(move |_, _, cx| {
+                                Pictures::retry(&retry_key, cx);
+                                cx.refresh_windows();
+                            }),
+                        ),
+                    )
+                })
         });
 
     div()

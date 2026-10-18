@@ -359,8 +359,11 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
     let fetching = matches!(state, Download::Fetching(_));
     let downloaded = matches!(state, Download::Downloaded(_));
     let lit_tile = over_tile && fetching;
+    // Only a removed server had a file it couldn't hand over, so asking again is no use.
+    let gone = ctx.removed && matches!(state, Download::Failed(_));
 
     let (icon, icon_size) = match &state {
+        Download::Failed(_) if gone => (file.symbol(), ControlSize::Large.symbol()),
         Download::Remote | Download::Failed(_) => ("download", ControlSize::Large.symbol()),
         Download::Fetching(_) => ("x", ControlSize::Small.symbol()),
         Download::Downloaded(_) => (file.symbol(), ControlSize::Large.symbol()),
@@ -468,6 +471,7 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
     let pressed = {
         let (store, file, state) = (store.clone(), file.clone(), state.clone());
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| match &state {
+            Download::Failed(_) if gone => {}
             Download::Remote | Download::Failed(_) => FileDownloads::download(&store, &file, cx),
             Download::Fetching(_) => {}
             Download::Downloaded(downloaded) => cx.open_with_system(downloaded),
@@ -493,7 +497,7 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
                 } else {
                     c.background_secondary
                 })
-                .cursor_pointer()
+                .when(!gone, |card| card.cursor_pointer())
                 .child(content)
                 .child(tile)
                 .when_some(tip, |card, tip| card.tooltip(crate::ui::tooltip(tip)))
@@ -505,6 +509,9 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
                 })
                 .on_click(pressed)
                 .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                    if gone {
+                        return;
+                    }
                     let state = FileDownloads::state(&menu_store, &menu_file.id, cx);
                     menu(&menu_store, &menu_file, &state).show(event.position, window, cx);
                 }),

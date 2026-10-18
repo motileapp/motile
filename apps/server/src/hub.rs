@@ -19,10 +19,10 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
     AccountSkills, Activity, Agent, AgentAccount, AgentLimits, Approval, BranchInstructions, CONTINUE_PROMPT,
-    ChangedFile, ContinueSettings, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd,
-    Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread, Project, PullRequest,
-    PullRequestAction, Queued, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread, ThreadChange, ToolCall,
-    ToolStatus, TurnChanges, TurnSummary, Worktree,
+    ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
+    HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread, OriginUsage, Project,
+    PullRequest, PullRequestAction, Queued, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread, ThreadChange,
+    ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -825,13 +825,25 @@ impl Hub {
         let (thread_id, is_new) = match (thread_id, new_thread) {
             (Some(thread_id), _) => (thread_id, false),
             (None, Some(new_thread)) => {
-                let stored = self.new_thread(new_thread, &text, &attachments).await?;
+                let from = match &new_thread.from {
+                    Some(from) => Some(self.copied_history(from)?),
+                    None => None,
+                };
+                let mut stored = self.new_thread(new_thread, &text, &attachments).await?;
+                if let Some((copied, _)) = &from {
+                    stored.thread.title = copied.title.clone();
+                    stored.title_source = TitleSource::Generated;
+                }
                 self.store.save_thread(&stored)?;
                 let thread_id = stored.thread.id.clone();
                 if let Some((thread_id, worktree)) = thread_worktree(&stored) {
                     self.lock_worktrees().insert(thread_id, worktree);
                 }
-                threads.insert(thread_id.clone(), Live::new(stored, self.media.clone()));
+                let mut live = Live::new(stored, self.media.clone());
+                if let Some((_, items)) = from {
+                    live.take_history(&self.store, items)?;
+                }
+                threads.insert(thread_id.clone(), live);
                 (thread_id, true)
             }
             (None, None) => bail!("No thread was given."),
@@ -906,6 +918,14 @@ impl Hub {
                 tokio::time::sleep(SWEEP_UPLOADS_EVERY).await;
             }
         });
+    }
+
+    /// A removed server's thread from this server's copy, with its transcript, for a new thread to
+    /// go on from.
+    fn copied_history(&self, from: &CopiedThread) -> anyhow::Result<(Thread, Vec<Item>)> {
+        let thread = self.store.copied_thread(&from.origin, &from.thread_id)?;
+        let thread = thread.context("That thread isn't copied to this server yet.")?;
+        Ok((thread, self.store.copied_items(&from.origin, &from.thread_id)?))
     }
 
     async fn new_thread(
@@ -1872,8 +1892,16 @@ impl Hub {
         *self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = prices;
     }
 
-    /// What the agents spent from `since` until `until` and what the API would have charged.
-    pub fn usage(&self, since: f64, until: f64, bucket_secs: u32, utc_offset_secs: i32) -> anyhow::Result<Message> {
+    /// What the agents spent from `since` until `until` and what the API would have charged, and
+    /// what this server's copies say the agents of the `removed` servers spent.
+    pub fn usage(
+        &self,
+        since: f64,
+        until: f64,
+        bucket_secs: u32,
+        utc_offset_secs: i32,
+        removed: &[String],
+    ) -> anyhow::Result<Message> {
         let mut buckets = self.store.usage(since, until, bucket_secs, utc_offset_secs)?;
         let accounts = self.agent_accounts();
         let prices = self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -1883,7 +1911,40 @@ impl Hub {
                 bucket.account_name = account.name.clone();
             }
         }
-        Ok(Message::Usage { buckets })
+        let mut copies = Vec::new();
+        for origin in removed {
+            let mut buckets = self.store.usage_of(Some(origin), since, until, bucket_secs, utc_offset_secs)?;
+            buckets.iter_mut().for_each(|bucket| prices.price(bucket));
+            copies.push(OriginUsage { origin: origin.clone(), buckets });
+        }
+        Ok(Message::Usage { buckets, copies })
+    }
+
+    /// What changed in a log after `after`: this server's own, or its copy of `origin`'s. The own
+    /// log's projects say which is the "No project", and its usage the names of the accounts.
+    pub fn changes(&self, origin: Option<&str>, after: u64) -> anyhow::Result<Message> {
+        let Some(origin) = origin else {
+            let mut part = self.store.changes(after)?;
+            for logged in &mut part.set.projects {
+                if Path::new(&logged.value.path) == self.no_project_folder {
+                    logged.value.name = "No project".to_string();
+                    logged.value.no_project = true;
+                }
+            }
+            let accounts = self.agent_accounts();
+            for logged in &mut part.set.usage {
+                if let Some(account) = accounts.iter().find(|account| account.id == logged.value.agent_account) {
+                    logged.value.agent_account = account.name.clone();
+                }
+            }
+            return Ok(Message::Changes { batch: part.encode()? });
+        };
+        let part = self.store.copied_changes(origin, after)?;
+        Ok(Message::Changes { batch: part.encode()? })
+    }
+
+    pub fn watermarks(&self) -> anyhow::Result<Message> {
+        Ok(Message::Watermarks { own: self.store.watermark()?, copies: self.store.origin_watermarks()? })
     }
 
     /// What the agents' accounts have used of their plans, read again once it is a few minutes
@@ -3639,6 +3700,21 @@ impl Live {
         self.last_message_seq = Some(item.seq);
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
+        Ok(())
+    }
+
+    /// Makes another thread's transcript the beginning of this one's, which its agent is then told
+    /// as the thread's history.
+    fn take_history(&mut self, store: &Store, items: Vec<Item>) -> anyhow::Result<()> {
+        let mut taken = Vec::with_capacity(items.len());
+        for item in items {
+            let seq = self.stored.next_seq;
+            self.stored.next_seq += 1;
+            let item = Item { seq, rev: self.next_rev(), ..item };
+            store.save_item(&self.stored.thread.id, &item)?;
+            taken.push(item);
+        }
+        let _ = self.updates.send(Message::Items { items: taken });
         Ok(())
     }
 

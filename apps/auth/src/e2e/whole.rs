@@ -42,6 +42,8 @@ struct Client {
     servers: Vec<ServerView>,
     threads: HashMap<String, ThreadView>,
     projects: Vec<ProjectView>,
+    /// Every server's projects, "No project" too.
+    projects_of: HashMap<String, Vec<ProjectView>>,
     rows: Vec<Row>,
     running: bool,
     live: bool,
@@ -52,13 +54,23 @@ struct Client {
 
 impl Client {
     fn start(data_dir: &Path, auth_url: &str, server_port: u16) -> Self {
+        Self::dialing(data_dir, auth_url, Some(format!("127.0.0.1:{server_port}")), HashMap::new())
+    }
+
+    fn dialing(
+        data_dir: &Path,
+        auth_url: &str,
+        direct_addr: Option<String>,
+        direct_addrs: HashMap<String, String>,
+    ) -> Self {
         let config = Config {
             data_dir: data_dir.to_path_buf(),
             auth_url: auth_url.to_string(),
             device_name: "Ann's Mac".into(),
             platform: "macos".into(),
             local_only: true,
-            direct_addr: Some(format!("127.0.0.1:{server_port}")),
+            direct_addr,
+            direct_addrs,
             media_limit: None,
         };
         let (sender, events) = mpsc::unbounded_channel();
@@ -73,6 +85,7 @@ impl Client {
             servers: Vec::new(),
             threads: HashMap::new(),
             projects: Vec::new(),
+            projects_of: HashMap::new(),
             rows: Vec::new(),
             running: false,
             live: false,
@@ -94,8 +107,9 @@ impl Client {
             Event::ThreadDeleted { thread_id } => {
                 self.threads.remove(&thread_id);
             }
-            Event::Projects { projects, .. } => {
-                self.projects = projects.into_iter().filter(|view| !view.project.no_project).collect();
+            Event::Projects { server_id, projects } => {
+                self.projects = projects.iter().filter(|view| !view.project.no_project).cloned().collect();
+                self.projects_of.insert(server_id, projects);
             }
             Event::Rows { reset, start, remove, rows, .. } => {
                 if reset {
@@ -201,6 +215,7 @@ fn kinds(client: &Client) -> Vec<&'static str> {
         RowKind::TurnEnd { .. } => "turn_end",
         RowKind::Queued { .. } => "queued",
         RowKind::Handoff { .. } => "handoff",
+        RowKind::Removed { .. } => "removed",
     });
     kinds.collect()
 }
@@ -280,6 +295,7 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
         effort: None,
         access: AgentAccess::Full,
         worktree: None,
+        from: None,
     };
     let send = Command::Send {
         server_id: server.id.clone(),
@@ -462,4 +478,156 @@ async fn a_client_signs_in_links_a_server_and_runs_a_thread_it_still_has_after_a
     reopened.until("the client is signed out", |client| !client.account.signed_in && client.threads.is_empty()).await;
     assert_ne!(reopened.account.device_key, old_key);
     assert!(reopened.servers.is_empty());
+}
+
+/// How far `server`'s own log goes, and its copy of `origin`'s.
+async fn logs(client: &mut Client, server: &str, origin: &str) -> (u64, Option<u64>) {
+    let asked = client.ask(Command::Request { server_id: server.to_string(), request: Request::Watermarks }).await;
+    let answer = asked.unwrap();
+    let copy = answer["copies"].as_array().unwrap().iter().find(|copy| copy["origin"] == origin);
+    (answer["own"]["change"].as_u64().unwrap(), copy.and_then(|copy| copy["change"].as_u64()))
+}
+
+#[sqlx::test]
+async fn a_removed_servers_threads_stay_readable_from_the_copies_until_it_is_deleted_completely(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let folder = tempfile::tempdir().unwrap();
+    let options = BindOptions { local_only: true, port: None };
+    let mut servers = Vec::new();
+    for name in ["build-box", "spare-box"] {
+        let data = DataDir::new(Some(folder.path().join(name))).unwrap();
+        let key = data.device_key().unwrap();
+        let endpoint = bind(&key, &options).await.unwrap();
+        let port = endpoint.bound_sockets().iter().find(|address| address.is_ipv4()).unwrap().port();
+        servers.push((name, data, key, endpoint, port));
+    }
+    let addresses = servers.iter().map(|(_, _, key, _, port)| (key.public(), format!("127.0.0.1:{port}"))).collect();
+    let mut client = Client::dialing(&folder.path().join("app"), &auth.base, None, addresses);
+    client.until("the account is known", |client| !client.account.device_key.is_empty()).await;
+    client.ask(Command::DevSignIn { email: "ann@example.com".into() }).await.unwrap();
+    client.ask(Command::WatchServers { on: true }).await.unwrap();
+    for (name, data, key, endpoint, _) in &servers {
+        let token = client.ask(Command::CreateEnrollToken).await.unwrap();
+        let setup_options = setup::Options {
+            token: Some(token["token"].as_str().unwrap().to_string()),
+            auth_url: auth.base.clone(),
+            name: Some(name.to_string()),
+            assume_defaults: true,
+            skip_service: true,
+        };
+        setup::setup(data, setup_options).await.unwrap();
+        run_server(data, endpoint.clone(), DeviceKey::from_bytes(key.to_bytes())).await;
+    }
+    client
+        .until("both servers are connected", |client| {
+            client.servers.len() == 2 && client.servers.iter().all(|server| server.state == State::Connected)
+        })
+        .await;
+    let (build, spare) = (servers[0].2.public(), servers[1].2.public());
+
+    // A thread runs on the first server.
+    let project_folder = folder.path().join("api");
+    std::fs::create_dir_all(&project_folder).unwrap();
+    let add = Request::AddProject { path: project_folder.to_string_lossy().into_owned() };
+    client.ask(Command::Request { server_id: build.clone(), request: add }).await.unwrap();
+    client
+        .until("the project is listed", |client| client.projects_of.get(&build).is_some_and(|all| all.len() == 2))
+        .await;
+    let project_id =
+        client.projects_of[&build].iter().find(|view| !view.project.no_project).unwrap().project.id.clone();
+    let new_thread = |project_id: String| NewThread {
+        project_id,
+        agent: Agent::Claude,
+        agent_account: None,
+        model: None,
+        effort: None,
+        access: AgentAccess::Full,
+        worktree: None,
+        from: None,
+    };
+    let send = Command::Send {
+        server_id: build.clone(),
+        thread_id: None,
+        new_thread: Some(new_thread(project_id)),
+        text: "Add a rate limiter to the API".into(),
+        attachments: Vec::new(),
+        now: false,
+    };
+    let thread_id = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
+    client.ask(Command::OpenThread { server_id: build.clone(), thread_id: thread_id.clone() }).await.unwrap();
+    client.until("the turn has ended", Client::turn_ended).await;
+    client.until("the thread is at rest", |client| !client.threads[&thread_id].thread.running).await;
+    let finished = kinds(&client).iter().map(|kind| kind.to_string()).collect::<Vec<_>>();
+    client.ask(Command::CloseThread { thread_id: thread_id.clone() }).await.unwrap();
+
+    // The client copies it to the other server by itself.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    loop {
+        let (own, _) = logs(&mut client, &build, &build).await;
+        let (_, copy) = logs(&mut client, &spare, &build).await;
+        if copy == Some(own) {
+            break;
+        }
+        assert!(tokio::time::Instant::now() < deadline, "the thread wasn't copied: {own} and {copy:?}");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    // Removed, the server's thread is still there, and says so at its end.
+    client.ask(Command::RemoveServer { server_id: build.clone() }).await.unwrap();
+    client
+        .until("the server shows as removed", |client| {
+            client.servers.iter().any(|server| server.id == build && server.removed)
+        })
+        .await;
+    assert_eq!(client.threads[&thread_id].server_id, build);
+    client.ask(Command::OpenThread { server_id: build.clone(), thread_id: thread_id.clone() }).await.unwrap();
+    client.until("the thread ends with the removal", |client| kinds(client).last() == Some(&"removed")).await;
+    let mut expected: Vec<&str> = finished.iter().map(String::as_str).collect();
+    expected.push("removed");
+    assert_eq!(kinds(&client), expected);
+    assert!(matches!(&client.rows.last().unwrap().kind, RowKind::Removed { server, .. } if server == "build-box"));
+    let more = Command::Send {
+        server_id: build.clone(),
+        thread_id: Some(thread_id.clone()),
+        new_thread: None,
+        text: "Go on".into(),
+        attachments: Vec::new(),
+        now: false,
+    };
+    let refused =
+        "“build-box” is unlinked, so its threads are read-only. You can delete “build-box” in settings to remove them.";
+    assert_eq!(client.ask(more).await.unwrap_err(), refused);
+
+    // The search finds it on the server that keeps its copy.
+    client.handle.send(0, Command::SearchThreads { query: "rate limiter".into() });
+    client.until("the search is answered", |client| !client.search.1 && !client.search.2.is_empty()).await;
+    assert_eq!(client.search.2[0].server_id, build);
+    assert_eq!(client.search.2[0].thread_id, thread_id);
+
+    // It goes on on the other server, with what happened in it.
+    let no_project = client.projects_of[&spare].iter().find(|view| view.project.no_project).unwrap().project.id.clone();
+    let from = motile_protocol::wire::CopiedThread { origin: build.clone(), thread_id: thread_id.clone() };
+    let send = Command::Send {
+        server_id: spare.clone(),
+        thread_id: None,
+        new_thread: Some(NewThread { from: Some(from), ..new_thread(no_project) }),
+        text: "Now test it".into(),
+        attachments: Vec::new(),
+        now: false,
+    };
+    let continued = client.ask(send).await.unwrap()["thread_id"].as_str().unwrap().to_string();
+    client.ask(Command::OpenThread { server_id: spare.clone(), thread_id: continued.clone() }).await.unwrap();
+    client.until("the continued turn has ended", Client::turn_ended).await;
+    let users = client.rows.iter().filter(|row| matches!(row.kind, RowKind::User { .. })).count();
+    assert_eq!(users, 2);
+    assert_eq!(client.threads[&continued].thread.title, client.threads[&thread_id].thread.title);
+
+    // Deleted completely, it is gone from the client.
+    client.ask(Command::DeleteServerCompletely { server_id: build.clone() }).await.unwrap();
+    client
+        .until("the server and its thread are gone", |client| {
+            client.servers.iter().all(|server| server.id != build) && !client.threads.contains_key(&thread_id)
+        })
+        .await;
+    assert!(client.threads.contains_key(&continued));
 }

@@ -139,29 +139,30 @@ impl Store {
                 self.prefs.set("sidebar.hidden", hidden);
             }
             "chat.new" => {
-                if !self.account.signed_in || self.servers.is_empty() {
+                if !self.account.signed_in || !self.has_live_servers() {
                     return false;
                 }
                 self.new_thread(cx);
             }
             "chat.newLocal" => {
-                let Some(project) = self.composer_project() else { return false };
+                let Some(project) = self.composer_project().filter(|project| self.is_live(project)) else {
+                    return false;
+                };
                 self.start_new_thread(Some(project.id), cx);
             }
             "chat.newWithoutProject" => {
                 let server_id = self.composer_server().map(|server| server.id.clone());
                 let project = self
-                    .no_projects
-                    .iter()
+                    .live_no_projects()
                     .find(|project| Some(&project.server_id) == server_id.as_ref())
-                    .or(self.no_projects.first());
+                    .or(self.live_no_projects().next());
                 let Some(project) = project.map(|project| project.id.clone()) else { return false };
                 self.start_new_thread(Some(project), cx);
             }
             "thread.previous" => return self.show_thread_offset(-1, cx),
             "thread.next" => return self.show_thread_offset(1, cx),
             "thread.done" => {
-                if self.selected_thread().is_none() {
+                if self.changeable_thread().is_none() {
                     return false;
                 }
                 self.toggle_done(cx);
@@ -173,17 +174,19 @@ impl Store {
                 self.perform_undo(cx);
             }
             "thread.stop" => {
-                if !self.activity.busy() {
+                if !self.activity.busy() || self.changeable_thread().is_none() {
                     return false;
                 }
                 self.stop_thread();
             }
             "thread.steerQueuedMessage" => {
-                let Some(queued) = self.activity.queued.first().map(|queued| queued.id.clone()) else { return false };
+                let queued = self.changeable_thread().and(self.activity.queued.first());
+                let Some(queued) = queued.map(|queued| queued.id.clone()) else { return false };
                 self.send_now(&queued);
             }
             "thread.editQueuedMessage" => {
-                let Some(queued) = self.activity.queued.last().map(|queued| queued.id.clone()) else { return false };
+                let queued = self.changeable_thread().and(self.activity.queued.last());
+                let Some(queued) = queued.map(|queued| queued.id.clone()) else { return false };
                 self.take_back(&queued);
             }
             "pullRequest.copyLink" => {
@@ -195,7 +198,7 @@ impl Store {
                 cx.write_to_clipboard(ClipboardItem::new_string(format!("#{number}")));
             }
             "composer.sendAlternate" => {
-                if self.selected_thread().is_none() || !self.activity.running || !self.can_send() {
+                if self.changeable_thread().is_none() || !self.activity.running || !self.can_send() {
                     return false;
                 }
                 self.send_message(true, cx);

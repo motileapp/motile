@@ -386,11 +386,11 @@ impl Sidebar {
         self.shelf(Shelf::Done, layout, max, expanded, header, rows, cx)
     }
 
-    /// The servers: one line for them all that opens into a line for each, or the one server's
-    /// line.
+    /// The servers of the account: one line for them all that opens into a line for each, or the
+    /// one server's line.
     pub(super) fn servers_shelf(&mut self, max: f32, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let c = colors(cx);
-        let servers = self.store.read(cx).servers.clone();
+        let servers: Vec<Server> = self.store.read(cx).live_servers().cloned().collect();
         if let [server] = servers.as_slice() {
             return div().flex().flex_col().flex_shrink_0().child(divider(cx)).child(
                 div()

@@ -137,7 +137,7 @@ fun Root(store: AppStore) {
             when {
                 !store.ready -> Unit
                 !store.account.signedIn -> SignInView()
-                store.servers.isEmpty() -> ConnectServerView(isFirst = true)
+                store.servers.isEmpty() && store.removedServers.isEmpty() -> ConnectServerView(isFirst = true)
                 else -> MainScreen(drawer)
             }
         }

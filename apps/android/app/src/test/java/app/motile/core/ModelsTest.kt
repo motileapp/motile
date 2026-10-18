@@ -1,5 +1,7 @@
 package app.motile.core
 
+import app.motile.transcript.RemovedContent
+import app.motile.transcript.RowModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -91,5 +93,32 @@ class ModelsTest {
         assertTrue(server.pullsDefaultBranch)
         assertEquals(listOf("claude", "codex"), server.agentAccounts.map { it.id })
         assertEquals("Default", server.account(null, Agent.Codex)?.name)
+        assertFalse(server.removed)
+    }
+
+    @Test
+    fun aRemovedServerKeepsItsLastNameWithoutInfo() {
+        val server = Server(json("id" to "s", "name" to "build-box", "short_name" to "build-box", "removed" to true, "state" to "disconnected", "info" to null))
+        assertTrue(server.removed)
+        assertEquals("build-box", server.name)
+        assertEquals(Server.State.Disconnected, server.state)
+        assertFalse(server.known)
+    }
+
+    @Test
+    fun theLastRowOfARemovedServersThreadSaysWhatTheCoreWrote() {
+        val title = "“build-box” is unlinked"
+        val message = "This thread is read-only. You can delete “build-box” in settings to remove its threads."
+        val row = RowModel.parse(json("id" to "removed", "item" to "removed", "kind" to "removed", "server" to "build-box", "title" to title, "message" to message))
+        assertEquals(RemovedContent("build-box", title, message), (row?.kind as? RowModel.Kind.Removed)?.content)
+    }
+
+    @Test
+    fun aDraftKeepsTheThreadItContinuesAndOneKeptBeforeHasNone() {
+        val kept = ThreadDraft.of(json("id" to "D", "projectID" to "p", "access" to "full"))
+        assertNull(kept.from)
+        val from = ContinuedThread(origin = "gone", threadID = "t", title = "Fix the build")
+        val draft = kept.copy(from = from)
+        assertEquals(from, ThreadDraft.of(jsonOf(draft.json) as JSON).from)
     }
 }

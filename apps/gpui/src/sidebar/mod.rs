@@ -363,10 +363,11 @@ impl Sidebar {
     }
 
     /// What a thread's menu offers: marking it done or undone and renaming it, then deleting it.
-    fn thread_menu(&mut self, thread_id: String, cx: &mut Context<Self>) -> Menu {
+    /// A removed server's thread has none.
+    fn thread_menu(&mut self, thread_id: String, cx: &mut Context<Self>) -> Option<Menu> {
         self.peek.hide();
         let store = self.store.read(cx);
-        let Some(thread) = store.threads.get(&thread_id) else { return Menu::new() };
+        let thread = store.threads.get(&thread_id).filter(|thread| !store.on_removed_server(thread))?;
         let (done, busy) = (thread.is_done(), thread.busy());
         let this = cx.entity().downgrade();
         let handle = self.store.clone();
@@ -388,13 +389,15 @@ impl Sidebar {
         };
         let (rename, delete) = (this.clone(), this);
         let (rename_id, delete_id) = (thread_id.clone(), thread_id);
-        menu.item("Rename", move |window, cx| {
-            let _ = rename.update(cx, |this, cx| this.begin_rename(rename_id.clone(), window, cx));
-        })
-        .separator()
-        .danger_item("Delete", move |_, cx| {
-            let _ = delete.update(cx, |this, cx| this.begin_delete(delete_id.clone(), cx));
-        })
+        let menu = menu
+            .item("Rename", move |window, cx| {
+                let _ = rename.update(cx, |this, cx| this.begin_rename(rename_id.clone(), window, cx));
+            })
+            .separator()
+            .danger_item("Delete", move |_, cx| {
+                let _ = delete.update(cx, |this, cx| this.begin_delete(delete_id.clone(), cx));
+            });
+        Some(menu)
     }
 
     /// The search, with the buttons that add a project and start a thread beside it.
@@ -714,7 +717,7 @@ impl Render for Sidebar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let room = f32::from(crate::window_frame::content_size(window).height) - theme::TOP_BAR - HEADER_HEIGHT;
         let plan = self.plan(cx);
-        let has_servers = !self.store.read(cx).servers.is_empty();
+        let has_servers = self.store.read(cx).has_live_servers();
         let shows_done = !plan.done_layout.tops.is_empty() && !plan.searching;
         let header = self.header(cx);
         let threads = self.threads(&plan, window, cx);
