@@ -760,6 +760,9 @@ struct ThreadInfo: Equatable, Identifiable {
     /// Its agent ended its turn, and the agents it started work on.
     var waitsOnAgents: Bool { !running && (children?.running ?? 0) > 0 }
 
+    /// Its agent's process is still there or the agents it started work, so it can't be done yet.
+    var unfinished: Bool { busy || waitsOnAgents }
+
     /// What it, or else an agent it started, waits for the user to answer.
     var waitsFor: Ask? { asking ?? children?.waiting.first?.ask }
 

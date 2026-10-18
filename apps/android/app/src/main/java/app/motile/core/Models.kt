@@ -674,6 +674,9 @@ data class ThreadInfo(
     /** Its agent ended its turn, and the agents it started work on. */
     val waitsOnAgents: Boolean get() = !running && (children?.running ?: 0) > 0
 
+    /** Its agent's process is still there or the agents it started work, so it can't be done yet. */
+    val unfinished: Boolean get() = busy || waitsOnAgents
+
     /** What it, or else an agent it started, waits for the user to answer. */
     val waitsFor: Ask? get() = asking ?: children?.waiting?.firstOrNull()?.ask
 
@@ -1126,7 +1129,7 @@ fun toolSymbol(icon: String): Symbol = when (icon) {
     "edit" -> Symbol.Pencil
     "search" -> Symbol.Search
     "web" -> Symbol.Globe
-    "agent" -> Symbol.Users
+    "agent" -> Symbol.Bot
     "watch" -> Symbol.Eye
     "question" -> Symbol.MessageCircleQuestionMark
     "todo" -> Symbol.ListChecks

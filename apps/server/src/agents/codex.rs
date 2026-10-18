@@ -167,8 +167,8 @@ pub struct Parser {
     edits: HashMap<String, Value>,
     /// What the process waits for an answer to, by its request.
     asked: HashMap<String, String>,
-    /// The agents it started, by the thread of each: the item that started it.
-    agents: HashMap<String, String>,
+    /// The agents it started, by the thread of each.
+    agents: HashMap<String, Started>,
     /// What each of them said last, which is what it reports.
     reports: HashMap<String, String>,
     /// What each thread, its own and its agents', had spent in all when it last said.
@@ -290,7 +290,7 @@ impl Parser {
 
     fn parse_notification(&mut self, method: &str, params: &Value) -> Vec<AgentEvent> {
         if method == "thread/tokenUsage/updated" {
-            return self.parse_usage(params).into_iter().collect();
+            return self.parse_usage(params);
         }
         if method == "account/rateLimits/updated" {
             self.note_rate_limits(&params["rateLimits"]);
@@ -329,22 +329,12 @@ impl Parser {
 
     /// What happens in the thread of an agent it started.
     fn parse_subagent(&mut self, method: &str, thread_id: &str, params: &Value) -> Vec<AgentEvent> {
-        let Some(parent) = self.agents.get(thread_id).cloned() else { return vec![] };
+        let Some(started) = self.agents.get_mut(thread_id) else { return vec![] };
+        started.working = method != "turn/completed" && (started.working || method == "turn/started");
+        let (parent, tokens) = (started.tool_id.clone(), started.tokens);
         let task = |status, result| {
-            let agent = Subagent {
-                kind: None,
-                status,
-                progress: None,
-                result,
-                tokens: None,
-                tool_uses: None,
-                duration_ms: params["turn"]["durationMs"].as_u64(),
-                workflow: None,
-                runs_on: None,
-                waits: None,
-                stopped: false,
-                limited: false,
-            };
+            let duration_ms = params["turn"]["durationMs"].as_u64();
+            let agent = Subagent { result, tokens, duration_ms, ..subagent(status) };
             vec![AgentEvent::Task { tool_id: parent.clone(), agent }]
         };
         match method {
@@ -373,18 +363,22 @@ impl Parser {
     }
 
     /// What a thread spent since it last said: how far its total has grown, or its last answer
-    /// alone when the total is one this process hasn't seen grow, as a resumed thread's is.
-    fn parse_usage(&mut self, params: &Value) -> Option<AgentEvent> {
+    /// alone when the total is one this process hasn't seen grow, as a resumed thread's is. An
+    /// agent it started shows how large its conversation has grown.
+    fn parse_usage(&mut self, params: &Value) -> Vec<AgentEvent> {
         let usage = &params["tokenUsage"];
         let counts = |counts: &Value| {
             ["inputTokens", "cachedInputTokens", "cacheWriteInputTokens", "outputTokens"]
                 .map(|name| counts[name].as_u64().unwrap_or_default())
         };
         let (total, last) = (counts(&usage["total"]), counts(&usage["last"]));
-        let thread_id = params["threadId"].as_str()?;
+        let Some(thread_id) = params["threadId"].as_str() else { return vec![] };
         let own = self.thread_id.as_deref().is_none_or(|own| own == thread_id);
         let context_window = usage["modelContextWindow"].as_u64().filter(|_| own);
-        let context_used = usage["last"]["inputTokens"].as_u64().filter(|_| own);
+        // Codex counts what it read from the cache and wrote to it as input too.
+        let size = Some(last[0] + last[3]).filter(|size| *size > 0);
+        let context_used = size.filter(|_| own);
+        let grown = size.filter(|_| !own).and_then(|size| self.grow_agent(thread_id, size));
         let known = self.spent.insert(thread_id.to_string(), total);
         let [input, cache_read, cache_write, output] = match known {
             Some(known) if (0..4).all(|index| total[index] >= known[index]) => {
@@ -392,14 +386,24 @@ impl Parser {
             }
             _ => last,
         };
-        // Codex counts what it read from the cache and wrote to it as input too.
         let input = input.saturating_sub(cache_read + cache_write);
         let tokens = Tokens { input, cache_read, cache_write, output };
-        if tokens == Tokens::default() {
-            return None;
-        }
-        let spent = ModelUsage { model: self.model.clone().unwrap_or_default(), tokens, cost_usd: None };
-        Some(AgentEvent::Usage { spent: vec![spent], total: false, context_window, context_used })
+        let model = self.model.clone().unwrap_or_default();
+        let spent = (tokens != Tokens::default()).then(|| AgentEvent::Usage {
+            spent: vec![ModelUsage { model, tokens, cost_usd: None }],
+            total: false,
+            context_window,
+            context_used,
+        });
+        spent.into_iter().chain(grown).collect()
+    }
+
+    /// Keeps how large the conversation of an agent it started is, and shows it while it works.
+    fn grow_agent(&mut self, thread_id: &str, size: u64) -> Option<AgentEvent> {
+        let started = self.agents.get_mut(thread_id)?;
+        started.tokens = Some(size);
+        let agent = Subagent { tokens: Some(size), ..subagent(ToolStatus::Running) };
+        started.working.then(|| AgentEvent::Task { tool_id: started.tool_id.clone(), agent })
     }
 
     /// Keeps when the limits that ran out reset. Only the account's own limits count, not a
@@ -519,21 +523,9 @@ impl Parser {
             Some("webSearch") => tool("WebSearch", json!({ "query": item["query"] }), None),
             Some("subAgentActivity") if item["kind"] == "started" && !completed => {
                 let Some(thread_id) = item["agentThreadId"].as_str() else { return vec![] };
-                self.agents.insert(thread_id.to_string(), id.clone());
-                let agent = Subagent {
-                    kind: None,
-                    status: ToolStatus::Running,
-                    progress: None,
-                    result: None,
-                    tokens: None,
-                    tool_uses: None,
-                    duration_ms: None,
-                    workflow: None,
-                    runs_on: None,
-                    waits: None,
-                    stopped: false,
-                    limited: false,
-                };
+                let started = Started { tool_id: id.clone(), tokens: None, working: true };
+                self.agents.insert(thread_id.to_string(), started);
+                let agent = subagent(ToolStatus::Running);
                 let description = agent_title(item["agentPath"].as_str().unwrap_or_default());
                 let call = ToolCall {
                     id: id.clone(),
@@ -647,6 +639,31 @@ fn todo_list(params: &Value) -> Vec<AgentEvent> {
     vec![AgentEvent::Tool { call }]
 }
 
+/// An agent the turn started: the item that started it, how large its conversation was at its
+/// last answer, and whether it works.
+struct Started {
+    tool_id: String,
+    tokens: Option<u64>,
+    working: bool,
+}
+
+fn subagent(status: ToolStatus) -> Subagent {
+    Subagent {
+        kind: None,
+        status,
+        progress: None,
+        result: None,
+        tokens: None,
+        tool_uses: None,
+        duration_ms: None,
+        workflow: None,
+        runs_on: None,
+        waits: None,
+        stopped: false,
+        limited: false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -697,12 +714,20 @@ mod tests {
             r#"{"method":"item/completed","params":{"threadId":"t2","item":{"type":"agentMessage","id":"m1",
                 "text":"It says hi"}}}"#,
         );
+        let answered = r#"{"method":"thread/tokenUsage/updated","params":{"threadId":"t2","tokenUsage":{
+            "total":{"inputTokens":900,"outputTokens":40},"last":{"inputTokens":700,"cachedInputTokens":600,
+            "outputTokens":30}}}}"#;
+        let grown = parser.parse(answered);
+        let [AgentEvent::Usage { .. }, AgentEvent::Task { tool_id, agent }] = &grown[..] else { panic!("{grown:?}") };
+        assert_eq!((tool_id.as_str(), agent.status, agent.tokens), ("c1", ToolStatus::Running, Some(730)));
         let ended = parser.parse(
             r#"{"method":"turn/completed","params":{"threadId":"t2","turn":{"status":"completed","durationMs":1800}}}"#,
         );
         let [AgentEvent::Task { tool_id, agent }] = &ended[..] else { panic!("{ended:?}") };
         assert_eq!((tool_id.as_str(), agent.status, agent.duration_ms), ("c1", ToolStatus::Succeeded, Some(1800)));
-        assert_eq!(agent.result.as_deref(), Some("It says hi"));
+        assert_eq!((agent.result.as_deref(), agent.tokens), (Some("It says hi"), Some(730)));
+        let late = parser.parse(&answered.replace("900", "950"));
+        assert!(matches!(&late[..], [AgentEvent::Usage { .. }]), "an agent that ended stays ended: {late:?}");
 
         let stranger = r#"{"method":"turn/completed","params":{"threadId":"t9","turn":{"status":"completed"}}}"#;
         assert_eq!(parser.parse(stranger), vec![]);

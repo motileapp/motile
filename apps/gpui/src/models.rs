@@ -515,6 +515,11 @@ impl ThreadInfo {
         !self.running && self.children.as_ref().is_some_and(|children| children.running > 0)
     }
 
+    /// Its agent's process is still there or the agents it started work, so it can't be done yet.
+    pub fn unfinished(&self) -> bool {
+        self.busy() || self.waits_on_agents()
+    }
+
     /// What it, or else an agent it started, waits for the user to answer.
     pub fn waits_for(&self) -> Option<Ask> {
         self.asking().or_else(|| self.children.as_ref()?.waiting.first().map(|child| child.ask))

@@ -218,7 +218,7 @@ struct ToolContent {
         case "edit": .pencil
         case "search": .search
         case "web": .globe
-        case "agent": .users
+        case "agent": .bot
         case "watch": .eye
         case "question": .messageCircleQuestionMark
         case "todo": .listChecks

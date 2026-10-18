@@ -190,7 +190,7 @@ pub struct Parser {
     refused: HashMap<String, Option<f64>>,
     /// The model the session runs, as it said when it started.
     model: Option<String>,
-    /// How much of the context the last request of the session took.
+    /// How large the session's conversation was at its last answer.
     context_used: Option<u64>,
 }
 
@@ -213,8 +213,8 @@ impl Parser {
                 vec![]
             }
             Some("assistant") => {
-                self.note_context(&object["message"]["usage"]);
-                self.parse_assistant(&object["message"])
+                let grown = self.note_context(&object["message"]["usage"]);
+                self.parse_assistant(&object["message"]).into_iter().chain(grown).collect()
             }
             Some("user") if object["isReplay"] == true => match object["uuid"].as_str() {
                 Some(id) => vec![AgentEvent::Taken { id: id.to_string() }],
@@ -239,12 +239,14 @@ impl Parser {
         }
     }
 
-    fn note_context(&mut self, usage: &Value) {
-        let counts = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"];
+    fn note_context(&mut self, usage: &Value) -> Option<AgentEvent> {
+        let counts = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"];
         let used: u64 = counts.iter().filter_map(|count| usage[count].as_u64()).sum();
-        if used > 0 {
-            self.context_used = Some(used);
+        if used == 0 || self.context_used == Some(used) {
+            return None;
         }
+        self.context_used = Some(used);
+        Some(AgentEvent::Usage { spent: vec![], total: false, context_window: None, context_used: Some(used) })
     }
 
     /// What the session has spent so far on each model, which every result repeats, and how much
@@ -914,16 +916,18 @@ mod tests {
         let init = r#"{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-5-5"}"#;
         let session = AgentEvent::Session { id: "s1".to_string(), model: Some("claude-opus-5-5".to_string()) };
         assert_eq!(parser.parse(init), vec![session]);
-        parser.parse(
+        let answer = parser.parse(
             r#"{"type":"assistant","message":{"id":"m1","content":[],"usage":{"input_tokens":12,
             "cache_read_input_tokens":40000,"cache_creation_input_tokens":3000,"output_tokens":90}}}"#,
         );
+        let grown = AgentEvent::Usage { spent: vec![], total: false, context_window: None, context_used: Some(43_102) };
+        assert_eq!(answer, vec![grown]);
         let result = r#"{"type":"result","subtype":"success","is_error":false,"modelUsage":{
             "claude-haiku-4-5":{"inputTokens":1,"outputTokens":1,"contextWindow":100000},
             "claude-opus-5-5":{"inputTokens":12,"outputTokens":90,"contextWindow":1000000}}}"#;
         let events = parser.parse(result);
         let [AgentEvent::Usage { context_window, context_used, .. }, _] = &events[..] else { panic!("{events:?}") };
-        assert_eq!((*context_window, *context_used), (Some(1_000_000), Some(43_012)));
+        assert_eq!((*context_window, *context_used), (Some(1_000_000), Some(43_102)));
     }
 
     #[test]

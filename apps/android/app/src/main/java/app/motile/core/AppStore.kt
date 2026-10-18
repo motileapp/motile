@@ -2244,7 +2244,7 @@ class AppStore(private val context: Context) {
 
     /** Marks threads done or brings them back. A thread that is working or monitoring can't be marked done. */
     fun setDone(ids: List<String>, done: Boolean, fromSidebar: Boolean = false) {
-        val changed = ids.mapNotNull { anyThread(it) }.filter { it.isDone != done && !(done && it.busy) && !onRemovedServer(it) }
+        val changed = ids.mapNotNull { anyThread(it) }.filter { it.isDone != done && !(done && it.unfinished) && !onRemovedServer(it) }
         if (changed.isEmpty()) return
         // Leaving the thread that was just put away, for the next one that is still active.
         val open = (selection as? Selection.Thread)?.id

@@ -217,8 +217,12 @@ fun SidebarScreen(underThread: Boolean) {
     }
 
     fun markDone(thread: ThreadInfo) {
-        if (thread.busy) {
-            busy = if (thread.running) "Still working" else "Still monitoring"
+        if (thread.unfinished) {
+            busy = when {
+                thread.running -> "Still working"
+                thread.monitoring -> "Still monitoring"
+                else -> "Still waiting on its agents"
+            }
             return
         }
         store.setDone(listOf(thread.id), done = true, fromSidebar = true)
@@ -309,8 +313,8 @@ fun SidebarScreen(underThread: Boolean) {
                                 row()
                             } else {
                                 RowSwipe(
-                                    Symbol.Check, "Mark Done", tint = if (thread.busy) Theme.colors.mutedForeground else Theme.colors.success, size = 36.dp,
-                                    isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, action = { markDone(thread) }, leaves = !thread.busy,
+                                    Symbol.Check, "Mark Done", tint = if (thread.unfinished) Theme.colors.mutedForeground else Theme.colors.success, size = 36.dp,
+                                    isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, action = { markDone(thread) }, leaves = !thread.unfinished,
                                     content = row,
                                 )
                             }

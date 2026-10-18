@@ -602,7 +602,9 @@ impl Hub {
 
     fn subagent_of(&self, live: &Live, state: &ChildState) -> anyhow::Result<Subagent> {
         let thread = &live.stored.thread;
-        let (tokens, tool_uses) = self.store.work_of(&thread.id)?;
+        let tool_uses = self.store.tool_count(&thread.id)?;
+        let tokens =
+            self.store.session(&thread.id, &self.continuation(thread))?.and_then(|session| session.context_used);
         let status = match state.status {
             Status::Finished => ToolStatus::Succeeded,
             Status::Failed | Status::Stopped => ToolStatus::Failed,
@@ -630,7 +632,7 @@ impl Hub {
             status,
             progress,
             result: state.reply.clone().or_else(|| state.error.clone()).filter(|_| state.status.settled()),
-            tokens: Some(tokens).filter(|tokens| *tokens > 0),
+            tokens,
             tool_uses: Some(tool_uses),
             duration_ms: state.status.settled().then(|| ((ended - thread.created_at).max(0.0) * 1000.0) as u64),
             workflow: None,

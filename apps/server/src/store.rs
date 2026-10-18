@@ -454,6 +454,9 @@ impl Store {
         spent: &[ModelUsage],
         total: bool,
     ) -> rusqlite::Result<Option<f64>> {
+        if spent.is_empty() {
+            return Ok(None);
+        }
         let mut connection = self.connection();
         let transaction = connection.transaction()?;
         let known: Option<bool> = transaction
@@ -616,21 +619,16 @@ impl Store {
         Ok(payloads.filter_map(|payload| serde_json::from_str(&payload.ok()?).ok()).collect())
     }
 
-    /// How many tokens the thread's agents have spent, and how many tools its own agent called.
-    pub fn work_of(&self, thread_id: &str) -> rusqlite::Result<(u64, u64)> {
+    /// How many tools the thread's own agent called.
+    pub fn tool_count(&self, thread_id: &str) -> rusqlite::Result<u64> {
         let connection = self.connection();
-        let tokens: i64 = connection.query_row(
-            "SELECT COALESCE(SUM(input + cache_read + cache_write + output), 0) FROM usage WHERE thread_id = ?1",
-            [thread_id],
-            |row| row.get(0),
-        )?;
         let tools: i64 = connection.query_row(
             "SELECT COUNT(*) FROM items WHERE thread_id = ?1 AND json_extract(payload, '$.type') = 'tool'
                  AND json_extract(payload, '$.parent') IS NULL",
             [thread_id],
             |row| row.get(0),
         )?;
-        Ok((tokens as u64, tools as u64))
+        Ok(tools as u64)
     }
 
     pub fn item(&self, thread_id: &str, item_id: &str) -> rusqlite::Result<Option<Item>> {
