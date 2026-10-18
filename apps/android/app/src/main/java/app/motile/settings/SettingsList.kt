@@ -70,6 +70,8 @@ class SettingsGroup(
     val also: List<String>,
     val header: (@Composable () -> Unit)?,
     val footer: String?,
+    /** What went wrong, said in the footer's place in the destructive colour. */
+    val failure: String?,
     val rows: List<@Composable () -> Unit>,
     /** Its rows lie on the page, not on a card, like a project's name under its icon. */
     val bare: Boolean,
@@ -84,14 +86,15 @@ class SettingsGroups {
         also: List<String> = emptyList(),
         header: String? = null,
         footer: String? = null,
+        failure: String? = null,
         headerContent: (@Composable () -> Unit)? = null,
         bare: Boolean = false,
         rows: SettingsRows.() -> Unit,
     ) {
         val built = SettingsRows().apply(rows).rows
-        if (built.isEmpty() && footer == null) return
+        if (built.isEmpty() && footer == null && failure == null) return
         val shownHeader = headerContent ?: header?.let { title -> @Composable { GroupHeader(title) } }
-        groups += SettingsGroup(id, also, shownHeader, footer, built, bare)
+        groups += SettingsGroup(id, also, shownHeader, footer, failure, built, bare)
     }
 
     /** Said on a page with nothing to set yet. */
@@ -177,8 +180,9 @@ private fun Group(group: SettingsGroup, lit: Boolean) {
                 }
             }
         }
-        group.footer?.let {
-            Text(it, Modifier.padding(start = rowPadding, end = rowPadding, top = 7.dp), size = NOTE_TEXT, color = palette.mutedForeground)
+        (group.failure ?: group.footer)?.let {
+            val color = if (group.failure == null) palette.mutedForeground else palette.destructive
+            Text(it, Modifier.padding(start = rowPadding, end = rowPadding, top = 7.dp), size = NOTE_TEXT, color = color)
         }
     }
 }

@@ -198,7 +198,8 @@ impl RenderOnce for CopyButton {
 }
 
 /// A command to run in a terminal, in the theme's code colours, with the button that copies it.
-/// Without a command yet it says what it waits for.
+/// Without a command yet it says what it waits for. A link is shown on one line, cut short, with
+/// the button that opens it.
 #[derive(IntoElement)]
 pub struct CommandBox {
     id: ElementId,
@@ -208,6 +209,7 @@ pub struct CommandBox {
     spans: Vec<u32>,
     placeholder: SharedString,
     surface: Surface,
+    link: Option<SharedString>,
 }
 
 impl CommandBox {
@@ -221,7 +223,13 @@ impl CommandBox {
             spans: Vec::new(),
             placeholder: "Preparing the command…".into(),
             surface: Surface::Background,
+            link: None,
         }
+    }
+
+    pub fn link(mut self, link: impl Into<SharedString>) -> Self {
+        self.link = Some(link.into());
+        self
     }
 
     pub fn spans(mut self, spans: Vec<u32>) -> Self {
@@ -269,10 +277,22 @@ impl RenderOnce for CommandBox {
         let c = colors(cx);
         let inside = self.surface.in_box();
         let inset = ((ControlSize::Regular.height() - Self::LINE_HEIGHT) / 2.).round();
-        let text = match &self.command {
-            Some(command) => Self::highlighted(command, &self.spans, &c.syntax).into_any_element(),
-            None => div().text_color(c.muted_stronger_foreground).child(self.placeholder).into_any_element(),
+        let text = match (&self.command, &self.link) {
+            (Some(command), Some(_)) => {
+                div().whitespace_nowrap().overflow_hidden().text_ellipsis().child(command.clone()).into_any_element()
+            }
+            (Some(command), None) => Self::highlighted(command, &self.spans, &c.syntax).into_any_element(),
+            (None, _) => div().text_color(c.muted_stronger_foreground).child(self.placeholder).into_any_element(),
         };
+        let noun = if self.link.is_some() { "link" } else { "command" };
+        let open = self.link.clone().map(|link| {
+            ActionButton::new(SharedString::from(format!("open-{:?}", self.id)), "Open")
+                .symbol("square-arrow-out-up-right")
+                .ghost()
+                .symbol_size(12.)
+                .surface(inside)
+                .on_click(move |_, _, cx| cx.open_url(&link))
+        });
         let copied = self.command.clone();
         div()
             .id(self.id.clone())
@@ -298,13 +318,19 @@ impl RenderOnce for CommandBox {
                     .child(text),
             )
             .child(
-                CopyButton::new(SharedString::from(format!("copy-{:?}", self.id)), "Copy the command", move |_, cx| {
-                    let Some(command) = &copied else { return };
-                    cx.write_to_clipboard(ClipboardItem::new_string(command.to_string()));
-                })
-                .symbol_size(12.)
-                .surface(inside)
-                .disabled(self.command.is_none()),
+                div().flex().gap(px(4.)).children(open).child(
+                    CopyButton::new(
+                        SharedString::from(format!("copy-{:?}", self.id)),
+                        format!("Copy the {noun}"),
+                        move |_, cx| {
+                            let Some(command) = &copied else { return };
+                            cx.write_to_clipboard(ClipboardItem::new_string(command.to_string()));
+                        },
+                    )
+                    .symbol_size(12.)
+                    .surface(inside)
+                    .disabled(self.command.is_none()),
+                ),
             )
     }
 }

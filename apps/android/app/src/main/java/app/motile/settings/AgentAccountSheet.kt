@@ -4,12 +4,14 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -18,8 +20,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
+import app.motile.core.AccountSignIn
 import app.motile.core.Agent
 import app.motile.core.AgentAccount
 import app.motile.core.Server
@@ -32,6 +36,7 @@ import app.motile.theme.Theme
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.InputField
+import app.motile.ui.HoldsModal
 import app.motile.ui.InputVariant
 import app.motile.ui.LocalCloseModal
 import app.motile.ui.Spinner
@@ -52,7 +57,7 @@ private class EditedVariable(variable: AgentAccount.Variable) {
 
 /**
  * An account of an agent to add or change: its name, the folder its sign-in is kept in, and the
- * variables its agent is given, with the command that signs it in.
+ * variables its agent is given, with the way to sign it in.
  */
 @Composable
 fun AgentAccountSheet(server: Server, initial: AgentAccount) {
@@ -64,14 +69,38 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
     var suggestedFolder by remember { mutableStateOf("") }
     var copied by remember { mutableStateOf(false) }
     var copies by remember { mutableIntStateOf(0) }
+    val signIn = remember { AccountSignIn() }
+    // The account as signing in saved it, until something else changes.
+    var savedBySignIn by remember { mutableStateOf<AgentAccount?>(null) }
     val installed = Agent.entries.filter { server.agents[it] != null }
     val isNew = account.id.isEmpty()
     val title = if (isNew) "New Account" else "${account.agent.title} Account"
     val canSave = account.name.isNotBlank()
+    val edited = account.copy(
+        variables = variables.map { it.variable }.filter { it.name.isNotBlank() },
+        sharesSessions = account.agent == Agent.Codex && account.sharesSessions,
+    )
+    // Signing in saved everything the form has, so there is nothing left to save or to throw away.
+    val savedAsIs = savedBySignIn == edited
+    // Claude Code signs in here; Codex, and a server too old for it, with a command.
+    val signsInHere = account.agent == Agent.Claude && server.signsInAccounts
+    val canStartSignIn = account.isDefault || account.folder.isNotBlank()
+    val step = signIn.step
+    val signedInAs = (step as? AccountSignIn.Step.SignedIn)?.who
+        ?: initial.email?.takeIf { account.folder == initial.folder }?.let { listOfNotNull(it, initial.plan).joinToString(" · ") }
+    val signInCaption = when {
+        step is AccountSignIn.Step.Waiting -> "Sign in on the page, then paste the code it shows."
+        !canStartSignIn -> "Give the account a folder to sign it in."
+        savedAsIs -> "Signing in saved the account."
+        else -> "Opens Claude's sign-in page. Signing in saves the account on ${server.name}."
+    }
 
+    LaunchedEffect(account.folder, account.agent) { signIn.cancel(store) }
+    DisposableEffect(Unit) { onDispose { signIn.cancel(store) } }
+    HoldsModal(saving || signIn.finishing)
     // Fills a new account's folder from its name until the folder is typed by hand.
     LaunchedEffect(account.name, account.agent) {
-        if (!isNew || (account.folder.isNotEmpty() && account.folder != suggestedFolder)) return@LaunchedEffect
+        if (!isNew || signIn.step != AccountSignIn.Step.Idle || (account.folder.isNotEmpty() && account.folder != suggestedFolder)) return@LaunchedEffect
         suggestedFolder = account.suggestedFolder(server.agentAccounts)
         account = account.copy(folder = suggestedFolder)
     }
@@ -81,20 +110,33 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
         copied = false
     }
 
+    fun copyLink(url: String) {
+        Platform.copy(url)
+        copied = true
+        copies += 1
+    }
+
+    fun startSignIn() = signIn.start(edited, server, store)
+
+    fun finishSignIn() = signIn.finish(edited, store) { id ->
+        account = account.copy(id = id)
+        savedBySignIn = edited.copy(id = id)
+    }
+
     fun save() {
-        val saved = account.copy(
-            variables = variables.map { it.variable }.filter { it.name.isNotBlank() },
-            sharesSessions = account.agent == Agent.Codex && account.sharesSessions,
-        )
         saving = true
-        store.saveAgentAccount(saved, server) { kept ->
+        store.saveAgentAccount(edited, server) { kept ->
             saving = false
             if (kept) close()
         }
     }
 
     val trailing: @Composable () -> Unit = {
-        if (saving) Spinner(17f) else ActionButton("Save", variant = ButtonVariant.Primary, disabled = !canSave) { save() }
+        when {
+            saving -> Spinner(17f)
+            savedAsIs -> ActionButton("Done", variant = ButtonVariant.Primary) { close() }
+            else -> ActionButton("Save", variant = ButtonVariant.Primary, disabled = !canSave) { save() }
+        }
     }
     Column(Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalBarLeading provides BarLeading.Close { close() }) { SettingsBar(title, trailing) }
@@ -137,7 +179,47 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
                     }
                 }
             }
-            group(header = "Sign In", footer = "Run it in a terminal on ${server.name}. Who is signed in shows in the list once the agent says.") {
+            if (signsInHere) {
+                group(header = "Sign In", footer = signInCaption, failure = signIn.error) {
+                    if (step is AccountSignIn.Step.Waiting) {
+                        row {
+                            SettingsRow {
+                                Text(step.url, Modifier.weight(1f), style = Theme.uiMono(13f), color = LocalPalette.current.mutedForeground, maxLines = 1)
+                            }
+                        }
+                        row { SettingsPressRow({ Platform.open(step.url) }) { SettingsActionLabel("Open the Sign-In Page", Symbol.SquareArrowOutUpRight) } }
+                        row {
+                            SettingsPressRow({ copyLink(step.url) }) {
+                                SettingsActionLabel(if (copied) "Copied" else "Copy the Link", if (copied) Symbol.Check else Symbol.Copy)
+                            }
+                        }
+                        row {
+                            SettingsRow {
+                                Box(Modifier.weight(1f).height(ControlSize.Large.height)) {
+                                    InputField(
+                                        "Paste the code", signIn.code, { signIn.code = it }, variant = InputVariant.Bare, size = ControlSize.Large,
+                                        monospaced = true, keyboardOptions = plainKeyboard.copy(imeAction = ImeAction.Done), onSubmit = ::finishSignIn,
+                                    )
+                                }
+                                if (signIn.finishing) {
+                                    Spinner(17f)
+                                } else {
+                                    ActionButton("Sign In", variant = ButtonVariant.Link, disabled = !signIn.canFinish || !canSave, onClick = ::finishSignIn)
+                                }
+                            }
+                        }
+                    } else {
+                        signedInAs?.let { who -> row { SettingsRow { RowText("Signed in as $who", color = LocalPalette.current.foreground) } } }
+                        row {
+                            SettingsPressRow(::startSignIn, enabled = canStartSignIn && step != AccountSignIn.Step.Starting) {
+                                SettingsActionLabel(if (signedInAs == null) "Sign In" else "Sign In Again", Symbol.CircleUser)
+                                Spacer(Modifier.weight(1f))
+                                if (step == AccountSignIn.Step.Starting) Spinner(17f)
+                            }
+                        }
+                    }
+                }
+            } else group(header = "Sign In", footer = "Run it in a terminal on ${server.name}. Who is signed in shows in the list once the agent says.") {
                 row {
                     SettingsRow {
                         SelectionContainer(Modifier.weight(1f)) {

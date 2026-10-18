@@ -192,6 +192,9 @@ data class Server(
     /** Whether threads there can move between accounts and agents. */
     val switchesAccounts: Boolean get() = protocolVersion >= 19
 
+    /** Whether it signs its agents' accounts in for the client. */
+    val signsInAccounts: Boolean get() = protocolVersion >= 31
+
     /** Whether the server keeps where the user moves its threads in the sidebar. */
     val movesThreads: Boolean get() = protocolVersion >= 21
 

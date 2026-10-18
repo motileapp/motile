@@ -40,6 +40,7 @@ use crate::mcp::{self, McpAccess};
 use crate::media::MediaStore;
 use crate::pricing::{self, Prices};
 use crate::ricrac::Ricrac;
+use crate::sign_in::SignIns;
 use crate::store::{Continuation, Purpose, Session, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, pull_requests, title};
 use motile_protocol::wire::{
@@ -159,6 +160,7 @@ pub struct Hub {
     /// once that is served.
     mcp_tokens: Arc<mcp::Tokens>,
     mcp_port: std::sync::OnceLock<u16>,
+    sign_ins: Arc<SignIns>,
 }
 
 /// What the agent of a thread that watches its pull request was last told about.
@@ -371,6 +373,7 @@ impl Hub {
             list_updates,
             mcp_tokens: Arc::default(),
             mcp_port: std::sync::OnceLock::new(),
+            sign_ins: Arc::default(),
         }))
     }
 
@@ -548,7 +551,7 @@ impl Hub {
 
     /// Adds an account of an agent or changes one. Threads whose sessions it no longer has start
     /// new ones, told what was said.
-    pub async fn save_agent_account(self: &Arc<Self>, account: AgentAccount) -> anyhow::Result<()> {
+    pub async fn save_agent_account(self: &Arc<Self>, account: AgentAccount) -> anyhow::Result<String> {
         let mut threads = self.threads.lock().await;
         let accounts = self.agent_accounts();
         let mut account = agent_accounts::checked(account, &accounts)?;
@@ -578,7 +581,38 @@ impl Hub {
         }
         drop(threads);
         self.refresh_limits();
-        Ok(())
+        Ok(id)
+    }
+
+    /// Starts signing the account in, as the form has it, and answers with the page to sign in on.
+    pub async fn start_sign_in(&self, account: AgentAccount) -> anyhow::Result<Message> {
+        let account = agent_accounts::signing_in(account, &self.agent_accounts())?;
+        let environment = agent_accounts::environment(&self.environment, &account);
+        let (id, url) = self.sign_ins.start(environment, account.folder).await?;
+        Ok(Message::SignInLink { id, url })
+    }
+
+    /// Finishes a sign-in with the code its page showed, saves the account, and answers with who
+    /// signed in.
+    pub async fn finish_sign_in(
+        self: &Arc<Self>,
+        id: &str,
+        code: &str,
+        account: AgentAccount,
+    ) -> anyhow::Result<Message> {
+        let accounts = self.agent_accounts();
+        let folder = agent_accounts::checked(account.clone(), &accounts)?.folder;
+        let environment = self.sign_ins.finish(id, code, &folder).await?;
+        let account = self.save_agent_account(account).await?;
+        let (email, plan) = limits::claude_login(&environment).await.unwrap_or_else(|error| {
+            tracing::warn!("couldn't read who signed in: {error:#}");
+            (None, None)
+        });
+        Ok(Message::SignedIn { account, email, plan })
+    }
+
+    pub async fn cancel_sign_in(&self, id: &str) {
+        self.sign_ins.cancel(id).await;
     }
 
     /// Removes an account. Its threads go on with the agent's default account.

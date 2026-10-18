@@ -9,20 +9,26 @@ struct EditedAccount: Identifiable {
 }
 
 /// An account of an agent to add or change: its name, the folder its sign-in is kept in, and the
-/// variables its agent is given, with the command that signs it in.
+/// variables its agent is given, with the way to sign it in.
 struct AgentAccountSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.closeModal) private var close
     let server: Server
+    private let opened: AgentAccount
     @State private var account: AgentAccount
+    @State private var signIn = AccountSignIn()
+    /// The account as signing in saved it, until something else changes.
+    @State private var savedBySignIn: AgentAccount?
     @State private var variables: [EditedVariable]
     @State private var saving = false
     @State private var suggestedFolder = ""
     @State private var copied = false
     @State private var copies = 0
+    @FocusState private var codeFocused: Bool
 
     init(server: Server, account: AgentAccount) {
         self.server = server
+        opened = account
         _account = State(initialValue: account)
         _variables = State(initialValue: account.variables.map { EditedVariable(variable: $0) })
     }
@@ -37,11 +43,59 @@ struct AgentAccountSheet: View {
         #endif
     }
     private var canSave: Bool { !account.name.trimmingCharacters(in: .whitespaces).isEmpty }
+    /// Signing in saved everything the form has, so there is nothing left to save or to throw away.
+    private var savedAsIs: Bool { savedBySignIn == edited }
+
+    /// The account as the form has it.
+    private var edited: AgentAccount {
+        var edited = account
+        edited.variables = variables.map(\.variable).filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+        if edited.agent != .codex { edited.sharesSessions = false }
+        return edited
+    }
+
+    /// Claude Code signs in here; Codex, and a server too old for it, with a command.
+    private var signsInHere: Bool { account.agent == .claude && server.signsInAccounts }
+    private var canStartSignIn: Bool { account.isDefault || !account.folder.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var signingIn: Bool {
+        if case .waiting = signIn.step { return true }
+        return false
+    }
+
+    /// Who is signed in to the folder the form has, as far as is known.
+    private var signedInAs: String? {
+        if case .signedIn(let who) = signIn.step { return who }
+        guard account.folder == opened.folder, let email = opened.email else { return nil }
+        return [email, opened.plan].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private var signInCaption: String {
+        if signingIn { return "Sign in on the page, then paste the code it shows." }
+        if !canStartSignIn { return "Give the account a folder to sign it in." }
+        if savedAsIs { return "Signing in saved the account." }
+        return "Opens Claude's sign-in page. Signing in saves the account on \(server.name)."
+    }
 
     var body: some View {
         content
             .onChange(of: account.name) { suggestFolder() }
-            .onChange(of: account.agent) { suggestFolder() }
+            .onChange(of: account.agent) {
+                signIn.cancel(in: store)
+                suggestFolder()
+            }
+            .onChange(of: account.folder) { signIn.cancel(in: store) }
+            .onDisappear { signIn.cancel(in: store) }
+    }
+
+    private func startSignIn() {
+        signIn.start(edited, on: server, in: store)
+    }
+
+    private func finishSignIn() {
+        signIn.finish(edited, in: store) { id in
+            account.id = id
+            savedBySignIn = edited
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -52,11 +106,16 @@ struct AgentAccountSheet: View {
             form
             HStack {
                 Spacer()
-                ActionButton("Cancel") { close() }
-                    .keyboardShortcut(.cancelAction)
-                ActionButton("Save", variant: .primary, pending: saving) { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canSave)
+                if savedAsIs {
+                    ActionButton("Done", variant: .primary) { close() }
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    ActionButton("Cancel") { close() }
+                        .keyboardShortcut(.cancelAction)
+                    ActionButton("Save", variant: .primary, pending: saving) { save() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!canSave)
+                }
             }
         }
         .padding(20)
@@ -72,6 +131,8 @@ struct AgentAccountSheet: View {
                     ToolbarItem(placement: .confirmationAction) {
                         if saving {
                             Spinner(size: 17)
+                        } else if savedAsIs {
+                            Button("Done") { close() }
                         } else {
                             Button("Save") { save() }
                                 .disabled(!canSave)
@@ -80,7 +141,7 @@ struct AgentAccountSheet: View {
                 }
         }
         .presentationDragIndicator(.visible)
-        .interactiveDismissDisabled(saving)
+        .interactiveDismissDisabled(saving || signIn.finishing)
         #endif
     }
 
@@ -133,6 +194,73 @@ struct AgentAccountSheet: View {
             Text("Given to its agent: an API key or a router. A sensitive value stays on \(server.name) and is never shown again.")
                 .foregroundStyle(Color.themeMutedForeground)
         }
+        if signsInHere {
+            listSignIn
+        } else {
+            listSignInCommand
+        }
+    }
+
+    @ViewBuilder private var listSignIn: some View {
+        @Bindable var signIn = signIn
+        Section {
+            switch signIn.step {
+            case .waiting(_, let url):
+                Text(url.absoluteString)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(Color.themeMutedForeground)
+                    .lineLimit(1)
+                Link(destination: url) {
+                    SettingsActionLabel("Open the Sign-In Page", symbol: .squareArrowOutUpRight)
+                }
+                Button {
+                    Platform.copy(url.absoluteString)
+                    copied = true
+                    copies += 1
+                } label: {
+                    SettingsActionLabel(copied ? "Copied" : "Copy the Link", symbol: copied ? .check : .copy)
+                }
+                .task(id: copies) {
+                    guard copied, (try? await Task.sleep(for: .seconds(1.2))) != nil else { return }
+                    copied = false
+                }
+                HStack {
+                    TextField("Paste the code", text: $signIn.code)
+                        .font(.system(.body, design: .monospaced))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        .onSubmit(finishSignIn)
+                    if signIn.finishing {
+                        Spinner(size: 17)
+                    } else {
+                        Button("Sign In", action: finishSignIn)
+                            .disabled(!signIn.canFinish || !canSave)
+                    }
+                }
+            default:
+                if let who = signedInAs {
+                    Text("Signed in as \(who)")
+                        .foregroundStyle(Color.themeForeground)
+                }
+                Button(action: startSignIn) {
+                    HStack {
+                        SettingsActionLabel(signedInAs == nil ? "Sign In" : "Sign In Again", symbol: .circleUser)
+                        Spacer()
+                        if signIn.step == .starting { Spinner(size: 17) }
+                    }
+                }
+                .disabled(!canStartSignIn || signIn.step == .starting)
+            }
+        } header: {
+            Text("Sign In")
+        } footer: {
+            Text(signIn.error ?? signInCaption)
+                .foregroundStyle(signIn.error == nil ? Color.themeMutedForeground : Color.themeDestructive)
+        }
+    }
+
+    @ViewBuilder private var listSignInCommand: some View {
         Section {
             Text(account.signInCommand)
                 .font(.system(.callout, design: .monospaced))
@@ -230,14 +358,47 @@ struct AgentAccountSheet: View {
                     }
                 }
             }
-            signIn
+            signInField
         }
     }
 
     /// How the account is signed in: on its server, with its folder.
-    private var signIn: some View {
-        field("Sign In", caption: "Run it in a terminal on \(server.name). Who is signed in shows in the list once the agent says.") {
-            CommandBox(command: account.signInCommand)
+    @ViewBuilder private var signInField: some View {
+        if signsInHere {
+            field("Sign In", caption: signInCaption, failure: signIn.error) { signInSteps }
+        } else {
+            field("Sign In", caption: "Run it in a terminal on \(server.name). Who is signed in shows in the list once the agent says.") {
+                CommandBox(command: account.signInCommand)
+            }
+        }
+    }
+
+    @ViewBuilder private var signInSteps: some View {
+        @Bindable var signIn = signIn
+        switch signIn.step {
+        case .waiting(_, let url):
+            VStack(alignment: .leading, spacing: 6) {
+                CommandBox(command: url.absoluteString, link: url)
+                HStack(spacing: 6) {
+                    InputField("Paste the code", text: $signIn.code, monospaced: true, focus: $codeFocused)
+                        .onSubmit(finishSignIn)
+                        .onAppear { codeFocused = true }
+                    ActionButton("Sign In", variant: .primary, pending: signIn.finishing, action: finishSignIn)
+                        .disabled(!signIn.canFinish || !canSave)
+                }
+            }
+        default:
+            HStack(spacing: 10) {
+                Text(signedInAs.map { "Signed in as \($0)" } ?? "Not signed in")
+                    .font(.ui(size: 13, weight: .medium))
+                    .foregroundStyle(signedInAs == nil ? Color.themeMutedForeground : Color.themeForeground)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.horizontal, 4)
+                Spacer(minLength: 12)
+                ActionButton(signedInAs == nil ? "Sign In" : "Sign In Again", pending: signIn.step == .starting, action: startSignIn)
+                    .disabled(!canStartSignIn)
+            }
         }
     }
 
@@ -261,16 +422,18 @@ struct AgentAccountSheet: View {
         }
     }
 
-    private func field<Content: View>(_ title: String, caption: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+    private func field<Content: View>(
+        _ title: String, caption: String? = nil, failure: String? = nil, @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.ui(size: 12, weight: .medium))
                 .padding(.horizontal, 4)
             content()
-            if let caption {
+            if let caption = failure ?? caption {
                 Text(caption)
                     .font(.ui(size: 11.5))
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                    .foregroundStyle(failure == nil ? Color.themeMutedStrongerForeground : Color.themeDestructive)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)
             }
@@ -281,17 +444,14 @@ struct AgentAccountSheet: View {
 
     /// Fills a new account's folder from its name until the folder is typed by hand.
     private func suggestFolder() {
-        guard isNew, account.folder.isEmpty || account.folder == suggestedFolder else { return }
+        guard isNew, signIn.step == .idle, account.folder.isEmpty || account.folder == suggestedFolder else { return }
         suggestedFolder = account.suggestedFolder(besides: server.agentAccounts)
         account.folder = suggestedFolder
     }
 
     private func save() {
-        var saved = account
-        saved.variables = variables.map(\.variable).filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
-        if saved.agent != .codex { saved.sharesSessions = false }
         saving = true
-        store.saveAgentAccount(saved, on: server) { kept in
+        store.saveAgentAccount(edited, on: server) { kept in
             saving = false
             if kept { close() }
         }

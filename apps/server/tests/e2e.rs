@@ -1661,6 +1661,59 @@ async fn a_thread_works_with_the_account_it_was_started_with_and_moves_to_anothe
 }
 
 #[tokio::test]
+async fn an_account_signs_in_with_the_code_its_page_showed_and_is_saved() {
+    let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
+    let connection = harness.connect().await;
+    let work = AgentAccount {
+        id: String::new(),
+        agent: Agent::Claude,
+        name: "Work".into(),
+        folder: "~/.claude-work".into(),
+        shares_sessions: false,
+        variables: vec![],
+        email: None,
+        plan: None,
+    };
+    let start = async || connection.request(&Request::StartSignIn { account: work.clone() }).await;
+    let finish = async |id: &str, code: &str, account: &AgentAccount| {
+        let request = Request::FinishSignIn { id: id.into(), code: code.into(), account: account.clone() };
+        connection.request(&request).await
+    };
+    let Message::SignInLink { id, url } = start().await.unwrap() else { panic!("a sign-in starts with its link") };
+    assert!(url.starts_with("https://claude.com/cai/oauth/authorize"), "{url}");
+    let refused = finish(&id, "wrong#code", &work).await.unwrap();
+    assert!(matches!(refused, Message::Error { message } if message.contains("didn't work")));
+    assert!(matches!(finish(&id, "abc#def", &work).await.unwrap(), Message::Error { .. }), "a refused sign-in is over");
+
+    let Message::SignInLink { id, .. } = start().await.unwrap() else { panic!("a sign-in starts with its link") };
+    let unnamed = AgentAccount { name: " ".into(), ..work.clone() };
+    let refused = finish(&id, "abc#def", &unnamed).await.unwrap();
+    assert!(matches!(refused, Message::Error { message } if message.contains("needs a name")));
+    let moved = AgentAccount { folder: "~/.claude-elsewhere".into(), ..work.clone() };
+    let refused = finish(&id, "abc#def", &moved).await.unwrap();
+    assert!(matches!(refused, Message::Error { message } if message.contains("folder changed")));
+
+    let Message::SignInLink { id, .. } = start().await.unwrap() else { panic!("a sign-in starts with its link") };
+    let Message::SignedIn { account, email, plan } = finish(&id, "abc#def", &work).await.unwrap() else {
+        panic!("the code signs in")
+    };
+    assert_eq!((email.as_deref(), plan.as_deref()), (Some("work@motile.app"), Some("Max")));
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+    let saved: Vec<(&str, &str)> =
+        server.agent_accounts.iter().map(|kept| (kept.id.as_str(), kept.name.as_str())).collect();
+    assert_eq!(saved.last(), Some(&(account.as_str(), "Work")));
+
+    let Message::SignInLink { id, .. } = start().await.unwrap() else { panic!("a sign-in starts with its link") };
+    assert_eq!(connection.request(&Request::CancelSignIn { id: id.clone() }).await.unwrap(), Message::Ok);
+    assert!(matches!(finish(&id, "abc#def", &work).await.unwrap(), Message::Error { .. }));
+
+    let codex = AgentAccount { agent: Agent::Codex, folder: "~/.codex-work".into(), ..work.clone() };
+    let refused = connection.request(&Request::StartSignIn { account: codex }).await.unwrap();
+    assert!(matches!(refused, Message::Error { .. }));
+}
+
+#[tokio::test]
 async fn projects_are_added_and_removed_and_show_their_branch() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
     let connection = harness.connect().await;

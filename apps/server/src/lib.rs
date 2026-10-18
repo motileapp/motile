@@ -21,6 +21,7 @@ pub mod ricrac;
 pub mod serve;
 pub mod service;
 pub mod setup;
+pub mod sign_in;
 pub mod store;
 pub mod sync;
 pub mod title;
