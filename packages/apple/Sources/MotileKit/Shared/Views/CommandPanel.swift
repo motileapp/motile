@@ -630,6 +630,7 @@ struct CommandPanel: View {
                 items.append(PanelItem(id: "continue", title: "Continue the agent", detail: thread.title, icon: .symbol(.play)) { store.continueThread() })
             }
             let done = thread.isDone
+            guard done || !thread.waitsOnAgents else { return items }
             var mark = PanelItem(id: "done", title: done ? "Mark undone" : "Mark done", detail: thread.title, icon: .symbol(done ? .undo2 : .circleCheck)) {
                 store.toggleDone()
             }

@@ -368,7 +368,7 @@ impl Sidebar {
         self.peek.hide();
         let store = self.store.read(cx);
         let thread = store.threads.get(&thread_id).filter(|thread| !store.on_removed_server(thread))?;
-        let (done, busy) = (thread.is_done(), thread.busy());
+        let (done, unfinished) = (thread.is_done(), thread.unfinished());
         let this = cx.entity().downgrade();
         let handle = self.store.clone();
         let id = thread_id.clone();
@@ -380,7 +380,7 @@ impl Sidebar {
                 })
             })
         } else {
-            Menu::new().item_if(!busy, "Mark Done", move |_, cx| {
+            Menu::new().item_if(!unfinished, "Mark Done", move |_, cx| {
                 handle.update(cx, |store, cx| {
                     store.set_done(std::slice::from_ref(&id), true, true, cx);
                     cx.notify();

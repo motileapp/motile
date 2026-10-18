@@ -582,7 +582,9 @@ impl Store {
         let changed: Vec<ThreadInfo> = ids
             .iter()
             .filter_map(|id| self.threads.get(id))
-            .filter(|thread| thread.is_done() != done && !(done && thread.busy()) && !self.on_removed_server(thread))
+            .filter(|thread| {
+                thread.is_done() != done && !(done && thread.unfinished()) && !self.on_removed_server(thread)
+            })
             .cloned()
             .collect();
         if changed.is_empty() {

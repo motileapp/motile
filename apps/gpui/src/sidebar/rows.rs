@@ -110,7 +110,7 @@ impl Sidebar {
                 .text_color(c.foreground)
                 .child(KeyCaps::new([jump]))
                 .into_any_element()
-        } else if hovering && !thread.busy() && !read_only {
+        } else if hovering && !thread.unfinished() && !read_only {
             let (store, id) = (self.store.clone(), thread.id.clone());
             let button = ActionButton::new(SharedString::from(format!("mark-done-{id}")), "Mark Done")
                 .symbol("check")
@@ -584,10 +584,10 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
             .flex()
             .items_center()
             .gap(px(9.))
-            .child(label(agents.to_string(), c.pending, symbol("users")))
+            .child(label(agents.to_string(), c.pending, symbol("bot")))
             .child(label(
                 elapsed(thread.monitoring_since()),
-                c.muted_foreground,
+                c.process,
                 icons::symbol("circle-dot-dashed", 10.).into_any_element(),
             ))
             .tooltip(tooltip(help))
@@ -603,7 +603,7 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
                 let help =
                     if agents == 1 { "1 agent is working".to_string() } else { format!("{agents} agents are working") };
                 status.child(
-                    label(agents.to_string(), c.pending, symbol("users"))
+                    label(agents.to_string(), c.pending, symbol("bot"))
                         .id(SharedString::from(format!("agents-{}", thread.id)))
                         .tooltip(tooltip(help)),
                 )

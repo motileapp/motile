@@ -2323,7 +2323,7 @@ final class AppStore {
     /// Marks threads done or brings them back. A thread that is working or monitoring can't be
     /// marked done.
     func setDone(_ ids: [String], done: Bool, fromSidebar: Bool = false) {
-        let changed = ids.compactMap { anyThread($0) }.filter { $0.isDone != done && !(done && $0.busy) && !onRemovedServer($0) }
+        let changed = ids.compactMap { anyThread($0) }.filter { $0.isDone != done && !(done && $0.unfinished) && !onRemovedServer($0) }
         guard !changed.isEmpty else { return }
         // Leaving the thread that was just put away, for the next one that is still active.
         if done, fromSidebar, case .thread(let open) = selection, changed.contains(where: { $0.id == open }) {

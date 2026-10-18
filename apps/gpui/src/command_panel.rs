@@ -785,6 +785,9 @@ impl CommandPanel {
             ));
         }
         let done = thread.is_done();
+        if !done && thread.waits_on_agents() {
+            return items;
+        }
         let mark = Item::new(
             "done",
             if done { "Mark undone" } else { "Mark done" },

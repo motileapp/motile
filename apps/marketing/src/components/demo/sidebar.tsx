@@ -1,4 +1,5 @@
 import {
+  BotIcon,
   ChartColumnIcon,
   ChevronRightIcon,
   CircleDashedIcon,
@@ -12,7 +13,6 @@ import {
   ServerIcon,
   SettingsIcon,
   ShieldIcon,
-  UsersIcon,
   type LucideIcon,
 } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
@@ -555,10 +555,10 @@ function ThreadStatus({
       return (
         <span className="flex items-center gap-[9px]">
           <span className={cn(label, "text-pending")}>
-            <UsersIcon className="size-[11px]" />
+            <BotIcon className="size-[11px]" />
             {thread.status.count}
           </span>
-          <span className={cn(label, "text-muted-foreground")}>
+          <span className={cn(label, "text-process")}>
             <CircleDotDashedIcon className="size-[10px]" />
             {elapsed(thread.status.since)}
           </span>

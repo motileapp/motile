@@ -174,8 +174,8 @@ struct SidebarScreen: View {
                 row
             } else {
                 row.rowSwipe(
-                    .check, "Mark Done", tint: thread.busy ? .themeMutedForeground : .themeSuccess, size: 36,
-                    leaves: !thread.busy, isOpen: swipe(item.id, swiped: shown.swiped)
+                    .check, "Mark Done", tint: thread.unfinished ? .themeMutedForeground : .themeSuccess, size: 36,
+                    leaves: !thread.unfinished, isOpen: swipe(item.id, swiped: shown.swiped)
                 ) {
                     markDone(thread)
                 }
@@ -343,8 +343,8 @@ struct SidebarScreen: View {
     }
 
     private func markDone(_ thread: ThreadInfo) {
-        guard !thread.busy else {
-            busy = thread.running ? "Still working" : "Still monitoring"
+        guard !thread.unfinished else {
+            busy = thread.running ? "Still working" : thread.monitoring ? "Still monitoring" : "Still waiting on its agents"
             showsBusy = true
             return
         }

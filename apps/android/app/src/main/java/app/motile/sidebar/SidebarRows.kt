@@ -168,7 +168,7 @@ fun MenuBuilder.threadMenu(store: AppStore, thread: ThreadInfo, rename: (ThreadI
     if (thread.isDone) {
         item("Mark Undone") { store.setDone(listOf(thread.id), done = false) }
     } else {
-        item("Mark Done", disabled = thread.busy) { store.setDone(listOf(thread.id), done = true, fromSidebar = true) }
+        item("Mark Done", disabled = thread.unfinished) { store.setDone(listOf(thread.id), done = true, fromSidebar = true) }
     }
     item("Rename") { rename(thread) }
     divider()
@@ -490,14 +490,14 @@ fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
             horizontalArrangement = Arrangement.spacedBy(9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatusLabel("${thread.children?.running ?: 0}", palette.pending) { Icon(Symbol.Users, 11f) }
-            StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.mutedForeground) { Icon(Symbol.CircleDotDashed, 10f) }
+            StatusLabel("${thread.children?.running ?: 0}", palette.pending) { Icon(Symbol.Bot, 11f) }
+            StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.process) { Icon(Symbol.CircleDotDashed, 10f) }
         }
         thread.working -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
             val agents = maxOf(thread.agents, thread.children?.running ?: 0)
             if (agents > 0) {
                 val working = if (agents == 1) "1 agent is working" else "$agents agents are working"
-                StatusLabel("$agents", palette.pending, Modifier.semantics { contentDescription = working }) { Icon(Symbol.Users, 11f) }
+                StatusLabel("$agents", palette.pending, Modifier.semantics { contentDescription = working }) { Icon(Symbol.Bot, 11f) }
             }
             StatusLabel(Time.elapsed(thread.updatedAt, everySecond()), palette.process) { Icon(Symbol.CircleDashed, 10f) }
         }

@@ -309,7 +309,7 @@ class ToolContent(json: JSON) {
             "edit" -> Symbol.Pencil
             "search" -> Symbol.Search
             "web" -> Symbol.Globe
-            "agent" -> Symbol.Users
+            "agent" -> Symbol.Bot
             "watch" -> Symbol.Eye
             "question" -> Symbol.MessageCircleQuestionMark
             "todo" -> Symbol.ListChecks

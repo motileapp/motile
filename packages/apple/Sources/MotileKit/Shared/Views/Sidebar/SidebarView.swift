@@ -321,7 +321,7 @@ extension AppStore {
         guard !onRemovedServer(thread) else { return [] }
         let done = thread.isDone
             ? RowAction(title: "Mark Undone") { self.setDone([thread.id], done: false) }
-            : RowAction(title: "Mark Done", disabled: thread.busy) { self.setDone([thread.id], done: true, fromSidebar: true) }
+            : RowAction(title: "Mark Done", disabled: thread.unfinished) { self.setDone([thread.id], done: true, fromSidebar: true) }
         return [[done, RowAction(title: "Rename") { rename(thread) }], [RowAction(title: "Delete", destructive: true) { delete(thread) }]]
     }
 }
@@ -403,7 +403,7 @@ struct ThreadRow: View, Equatable {
                     KeyCaps([jump])
                         .foregroundStyle(Color.themeForeground)
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
-                } else if hovering && !thread.busy && !store.onRemovedServer(thread) {
+                } else if hovering && !thread.unfinished && !store.onRemovedServer(thread) {
                     MarkDoneButton { store.setDone([thread.id], done: true, fromSidebar: true) }
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
                 } else {
@@ -962,10 +962,10 @@ struct ThreadStatus: View {
             let agents = thread.children?.running ?? 0
             HStack(spacing: 9) {
                 label("\(agents)", Color.themePending) {
-                    symbol(.users)
+                    symbol(.bot)
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeMutedForeground) {
+                    label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeProcess) {
                         Image(.circleDotDashed, size: 10)
                     }
                 }
@@ -976,7 +976,7 @@ struct ThreadStatus: View {
             HStack(spacing: 9) {
                 if agents > 0 {
                     label("\(agents)", Color.themePending) {
-                        symbol(.users)
+                        symbol(.bot)
                     }
                     .help(agents == 1 ? "1 agent is working" : "\(agents) agents are working")
                 }
