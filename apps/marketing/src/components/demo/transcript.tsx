@@ -10,7 +10,7 @@ import {
   SquareTerminalIcon,
   type LucideIcon,
 } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { Fragment, useState, type ReactNode } from "react"
 import { parseDiff } from "./diff"
 import { highlight } from "./highlight"
 import { AgentAvatar, AgentIcon } from "./icons"
@@ -171,7 +171,7 @@ const STATE_WORDS: Record<AgentState, string> = {
 const STATE_TEXT: Record<AgentState, string> = {
   working: "text-process",
   waiting: "text-warning",
-  done: "text-muted-foreground",
+  done: "text-success",
   failed: "text-destructive",
 }
 
@@ -262,13 +262,7 @@ function AgentGroup({
   const count = (state: AgentState) =>
     agents.filter((run) => run.state === state).length
   const order: AgentState[] = ["waiting", "working", "done", "failed"]
-  const summary = order
-    .filter((state) => count(state) > 0)
-    .map((state) => `${count(state)} ${state}`)
-    .join(" · ")
-  const state = (["waiting", "working", "failed"] as AgentState[]).find(
-    (one) => count(one) > 0
-  )
+  const counted = order.filter((state) => count(state) > 0)
   const longest = Math.max(...agents.map((run) => run.since ?? 0))
   const Chevron = open ? ChevronDownIcon : ChevronRightIcon
   return (
@@ -287,13 +281,17 @@ function AgentGroup({
           <span className="block text-[13px] font-semibold text-foreground">
             {agents.length} agents
           </span>
-          <span
-            className={cn(
-              "block truncate text-[12px]",
-              state ? STATE_TEXT[state] : "text-muted-foreground"
-            )}
-          >
-            {summary}
+          <span className="block truncate text-[12px]">
+            {counted.map((state, index) => (
+              <Fragment key={state}>
+                {index > 0 && (
+                  <span className="text-muted-stronger-foreground"> · </span>
+                )}
+                <span className={STATE_TEXT[state]}>
+                  {count(state)} {state}
+                </span>
+              </Fragment>
+            ))}
           </span>
         </span>
         <span className="shrink-0 text-[12px] text-muted-stronger-foreground tabular-nums">

@@ -150,11 +150,11 @@ class ModelsTest {
     fun agentsStartedTogetherAreOneRowOfTheirAvatars() {
         val avatars = listOf(mapOf("agent" to "claude", "state" to "done"), mapOf("state" to "failed"))
         val row = RowModel.parse(
-            json("id" to "t1/agents", "item" to "t1", "kind" to "agents", "title" to "2 agents", "summary" to "1 done · 1 failed", "state" to "failed", "avatars" to avatars, "more" to 0, "duration_ms" to 4000, "open" to true),
+            json("id" to "t1/agents", "item" to "t1", "kind" to "agents", "title" to "2 agents", "summary" to listOf(mapOf("text" to "1 done", "state" to "done"), mapOf("text" to "1 failed", "state" to "failed")), "avatars" to avatars, "more" to 0, "duration_ms" to 4000, "open" to true),
         )
         val agents = (row?.kind as? RowModel.Kind.Agents)?.content
         assertEquals(listOf(Agent.Claude to AgentState.Done, null to AgentState.Failed), agents?.avatars)
-        assertEquals(AgentState.Failed, agents?.state)
+        assertEquals(listOf("1 done" to AgentState.Done, "1 failed" to AgentState.Failed), agents?.summary)
         assertEquals(4000, agents?.durationMs)
         assertNull(agents?.startedAt)
         assertTrue(agents?.open == true)

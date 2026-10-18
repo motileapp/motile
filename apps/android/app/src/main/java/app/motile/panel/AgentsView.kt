@@ -23,6 +23,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
@@ -34,6 +38,7 @@ import app.motile.core.ToolStatus
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
+import app.motile.theme.Palette
 import app.motile.theme.Theme
 import app.motile.ui.AgentAvatar
 import app.motile.ui.HighlightButton
@@ -41,7 +46,6 @@ import app.motile.ui.Icon
 import app.motile.ui.MenuPopup
 import app.motile.ui.Text
 import app.motile.ui.color
-import app.motile.ui.dotted
 import app.motile.ui.pressPosition
 import app.motile.ui.rememberMenuState
 import kotlinx.coroutines.delay
@@ -71,7 +75,7 @@ fun AgentsSurface() {
     val shown = showsEnded ?: working.isEmpty()
     Column(Modifier.fillMaxSize()) {
         PanelBar {
-            Text(dotted(AgentsSummary.of(agents, parent), palette.mutedForeground), Modifier.weight(1f), size = 12f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
+            Text(AgentsSummary.styled(agents, parent, palette), Modifier.weight(1f), size = 12f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
         }
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -92,19 +96,24 @@ fun AgentsSurface() {
 }
 
 object AgentsSummary {
-    /** "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of. */
-    fun of(agents: List<AgentInfo>, parent: ThreadInfo? = null): String {
-        if (agents.isEmpty()) return parent?.let { "Started by ${it.title}" } ?: ""
-        val counts = listOf(
-            agents.count { it.state == AgentState.Waiting } to "waiting",
-            agents.count { it.state == AgentState.Working } to "working",
-            agents.count { it.state == AgentState.Done } to "done",
-            agents.count { it.state == AgentState.Failed } to "failed",
-            agents.count { it.state == AgentState.Stopped } to "stopped",
-        )
+    /** "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of, each count with its state. */
+    fun parts(agents: List<AgentInfo>, parent: ThreadInfo? = null): List<Pair<String, AgentState?>> {
+        if (agents.isEmpty()) return listOfNotNull(parent?.let { "Started by ${it.title}" to null })
+        val counts = listOf(AgentState.Waiting, AgentState.Working, AgentState.Done, AgentState.Failed, AgentState.Stopped)
+            .map { state -> agents.count { it.state == state } to state }
+            .filter { it.first > 0 }
+            .map { (count, state) -> "$count ${state.raw}" to state }
         val spent = agents.mapNotNull { it.tokens }
-        val total = if (spent.isEmpty()) emptyList() else listOf(AgentInfo.tokens(spent.sum()))
-        return (counts.filter { it.first > 0 }.map { "${it.first} ${it.second}" } + total).joinToString(" · ")
+        val total = if (spent.isEmpty()) emptyList() else listOf(AgentInfo.tokens(spent.sum()) to null)
+        return counts + total
+    }
+
+    /** The same, each count in its state's colour, between muted dots. */
+    fun styled(agents: List<AgentInfo>, parent: ThreadInfo?, palette: Palette): AnnotatedString = buildAnnotatedString {
+        parts(agents, parent).forEachIndexed { index, (part, state) ->
+            if (index > 0) withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
+            if (state == null) append(part) else withStyle(SpanStyle(color = state.color(palette))) { append(part) }
+        }
     }
 }
 

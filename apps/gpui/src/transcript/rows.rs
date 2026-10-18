@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::agents::AgentState;
-use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, Tool};
+use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, StateCount, Tool};
 use motile_protocol::wire::{Agent, Ask, ToolStatus};
 
 use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dotted_outline};
@@ -1284,8 +1284,7 @@ fn agent_row(model: &RowModel, agent: &AgentRow, ctx: &RowContext, cx: &App) -> 
 /// Agents started one after the other: their avatars side by side, how many and how they are
 /// doing, and how long they have worked. A click opens it into a card of their rows.
 fn agents_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
-    let RowKind::Agents { title, summary, state, avatars, more, started_at, duration_ms, open } = &model.row.kind
-    else {
+    let RowKind::Agents { title, summary, avatars, more, started_at, duration_ms, open } = &model.row.kind else {
         return div().into_any_element();
     };
     let c = colors(cx);
@@ -1296,9 +1295,7 @@ fn agents_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c.foreground)
         .child(div().min_w_0().truncate().child(title.clone()));
-    let summary_color =
-        if *state == AgentState::Done { c.muted_foreground } else { crate::ui::agent_avatar::state_color(*state, c) };
-    let line = div().text_color(summary_color).child(summary.clone());
+    let line = div().child(summary_text(summary, c));
     let time = match started_at {
         Some(started) => elapsed(*started),
         None => duration_ms.map(duration).unwrap_or_default(),
@@ -1314,6 +1311,21 @@ fn agents_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             let _ = view.update(cx, |view, cx| view.toggle_in_core(&row_id, cx));
         })
         .into_any_element()
+}
+
+/// Each count in its state's colour, between muted dots.
+fn summary_text(counts: &[StateCount], c: &Colors) -> StyledText {
+    let normal = font(theme::UI_FONT, FontWeight::NORMAL, false);
+    let (mut text, mut runs) = (String::new(), Vec::new());
+    for (index, count) in counts.iter().enumerate() {
+        if index > 0 {
+            text.push_str(" · ");
+            runs.push(run(" · ".len(), normal.clone(), c.muted_stronger_foreground));
+        }
+        text.push_str(&count.text);
+        runs.push(run(count.text.len(), normal.clone(), crate::ui::agent_avatar::state_color(count.state, c)));
+    }
+    StyledText::new(text).with_runs(runs)
 }
 
 pub fn turn_label(stopped: bool, duration_ms: Option<u64>) -> String {

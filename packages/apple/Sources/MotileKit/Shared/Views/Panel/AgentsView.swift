@@ -30,7 +30,7 @@ struct AgentsSurface: View {
             let shown = showsEnded ?? working.isEmpty
             VStack(spacing: 0) {
                 PanelBar {
-                    Text(dotted: Self.summary(of: agents, parent: parent))
+                    Self.summary(of: agents, parent: parent)
                         .font(.ui(size: 12, weight: .medium))
                         .foregroundStyle(Color.themeMutedForeground)
                     Spacer()
@@ -52,19 +52,18 @@ struct AgentsSurface: View {
         }
     }
 
-    /// "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of.
-    static func summary(of agents: [AgentInfo], parent: ThreadInfo?) -> String {
-        guard !agents.isEmpty else { return parent.map { "Started by \($0.title)" } ?? "" }
-        let counts: [(Int, String)] = [
-            (agents.count { $0.state == .waiting }, "waiting"),
-            (agents.count { $0.state == .working }, "working"),
-            (agents.count { $0.state == .done }, "done"),
-            (agents.count { $0.state == .failed }, "failed"),
-            (agents.count { $0.state == .stopped }, "stopped"),
-        ]
+    /// "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of, each count
+    /// in its state's colour.
+    static func summary(of agents: [AgentInfo], parent: ThreadInfo?) -> Text {
+        guard !agents.isEmpty else { return Text(verbatim: parent.map { "Started by \($0.title)" } ?? "") }
+        let words: [(AgentState, String)] = [(.waiting, "waiting"), (.working, "working"), (.done, "done"), (.failed, "failed"), (.stopped, "stopped")]
+        let counts = words.compactMap { state, word -> Text? in
+            let count = agents.count { $0.state == state }
+            return count > 0 ? Text(verbatim: "\(count) \(word)").foregroundStyle(state.color) : nil
+        }
         let spent = agents.compactMap(\.tokens)
-        let total = spent.isEmpty ? [] : [AgentInfo.tokens(spent.reduce(0, +))]
-        return (counts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" } + total).joined(separator: " · ")
+        let total = spent.isEmpty ? [] : [Text(verbatim: AgentInfo.tokens(spent.reduce(0, +)))]
+        return Text(dotted: counts + total)
     }
 }
 

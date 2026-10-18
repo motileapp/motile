@@ -439,8 +439,7 @@ struct AgentContent {
 /// Agents started one after the other: their avatars, how many, and how they are doing.
 struct AgentsContent {
     let title: String
-    let summary: String
-    let state: AgentState
+    let summary: [(text: String, state: AgentState)]
     let avatars: [(agent: Agent?, state: AgentState)]
     let more: Int
     let startedAt: Double?
@@ -449,8 +448,7 @@ struct AgentsContent {
 
     init(json: JSON) {
         title = json.string("title")
-        summary = json.string("summary")
-        state = AgentState(rawValue: json.string("state")) ?? .done
+        summary = json.objects("summary").map { ($0.string("text"), AgentState(rawValue: $0.string("state")) ?? .done) }
         avatars = json.objects("avatars").map {
             ($0.optionalString("agent").flatMap(Agent.init(rawValue:)), AgentState(rawValue: $0.string("state")) ?? .done)
         }

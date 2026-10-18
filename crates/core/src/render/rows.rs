@@ -165,10 +165,8 @@ pub enum RowKind {
     Agents {
         /// "3 agents".
         title: String,
-        /// "2 working · 1 done".
-        summary: String,
-        /// What the summary is coloured by: whether one waits, works or failed.
-        state: AgentState,
+        /// "2 working", "1 done": how many are in each state, each drawn in its state's colour.
+        summary: Vec<StateCount>,
         /// The first few, whose avatars stand side by side.
         avatars: Vec<Avatar>,
         /// How many more there are.
@@ -267,6 +265,12 @@ pub enum CardPlace {
     First,
     Middle,
     Last,
+}
+
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct StateCount {
+    pub text: String,
+    pub state: AgentState,
 }
 
 #[derive(Serialize, Clone, Copy, PartialEq, Debug)]
@@ -1013,20 +1017,18 @@ fn agents_row(agents: &[&AgentRow], open: bool) -> RowKind {
     use AgentState::{Done, Failed, Stopped, Waiting, Working};
     let count = |state: AgentState| agents.iter().filter(|agent| agent.state == state).count();
     let words = [(Waiting, "waiting"), (Working, "working"), (Done, "done"), (Failed, "failed"), (Stopped, "stopped")];
-    let summary: Vec<String> = words
+    let summary = words
         .iter()
         .filter(|(state, _)| count(*state) > 0)
-        .map(|(state, word)| format!("{} {word}", count(*state)))
+        .map(|(state, word)| StateCount { text: format!("{} {word}", count(*state)), state: *state })
         .collect();
-    let state = [Waiting, Working, Failed, Stopped].into_iter().find(|state| count(*state) > 0).unwrap_or(Done);
     let working = count(Working) + count(Waiting) > 0;
     let first = agents.iter().map(|agent| agent.started_at).fold(f64::INFINITY, f64::min);
     let ended = agents.iter().map(|agent| agent.ended_at()).collect::<Option<Vec<f64>>>();
     let last = ended.map(|ends| ends.into_iter().fold(first, f64::max));
     RowKind::Agents {
         title: format!("{} agents", agents.len()),
-        summary: summary.join(" · "),
-        state,
+        summary,
         avatars: agents.iter().take(3).map(|agent| Avatar { agent: agent.agent, state: agent.state }).collect(),
         more: agents.len().saturating_sub(3),
         started_at: working.then_some(first),
@@ -1761,7 +1763,8 @@ mod tests {
                 format!("({}: {}{card})", agent.title, agent.label)
             }
             RowKind::Agents { title, summary, open, .. } => {
-                format!("({title}: {summary}){}", if *open { " open" } else { "" })
+                let summary: Vec<&str> = summary.iter().map(|count| count.text.as_str()).collect();
+                format!("({title}: {}){}", summary.join(" · "), if *open { " open" } else { "" })
             }
             _ => "other".to_string(),
         });

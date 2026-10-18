@@ -1170,10 +1170,21 @@ final class AgentsRowView: RowView {
         more.isHidden = content.more == 0
         moreSurface.isHidden = content.more == 0
         title.string = content.title
-        summary.string = content.summary
-        summary.color = content.state == .done ? Theme.mutedForeground : content.state.platformColor
+        summary.attributed = Self.summary(content.summary)
         chevron.show(content.open ? .chevronDown : .chevronRight, size: 9)
         keepTime()
+    }
+
+    /// Each count in its state's colour, between muted dots.
+    private static func summary(_ counts: [(text: String, state: AgentState)]) -> NSAttributedString {
+        let text = NSMutableAttributedString()
+        for (index, count) in counts.enumerated() {
+            if index > 0 {
+                text.append(NSAttributedString(string: " · ", attributes: [.font: PlatformFont.ui(12), .foregroundColor: Theme.mutedStrongerForeground]))
+            }
+            text.append(NSAttributedString(string: count.text, attributes: [.font: PlatformFont.ui(12), .foregroundColor: count.state.platformColor]))
+        }
+        return text
     }
 
     private func keepTime() {

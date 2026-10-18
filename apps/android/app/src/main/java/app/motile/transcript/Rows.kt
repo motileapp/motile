@@ -453,8 +453,7 @@ data class AgentContent(
 /** Agents started one after the other: their avatars, how many, and how they are doing. */
 data class AgentsContent(
     val title: String,
-    val summary: String,
-    val state: AgentState,
+    val summary: List<Pair<String, AgentState>>,
     val avatars: List<Pair<Agent?, AgentState>>,
     val more: Int,
     val startedAt: Double?,
@@ -463,8 +462,7 @@ data class AgentsContent(
 ) {
     constructor(json: JSON) : this(
         title = json.string("title"),
-        summary = json.string("summary"),
-        state = AgentState.of(json.string("state")),
+        summary = json.objects("summary").map { it.string("text") to AgentState.of(it.string("state")) },
         avatars = json.objects("avatars").map { Agent.of(it.optionalString("agent")) to AgentState.of(it.string("state")) },
         more = json.int("more"),
         startedAt = json.optionalDouble("started_at"),

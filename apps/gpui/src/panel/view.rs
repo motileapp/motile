@@ -24,7 +24,7 @@ use crate::panel::pull_request_list::PullRequestListView;
 use crate::panel::ricrac::RicracView;
 use crate::store::Store;
 use crate::store::integrations::Integration;
-use crate::theme::{self, ControlSize, Layer, Radius, colors};
+use crate::theme::{self, Colors, ControlSize, Layer, Radius, colors};
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, edges, icons};
@@ -1173,16 +1173,12 @@ impl RightPanelView {
             return Self::message("The agents this thread starts show up here.", false, cx);
         }
         let said = match &parent {
-            Some((_, title)) if agents.is_empty() => format!("Started by {title}"),
-            _ => summary(&agents),
+            Some((_, title)) if agents.is_empty() => StyledText::new(format!("Started by {title}")),
+            _ => summary(&agents, c),
         };
         let bar = Self::bar(
             div().flex().w_full().child(
-                div()
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(c.muted_foreground)
-                    .child(crate::ui::control::dotted(said, c)),
+                div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(c.muted_foreground).child(said),
             ),
             cx,
         );
@@ -1860,24 +1856,37 @@ pub fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
     }
 }
 
-/// "1 waiting · 2 working · 1 done · 48K tokens", leaving out what there is none of.
-fn summary(agents: &[AgentView]) -> String {
+/// "1 waiting · 2 working · 1 done · 48K tokens", leaving out what there is none of, each count
+/// in its state's colour.
+fn summary(agents: &[AgentView], c: &Colors) -> StyledText {
     let count = |state: AgentState| agents.iter().filter(|agent| agent.state == state).count();
     let spent: Vec<u64> = agents.iter().filter_map(|agent| agent.tokens).collect();
-    let total = (!spent.is_empty()).then(|| crate::models::tokens(spent.iter().sum()));
-    [
-        (count(AgentState::Waiting), "waiting"),
-        (count(AgentState::Working), "working"),
-        (count(AgentState::Done), "done"),
-        (count(AgentState::Failed), "failed"),
-        (count(AgentState::Stopped), "stopped"),
+    let total = (!spent.is_empty()).then(|| (crate::models::tokens(spent.iter().sum()), None));
+    let parts = [
+        (AgentState::Waiting, "waiting"),
+        (AgentState::Working, "working"),
+        (AgentState::Done, "done"),
+        (AgentState::Failed, "failed"),
+        (AgentState::Stopped, "stopped"),
     ]
     .into_iter()
-    .filter(|(count, _)| *count > 0)
-    .map(|(count, word)| format!("{count} {word}"))
-    .chain(total)
-    .collect::<Vec<_>>()
-    .join(" · ")
+    .filter(|(state, _)| count(*state) > 0)
+    .map(|(state, word)| (format!("{} {word}", count(state)), Some(state)))
+    .chain(total);
+    let (mut text, mut highlights) = (String::new(), Vec::new());
+    let tint = |color| HighlightStyle { color: Some(color), ..Default::default() };
+    for (index, (part, state)) in parts.enumerate() {
+        if index > 0 {
+            highlights.push((text.len()..text.len() + " · ".len(), tint(c.muted_stronger_foreground)));
+            text.push_str(" · ");
+        }
+        if let Some(state) = state {
+            highlights
+                .push((text.len()..text.len() + part.len(), tint(crate::ui::agent_avatar::state_color(state, c))));
+        }
+        text.push_str(&part);
+    }
+    StyledText::new(text).with_highlights(highlights)
 }
 
 impl Render for RightPanelView {

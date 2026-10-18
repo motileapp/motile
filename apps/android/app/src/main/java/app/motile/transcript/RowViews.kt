@@ -458,13 +458,20 @@ private fun AgentsRow(row: RowModel, content: AgentsContent) {
                 Spacer(Modifier.width(AgentRow.avatarGap))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
                     Text(content.title, size = 13f, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
-                    val color = if (content.state == AgentState.Done) palette.mutedForeground else content.state.color
-                    Text(content.summary, Modifier.padding(top = 1.dp), size = 12f, color = color, maxLines = 1)
+                    Text(summaryText(content.summary, palette), Modifier.padding(top = 1.dp), size = 12f, maxLines = 1)
                 }
                 if (time.isNotEmpty()) Text(time, Modifier.padding(start = 12.dp), style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground, maxLines = 1)
                 AgentRowChevron(content.open)
             }
         }
+    }
+}
+
+/** Each count in its state's colour, between muted dots. */
+private fun summaryText(counts: List<Pair<String, AgentState>>, palette: Palette): AnnotatedString = buildAnnotatedString {
+    counts.forEachIndexed { index, (text, state) ->
+        if (index > 0) withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
+        withStyle(SpanStyle(color = state.color(palette))) { append(text) }
     }
 }
 
