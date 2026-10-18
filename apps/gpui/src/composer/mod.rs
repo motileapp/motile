@@ -634,7 +634,7 @@ impl Composer {
                         .margin(margin(4., if sends { 4. } else { 8. }))
                         .on_click(move |_, _, cx| {
                             stop.update(cx, |store, cx| {
-                                store.stop_thread();
+                                store.stop_thread(cx);
                                 cx.notify();
                             })
                         }),

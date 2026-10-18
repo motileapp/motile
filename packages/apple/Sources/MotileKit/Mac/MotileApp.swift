@@ -216,6 +216,7 @@ struct RootView: View {
         .asking(Binding { store.errorMessage.map(ShownError.init) } set: { store.errorMessage = $0?.id }) { _ in
             Confirmation(title: store.errorAlert.title, message: store.errorAlert.detail, dismissal: "OK")
         }
+        .asking($store.stopping) { $0.confirmation(store) }
         .overlay { ModalLayer() }
     }
 }

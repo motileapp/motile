@@ -103,6 +103,13 @@ pub struct ListedDraft {
     pub sending: bool,
 }
 
+/// A stop that asks first, since it ends the agents the thread started.
+#[derive(Clone, Debug)]
+pub struct StopQuestion {
+    pub thread_id: String,
+    pub question: String,
+}
+
 /// The first message of a draft, on its way to the server.
 #[derive(Clone, Debug)]
 pub struct SendingDraft {
@@ -269,6 +276,8 @@ pub struct Store {
     /// The drafts whose first message is on its way to the server, by draft.
     pub sending_drafts: HashMap<String, SendingDraft>,
     pub error_message: Option<String>,
+    /// The stop that waits for the user to say it may end the agents a thread started.
+    pub stopping: Option<StopQuestion>,
     pub thread_drafts: Vec<ThreadDraft>,
     /// What the open draft said when it was opened, if it said anything. Its row in the sidebar
     /// shows this, so the sidebar doesn't change while the draft is being written.
@@ -392,6 +401,7 @@ impl Store {
             agents: Vec::new(),
             sending_drafts: HashMap::new(),
             error_message: None,
+            stopping: None,
             thread_drafts: Vec::new(),
             opened_draft_preview: None,
             undo: None,

@@ -243,6 +243,7 @@ struct RootView: View {
         } message: {
             Text(store.errorAlert.detail)
         }
+        .asking(Binding { store.stopping } set: { store.stopping = $0 }) { $0.confirmation(store) }
     }
 
     private var sheet: Binding<RootSheet?> {

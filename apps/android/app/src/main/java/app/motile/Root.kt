@@ -50,6 +50,10 @@ import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.thread.CommitSheet
 import app.motile.thread.ThreadSettingsSheet
+import app.motile.ui.Answer
+import app.motile.ui.Asking
+import app.motile.ui.ButtonVariant
+import app.motile.ui.Confirmation
 import app.motile.ui.Text
 import app.motile.usage.UsageSheet
 
@@ -159,6 +163,12 @@ fun Root(store: AppStore) {
                 title = { Text(title, size = 16f) },
                 text = if (detail.isEmpty()) null else ({ Text(detail, size = 14f, color = palette.mutedForeground) }),
                 containerColor = palette.popover,
+            )
+        }
+        Asking(store.stopping, onDismiss = { store.stopping = null }) { stopping ->
+            Confirmation(
+                stopping.question, "What they did so far stays in their threads.",
+                listOf(Answer("Stop", ButtonVariant.Danger) { store.stopNow(stopping.threadID) }),
             )
         }
     }

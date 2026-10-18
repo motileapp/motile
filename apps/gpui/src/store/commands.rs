@@ -177,7 +177,7 @@ impl Store {
                 if !self.activity.busy() || self.changeable_thread().is_none() {
                     return false;
                 }
-                self.stop_thread();
+                self.stop_thread(cx);
             }
             "thread.steerQueuedMessage" => {
                 let queued = self.changeable_thread().and(self.activity.queued.first());

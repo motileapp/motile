@@ -887,6 +887,8 @@ data class ThreadChildren(
     val waitingText: String?,
     /** "Waiting on Run greet.py", "Waiting on 3 agents", while they work. */
     val runningText: String?,
+    /** "Stop 1 agent?", "Stop 3 agents?", while they work. */
+    val stopQuestion: String?,
 ) {
     data class Waiting(val threadID: String, val title: String, val ask: Ask)
 
@@ -897,8 +899,12 @@ data class ThreadChildren(
         },
         waitingText = json.optionalString("waiting_text"),
         runningText = json.optionalString("running_text"),
+        stopQuestion = json.optionalString("stop_question"),
     )
 }
+
+/** A stop that asks first, since it ends the agents the thread started. */
+data class StopQuestion(val threadID: String, val question: String)
 
 /** How an agent is doing, which the dot on its avatar shows. */
 enum class AgentState(val raw: String) {

@@ -2737,6 +2737,11 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
         [one] => Some(format!("Waiting on {}", one.title)),
         several => Some(format!("Waiting on {} agents", several.len())),
     };
+    let stop_question = match running {
+        0 => None,
+        1 => Some("Stop 1 agent?".to_string()),
+        several => Some(format!("Stop {several} agents?")),
+    };
     let mut waiting: Vec<&&Thread> = descendants.iter().filter(|thread| thread.needs_approval).collect();
     waiting.sort_by(|one, other| one.updated_at.total_cmp(&other.updated_at));
     let waiting: Vec<WaitingChild> = waiting
@@ -2756,7 +2761,7 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
         }),
         several => Some(format!("{} agents need you", several.len())),
     };
-    Some(Children { running, waiting, waiting_text, running_text })
+    Some(Children { running, waiting, waiting_text, running_text, stop_question })
 }
 
 fn agents_event(thread_id: &str, started: &[Item]) -> Event {

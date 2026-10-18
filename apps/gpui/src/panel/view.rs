@@ -1698,9 +1698,9 @@ fn agent_row(
     };
     let stop = {
         let thread = agent.thread_id.clone();
-        move |store: &mut Store, _: &mut Context<Store>| {
+        move |store: &mut Store, cx: &mut Context<Store>| {
             if let Some(thread) = &thread {
-                store.stop_thread_id(thread);
+                store.stop_thread_id(thread, cx);
             }
         }
     };

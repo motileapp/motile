@@ -288,6 +288,9 @@ class AppStore(private val context: Context) {
         private set
     var errorMessage by mutableStateOf<String?>(null)
 
+    /** The stop that waits for the user to say it may end the agents a thread started. */
+    var stopping by mutableStateOf<StopQuestion?>(null)
+
     /** What deleting a thread takes with it. */
     fun deletionNote(thread: ThreadInfo?): String {
         val inWorktree = thread?.let { project(it.projectID)?.seen(it)?.worktree != null } ?: false
@@ -2160,8 +2163,15 @@ class AppStore(private val context: Context) {
         stop(thread.id)
     }
 
-    /** Stops the thread's agent, and the agents it started. */
+    /** Stops the thread's agent, and the agents it started, asking first while those work. */
     fun stop(threadID: String) {
+        val thread = anyThread(threadID) ?: return
+        if (onRemovedServer(thread)) return
+        val question = thread.children?.stopQuestion ?: return stopNow(threadID)
+        stopping = StopQuestion(threadID, question)
+    }
+
+    fun stopNow(threadID: String) {
         val thread = anyThread(threadID) ?: return
         if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "stop", "thread_id" to thread.id))
