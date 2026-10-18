@@ -127,6 +127,9 @@ struct ControlLabel: View {
     var padding: CGFloat?
     /// A symbol after a dot behind the words, as the reasoning effort after the model.
     var detail: Symbol?
+    /// Words after the title in a colour of their own, as "working" after "2 agents", which
+    /// leave the title in the foreground.
+    var tinted: (words: String, color: Color)?
 
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: CGFloat { symbolSize ?? size.symbol }
@@ -136,9 +139,9 @@ struct ControlLabel: View {
         HStack(spacing: size.gap) {
             if icon != nil || title != nil {
                 ZStack {
-                    words(title, spins: pending && icon != nil)
+                    words(title, tinted: tinted, spins: pending && icon != nil)
                         .opacity(waitingTitle == nil ? 1 : 0)
-                    if let waitingTitle { words(waitingTitle, spins: true) }
+                    if let waitingTitle { words(waitingTitle, tinted: nil, spins: true) }
                 }
             }
             if chevron {
@@ -164,7 +167,7 @@ struct ControlLabel: View {
         return (size.symbolSide - symbolSize) / 2
     }
 
-    private func words(_ title: String?, spins: Bool) -> some View {
+    private func words(_ title: String?, tinted: (words: String, color: Color)?, spins: Bool) -> some View {
         HStack(spacing: gap ?? size.gap) {
             if case .symbol(let symbol) = icon, symbol.turns {
                 TurningSymbol(symbol: symbol, size: markSize, turning: pending)
@@ -175,7 +178,7 @@ struct ControlLabel: View {
             }
             if let title {
                 HStack(spacing: 0) {
-                    Text(dotted: title)
+                    text(title, tinted: tinted)
                         .lineLimit(1)
                     if let detail {
                         Text(verbatim: " · ")
@@ -188,6 +191,11 @@ struct ControlLabel: View {
                 .opacity(pending && !spins ? 0 : 1)
             }
         }
+    }
+
+    private func text(_ title: String, tinted: (words: String, color: Color)?) -> Text {
+        guard let tinted else { return Text(dotted: title) }
+        return Text("\(Text(dotted: title).foregroundStyle(Color.themeForeground)) \(Text(verbatim: tinted.words).foregroundStyle(tinted.color))")
     }
 
     @ViewBuilder private func mark(_ icon: ControlIcon) -> some View {
@@ -291,6 +299,7 @@ struct ActionButton: View {
     private var gap: CGFloat?
     private var padding: CGFloat?
     private let detail: Symbol?
+    private var tinted: String?
     private let margin: EdgeInsets
     /// It stands in a line of text: its symbol or words start where the line does, and it is no
     /// taller than its words, so that nothing moves for it. Its light and its press reach around.
@@ -298,7 +307,8 @@ struct ActionButton: View {
     private let action: () -> Void
 
     init(
-        _ title: String, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil, help: String? = nil,
+        _ title: String, tinted: String? = nil, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil,
+        help: String? = nil,
         variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: CGFloat? = nil, gap: CGFloat? = nil,
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
@@ -310,6 +320,7 @@ struct ActionButton: View {
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture) ?? pictures.map(ControlIcon.pictures)
         self.detail = detail
+        self.tinted = tinted
         self.help = help
         look = ControlLook(variant: variant, size: size, selected: selected, round: round, joined: joined, tint: tint)
         self.pending = pending
@@ -366,7 +377,8 @@ struct ActionButton: View {
         return Button(action: action) {
             ControlLabel(
                 title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, pendingTitle: pendingTitle, fills: fills,
-                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail
+                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail,
+                tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }
             )
             .padding(reach.around)
         }
@@ -375,7 +387,7 @@ struct ActionButton: View {
         .padding(inline ? inlineBleed : EdgeInsets())
         .allowsHitTesting(!pending)
         .help(help ?? "")
-        .accessibilityLabel(words ?? help ?? "")
+        .accessibilityLabel(words.map { [$0, tinted].compactMap { $0 }.joined(separator: " ") } ?? help ?? "")
     }
 
     /// How far an inline button's light reaches above and below its words.

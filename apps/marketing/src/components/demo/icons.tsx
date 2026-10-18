@@ -86,36 +86,37 @@ export function AgentAvatar({
   agent,
   state,
   cut = false,
+  side = 24,
 }: {
   agent: Agent
   state?: AgentState
   cut?: boolean
+  side?: number
 }) {
+  const center = side / 2
+  const ring = Math.max(1, Math.floor(side / 12))
   return (
     <span
-      className="relative size-6 shrink-0 rounded-full"
-      style={
-        cut
-          ? {
-              mask: "radial-gradient(circle at -6px 12px, transparent 14px, black 14.5px)",
-            }
-          : undefined
-      }
+      className="relative shrink-0 rounded-full"
+      style={{
+        width: side,
+        height: side,
+        mask: cut
+          ? `radial-gradient(circle at ${center - (side * 3) / 4}px ${center}px, transparent ${center + ring}px, black ${center + ring + 0.5}px)`
+          : undefined,
+      }}
     >
       <span
-        className={cn(
-          "absolute top-0 left-0 flex items-center justify-center rounded-full border border-border-accent bg-background-accent",
-          state ? "size-[22px]" : "size-6"
-        )}
-        style={
-          state
-            ? {
-                mask: "radial-gradient(circle at 19px 19px, transparent 5px, black 5.5px)",
-              }
-            : undefined
-        }
+        className="absolute top-0 left-0 flex items-center justify-center rounded-full border border-border-accent bg-background-accent"
+        style={{
+          width: state ? side - 2 : side,
+          height: state ? side - 2 : side,
+          mask: state
+            ? `radial-gradient(circle at ${side - 5}px ${side - 5}px, transparent 5px, black 5.5px)`
+            : undefined,
+        }}
       >
-        <AgentIcon agent={agent} size={13} />
+        <AgentIcon agent={agent} size={Math.round((side * 13) / 24)} />
       </span>
       {state && (
         <span

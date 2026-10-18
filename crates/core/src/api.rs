@@ -664,6 +664,9 @@ pub struct Children {
     /// "2 agents need you".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub waiting_text: Option<String>,
+    /// How many work, as the agents strip says it before "working": "1 agent", "3 agents".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub running_count: Option<String>,
     /// What the thread says while they work: "1 agent working", "3 agents working".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub running_text: Option<String>,

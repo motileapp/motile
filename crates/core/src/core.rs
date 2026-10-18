@@ -2733,11 +2733,12 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
     let mut working: Vec<&&Thread> = descendants.iter().filter(|thread| thread.running || thread.monitoring).collect();
     working.sort_by(|one, other| one.created_at.total_cmp(&other.created_at));
     let running = working.len() as u32;
-    let running_text = match running {
+    let running_count = match running {
         0 => None,
-        1 => Some("1 agent working".to_string()),
-        several => Some(format!("{several} agents working")),
+        1 => Some("1 agent".to_string()),
+        several => Some(format!("{several} agents")),
     };
+    let running_text = running_count.as_ref().map(|count| format!("{count} working"));
     let stop_question = match running {
         0 => None,
         1 => Some("Stop 1 agent?".to_string()),
@@ -2763,7 +2764,7 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
         several => Some(format!("{} agents need you", several.len())),
     };
     let working = working.iter().take(agents::avatars_shown(working.len())).map(|thread| thread.agent).collect();
-    Some(Children { running, working, waiting, waiting_text, running_text, stop_question })
+    Some(Children { running, working, waiting, waiting_text, running_count, running_text, stop_question })
 }
 
 fn agents_event(thread_id: &str, started: &[Item]) -> Event {

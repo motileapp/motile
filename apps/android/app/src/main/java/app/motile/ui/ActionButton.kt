@@ -214,6 +214,8 @@ fun ControlLabel(
     padding: Dp? = null,
     /** A symbol after a dot behind the words, as the reasoning effort after the model. */
     detail: Symbol? = null,
+    /** Words after the title in a colour of their own, as "working" after "2 agents", which leave the title in the foreground. */
+    tinted: Pair<String, Color>? = null,
 ) {
     val wordless = title == null && !chevron
     val markSize = symbolSize ?: size.symbol
@@ -232,8 +234,8 @@ fun ControlLabel(
         ) {
             if (icon != null || title != null) {
                 Box(Modifier.weight(1f, fill = false), contentAlignment = Alignment.Center) {
-                    ControlWords(title, icon, size, markSize, pictureSide, gap, detail, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
-                    if (waitingTitle != null) ControlWords(waitingTitle, icon, size, markSize, pictureSide, gap, null, pending, spins = true)
+                    ControlWords(title, tinted, icon, size, markSize, pictureSide, gap, detail, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
+                    if (waitingTitle != null) ControlWords(waitingTitle, null, icon, size, markSize, pictureSide, gap, null, pending, spins = true)
                 }
             }
             if (chevron) Icon(Symbol.ChevronDown, size.textSize, color = LocalPalette.current.mutedStrongerForeground, trimmed = true)
@@ -245,6 +247,7 @@ fun ControlLabel(
 @Composable
 private fun ControlWords(
     title: String?,
+    tinted: Pair<String, Color>?,
     icon: ControlIcon?,
     size: ControlSize,
     markSize: Float,
@@ -271,13 +274,23 @@ private fun ControlWords(
                 Modifier.weight(1f, fill = false).alpha(if (pending && !spins) 0f else 1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(dotted(title, muted), style = size.font, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                Text(words(title, tinted, muted), style = size.font, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
                 if (detail != null) {
                     Text(" · ", style = size.font, color = muted, maxLines = 1)
                     Icon(detail, markSize - 2, color = muted)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun words(title: String, tinted: Pair<String, Color>?, muted: Color): AnnotatedString {
+    if (tinted == null) return dotted(title, muted)
+    val foreground = LocalPalette.current.foreground
+    return buildAnnotatedString {
+        withStyle(SpanStyle(color = foreground)) { append(dotted(title, muted)) }
+        withStyle(SpanStyle(color = tinted.second)) { append(" ${tinted.first}") }
     }
 }
 
@@ -351,6 +364,8 @@ fun ActionButton(
     picture: (@Composable () -> Unit)? = null,
     pictures: (@Composable () -> Unit)? = null,
     detail: Symbol? = null,
+    /** Words after its title in its tint, which leave the title in the foreground. */
+    tinted: String? = null,
     help: String? = null,
     variant: ButtonVariant = if (title.isNullOrEmpty()) ButtonVariant.Ghost else ButtonVariant.Secondary,
     size: ControlSize = ControlSize.Regular,
@@ -379,9 +394,10 @@ fun ActionButton(
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens, pending = pending, pendingTitle = pendingTitle, fills = fills,
             alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail,
+            tinted = tinted?.let { tail -> tint?.let { tail to it } },
         )
     }
-    if (!inline) return ControlButton(look, onClick, modifier, pending, disabled, margin, words ?: help, onLongClick, label)
+    if (!inline) return ControlButton(look, onClick, modifier, pending, disabled, margin, words?.let { listOfNotNull(it, tinted).joinToString(" ") } ?: help, onLongClick, label)
     val line = with(LocalDensity.current) { rememberTextMeasurer().measure("M", size.font).size.height.toDp() }
     val vertical = ((size.height - line) / 2).coerceAtLeast(0.dp)
     val leading = when {

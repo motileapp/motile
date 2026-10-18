@@ -49,7 +49,7 @@ export type Status =
   | { kind: "approval" }
   | { kind: "monitoring"; since: number }
   /** Its turn has ended, and agents it started on your server's accounts work. */
-  | { kind: "agents"; since: number; count: number; waiting?: string }
+  | { kind: "agents"; since: number; count: number }
 
 export type Thread = {
   id: string
@@ -246,12 +246,7 @@ src/middleware.ts
     agent: "claude",
     model: "Opus 5.5 · Work",
     server: studio,
-    status: {
-      kind: "agents",
-      since: 96,
-      count: 2,
-      waiting: "Check the migrations needs your approval",
-    },
+    status: { kind: "agents", since: 96, count: 2 },
     items: [
       {
         kind: "user",
@@ -282,9 +277,9 @@ src/middleware.ts
           {
             agent: "claude",
             title: "Check the migrations",
-            state: "waiting",
+            state: "working",
             runsOn: "Sonnet 5.5 · Work",
-            detail: "Waiting for your approval",
+            detail: "Running the migrations on a copy of the database",
             since: 71,
           },
         ],

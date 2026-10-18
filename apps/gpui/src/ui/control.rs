@@ -182,6 +182,18 @@ pub fn dotted(text: impl Into<SharedString>, c: &Colors) -> StyledText {
     StyledText::new(text).with_highlights(dots)
 }
 
+/// The title in the foreground, with its dots muted, and `tinted` after it in `tint`.
+fn tinted_dotted(title: &str, tinted: &str, tint: Hsla, c: &Colors) -> StyledText {
+    let muted = HighlightStyle { color: Some(c.muted_stronger_foreground), ..Default::default() };
+    let mut highlights: Vec<_> =
+        title.match_indices(" · ").map(|(start, dot)| (start..start + dot.len(), muted)).collect();
+    highlights.push((
+        title.len() + 1..title.len() + 1 + tinted.len(),
+        HighlightStyle { color: Some(tint), ..Default::default() },
+    ));
+    StyledText::new(format!("{title} {tinted}")).with_highlights(highlights)
+}
+
 /// Where the words of a label that fills sit.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Alignment {
@@ -213,6 +225,10 @@ pub struct ControlLabel {
     pub middle: bool,
     /// Its digits are all one width, as a count that changes.
     pub tabular: bool,
+    /// Words after the title in `tint`, as "working" after "2 agents", which leave the title in
+    /// the foreground.
+    pub tinted: Option<SharedString>,
+    pub tint: Option<Hsla>,
 }
 
 impl ControlLabel {
@@ -231,6 +247,8 @@ impl ControlLabel {
             padding: None,
             middle: false,
             tabular: false,
+            tinted: None,
+            tint: None,
         }
     }
 
@@ -254,8 +272,13 @@ impl ControlLabel {
             ControlIcon::Pictures(_, width) => *width,
             ControlIcon::Symbol(_) => crate::theme::symbol_side(self.mark_size()),
         });
-        let words =
-            self.title.as_ref().map(|title| crate::ui::text_width(title, size.text_size(), FontWeight::MEDIUM, window));
+        let words = self.title.as_ref().map(|title| {
+            let text = match &self.tinted {
+                Some(tinted) => format!("{title} {tinted}"),
+                None => title.to_string(),
+            };
+            crate::ui::text_width(&text, size.text_size(), FontWeight::MEDIUM, window)
+        });
         let stack = match (mark, words) {
             (Some(mark), Some(words)) => mark + self.gap.unwrap_or(size.gap()) + words,
             (Some(only), None) | (None, Some(only)) => only,
@@ -291,7 +314,12 @@ impl ControlLabel {
         let spins = self.pending && has_icon;
         let middle = self.middle;
         let tabular = self.tabular;
-        let words = |title: Option<SharedString>, spins: bool, icon: Option<ControlIcon>, hidden: bool| {
+        let tinted = self.tinted.clone().zip(self.tint);
+        let words = |title: Option<SharedString>,
+                     tinted: Option<(SharedString, Hsla)>,
+                     spins: bool,
+                     icon: Option<ControlIcon>,
+                     hidden: bool| {
             let turning = matches!(&icon, Some(ControlIcon::Symbol(symbol)) if icons::turns(symbol));
             div()
                 .flex()
@@ -326,7 +354,12 @@ impl ControlLabel {
                             .map(|text| if middle { text.text_ellipsis_middle() } else { text.text_ellipsis() })
                             .when(tabular, |text| text.font_features(crate::ui::tabular_numbers()))
                             .when(hidden, |text| text.opacity(0.))
-                            .child(dotted(title, c)),
+                            .map(|text| match tinted {
+                                Some((tinted, tint)) => {
+                                    text.text_color(c.foreground).child(tinted_dotted(&title, &tinted, tint, c))
+                                }
+                                None => text.child(dotted(title, c)),
+                            }),
                     )
                 })
         };
@@ -352,12 +385,13 @@ impl ControlLabel {
                     .relative()
                     .min_w_0()
                     .child(
-                        words(self.title.clone(), spins, self.icon, text_hidden)
+                        words(self.title.clone(), tinted, spins, self.icon, text_hidden)
                             .when(waiting_title.is_some(), |w| w.opacity(0.)),
                     )
                     .when_some(waiting_title, |stack, waiting| {
                         stack.child(div().absolute().inset_0().flex().items_center().child(words(
                             Some(waiting),
+                            None,
                             true,
                             None,
                             false,
@@ -619,6 +653,13 @@ impl ActionButton {
 
     pub fn tint(mut self, tint: Option<Hsla>) -> Self {
         self.look.tint = tint;
+        self.label.tint = tint;
+        self
+    }
+
+    /// Words after its title in its tint, which leave the title in the foreground.
+    pub fn tinted(mut self, words: impl Into<SharedString>) -> Self {
+        self.label.tinted = Some(words.into());
         self
     }
 

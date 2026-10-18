@@ -109,21 +109,22 @@ pub fn monitoring_strip(
         .child(stop)
 }
 
-/// The agents the thread's agent started work on after its turn: the strip says which, with the
-/// button that stops them.
+/// The agents the thread's agent started work: the strip says which, and once its turn is over
+/// has the button that stops them. During the turn the composer's own Stop does.
 pub fn agents_strip(
     store: &Entity<Store>,
     children: &Children,
+    stops: bool,
     width: f32,
     window: &mut Window,
     cx: &App,
 ) -> impl IntoElement {
-    let stop = stop_button(store, "stop-agents", "Stop its agents", cx);
-    let room = width - strip_sides() - INSET - SPACER - stop.natural_width(window, cx);
+    let stop = stops.then(|| stop_button(store, "stop-agents", "Stop its agents", cx));
+    let room = width - strip_sides() - INSET - SPACER - stop.as_ref().map_or(0., |stop| stop.natural_width(window, cx));
     strip(true, Some(HEIGHT), cx)
         .child(div().pl(px(INSET)).flex_shrink_0().child(agents_button(store, children, room, window, cx)))
         .child(div().flex_1().min_w(px(SPACER)))
-        .child(stop)
+        .children(stop)
 }
 
 const SPACER: f32 = 8.;
@@ -160,7 +161,7 @@ fn stop_button(store: &Entity<Store>, id: &'static str, help: &str, cx: &App) ->
 /// in `room` it only counts them.
 fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: &mut Window, cx: &App) -> ActionButton {
     let text = children.running_text.clone().unwrap_or_default();
-    let button = |words: String| {
+    let button = |words: String, tinted: Option<&str>| {
         let more = (children.running as usize).saturating_sub(children.working.len());
         let avatars = AgentAvatars::new(children.working.iter().copied().map(Some).collect(), more).side(AVATAR_SIDE);
         let width = avatars.width();
@@ -168,6 +169,7 @@ fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: 
         let avatars = div().my(px((ControlSize::Regular.symbol_side() - AVATAR_SIDE) / 2.)).child(avatars);
         let store = store.clone();
         ActionButton::new("composer-agents", words)
+            .when_some(tinted, |button, tinted| button.tinted(tinted.to_string()))
             .pictures(avatars, width)
             .help(text.clone())
             .ghost()
@@ -181,11 +183,14 @@ fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: 
                 })
             })
     };
-    let full = button(text.clone());
+    let full = match &children.running_count {
+        Some(count) => button(count.clone(), Some("working")),
+        None => button(text.clone(), None),
+    };
     if full.natural_width(window, cx) <= room {
         return full;
     }
-    button(children.running.to_string())
+    button(children.running.to_string(), None)
 }
 
 /// Why the agent stopped before it finished: the usage limit, with when the thread goes on by

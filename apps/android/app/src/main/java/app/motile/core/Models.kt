@@ -887,6 +887,8 @@ data class ThreadChildren(
     val waiting: List<Waiting>,
     /** "Run greet.py needs your approval", "2 agents need you". */
     val waitingText: String?,
+    /** "1 agent", "3 agents", which the agents strip says "working" after. */
+    val runningCount: String?,
     /** "1 agent working", "3 agents working", while they work. */
     val runningText: String?,
     /** "Stop 1 agent?", "Stop 3 agents?", while they work. */
@@ -901,6 +903,7 @@ data class ThreadChildren(
             Waiting(it.string("thread_id"), it.string("title"), Ask.of(it.string("ask")) ?: Ask.Approval)
         },
         waitingText = json.optionalString("waiting_text"),
+        runningCount = json.optionalString("running_count"),
         runningText = json.optionalString("running_text"),
         stopQuestion = json.optionalString("stop_question"),
     )

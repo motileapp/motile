@@ -541,17 +541,6 @@ function ThreadStatus({
         </span>
       )
     case "agents":
-      if (thread.status.waiting) {
-        return (
-          <span
-            className={cn(label, "text-warning")}
-            title={thread.status.waiting}
-          >
-            <ShieldIcon className="size-[11px]" />
-            Approval
-          </span>
-        )
-      }
       return (
         <span className="flex items-center gap-[9px]">
           <span className={cn(label, "text-pending")}>

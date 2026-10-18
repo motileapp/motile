@@ -30,9 +30,8 @@ struct ComposerView: View {
                     ChildrenStrip(text: text, first: first, count: children.waiting.count)
                 } else if store.selectedThread != nil, store.activity.monitoring {
                     monitoringStrip
-                } else if let thread = store.selectedThread, thread.waitsOnAgents, !store.activity.running,
-                          let children = thread.children, let text = children.runningText {
-                    agentsStrip(text, children: children)
+                } else if let thread = store.selectedThread, let children = thread.children, let text = children.runningText {
+                    agentsStrip(text, children: children, stops: thread.waitsOnAgents && !store.activity.running)
                 } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {
                     InterruptionStrip(interruption: interruption)
                 }
@@ -178,14 +177,16 @@ struct ComposerView: View {
         store.selectedThread?.children?.runningText == nil ? "Stop monitoring" : "Stop monitoring and its agents"
     }
 
-    /// While the agents the thread's agent started work on after its turn: which, and the way to
-    /// stop them.
-    private func agentsStrip(_ text: String, children: ThreadChildren) -> some View {
+    /// While the agents the thread's agent started work: which, and once its turn is over, the way
+    /// to stop them. During the turn the composer's own Stop does.
+    private func agentsStrip(_ text: String, children: ThreadChildren, stops: Bool) -> some View {
         HStack(spacing: 0) {
             agentsButton(text, children: children)
                 .padding(.leading, ComposerStrip.inset)
             Spacer(minLength: 8)
-            ActionButton("Stop", help: store.shortcuts.help("Stop its agents", "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
+            if stops {
+                ActionButton("Stop", help: store.shortcuts.help("Stop its agents", "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
+            }
         }
         .modifier(ComposerStrip(edge: .top))
     }
@@ -197,14 +198,16 @@ struct ComposerView: View {
             side: ComposerView.avatarSide)
             // Taller than the words, they reach into the button's room above and below them.
             .padding(.vertical, (ControlSize.regular.symbolSide - ComposerView.avatarSide) / 2)
+        let button = { (words: String, tinted: String?) in
+            ActionButton(
+                words, tinted: tinted, pictures: AnyView(avatars), help: text, variant: .ghost, tint: .themeProcess,
+                margin: EdgeInsets(top: ComposerStrip.inset, leading: 0, bottom: ComposerStrip.inset, trailing: 0)
+            ) { store.rightPanel.open(.agents) }
+        }
         // A narrow composer only counts them.
         return ViewThatFits(in: .horizontal) {
-            ForEach([text, "\(children.running)"], id: \.self) { words in
-                ActionButton(
-                    words, pictures: AnyView(avatars), help: text, variant: .ghost, tint: .themeProcess,
-                    margin: EdgeInsets(top: ComposerStrip.inset, leading: 0, bottom: ComposerStrip.inset, trailing: 0)
-                ) { store.rightPanel.open(.agents) }
-            }
+            button(children.runningCount ?? text, children.runningCount == nil ? nil : "working")
+            button("\(children.running)", nil)
         }
     }
 

@@ -947,6 +947,8 @@ struct ThreadChildren: Equatable {
     let waiting: [Waiting]
     /// "Run greet.py needs your approval", "2 agents need you".
     let waitingText: String?
+    /// "1 agent", "3 agents", which the agents strip says "working" after.
+    let runningCount: String?
     /// "1 agent working", "3 agents working", while they work.
     let runningText: String?
     /// "Stop 1 agent?", "Stop 3 agents?", while they work.
@@ -959,6 +961,7 @@ struct ThreadChildren: Equatable {
             Waiting(threadID: $0.string("thread_id"), title: $0.string("title"), ask: Ask(rawValue: $0.string("ask")) ?? .approval)
         }
         waitingText = json.optionalString("waiting_text")
+        runningCount = json.optionalString("running_count")
         runningText = json.optionalString("running_text")
         stopQuestion = json.optionalString("stop_question")
     }

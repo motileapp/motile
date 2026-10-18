@@ -10,7 +10,13 @@ import {
   SquareTerminalIcon,
 } from "lucide-react"
 import { Fragment, useRef, useState, type ReactNode } from "react"
-import { AgentIcon, EffortHighIcon, MenuChevron, ProjectIcon } from "./icons"
+import {
+  AgentAvatar,
+  AgentIcon,
+  EffortHighIcon,
+  MenuChevron,
+  ProjectIcon,
+} from "./icons"
 import type { Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
@@ -30,6 +36,9 @@ export function Composer({
   const [text, setText] = useState("")
   const input = useRef<HTMLTextAreaElement>(null)
   const status = thread.status
+  const working = thread.items
+    .flatMap((item) => (item.kind === "agents" ? item.agents : []))
+    .filter((run) => run.state === "working")
   const send = () => {
     if (!text.trim()) return
     onSend(text.trim())
@@ -53,34 +62,38 @@ export function Composer({
           </button>
         </Strip>
       )}
-      {status.kind === "agents" && !status.waiting && (
-        <Strip edge="top">
-          <span className="mr-2 ml-3.5 size-1.5 shrink-0 rounded-full bg-process" />
-          <span className="truncate text-[12.5px] font-medium text-foreground">
-            {status.count} agents working
-          </span>
-          <button
-            type="button"
-            className="mr-[2px] ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
-          >
-            Stop
-          </button>
-        </Strip>
-      )}
-      {status.kind === "agents" && status.waiting && (
-        <Strip edge="top">
-          <ShieldIcon className="mr-[7px] ml-3.5 size-[13px] text-warning" />
-          <span className="truncate text-[12.5px] font-medium text-warning">
-            {status.waiting}
-          </span>
-          <button
-            type="button"
-            className="mr-[2px] ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
-          >
-            Open Approval
-          </button>
-        </Strip>
-      )}
+      {(status.kind === "agents" || status.kind === "working") &&
+        working.length > 0 && (
+          <Strip edge="top">
+            <button
+              type="button"
+              className="ml-[3px] flex h-7 min-w-0 items-center gap-1.5 rounded-md pr-[11px] pl-[9px] text-[12px] font-medium text-foreground hover:bg-border-composer"
+            >
+              <span className="flex shrink-0 -space-x-[5px]">
+                {working.map((run, index) => (
+                  <AgentAvatar
+                    key={index}
+                    agent={run.agent}
+                    cut={index > 0}
+                    side={20}
+                  />
+                ))}
+              </span>
+              <span className="truncate">
+                {working.length === 1 ? "1 agent" : `${working.length} agents`}{" "}
+                <span className="text-process">working</span>
+              </span>
+            </button>
+            {status.kind === "agents" && (
+              <button
+                type="button"
+                className="mr-[2px] ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+              >
+                Stop
+              </button>
+            )}
+          </Strip>
+        )}
       {status.kind === "approval" && thread.approval && (
         <Strip edge="top" tall>
           <div className="flex items-center gap-2">

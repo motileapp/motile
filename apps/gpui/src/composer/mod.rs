@@ -832,11 +832,10 @@ impl Render for Composer {
             Some((children.waiting_text.clone()?, children.waiting.first()?.clone(), children.waiting.len()))
         });
         let monitoring = thread.is_some() && store.activity.monitoring;
-        let working_children = thread
-            .as_ref()
-            .filter(|thread| thread.waits_on_agents() && !store.activity.running)
-            .and_then(|thread| thread.children.clone())
-            .filter(|children| children.running_text.is_some());
+        let working_children = thread.as_ref().and_then(|thread| {
+            let children = thread.children.clone().filter(|children| children.running_text.is_some())?;
+            Some((children, thread.waits_on_agents() && !store.activity.running))
+        });
         let interrupted = thread.as_ref().and_then(|thread| interruption(thread, store));
         let project = store.composer_project();
         let server = project.as_ref().and_then(|project| store.server(Some(&project.server_id)).cloned());
@@ -847,8 +846,8 @@ impl Render for Composer {
             Some(children::children_strip(&self.store, text, &first, count, cx).into_any_element())
         } else if let Some(thread) = thread.as_ref().filter(|_| monitoring) {
             Some(monitoring_strip(&self.store, thread, self.width, window, cx).into_any_element())
-        } else if let Some(children) = working_children {
-            Some(agents_strip(&self.store, &children, self.width, window, cx).into_any_element())
+        } else if let Some((children, stops)) = working_children {
+            Some(agents_strip(&self.store, &children, stops, self.width, window, cx).into_any_element())
         } else {
             interrupted.map(|interruption| interruption_strip(&self.store, interruption, cx).into_any_element())
         };
