@@ -168,7 +168,7 @@ impl ThreadPane {
     fn start_block(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
-        let no_projects = store.projects.is_empty() && store.no_projects.is_empty();
+        let no_projects = store.recent_projects().is_empty() && store.live_no_projects().next().is_none();
         let connected = store.servers.iter().any(|server| server.connected());
         let add = self.store.clone();
         div()
@@ -223,12 +223,12 @@ impl ThreadPane {
         let selected = store.project(store.selected_draft().and_then(|draft| draft.project_id.as_deref())).cloned();
         let anchor = self.project_menu.clone();
         let handle = self.store.clone();
-        let several_servers = store.servers.len() > 1;
+        let several_servers = store.live_servers().count() > 1;
         let (lead, name) = Project::headline(selected.as_ref());
         let projects: Vec<(String, String, Option<String>, &'static str)> = store
             .recent_projects()
             .into_iter()
-            .chain(&store.no_projects)
+            .chain(store.live_no_projects())
             .map(|project| {
                 let name = if several_servers {
                     let server = store
@@ -392,7 +392,8 @@ impl Render for ThreadPane {
         let notice = store.open_notice();
         let removing = store.removing_project.clone();
         let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
-        let takes_drops = store.composer_server().is_some();
+        let removed = store.open_thread_removed();
+        let takes_drops = store.composer_server().is_some() && !removed;
         if self.window_title != title {
             window.set_window_title(&title);
             self.window_title = title;
@@ -428,7 +429,8 @@ impl Render for ThreadPane {
             cx,
         );
         let measured = self.composer_height.clone();
-        let inset = self.composer_height.get();
+        // A thread whose server was unlinked ends with the row that says so, in the composer's place.
+        let inset = if removed { COMPOSER_BOTTOM_GAP } else { self.composer_height.get() };
         self.transcript.update(cx, |transcript, cx| transcript.set_bottom_inset(inset, cx));
         div()
             .id("thread-pane")
@@ -449,27 +451,29 @@ impl Render for ThreadPane {
                             .bottom_0()
                             .child(self.transcript.clone()),
                     )
-                    .child(
-                        div()
-                            .absolute()
-                            .left_0()
-                            .right_0()
-                            .bottom_0()
-                            .px(px(theme::COMPOSER_PADDING))
-                            .pt(px(COMPOSER_GAP))
-                            .pb(px(COMPOSER_BOTTOM_GAP))
-                            .flex()
-                            .justify_center()
-                            .child(
-                                canvas(
-                                    move |bounds, _, _| measured.set(f32::from(bounds.size.height)),
-                                    |_, _, _, _| {},
-                                )
+                    .when(!removed, |thread| {
+                        thread.child(
+                            div()
                                 .absolute()
-                                .inset_0(),
-                            )
-                            .child(self.composer.clone()),
-                    )
+                                .left_0()
+                                .right_0()
+                                .bottom_0()
+                                .px(px(theme::COMPOSER_PADDING))
+                                .pt(px(COMPOSER_GAP))
+                                .pb(px(COMPOSER_BOTTOM_GAP))
+                                .flex()
+                                .justify_center()
+                                .child(
+                                    canvas(
+                                        move |bounds, _, _| measured.set(f32::from(bounds.size.height)),
+                                        |_, _, _, _| {},
+                                    )
+                                    .absolute()
+                                    .inset_0(),
+                                )
+                                .child(self.composer.clone()),
+                        )
+                    })
                     .into_any_element()
             })
             .child(self.top_bar(cx))

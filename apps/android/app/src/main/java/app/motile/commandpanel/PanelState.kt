@@ -280,7 +280,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         get() {
             val recent = store.recentProjects
             val current = store.composerProject
-            if (current == null || current.noProject) return recent + store.noProjects
+            if (current == null || store.projects.none { it.id == current.id }) return recent + store.noProjects
             return listOf(current) + recent.filter { it.id != current.id } + store.noProjects
         }
 

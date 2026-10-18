@@ -65,6 +65,17 @@ pub struct ThreadDraft {
     /// The thread starts in a new worktree, on a branch that starts from `base`.
     pub worktree: Option<bool>,
     pub base: Option<String>,
+    /// The thread of a removed server the new thread goes on from.
+    #[serde(default)]
+    pub from: Option<Continuation>,
+}
+
+/// A thread of a removed server, which a new thread on another server goes on from.
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub struct Continuation {
+    pub origin: String,
+    pub thread_id: String,
+    pub title: String,
 }
 
 impl ThreadDraft {
@@ -78,6 +89,7 @@ impl ThreadDraft {
             access: Access::Full,
             worktree: None,
             base: None,
+            from: None,
         }
     }
 }
@@ -436,6 +448,7 @@ impl Store {
             platform: std::env::consts::OS.to_string(),
             local_only: std::env::var("MOTILE_LOCAL").as_deref() == Ok("1"),
             direct_addr: std::env::var("MOTILE_SERVER_ADDR").ok(),
+            direct_addrs: Default::default(),
             media_limit: None,
         };
         match Bridge::start(config) {
@@ -801,15 +814,15 @@ impl Store {
         self.projects.iter().chain(&self.no_projects).find(|project| project.id == id)
     }
 
-    /// The projects, the one a thread was last started in first. A project without threads
-    /// counts from when it was added.
+    /// The projects a thread can start in, the one a thread was last started in first. A project
+    /// without threads counts from when it was added.
     pub fn recent_projects(&self) -> Vec<&Project> {
         let mut last_used: HashMap<&str, f64> = HashMap::new();
         for thread in self.threads.values() {
             let used = last_used.entry(thread.project_id.as_str()).or_insert(0.);
             *used = used.max(thread.created_at);
         }
-        let mut projects: Vec<&Project> = self.projects.iter().collect();
+        let mut projects: Vec<&Project> = self.projects.iter().filter(|project| self.is_live(project)).collect();
         let used = |project: &Project| last_used.get(project.id.as_str()).copied().unwrap_or(project.created_at);
         projects.sort_by(|a, b| used(b).total_cmp(&used(a)).then_with(|| b.id.cmp(&a.id)));
         projects
@@ -818,6 +831,45 @@ impl Store {
     pub fn server(&self, id: Option<&str>) -> Option<&Server> {
         let id = id?;
         self.servers.iter().find(|server| server.id == id)
+    }
+
+    /// The servers of the account, which threads start and go on on. A removed one only keeps its
+    /// threads readable.
+    pub fn live_servers(&self) -> impl Iterator<Item = &Server> {
+        self.servers.iter().filter(|server| !server.removed)
+    }
+
+    pub fn has_live_servers(&self) -> bool {
+        self.live_servers().next().is_some()
+    }
+
+    pub fn is_removed(&self, server_id: &str) -> bool {
+        self.server(Some(server_id)).is_some_and(|server| server.removed)
+    }
+
+    /// Whether the thread is a copy of a removed server's, which can only be read.
+    pub fn on_removed_server(&self, thread: &ThreadInfo) -> bool {
+        self.is_removed(&thread.server_id)
+    }
+
+    /// Whether a thread can start in the project: its server wasn't removed.
+    pub fn is_live(&self, project: &Project) -> bool {
+        !self.is_removed(&project.server_id)
+    }
+
+    /// The "No project" of each server a thread can start on.
+    pub fn live_no_projects(&self) -> impl Iterator<Item = &Project> {
+        self.no_projects.iter().filter(|project| self.is_live(project))
+    }
+
+    /// The first project a thread can start in: a folder, else a server's "No project".
+    fn first_live_project(&self) -> Option<&Project> {
+        self.projects.iter().find(|project| self.is_live(project)).or_else(|| self.live_no_projects().next())
+    }
+
+    /// Whether the open thread's server was removed, so that it can only go on on another one.
+    pub fn open_thread_removed(&self) -> bool {
+        self.selected_thread().is_some_and(|thread| self.is_removed(&thread.server_id))
     }
 
     /// The project the composer's thread works in, or the one the open draft would start in.
@@ -883,9 +935,18 @@ impl Store {
         })
     }
 
+    /// What the right panel says in place of what it can't show of an unlinked server.
+    pub fn removed_note(&self, server_id: &str) -> Option<String> {
+        let server = self.server(Some(server_id)).filter(|server| server.removed)?;
+        Some(format!("“{}” is unlinked, so this thread is read-only.", server.name))
+    }
+
     /// Why the right panel has nothing to show here, when it hasn't.
     pub fn panel_unavailable(&self) -> Option<String> {
         let Some(target) = self.panel_target() else { return Some("Add a project to see its files.".into()) };
+        if let Some(note) = self.removed_note(&target.server_id) {
+            return Some(note);
+        }
         let Some(server) = self.server(Some(&target.server_id)).filter(|server| server.connected()) else {
             return Some("Your server isn't connected.".into());
         };
@@ -903,7 +964,7 @@ impl Store {
     /// The server a draft starts its thread on: its project's, or the first one.
     fn server_of(&self, draft: &ThreadDraft) -> Option<&Server> {
         let project = self.project(draft.project_id.as_deref());
-        self.server(project.map(|project| project.server_id.as_str())).or(self.servers.first())
+        self.server(project.map(|project| project.server_id.as_str())).or(self.live_servers().next())
     }
 
     /// The models the composer offers. An open thread on a server from before accounts stays
@@ -1122,6 +1183,7 @@ impl Store {
             self.thread_drafts.iter().rposition(|draft| self.preview(draft).is_none() && !self.is_sending(&draft.id));
         if let Some(index) = empty {
             let mut draft = self.thread_drafts[index].clone();
+            draft.from = None;
             self.apply_last_settings(&mut draft);
             self.thread_drafts[index] = draft.clone();
             self.save_thread_drafts();
@@ -1192,10 +1254,10 @@ impl Store {
             return;
         }
         let Some(draft) = self.selected_draft() else { return };
-        if self.project(draft.project_id.as_deref()).is_some() {
+        if self.project(draft.project_id.as_deref()).is_some_and(|project| self.is_live(project)) {
             return;
         }
-        let first = self.projects.first().or(self.no_projects.first()).map(|project| project.id.clone());
+        let first = self.first_live_project().map(|project| project.id.clone());
         let Some(first) = first else { return };
         self.move_draft(Some(first));
     }
@@ -1210,7 +1272,7 @@ impl Store {
         let Some(index) = self.thread_drafts.iter().position(|draft| draft.id == awaiting) else { return };
         let mut draft = self.thread_drafts[index].clone();
         let known = match &draft.project_id {
-            None => !self.servers.is_empty(),
+            None => self.has_live_servers(),
             Some(id) => self.project(Some(id)).is_some(),
         };
         if !known {
@@ -1296,4 +1358,24 @@ fn device_name() -> String {
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "Computer".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Continuation, ThreadDraft};
+
+    #[test]
+    fn a_draft_keeps_the_thread_it_goes_on_from_and_one_kept_before_has_none() {
+        let kept = serde_json::json!({
+            "id": "D", "project_id": "p", "model": null, "effort": null, "access": "full",
+            "worktree": false, "base": null
+        });
+        let draft: ThreadDraft = serde_json::from_value(kept).unwrap();
+        assert_eq!(draft.from, None);
+
+        let from = Continuation { origin: "gone".into(), thread_id: "t".into(), title: "Fix the build".into() };
+        let draft = ThreadDraft { from: Some(from.clone()), ..draft };
+        let read: ThreadDraft = serde_json::from_value(serde_json::to_value(&draft).unwrap()).unwrap();
+        assert_eq!(read.from, Some(from));
+    }
 }

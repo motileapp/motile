@@ -318,6 +318,7 @@ struct RowAction {
 extension AppStore {
     /// What a thread's menu offers, in groups a line divides.
     func rowActions(for thread: ThreadInfo, rename: @escaping (ThreadInfo) -> Void, delete: @escaping (ThreadInfo) -> Void) -> [[RowAction]] {
+        guard !onRemovedServer(thread) else { return [] }
         let done = thread.isDone
             ? RowAction(title: "Mark Undone") { self.setDone([thread.id], done: false) }
             : RowAction(title: "Mark Done", disabled: thread.busy) { self.setDone([thread.id], done: true, fromSidebar: true) }
@@ -402,14 +403,14 @@ struct ThreadRow: View, Equatable {
                     KeyCaps([jump])
                         .foregroundStyle(Color.themeForeground)
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
-                } else if hovering && !thread.busy {
+                } else if hovering && !thread.busy && !store.onRemovedServer(thread) {
                     MarkDoneButton { store.setDone([thread.id], done: true, fromSidebar: true) }
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
                 } else {
-                    ThreadStatus(thread: thread)
+                    ThreadStatus(thread: thread, readOnly: store.onRemovedServer(thread))
                 }
                 #else
-                ThreadStatus(thread: thread)
+                ThreadStatus(thread: thread, readOnly: store.onRemovedServer(thread))
                 #endif
             }
             .foregroundStyle(Color.themeMutedForeground)
@@ -430,7 +431,7 @@ struct ThreadRow: View, Equatable {
                     ThreadFolderLabel(serverID: thread.serverID, folder: thread.cwd)
                 }
                 Spacer(minLength: 6)
-                if let pullRequest = project?.pullRequest(of: thread) {
+                if !store.onRemovedServer(thread), let pullRequest = project?.pullRequest(of: thread) {
                     ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, open: open)
                 }
                 ThreadServerLabel(serverID: thread.serverID)
@@ -527,7 +528,7 @@ private struct ThreadServerLabel: View {
     let serverID: String
 
     var body: some View {
-        if store.servers.count > 1, let server = store.server(serverID) {
+        if store.servers.count + store.removedServers.count > 1, let server = store.server(serverID) {
             ServerLabel(server: server)
                 .padding(.leading, 1)
         }
@@ -871,12 +872,14 @@ struct DoneRow: View, Equatable {
         .padding(.horizontal, Self.sidePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .overlay(alignment: .trailing) {
-            OnRowSurface {
-                ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
+            if !store.onRemovedServer(thread) {
+                OnRowSurface {
+                    ActionButton(icon: .undo2, help: "Mark undone", size: .small) { store.setDone([thread.id], done: false) }
+                }
+                .padding(.trailing, Self.buttonInset)
+                .opacity(hovering ? 1 : 0)
+                .allowsHitTesting(hovering)
             }
-            .padding(.trailing, Self.buttonInset)
-            .opacity(hovering ? 1 : 0)
-            .allowsHitTesting(hovering)
         }
         .padding(rowMargin)
         .button(.highlight(radius: Radius.md, selected: selected, inset: rowMargin, hovered: hovering, opaque: true)) { open(.thread(thread.id)) }
@@ -938,12 +941,19 @@ extension ThreadInfo {
     }
 }
 
-/// What a thread is up to, or how long ago it last was.
+/// What a thread is up to, or how long ago it last was. A thread of an unlinked server is only
+/// ever read only.
 struct ThreadStatus: View {
     let thread: ThreadInfo
+    var readOnly = false
 
     var body: some View {
-        if let asking = thread.asking {
+        if readOnly {
+            label("Read-only", Color.themeWarning) {
+                symbol(.unlink)
+            }
+            .help("Its server is unlinked, so this thread can only be read or continued on another server.")
+        } else if let asking = thread.asking {
             label(asking.word, Color.themeWarning) {
                 symbol(asking.symbol)
             }

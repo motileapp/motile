@@ -235,6 +235,9 @@ impl Store {
     pub fn linear_unavailable(&self) -> Option<String> {
         let target = self.panel_target()?;
         let server = self.server(Some(&target.server_id))?;
+        if let Some(note) = self.removed_note(&server.id) {
+            return Some(note);
+        }
         (server.protocol_version < 12).then(|| format!("Update {} to connect it to Linear.", server.name))
     }
 

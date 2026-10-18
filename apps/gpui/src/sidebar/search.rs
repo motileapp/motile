@@ -77,9 +77,13 @@ impl Sidebar {
                 .child(icons::symbol("file", 11.))
                 .child(div().text_size(px(11.)).font_weight(FontWeight::MEDIUM).child("Draft")),
             SearchResult::Thread(thread, _) => {
-                let pull_request = project.as_ref().and_then(|project| project.pull_request(thread));
+                let read_only = store.on_removed_server(thread);
+                let pull_request =
+                    project.as_ref().and_then(|project| project.pull_request(thread)).filter(|_| !read_only);
                 let state = if let Some(jump) = jump {
                     div().text_color(c.foreground).child(KeyCaps::new([jump])).into_any_element()
+                } else if read_only {
+                    thread_status(thread, true, cx)
                 } else if done {
                     div()
                         .text_size(px(11.))
@@ -87,7 +91,7 @@ impl Sidebar {
                         .child(ago(thread.done_at.unwrap_or(thread.updated_at)))
                         .into_any_element()
                 } else {
-                    thread_status(thread, cx)
+                    thread_status(thread, false, cx)
                 };
                 div()
                     .flex()
@@ -172,7 +176,8 @@ impl Sidebar {
                 MouseButton::Right,
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                     let Some(thread_id) = menu_thread.clone() else { return };
-                    this.thread_menu(thread_id, cx).show(event.position, window, cx);
+                    let Some(menu) = this.thread_menu(thread_id, cx) else { return };
+                    menu.show(event.position, window, cx);
                 }),
             )
             .into_any_element()

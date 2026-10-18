@@ -278,7 +278,7 @@ impl CommandPanel {
             }
             PanelPage::Servers => vec![section("Servers", self.server_items(cx))],
             PanelPage::Sources(id) => {
-                let title = if self.store.read(cx).servers.len() > 1 {
+                let title = if self.store.read(cx).live_servers().count() > 1 {
                     format!("Add a project on {}", self.server_name(&id, cx))
                 } else {
                     "Add a project".into()
@@ -342,11 +342,12 @@ impl CommandPanel {
     fn projects(&self, cx: &App) -> Vec<Project> {
         let store = self.store.read(cx);
         let mut projects: Vec<Project> = store.recent_projects().into_iter().cloned().collect();
-        if let Some(current) = store.composer_project().filter(|project| !project.no_project) {
+        if let Some(current) = store.composer_project().filter(|project| !project.no_project && store.is_live(project))
+        {
             projects.retain(|project| project.id != current.id);
             projects.insert(0, current);
         }
-        projects.extend(store.no_projects.iter().cloned());
+        projects.extend(store.live_no_projects().cloned());
         projects
     }
 
@@ -425,7 +426,7 @@ impl CommandPanel {
                 1
             }
         };
-        let mut servers: Vec<(usize, &Server)> = store.servers.iter().enumerate().collect();
+        let mut servers: Vec<(usize, &Server)> = store.live_servers().enumerate().collect();
         servers.sort_by_key(|(position, server)| (rank(server), *position));
         servers
             .into_iter()
@@ -752,7 +753,7 @@ impl CommandPanel {
     /// What can be done with the open thread.
     fn thread_commands(&self, cx: &App) -> Vec<Item> {
         let store = self.store.read(cx);
-        let Some(thread) = store.selected_thread() else { return Vec::new() };
+        let Some(thread) = store.changeable_thread() else { return Vec::new() };
         if thread.busy() {
             let stop = Item::new(
                 "stop",
@@ -797,8 +798,7 @@ impl CommandPanel {
             })
         };
         store
-            .servers
-            .iter()
+            .live_servers()
             .filter(|server| store.is_outdated(server) && store.server_update(server).is_none())
             .flat_map(|server| {
                 let detail = format!("From version {} to {latest}", server.version);

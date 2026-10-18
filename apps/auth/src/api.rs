@@ -244,3 +244,28 @@ pub async fn remove_device(
     }
     Ok(Json(json!({ "ok": true })))
 }
+
+/// Deletes one of the account's servers completely: it is removed if it is still linked, and every
+/// copy of its threads is dropped. Only someone signed in can, in a client or on the web.
+pub async fn delete_server_completely(
+    State(state): State<AppState>,
+    Path(target): Path<String>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> AppResult<Json<Value>> {
+    let user = match caller(&state, &method, &uri, &headers, b"").await? {
+        Caller::Web(user) => user,
+        Caller::Device(public_key) => {
+            let user = linked_user(&state, &public_key).await?;
+            if db::device_kind(&state.db, &public_key).await?.as_deref() != Some(db::kind_text(DeviceKind::Client)) {
+                return Err(AppError::new(StatusCode::FORBIDDEN, "Servers are deleted from a client."));
+            }
+            user
+        }
+    };
+    if !db::delete_server_completely(&state.db, user.id, &target).await? {
+        return Err(AppError::not_found());
+    }
+    Ok(Json(json!({ "ok": true })))
+}

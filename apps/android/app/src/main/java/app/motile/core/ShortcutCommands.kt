@@ -55,7 +55,7 @@ fun AppStore.perform(command: String): Boolean {
             if (!account.signedIn || servers.isEmpty()) return false
             newThread()
         }
-        "chat.newLocal" -> startNewThread(composerProject ?: return false)
+        "chat.newLocal" -> startNewThread(composerProject?.takeIf(::startsThreads) ?: return false)
         "chat.newWithoutProject" -> {
             val project = noProjects.firstOrNull { it.serverID == composerServer?.id } ?: noProjects.firstOrNull() ?: return false
             startNewThread(project)
@@ -63,7 +63,8 @@ fun AppStore.perform(command: String): Boolean {
         "thread.previous" -> return showThreadOffset(-1)
         "thread.next" -> return showThreadOffset(1)
         "thread.done" -> {
-            if (selectedThread == null) return false
+            val thread = selectedThread ?: return false
+            if (onRemovedServer(thread)) return false
             toggleDone()
         }
         "thread.undo" -> {
@@ -71,11 +72,17 @@ fun AppStore.perform(command: String): Boolean {
             performUndo()
         }
         "thread.stop" -> {
-            if (!activity.busy) return false
+            if (!activity.busy || openThreadRemovedServer != null) return false
             stop()
         }
-        "thread.steerQueuedMessage" -> sendNow(activity.queued.firstOrNull()?.id ?: return false)
-        "thread.editQueuedMessage" -> takeBack(activity.queued.lastOrNull()?.id ?: return false)
+        "thread.steerQueuedMessage" -> {
+            if (openThreadRemovedServer != null) return false
+            sendNow(activity.queued.firstOrNull()?.id ?: return false)
+        }
+        "thread.editQueuedMessage" -> {
+            if (openThreadRemovedServer != null) return false
+            takeBack(activity.queued.lastOrNull()?.id ?: return false)
+        }
         "pullRequest.copyLink" -> Platform.copy(shownPullRequest?.first ?: return false)
         "pullRequest.copyNumber" -> Platform.copy("#${shownPullRequest?.second ?: return false}")
         "composer.sendAlternate" -> {
@@ -155,7 +162,7 @@ private fun AppStore.togglePanel(page: PanelPage): Boolean {
         closePanel()
         return true
     }
-    if (!account.signedIn || servers.isEmpty()) return false
+    if (!account.signedIn || (servers.isEmpty() && removedServers.isEmpty())) return false
     openPanel(page)
     return true
 }

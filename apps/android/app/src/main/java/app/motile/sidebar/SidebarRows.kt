@@ -164,6 +164,7 @@ fun AppStore.offersNewThread(drafts: List<ListedDraft>, active: List<ThreadInfo>
 
 /** What a thread's menu offers, in groups a line divides. */
 fun MenuBuilder.threadMenu(store: AppStore, thread: ThreadInfo, rename: (ThreadInfo) -> Unit, delete: (ThreadInfo) -> Unit) {
+    if (store.onRemovedServer(thread)) return
     if (thread.isDone) {
         item("Mark Undone") { store.setDone(listOf(thread.id), done = false) }
     } else {
@@ -203,7 +204,9 @@ fun ThreadRow(
     contentModifier: Modifier = Modifier,
     open: (Selection) -> Unit,
 ) {
+    val store = LocalStore.current
     val palette = Theme.colors
+    val readOnly = store.onRemovedServer(thread)
     val hover = remember { MutableInteractionSource() }
     val hovering by hover.collectIsHoveredAsState()
     HighlightButton(
@@ -230,7 +233,7 @@ fun ThreadRow(
                     size = 11f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1,
                 )
                 CompositionLocalProvider(LocalForeground provides palette.mutedForeground) {
-                    if (jump != null) KeyCaps(listOf(jump)) else ThreadStatus(thread)
+                    if (jump != null) KeyCaps(listOf(jump)) else ThreadStatus(thread, readOnly)
                 }
             }
             Text(
@@ -251,7 +254,7 @@ fun ThreadRow(
                         }
                     }
                     Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, open = open) }
+                        if (!readOnly) project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, open = open) }
                         ThreadServerLabel(thread.serverID)
                         AgentIcon(thread.agent, size = 12f)
                     }
@@ -291,7 +294,7 @@ private fun CheckoutLabel(symbol: Symbol, text: String) {
 @Composable
 private fun ThreadServerLabel(serverID: String) {
     val store = LocalStore.current
-    if (store.servers.size <= 1) return
+    if (store.servers.size + store.removedServers.size <= 1) return
     val server = store.server(serverID) ?: return
     ServerLabel(server, Modifier.padding(start = 1.dp))
 }
@@ -440,7 +443,7 @@ fun DoneRow(
                 }
             }
         }
-        if (hovering) {
+        if (hovering && !store.onRemovedServer(thread)) {
             OnRowSurface(Modifier.align(Alignment.CenterEnd).padding(end = sidebarRowInset + buttonInset)) {
                 ActionButton(icon = Symbol.Undo2, help = "Mark undone", size = ControlSize.Small) { store.setDone(listOf(thread.id), done = false) }
             }
@@ -468,14 +471,15 @@ fun NewThreadRow(modifier: Modifier = Modifier) {
     }
 }
 
-/** What a thread is up to, or how long ago it last was. */
+/** What a thread is up to, or how long ago it last was. A thread of an unlinked server is only ever read-only. */
 @Composable
-fun ThreadStatus(thread: ThreadInfo) {
+fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
     val palette = Theme.colors
     val asking = thread.asking
     val stage = thread.gitStage
     val interruption = thread.interruption
     when {
+        readOnly -> StatusLabel("Read-only", palette.warning, Modifier.semantics { contentDescription = readOnlyHelp }) { Icon(Symbol.Unlink, 11f) }
         asking != null -> StatusLabel(asking.word, palette.warning) { Icon(asking.symbol, 11f) }
         thread.running -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
             if (thread.agents > 0) {
@@ -493,6 +497,8 @@ fun ThreadStatus(thread: ThreadInfo) {
         else -> Text(Time.ago(thread.updatedAt, AgoClock.now), size = 11f, color = palette.mutedStrongerForeground)
     }
 }
+
+private const val readOnlyHelp = "Its server is unlinked, so this thread can only be read or continued on another server."
 
 private fun capitalized(text: String): String = text.split(" ").joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
 

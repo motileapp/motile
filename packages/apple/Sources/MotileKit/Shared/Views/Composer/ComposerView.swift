@@ -114,6 +114,11 @@ struct ComposerView: View {
         if let thread = store.selectedThread, thread.isDone {
             doneBanner(thread)
         }
+        if let from = store.selectedDraft?.from {
+            ContinuedThreadChip(from: from)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+        }
         if !store.attachments.isEmpty {
             attachments
         }
@@ -384,5 +389,18 @@ struct ComposerPlace: PreferenceKey {
         let next = nextValue()
         value.room = next.room ?? value.room
         value.box = next.box ?? value.box
+    }
+}
+
+/// The room under a thread whose server was removed, where the transcript's last row stands in
+/// for the composer.
+struct RoomWithoutComposer: View {
+    let bottomGap: CGFloat
+
+    var body: some View {
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: 0)
+            .padding(.bottom, bottomGap)
+            .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
     }
 }

@@ -22,7 +22,9 @@ struct ThreadScreen: View {
             if isStart {
                 start
             }
-            if !isStart || !store.projects.isEmpty || !store.noProjects.isEmpty {
+            if store.openThreadRemovedServer != nil {
+                RoomWithoutComposer(bottomGap: Self.composerBottomGap)
+            } else if !isStart || !store.projects.isEmpty || !store.noProjects.isEmpty {
                 ComposerView()
                     .padding(.horizontal, Theme.composerPadding)
                     .padding(.top, TranscriptView.composerGap)

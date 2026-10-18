@@ -73,6 +73,7 @@ async fn main() -> anyhow::Result<()> {
         platform: std::env::consts::OS.to_string(),
         local_only: std::env::var("MOTILE_LOCAL").is_ok(),
         direct_addr: std::env::var("MOTILE_SERVER_ADDR").ok(),
+        direct_addrs: Default::default(),
         media_limit: None,
     };
     let (sender, events) = unbounded_channel();
@@ -115,6 +116,7 @@ async fn main() -> anyhow::Result<()> {
             effort: None,
             access: Access::Full,
             worktree: None,
+            from: None,
         };
         let sent = seed
             .command(Command::Send {

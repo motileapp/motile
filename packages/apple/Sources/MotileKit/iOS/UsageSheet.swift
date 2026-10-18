@@ -9,7 +9,7 @@ struct UsageSheet: View {
     @Environment(AppStore.self) private var store
     private var model: UsageModel { store.usage }
 
-    private var picksServers: Bool { store.servers.count > 1 }
+    private var picksServers: Bool { store.usageServers.count > 1 }
 
     var body: some View {
         NavigationStack {

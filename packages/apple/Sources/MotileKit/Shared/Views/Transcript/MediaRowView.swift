@@ -195,8 +195,8 @@ final class MediaRowView: RowView {
         menuActions = { [weak self] in
             guard let self, let media = self.content else { return [] }
             return MediaFiles.actions(video: media.video, name: media.name, from: self) { [weak self] done in
-                self?.fetch { file in
-                    guard let file else { return }
+                self?.fetch { fetched in
+                    guard case .success(let file) = fetched else { return }
                     done(file)
                 }
             }
@@ -236,9 +236,9 @@ final class MediaRowView: RowView {
         let box = media.box(width: Theme.contentWidth)
         let maxPixels = max(box.width, box.height) * Platform.pixelsPerPoint
         state = .loading(fraction: nil)
-        let decode = { [weak self] (file: URL?) in
+        let decode = { [weak self] (fetched: Result<URL, Error>) in
             guard let self, self.content?.id == media.id else { return }
-            guard let file else { return self.state = media.video ? .shown : .failed("This image couldn't be loaded.") }
+            guard case .success(let file) = fetched else { return self.state = media.video ? .shown : self.failure(fetched) }
             Pictures.decode(file, id: pictureID, maxPixels: maxPixels) { image in
                 guard self.content?.id == media.id else { return }
                 self.picture.picture = image
@@ -246,8 +246,15 @@ final class MediaRowView: RowView {
             }
         }
         guard media.video else { return fetch(decode) }
-        guard let owner else { return decode(nil) }
-        owner.media(id: pictureID, done: decode)
+        guard let owner else { return decode(.failure(CoreBridge.CoreError(message: "Something went wrong."))) }
+        owner.fetchFile(id: pictureID, done: decode)
+    }
+
+    /// Why the image isn't shown: what the core said when it can't be asked for again, as from a
+    /// removed server, or else that it can be tried again.
+    private func failure(_ fetched: Result<URL, Error>) -> State {
+        guard case .failure(let error) = fetched, owner?.fetchesAgain == false else { return .failed("This image couldn't be loaded.") }
+        return .failed(error.localizedDescription)
     }
 
     private func retry() {
@@ -273,19 +280,19 @@ final class MediaRowView: RowView {
         spinner.isHidden = !loading
         progress.isHidden = !loading || progress.string.isEmpty
         message.isHidden = !failed
-        retryButton.isHidden = !failed
+        retryButton.isHidden = !failed || owner?.fetchesAgain == false
         placeStates()
     }
 
     /// Hands over the file, which the core fetches from the server if this device doesn't have it.
-    private func fetch(_ done: @escaping (URL?) -> Void) {
+    private func fetch(_ done: @escaping (Result<URL, Error>) -> Void) {
         guard let media = content else { return }
-        if let file { return done(file) }
-        guard let owner else { return done(nil) }
-        owner.media(id: media.id) { [weak self] file in
+        if let file { return done(.success(file)) }
+        guard let owner else { return done(.failure(CoreBridge.CoreError(message: "Something went wrong."))) }
+        owner.fetchFile(id: media.id) { [weak self] fetched in
             guard let self, self.content?.id == media.id else { return }
-            self.file = file
-            done(file)
+            self.file = try? fetched.get()
+            done(fetched)
         }
     }
 
@@ -310,7 +317,7 @@ final class MediaRowView: RowView {
         spinner.frame = CGRect(x: (box.midX - spinnerSide / 2).rounded(), y: y, width: spinnerSide, height: spinnerSide)
         progress.frame = CGRect(x: box.minX, y: y + spinnerSide + Self.stackGap, width: box.width, height: Self.lineHeight)
         let buttonHeight = RowButton.metrics.height
-        let messageStack = Self.lineHeight + Self.stackGap + buttonHeight
+        let messageStack = Self.lineHeight + (retryButton.isHidden ? 0 : Self.stackGap + buttonHeight)
         y = (box.midY - messageStack / 2).rounded()
         message.frame = CGRect(x: box.minX + 12, y: y, width: max(0, box.width - 24), height: Self.lineHeight)
         let buttonWidth = retryButton.width

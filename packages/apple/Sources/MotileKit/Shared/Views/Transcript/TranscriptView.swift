@@ -35,6 +35,11 @@ final class TranscriptView: FlippedView, RowOwner {
     var onOpenDiff: ((String, String?) -> Void)?
     /// What the agent did that the item's tool call started is to be shown.
     var onOpenAgent: ((String) -> Void)?
+    /// Whether a file that couldn't be fetched can be asked for again.
+    var canFetchAgain: (() -> Bool)?
+    /// The thread, whose server was removed, is to go on on another server.
+    var onContinueElsewhere: (() -> Void)?
+    var onOpenServerSettings: (() -> Void)?
     /// Whether rows are measured for this view's width as they are decoded. Only one transcript
     /// can have that; another measures its rows when they arrive.
     var measuresAhead = true
@@ -63,12 +68,22 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private static let jumpButtonGap: CGFloat = 10
 
+    /// The composer floats over the transcript's end, `composerGap` into the inset. Without it the
+    /// inset is only room.
+    var underComposer = true {
+        didSet {
+            guard underComposer != oldValue else { return }
+            jumpButton.frame.origin.y = jumpButtonY
+        }
+    }
+
     /// The room between the last row and the composer.
     static let composerGap: CGFloat = 48
 
-    /// Above the composer, which starts `composerGap` into the inset.
+    /// Above the composer, which starts `composerGap` into the inset, or above the inset.
     private var jumpButtonY: CGFloat {
-        bounds.height - bottomInset + Self.composerGap - Self.jumpButtonGap - Self.jumpButtonSide
+        let composer = underComposer ? Self.composerGap : 0
+        return bounds.height - bottomInset + composer - Self.jumpButtonGap - Self.jumpButtonSide
     }
 
     private static let jumpButtonSide: CGFloat = Platform.scale > 1 ? 38 : 32
@@ -599,6 +614,7 @@ final class TranscriptView: FlippedView, RowOwner {
         case is ChangesRowView: "changes"
         case is QueuedRowView: "queued"
         case is HandoffRowView: "handoff"
+        case is RemovedRowView: "removed"
         default: "turnEnd"
         }
     }
@@ -864,6 +880,12 @@ final class TranscriptView: FlippedView, RowOwner {
     func openDiff(turn itemID: String, path: String?) { onOpenDiff?(itemID, path) }
 
     func openAgent(itemID: String) { onOpenAgent?(itemID) }
+
+    var fetchesAgain: Bool { canFetchAgain?() ?? true }
+
+    func continueElsewhere() { onContinueElsewhere?() }
+
+    func openServerSettings() { onOpenServerSettings?() }
 
     func cancelQueued(messageID: String) { onCancelQueued?(messageID) }
 

@@ -97,6 +97,89 @@ async fn devices_are_removed_by_their_own_account_only(db: PgPool) {
     assert_eq!(emails(&auth.client.me(&ann).await.unwrap()), None);
 }
 
+fn removed_names(me: &motile_protocol::auth_api::Me) -> Vec<&str> {
+    me.removed.iter().map(|server| server.name.as_str()).collect()
+}
+
+#[sqlx::test]
+async fn a_removed_server_is_remembered_by_name_until_it_links_again(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (ann, _) = auth.new_client(&ANN).await;
+    let server = DeviceKey::generate();
+    let token = auth.client.create_enroll_token(&ann).await.unwrap();
+    auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
+
+    auth.client.remove_device(&ann, &server.public()).await.unwrap();
+    let me = auth.client.me(&ann).await.unwrap();
+    assert_eq!(names(&me), vec!["Ann's Mac"]);
+    assert_eq!(removed_names(&me), vec!["build-box"]);
+    assert_eq!(me.removed[0].public_key, server.public());
+    assert!(me.deleted.is_empty());
+    // A removed server is no device of the account: it can't see it, nor be counted as linked.
+    assert_eq!(auth.client.me(&server).await.unwrap().user, None);
+
+    auth.client.enroll(&server, &token.token, &LINUX).await.unwrap();
+    let me = auth.client.me(&ann).await.unwrap();
+    assert_eq!(names(&me), vec!["Ann's Mac", "build-box"]);
+    assert!(me.removed.is_empty());
+}
+
+#[sqlx::test]
+async fn a_server_deleted_completely_is_listed_as_deleted_and_can_link_again(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (ann, _) = auth.new_client(&ANN).await;
+    let (linked, removed) = (DeviceKey::generate(), DeviceKey::generate());
+    for server in [&linked, &removed] {
+        let token = auth.client.create_enroll_token(&ann).await.unwrap();
+        auth.client.enroll(server, &token.token, &LINUX).await.unwrap();
+    }
+    auth.client.remove_device(&ann, &removed.public()).await.unwrap();
+
+    auth.client.delete_server_completely(&ann, &linked.public()).await.unwrap();
+    auth.client.delete_server_completely(&ann, &removed.public()).await.unwrap();
+    let me = auth.client.me(&ann).await.unwrap();
+    assert_eq!(names(&me), vec!["Ann's Mac"]);
+    assert!(me.removed.is_empty());
+    let mut deleted = me.deleted.clone();
+    deleted.sort();
+    let mut expected = vec![linked.public(), removed.public()];
+    expected.sort();
+    assert_eq!(deleted, expected);
+    // Deleting it again changes nothing.
+    auth.client.delete_server_completely(&ann, &linked.public()).await.unwrap();
+
+    let token = auth.client.create_enroll_token(&ann).await.unwrap();
+    auth.client.enroll(&linked, &token.token, &LINUX).await.unwrap();
+    let me = auth.client.me(&ann).await.unwrap();
+    assert_eq!(names(&me), vec!["Ann's Mac", "build-box"]);
+    assert_eq!(me.deleted, vec![removed.public()]);
+}
+
+#[sqlx::test]
+async fn only_a_client_of_the_account_deletes_its_servers_completely(db: PgPool) {
+    let auth = Auth::start(db).await;
+    let (ann, _) = auth.new_client(&ANN).await;
+    let (bob, _) = auth.new_client(&BOB).await;
+    let (server, other) = (DeviceKey::generate(), DeviceKey::generate());
+    for key in [&server, &other] {
+        let token = auth.client.create_enroll_token(&ann).await.unwrap();
+        auth.client.enroll(key, &token.token, &LINUX).await.unwrap();
+    }
+
+    assert!(auth.client.delete_server_completely(&bob, &server.public()).await.is_err());
+    let from_server = auth.client.delete_server_completely(&other, &server.public()).await;
+    assert_eq!(from_server.unwrap_err().to_string(), "Servers are deleted from a client.");
+    // A client is removed, never deleted completely.
+    let (second, _) = auth.new_client(&ANN).await;
+    assert!(auth.client.delete_server_completely(&ann, &second.public()).await.is_err());
+    assert!(auth.client.delete_server_completely(&ann, &DeviceKey::generate().public()).await.is_err());
+
+    let me = auth.client.me(&ann).await.unwrap();
+    assert_eq!(me.devices.len(), 4);
+    assert!(me.deleted.is_empty());
+    assert!(auth.client.me(&bob).await.unwrap().deleted.is_empty());
+}
+
 #[sqlx::test]
 async fn a_request_is_accepted_only_as_its_device_signed_it(db: PgPool) {
     let auth = Auth::start(db).await;

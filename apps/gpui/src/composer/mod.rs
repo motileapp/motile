@@ -661,7 +661,8 @@ impl Composer {
     fn box_(&self, thread: Option<&ThreadInfo>, labels: Labels, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
-        let has_attachments = !store.attachments().is_empty();
+        let continues = store.selected_draft().is_some_and(|draft| draft.from.is_some());
+        let has_attachments = continues || !store.attachments().is_empty();
         let store_handle = self.store.clone();
         let pasted = self.skills.pasted.clone();
         let text = Textarea::new(&self.text)

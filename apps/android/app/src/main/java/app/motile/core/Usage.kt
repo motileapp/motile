@@ -111,7 +111,7 @@ class UsageModel {
         asked += 1
         val number = asked
         refreshing = true
-        val counted = picked(store.servers)
+        val counted = picked(store.usageServers)
         if (tab == Tab.Limits) {
             store.loadLimits(refresh = refresh, kept = !refresh, servers = counted) { result ->
                 if (number != asked) return@loadLimits

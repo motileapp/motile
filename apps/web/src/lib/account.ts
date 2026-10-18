@@ -21,11 +21,26 @@ export type Account = {
   user: { email: string; name: string | null; picture: string | null }
   servers: Array<Device>
   clients: Array<Device>
+  removed: Array<RemovedServer>
+}
+
+/** A server removed from the account, whose threads live on as copies on its other servers. */
+export type RemovedServer = {
+  public_key: string
+  name: string
+  platform: string
+  removed_at: number
 }
 
 export type InstallCommand = { command: string; expires_at: number }
 
-type Me = { user: Account["user"] | null; devices: Array<Device> }
+type Me = {
+  user: Account["user"] | null
+  devices: Array<Device>
+  removed: Array<RemovedServer>
+  /** The servers deleted completely: no copy of their threads is kept anywhere. */
+  deleted: Array<string>
+}
 
 /** The account of the person signed in, or `null`. */
 export const getAccount = createServerFn().handler(
@@ -39,6 +54,7 @@ export const getAccount = createServerFn().handler(
       user: me.user,
       servers: me.devices.filter((device) => device.kind === "server"),
       clients: me.devices.filter((device) => device.kind === "client"),
+      removed: me.removed,
     }
   }
 )
@@ -51,6 +67,13 @@ export const removeDevice = createServerFn({ method: "POST" })
   .inputValidator((publicKey: string) => publicKey)
   .handler(async ({ data: publicKey }) => {
     await api("DELETE", `/api/devices/${encodeURIComponent(publicKey)}`)
+  })
+
+/** Removes a server if it is still linked and drops every copy of its threads. */
+export const deleteServerCompletely = createServerFn({ method: "POST" })
+  .inputValidator((publicKey: string) => publicKey)
+  .handler(async ({ data: publicKey }) => {
+    await api("DELETE", `/api/servers/${encodeURIComponent(publicKey)}`)
   })
 
 export const signOut = createServerFn({ method: "POST" }).handler(async () => {

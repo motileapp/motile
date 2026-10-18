@@ -1,5 +1,6 @@
 //! The attached files above the text: a tile for an image or a video and a chip for any other
-//! file, each saying how far its upload is. A click on a tile opens it in the viewer.
+//! file, each saying how far its upload is. A click on a tile opens it in the viewer. A draft that
+//! goes on from a removed server's thread has a chip for that thread before them.
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -11,12 +12,18 @@ use crate::theme::{Layer, Opacity, Radius, ShadowSize, Surface, colors};
 use crate::ui::{ActionButton, Variant, icons};
 
 pub const TILE: f32 = 64.;
+/// How wide the title of the thread a draft goes on from gets before it is cut.
+const CONTINUES_WIDTH: f32 = 320.;
 
 pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
     let attached = store.read(cx).attachments();
     let pictured: Vec<Attachment> = attached.iter().filter(|attachment| attachment.pictured).cloned().collect();
     let viewed: Vec<_> = pictured.iter().filter_map(Attachment::viewed).collect();
     let mut items: Vec<AnyElement> = Vec::new();
+    let continues = store.read(cx).selected_draft().and_then(|draft| draft.from.clone());
+    if let Some(from) = continues {
+        items.push(continues_chip(&from.title, store, cx).into_any_element());
+    }
     for (index, attachment) in pictured.iter().enumerate() {
         let (opens, viewed) = (store.clone(), viewed.clone());
         let tile = tile(attachment, store.clone(), cx).on_click(move |_, _, cx| {
@@ -143,6 +150,41 @@ fn chip(attachment: &Attachment, store: &Entity<Store>, cx: &App) -> impl IntoEl
                 .on_click(move |_, _, cx| {
                     remove.update(cx, |store, cx| {
                         store.remove_attachment(&id);
+                        cx.notify();
+                    })
+                }),
+        )
+}
+
+/// The thread of a removed server the draft goes on from, with the button that lets go of it.
+fn continues_chip(title: &str, store: &Entity<Store>, cx: &App) -> impl IntoElement {
+    let c = colors(cx);
+    let store = store.clone();
+    div()
+        .flex_shrink_0()
+        .cursor_default()
+        .flex()
+        .items_center()
+        .gap(px(5.))
+        .pl(px(9.))
+        .pr(px(2.))
+        .py(px(2.))
+        .rounded_full()
+        .bg(Surface::Composer.layer(Layer::Chip, c))
+        .border_1()
+        .border_color(c.border_accent)
+        .text_size(px(12.))
+        .child(icons::symbol("history", 12.))
+        .child(div().max_w(px(CONTINUES_WIDTH)).truncate().child(format!("Continues “{title}”")))
+        .child(
+            ActionButton::icon("drop-continuation", "x", "Start without it")
+                .small()
+                .round(true)
+                .surface(Surface::Composer)
+                .row(Some(Layer::Chip))
+                .on_click(move |_, _, cx| {
+                    store.update(cx, |store, cx| {
+                        store.drop_continuation();
                         cx.notify();
                     })
                 }),

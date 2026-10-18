@@ -102,14 +102,15 @@ impl Sidebar {
         let project = store.project(Some(&thread.project_id)).map(|project| project.seen(thread));
         let project_name =
             project.as_ref().map(|project| project.name.clone()).unwrap_or_else(|| last_component(&thread.cwd));
-        let pull_request = project.as_ref().and_then(|project| project.pull_request(thread));
+        let read_only = store.on_removed_server(thread);
+        let pull_request = project.as_ref().and_then(|project| project.pull_request(thread)).filter(|_| !read_only);
         let status = if let Some(jump) = jump {
             div()
                 .mr(px(button_inset() - SIDE_PADDING))
                 .text_color(c.foreground)
                 .child(KeyCaps::new([jump]))
                 .into_any_element()
-        } else if hovering && !thread.busy() {
+        } else if hovering && !thread.busy() && !read_only {
             let (store, id) = (self.store.clone(), thread.id.clone());
             let button = ActionButton::new(SharedString::from(format!("mark-done-{id}")), "Mark Done")
                 .symbol("check")
@@ -125,7 +126,7 @@ impl Sidebar {
                 });
             div().mr(px(button_inset() - SIDE_PADDING)).child(stop_press(button)).into_any_element()
         } else {
-            thread_status(thread, cx)
+            thread_status(thread, read_only, cx)
         };
         div()
             .relative()
@@ -214,7 +215,8 @@ impl Sidebar {
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                    this.thread_menu(menu_id.clone(), cx).show(event.position, window, cx);
+                    let Some(menu) = this.thread_menu(menu_id.clone(), cx) else { return };
+                    menu.show(event.position, window, cx);
                 }),
             );
         if movable {
@@ -390,6 +392,7 @@ impl Sidebar {
         let pull_request = project.as_ref().and_then(|project| project.pull_request(thread));
         let key = format!("done-{}", thread.id);
         let hovering = self.hovering(&key);
+        let removed = store.on_removed_server(thread);
         let (select, undone, menu_id) = (self.store.clone(), self.store.clone(), thread.id.clone());
         let (id, undone_id) = (thread.id.clone(), thread.id.clone());
         let margin = row_margin();
@@ -442,7 +445,7 @@ impl Sidebar {
                             .when(hovering, |time| time.opacity(0.))
                             .child(ago(thread.done_at.unwrap_or(thread.updated_at))),
                     )
-                    .when(hovering, |line| {
+                    .when(hovering && !removed, |line| {
                         line.child(
                             div()
                                 .absolute()
@@ -467,7 +470,8 @@ impl Sidebar {
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                    this.thread_menu(menu_id.clone(), cx).show(event.position, window, cx);
+                    let Some(menu) = this.thread_menu(menu_id.clone(), cx) else { return };
+                    menu.show(event.position, window, cx);
                 }),
             )
             .into_any_element()
@@ -540,8 +544,9 @@ impl Sidebar {
 /// How tall an active thread's row is, without the gap around it.
 pub const THREAD_ROW_HEIGHT: f32 = TOP_PADDING + FIRST_LINE_HEIGHT + 1. + TITLE_HEIGHT + 5. + 16. + BOTTOM_PADDING;
 
-/// What a thread is up to, or how long ago it last was.
-pub fn thread_status(thread: &ThreadInfo, cx: &App) -> AnyElement {
+/// What a thread is up to, or how long ago it last was. A thread of an unlinked server is only
+/// ever read-only.
+pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyElement {
     let c = colors(cx);
     let label = |text: String, color: Hsla, icon: AnyElement| {
         div().flex().items_center().gap(px(3.)).text_color(color).child(icon).child(
@@ -554,6 +559,12 @@ pub fn thread_status(thread: &ThreadInfo, cx: &App) -> AnyElement {
         )
     };
     let symbol = |name: &'static str| icons::symbol(name, 11.).into_any_element();
+    if read_only {
+        return label("Read-only".into(), c.warning, symbol("unlink"))
+            .id(SharedString::from(format!("read-only-{}", thread.id)))
+            .tooltip(tooltip("Its server is unlinked, so this thread can only be read or continued on another server."))
+            .into_any_element();
+    }
     if let Some(ask) = thread.asking() {
         let (word, name) = ask_label(ask);
         return label(word.into(), c.warning, symbol(name)).into_any_element();

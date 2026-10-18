@@ -28,7 +28,7 @@ fun UsageSheet() {
     val store = LocalStore.current
     val model = store.usage
     val close = LocalCloseSheet.current
-    val picksServers = store.servers.size > 1
+    val picksServers = store.usageServers.size > 1
     Column(Modifier.fillMaxSize()) {
         SheetBar(
             "Usage",

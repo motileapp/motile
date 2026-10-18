@@ -15,7 +15,8 @@ use crate::ui::{OnClick, edges, tooltip};
 
 /// A button of words inside a row. All of its frame takes the click, and what lights up under
 /// the pointer is inset from it by `insets`, so buttons that touch each other and the row's edge
-/// look apart. A bordered one is drawn as a regular button is, with a line around it.
+/// look apart. A bordered one is drawn as a regular button is, with a line around it, and a
+/// primary one is filled with the primary colour.
 #[derive(IntoElement)]
 pub struct RowButton {
     id: ElementId,
@@ -23,7 +24,10 @@ pub struct RowButton {
     help: SharedString,
     radius: f32,
     bordered: bool,
+    primary: bool,
     hover: Option<Hsla>,
+    rest: Option<Hsla>,
+    grows: bool,
     insets: Edges<f32>,
     height: f32,
     on_click: Option<OnClick>,
@@ -41,7 +45,10 @@ impl RowButton {
             help: help.into(),
             radius: Self::METRICS.radius(),
             bordered: false,
+            primary: false,
             hover: None,
+            rest: None,
+            grows: false,
             insets: edges(0., 0., 0., 0.),
             height: Self::METRICS.height(),
             on_click: None,
@@ -58,9 +65,26 @@ impl RowButton {
         self
     }
 
+    pub fn primary(mut self) -> Self {
+        self.primary = true;
+        self
+    }
+
     /// What lights it, a step above the surface it lies on.
     pub fn hover(mut self, hover: Hsla) -> Self {
         self.hover = Some(hover);
+        self
+    }
+
+    /// What fills it unlit.
+    pub fn rest(mut self, rest: Hsla) -> Self {
+        self.rest = Some(rest);
+        self
+    }
+
+    /// It takes its share of the row's width, beside the buttons that do too.
+    pub fn grows(mut self) -> Self {
+        self.grows = true;
         self
     }
 
@@ -86,13 +110,22 @@ impl RenderOnce for RowButton {
         let hovered = crate::ui::hover_state(&self.id, window, cx);
         let lit = *hovered.read(cx);
         let c = colors(cx);
-        let hover = self.hover.unwrap_or(c.background_secondary);
         let insets = self.insets;
-        let padding = if self.bordered { Self::METRICS.padding() } else { Self::PADDING };
-        let text = if lit || self.bordered { c.foreground } else { c.muted_foreground };
+        let bordered = self.bordered || self.primary;
+        let padding = if bordered { Self::METRICS.padding() } else { Self::PADDING };
+        let (fill, text) = if self.primary {
+            let fill = if lit { c.at(c.primary, Opacity::Lit) } else { c.primary };
+            (Some(fill), c.primary_foreground)
+        } else if lit {
+            (Some(self.hover.unwrap_or(c.background_secondary)), c.foreground)
+        } else {
+            (self.rest, if bordered { c.foreground } else { c.muted_foreground })
+        };
+        let stroked = self.bordered && !self.primary;
         div()
             .id(self.id)
             .flex_shrink_0()
+            .when(self.grows, |button| button.flex_1().min_w_0())
             .h(px(self.height))
             .pt(px(insets.top))
             .pl(px(insets.left))
@@ -102,15 +135,16 @@ impl RenderOnce for RowButton {
             .child(
                 div()
                     .h_full()
+                    .when(self.grows, |light| light.w_full())
                     .px(px(padding))
                     .flex()
                     .items_center()
                     .justify_center()
                     .rounded(px(self.radius))
-                    .when(self.bordered, |light| light.border_1().border_color(c.border).px(px(padding - 1.)))
-                    .when(lit, |light| light.bg(hover))
+                    .when(stroked, |light| light.border_1().border_color(c.border).px(px(padding - 1.)))
+                    .when_some(fill, |light, fill| light.bg(fill))
                     .text_size(px(Self::METRICS.text_size()))
-                    .when(self.bordered, |light| light.font_weight(FontWeight::MEDIUM))
+                    .when(bordered, |light| light.font_weight(FontWeight::MEDIUM))
                     .text_color(text)
                     .whitespace_nowrap()
                     .child(self.title),

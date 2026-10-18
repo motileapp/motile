@@ -111,6 +111,8 @@ data class ControlLook(
     val joined: Set<HorizontalEdge> = emptySet(),
     /** A colour that says something, like a pull request's state, in place of the quiet ones. */
     val tint: Color? = null,
+    /** What it fills with when lit, where that isn't its variant's colour. */
+    val hover: Color? = null,
 ) {
     fun foreground(palette: Palette): Color {
         if (tint != null && (variant == ButtonVariant.Ghost || variant == ButtonVariant.Secondary)) return tint
@@ -128,6 +130,7 @@ data class ControlLook(
     /** A button filled with a colour of its own lights by that colour at opacity lit. */
     fun fill(palette: Palette, dark: Boolean): Color {
         fun filled(color: Color) = if (lit) color.at(Opacity.Lit, dark) else color
+        if (lit && hover != null) return hover
         return when (variant) {
             ButtonVariant.Primary -> filled(palette.primary)
             ButtonVariant.Secondary -> surface.color(if (selected || lit) Surface.Layer.ControlLit else Surface.Layer.Control, palette)
@@ -353,13 +356,14 @@ fun ActionButton(
     opens: Boolean = false,
     joined: Set<HorizontalEdge> = emptySet(),
     tint: Color? = null,
+    hover: Color? = null,
     margin: PaddingValues = PaddingValues(0.dp),
     disabled: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val words = title?.takeIf { it.isNotEmpty() }
-    val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint)
+    val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, hover = hover)
     ControlButton(look, onClick, modifier, pending, disabled, margin, words ?: help, onLongClick) {
         ControlLabel(
             words, ControlIcon.of(icon, picture), size, chevron = opens, pending = pending, pendingTitle = pendingTitle, fills = fills,

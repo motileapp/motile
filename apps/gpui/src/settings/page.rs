@@ -35,10 +35,12 @@ const FADE: f32 = 20.;
 const LOGO_TILE: f32 = 32.;
 const LOGO_GAP: f32 = 12.;
 
-/// What the settings take away once the user says so: a server, a project or an agent's account.
+/// What the settings take away once the user says so: a server, a server with every copy of its
+/// threads, a project or an agent's account.
 #[derive(Clone)]
 enum Removal {
     Server(Box<Server>),
+    ServerCompletely(Box<Server>),
     Project(Box<Project>),
     Account(Box<(AgentAccount, Server)>),
 }
@@ -46,7 +48,8 @@ enum Removal {
 impl Removal {
     fn title(&self) -> String {
         match self {
-            Removal::Server(server) => format!("Remove “{}”?", server.name),
+            Removal::Server(server) => format!("Unlink “{}”?", server.name),
+            Removal::ServerCompletely(server) => format!("Delete “{}”?", server.name),
             Removal::Project(project) => format!("Remove “{}”?", project.name),
             Removal::Account(pair) => format!("Remove “{} · {}”?", agent_name(pair.0.agent), pair.0.name),
         }
@@ -55,8 +58,12 @@ impl Removal {
     fn message(&self, store: &Store) -> String {
         match self {
             Removal::Server(server) => format!(
-                "Your account lets go of {} and its threads leave your clients. What is on it stays there.",
+                "Your account lets go of {}. Its threads stay readable, and can go on, from the copies your other servers keep. If it is your only server, nothing is kept. What is on it stays there.",
                 server.name
+            ),
+            Removal::ServerCompletely(server) => format!(
+                "{name} leaves your account and every copy of its threads is deleted, on all your servers and clients. What is on {name} itself stays there.",
+                name = server.name
             ),
             Removal::Project(project) => {
                 let server = store.server(Some(&project.server_id)).map_or("its server", |server| server.name.as_str());
@@ -69,9 +76,18 @@ impl Removal {
         }
     }
 
+    fn answer(&self) -> &'static str {
+        match self {
+            Removal::ServerCompletely(_) => "Delete",
+            Removal::Server(_) => "Unlink",
+            _ => "Remove",
+        }
+    }
+
     fn run(&self, store: &mut Store) {
         match self {
             Removal::Server(server) => store.remove_server(server),
+            Removal::ServerCompletely(server) => store.delete_server_completely(server),
             Removal::Project(project) => store.remove_project(project),
             Removal::Account(pair) => store.remove_agent_account(&pair.0, &pair.1),
         }
@@ -266,7 +282,8 @@ impl SettingsPage {
     }
 
     fn servers(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let servers = self.store.read(cx).servers.clone();
+        let (servers, removed): (Vec<Server>, Vec<Server>) =
+            self.store.read(cx).servers.iter().cloned().partition(|server| !server.removed);
         let page = cx.weak_entity();
         let mut rows = Vec::new();
         for (index, server) in servers.iter().enumerate() {
@@ -275,9 +292,12 @@ impl SettingsPage {
                 .size(ControlSize::Large)
                 .surface(Surface::Card);
             let remove = Self::ask_removal(&page, Removal::Server(Box::new(server.clone())));
+            let delete = Self::ask_removal(&page, Removal::ServerCompletely(Box::new(server.clone())));
             let menu = more(("server-menu", index), format!("What to do with {}", server.name), move |_, _| {
-                let remove = remove.clone();
-                Menu::new().danger_symbol_item("Remove Server", "trash-2", move |window, cx| remove(window, cx))
+                let (remove, delete) = (remove.clone(), delete.clone());
+                Menu::new()
+                    .danger_symbol_item("Unlink Server", "unlink", move |window, cx| remove(window, cx))
+                    .danger_symbol_item("Delete", "trash-2", move |window, cx| delete(window, cx))
             });
             let leading = label(server.name.clone(), Some(description(server)), Some("server"), Cut::End, cx);
             rows.push(row(vec![leading], vec![status.into_any_element(), menu.into_any_element()]).into_any_element());
@@ -294,8 +314,31 @@ impl SettingsPage {
             row(vec![div().ml(px(-large_outset())).child(add).into_any_element()], Vec::new()).into_any_element(),
         );
         let mut groups = vec![group("servers", "Servers", None, true, rows, cx)];
+        groups.extend(self.removed_servers(&removed, cx));
         groups.extend(self.continuing(cx));
         groups
+    }
+
+    /// The servers removed from the account, whose threads the other servers keep copies of, to
+    /// delete those copies too.
+    fn removed_servers(&self, removed: &[Server], cx: &mut Context<Self>) -> Option<AnyElement> {
+        if removed.is_empty() {
+            return None;
+        }
+        let page = cx.weak_entity();
+        let mut rows = Vec::new();
+        for (index, server) in removed.iter().enumerate() {
+            let delete = Self::ask_removal(&page, Removal::ServerCompletely(Box::new(server.clone())));
+            let menu = more(("removed-server-menu", index), format!("What to do with {}", server.name), move |_, _| {
+                let delete = delete.clone();
+                Menu::new().danger_symbol_item("Delete", "trash-2", move |window, cx| delete(window, cx))
+            });
+            rows.push(row(vec![server_label(server, cx)], vec![menu.into_any_element()]).into_any_element());
+            if index + 1 < removed.len() {
+                rows.push(divider_on(Surface::Card, cx).into_any_element());
+            }
+        }
+        Some(group("removed-servers", "Unlinked", None, true, rows, cx))
     }
 
     /// What each server goes on with by itself: threads whose usage limit reset, and threads whose
@@ -380,7 +423,7 @@ impl SettingsPage {
 
     /// The accounts each server's agents work with, a card for each server.
     fn agents(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let servers = self.store.read(cx).servers.clone();
+        let servers: Vec<Server> = self.store.read(cx).live_servers().cloned().collect();
         if servers.is_empty() {
             return vec![note(
                 "The accounts your agents work with are set on each of your servers, once you have one.",
@@ -478,8 +521,9 @@ impl SettingsPage {
     }
 
     fn projects(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let projects = self.store.read(cx).projects.clone();
-        let no_servers = self.store.read(cx).servers.is_empty();
+        let store = self.store.read(cx);
+        let projects: Vec<Project> = store.projects.iter().filter(|project| store.is_live(project)).cloned().collect();
+        let no_servers = !store.has_live_servers();
         let page = cx.weak_entity();
         let mut rows = Vec::new();
         for (index, project) in projects.iter().enumerate() {
@@ -723,7 +767,7 @@ impl SettingsPage {
         let message = removal.message(self.store.read(cx));
         let store = self.store.clone();
         let shown = Confirmation::new(removal.title()).message(message).answer(
-            Answer::new("Remove", move |_, cx| {
+            Answer::new(removal.answer(), move |_, cx| {
                 store.update(cx, |store, cx| {
                     removal.run(store);
                     cx.notify();

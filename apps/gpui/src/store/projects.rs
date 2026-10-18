@@ -303,6 +303,7 @@ impl Store {
 
     // Command panel
 
+    /// Opens the command panel, also where only unlinked servers' threads are left to find.
     pub fn open_panel(&mut self, page: PanelPage) {
         if !self.account.signed_in || self.servers.is_empty() {
             return;

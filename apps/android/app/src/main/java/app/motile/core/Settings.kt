@@ -56,7 +56,7 @@ data class SettingsEntry(
             SettingsEntry("messages", "Sent while the agent works", SettingsSection.General, "messages queue steer interrupt"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
             SettingsEntry("shortcuts", "Keybindings", SettingsSection.Keyboard, "keys keyboard shortcuts hotkeys commands record keybindings.json"),
-            SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove machine agents connected"),
+            SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove unlink unlinked delete copies machine agents connected"),
             SettingsEntry("continue-limits", "Continue after usage limits", SettingsSection.Servers, "rate limit reset resume quota wait"),
             SettingsEntry("continue-restarts", "Continue after restarts", SettingsSection.Servers, "restart update crash resume interrupted"),
             SettingsEntry("agent-accounts", "Accounts", SettingsSection.Agents, "claude codex sign in login folder subscription plan api key router"),

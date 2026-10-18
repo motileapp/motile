@@ -165,16 +165,20 @@ struct SidebarScreen: View {
         case .drafts:
             DraftRows(swiped: { swipe("draft:\($0)", swiped: shown.swiped) }, open: open)
         case .active(let thread):
-            ThreadRow(
+            let row = ThreadRow(
                 thread: thread, project: projects[thread.projectID]?.seen(from: thread),
                 selected: selection == .thread(thread.id), rename: beginRename, delete: { deleting = $0 }, open: open
             )
             .equatable()
-            .rowSwipe(
-                .check, "Mark Done", tint: thread.busy ? .themeMutedForeground : .themeSuccess, size: 36,
-                leaves: !thread.busy, isOpen: swipe(item.id, swiped: shown.swiped)
-            ) {
-                markDone(thread)
+            if store.onRemovedServer(thread) {
+                row
+            } else {
+                row.rowSwipe(
+                    .check, "Mark Done", tint: thread.busy ? .themeMutedForeground : .themeSuccess, size: 36,
+                    leaves: !thread.busy, isOpen: swipe(item.id, swiped: shown.swiped)
+                ) {
+                    markDone(thread)
+                }
             }
         case .result(let result):
             SearchResultRow(result: result, highlighted: result.id == shown.highlighted, open: openSearchResult)
@@ -197,14 +201,18 @@ struct SidebarScreen: View {
         case .doneHeader:
             doneHeader(count: done.count, expanded: expanded)
         case .done(let thread):
-            DoneRow(
+            let row = DoneRow(
                 thread: thread, project: projects[thread.projectID], selected: selection == .thread(thread.id),
                 rename: beginRename, delete: { deleting = $0 }, open: open
             )
             .equatable()
             .frame(height: 44)
-            .rowSwipe(.undo2, "Mark Undone", tint: .themeMutedForeground, size: 28, isOpen: swipe(item.id, swiped: shown.swiped)) {
-                store.setDone([thread.id], done: false)
+            if store.onRemovedServer(thread) {
+                row
+            } else {
+                row.rowSwipe(.undo2, "Mark Undone", tint: .themeMutedForeground, size: 28, isOpen: swipe(item.id, swiped: shown.swiped)) {
+                    store.setDone([thread.id], done: false)
+                }
             }
         }
     }

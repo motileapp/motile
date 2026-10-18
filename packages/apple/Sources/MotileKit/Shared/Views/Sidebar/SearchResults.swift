@@ -188,12 +188,15 @@ struct SearchResultRow: View {
             }
             .foregroundStyle(Color.themeMutedForeground)
         case .thread(let thread, _):
-            if let pullRequest = project?.pullRequest(of: thread) {
+            let readOnly = store.onRemovedServer(thread)
+            if !readOnly, let pullRequest = project?.pullRequest(of: thread) {
                 PullRequestLabel(pullRequest: pullRequest, colored: !thread.isDone)
             }
             if let jump {
                 KeyCaps([jump])
                     .foregroundStyle(Color.themeForeground)
+            } else if readOnly {
+                ThreadStatus(thread: thread, readOnly: true)
             } else if thread.isDone {
                 Text(Time.ago(thread.doneAt ?? thread.updatedAt, now: AgoClock.shared.now))
                     .font(.ui(size: 11))

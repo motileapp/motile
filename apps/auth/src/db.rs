@@ -1,5 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
-use motile_protocol::auth_api::{Device, DeviceKind, Me, User};
+use motile_protocol::auth_api::{Device, DeviceKind, Me, RemovedServer, User};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -25,6 +25,15 @@ struct DeviceRow {
     name: String,
     platform: String,
     created_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct RemovedRow {
+    public_key: String,
+    name: String,
+    platform: String,
+    removed_at: DateTime<Utc>,
+    deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -91,12 +100,33 @@ pub async fn me(db: &PgPool, user: &UserRow) -> Result<Me, sqlx::Error> {
         kind: if row.kind == "server" { DeviceKind::Server } else { DeviceKind::Client },
         name: row.name,
         platform: row.platform,
-        created_at: row.created_at.timestamp_millis() as f64 / 1000.0,
+        created_at: seconds(row.created_at),
+    });
+    let gone: Vec<RemovedRow> = sqlx::query_as(
+        "SELECT public_key, name, platform, removed_at, deleted_at FROM removed_servers
+         WHERE user_id = $1 ORDER BY removed_at",
+    )
+    .bind(user.id)
+    .fetch_all(db)
+    .await?;
+    let (deleted, removed): (Vec<RemovedRow>, Vec<RemovedRow>) =
+        gone.into_iter().partition(|row| row.deleted_at.is_some());
+    let removed = removed.into_iter().map(|row| RemovedServer {
+        public_key: row.public_key,
+        name: row.name,
+        platform: row.platform,
+        removed_at: seconds(row.removed_at),
     });
     Ok(Me {
         user: Some(User { email: user.email.clone(), name: user.name.clone(), picture: user.picture.clone() }),
         devices: devices.collect(),
+        removed: removed.collect(),
+        deleted: deleted.into_iter().map(|row| row.public_key).collect(),
     })
+}
+
+fn seconds(at: DateTime<Utc>) -> f64 {
+    at.timestamp_millis() as f64 / 1000.0
 }
 
 /// Links the device to the user, taking it from another account if it was linked there: the
@@ -129,16 +159,67 @@ pub async fn link_device(
     .bind(platform)
     .execute(db)
     .await?;
-    Ok(linked.rows_affected() == 1)
-}
-
-pub async fn remove_device(db: &PgPool, user_id: Uuid, public_key: &str) -> Result<bool, sqlx::Error> {
-    let removed = sqlx::query("DELETE FROM devices WHERE public_key = $1 AND user_id = $2")
-        .bind(public_key)
+    if linked.rows_affected() != 1 {
+        return Ok(false);
+    }
+    // A server linked again, even after it was deleted completely, is an ordinary server again.
+    sqlx::query("DELETE FROM removed_servers WHERE user_id = $1 AND public_key = $2")
         .bind(user_id)
+        .bind(public_key)
         .execute(db)
         .await?;
-    Ok(removed.rows_affected() == 1)
+    Ok(true)
+}
+
+/// Removes the device; a server is remembered as removed, with its name.
+pub async fn remove_device(db: &PgPool, user_id: Uuid, public_key: &str) -> Result<bool, sqlx::Error> {
+    let mut transaction = db.begin().await?;
+    let removed: Option<(String, String, String)> =
+        sqlx::query_as("DELETE FROM devices WHERE public_key = $1 AND user_id = $2 RETURNING kind, name, platform")
+            .bind(public_key)
+            .bind(user_id)
+            .fetch_optional(&mut *transaction)
+            .await?;
+    let Some((kind, name, platform)) = removed else { return Ok(false) };
+    if kind == kind_text(DeviceKind::Server) {
+        sqlx::query(
+            "INSERT INTO removed_servers (user_id, public_key, name, platform) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (user_id, public_key) DO UPDATE SET
+                 name = excluded.name, platform = excluded.platform, removed_at = now(), deleted_at = NULL",
+        )
+        .bind(user_id)
+        .bind(public_key)
+        .bind(&name)
+        .bind(&platform)
+        .execute(&mut *transaction)
+        .await?;
+    }
+    transaction.commit().await?;
+    Ok(true)
+}
+
+/// Removes the server if it is still linked and marks it deleted completely. `false` when the
+/// account has no such server, linked or removed.
+pub async fn delete_server_completely(db: &PgPool, user_id: Uuid, public_key: &str) -> Result<bool, sqlx::Error> {
+    let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM devices WHERE public_key = $1 AND user_id = $2")
+        .bind(public_key)
+        .bind(user_id)
+        .fetch_optional(db)
+        .await?;
+    if kind.as_deref() == Some(kind_text(DeviceKind::Client)) {
+        return Ok(false);
+    }
+    if kind.is_some() {
+        remove_device(db, user_id, public_key).await?;
+    }
+    let deleted = sqlx::query(
+        "UPDATE removed_servers SET deleted_at = COALESCE(deleted_at, now()) WHERE user_id = $1 AND public_key = $2",
+    )
+    .bind(user_id)
+    .bind(public_key)
+    .execute(db)
+    .await?;
+    Ok(deleted.rows_affected() == 1)
 }
 
 pub struct NewSignIn<'a> {

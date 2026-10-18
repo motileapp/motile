@@ -37,11 +37,13 @@ data class ThreadDraft(
     /** The thread starts in a new worktree, on a branch that starts from `base`. */
     val worktree: Boolean? = null,
     val base: String? = null,
+    /** The thread of a removed server the new one goes on from. */
+    val from: ContinuedThread? = null,
 ) {
     val json: Map<String, Any?>
         get() = mapOf(
             "id" to id, "projectID" to projectID, "model" to model, "agentAccount" to agentAccount, "effort" to effort,
-            "access" to access.raw, "worktree" to worktree, "base" to base,
+            "access" to access.raw, "worktree" to worktree, "base" to base, "from" to from?.json,
         )
 
     companion object {
@@ -54,7 +56,17 @@ data class ThreadDraft(
             access = Access.of(json.optionalString("access")) ?: Access.Full,
             worktree = json.optionalBool("worktree"),
             base = json.optionalString("base"),
+            from = json.obj("from")?.let(ContinuedThread::of),
         )
+    }
+}
+
+/** A thread of a server removed from the account, which a new thread goes on from on another server, with all that happened in it. */
+data class ContinuedThread(val origin: String, val threadID: String, val title: String) {
+    val json: Map<String, Any?> get() = mapOf("origin" to origin, "threadID" to threadID, "title" to title)
+
+    companion object {
+        fun of(json: JSON) = ContinuedThread(json.string("origin"), json.string("threadID"), json.string("title"))
     }
 }
 
@@ -216,17 +228,26 @@ class AppStore(private val context: Context) {
         private set
 
     // What the servers hold
+    /** The account's servers, which threads start and go on on. */
     var servers by mutableStateOf(emptyList<Server>())
         private set
+    /** The servers removed from the account, whose threads stay to read from the copies. */
+    var removedServers by mutableStateOf(emptyList<Server>())
+        private set
     private val serverUpdates = mutableStateMapOf<String, ServerUpdate>()
-    /** The folders the user added. "No project" of each server is in `noProjects`. */
+    /** Every server's projects as the core sent them, the removed servers' too. */
+    private var everyProject = emptyList<Project>()
+    /** The folders the user added on the account's servers. "No project" of each server is in `noProjects`. */
     var projects by mutableStateOf(emptyList<Project>())
         private set
-    /** The project of each server that threads start in without one. */
+    /** The project of each of the account's servers that threads start in without one. */
     var noProjects by mutableStateOf(emptyList<Project>())
         private set
+    /** The projects of the removed servers, which their threads are listed under. */
+    var removedProjects by mutableStateOf(emptyList<Project>())
+        private set
     val projectsByID: Map<String, Project>
-        get() = (projects + noProjects).reversed().associateBy { it.id }
+        get() = (projects + noProjects + removedProjects).reversed().associateBy { it.id }
     var threads by mutableStateOf(mapOf<String, ThreadInfo>())
         private set
     /** The threads as the sidebar lists them, kept in order as they change so that it never sorts them. */
@@ -576,10 +597,13 @@ class AppStore(private val context: Context) {
         }
     }
 
-    private fun apply(servers: List<Server>) {
+    private fun apply(all: List<Server>) {
         val composerWasConnected = composerServer?.state == Server.State.Connected
         val wereConnected = this.servers.filter { it.state == Server.State.Connected }.map { it.id }.toSet()
-        this.servers = servers
+        val servers = all.filter { !it.removed }
+        if (this.servers != servers) this.servers = servers
+        val removed = all.filter { it.removed }
+        if (removedServers != removed) removedServers = removed
         for (server in servers) {
             if (server.state != Server.State.Connected || server.id in wereConnected) continue
             linear.read(server.id)
@@ -589,9 +613,9 @@ class AppStore(private val context: Context) {
             readGit(fetch = true)
             readWorktreeStart(fetch = true)
         }
-        val known = servers.map { it.id }.toSet()
-        if (projects.any { it.serverID !in known }) projects = projects.filter { it.serverID in known }
-        if (noProjects.any { it.serverID !in known }) noProjects = noProjects.filter { it.serverID in known }
+        val known = all.map { it.id }.toSet()
+        everyProject = everyProject.filter { it.serverID in known }
+        sortProjects()
         if (threads.values.any { it.serverID !in known }) replaceThreads(threads.filterValues { it.serverID in known })
         // A server that is back with another version has finished updating.
         for (server in servers) {
@@ -640,19 +664,28 @@ class AppStore(private val context: Context) {
 
     private fun applyProjects(new: List<Project>, serverID: String) {
         val git = gitProject?.git
-        val updated = (projects.filter { it.serverID != serverID } + new.filter { !it.noProject }).sortedBy { it.createdAt }
-        // Every row of the sidebar looks at the projects, so they only change when they did.
-        if (updated != projects) projects = updated
-        val order = servers.map { it.id }
-        val none = (noProjects.filter { it.serverID != serverID } + new.filter { it.noProject })
-            .sortedBy { order.indexOf(it.serverID).let { index -> if (index < 0) order.size else index } }
-        if (none != noProjects) noProjects = none
+        everyProject = everyProject.filter { it.serverID != serverID } + new
+        sortProjects()
         ensureDraftProject()
         openAwaitedProject()
         pickAwaitedFolder()
         // A server that has just started hasn't read the repository yet.
         gitProject?.let { if (it.serverID == serverID && it.git == null) readGit() }
         if (gitProject?.git != git) workspaceVersion += 1
+    }
+
+    /** Puts every project where it is listed: the account's servers' folders, their "No project", or the removed servers' projects. */
+    private fun sortProjects() {
+        val removed = removedServers.map { it.id }.toSet()
+        val live = everyProject.filter { it.serverID !in removed }
+        val updated = live.filter { !it.noProject }.sortedBy { it.createdAt }
+        // Every row of the sidebar looks at the projects, so they only change when they did.
+        if (updated != projects) projects = updated
+        val order = servers.map { it.id }
+        val none = live.filter { it.noProject }.sortedBy { order.indexOf(it.serverID).let { index -> if (index < 0) order.size else index } }
+        if (none != noProjects) noProjects = none
+        val gone = everyProject.filter { it.serverID in removed }
+        if (gone != removedProjects) removedProjects = gone
     }
 
     // Lookups
@@ -709,7 +742,30 @@ class AppStore(private val context: Context) {
             return projects.sortedWith(compareByDescending<Project> { lastUsed[it.id] ?: it.createdAt }.thenByDescending { it.id })
         }
 
-    fun server(id: String?): Server? = servers.firstOrNull { it.id == id }
+    fun server(id: String?): Server? = servers.firstOrNull { it.id == id } ?: removedServers.firstOrNull { it.id == id }
+
+    /** The servers whose agents' spending the usage counts: the removed ones' too, from the copies. */
+    val usageServers: List<Server> get() = servers + removedServers
+
+    /** Whether the server was removed from the account, so that nothing can be done there. */
+    fun isRemoved(serverID: String?): Boolean = removedServers.any { it.id == serverID }
+
+    /** Whether the thread is a copy of a removed server's, which can only be read. */
+    fun onRemovedServer(thread: ThreadInfo): Boolean = isRemoved(thread.serverID)
+
+    /** What the right panel says in place of what it can't show of a removed server. */
+    private fun removedNote(serverID: String): String? {
+        if (!isRemoved(serverID)) return null
+        return "“${server(serverID)?.name ?: "Its server"}” is unlinked, so this thread is read-only."
+    }
+
+    /** The server the open thread was on, once it was removed from the account. The thread then ends with the way to go on elsewhere, in place of the composer. */
+    val openThreadRemovedServer: Server?
+        get() {
+            val thread = selectedThread ?: return null
+            if (!isRemoved(thread.serverID)) return null
+            return server(thread.serverID)
+        }
 
     /** The project the composer's thread works in, or the one the open draft would start in. */
     val composerProject: Project?
@@ -772,6 +828,7 @@ class AppStore(private val context: Context) {
         get() {
             val target = panelTarget ?: return null
             val server = server(target.serverID) ?: return null
+            removedNote(server.id)?.let { return it }
             if (server.protocolVersion < 8) return "Update ${server.name} to see pull requests here."
             return if (target.repository) null else "This folder isn't a git repository."
         }
@@ -830,6 +887,7 @@ class AppStore(private val context: Context) {
     val panelUnavailable: String?
         get() {
             val target = panelTarget ?: return "Add a project to see its files."
+            removedNote(target.serverID)?.let { return it }
             val server = server(target.serverID)
             if (server == null || server.state != Server.State.Connected) return "Your server isn't connected."
             return if (server.protocolVersion >= 7) null else "Update ${server.name} to see files and changes."
@@ -1001,7 +1059,7 @@ class AppStore(private val context: Context) {
     private fun emptyDraft(): ThreadDraft {
         val index = threadDrafts.indexOfLast { preview(it) == null && !isSending(it) }
         if (index >= 0) {
-            val empty = applyLastSettings(threadDrafts[index])
+            val empty = applyLastSettings(threadDrafts[index].copy(from = null))
             threadDrafts = threadDrafts.toMutableList().also { it[index] = empty }
             saveThreadDrafts()
             return empty
@@ -1027,11 +1085,11 @@ class AppStore(private val context: Context) {
         saveThreadDrafts()
     }
 
-    /** Keeps the open draft pointing at a project that exists, once the projects are known. */
+    /** Keeps the open draft pointing at a project of the account's servers, once the projects are known. */
     private fun ensureDraftProject() {
         try {
             val draft = selectedDraft ?: return
-            if (!ready || project(draft.projectID) != null) return
+            if (!ready || startsThreads(project(draft.projectID))) return
             val first = projects.firstOrNull() ?: noProjects.firstOrNull() ?: return
             moveDraft(first.id)
         } finally {
@@ -1216,6 +1274,11 @@ class AppStore(private val context: Context) {
         core.send("remove_server", json("server_id" to server.id)) { alert(it) }
     }
 
+    /** Removes the server if it is still the account's, and deletes every copy of its threads. */
+    fun deleteServerCompletely(server: Server) {
+        core.send("delete_server_completely", json("server_id" to server.id)) { alert(it) }
+    }
+
     // Projects
 
     /** Adds the folder as a project and opens a thread in it. A folder that is a project already is opened where it was left. */
@@ -1298,6 +1361,7 @@ class AppStore(private val context: Context) {
         get() {
             val target = panelTarget ?: return null
             val server = server(target.serverID) ?: return null
+            removedNote(server.id)?.let { return it }
             return if (server.protocolVersion >= 12) null else "Update ${server.name} to connect it to Linear."
         }
 
@@ -1315,6 +1379,7 @@ class AppStore(private val context: Context) {
         get() {
             val target = panelTarget ?: return null
             val server = server(target.serverID) ?: return null
+            removedNote(server.id)?.let { return it }
             return if (server.protocolVersion >= 29) null else "Update ${server.name} to connect it to Ricrac."
         }
 
@@ -1496,8 +1561,9 @@ class AppStore(private val context: Context) {
         Preferences.set("new.base-$projectID", branch)
     }
 
-    /** Whether the project's server is new enough to list and switch branches. */
-    fun canSwitchBranches(project: Project): Boolean = project.branch != null && (server(project.serverID)?.protocolVersion ?: 0) >= 3
+    /** Whether the project's server is new enough to list and switch branches, and still the account's. */
+    fun canSwitchBranches(project: Project): Boolean =
+        project.branch != null && !isRemoved(project.serverID) && (server(project.serverID)?.protocolVersion ?: 0) >= 3
 
     /** Opens the branch picker at once, on the branches last listed or on placeholders, and lists them again. */
     fun showBranches(project: Project) {
@@ -1533,12 +1599,12 @@ class AppStore(private val context: Context) {
 
     // Git
 
-    /** Whether the project's server is new enough to commit, push and open pull requests. */
-    fun canUseGit(project: Project): Boolean = (server(project.serverID)?.protocolVersion ?: 0) >= 4
+    /** Whether the project's server is new enough to commit, push and open pull requests, and still the account's. */
+    fun canUseGit(project: Project): Boolean = !isRemoved(project.serverID) && (server(project.serverID)?.protocolVersion ?: 0) >= 4
 
-    /** Whether the project's folder is no git repository and its server can make it one. */
+    /** Whether the project's folder is no git repository and its server, still the account's, can make it one. */
     fun canInitializeGit(project: Project): Boolean =
-        !project.noProject && project.branch == null && project.git == null && (server(project.serverID)?.protocolVersion ?: 0) >= 16
+        !isRemoved(project.serverID) && !project.noProject && project.branch == null && project.git == null && (server(project.serverID)?.protocolVersion ?: 0) >= 16
 
     fun initializeGit(project: Project) {
         if (project.id in initializingGit) return
@@ -1776,7 +1842,7 @@ class AppStore(private val context: Context) {
     // Command panel
 
     fun openPanel(page: PanelPage) {
-        if (!account.signedIn || servers.isEmpty()) return
+        if (!account.signedIn || (servers.isEmpty() && removedServers.isEmpty())) return
         panel = page
         readGitHubOfServers()
     }
@@ -1865,9 +1931,28 @@ class AppStore(private val context: Context) {
     /** Opens an empty draft. The one that was open stays in the sidebar if something was written in it. */
     fun startNewThread(project: Project? = null) {
         openEmptyDraft()
-        project?.let { setNewThreadProject(it.id) }
+        if (project != null && startsThreads(project)) setNewThreadProject(project.id)
         threadsShown += 1
     }
+
+    /** Whether a thread can start in the project: it is one of the account's servers'. */
+    fun startsThreads(project: Project?): Boolean {
+        project ?: return false
+        return !isRemoved(project.serverID)
+    }
+
+    /** Opens a draft of a new thread that goes on from the open one, whose server was removed, on the server of the project the user picks. */
+    fun continueOnAnotherServer() {
+        val thread = selectedThread ?: return
+        if (!isRemoved(thread.serverID)) return
+        val from = ContinuedThread(thread.serverID, thread.id, thread.title)
+        startNewThread()
+        updateDraft { it.copy(from = from) }
+        composerFocus += 1
+    }
+
+    /** The open draft starts a thread of its own, not one that goes on from a removed server's. */
+    fun dropContinuation() = updateDraft { it.copy(from = null) }
 
     /** Opens a thread or a draft and brings it to the front. */
     fun show(selection: Selection) {
@@ -1941,6 +2026,7 @@ class AppStore(private val context: Context) {
                 composerEffort?.let { put("effort", it) }
                 val base = draftBase
                 if (draftUsesWorktree && base != null) put("worktree", mapOf("base" to base))
+                draft.from?.let { put("from", mapOf("origin" to it.origin, "thread_id" to it.threadID)) }
             }
             command["server_id"] = project.serverID
             command["new_thread"] = settings
@@ -1996,6 +2082,9 @@ class AppStore(private val context: Context) {
     /** The file of an image or a video the open thread shows. The core fetches it from the thread's server if this device doesn't have it. */
     fun media(id: String, done: (File?) -> Unit) = fetchMedia(id) { done(it.getOrNull()) }
 
+    /** Whether a file of the open thread that couldn't be fetched can be asked for again: not from a removed server. */
+    val fetchesAgain: Boolean get() = openThreadRemovedServer == null
+
     /** The file, or why it can't be had. */
     fun fetchMedia(id: String, done: (Result<File>) -> Unit) {
         val serverID = selectedThread?.serverID ?: composerServer?.id
@@ -2023,24 +2112,28 @@ class AppStore(private val context: Context) {
 
     fun stop() {
         val thread = selectedThread ?: return
+        if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "stop", "thread_id" to thread.id))
     }
 
     /** Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by question, when the call asks questions. */
     fun answer(approval: Approval, allow: Boolean, answers: Map<String, String> = emptyMap()) {
         val thread = selectedThread ?: return
+        if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "answer", "thread_id" to thread.id, "approval_id" to approval.id, "allow" to allow, "answers" to answers))
     }
 
     /** Gives the agent a queued message now, in the turn that runs. */
     fun sendNow(queued: String) {
         val thread = selectedThread ?: return
+        if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "send_queued", "thread_id" to thread.id, "message_id" to queued))
     }
 
     /** Takes a queued message back into the composer of its thread, after what is written there. */
     fun takeBack(queued: String) {
         val thread = selectedThread ?: return
+        if (onRemovedServer(thread)) return
         val message = activity.queued.firstOrNull { it.id == queued } ?: return
         val key = thread.id
         request(thread.serverID, mapOf("type" to "cancel_queued", "thread_id" to thread.id, "message_id" to queued), done = {
@@ -2059,7 +2152,10 @@ class AppStore(private val context: Context) {
         update(thread, mapOf("title" to trimmed)) { it.copy(title = trimmed) }
     }
 
-    fun delete(thread: ThreadInfo) = request(thread.serverID, mapOf("type" to "delete", "thread_id" to thread.id))
+    fun delete(thread: ThreadInfo) {
+        if (onRemovedServer(thread)) return
+        request(thread.serverID, mapOf("type" to "delete", "thread_id" to thread.id))
+    }
 
     /** Has the thread or the draft work with `model` under `account`. A thread that moves to an account without its session goes on in a new one, which is told what was said. */
     fun setModel(model: ModelInfo, account: AgentAccount) {
@@ -2093,7 +2189,7 @@ class AppStore(private val context: Context) {
 
     /** Marks threads done or brings them back. A thread that is working or monitoring can't be marked done. */
     fun setDone(ids: List<String>, done: Boolean, fromSidebar: Boolean = false) {
-        val changed = ids.mapNotNull { threads[it] }.filter { it.isDone != done && !(done && it.busy) }
+        val changed = ids.mapNotNull { threads[it] }.filter { it.isDone != done && !(done && it.busy) && !onRemovedServer(it) }
         if (changed.isEmpty()) return
         // Leaving the thread that was just put away, for the next one that is still active.
         val open = (selection as? Selection.Thread)?.id
@@ -2116,6 +2212,7 @@ class AppStore(private val context: Context) {
     /** Has the agent of the open thread go on with what it was doing when it was interrupted. */
     fun continueThread() {
         val thread = selectedThread ?: return
+        if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "continue", "thread_id" to thread.id))
     }
 
@@ -2128,11 +2225,12 @@ class AppStore(private val context: Context) {
 
     fun toggleDone() {
         val thread = selectedThread ?: return
+        if (onRemovedServer(thread)) return
         setDone(listOf(thread.id), !thread.isDone)
     }
 
     /** Whether the user can move the thread among the active ones. */
-    fun moves(thread: ThreadInfo): Boolean = !thread.isDone && server(thread.serverID)?.movesThreads == true
+    fun moves(thread: ThreadInfo): Boolean = !thread.isDone && !onRemovedServer(thread) && server(thread.serverID)?.movesThreads == true
 
     /** Puts the thread where `index` is among the sidebar's rows without it: `rows` is the active thread of each, or null for a row that isn't one. */
     fun move(thread: ThreadInfo, index: Int, rows: List<ThreadInfo?>) {
@@ -2180,6 +2278,7 @@ class AppStore(private val context: Context) {
 
     /** Changes a thread on its server, and here at once so the client doesn't wait for the answer. */
     private fun update(thread: ThreadInfo, change: Map<String, Any?>, locally: (ThreadInfo) -> ThreadInfo) {
+        if (onRemovedServer(thread)) return
         setThread(locally(thread), thread.id)
         request(thread.serverID, mapOf("type" to "update", "thread_id" to thread.id, "change" to change), failed = { setThread(thread, thread.id) })
     }
@@ -2200,6 +2299,7 @@ class AppStore(private val context: Context) {
     /** Adds the files to what is being written and starts sending them to its server, so they are there when the message is sent. */
     fun attach(files: List<File>) {
         val server = composerServer ?: return
+        if (server.removed) return
         val key = draftKey
         for (file in files) {
             if (attachments.any { it.file == file }) continue

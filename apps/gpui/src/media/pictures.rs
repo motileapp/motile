@@ -15,10 +15,10 @@ use crate::store::Store;
 const KEPT_BYTES: usize = 256 * 1024 * 1024;
 
 /// Why an image isn't shown.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Failure {
-    /// Its file couldn't be had.
-    Fetch,
+    /// Its file couldn't be had, for the reason the core gave.
+    Fetch(SharedString),
     /// Its file isn't an image this app can read.
     Decode,
 }
@@ -67,7 +67,7 @@ impl Pictures {
         let key = key.to_string();
         MediaFiles::fetch(store, media, cx, move |result, cx| match result {
             Ok(file) => Self::decode(key, generation, file, max_pixels, cx),
-            Err(_) => Self::finish(&key, generation, Err(Failure::Fetch), cx),
+            Err(error) => Self::finish(&key, generation, Err(Failure::Fetch(error.into())), cx),
         });
         Picture::Loading
     }
@@ -115,7 +115,7 @@ impl Pictures {
             return Some(Picture::Ready(kept.shown.clone()));
         }
         if let Some(failure) = pictures.failed.get(key) {
-            return Some(Picture::Failed(*failure));
+            return Some(Picture::Failed(failure.clone()));
         }
         pictures.loading.contains_key(key).then_some(Picture::Loading)
     }

@@ -12,11 +12,13 @@ import androidx.lifecycle.ProcessLifecycleOwner
 
 /**
  * Tells the core when the client comes to the front or changes networks, so that it dials again
- * the moment the client is back instead of waiting to find out.
+ * the moment the client is back instead of waiting to find out, and whether the network costs by
+ * the byte.
  */
 class Lifecycle {
     private val main = Handler(Looper.getMainLooper())
     private var path: String? = null
+    private var metered: Boolean? = null
 
     fun start(context: Context, store: AppStore) {
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -34,7 +36,11 @@ class Lifecycle {
                     capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
                     else -> "up"
                 }
-                main.post { pathChanged(name, store) }
+                val metered = !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                main.post {
+                    pathChanged(name, store)
+                    meteredChanged(metered, store)
+                }
             }
 
             override fun onLost(network: Network) {
@@ -48,5 +54,12 @@ class Lifecycle {
         path = name
         if (before == null || before == name) return
         store.core.send("network_changed")
+    }
+
+    /** Tells the core whether the network costs by the byte, at start and on every change. */
+    private fun meteredChanged(metered: Boolean, store: AppStore) {
+        if (this.metered == metered) return
+        this.metered = metered
+        store.core.send("set_metered", json("metered" to metered))
     }
 }

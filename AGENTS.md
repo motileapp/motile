@@ -42,7 +42,8 @@ Production is the `Motile` project on Unbind:
 What the programs agree on.
 
 - `wire.rs`: every message between a client and a server. Bump `PROTOCOL_VERSION` when an old
-  client or server could no longer understand the other.
+  client or server could no longer understand the other. It has the change logs the servers copy
+  each other's threads with too (`Watermarks`, `Changes`, `Apply`), which the clients carry.
 - `auth_api.rs`, `auth_client.rs`: the auth server's JSON and the client for it.
 - `identity.rs`: the device key and request signing.
 - `media.rs`: names an image, a video or a file an agent sends by its contents.
@@ -52,7 +53,11 @@ What the programs agree on.
 
 - `sign_in.rs`: the browser's side of a sign-in. `google.rs` is the OIDC exchange.
 - `api.rs`: what clients, servers and the web app call. A caller is a device that signed the
-  request or a session's `Bearer` token.
+  request or a session's `Bearer` token. A server removed from an account is kept in
+  `removed_servers` with its name, so that its threads, which live on as copies on the account's
+  other servers, still show it; deleting it completely marks it there, and every server and client
+  then drops its copies. Linking the key again makes it an ordinary server. The clients call these
+  "Unlink Server" and "Delete".
 - `config.rs`: builds the install command a token comes with.
 - `pages.rs`: the page a failed sign-in ends on, drawn like the web app's with the colours of
   `packages/theme/tokens.css` and DM Sans from `assets/`.
@@ -159,7 +164,16 @@ shadcn's own colours, opacities and radii are gone from the theme.
 - `ricrac.rs`: the same for Ricrac (ricrac.app, our own tracker), through its REST operations
   (`POST /v1/ops/<name>`) where Linear's is GraphQL. `MOTILE_RICRAC_URL` stands in for Ricrac.
 - `icons.rs`: finds a project's icon in its folder.
-- `access.rs`: asks the auth server which clients belong to the account.
+- `access.rs`: asks the auth server which clients belong to the account, and which servers it
+  deleted completely.
+- `sync.rs`: the server's change log and its copies of the account's other servers' logs. Triggers
+  give each write to a project, a thread, an item or the usage the next number of the log
+  (`migrations/0018_sync.sql`), and a delete leaves a tombstone. A client asks a server what changed
+  after a number and hands the batch, compressed, to another server, which keeps only what its copy
+  lacks, so a batch that comes twice changes nothing. A copy keeps its origin's numbers and can be
+  passed on to a third server. The copies are apart from the server's own threads: agents,
+  `read_thread` and git never see them. A new thread can go on from a copied one, which it starts
+  with the copy's transcript.
 - `setup.rs`, `service.rs`: what the installer runs, and the systemd or launchd service.
 - `update.rs`: replaces the server's own program with the latest release.
 - `tests/e2e.rs`: runs the server against `scripts/fake-agent` over real iroh connections.
@@ -170,7 +184,13 @@ A static library for the clients (`ffi.rs`: JSON commands in, JSON events out) a
 for tests.
 
 - `core.rs`: one loop that owns all state. Anything that waits on the network runs in its own
-  task.
+  task. A server removed from the account stays, `removed`: its threads come from the copies its
+  account's other servers keep, can be read and searched, and end with a row that says it was
+  removed, in place of the composer.
+- `sync.rs`: carries the threads between the servers: a round a moment after a server connects or a
+  thread changes asks each server how far its own log and its copies go, and moves what each lacks,
+  from the origin itself or, for a removed server, from the server whose copy goes furthest. On a
+  metered network only what follows a copy is carried.
 - `link.rs`: keeps one server connected and follows its threads.
 - `follow.rs`: keeps the cached copy of an active thread that isn't open current.
 - `cache.rs`: the client's SQLite copy of its servers' threads, read a page of whole turns at a

@@ -61,6 +61,8 @@ fun FileRow(file: SentFile) {
     val palette = LocalPalette.current
     val state = FileDownloads.state(file.id, store)
     val fetching = state is FileDownloads.State.Fetching
+    // Only a removed server had a file it couldn't hand over, so asking again is no use.
+    val gone = state is FileDownloads.State.Failed && !store.fetchesAgain
     val menu = rememberMenuState()
     val card = remember { MutableInteractionSource() }
     val cardPressed by card.collectIsPressedAsState()
@@ -75,14 +77,14 @@ fun FileRow(file: SentFile) {
                 .fillMaxWidth()
                 .height(FileRow.cardHeight)
                 .clip(shape)
-                .background(if (cardPressed && !fetching) palette.backgroundSecondaryAccent else palette.backgroundSecondary, shape)
+                .background(if (cardPressed && !fetching && !gone) palette.backgroundSecondaryAccent else palette.backgroundSecondary, shape)
                 .border(1.dp, palette.border, shape)
                 .pressPosition(menu)
                 .semantics { contentDescription = "${file.name}, ${file.detail}" }
                 .combinedClickable(
                     interactionSource = card, indication = null, role = Role.Button,
-                    onLongClick = { menu.openAtPress() },
-                    onClick = { press(file, state, store) },
+                    onLongClick = { if (!gone) menu.openAtPress() },
+                    onClick = { if (!gone) press(file, state, store) },
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -104,12 +106,12 @@ fun FileRow(file: SentFile) {
                 contentAlignment = Alignment.Center,
             ) {
                 val iconColor = if (tileLit) palette.foreground else palette.mutedForeground
-                when (state) {
-                    is FileDownloads.State.Fetching -> {
+                when {
+                    state is FileDownloads.State.Fetching -> {
                         ProgressRing(state.fraction, Modifier.fillMaxSize().padding(FileRow.ringInset))
                         Icon(Symbol.X, ControlSize.Small.symbol, color = iconColor)
                     }
-                    is FileDownloads.State.Downloaded -> Icon(file.symbol, ControlSize.Large.symbol, color = iconColor)
+                    state is FileDownloads.State.Downloaded || gone -> Icon(file.symbol, ControlSize.Large.symbol, color = iconColor)
                     else -> Icon(Symbol.Download, ControlSize.Large.symbol, color = iconColor)
                 }
             }

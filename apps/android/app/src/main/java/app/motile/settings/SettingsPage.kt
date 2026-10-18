@@ -121,6 +121,13 @@ private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator
         }
         row { SettingsLink({ navigator.push(SettingsRoute.AddServer) }) { SettingsActionLabel("Add a Server", Symbol.Plus) } }
     }
+    group("removed-servers", header = "Unlinked") {
+        for (server in store.removedServers) row {
+            SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id, removed = true)) }) {
+                SettingsItem(server.name, "Its threads stay readable from the copies") { SettingsTile(Symbol.Server) }
+            }
+        }
+    }
     val continuing = store.servers.filter { it.state == Server.State.Connected && store.canChooseRestart(it) }
     if (continuing.isEmpty()) return
     toggles(
@@ -292,17 +299,22 @@ private fun SettingsGroups.toggles(
     }
 }
 
-/** A server's page: how it is, its agents, its update, and the way to remove it. */
+/** A server's page: how it is, its agents, its update, and the ways to remove it. A `removed` one's only deletes its copies. */
 @Composable
-internal fun ServerSettingsPage(serverID: String) {
+internal fun ServerSettingsPage(serverID: String, removed: Boolean) {
     val store = LocalStore.current
     val navigator = LocalSettingsNavigator.current
     var removal by remember { mutableStateOf<Removal?>(null) }
     val server = store.server(serverID)
-    LaunchedEffect(server == null) { if (server == null) navigator.pop() }
+    val left = server == null || server.removed != removed
+    LaunchedEffect(left) { if (left) navigator.pop() }
     SettingsScreen(server?.name ?: "Server") {
         SettingsList {
             if (server == null) return@SettingsList
+            if (removed) {
+                group { row { SettingsButton("Delete", destructive = true) { removal = Removal.OfServerCompletely(server) } } }
+                return@SettingsList
+            }
             group {
                 row { SettingsLabeled("Status", server.stateLabel) }
                 if (server.state == Server.State.Connected) {
@@ -319,7 +331,10 @@ internal fun ServerSettingsPage(serverID: String) {
                     }
                 }
             }
-            group { row { SettingsButton("Remove Server", destructive = true) { removal = Removal.OfServer(server) } } }
+            group {
+                row { SettingsButton("Unlink Server", destructive = true) { removal = Removal.OfServer(server) } }
+                row { SettingsButton("Delete", destructive = true) { removal = Removal.OfServerCompletely(server) } }
+            }
         }
     }
     ConfirmsRemoval(removal) { removal = null }

@@ -55,7 +55,8 @@ import app.motile.ui.Text
 /** A page the settings push over their list. */
 sealed interface SettingsRoute {
     data class Section(val section: SettingsSection) : SettingsRoute
-    data class ServerPage(val serverID: String) : SettingsRoute
+    /** A server's page; a `removed` one's only deletes its copies. */
+    data class ServerPage(val serverID: String, val removed: Boolean = false) : SettingsRoute
     data object AddServer : SettingsRoute
     data class ProjectPage(val projectID: String) : SettingsRoute
     data class WorktreeSetup(val projectID: String) : SettingsRoute
@@ -183,7 +184,7 @@ private fun Pages(routes: List<SettingsRoute>, root: Boolean = false, page: @Com
 private fun RoutePage(route: SettingsRoute) {
     when (route) {
         is SettingsRoute.Section -> SettingsScreen(route.section.title) { SettingsPage(route.section) }
-        is SettingsRoute.ServerPage -> ServerSettingsPage(route.serverID)
+        is SettingsRoute.ServerPage -> ServerSettingsPage(route.serverID, route.removed)
         SettingsRoute.AddServer -> AddServerPage()
         is SettingsRoute.ProjectPage -> ProjectSettingsPage(route.projectID)
         is SettingsRoute.WorktreeSetup -> WorktreeSetupPage(route.projectID)

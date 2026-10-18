@@ -72,14 +72,30 @@ import kotlin.math.min
 
 /**
  * A button of words inside a row. A bordered one is drawn as a regular button is, with a line
- * around it; the others light under a finger. `margin` is room around it that still takes the
- * press, so buttons that touch each other and the row's edge look apart.
+ * around it, and lights to `hover` where given; a `primary` one is filled; the others light under a
+ * finger. `margin` is room around it that still takes the press, so buttons that touch each other
+ * and the row's edge look apart.
  */
 @Composable
-fun RowButton(title: String, help: String, modifier: Modifier = Modifier, bordered: Boolean = false, margin: PaddingValues = PaddingValues(0.dp), onClick: () -> Unit) {
+fun RowButton(
+    title: String,
+    help: String,
+    modifier: Modifier = Modifier,
+    bordered: Boolean = false,
+    primary: Boolean = false,
+    hover: Color? = null,
+    fills: Boolean = false,
+    margin: PaddingValues = PaddingValues(0.dp),
+    onClick: () -> Unit,
+) {
+    val variant = when {
+        primary -> ButtonVariant.Primary
+        bordered -> ButtonVariant.Outline
+        else -> ButtonVariant.Ghost
+    }
     ActionButton(
-        title = title, help = help, modifier = modifier, variant = if (bordered) ButtonVariant.Outline else ButtonVariant.Ghost,
-        size = RowButton.size, margin = margin, onClick = onClick,
+        title = title, help = help, modifier = modifier, variant = variant, size = RowButton.size, fills = fills,
+        hover = hover.takeIf { !primary }, margin = margin, onClick = onClick,
     )
 }
 

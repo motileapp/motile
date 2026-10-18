@@ -296,10 +296,7 @@ fun SidebarScreen(underThread: Boolean) {
                         is SidebarItem.Active -> {
                             val thread = item.thread
                             val movable = !searching && active.size > 1 && store.moves(thread)
-                            RowSwipe(
-                                Symbol.Check, "Mark Done", tint = if (thread.busy) Theme.colors.mutedForeground else Theme.colors.success, size = 36.dp,
-                                isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, action = { markDone(thread) }, leaves = !thread.busy,
-                            ) {
+                            val row = @Composable {
                                 ThreadRowWithMenu(
                                     store, thread, places[thread.id], lifted, movable, peek, reorder,
                                     keys = { shown.map { it.id } },
@@ -308,11 +305,20 @@ fun SidebarScreen(underThread: Boolean) {
                                     rename = ::beginRename, delete = { deleting = it }, open = ::open,
                                 )
                             }
+                            if (store.onRemovedServer(thread)) {
+                                row()
+                            } else {
+                                RowSwipe(
+                                    Symbol.Check, "Mark Done", tint = if (thread.busy) Theme.colors.mutedForeground else Theme.colors.success, size = 36.dp,
+                                    isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, action = { markDone(thread) }, leaves = !thread.busy,
+                                    content = row,
+                                )
+                            }
                         }
                         is SidebarItem.Result -> {
                             val result = item.result
                             val thread = result.threadInfo
-                            val menu: (MenuBuilder.() -> Unit)? = thread?.let { found -> { threadMenu(store, found, ::beginRename) { deleting = it } } }
+                            val menu: (MenuBuilder.() -> Unit)? = thread?.takeIf { !store.onRemovedServer(it) }?.let { found -> { threadMenu(store, found, ::beginRename) { deleting = it } } }
                             WithMenu(menu) { modifier, openMenu ->
                                 SearchResultRow(
                                     result, highlighted = result.id == highlightedID, modifier = modifier.peeks(thread?.id, peek),
@@ -331,17 +337,24 @@ fun SidebarScreen(underThread: Boolean) {
                         SidebarItem.DoneHeader -> DoneHeader(done.size, doneExpanded) { setDoneExpanded(!doneExpanded) }
                         is SidebarItem.Done -> {
                             val thread = item.thread
-                            RowSwipe(
-                                Symbol.Undo2, "Mark Undone", tint = Theme.colors.mutedForeground, size = 28.dp,
-                                isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange,
-                                action = { store.setDone(listOf(thread.id), done = false) },
-                            ) {
-                                WithMenu({ threadMenu(store, thread, ::beginRename) { deleting = it } }) { modifier, openMenu ->
+                            val readOnly = store.onRemovedServer(thread)
+                            val row = @Composable {
+                                WithMenu(if (readOnly) null else ({ threadMenu(store, thread, ::beginRename) { deleting = it } })) { modifier, openMenu ->
                                     DoneRow(
                                         thread, store.projectsByID[thread.projectID], selected = store.selection == Selection.Thread(thread.id),
                                         modifier = modifier.fillMaxWidth().height(lineHeight).peeks(thread.id, peek), onLongClick = openMenu, open = ::open,
                                     )
                                 }
+                            }
+                            if (readOnly) {
+                                row()
+                            } else {
+                                RowSwipe(
+                                    Symbol.Undo2, "Mark Undone", tint = Theme.colors.mutedForeground, size = 28.dp,
+                                    isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange,
+                                    action = { store.setDone(listOf(thread.id), done = false) },
+                                    content = row,
+                                )
                             }
                         }
                     }
@@ -443,6 +456,7 @@ private fun ThreadRowWithMenu(
     open: (Selection) -> Unit,
 ) {
     val menu = rememberMenuState()
+    val readOnly = store.onRemovedServer(thread)
     Box {
         if (lifted) {
             val shape = RoundedCornerShape(Radius.md)
@@ -460,10 +474,14 @@ private fun ThreadRowWithMenu(
             jump = place?.let(store::jumpHint),
             lit = lifted,
             // A hold on a row that moves lifts it, and its menu comes up from there.
-            onLongClick = if (movable) ({}) else ({ menu.openAtPress() }),
+            onLongClick = when {
+                movable -> ({})
+                readOnly -> null
+                else -> ({ menu.openAtPress() })
+            },
             open = open,
         )
-        MenuPopup(menu) { threadMenu(store, thread, rename, delete) }
+        if (!readOnly) MenuPopup(menu) { threadMenu(store, thread, rename, delete) }
     }
 }
 

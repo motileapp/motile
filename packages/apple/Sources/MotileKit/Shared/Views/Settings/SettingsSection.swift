@@ -56,7 +56,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
         SettingsEntry(id: "shortcuts", title: "Keybindings", section: .keyboard, keywords: "keys keyboard shortcuts hotkeys commands record keybindings.json"),
-        SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove machine agents connected"),
+        SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
         SettingsEntry(id: "agent-accounts", title: "Accounts", section: .agents, keywords: "claude codex sign in login folder subscription plan api key router"),

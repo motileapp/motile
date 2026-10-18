@@ -26,6 +26,16 @@ struct ThreadDraft: Identifiable, Equatable, Codable {
     /// The thread starts in a new worktree, on a branch that starts from `base`.
     var worktree: Bool?
     var base: String?
+    /// The thread of a removed server the new one goes on from.
+    var from: ContinuedThread?
+}
+
+/// A thread of a server removed from the account, which a new thread goes on from on another
+/// server, with all that happened in it.
+struct ContinuedThread: Equatable, Codable {
+    let origin: String
+    let threadID: String
+    let title: String
 }
 
 /// A draft as the sidebar lists it.
@@ -205,14 +215,24 @@ final class AppStore {
     private(set) var threadsShown = 0
 
     // What the servers hold
+    /// The account's servers, which threads start and go on on.
     private(set) var servers: [Server] = []
+    /// The servers removed from the account, whose threads stay to read from the copies.
+    private(set) var removedServers: [Server] = []
     private var serverUpdates: [String: ServerUpdate] = [:]
-    /// The folders the user added. "No project" of each server is in `noProjects`.
+    /// Every server's projects as the core sent them, the removed servers' too.
+    @ObservationIgnored private var everyProject: [Project] = []
+    /// The folders the user added on the account's servers. "No project" of each server is in
+    /// `noProjects`.
     private(set) var projects: [Project] = [] {
         didSet { indexProjects() }
     }
-    /// The project of each server that threads start in without one.
+    /// The project of each of the account's servers that threads start in without one.
     private(set) var noProjects: [Project] = [] {
+        didSet { indexProjects() }
+    }
+    /// The projects of the removed servers, which their threads are listed under.
+    private(set) var removedProjects: [Project] = [] {
         didSet { indexProjects() }
     }
     private(set) var projectsByID: [String: Project] = [:]
@@ -332,6 +352,15 @@ final class AppStore {
             "local_only": environment["MOTILE_LOCAL"] == "1",
         ]
         if let address = environment["MOTILE_SERVER_ADDR"] { config["direct_addr"] = address }
+        // `key=address,…`: each server at an address of its own, where the dev stack runs two.
+        if let addresses = environment["MOTILE_SERVER_ADDRS"] {
+            let pairs = addresses.split(separator: ",").compactMap { pair -> (String, Any)? in
+                let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { return nil }
+                return (parts[0], parts[1])
+            }
+            config["direct_addrs"] = Dictionary(pairs, uniquingKeysWith: { first, _ in first })
+        }
         #if os(iOS)
         // A phone has less room for the images and videos it keeps than a Mac.
         config["media_limit"] = 500_000_000
@@ -520,10 +549,13 @@ final class AppStore {
         }
     }
 
-    private func apply(servers: [Server]) {
+    private func apply(servers all: [Server]) {
         let composerWasConnected = composerServer?.state == .connected
         let wereConnected = Set(self.servers.filter { $0.state == .connected }.map(\.id))
-        self.servers = servers
+        let servers = all.filter { !$0.removed }
+        if self.servers != servers { self.servers = servers }
+        let removed = all.filter(\.removed)
+        if removedServers != removed { removedServers = removed }
         for server in servers where server.state == .connected && !wereConnected.contains(server.id) {
             linear.read(server.id)
             ricrac.read(server.id)
@@ -532,13 +564,9 @@ final class AppStore {
             readGit(fetch: true)
             readWorktreeStart(fetch: true)
         }
-        let known = Set(servers.map(\.id))
-        if projects.contains(where: { !known.contains($0.serverID) }) {
-            projects.removeAll { !known.contains($0.serverID) }
-        }
-        if noProjects.contains(where: { !known.contains($0.serverID) }) {
-            noProjects.removeAll { !known.contains($0.serverID) }
-        }
+        let known = Set(all.map(\.id))
+        everyProject.removeAll { !known.contains($0.serverID) }
+        sortProjects()
         if threads.values.contains(where: { !known.contains($0.serverID) }) {
             setThreads(threads.filter { known.contains($0.value.serverID) })
         }
@@ -592,14 +620,8 @@ final class AppStore {
     private func apply(projects new: [Project], serverID: String) {
         let git = gitProject?.git
         defer { if gitProject?.git != git { workspaceVersion += 1 } }
-        var updated = projects.filter { $0.serverID != serverID } + new.filter { !$0.noProject }
-        updated.sort { $0.createdAt < $1.createdAt }
-        // Every row of the sidebar looks at the projects, so they only change when they did.
-        if updated != projects { projects = updated }
-        let order = servers.map(\.id)
-        var none = noProjects.filter { $0.serverID != serverID } + new.filter(\.noProject)
-        none.sort { (order.firstIndex(of: $0.serverID) ?? order.count) < (order.firstIndex(of: $1.serverID) ?? order.count) }
-        if none != noProjects { noProjects = none }
+        everyProject = everyProject.filter { $0.serverID != serverID } + new
+        sortProjects()
         ImageFiles.shared.warm(new.compactMap(\.iconPath))
         ensureDraftProject()
         openAwaitedProject()
@@ -608,8 +630,24 @@ final class AppStore {
         if let project = gitProject, project.serverID == serverID, project.git == nil { readGit() }
     }
 
+    /// Puts every project where it is listed: the account's servers' folders, their "No project",
+    /// or the removed servers' projects.
+    private func sortProjects() {
+        let removed = Set(removedServers.map(\.id))
+        let live = everyProject.filter { !removed.contains($0.serverID) }
+        let updated = live.filter { !$0.noProject }.sorted { $0.createdAt < $1.createdAt }
+        // Every row of the sidebar looks at the projects, so they only change when they did.
+        if updated != projects { projects = updated }
+        let order = servers.map(\.id)
+        var none = live.filter(\.noProject)
+        none.sort { (order.firstIndex(of: $0.serverID) ?? order.count) < (order.firstIndex(of: $1.serverID) ?? order.count) }
+        if none != noProjects { noProjects = none }
+        let gone = everyProject.filter { removed.contains($0.serverID) }
+        if gone != removedProjects { removedProjects = gone }
+    }
+
     private func indexProjects() {
-        projectsByID = Dictionary((projects + noProjects).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        projectsByID = Dictionary((projects + noProjects + removedProjects).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     // MARK: Lookups
@@ -700,7 +738,33 @@ final class AppStore {
     }
 
     func server(_ id: String?) -> Server? {
-        servers.first { $0.id == id }
+        servers.first { $0.id == id } ?? removedServers.first { $0.id == id }
+    }
+
+    /// The servers whose agents' spending the usage counts: the removed ones' too, from the copies.
+    var usageServers: [Server] { servers + removedServers }
+
+    /// Whether the server was removed from the account, so that nothing can be done there.
+    func isRemoved(_ serverID: String?) -> Bool {
+        removedServers.contains { $0.id == serverID }
+    }
+
+    /// Whether the thread is a copy of a removed server's, which can only be read.
+    func onRemovedServer(_ thread: ThreadInfo) -> Bool {
+        isRemoved(thread.serverID)
+    }
+
+    /// What the right panel says in place of what it can't show of a removed server.
+    private func removedNote(_ serverID: String) -> String? {
+        guard isRemoved(serverID) else { return nil }
+        return "“\(server(serverID)?.name ?? "Its server")” is unlinked, so this thread is read-only."
+    }
+
+    /// The server the open thread was on, once it was removed from the account. The thread then
+    /// ends with the way to go on elsewhere, in place of the composer.
+    var openThreadRemovedServer: Server? {
+        guard let thread = selectedThread, isRemoved(thread.serverID) else { return nil }
+        return server(thread.serverID)
     }
 
     /// The project the composer's thread works in, or the one the open draft would start in.
@@ -760,6 +824,7 @@ final class AppStore {
     /// Why no pull request can be shown here, when none can.
     var pullRequestsUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
+        if let note = removedNote(server.id) { return note }
         guard server.protocolVersion >= 8 else { return "Update \(server.name) to see pull requests here." }
         return target.repository ? nil : "This folder isn't a git repository."
     }
@@ -821,6 +886,7 @@ final class AppStore {
     /// Why the right panel has nothing to show here, when it hasn't.
     var panelUnavailable: String? {
         guard let target = panelTarget else { return "Add a project to see its files." }
+        if let note = removedNote(target.serverID) { return note }
         guard let server = server(target.serverID), server.state == .connected else { return "Your server isn't connected." }
         return server.protocolVersion >= 7 ? nil : "Update \(server.name) to see files and changes."
     }
@@ -987,6 +1053,7 @@ final class AppStore {
     private func emptyDraft() -> ThreadDraft {
         if let index = threadDrafts.lastIndex(where: { preview(of: $0) == nil && !isSending($0) }) {
             var empty = threadDrafts[index]
+            empty.from = nil
             applyLastSettings(to: &empty)
             threadDrafts[index] = empty
             saveThreadDrafts()
@@ -1011,10 +1078,11 @@ final class AppStore {
         saveThreadDrafts()
     }
 
-    /// Keeps the open draft pointing at a project that exists, once the projects are known.
+    /// Keeps the open draft pointing at a project of the account's servers, once the projects are
+    /// known.
     private func ensureDraftProject() {
         defer { applyLastSettingsOnceServerKnown() }
-        guard ready, let draft = selectedDraft, project(draft.projectID) == nil, let first = projects.first ?? noProjects.first else {
+        guard ready, let draft = selectedDraft, !startsThreads(in: project(draft.projectID)), let first = projects.first ?? noProjects.first else {
             return
         }
         moveDraft(to: first.id)
@@ -1220,6 +1288,13 @@ final class AppStore {
         }
     }
 
+    /// Removes the server if it is still the account's, and deletes every copy of its threads.
+    func deleteServerCompletely(_ server: Server) {
+        core.send("delete_server_completely", ["server_id": server.id]) { [weak self] result in
+            if case .failure(let error) = result { self?.alert(error) }
+        }
+    }
+
     // MARK: Projects
 
     /// Adds the folder as a project and opens a thread in it. A folder that is a project
@@ -1313,6 +1388,7 @@ final class AppStore {
     /// Why Linear can't be shown here, when it can't.
     var linearUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
+        if let note = removedNote(server.id) { return note }
         return server.protocolVersion >= 12 ? nil : "Update \(server.name) to connect it to Linear."
     }
 
@@ -1325,6 +1401,7 @@ final class AppStore {
     /// Why Ricrac can't be shown here, when it can't.
     var ricracUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
+        if let note = removedNote(server.id) { return note }
         return server.protocolVersion >= 29 ? nil : "Update \(server.name) to connect it to Ricrac."
     }
 
@@ -1513,7 +1590,7 @@ final class AppStore {
 
     /// Whether the project's server is new enough to list and switch branches.
     func canSwitchBranches(of project: Project) -> Bool {
-        project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 3
+        !isRemoved(project.serverID) && project.branch != nil && (server(project.serverID)?.protocolVersion ?? 0) >= 3
     }
 
     /// Opens the branch picker at once, on the branches last listed or on placeholders, and
@@ -1556,14 +1633,15 @@ final class AppStore {
 
     // MARK: Git
 
-    /// Whether the project's server is new enough to commit, push and open pull requests.
+    /// Whether the project's server is new enough to commit, push and open pull requests, and
+    /// still the account's.
     func canUseGit(of project: Project) -> Bool {
-        (server(project.serverID)?.protocolVersion ?? 0) >= 4
+        !isRemoved(project.serverID) && (server(project.serverID)?.protocolVersion ?? 0) >= 4
     }
 
     /// Whether the project's folder is no git repository and its server can make it one.
     func canInitializeGit(of project: Project) -> Bool {
-        !project.noProject && project.branch == nil && project.git == nil && (server(project.serverID)?.protocolVersion ?? 0) >= 16
+        !isRemoved(project.serverID) && !project.noProject && project.branch == nil && project.git == nil && (server(project.serverID)?.protocolVersion ?? 0) >= 16
     }
 
     func initializeGit(in project: Project) {
@@ -1817,7 +1895,7 @@ final class AppStore {
     // MARK: Command panel
 
     func openPanel(_ page: PanelPage) {
-        guard account.signedIn, !servers.isEmpty else { return }
+        guard account.signedIn, !servers.isEmpty || !removedServers.isEmpty else { return }
         panel = page
         readGitHubOfServers()
     }
@@ -1903,8 +1981,29 @@ final class AppStore {
     /// in it.
     func startNewThread(in project: Project? = nil) {
         openEmptyDraft()
-        if let project { setNewThreadProject(project.id) }
+        if let project, startsThreads(in: project) { setNewThreadProject(project.id) }
         threadsShown += 1
+    }
+
+    /// Whether a thread can start in the project: it is one of the account's servers'.
+    func startsThreads(in project: Project?) -> Bool {
+        guard let project else { return false }
+        return !isRemoved(project.serverID)
+    }
+
+    /// Opens a draft of a new thread that goes on from the open one, whose server was removed, on
+    /// the server of the project the user picks.
+    func continueOnAnotherServer() {
+        guard let thread = selectedThread, isRemoved(thread.serverID) else { return }
+        let from = ContinuedThread(origin: thread.serverID, threadID: thread.id, title: thread.title)
+        startNewThread()
+        updateDraft { $0.from = from }
+        composerFocus += 1
+    }
+
+    /// The open draft starts a thread of its own, not one that goes on from a removed server's.
+    func dropContinuation() {
+        updateDraft { $0.from = nil }
     }
 
     /// Opens a thread or a draft and brings it to the front.
@@ -1985,6 +2084,7 @@ final class AppStore {
                 var worktree: JSON = ["base": base]
                 settings["worktree"] = worktree
             }
+            if let from = draft.from { settings["from"] = ["origin": from.origin, "thread_id": from.threadID] }
             command["server_id"] = project.serverID
             command["new_thread"] = settings
             activity = Activity.starting
@@ -2076,27 +2176,29 @@ final class AppStore {
     }
 
     func stop() {
-        guard let thread = selectedThread else { return }
+        guard let thread = selectedThread, !onRemovedServer(thread) else { return }
         request(thread.serverID, ["type": "stop", "thread_id": thread.id])
     }
 
     /// Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by
     /// question, when the call asks questions.
     func answer(_ approval: Approval, allow: Bool, answers: [String: String] = [:]) {
-        guard let thread = selectedThread else { return }
+        guard let thread = selectedThread, !onRemovedServer(thread) else { return }
         let answer: JSON = ["type": "answer", "thread_id": thread.id, "approval_id": approval.id, "allow": allow, "answers": answers]
         request(thread.serverID, answer)
     }
 
     /// Gives the agent a queued message now, in the turn that runs.
     func sendNow(queued messageID: String) {
-        guard let thread = selectedThread else { return }
+        guard let thread = selectedThread, !onRemovedServer(thread) else { return }
         request(thread.serverID, ["type": "send_queued", "thread_id": thread.id, "message_id": messageID])
     }
 
     /// Takes a queued message back into the composer of its thread, after what is written there.
     func takeBack(queued messageID: String) {
-        guard let thread = selectedThread, let message = activity.queued.first(where: { $0.id == messageID }) else { return }
+        guard let thread = selectedThread, !onRemovedServer(thread), let message = activity.queued.first(where: { $0.id == messageID }) else {
+            return
+        }
         let key = thread.id
         request(thread.serverID, ["type": "cancel_queued", "thread_id": thread.id, "message_id": messageID], done: { [weak self] in
             guard let self else { return }
@@ -2116,6 +2218,7 @@ final class AppStore {
     }
 
     func delete(_ thread: ThreadInfo) {
+        guard !onRemovedServer(thread) else { return }
         request(thread.serverID, ["type": "delete", "thread_id": thread.id])
     }
 
@@ -2169,7 +2272,7 @@ final class AppStore {
     /// Marks threads done or brings them back. A thread that is working or monitoring can't be
     /// marked done.
     func setDone(_ ids: [String], done: Bool, fromSidebar: Bool = false) {
-        let changed = ids.compactMap { threads[$0] }.filter { $0.isDone != done && !(done && $0.busy) }
+        let changed = ids.compactMap { threads[$0] }.filter { $0.isDone != done && !(done && $0.busy) && !onRemovedServer($0) }
         guard !changed.isEmpty else { return }
         // Leaving the thread that was just put away, for the next one that is still active.
         if done, fromSidebar, case .thread(let open) = selection, changed.contains(where: { $0.id == open }) {
@@ -2192,7 +2295,7 @@ final class AppStore {
 
     /// Has the agent of the open thread go on with what it was doing when it was interrupted.
     func continueThread() {
-        guard let thread = selectedThread else { return }
+        guard let thread = selectedThread, !onRemovedServer(thread) else { return }
         request(thread.serverID, ["type": "continue", "thread_id": thread.id])
     }
 
@@ -2203,13 +2306,13 @@ final class AppStore {
     }
 
     func toggleDone() {
-        guard let thread = selectedThread else { return }
+        guard let thread = selectedThread, !onRemovedServer(thread) else { return }
         setDone([thread.id], done: !thread.isDone)
     }
 
     /// Whether the user can move the thread among the active ones.
     func moves(_ thread: ThreadInfo) -> Bool {
-        !thread.isDone && server(thread.serverID)?.movesThreads == true
+        !thread.isDone && !onRemovedServer(thread) && server(thread.serverID)?.movesThreads == true
     }
 
     /// Puts the thread where `index` is among the sidebar's rows without it: `rows` is the
@@ -2261,6 +2364,7 @@ final class AppStore {
 
     /// Changes a thread on its server, and here at once so the client doesn't wait for the answer.
     private func update(_ thread: ThreadInfo, _ change: JSON, locally: (inout ThreadInfo) -> Void) {
+        guard !onRemovedServer(thread) else { return }
         var changed = thread
         locally(&changed)
         setThread(changed, id: thread.id)
@@ -2285,7 +2389,7 @@ final class AppStore {
     /// Adds the files to what is being written and starts sending them to its server, so they
     /// are there when the message is sent.
     func attach(_ urls: [URL]) {
-        guard let server = composerServer else { return }
+        guard let server = composerServer, !server.removed else { return }
         let key = draftKey
         for url in urls where url.isFileURL && !attachments.contains(where: { $0.file == url }) {
             let attachment = Attachment(file: url, serverID: server.id)

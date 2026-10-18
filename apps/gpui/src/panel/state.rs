@@ -764,6 +764,9 @@ impl Store {
     pub fn pull_requests_unavailable(&self) -> Option<String> {
         let target = self.panel_target()?;
         let server = self.server(Some(&target.server_id))?;
+        if let Some(note) = self.removed_note(&server.id) {
+            return Some(note);
+        }
         if server.protocol_version < 8 {
             return Some(format!("Update {} to see pull requests here.", server.name));
         }

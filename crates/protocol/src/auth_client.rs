@@ -127,6 +127,13 @@ impl AuthClient {
         self.send(self.post("/api/enroll", &request)).await
     }
 
+    /// Removes the server from the account and drops every copy of its threads.
+    pub async fn delete_server_completely(&self, key: &DeviceKey, public_key: &str) -> anyhow::Result<()> {
+        let path = format!("/api/servers/{public_key}");
+        let _: serde_json::Value = self.send(self.signed(key, Method::DELETE, &path, b"")).await?;
+        Ok(())
+    }
+
     /// Removes a device from the account; `public_key` may be the caller's own.
     pub async fn remove_device(&self, key: &DeviceKey, public_key: &str) -> anyhow::Result<()> {
         let path = format!("/api/devices/{public_key}");
