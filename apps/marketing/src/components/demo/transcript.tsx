@@ -1,5 +1,7 @@
 import {
   ArrowRightIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   CopyIcon,
   FileTextIcon,
   GlobeIcon,
@@ -8,11 +10,18 @@ import {
   SquareTerminalIcon,
   type LucideIcon,
 } from "lucide-react"
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { parseDiff } from "./diff"
 import { highlight } from "./highlight"
-import { AgentIcon } from "./icons"
-import type { HandoffEnd, Item, Thread, Tool } from "./threads"
+import { AgentAvatar, AgentIcon } from "./icons"
+import type {
+  AgentState,
+  HandoffEnd,
+  Item,
+  StartedAgent,
+  Thread,
+  Tool,
+} from "./threads"
 import { cn } from "@/lib/utils"
 
 const TOOL_ICONS: Record<Tool, LucideIcon> = {
@@ -29,17 +38,23 @@ export function Transcript({
   onOpenDiff,
 }: {
   thread: Thread
-  elapsed: string
+  elapsed: (since: number) => string
   onOpenDiff: () => void
 }) {
   return (
     <div className="mx-auto flex max-w-[844px] flex-col px-[38px] pt-6">
       {thread.items.map((item, index) => (
-        <Row key={index} item={item} thread={thread} onOpenDiff={onOpenDiff} />
+        <Row
+          key={index}
+          item={item}
+          thread={thread}
+          elapsed={elapsed}
+          onOpenDiff={onOpenDiff}
+        />
       ))}
       {thread.status.kind === "working" && (
         <Shimmer className="mt-2 self-start text-[13px] tabular-nums">
-          Working for {elapsed}
+          Working for {elapsed(thread.status.since)}
         </Shimmer>
       )}
       {thread.status.kind === "approval" && (
@@ -54,10 +69,12 @@ export function Transcript({
 function Row({
   item,
   thread,
+  elapsed,
   onOpenDiff,
 }: {
   item: Item
   thread: Thread
+  elapsed: (since: number) => string
   onOpenDiff: () => void
 }) {
   switch (item.kind) {
@@ -92,12 +109,15 @@ function Row({
           <Icon className="size-3.5 shrink-0" />
           {item.running ? (
             <Shimmer className="truncate">
-              {item.verb} <span className="font-mono text-[12px]">{item.target}</span>
+              {item.verb}{" "}
+              <span className="font-mono text-[12px]">{item.target}</span>
             </Shimmer>
           ) : (
             <span className="truncate">
               {item.verb}{" "}
-              <span className="font-mono text-[12px] text-muted-foreground">{item.target}</span>
+              <span className="font-mono text-[12px] text-muted-foreground">
+                {item.target}
+              </span>
             </span>
           )}
         </div>
@@ -112,6 +132,20 @@ function Row({
           <CopyIcon className="size-3" />
         </div>
       )
+    case "agents":
+      return item.agents.length === 1 ? (
+        <AgentRow run={item.agents[0]} elapsed={elapsed} />
+      ) : (
+        <AgentGroup agents={item.agents} elapsed={elapsed} />
+      )
+    case "notice":
+      return (
+        <AgentRow
+          run={item.agent}
+          elapsed={elapsed}
+          told={{ event: item.event, at: item.at }}
+        />
+      )
     case "handoff":
       return (
         <div className="flex h-9 items-center text-[12px] text-muted-stronger-foreground">
@@ -125,6 +159,157 @@ function Row({
         </div>
       )
   }
+}
+
+const STATE_WORDS: Record<AgentState, string> = {
+  working: "Working",
+  waiting: "Needs approval",
+  done: "Done",
+  failed: "Failed",
+}
+
+const STATE_TEXT: Record<AgentState, string> = {
+  working: "text-process",
+  waiting: "text-warning",
+  done: "text-muted-foreground",
+  failed: "text-destructive",
+}
+
+/**
+ * An agent the thread's agent started, or what it was told of one: its avatar, its title and
+ * word, what it runs on and does or said, and how long it worked. In the card of an open group it
+ * lies on the card.
+ */
+function AgentRow({
+  run,
+  elapsed,
+  told,
+  card = false,
+}: {
+  run: StartedAgent
+  elapsed: (since: number) => string
+  told?: { event: string; at: string }
+  card?: boolean
+}) {
+  const flagged = told || run.state === "waiting" || run.state === "failed"
+  const working = run.state === "working" || run.state === "waiting"
+  const time =
+    told?.at ??
+    (working && run.since !== undefined ? elapsed(run.since) : run.took)
+  const line = told
+    ? run.detail
+    : [run.runsOn, run.detail].filter(Boolean).join(" · ")
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex h-[50px] items-center gap-2.5 rounded-md text-left",
+        card
+          ? "w-full px-2 hover:bg-card-accent"
+          : "-mx-1.5 w-[calc(100%+12px)] px-1.5 hover:bg-background-accent-larger"
+      )}
+    >
+      <AgentAvatar agent={run.agent} state={told ? "done" : run.state} />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-1.5">
+          <span className="truncate text-[13px] font-medium text-foreground">
+            {run.title}
+          </span>
+          {run.role && !told && (
+            <span className="shrink-0 text-[11px] text-muted-stronger-foreground">
+              {run.role}
+            </span>
+          )}
+          {flagged && (
+            <span
+              className={cn(
+                "shrink-0 text-[11px] font-medium",
+                told ? "text-muted-foreground" : STATE_TEXT[run.state]
+              )}
+            >
+              {told?.event ?? STATE_WORDS[run.state]}
+            </span>
+          )}
+        </span>
+        <span
+          className={cn(
+            "block truncate text-[12px]",
+            run.state === "failed"
+              ? "text-destructive"
+              : "text-muted-foreground"
+          )}
+        >
+          {line}
+        </span>
+      </span>
+      <span className="shrink-0 text-[12px] text-muted-stronger-foreground tabular-nums">
+        {time}
+      </span>
+      <ChevronRightIcon className="size-3 shrink-0 text-muted-stronger-foreground" />
+    </button>
+  )
+}
+
+/** Agents started one after the other: their avatars, how many and how they are doing, which opens into a card of them. */
+function AgentGroup({
+  agents,
+  elapsed,
+}: {
+  agents: StartedAgent[]
+  elapsed: (since: number) => string
+}) {
+  const [open, setOpen] = useState(true)
+  const count = (state: AgentState) =>
+    agents.filter((run) => run.state === state).length
+  const order: AgentState[] = ["waiting", "working", "done", "failed"]
+  const summary = order
+    .filter((state) => count(state) > 0)
+    .map((state) => `${count(state)} ${state}`)
+    .join(" · ")
+  const state = (["waiting", "working", "failed"] as AgentState[]).find(
+    (one) => count(one) > 0
+  )
+  const longest = Math.max(...agents.map((run) => run.since ?? 0))
+  const Chevron = open ? ChevronDownIcon : ChevronRightIcon
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="-mx-1.5 flex h-[50px] w-[calc(100%+12px)] items-center gap-2.5 rounded-md px-1.5 text-left hover:bg-background-accent-larger"
+      >
+        <span className="flex shrink-0 -space-x-1.5">
+          {agents.slice(0, 3).map((run, index) => (
+            <AgentAvatar key={index} agent={run.agent} ringed />
+          ))}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold text-foreground">
+            {agents.length} agents
+          </span>
+          <span
+            className={cn(
+              "block truncate text-[12px]",
+              state ? STATE_TEXT[state] : "text-muted-foreground"
+            )}
+          >
+            {summary}
+          </span>
+        </span>
+        <span className="shrink-0 text-[12px] text-muted-stronger-foreground tabular-nums">
+          {elapsed(longest)}
+        </span>
+        <Chevron className="size-3 shrink-0 text-muted-stronger-foreground" />
+      </button>
+      {open && (
+        <div className="mt-1 mb-2.5 rounded-lg border border-border-card bg-card p-1">
+          {agents.map((run, index) => (
+            <AgentRow key={index} run={run} elapsed={elapsed} card />
+          ))}
+        </div>
+      )}
+    </>
+  )
 }
 
 function Handoff({ end }: { end: HandoffEnd }) {
@@ -143,11 +328,7 @@ export function Shimmer({
   children: ReactNode
   className?: string
 }) {
-  return (
-    <span className={cn("demo-shimmer", className)}>
-      {children}
-    </span>
-  )
+  return <span className={cn("demo-shimmer", className)}>{children}</span>
 }
 
 /** The bit of Markdown the replies use: paragraphs, headings, lists, `code` and **bold**. */

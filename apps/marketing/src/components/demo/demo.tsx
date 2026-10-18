@@ -138,7 +138,8 @@ export function Demo() {
                 <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   <ProjectIcon project={thread.project} size={12} />
                   <span>
-                    {thread.project.name} <span className="text-muted-stronger-foreground">·</span>{" "}
+                    {thread.project.name}{" "}
+                    <span className="text-muted-stronger-foreground">·</span>{" "}
                     {thread.branch}
                   </span>
                 </p>
@@ -154,11 +155,7 @@ export function Demo() {
                   <Transcript
                     key={thread.id}
                     thread={thread}
-                    elapsed={
-                      thread.status.kind === "working"
-                        ? elapsed(thread.status.since)
-                        : ""
-                    }
+                    elapsed={elapsed}
                     onOpenDiff={() => setPanel("open")}
                   />
                   <div

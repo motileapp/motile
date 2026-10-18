@@ -20,6 +20,25 @@ export type Item =
   | { kind: "changes" }
   | { kind: "end"; worked: string }
   | { kind: "handoff"; from: HandoffEnd; to: HandoffEnd }
+  | { kind: "agents"; agents: StartedAgent[] }
+  | { kind: "notice"; agent: StartedAgent; event: string; at: string }
+
+/** How an agent the thread's agent started is doing, which the dot on its avatar shows. */
+export type AgentState = "working" | "waiting" | "done" | "failed"
+
+/** An agent the thread's agent started on one of your server's accounts. */
+export type StartedAgent = {
+  agent: Agent
+  title: string
+  role?: string
+  state: AgentState
+  /** The model's short name, and the account when its agent has more than one. */
+  runsOn: string
+  detail: string
+  /** How long it had worked when the page opened, while it works. */
+  since?: number
+  took?: string
+}
 
 /** One side of a handoff: the agent and the model's short name. */
 export type HandoffEnd = { agent: Agent; label: string }
@@ -29,6 +48,8 @@ export type Status =
   | { kind: "working"; since: number }
   | { kind: "approval" }
   | { kind: "monitoring"; since: number }
+  /** Its turn has ended, and agents it started on your server's accounts work. */
+  | { kind: "agents"; since: number; count: number; waiting?: string }
 
 export type Thread = {
   id: string
@@ -67,6 +88,16 @@ export const servers: Server[] = [
 ]
 
 const [studio, buildBox] = servers
+
+const paymentsReview: StartedAgent = {
+  agent: "codex",
+  title: "Review the payment logic",
+  role: "reviewer",
+  state: "done",
+  runsOn: "6.1-Sol",
+  detail: "Refunds larger than their charge aren't refused. The rest holds up.",
+  took: "1m 48s",
+}
 
 export const threads: Thread[] = [
   {
@@ -178,6 +209,71 @@ src/middleware.ts
 +    })
 +  }
 +}`,
+  },
+  {
+    id: "payments-review",
+    title: "Review the payments refactor",
+    project: api,
+    branch: "payments-refactor",
+    agent: "claude",
+    model: "Opus 5.5 · Work",
+    server: studio,
+    status: {
+      kind: "agents",
+      since: 96,
+      count: 2,
+      waiting: "Check the migrations needs your approval",
+    },
+    items: [
+      {
+        kind: "user",
+        text: "Review the payments refactor before I merge it. Have Codex go over the logic, and run the whole test suite on my other account.",
+      },
+      {
+        kind: "tool",
+        tool: "read",
+        verb: "Read",
+        target: "src/payments/refunds.ts",
+      },
+      {
+        kind: "text",
+        text: "I'll split this across your accounts: Codex reviews the logic, your Personal account runs the slow suite, and a third agent checks the migrations.",
+      },
+      {
+        kind: "agents",
+        agents: [
+          paymentsReview,
+          {
+            agent: "claude",
+            title: "Run the whole test suite",
+            state: "working",
+            runsOn: "Opus 5.5 · Personal",
+            detail: "Running pnpm test --runInBand",
+            since: 96,
+          },
+          {
+            agent: "claude",
+            title: "Check the migrations",
+            state: "waiting",
+            runsOn: "Sonnet 5.5 · Work",
+            detail: "Waiting for your approval",
+            since: 71,
+          },
+        ],
+      },
+      {
+        kind: "text",
+        text: "All three are on it. I'll tell you what they find.",
+      },
+      { kind: "end", worked: "Worked for 9s" },
+      { kind: "notice", agent: paymentsReview, event: "Finished", at: "10:42" },
+      {
+        kind: "text",
+        text: "Codex found a real bug: a refund larger than its charge goes through. The fix is one check in `refund()`, which I'll add once the tests come back.",
+      },
+      { kind: "end", worked: "Worked for 4s" },
+    ],
+    diff: "",
   },
   {
     id: "flaky-test",

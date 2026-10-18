@@ -11,6 +11,7 @@ import {
   ServerIcon,
   SettingsIcon,
   ShieldIcon,
+  UsersIcon,
   type LucideIcon,
 } from "lucide-react"
 import { useEffect, useState, type ReactNode } from "react"
@@ -536,6 +537,30 @@ function ThreadStatus({
         <span className={cn(label, "text-process")}>
           <CircleDashedIcon className="size-[10px]" />
           {elapsed(thread.status.since)}
+        </span>
+      )
+    case "agents":
+      if (thread.status.waiting) {
+        return (
+          <span
+            className={cn(label, "text-warning")}
+            title={thread.status.waiting}
+          >
+            <ShieldIcon className="size-[11px]" />
+            Approval
+          </span>
+        )
+      }
+      return (
+        <span className="flex items-center gap-[9px]">
+          <span className={cn(label, "text-pending")}>
+            <UsersIcon className="size-[11px]" />
+            {thread.status.count}
+          </span>
+          <span className={cn(label, "text-process")}>
+            <CircleDashedIcon className="size-[10px]" />
+            {elapsed(thread.status.since)}
+          </span>
         </span>
       )
     case "monitoring":

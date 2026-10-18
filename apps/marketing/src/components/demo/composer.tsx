@@ -41,7 +41,7 @@ export function Composer({
       {status.kind === "monitoring" && (
         <Strip edge="top">
           <span className="mr-2 ml-3.5 size-1.5 rounded-full bg-foreground" />
-          <span className="text-[12.5px] font-medium tabular-nums text-foreground">
+          <span className="text-[12.5px] font-medium text-foreground tabular-nums">
             Monitoring for {elapsed(status.since)}
           </span>
           <button
@@ -50,6 +50,20 @@ export function Composer({
             className="mr-2 ml-auto h-7 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
           >
             Stop
+          </button>
+        </Strip>
+      )}
+      {status.kind === "agents" && status.waiting && (
+        <Strip edge="top">
+          <ShieldIcon className="mr-[7px] ml-3.5 size-[13px] text-warning" />
+          <span className="truncate text-[12.5px] font-medium text-warning">
+            {status.waiting}
+          </span>
+          <button
+            type="button"
+            className="mr-2 ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+          >
+            Open Approval
           </button>
         </Strip>
       )}
@@ -94,7 +108,7 @@ export function Composer({
           placeholder={
             status.kind === "working" ? "Send a follow-up" : "Ask anything"
           }
-          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none pointer-coarse:text-[16px] placeholder:text-muted-stronger-foreground"
+          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14px] leading-5 outline-none placeholder:text-muted-stronger-foreground pointer-coarse:text-[16px]"
         />
         <div
           onClick={(event) => {
@@ -129,7 +143,9 @@ export function Composer({
             aria-label="Send"
             className={cn(
               "ml-1 flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground",
-              text.trim() ? "hover:bg-primary/(--opacity-lit)" : "opacity-(--opacity-disabled)"
+              text.trim()
+                ? "hover:bg-primary/(--opacity-lit)"
+                : "opacity-(--opacity-disabled)"
             )}
           >
             <ArrowUpIcon className="size-3.5" />
@@ -156,7 +172,10 @@ export function Composer({
         </span>
         <span className="ml-2.5 h-3 w-px bg-border-composer" />
         <span className="mr-2 flex items-center">
-          <Control icon={<GitBranchIcon className="size-3.5" />} plain={!!thread.worktree}>
+          <Control
+            icon={<GitBranchIcon className="size-3.5" />}
+            plain={!!thread.worktree}
+          >
             {thread.branch}
           </Control>
         </span>
@@ -207,11 +226,12 @@ function Strip({
     <div
       className={cn(
         "mx-[22px] border border-border-composer bg-composer text-[12px] text-muted-foreground",
-        tall
-          ? "p-3 text-[12.5px]"
-          : "flex h-[35px] items-center",
+        tall ? "p-3 text-[12.5px]" : "flex h-[35px] items-center",
         edge === "top"
-          ? cn("-mb-px rounded-t-lg text-foreground", tall ? "pb-[13px]" : "pb-px")
+          ? cn(
+              "-mb-px rounded-t-lg text-foreground",
+              tall ? "pb-[13px]" : "pb-px"
+            )
           : cn("-mt-px rounded-b-lg", tall ? "pt-[13px]" : "pt-px")
       )}
     >
