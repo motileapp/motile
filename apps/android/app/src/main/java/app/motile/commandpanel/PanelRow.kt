@@ -51,6 +51,7 @@ import app.motile.ui.Text
 
 internal object PanelRow {
     val height = scaled(52f).dp
+    val oneLineHeight = scaled(40f).dp
     val sideMargin = 8.dp
     val radius = Radius.md
     val titleHeight = scaled(17f).dp
@@ -62,7 +63,7 @@ internal fun PanelRow(item: PanelItem, lit: Boolean, onClick: () -> Unit) {
     val placeholder = item.placeholderLines > 0
     HighlightButton(
         onClick,
-        Modifier.fillMaxWidth().height(PanelRow.height).then(if (placeholder) Modifier.pulsing() else Modifier),
+        Modifier.fillMaxWidth().height(if (item.oneLine) PanelRow.oneLineHeight else PanelRow.height).then(if (placeholder) Modifier.pulsing() else Modifier),
         enabled = item.selectable,
         radius = PanelRow.radius,
         lit = lit,
@@ -101,6 +102,16 @@ private fun Modifier.pulsing(): Modifier {
 @Composable
 private fun Words(item: PanelItem) {
     val palette = LocalPalette.current
+    if (item.oneLine) {
+        Row(Modifier.height(PanelRow.titleHeight), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(item.title, size = 14f, maxLines = 1)
+            if (item.detailParts.isNotEmpty()) {
+                Text("·", size = 12f, color = palette.mutedStrongerForeground)
+                DetailParts(item.detailParts)
+            }
+        }
+        return
+    }
     Box(Modifier.height(PanelRow.titleHeight), contentAlignment = Alignment.CenterStart) {
         Text(item.title, size = 14f, maxLines = 1)
     }

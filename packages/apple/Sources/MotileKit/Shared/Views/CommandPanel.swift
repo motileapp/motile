@@ -39,7 +39,7 @@ struct CommandPanel: View {
     var body: some View {
         panel
             .onChange(of: query) {
-                highlighted.index = 0
+                highlighted.index = startIndex(page)
                 if store.panelNotice != nil { store.panelNotice = nil }
                 browse()
             }
@@ -177,7 +177,7 @@ struct CommandPanel: View {
 
     private func steer(_ step: Int) -> KeyPress.Result {
         let count = sections(page).flatMap(\.items).filter(\.selectable).count
-        highlighted.index = steered ? min(max(highlighted.index + step, 0), max(0, count - 1)) : 0
+        highlighted.index = steered ? min(max(highlighted.index + step, 0), max(0, count - 1)) : startIndex(page)
         steered = true
         return .handled
     }
@@ -280,7 +280,7 @@ struct CommandPanel: View {
                 .padding(.bottom, Platform.scale > 1 ? 32 : 8)
             }
             #if os(macOS)
-            .frame(height: height(page, sections, rows: rows, notice: refused))
+            .frame(height: height(page, sections, notice: refused))
             #else
             .frame(maxHeight: .infinity)
             .scrollDismissesKeyboard(.interactively)
@@ -295,12 +295,13 @@ struct CommandPanel: View {
     private static let noticeHeight: CGFloat = 36
 
     /// The pages that fill as the server answers keep one height, so nothing moves when it does.
-    private func height(_ page: PanelPage, _ sections: [PanelSection], rows: Int, notice: String?) -> CGFloat {
+    private func height(_ page: PanelPage, _ sections: [PanelSection], notice: String?) -> CGFloat {
         switch page {
         case .github, .folder, .icon: return 420
         default:
             let notice = notice == nil ? 0 : Self.noticeHeight
-            return min(420, max(90, CGFloat(rows) * PanelRow.height + CGFloat(sections.count) * 32 + 10 + notice))
+            let rows = sections.flatMap(\.items).map(PanelRow.height).reduce(0, +)
+            return min(420, max(90, rows + CGFloat(sections.count) * 32 + 10 + notice))
         }
     }
 
@@ -358,11 +359,17 @@ struct CommandPanel: View {
         var narrows = true
         switch page {
         case .projects:
-            let items = projectItems(shortcuts: Platform.name == "macos") { store.startNewThread(in: $0) }
-            sections = [PanelSection(title: "Projects", items: items + [addProject])]
+            let pick = { (project: Project) in store.startNewThread(in: project) }
+            sections = [
+                PanelSection(title: "Without a Project", items: noProjectItems(pick: pick)),
+                PanelSection(title: "Projects", items: projectItems(shortcuts: Platform.name == "macos", pick: pick) + [addProject]),
+            ]
         case .draftProject:
-            let items = projectItems(shortcuts: Platform.name == "macos") { store.setNewThreadProject($0.id) }
-            sections = [PanelSection(title: "Projects", items: items + [addProject])]
+            let pick = { (project: Project) in store.setNewThreadProject(project.id) }
+            sections = [
+                PanelSection(title: "Without a Project", items: noProjectItems(pick: pick)),
+                PanelSection(title: "Projects", items: projectItems(shortcuts: Platform.name == "macos", pick: pick) + [addProject]),
+            ]
         case .threads: sections = [PanelSection(title: "Threads", items: threadItems)]
         case .commands:
             sections = [PanelSection(title: "Commands", items: commands)]
@@ -374,6 +381,7 @@ struct CommandPanel: View {
             if !query.isEmpty {
                 sections.append(PanelSection(title: "Threads", items: threadItems))
                 sections.append(PanelSection(title: "Start a thread in", items: projectItems(shortcuts: false) { store.startNewThread(in: $0) }))
+                sections.append(PanelSection(title: "Without a Project", items: noProjectItems { store.startNewThread(in: $0) }))
             }
         case .servers: sections = [PanelSection(title: "Servers", items: serverItems)]
         case .sources(let id):
@@ -417,29 +425,43 @@ struct CommandPanel: View {
         store.server(id)?.name ?? "your server"
     }
 
-    /// The projects, the one the open thread works in first, then by when a thread last started,
-    /// and "No project" of each server last.
+    /// The projects, the one the open thread works in first, then by when a thread last started.
     private var projects: [Project] {
         let recent = store.recentProjects
-        guard let current = store.composerProject, store.projects.contains(where: { $0.id == current.id }) else { return recent + store.noProjects }
-        return [current] + recent.filter { $0.id != current.id } + store.noProjects
+        guard let current = store.composerProject, store.projects.contains(where: { $0.id == current.id }) else { return recent }
+        return [current] + recent.filter { $0.id != current.id }
     }
 
     /// `shortcuts` numbers the first nine for ⌘ and a digit.
     private func projectItems(shortcuts: Bool, pick: @escaping (Project) -> Void) -> [PanelItem] {
         projects.enumerated().map { position, project in
             let server = store.server(project.serverID)?.shortName ?? ""
-            let location = project.noProject ? "A folder of its own for each thread" : project.path
             var item = PanelItem(
                 id: "project-\(project.id)",
                 title: project.name,
-                detail: "\(server) \(location)",
+                detail: "\(server) \(project.path)",
                 icon: .project(project),
                 shortcut: shortcuts && position < 9 ? position + 1 : nil
             ) { pick(project) }
-            item.detailParts = server.isEmpty ? [(.folder, location)] : [(.server, server), (.folder, location)]
+            item.detailParts = server.isEmpty ? [(.folder, project.path)] : [(.server, server), (.folder, project.path)]
             return item
         }
+    }
+
+    /// "No project" of each server, one line each.
+    private func noProjectItems(pick: @escaping (Project) -> Void) -> [PanelItem] {
+        store.noProjects.map { project in
+            let server = store.server(project.serverID)?.shortName ?? ""
+            var item = PanelItem(id: "project-\(project.id)", title: "New thread", detail: server, icon: .project(project)) { pick(project) }
+            item.detailParts = server.isEmpty ? [] : [(.server, server)]
+            item.oneLine = true
+            return item
+        }
+    }
+
+    /// The highlight starts on the first project, past "No project" of each server.
+    private func startIndex(_ page: PanelPage) -> Int {
+        sections(page).flatMap(\.items).first { $0.selectable && !$0.oneLine }?.index ?? 0
     }
 
     private var addProject: PanelItem {
@@ -738,7 +760,7 @@ struct CommandPanel: View {
     }
 
     private func arrive() {
-        highlighted.index = 0
+        highlighted.index = startIndex(page)
         store.panelNotice = nil
         copied = false
         listing = nil
@@ -864,6 +886,8 @@ private struct PanelItem: Identifiable {
     let detail: String
     /// Shown instead of `detail`, each part after its symbol.
     var detailParts: [(symbol: Symbol, text: String)] = []
+    /// The detail follows the title on its line.
+    var oneLine = false
     let icon: Icon
     /// The digit that runs it with ⌘.
     var shortcut: Int?
@@ -909,6 +933,7 @@ private struct PanelItem: Identifiable {
 private struct PanelRow: View {
     @Environment(\.surface) private var surface
     static let height: CGFloat = scaled(52)
+    static let oneLineHeight: CGFloat = scaled(40)
     static let sideMargin: CGFloat = 8
     static let radius = Radius.md
     static let margin = EdgeInsets(top: 0, leading: sideMargin, bottom: 0, trailing: sideMargin)
@@ -925,6 +950,19 @@ private struct PanelRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 if item.placeholderLines > 0 {
                     placeholderLines
+                } else if item.oneLine {
+                    HStack(spacing: 4) {
+                        Text(item.title)
+                            .font(.ui(size: 14))
+                            .lineLimit(1)
+                        if !item.detailParts.isEmpty {
+                            Text("·")
+                                .font(.ui(size: 12))
+                                .foregroundStyle(Color.themeMutedStrongerForeground)
+                            detailParts
+                        }
+                    }
+                    .frame(height: Self.titleHeight)
                 } else {
                     Text(item.title)
                         .font(.ui(size: 14))
@@ -946,7 +984,7 @@ private struct PanelRow: View {
             trailing
         }
         .padding(.horizontal, 10)
-        .frame(height: Self.height)
+        .frame(height: Self.height(item))
         .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(.disabled, when: item.off)
         .padding(.horizontal, Self.sideMargin)
@@ -954,6 +992,10 @@ private struct PanelRow: View {
         .animation(item.placeholderLines > 0 ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : nil, value: faded)
         .onAppear { faded = item.placeholderLines > 0 }
         .onChange(of: item.placeholderLines) { faded = item.placeholderLines > 0 }
+    }
+
+    static func height(_ item: PanelItem) -> CGFloat {
+        item.oneLine ? oneLineHeight : height
     }
 
     private var detailParts: some View {
