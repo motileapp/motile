@@ -97,6 +97,8 @@ impl RenderOnce for ShortWhenNarrow {
 
 /// The way back's arrow stands close to its words, as the crumb's does.
 const BACK_GAP: f32 = 4.;
+/// What the bar says stands twice its gap from the way back.
+const BACK_APART: f32 = 8.;
 
 /// In place of the composer of an agent the thread's agent started, which runs on its own and
 /// can't be written to: how it is doing, and the way back to the thread.
@@ -133,7 +135,13 @@ pub fn agent_bar(store: &Entity<Store>, agent: &AgentView, cx: &App) -> impl Int
         .child(agent_time(agent, cx))
         .child(div().flex_1().min_w(px(8.)))
         .child(
-            div().min_w_0().text_size(px(TEXT_SIZE)).text_color(c.muted_foreground).truncate().child("Runs on its own"),
+            div()
+                .min_w_0()
+                .mr(px(BACK_APART))
+                .text_size(px(TEXT_SIZE))
+                .text_color(c.muted_foreground)
+                .truncate()
+                .child("Runs on its own"),
         )
         .child(
             ActionButton::new("go-back", "Go Back")

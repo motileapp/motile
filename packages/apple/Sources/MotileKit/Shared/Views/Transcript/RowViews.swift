@@ -1141,8 +1141,7 @@ final class AgentsRowView: RowView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         highlight.radius = Radius.md
-        moreSurface.fill = Theme.backgroundAccent
-        moreSurface.stroke = Theme.borderAccent
+        moreSurface.fill = Theme.borderAccent
         moreSurface.radius = AgentAvatarDrawing.side / 2
         [highlight, moreSurface, more, title, summary, time, chevron].forEach { addSubview($0) }
         onHover = { [weak self] point in
@@ -1230,8 +1229,9 @@ final class AgentsRowView: RowView {
         }
         var end = avatars.last.map { $0.frame.maxX } ?? 0
         if !moreSurface.isHidden {
-            moreSurface.frame = CGRect(x: CGFloat(avatars.count) * Self.step, y: y, width: side, height: side)
             let size = more.natural
+            let pill = max(side, (size.width + AgentAvatarDrawing.morePadding * 2).rounded(.up))
+            moreSurface.frame = CGRect(x: CGFloat(avatars.count) * Self.step, y: y, width: pill, height: side)
             more.frame = CGRect(x: moreSurface.frame.midX - size.width / 2, y: moreSurface.frame.midY - size.height / 2, width: size.width, height: size.height)
             end = moreSurface.frame.maxX
         }
@@ -1253,11 +1253,13 @@ final class LineageView: FlippedView {
 
     private static let size = ControlSize.small
     private static let lineGap = ControlSize.regular.padding
+    /// The arrow's square leaves room around its ink, so it needs little more from the words.
+    private static let arrowGap: CGFloat = 1
 
     private let leading = SurfaceView()
     private let trailing = SurfaceView()
     private let pill = SurfaceView()
-    private let symbol = SymbolView(.cornerLeftUp, size: size.symbol, tint: Theme.mutedForeground)
+    private let symbol = SymbolView(.cornerLeftUp, size: size.smallSymbol, tint: Theme.mutedForeground)
     private let words = TextLabel(font: .ui(size.textSize, weight: .medium), color: Theme.foreground)
 
     var title = "" {
@@ -1306,18 +1308,19 @@ final class LineageView: FlippedView {
 
     private func placeParts() {
         let size = Self.size
-        let side = size.symbolSide
-        let ends = size.padding - size.symbolOutset + side + size.gap + size.padding
+        let side = PlatformImage.symbolSide(size.smallSymbol)
+        let ends = size.padding + side + Self.arrowGap + size.padding
         let room = max(0, bounds.width - Self.lineGap * 2 - ends)
         let wordsWidth = min(ceil(words.attributed.size().width) + 2, room)
         let width = ends + wordsWidth
         let x = ((bounds.width - width) / 2).rounded()
         let y = ((bounds.height - size.height) / 2).rounded()
         pill.frame = CGRect(x: x, y: y, width: width, height: size.height)
-        let symbolX = x + size.padding - size.symbolOutset
-        symbol.frame = CGRect(x: symbolX, y: y + ((size.height - side) / 2).rounded(), width: side, height: side)
+        let symbolX = x + size.padding
+        // The arrow stands on the baseline, lower than the caps' middle it is raised to.
+        symbol.frame = CGRect(x: symbolX, y: y + ((size.height - side) / 2).rounded() - scaled(1), width: side, height: side)
         let wordsHeight = scaled(16)
-        words.frame = CGRect(x: symbolX + side + size.gap, y: y + ((size.height - wordsHeight) / 2).rounded(), width: wordsWidth, height: wordsHeight)
+        words.frame = CGRect(x: symbolX + side + Self.arrowGap, y: y + ((size.height - wordsHeight) / 2).rounded(), width: wordsWidth, height: wordsHeight)
         let lineY = (bounds.height / 2).rounded()
         leading.frame = CGRect(x: 0, y: lineY, width: max(0, x - Self.lineGap), height: 1)
         let after = x + width + Self.lineGap

@@ -1585,7 +1585,6 @@ fn reply_text(rows: &[Arc<RowModel>], end_id: &str) -> String {
     parts.join("\n\n")
 }
 
-/// Shown under the transcript while the agent is at work or waits for an approval.
 /// The way back to the thread whose agent started this one: a line across, broken by a round
 /// button that names it. The transcript shows it above its first row and under its last.
 pub fn started_by(end: bool, ctx: &RowContext, cx: &App) -> AnyElement {
@@ -1606,11 +1605,9 @@ pub fn started_by(end: bool, ctx: &RowContext, cx: &App) -> AnyElement {
         .id(("started-by", usize::from(end)))
         .min_w_0()
         .h(px(size.height()))
-        .pl(px(size.padding() - size.symbol_outset()))
-        .pr(px(size.padding()))
+        .px(px(size.padding()))
         .flex()
         .items_center()
-        .gap(px(size.gap()))
         .rounded_full()
         .bg(c.background_accent)
         .border_1()
@@ -1618,7 +1615,14 @@ pub fn started_by(end: bool, ctx: &RowContext, cx: &App) -> AnyElement {
         .hover(|pill| pill.bg(c.border_accent))
         .active(|pill| pill.bg(c.border_accent))
         .cursor_pointer()
-        .child(icons::symbol("corner-left-up", size.symbol()).text_color(c.muted_foreground))
+        // The arrow stands on the baseline, lower than the caps' middle it is raised to. Its
+        // square leaves room around its ink, so it needs little more from the words.
+        .child(
+            div()
+                .mt(px(-1.))
+                .mr(px(1.))
+                .child(icons::symbol("corner-left-up", size.small_symbol()).text_color(c.muted_foreground)),
+        )
         .child(div().min_w_0().text_size(px(size.text_size())).truncate().child(StyledText::new(words).with_runs(runs)))
         .on_click(move |_, _, cx| {
             store.update(cx, |store, cx| store.open_started_thread(&id, cx));
@@ -1634,6 +1638,7 @@ pub fn started_by(end: bool, ctx: &RowContext, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
+/// Shown under the transcript while the agent is at work or waits for an approval.
 pub fn working_line(activity: &crate::models::Activity, cx: &App) -> AnyElement {
     let c = colors(cx);
     let asking = activity.approvals.first().map(|waiting| waiting.ask);

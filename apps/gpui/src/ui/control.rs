@@ -39,10 +39,12 @@ pub enum Variant {
     Overlay,
 }
 
-/// What a button shows before its words: a symbol, or a picture of its own like a logo.
+/// What a button shows before its words: a symbol, a picture of its own like a logo, or
+/// pictures side by side, as wide as they are (the width they take).
 pub enum ControlIcon {
     Symbol(SharedString),
     Picture(AnyElement),
+    Pictures(AnyElement, f32),
 }
 
 /// The colours and the shape of a button or a menu. Pressed looks as under the pointer does.
@@ -249,6 +251,7 @@ impl ControlLabel {
         let trailing = if wordless { 0. } else { padding - if self.chevron { size.chevron_outset() } else { 0. } };
         let mark = self.icon.as_ref().map(|icon| match icon {
             ControlIcon::Picture(_) => self.symbol_size.unwrap_or(size.symbol_side()),
+            ControlIcon::Pictures(_, width) => *width,
             ControlIcon::Symbol(_) => crate::theme::symbol_side(self.mark_size()),
         });
         let words =
@@ -309,6 +312,7 @@ impl ControlLabel {
                                 .overflow_hidden()
                                 .child(picture),
                         ),
+                        ControlIcon::Pictures(pictures, _) => row.child(div().flex_shrink_0().child(pictures)),
                     })
                 })
                 .when_some(title, |row, title| {
@@ -495,6 +499,12 @@ impl ActionButton {
 
     pub fn picture(mut self, picture: impl IntoElement) -> Self {
         self.label.icon = Some(ControlIcon::Picture(picture.into_any_element()));
+        self
+    }
+
+    /// Pictures side by side before its words, `width` wide.
+    pub fn pictures(mut self, pictures: impl IntoElement, width: f32) -> Self {
+        self.label.icon = Some(ControlIcon::Pictures(pictures.into_any_element(), width));
         self
     }
 

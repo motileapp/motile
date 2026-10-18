@@ -2762,7 +2762,7 @@ fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Chi
         }),
         several => Some(format!("{} agents need you", several.len())),
     };
-    let working = working.iter().take(3).map(|thread| thread.agent).collect();
+    let working = working.iter().take(agents::avatars_shown(working.len())).map(|thread| thread.agent).collect();
     Some(Children { running, working, waiting, waiting_text, running_text, stop_question })
 }
 

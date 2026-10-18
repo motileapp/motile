@@ -274,7 +274,7 @@ function AgentGroup({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="-mx-1.5 flex h-[50px] w-[calc(100%+12px)] items-center gap-2.5 rounded-md px-1.5 text-left hover:bg-background-accent-larger"
+        className="group -mx-1.5 flex h-[50px] w-[calc(100%+12px)] items-center gap-2.5 rounded-md px-1.5 text-left hover:bg-background-accent-larger"
       >
         <span className="flex shrink-0 -space-x-1.5">
           {agents.slice(0, 3).map((run, index) => (

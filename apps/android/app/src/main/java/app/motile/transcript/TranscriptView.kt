@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,11 +59,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -80,12 +81,12 @@ import app.motile.theme.Theme
 import app.motile.theme.shadow
 import app.motile.ui.Icon
 import app.motile.ui.Text
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 /** What a row needs from the transcript around it. */
 val LocalTranscript = staticCompositionLocalOf<TranscriptActions> { error("No transcript") }
@@ -534,11 +535,12 @@ private fun StartedByLine(title: String, open: () -> Unit) {
                 .background(if (pressed) palette.borderAccent else palette.backgroundAccent, CircleShape)
                 .border(1.dp, palette.borderAccent, CircleShape)
                 .clickable(interaction, indication = null, role = Role.Button, onClick = open)
-                .padding(start = size.padding - size.symbolOutset, end = size.padding),
-            horizontalArrangement = Arrangement.spacedBy(size.gap),
+                .padding(horizontal = size.padding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Symbol.CornerLeftUp, size.symbol, color = palette.mutedForeground)
+            // The arrow stands on the baseline, lower than the caps' middle it is raised to. Its
+            // square leaves room around its ink, so it needs little more from the words.
+            Icon(Symbol.CornerLeftUp, size.smallSymbol, Modifier.offset(y = (-1).dp).padding(end = 1.dp), color = palette.mutedForeground)
             Text(words, style = size.font, maxLines = 1)
         }
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))

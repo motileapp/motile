@@ -441,9 +441,11 @@ impl RightPanelView {
         let ricrac_unavailable = store.ricrac_unavailable();
         let ricrac_connected = store.ricrac_connected();
         let ricrac_title = if ricrac_connected { "Ricrac" } else { "Connect Ricrac" };
+        let working = store.agents.iter().filter(|agent| agent.working()).count();
         let row = |id: &'static str,
                    symbol: &'static str,
                    title: &'static str,
+                   count: usize,
                    command: Option<&'static str>,
                    reason: Option<String>,
                    open: Box<dyn Fn(&mut Store)>| {
@@ -470,7 +472,21 @@ impl RightPanelView {
                         .justify_center()
                         .child(icons::symbol(symbol, 13.).text_color(c.foreground)),
                 )
-                .child(div().relative().flex_1().text_size(px(13.)).text_color(c.foreground).child(title))
+                .child(
+                    div()
+                        .relative()
+                        .flex_1()
+                        .flex()
+                        .text_size(px(13.))
+                        .text_color(c.foreground)
+                        .when(count == 0, |text| text.child(title))
+                        // How many of its things work, in the working colour.
+                        .when(count > 0, |text| {
+                            text.child(format!("{title}\u{a0}"))
+                                .child(div().text_color(c.muted_foreground).child("·"))
+                                .child(div().text_color(c.process).child(format!("\u{a0}{count}")))
+                        }),
+                )
                 .when_some(keys, |row, keys| {
                     row.child(div().relative().text_color(c.muted_foreground).child(KeyCaps::new(keys).joined(true)))
                 })
@@ -495,6 +511,7 @@ impl RightPanelView {
                         "launch-files",
                         "folder",
                         "Files",
+                        0,
                         Some("rightPanel.files"),
                         None,
                         Box::new(|store| store.open_tab(PanelTab::Files)),
@@ -503,6 +520,7 @@ impl RightPanelView {
                         "launch-diff",
                         "diff",
                         "Diff",
+                        0,
                         Some("rightPanel.diff"),
                         (!target.repository).then(|| "Available in git repositories.".to_string()),
                         Box::new(|store| store.show_diff(None, None)),
@@ -511,6 +529,7 @@ impl RightPanelView {
                         "launch-agents",
                         "bot",
                         "Agents",
+                        working,
                         Some("rightPanel.agents"),
                         None,
                         Box::new(|store| store.open_tab(PanelTab::Agents)),
@@ -519,6 +538,7 @@ impl RightPanelView {
                         "launch-pull-request",
                         "git-pull-request",
                         "Pull Request",
+                        0,
                         Some("rightPanel.pullRequest"),
                         pull_requests_unavailable.clone(),
                         Box::new(|store| store.open_tab(PanelTab::PullRequest)),
@@ -528,6 +548,7 @@ impl RightPanelView {
                             "launch-pull-requests",
                             "list",
                             "All Pull Requests",
+                            0,
                             Some("rightPanel.pullRequests"),
                             pull_requests_unavailable,
                             Box::new(|store| store.open_tab(PanelTab::PullRequests)),
@@ -538,6 +559,7 @@ impl RightPanelView {
                             "launch-linear",
                             "linear",
                             linear_title,
+                            0,
                             Some("rightPanel.linear"),
                             linear_unavailable,
                             Box::new(|store| store.open_tab(PanelTab::Linear)),
@@ -548,6 +570,7 @@ impl RightPanelView {
                             "launch-ricrac",
                             "ricrac",
                             ricrac_title,
+                            0,
                             Some("rightPanel.ricrac"),
                             ricrac_unavailable,
                             Box::new(|store| store.open_tab(PanelTab::Ricrac)),

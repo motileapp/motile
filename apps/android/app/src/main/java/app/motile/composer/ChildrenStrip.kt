@@ -50,6 +50,9 @@ fun ChildrenStrip(text: String, first: ThreadChildren.Waiting, count: Int) {
 }
 
 /** In place of the composer of an agent the thread's agent started, which runs on its own and can't be written to: how it is doing, and the way back to the thread. */
+/** What the bar says stands twice its gap from the way back. */
+private val BACK_APART = 8.dp
+
 @Composable
 fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
     val store = LocalStore.current
@@ -78,7 +81,7 @@ fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
                     title(Modifier)
                     AgentTime(agent)
                     Spacer(Modifier.weight(1f))
-                    Text("Runs on its own", size = 12.5f, color = palette.mutedForeground, maxLines = 1)
+                    Text("Runs on its own", Modifier.padding(end = BACK_APART), size = 12.5f, color = palette.mutedForeground, maxLines = 1)
                 }
             },
             {
