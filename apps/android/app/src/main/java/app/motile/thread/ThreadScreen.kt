@@ -238,7 +238,8 @@ private fun TitleLine(compact: Boolean) {
     val agent = store.shownAgent
     val thread = store.selectedThread
     val parent = store.parentThread
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    // The symbol alone stands as close to the title as it does to its words.
+    Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 0.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
         val title = @Composable { text: String -> Text(text, Modifier.weight(1f, fill = false), style = system(15f, FontWeight.SemiBold), maxLines = 1) }
         when {
             agent != null && thread != null -> {

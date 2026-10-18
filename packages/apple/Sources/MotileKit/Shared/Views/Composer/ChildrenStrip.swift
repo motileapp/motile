@@ -86,11 +86,19 @@ struct AgentBar: View {
 /// the open one, or the thread of the agent shown.
 struct TitleCrumb: View {
     let title: String
+    /// Where the title has no room, it is only the symbol.
+    var compact = false
     let action: () -> Void
 
     var body: some View {
-        ActionButton(
-            title, icon: .cornerLeftUp, help: "Open \(title)", variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol,
-            inline: true, action: action)
+        if compact {
+            ActionButton(
+                icon: .cornerLeftUp, help: "Open \(title)", size: .small, symbolSize: ControlSize.small.smallSymbol, inline: true,
+                action: action)
+        } else {
+            ActionButton(
+                title, icon: .cornerLeftUp, help: "Open \(title)", variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol,
+                inline: true, action: action)
+        }
     }
 }
