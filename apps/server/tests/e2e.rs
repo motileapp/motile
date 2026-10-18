@@ -989,6 +989,29 @@ async fn a_thread_the_usage_limit_stopped_continues_once_the_limit_resets() {
 }
 
 #[tokio::test]
+async fn a_thread_whose_agents_the_usage_limit_stopped_after_its_turn_rests_and_continues() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    let thread_id = send(&connection, None, new_thread, "Agents hit the limit").await;
+
+    let rested = thread_where(&mut list, |thread| !thread.running && thread.interruption.is_some()).await;
+    assert_eq!(rested.agents, 0);
+    thread_where(&mut list, |thread| thread.running && thread.interruption.is_none()).await;
+
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    assert_eq!(transcript.user_texts(), vec!["Agents hit the limit", CONTINUE_PROMPT]);
+    let stopped = transcript.items.iter().filter_map(|item| match &item.kind {
+        ItemKind::Tool { call } => call.agent.as_ref().map(|agent| agent.status),
+        _ => None,
+    });
+    assert_eq!(stopped.collect::<Vec<_>>(), [ToolStatus::Failed, ToolStatus::Failed]);
+    assert_eq!(harness.recorded_turns().len(), 1, "the resting process takes the prompt that continues");
+}
+
+#[tokio::test]
 async fn a_thread_the_usage_limit_stopped_waits_when_it_is_not_to_continue() {
     let harness = Harness::start(fixture(Agent::Codex), "0").await;
     let connection = harness.connect().await;

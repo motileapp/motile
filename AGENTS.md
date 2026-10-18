@@ -542,6 +542,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "which color" | Asks the user a question |
 | "plan the hello" | Presents a plan to approve |
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
+| "agents hit the limit" | Is stopped by the usage limit while two agents it started work, which it stops after the turn (Claude Code) |
 | "crash before taking this" | Exits before it takes the prompt (Claude Code) |
 | "$ship-it", "$review" | Says it followed the skill: the project's in `.claude/skills` (`.agents/skills` for Codex), or one it makes up |
 

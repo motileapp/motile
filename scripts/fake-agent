@@ -31,6 +31,8 @@ made up on the spot instead:
   `docs/greeting.md`.
 - "hit the limit": a turn that reads a file and is stopped by the usage limit, which resets
   FAKE_AGENT_RESET seconds later.
+- "agents hit the limit": a turn that starts two agents and is stopped by the usage limit while they
+  work, which stops them too, after the turn has ended.
 - "ask two agents": a turn that starts two agents at once. Each says what it does, a step every
   FAKE_AGENT_STEP seconds, and reports.
 - "run the workflow": a turn that runs a workflow of two phases and waits for it. Its agents start
@@ -745,6 +747,26 @@ def hit_the_limit():
     """A turn the usage limit stops, as Claude Code's does when the subscription's limit runs out."""
     turn = Turn("00000000-0000-4000-8000-0000000c0105")
     turn.tool("Read", {"file_path": "/srv/api/greet.py"}, "1\tdef greet(name):\n")
+    refused_for_the_limit()
+
+
+def agents_hit_the_limit():
+    """A turn the usage limit stops while two agents it started work, which the limit stops after it,
+    without waking the turn's agent again."""
+    turn = Turn("00000000-0000-4000-8000-0000000c0106")
+    agents = [turn.start_agent("Read greet.py", "Explore", "Read greet.py and say what it does."),
+              turn.start_agent("Run the tests", "general-purpose", "Run the tests and report what fails.")]
+    emit({"type": "system", "subtype": "background_tasks_changed",
+          "tasks": [{"task_id": f"task_{agent}", "task_type": "local_agent"} for agent in agents]})
+    text = refused_for_the_limit()
+    for agent in agents:
+        emit({"type": "system", "subtype": "task_notification", "task_id": f"task_{agent}", "tool_use_id": agent,
+              "status": "failed", "summary": text, "usage": turn._usage(1)}, AGENT_STEP)
+    emit({"type": "system", "subtype": "background_tasks_changed", "tasks": []})
+
+
+def refused_for_the_limit():
+    """Ends the turn as Claude Code does when the subscription's limit runs out, and says so."""
     resets = limit_resets()
     emit({"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "rateLimitType": "five_hour",
                                                           "resetsAt": resets, "overageStatus": "rejected"}})
@@ -753,6 +775,7 @@ def hit_the_limit():
     emit({"type": "assistant", "error": "rate_limit", "message": message})
     emit({"type": "result", "subtype": "success", "is_error": True, "result": text, "duration_ms": 1,
           "api_error_status": 429, "terminal_reason": "api_error"})
+    return text
 
 
 def plan_hello():
@@ -1166,6 +1189,7 @@ SCRIPTED = {
     "huge transcript": huge_transcript,
     "long reply with a lot of code": long_reply,
     "rate limiter": rate_limiter,
+    "agents hit the limit": agents_hit_the_limit,
     "hit the limit": hit_the_limit,
 }
 
