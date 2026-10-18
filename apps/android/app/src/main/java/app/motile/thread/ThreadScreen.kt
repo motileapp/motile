@@ -77,8 +77,6 @@ import app.motile.ui.ProjectIcon
 import app.motile.ui.Text
 import app.motile.ui.glassButton
 
-/** The room between the last row and the composer, where the transcript's jump button stands. */
-private val composerGap = 48.dp
 private val composerBottomGap = 8.dp
 private val barPadding = 12.dp
 private val barHeight = GlassButton.side + 10.dp
@@ -114,7 +112,7 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .onSizeChanged { composerHeight = with(density) { it.height.toDp() } }
-                                .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = composerGap, bottom = composerBottomGap),
+                                .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = TranscriptView.composerGap, bottom = composerBottomGap),
                         )
                     }
                 }

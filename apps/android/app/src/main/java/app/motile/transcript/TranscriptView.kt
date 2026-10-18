@@ -150,7 +150,7 @@ private object Working
 
 object TranscriptView {
     /** The room between the last row and the composer, which the bottom padding the transcript is given starts with. */
-    val composerGap = 48.dp
+    val composerGap = 80.dp
     /** The room above the first row, which the rows fade out in. */
     val topFade = 20.dp
     private val jumpButtonGap = 10.dp

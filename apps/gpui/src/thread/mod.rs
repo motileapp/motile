@@ -19,7 +19,7 @@ use crate::ui::modal::{Answer, Confirmation, Modal, confirmation, present_sheet,
 use crate::ui::{ActionButton, Highlight, TOOLBAR_WIDTH, icons, logos};
 
 /// The room between the last row and the composer, which the transcript fades out in.
-pub const COMPOSER_GAP: f32 = 48.;
+pub const COMPOSER_GAP: f32 = 80.;
 const COMPOSER_BOTTOM_GAP: f32 = 16.;
 /// How far above the middle the start is, as a part of the window's height.
 const START_LIFT: f32 = 0.03;
