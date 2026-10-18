@@ -42,6 +42,11 @@ made up on the spot instead:
 - "ask agents in the background": a turn that starts two agents through it, Codex and Claude Code,
   and ends. Told one finished, it says what that one found.
 - "ask three agents": the same with a third agent, which fails.
+- "ask sixty agents": a turn that starts fifty-four agents that only say hello and six that look over
+  greet.py slowly, and ends.
+- "say hello": a turn that only says hello.
+- "look over greet.py slowly": eight test runs, a step every FAKE_AGENT_CHILD_STEP seconds, then what
+  it would change.
 - "ask a supervised agent": a turn that starts a supervised agent to run greet.py, which asks
   before each step, and ends.
 - "ask an agent which color": a turn that starts an agent that asks which color; told it asks, it
@@ -398,6 +403,8 @@ def title_answer():
         title = "Review in the Background"
     if "ask three agents" in message:
         title = "Three Agents at Once"
+    if "ask sixty agents" in message:
+        title = "Sixty Agents at Once"
     if "ask a supervised agent" in message:
         title = "Run greet.py Under Supervision"
     if "ask an agent which color" in message:
@@ -765,6 +772,24 @@ def ask_agents_in_the_background():
     turn.done()
 
 
+def ask_sixty_agents():
+    turn = Turn("00000000-0000-4000-8000-000000060a60")
+    turn.text("I'll split this across sixty agents.")
+    for index in range(54):
+        call_motile(turn, "start_agent", {"prompt": "Say hello.", "title": f"Check {index + 1}", "agent": "claude"})
+    for index in range(6):
+        call_motile(turn, "start_agent", {"prompt": "Look over greet.py slowly and say what you would change.",
+                                          "title": f"Look over part {index + 1}", "agent": "claude"})
+    turn.text("All sixty are working. I'll tell you what they find.")
+    turn.done()
+
+
+def say_hello():
+    turn = Turn("00000000-0000-4000-8000-0000000e1100")
+    turn.text("Hello.")
+    turn.done()
+
+
 def ask_three_agents():
     turn = Turn("00000000-0000-4000-8000-0000000a3a3a")
     turn.text("I'll have three agents look at this.")
@@ -817,6 +842,15 @@ def look_over():
     turn.tool("Bash", {"command": "python3 -m pytest -q", "description": "Run the tests"}, "2 passed in 0.03s",
               seconds=CHILD_STEP)
     turn.thinking(CHILD_STEP)
+    turn.text(REVIEW)
+    turn.done()
+
+
+def look_over_slowly():
+    turn = Turn("00000000-0000-4000-8000-0000000100c1")
+    for step in range(8):
+        turn.tool("Bash", {"command": f"python3 -m pytest -q -k part{step + 1}", "description": "Run the tests"},
+                  "1 passed in 0.01s", seconds=CHILD_STEP)
     turn.text(REVIEW)
     turn.done()
 
@@ -1359,12 +1393,15 @@ SCRIPTED = {
     "ask another account": ask_another_account,
     "ask agents in the background": ask_agents_in_the_background,
     "ask three agents": ask_three_agents,
+    "ask sixty agents": ask_sixty_agents,
+    "say hello": say_hello,
     "ask a supervised agent": ask_a_supervised_agent,
     "ask an agent which color": ask_an_agent_which_color,
     "finished. its reply:": hear_from_an_agent,
     ") failed: ": hear_from_an_agent,
     "was stopped before it finished": hear_from_an_agent,
     " asks:\n": hear_from_an_agent,
+    "look over greet.py slowly": look_over_slowly,
     "look over": look_over,
     "ask which color": which_color,
     "show the screenshot": show_screenshot,
@@ -1423,10 +1460,16 @@ def answer(prompt):
     try:
         scripted()
     except Preempted as preempted:
-        turn = Turn(preempted.session_id)
-        said = take(preempted.message)
-        turn.text("I stopped there. You also said: " + said)
-        turn.done()
+        # A message that stops the answer to the one before it is answered in its turn, and so on.
+        while True:
+            turn = Turn(preempted.session_id)
+            said = take(preempted.message)
+            try:
+                turn.text("I stopped there. You also said: " + said)
+                turn.done()
+                return
+            except Preempted as again:
+                preempted = again
 
 
 answer(prompt)

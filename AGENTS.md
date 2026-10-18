@@ -557,6 +557,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "ask another account" | Starts Codex through `start_agent` to look over greet.py and waits for it (Claude Code) |
 | "ask agents in the background" | Starts Codex and Claude Code through `start_agent` and ends; told one finished, says what it found (Claude Code) |
 | "ask three agents" | Starts three agents through `start_agent`, the last of which fails (Claude Code) |
+| "ask sixty agents" | Starts fifty-four agents that say hello and six that look over greet.py slowly, through `start_agent` (Claude Code) |
 | "ask a supervised agent" | Starts a supervised agent that runs greet.py, which waits for the user's approval (Claude Code) |
 | "ask an agent which color" | Starts an agent that asks which color; told it asks, answers blue through `answer_agent` (Claude Code) |
 | "look over" | Reads greet.py and runs the tests, a step every `FAKE_AGENT_CHILD_STEP` seconds, and says what it would change |

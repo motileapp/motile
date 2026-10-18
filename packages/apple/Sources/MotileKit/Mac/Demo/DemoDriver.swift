@@ -389,6 +389,23 @@ private final class Demo {
         scrollTranscript(to: 0.5)
         await shoot("09-huge-thread")
 
+        // Sixty agents at once: the thread and its Agents tab stay responsive while they start, and
+        // while six of them work on after the thread's agent has ended its turn.
+        store.startNewThread()
+        store.rightPanel.open(.agents)
+        let starting = StallMonitor()
+        send("Ask sixty agents.")
+        await expect("sixty agents are started", within: 90) { store.agents.count >= 60 }
+        results.append(responsive("sixty agents start", starting))
+        await expect("fifty-four of them are done, and six work on", within: 90) {
+            store.agents.count { $0.working } == 6 && store.selectedThread?.running == false
+        }
+        let working = StallMonitor()
+        await wait(5)
+        results.append(responsive("six agents work on with the Agents tab open", working))
+        await shoot("09-sixty-agents")
+        store.rightPanel.isOpen = false
+
         // What updates look like, without one happening.
         store.updater.show(.available("9.9.9"), latest: "9.9.9")
         await shoot("09-update-available")

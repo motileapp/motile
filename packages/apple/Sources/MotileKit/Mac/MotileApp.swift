@@ -11,6 +11,7 @@ public func runMotile() {
 struct MotileApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var store = AppStore()
+    @State private var menuModel = MenuModel()
     @AppStorage("appearance") private var appearance = Appearance.system
     @AppStorage(MainView.sidebarHiddenKey) private var sidebarHidden = false
 
@@ -25,6 +26,7 @@ struct MotileApp: App {
                     delegate.started = true
                     appearance.apply()
                     store.start()
+                    menuModel.follow(store)
                     ShortcutMonitor.shared.start(store)
                     DemoDriver.startIfRequested(store: store)
                 }
@@ -34,40 +36,49 @@ struct MotileApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             let keys = store.shortcuts
+            let menu = menuModel.state
             CommandGroup(replacing: .sidebar) {
                 Button(sidebarHidden ? "Show Sidebar" : "Hide Sidebar") { sidebarHidden.toggle() }
                     .shortcut("sidebar.toggle", in: keys)
-                Button(store.rightPanel.isOpen ? "Hide Right Panel" : "Show Right Panel") { store.rightPanel.isOpen.toggle() }
+                Button(menu.panelOpen ? "Hide Right Panel" : "Show Right Panel") { store.rightPanel.isOpen.toggle() }
                     .shortcut("rightPanel.toggle", in: keys)
-                Button(store.rightPanel.isMaximized ? "Restore Right Panel" : "Maximize Right Panel") { store.rightPanel.toggleMaximized() }
+                Button(menu.panelMaximized ? "Restore Right Panel" : "Maximize Right Panel") { store.rightPanel.toggleMaximized() }
                     .shortcut("rightPanel.toggleMaximized", in: keys)
-                    .disabled(!store.rightPanel.canMaximize)
+                    .disabled(!menu.panelCanMaximize)
                 Button("Show Changes") { store.rightPanel.showDiff() }
                     .shortcut("rightPanel.diff", in: keys)
-                    .disabled(store.panelUnavailable != nil || store.panelTarget?.repository != true)
+                    .disabled(menu.panelUnavailable || !menu.panelRepository)
                 Button("Show Files") { store.rightPanel.open(.files) }
                     .shortcut("rightPanel.files", in: keys)
-                    .disabled(store.panelUnavailable != nil)
+                    .disabled(menu.panelUnavailable)
                 Button("Show Agents") { store.rightPanel.open(.agents) }
                     .shortcut("rightPanel.agents", in: keys)
-                    .disabled(store.panelUnavailable != nil)
+                    .disabled(menu.panelUnavailable)
                 Button("Show Pull Request") { store.rightPanel.open(.pullRequest) }
                     .shortcut("rightPanel.pullRequest", in: keys)
-                    .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil)
+                    .disabled(menu.panelUnavailable || menu.pullRequestsUnavailable)
                 Button("Show All Pull Requests") { store.rightPanel.open(.pullRequests) }
                     .shortcut("rightPanel.pullRequests", in: keys)
-                    .disabled(store.panelUnavailable != nil || store.pullRequestsUnavailable != nil || !store.pullRequestsExtended)
-                if store.isOn(.linear) {
+                    .disabled(menu.panelUnavailable || menu.pullRequestsUnavailable || !menu.pullRequestsExtended)
+                if menu.linear {
                     Button("Show Linear") { store.rightPanel.open(.linear) }
                         .shortcut("rightPanel.linear", in: keys)
-                        .disabled(store.panelUnavailable != nil || store.linearUnavailable != nil)
+                        .disabled(menu.panelUnavailable || menu.linearUnavailable)
                 }
-                if store.isOn(.ricrac) {
+                if menu.ricrac {
                     Button("Show Ricrac") { store.rightPanel.open(.ricrac) }
                         .shortcut("rightPanel.ricrac", in: keys)
-                        .disabled(store.panelUnavailable != nil || store.ricracUnavailable != nil)
+                        .disabled(menu.panelUnavailable || menu.ricracUnavailable)
                 }
-                PanelTabCommands(store: store)
+                Button("New Tab") { store.rightPanel.openBlank() }
+                    .shortcut("rightPanel.new", in: keys)
+                    .disabled(menu.panelUnavailable)
+                Button("Show Next Tab") { store.rightPanel.activate(offset: 1) }
+                    .shortcut("rightPanel.nextTab", in: keys)
+                    .disabled(!menu.panelSwitchable)
+                Button("Show Previous Tab") { store.rightPanel.activate(offset: -1) }
+                    .shortcut("rightPanel.previousTab", in: keys)
+                    .disabled(!menu.panelSwitchable)
                 Divider()
             }
             CommandGroup(replacing: .saveItem) {
@@ -82,42 +93,42 @@ struct MotileApp: App {
                     .shortcut("settings.open", in: keys)
                 Button("Usage") { store.openUsage() }
                     .shortcut("usage.open", in: keys)
-                    .disabled(!store.account.signedIn)
+                    .disabled(!menu.signedIn)
             }
             CommandGroup(replacing: .newItem) {
                 Button("New Thread") { store.newThread() }
                     .shortcut("chat.new", in: keys)
-                Button(store.composerProject.map { $0.noProject ? "New Thread Without a Project" : "New Thread in “\($0.name)”" } ?? "New Thread in This Project") {
+                Button(menu.newThreadHere ?? "New Thread in This Project") {
                     store.startNewThread(in: store.composerProject)
                 }
                 .shortcut("chat.newLocal", in: keys)
-                .disabled(store.composerProject == nil)
+                .disabled(menu.newThreadHere == nil)
                 Button("New Thread Without a Project") { _ = store.perform("chat.newWithoutProject") }
                     .shortcut("chat.newWithoutProject", in: keys)
-                    .disabled(store.noProjects.isEmpty)
+                    .disabled(menu.noProjects)
                 Button("Go to Thread") { store.openPanel(.threads) }
                     .shortcut("threadPicker.toggle", in: keys)
                 Button("Commands") { store.openPanel(.commands) }
                     .shortcut("commandPalette.toggle", in: keys)
             }
             CommandMenu("Thread") {
-                Button(store.selectedThread?.isDone == true ? "Mark Undone" : "Mark Done") { store.toggleDone() }
+                Button(menu.threadDone ? "Mark Undone" : "Mark Done") { store.toggleDone() }
                     .shortcut("thread.done", in: keys)
-                    .disabled(store.selectedThread == nil || store.openThreadRemovedServer != nil)
+                    .disabled(!menu.threadOpen || menu.removedServer)
                 Button("Stop") { store.stop() }
                     .shortcut("thread.stop", in: keys)
-                    .disabled(!store.activity.busy || store.openThreadRemovedServer != nil)
+                    .disabled(!menu.busy || menu.removedServer)
                 Button("Previous Thread") { _ = store.perform("thread.previous") }
                     .shortcut("thread.previous", in: keys)
-                    .disabled(store.jumpThreads.isEmpty)
+                    .disabled(!menu.hasJumps)
                 Button("Next Thread") { _ = store.perform("thread.next") }
                     .shortcut("thread.next", in: keys)
-                    .disabled(store.jumpThreads.isEmpty)
+                    .disabled(!menu.hasJumps)
                 Divider()
                 Button("Add a Project") { store.addProject() }
-                    .disabled(store.servers.isEmpty)
+                    .disabled(!menu.hasServers)
                 Button("Add a Server") { store.showsAddServer = true }
-                    .disabled(!store.account.signedIn)
+                    .disabled(!menu.signedIn)
             }
         }
 

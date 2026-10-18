@@ -8,7 +8,7 @@ struct ThreadCard: View {
     let threadID: String
 
     var body: some View {
-        if let thread = store.threads[threadID] {
+        if let thread = store.anyThread(threadID) {
             card(thread, project: store.project(thread.projectID)?.seen(from: thread))
         }
     }

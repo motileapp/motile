@@ -249,8 +249,17 @@ class AppStore(private val context: Context) {
         private set
     val projectsByID: Map<String, Project>
         get() = (projects + noProjects + removedProjects).reversed().associateBy { it.id }
+    /** The threads the sidebar lists, by id. */
     var threads by mutableStateOf(mapOf<String, ThreadInfo>())
         private set
+    /** The threads agents started, kept apart: they change many times a second while their agents work, and a view that looks up a listed thread doesn't hear of them. */
+    var startedThreads by mutableStateOf(mapOf<String, ThreadInfo>())
+        private set
+
+    /** A thread by its id, a listed one or one an agent started. */
+    fun anyThread(id: String): ThreadInfo? = threads[id] ?: startedThreads[id]
+
+    private val everyThread: Map<String, ThreadInfo> get() = startedThreads + threads
     /** The threads as the sidebar lists them, kept in order as they change so that it never sorts them. */
     var activeThreads by mutableStateOf(emptyList<ThreadInfo>())
         private set
@@ -265,6 +274,7 @@ class AppStore(private val context: Context) {
         private set(value) {
             selectionState = value
             Preferences.set("selection", value.id)
+            showSelectedThread()
         }
     var activity by mutableStateOf(Activity())
         private set
@@ -479,7 +489,7 @@ class AppStore(private val context: Context) {
                 val stage = GitStage.of(event.string("stage"))
                 return {
                     project(projectID)?.let { project ->
-                        val checkoutID = (threadID?.let { threads[it] }?.let { project.seen(it) } ?: project).checkoutID
+                        val checkoutID = (threadID?.let { anyThread(it) }?.let { project.seen(it) } ?: project).checkoutID
                         if (gitStages[checkoutID] != null) gitStages = gitStages + (checkoutID to stage)
                     }
                 }
@@ -617,7 +627,7 @@ class AppStore(private val context: Context) {
         val known = all.map { it.id }.toSet()
         everyProject = everyProject.filter { it.serverID in known }
         sortProjects()
-        if (threads.values.any { it.serverID !in known }) replaceThreads(threads.filterValues { it.serverID in known })
+        if (everyThread.values.any { it.serverID !in known }) replaceThreads(everyThread.filterValues { it.serverID in known })
         // A server that is back with another version has finished updating.
         for (server in servers) {
             if (server.state != Server.State.Connected) continue
@@ -631,16 +641,16 @@ class AppStore(private val context: Context) {
     }
 
     private fun applyThreads(new: List<ThreadInfo>, serverID: String) {
-        val kept = threads.filterValues { it.serverID != serverID }.toMutableMap()
+        val kept = everyThread.filterValues { it.serverID != serverID }.toMutableMap()
         for (thread in new) kept[thread.id] = thread
         replaceThreads(kept)
-        (selection as? Selection.Thread)?.let { if (threads[it.id] == null) openEmptyDraft() }
+        (selection as? Selection.Thread)?.let { if (anyThread(it.id) == null) openEmptyDraft() }
         markOpenThreadSeen()
         restoreSelection()
     }
 
     private fun upsert(thread: ThreadInfo) {
-        val before = threads[thread.id]
+        val before = anyThread(thread.id)
         if (before == thread) return
         setThread(thread, thread.id)
         markOpenThreadSeen()
@@ -693,17 +703,23 @@ class AppStore(private val context: Context) {
 
     /** The lists leave out the threads agents started, which their parents show. */
     private fun replaceThreads(new: Map<String, ThreadInfo>) {
-        threads = new
-        val listed = new.values.filter { it.parentID == null }
+        threads = new.filterValues { it.parentID == null }
+        startedThreads = new.filterValues { it.parentID != null }
+        val listed = threads.values
         activeThreads = listed.filter { !it.isDone }.sortedWith(ThreadInfo.order)
         doneThreads = listed.filter { it.isDone }.sortedWith(ThreadInfo.order)
+        showSelectedThread()
     }
 
     /** Changes one thread, and moves it in its list only when its place there changed. */
     private fun setThread(thread: ThreadInfo?, id: String) {
-        val before = threads[id]
+        val before = anyThread(id)
+        if ((thread ?: before)?.parentID != null) {
+            startedThreads = if (thread == null) startedThreads - id else startedThreads + (id to thread)
+            return showSelectedThread()
+        }
         threads = if (thread == null) threads - id else threads + (id to thread)
-        if ((thread ?: before)?.parentID != null) return
+        showSelectedThread()
         if (before != null && thread != null && before.isDone == thread.isDone && before.listedAt == thread.listedAt) {
             changeList(thread.isDone) { list -> list.indexOfListed(before)?.let { list[it] = thread } }
             return
@@ -716,16 +732,23 @@ class AppStore(private val context: Context) {
         if (done) doneThreads = doneThreads.toMutableList().also(change) else activeThreads = activeThreads.toMutableList().also(change)
     }
 
-    val selectedThread: ThreadInfo?
-        get() = (selection as? Selection.Thread)?.let { threads[it.id] }
+    /** The open thread and the one whose agent started it, kept apart from `threads` so that what shows them changes with them alone, not with every thread. */
+    var selectedThread by mutableStateOf<ThreadInfo?>(null)
+        private set
+    var parentThread by mutableStateOf<ThreadInfo?>(null)
+        private set
 
-    /** The thread whose agent started the open one. */
-    val parentThread: ThreadInfo?
-        get() = selectedThread?.parentID?.let { threads[it] }
+    /** Keeps `selectedThread` and `parentThread` as the threads have them, assigned only when they change. */
+    private fun showSelectedThread() {
+        val selected = (selection as? Selection.Thread)?.let { anyThread(it.id) }
+        if (selectedThread != selected) selectedThread = selected
+        val parent = selected?.parentID?.let { anyThread(it) }
+        if (parentThread != parent) parentThread = parent
+    }
 
     /** Opens the thread an agent the open thread's agent started works in, or the one whose agent started it. On a phone the panel it was opened from goes away. */
     fun openStartedThread(threadID: String) {
-        if (threads[threadID] == null) return
+        if (anyThread(threadID) == null) return
         // The agents stay in view on the way between a thread and the agents it started, and where the panel covers the
         // thread, they are what it opens on there.
         val showsAgents = rightPanel.isOpen && rightPanel.tabs.active == PanelTab.Agents
@@ -1147,7 +1170,7 @@ class AppStore(private val context: Context) {
     /** Opens the thread that was open when the client was last closed, once it is known. */
     private fun restoreSelection() {
         val wanted = lastSelection ?: return
-        if (threads[wanted] == null) return
+        if (anyThread(wanted) == null) return
         lastSelection = null
         val draft = selectedDraft ?: return
         if (preview(draft) != null || isSending(draft)) return
@@ -1249,7 +1272,7 @@ class AppStore(private val context: Context) {
         private set
 
     /** Whether an agent works on the server: in a turn, or watching something it left running. */
-    fun isBusy(server: Server): Boolean = threads.values.any { it.serverID == server.id && it.busy }
+    fun isBusy(server: Server): Boolean = threads.values.any { it.serverID == server.id && it.busy } || startedThreads.values.any { it.serverID == server.id && it.busy }
 
     /** Whether the server can wait for its agents before it restarts, or stop them and go on with them after. */
     fun canChooseRestart(server: Server): Boolean = server.protocolVersion >= 14
@@ -1483,7 +1506,10 @@ class AppStore(private val context: Context) {
     // Branches
 
     /** Whether a turn is running in the project's folder, which is when its branch can't be switched. */
-    fun isWorking(project: Project): Boolean = threads.values.any { it.projectID == project.id && it.running && it.cwd == project.path }
+    fun isWorking(project: Project): Boolean {
+        val working = { thread: ThreadInfo -> thread.projectID == project.id && thread.running && thread.cwd == project.path }
+        return threads.values.any(working) || startedThreads.values.any(working)
+    }
 
     /** Whether the project's server is new enough to start threads in worktrees of their own. */
     fun canUseWorktrees(project: Project): Boolean =
@@ -1909,7 +1935,7 @@ class AppStore(private val context: Context) {
         rightPanel.turns = emptyList()
         rightPanel.showAgents()
         agents = emptyList()
-        val thread = (new as? Selection.Thread)?.let { threads[it.id] }
+        val thread = (new as? Selection.Thread)?.let { anyThread(it.id) }
         if (thread == null) {
             transcript.begin(null)
             showSendingMessage()
@@ -2136,7 +2162,7 @@ class AppStore(private val context: Context) {
 
     /** Stops the thread's agent, and the agents it started. */
     fun stop(threadID: String) {
-        val thread = threads[threadID] ?: return
+        val thread = anyThread(threadID) ?: return
         if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "stop", "thread_id" to thread.id))
     }
@@ -2218,7 +2244,7 @@ class AppStore(private val context: Context) {
 
     /** Marks threads done or brings them back. A thread that is working or monitoring can't be marked done. */
     fun setDone(ids: List<String>, done: Boolean, fromSidebar: Boolean = false) {
-        val changed = ids.mapNotNull { threads[it] }.filter { it.isDone != done && !(done && it.busy) && !onRemovedServer(it) }
+        val changed = ids.mapNotNull { anyThread(it) }.filter { it.isDone != done && !(done && it.busy) && !onRemovedServer(it) }
         if (changed.isEmpty()) return
         // Leaving the thread that was just put away, for the next one that is still active.
         val open = (selection as? Selection.Thread)?.id

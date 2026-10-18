@@ -68,7 +68,7 @@ object ThreadCard {
 @Composable
 fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
     val store = LocalStore.current
-    val thread = store.threads[threadID] ?: return
+    val thread = store.anyThread(threadID) ?: return
     val project = store.project(thread.projectID)?.seen(thread)
     val palette = Theme.colors
     DropdownCard(modifier.widthIn(max = ThreadCard.maxWidth)) {

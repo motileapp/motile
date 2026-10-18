@@ -79,11 +79,11 @@ struct AgentAvatars: View {
 
 /// The avatar drawn in the transcript's rows, which aren't SwiftUI.
 final class AgentAvatarView: FlippedView {
-    var agent: Agent? { didSet { redraw() } }
-    var state: AgentState? { didSet { redraw() } }
-    var ground = Theme.background { didSet { redraw() } }
+    var agent: Agent? { didSet { if agent != oldValue { redraw() } } }
+    var state: AgentState? { didSet { if state != oldValue { redraw() } } }
+    var ground = Theme.background { didSet { if ground != oldValue { redraw() } } }
     /// It lies over another, from which a ring of the ground sets it apart.
-    var ringed = false { didSet { redraw() } }
+    var ringed = false { didSet { if ringed != oldValue { redraw() } } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)

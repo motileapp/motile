@@ -236,7 +236,16 @@ final class AppStore {
         didSet { indexProjects() }
     }
     private(set) var projectsByID: [String: Project] = [:]
+    /// The threads the sidebar lists, by id.
     private(set) var threads: [String: ThreadInfo] = [:]
+    /// The threads agents started, kept apart: they change many times a second while their agents
+    /// work, and a view that looks up a listed thread doesn't hear of them.
+    private(set) var startedThreads: [String: ThreadInfo] = [:]
+
+    /// A thread by its id, a listed one or one an agent started.
+    func anyThread(_ id: String) -> ThreadInfo? { threads[id] ?? startedThreads[id] }
+
+    private var everyThread: [String: ThreadInfo] { threads.merging(startedThreads) { listed, _ in listed } }
     /// The threads as the sidebar lists them, kept in order as they change so that it never sorts them.
     private(set) var activeThreads: [ThreadInfo] = []
     private(set) var doneThreads: [ThreadInfo] = []
@@ -244,8 +253,15 @@ final class AppStore {
     // The open thread
     /// Always a draft or a thread; `loadPreferences` opens the first draft.
     private(set) var selection: Selection = .draft("") {
-        didSet { defaults.set(draftKey, forKey: "selection") }
+        didSet {
+            defaults.set(draftKey, forKey: "selection")
+            showSelectedThread()
+        }
     }
+    /// The open thread and the one whose agent started it, kept apart from `threads` so that the
+    /// views that show them change with them alone, not with every thread.
+    private(set) var selectedThread: ThreadInfo?
+    private(set) var parentThread: ThreadInfo?
     private(set) var activity = Activity()
     private(set) var transcriptIsEmpty = true
     /// The agents the open thread's agent has started, in the order it started them.
@@ -451,7 +467,7 @@ final class AppStore {
             let stage = GitStage(rawValue: event.string("stage")) ?? .unknown
             return { [weak self] in
                 guard let self, let project = self.project(projectID) else { return }
-                let checkoutID = (threadID.flatMap { self.threads[$0] }.map { project.seen(from: $0) } ?? project).checkoutID
+                let checkoutID = (threadID.flatMap { self.anyThread($0) }.map { project.seen(from: $0) } ?? project).checkoutID
                 guard self.gitStages[checkoutID] != nil else { return }
                 self.gitStages[checkoutID] = stage
             }
@@ -567,8 +583,8 @@ final class AppStore {
         let known = Set(all.map(\.id))
         everyProject.removeAll { !known.contains($0.serverID) }
         sortProjects()
-        if threads.values.contains(where: { !known.contains($0.serverID) }) {
-            setThreads(threads.filter { known.contains($0.value.serverID) })
+        if everyThread.values.contains(where: { !known.contains($0.serverID) }) {
+            setThreads(everyThread.filter { known.contains($0.value.serverID) })
         }
         // A server that is back with another version has finished updating.
         for server in servers where server.state == .connected {
@@ -584,10 +600,10 @@ final class AppStore {
     }
 
     private func apply(threads new: [ThreadInfo], serverID: String) {
-        var kept = threads.filter { $0.value.serverID != serverID }
+        var kept = everyThread.filter { $0.value.serverID != serverID }
         for thread in new { kept[thread.id] = thread }
         setThreads(kept)
-        if case .thread(let id) = selection, threads[id] == nil {
+        if case .thread(let id) = selection, anyThread(id) == nil {
             openEmptyDraft()
         }
         markOpenThreadSeen()
@@ -595,7 +611,7 @@ final class AppStore {
     }
 
     private func upsert(_ thread: ThreadInfo) {
-        let before = threads[thread.id]
+        let before = anyThread(thread.id)
         guard before != thread else { return }
         setThread(thread, id: thread.id)
         markOpenThreadSeen()
@@ -654,17 +670,23 @@ final class AppStore {
 
     /// The lists leave out the threads agents started, which their parents show.
     private func setThreads(_ new: [String: ThreadInfo]) {
-        threads = new
-        let listed = new.values.filter { $0.parentID == nil }
+        threads = new.filter { $0.value.parentID == nil }
+        startedThreads = new.filter { $0.value.parentID != nil }
+        let listed = Array(threads.values)
         activeThreads = listed.filter { !$0.isDone }.sorted(by: ThreadInfo.listed)
         doneThreads = listed.filter(\.isDone).sorted(by: ThreadInfo.listed)
+        showSelectedThread()
     }
 
     /// Changes one thread, and moves it in its list only when its place there changed.
     private func setThread(_ thread: ThreadInfo?, id: String) {
-        let before = threads[id]
+        let before = anyThread(id)
+        defer { showSelectedThread() }
+        guard (thread ?? before)?.parentID == nil else {
+            startedThreads[id] = thread
+            return
+        }
         threads[id] = thread
-        guard (thread ?? before)?.parentID == nil else { return }
         if let before, let thread, before.isDone == thread.isDone, before.listedAt == thread.listedAt {
             changeList(done: thread.isDone) { list in
                 guard let index = list.index(of: before) else { return }
@@ -687,18 +709,18 @@ final class AppStore {
         if done { change(&doneThreads) } else { change(&activeThreads) }
     }
 
-    var selectedThread: ThreadInfo? {
-        guard case .thread(let id) = selection else { return nil }
-        return threads[id]
+    /// Keeps `selectedThread` and `parentThread` as the threads have them, assigned only when they change.
+    private func showSelectedThread() {
+        let selected: ThreadInfo? = if case .thread(let id) = selection { anyThread(id) } else { nil }
+        if selectedThread != selected { selectedThread = selected }
+        let parent = selected?.parentID.flatMap { anyThread($0) }
+        if parentThread != parent { parentThread = parent }
     }
-
-    /// The thread whose agent started the open one.
-    var parentThread: ThreadInfo? { selectedThread?.parentID.flatMap { threads[$0] } }
 
     /// Opens the thread an agent the open thread's agent started works in, or the one whose agent
     /// started it. On a phone the panel it was opened from goes away.
     func openStartedThread(_ threadID: String) {
-        guard threads[threadID] != nil else { return }
+        guard anyThread(threadID) != nil else { return }
         // The agents stay in view on the way between a thread and the agents it started, and where
         // the panel covers the thread, they are what it opens on there.
         let showsAgents = rightPanel.isOpen && rightPanel.tabs.active == .agents
@@ -1138,7 +1160,7 @@ final class AppStore {
 
     /// Opens the thread that was open when the client was last closed, once it is known.
     private func restoreSelection() {
-        guard let wanted = lastSelection, threads[wanted] != nil else { return }
+        guard let wanted = lastSelection, anyThread(wanted) != nil else { return }
         lastSelection = nil
         guard let draft = selectedDraft, preview(of: draft) == nil, !isSending(draft) else { return }
         select(.thread(wanted))
@@ -1242,7 +1264,8 @@ final class AppStore {
 
     /// Whether an agent works on the server: in a turn, or watching something it left running.
     func isBusy(_ server: Server) -> Bool {
-        threads.values.contains { $0.serverID == server.id && $0.busy }
+        let busy = { (thread: ThreadInfo) in thread.serverID == server.id && thread.busy }
+        return threads.values.contains(where: busy) || startedThreads.values.contains(where: busy)
     }
 
     /// Whether the server can wait for its agents before it restarts, or stop them and go on with
@@ -1513,7 +1536,8 @@ final class AppStore {
     /// Whether a turn is running in the project's folder, which is when its branch can't be
     /// switched.
     func isWorking(in project: Project) -> Bool {
-        threads.values.contains { $0.projectID == project.id && $0.running && $0.cwd == project.path }
+        let working = { (thread: ThreadInfo) in thread.projectID == project.id && thread.running && thread.cwd == project.path }
+        return threads.values.contains(where: working) || startedThreads.values.contains(where: working)
     }
 
     /// Whether the project's server is new enough to start threads in worktrees of their own.
@@ -1956,7 +1980,7 @@ final class AppStore {
         rightPanel.turns = []
         rightPanel.showAgents()
         agents = []
-        guard case .thread(let id) = new, let thread = threads[id] else {
+        guard case .thread(let id) = new, let thread = anyThread(id) else {
             transcript.begin(threadID: nil)
             showSendingMessage()
             ensureDraftProject()
@@ -2200,7 +2224,7 @@ final class AppStore {
 
     /// Stops the thread's agent, and the agents it started.
     func stop(threadID: String) {
-        guard let thread = threads[threadID], !onRemovedServer(thread) else { return }
+        guard let thread = anyThread(threadID), !onRemovedServer(thread) else { return }
         request(thread.serverID, ["type": "stop", "thread_id": thread.id])
     }
 
@@ -2299,7 +2323,7 @@ final class AppStore {
     /// Marks threads done or brings them back. A thread that is working or monitoring can't be
     /// marked done.
     func setDone(_ ids: [String], done: Bool, fromSidebar: Bool = false) {
-        let changed = ids.compactMap { threads[$0] }.filter { $0.isDone != done && !(done && $0.busy) && !onRemovedServer($0) }
+        let changed = ids.compactMap { anyThread($0) }.filter { $0.isDone != done && !(done && $0.busy) && !onRemovedServer($0) }
         guard !changed.isEmpty else { return }
         // Leaving the thread that was just put away, for the next one that is still active.
         if done, fromSidebar, case .thread(let open) = selection, changed.contains(where: { $0.id == open }) {

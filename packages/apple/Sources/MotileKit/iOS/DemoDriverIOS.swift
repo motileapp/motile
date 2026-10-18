@@ -65,7 +65,8 @@ enum DemoDriver {
         switch verb {
         case "sidebar": drawer.isOpen = rest == "open"
         case "thread":
-            guard let thread = store.threads.values.first(where: { $0.title.localizedCaseInsensitiveContains(rest) }) else { return }
+            let all = Array(store.threads.values) + Array(store.startedThreads.values)
+            guard let thread = all.first(where: { $0.title.localizedCaseInsensitiveContains(rest) }) else { return }
             store.select(.thread(thread.id))
         case "new": store.startNewThread(in: store.composerProject ?? store.projects.first)
         case "type": store.draft = rest

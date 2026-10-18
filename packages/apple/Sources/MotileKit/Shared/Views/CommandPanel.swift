@@ -605,11 +605,11 @@ struct CommandPanel: View {
 
     /// The threads, then the ones agents started, each saying which thread started it.
     private var threadItems: [PanelItem] {
-        let started = store.threads.values.filter { $0.parentID != nil }.sorted { $0.updatedAt > $1.updatedAt }
+        let started = store.startedThreads.values.sorted { $0.updatedAt > $1.updatedAt }
         return (store.activeThreads + store.doneThreads + started).map { thread in
             let project = store.project(thread.projectID)
             let name = project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
-            let from = thread.parentID.flatMap { store.threads[$0]?.title }.map { " · from \($0)" } ?? ""
+            let from = thread.parentID.flatMap { store.anyThread($0)?.title }.map { " · from \($0)" } ?? ""
             let state = thread.isDone ? "done" : thread.waitsFor?.phrase ?? (thread.working ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt))
             return PanelItem(id: "thread-\(thread.id)", title: thread.title, detail: "\(name)\(from) · \(state)", icon: .project(project)) {
                 store.show(.thread(thread.id))
@@ -668,7 +668,7 @@ struct CommandPanel: View {
             keyed(PanelItem(id: "new-thread", title: "New thread", detail: "Choose a project to start in", icon: .symbol(.squarePen), keepsOpen: true) {
                 open(.projects)
             }, "chat.new"),
-            keyed(PanelItem(id: "go-to-thread", title: "Go to thread", detail: "\(store.threads.count) threads", icon: .symbol(.messageSquareText), keepsOpen: true) {
+            keyed(PanelItem(id: "go-to-thread", title: "Go to thread", detail: "\(store.threads.count + store.startedThreads.count) threads", icon: .symbol(.messageSquareText), keepsOpen: true) {
                 open(.threads)
             }, "threadPicker.toggle"),
             addProject,

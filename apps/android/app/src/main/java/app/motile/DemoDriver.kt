@@ -84,7 +84,7 @@ object DemoDriver {
         when (verb) {
             "sidebar" -> LocalDrawerHolder.drawer?.isOpen = rest == "open"
             "thread" -> {
-                val thread = store.threads.values.firstOrNull { it.title.contains(rest, ignoreCase = true) } ?: return
+                val thread = (store.threads.values + store.startedThreads.values).firstOrNull { it.title.contains(rest, ignoreCase = true) } ?: return
                 store.select(Selection.Thread(thread.id))
             }
             "new" -> store.startNewThread(store.composerProject ?: store.projects.firstOrNull())

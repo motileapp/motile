@@ -430,14 +430,14 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
     /** The threads, then the ones agents started, each saying which thread started it. */
     private val threadItems: List<PanelItem>
         get() {
-            val started = store.threads.values.filter { it.parentID != null }.sortedByDescending { it.updatedAt }
+            val started = store.startedThreads.values.sortedByDescending { it.updatedAt }
             return (store.activeThreads + store.doneThreads + started).map(::threadItem)
         }
 
     private fun threadItem(thread: ThreadInfo): PanelItem {
         val project = store.project(thread.projectID)
         val name = project?.name ?: thread.cwd.trimEnd('/').substringAfterLast('/')
-        val from = thread.parentID?.let { store.threads[it]?.title }?.let { " · from $it" } ?: ""
+        val from = thread.parentID?.let { store.anyThread(it)?.title }?.let { " · from $it" } ?: ""
         val waitsFor = thread.waitsFor
         val state = when {
             thread.isDone -> "done"
@@ -474,7 +474,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
                 PanelItem("new-thread", "New thread", "Choose a project to start in", PanelIcon.Glyph(Symbol.SquarePen), keepsOpen = true) {
                     open(PanelPage.Projects)
                 }.keyed("chat.new"),
-                PanelItem("go-to-thread", "Go to thread", "${store.threads.size} threads", PanelIcon.Glyph(Symbol.MessageSquareText), keepsOpen = true) {
+                PanelItem("go-to-thread", "Go to thread", "${store.threads.size + store.startedThreads.size} threads", PanelIcon.Glyph(Symbol.MessageSquareText), keepsOpen = true) {
                     open(PanelPage.Threads)
                 }.keyed("threadPicker.toggle"),
                 addProject,
