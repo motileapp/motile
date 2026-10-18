@@ -256,6 +256,11 @@ impl Server {
         self.protocol_version >= 19
     }
 
+    /// Whether it signs its agents' accounts in for the client.
+    pub fn signs_in_accounts(&self) -> bool {
+        self.protocol_version >= 31
+    }
+
     /// Whether the server keeps where the user moves its threads in the sidebar.
     pub fn moves_threads(&self) -> bool {
         self.protocol_version >= 21

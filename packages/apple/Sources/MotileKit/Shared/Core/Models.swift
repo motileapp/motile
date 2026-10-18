@@ -261,6 +261,9 @@ struct Server: Equatable, Identifiable {
     /// Whether threads there can move between accounts and agents.
     var switchesAccounts: Bool { protocolVersion >= 19 }
 
+    /// Whether it signs its agents' accounts in for the client.
+    var signsInAccounts: Bool { protocolVersion >= 31 }
+
     /// Whether the server keeps where the user moves its threads in the sidebar.
     var movesThreads: Bool { protocolVersion >= 21 }
 

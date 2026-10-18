@@ -105,6 +105,9 @@ shadcn's own colours, opacities and radii are gone from the theme.
   (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`) and the variables its agent is given; every agent has a
   default one. A Codex account can share the default one's folder but for its sign-in. A thread
   works with one account and can move to another.
+- `sign_in.rs`: signs a Claude Code account in for a client: it runs `claude auth login` with the
+  account's folder, the client opens the page it links to, and the code that page shows comes
+  back to it.
 - `hub.rs`: the live state of every thread: turns, queued messages, approvals, monitoring,
   worktrees, snapshots and the agents an agent starts. It continues a thread once its usage limit
   resets, and after a restart that cut its agent off, where the server's settings say so. Claude
@@ -546,7 +549,8 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "crash before taking this" | Exits before it takes the prompt (Claude Code) |
 | "$ship-it", "$review" | Says it followed the skill: the project's in `.claude/skills` (`.agents/skills` for Codex), or one it makes up |
 
-A message sent now while it works is read after its next tool call, or stops a reply that
+As `claude auth login` it signs in with any code but one with "wrong" in it, as the folder's
+name at motile.app. A message sent now while it works is read after its next tool call, or stops a reply that
 streams (Claude Code). Asked for a title, a commit message, a pull request's text or a branch's
 name, it writes one.
 

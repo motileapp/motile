@@ -66,11 +66,7 @@ pub fn checked(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::
     if !account.id.is_empty() && existing.is_none() {
         bail!("That account is no longer on your server.");
     }
-    for variable in account.variables.iter_mut().filter(|variable| variable.sensitive && variable.value.is_empty()) {
-        let kept = existing.and_then(|existing| existing.variables.iter().find(|kept| kept.name == variable.name));
-        let Some(kept) = kept else { bail!("{} needs a value.", variable.name) };
-        variable.value = kept.value.clone();
-    }
+    keep_sensitive_values(&mut account, existing)?;
     if existing.is_some_and(|existing| existing.agent != account.agent) {
         bail!("An account stays with its agent. Add a new one for the other agent.");
     }
@@ -115,6 +111,36 @@ pub fn checked(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::
     }
     if account.id.is_empty() {
         account.id = uuid::Uuid::new_v4().to_string();
+    }
+    Ok(account)
+}
+
+/// Gives the sensitive variables saved without a value the values `existing` keeps.
+fn keep_sensitive_values(account: &mut AgentAccount, existing: Option<&AgentAccount>) -> anyhow::Result<()> {
+    for variable in account.variables.iter_mut().filter(|variable| variable.sensitive && variable.value.is_empty()) {
+        let kept = existing.and_then(|existing| existing.variables.iter().find(|kept| kept.name == variable.name));
+        let Some(kept) = kept else { bail!("{} needs a value.", variable.name) };
+        variable.value = kept.value.clone();
+    }
+    Ok(())
+}
+
+/// The account as a sign-in runs it: the form's folder and variables, before they are saved.
+pub fn signing_in(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::Result<AgentAccount> {
+    if account.agent != Agent::Claude {
+        bail!("Only Claude Code accounts sign in from here.");
+    }
+    account.folder = account.folder.trim().trim_end_matches('/').to_string();
+    account.variables.retain(|variable| !variable.name.trim().is_empty());
+    for variable in &mut account.variables {
+        variable.name = variable.name.trim().to_string();
+    }
+    let existing = accounts.iter().find(|kept| kept.id == account.id && !account.id.is_empty());
+    keep_sensitive_values(&mut account, existing)?;
+    if is_default(&account) {
+        account.folder.clear();
+    } else if !account.folder.starts_with('/') && !account.folder.starts_with("~/") {
+        bail!("Give the account a full folder first, like ~/.claude-personal.");
     }
     Ok(account)
 }

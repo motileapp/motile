@@ -67,6 +67,12 @@ or a branch's name it writes one. FAKE_AGENT_ARGUMENTS_FILE records how it was c
 per call (for Codex, once it is asked for a thread), and what it was told while it ran, one JSON object each: the settings Claude Code was
 told to change, and the threads and turns Codex was asked for. FAKE_AGENT_PROMPTS_FILE records
 every prompt Claude Code reads, one JSON string each.
+
+Called as `auth login` it signs Claude Code in as `claude auth login` does without a terminal: it
+prints the page to sign in on and reads the code that page shows. A code with "wrong" in it is
+refused; any other signs in as the folder's name at motile.app (`~/.claude-work` is
+work@motile.app), which `initialize` then says, kept in `CLAUDE_CONFIG_DIR`. Without that folder,
+the CLI's usual one, it signs in as demo@motile.app and keeps nothing.
 """
 import json
 import os
@@ -81,6 +87,36 @@ import zlib
 
 if "--version" in sys.argv:
     print("2.1.284 (Claude Code, fake)")
+    sys.exit(0)
+
+LOGIN_FILE = "fake-login.json"
+
+
+def signed_in_email():
+    folder = os.environ.get("CLAUDE_CONFIG_DIR")
+    try:
+        with open(os.path.join(folder, LOGIN_FILE)) as f:
+            return json.load(f)["email"]
+    except (TypeError, OSError, ValueError, KeyError):
+        return "demo@motile.app"
+
+
+if sys.argv[1:3] == ["auth", "login"]:
+    print("Opening browser to sign in…")
+    print("If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&client_id=fake-agent")
+    sys.stdout.write("Paste code here if prompted > ")
+    sys.stdout.flush()
+    code = sys.stdin.readline().strip()
+    if not code or "wrong" in code:
+        print("Login failed: Request failed with status code 400")
+        sys.exit(1)
+    folder = os.environ.get("CLAUDE_CONFIG_DIR")
+    if folder:
+        name = os.path.basename(folder.rstrip("/")).removeprefix(".claude-").strip(".") or "demo"
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, LOGIN_FILE), "w") as f:
+            json.dump({"email": f"{name}@motile.app"}, f)
+    print("Login successful.")
     sys.exit(0)
 
 
@@ -219,7 +255,7 @@ def answer_control(message):
     """Answers what Claude Code is asked about its login and the limits of its plan."""
     subtype = message["request"].get("subtype")
     if subtype == "initialize":
-        answer = {"account": {"email": "demo@motile.app", "subscriptionType": "Claude Max"}, "commands": claude_commands()}
+        answer = {"account": {"email": signed_in_email(), "subscriptionType": "Claude Max"}, "commands": claude_commands()}
     elif subtype == "get_usage":
         limits = [claude_limit("session", 34, 3.5), claude_limit("weekly", 61, 98), claude_limit("weekly", 82, 98, "Fable")]
         answer = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {"limits": limits}}

@@ -194,6 +194,12 @@ impl Server {
             }
             Request::SaveAgentAccount { account } => hub.save_agent_account(account).await.map(|_| Message::Ok),
             Request::RemoveAgentAccount { id } => hub.remove_agent_account(&id).await.map(|_| Message::Ok),
+            Request::StartSignIn { account } => hub.start_sign_in(account).await,
+            Request::FinishSignIn { id, code, account } => hub.finish_sign_in(&id, &code, account).await,
+            Request::CancelSignIn { id } => {
+                hub.cancel_sign_in(&id).await;
+                Ok(Message::Ok)
+            }
             Request::SearchThreads { query, limit, removed } => {
                 let store = hub.clone();
                 let found =

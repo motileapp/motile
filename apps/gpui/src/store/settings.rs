@@ -221,6 +221,53 @@ impl Store {
     pub fn remove_agent_account(&mut self, account: &AgentAccount, server: &Server) {
         self.request(&server.id, Request::RemoveAgentAccount { id: account.id.clone() });
     }
+
+    /// Has the server start signing a Claude Code account in. `done` hears the sign-in's id and
+    /// the page to sign in on, or why it couldn't start.
+    pub fn start_agent_sign_in(
+        &mut self,
+        account: AgentAccount,
+        server: &Server,
+        done: impl FnOnce(Result<(String, String), String>, &mut gpui_kit::App) + 'static,
+    ) {
+        self.request_then(&server.id, Request::StartSignIn { account }, move |_, result, cx| {
+            let started = result.map_err(|error| error.message).and_then(|answer| {
+                let url = answer["url"].as_str().filter(|url| !url.is_empty());
+                let Some(url) = url else { return Err("Claude Code didn't give a page to sign in on.".to_string()) };
+                Ok((answer["id"].as_str().unwrap_or_default().to_string(), url.to_string()))
+            });
+            done(started, cx);
+        });
+    }
+
+    /// Hands the server the code the sign-in page showed, which saves `account` with it. `done`
+    /// hears the saved account's id and who signed in, or why not.
+    pub fn finish_agent_sign_in(
+        &mut self,
+        server_id: &str,
+        id: String,
+        code: String,
+        account: AgentAccount,
+        done: impl FnOnce(Result<(String, String), String>, &mut gpui_kit::App) + 'static,
+    ) {
+        self.request_then(server_id, Request::FinishSignIn { id, code, account }, move |_, result, cx| {
+            let signed_in = result.map_err(|error| error.message).map(|answer| {
+                let saved = answer["account"].as_str().unwrap_or_default().to_string();
+                let who = match (answer["email"].as_str(), answer["plan"].as_str()) {
+                    (Some(email), Some(plan)) => format!("{email} · {plan}"),
+                    (Some(email), None) => email.to_string(),
+                    (None, _) => "Claude Code".to_string(),
+                };
+                (saved, who)
+            });
+            done(signed_in, cx);
+        });
+    }
+
+    /// Stops a sign-in that waits for its code.
+    pub fn cancel_agent_sign_in(&mut self, server_id: &str, id: String) {
+        self.send(Command::Request { server_id: server_id.to_string(), request: Request::CancelSignIn { id } });
+    }
 }
 
 #[cfg(test)]

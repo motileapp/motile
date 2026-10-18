@@ -15,9 +15,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -48,6 +54,17 @@ class CloseModal(private val action: () -> Unit) {
 }
 
 val LocalCloseModal = staticCompositionLocalOf { CloseModal {} }
+
+/** Whether the sheet a view lies in is kept from being swiped, tapped or backed away. */
+private val LocalModalHeld = staticCompositionLocalOf<MutableState<Boolean>?> { null }
+
+/** Keeps the sheet the view lies in open while `held`, as iOS's `interactiveDismissDisabled`. */
+@Composable
+fun HoldsModal(held: Boolean) {
+    val hold = LocalModalHeld.current ?: return
+    SideEffect { hold.value = held }
+    DisposableEffect(hold) { onDispose { hold.value = false } }
+}
 
 /**
  * What `Asking` puts to the user: a title, what it means, and the answers besides the one that lets
@@ -80,7 +97,8 @@ fun Modal(shown: Boolean, onDismiss: () -> Unit, content: @Composable () -> Unit
 @Composable
 private fun Sheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val palette = LocalPalette.current
-    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val held = remember { mutableStateOf(false) }
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { it != SheetValue.Hidden || !held.value })
     val scope = rememberCoroutineScope()
     val close = CloseModal { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
     ModalBottomSheet(
@@ -93,7 +111,7 @@ private fun Sheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
         tonalElevation = 0.dp,
         dragHandle = { Grabber() },
     ) {
-        SheetSurface(close, content)
+        CompositionLocalProvider(LocalModalHeld provides held) { SheetSurface(close, content) }
     }
 }
 

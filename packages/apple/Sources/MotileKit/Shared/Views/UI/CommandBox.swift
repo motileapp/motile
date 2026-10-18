@@ -1,13 +1,17 @@
 import SwiftUI
 
 /// A command to run in a terminal, in the theme's code colours, with the button that copies it
-/// and, on iOS, the one that shares it. Without a command yet it says what it waits for.
+/// and, on iOS, the one that shares it. Without a command yet it says what it waits for. A link
+/// is shown on one line, cut short, with the button that opens it.
 struct CommandBox: View {
     @Environment(\.surface) private var surface
     let command: String?
     /// What `Theme.syntax` colours each stretch: its start, its length and the colour, in threes.
     var spans: [Int] = []
     var placeholder = "Preparing the command…"
+    var link: URL?
+
+    private var noun: String { link == nil ? "command" : "link" }
 
     /// Puts the first line of the command level with the middle of the buttons.
     private static let textInset = ((ControlSize.regular.height - PlatformFont.uiMono(12.5).textLineHeight) / 2).rounded()
@@ -18,18 +22,22 @@ struct CommandBox: View {
                 .font(.ui(size: 12.5, design: .monospaced))
                 .foregroundStyle(command == nil ? Color.themeMutedStrongerForeground : Color.themeForeground)
                 .lineSpacing(3)
+                .lineLimit(link == nil ? nil : 1)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding([.vertical, .leading], Self.textInset)
             HStack(spacing: 4) {
+                if let link {
+                    ActionButton("Open", icon: .squareArrowOutUpRight, variant: .ghost, symbolSize: 12) { Platform.open(link) }
+                }
                 #if os(iOS)
                 ShareLink(item: command ?? "") {
                     ControlLabel(title: nil, icon: .symbol(.share), size: .regular, symbolSize: 12)
                 }
                 .buttonStyle(.control())
-                .accessibilityLabel("Share the command")
+                .accessibilityLabel("Share the \(noun)")
                 #endif
-                CopyButton(help: "Copy the command", symbolSize: 12) {
+                CopyButton(help: "Copy the \(noun)", symbolSize: 12) {
                     guard let command else { return }
                     Platform.copy(command)
                 }

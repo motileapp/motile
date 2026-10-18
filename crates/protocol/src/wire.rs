@@ -794,6 +794,25 @@ pub enum Request {
     RemoveAgentAccount {
         id: String,
     },
+    /// Starts signing an account of Claude Code in, with its folder and variables as the form has
+    /// them; a sensitive variable without a value keeps the saved account's. `SignInLink` answers
+    /// with the page to sign in on.
+    StartSignIn {
+        account: AgentAccount,
+    },
+    /// Hands the code the sign-in page showed to the sign-in `id`, and saves `account` as
+    /// `SaveAgentAccount` does once the agent's CLI kept the sign-in. `SignedIn` answers. An account
+    /// that can't be saved is refused before the code is used; an error that ended the sign-in
+    /// ends with "Sign in again."
+    FinishSignIn {
+        id: String,
+        code: String,
+        account: AgentAccount,
+    },
+    /// Stops the sign-in `id`. `Ok` answers.
+    CancelSignIn {
+        id: String,
+    },
     /// The threads whose messages, the user's or the agent's, have `query` in them, the last
     /// updated first, at most `limit` of them. `ThreadMatches` answers.
     SearchThreads {
@@ -2233,6 +2252,16 @@ pub enum Message {
     },
     ThreadMatches {
         matches: Vec<ThreadMatch>,
+    },
+    SignInLink {
+        id: String,
+        url: String,
+    },
+    /// Who signed in, as the agent's CLI says, and the id of the account that was saved.
+    SignedIn {
+        account: String,
+        email: Option<String>,
+        plan: Option<String>,
     },
     Watermarks {
         own: Watermark,

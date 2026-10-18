@@ -91,6 +91,7 @@ class ModelsTest {
         val server = Server(json("id" to "s", "name" to "studio", "state" to "connected", "info" to mapOf("version" to "0.1.2", "protocol" to 25)))
         assertEquals(Server.State.Connected, server.state)
         assertTrue(server.pullsDefaultBranch)
+        assertFalse(server.signsInAccounts)
         assertEquals(listOf("claude", "codex"), server.agentAccounts.map { it.id })
         assertEquals("Default", server.account(null, Agent.Codex)?.name)
         assertFalse(server.removed)

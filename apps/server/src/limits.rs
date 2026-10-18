@@ -10,6 +10,7 @@ use crate::agents::environment::Environment;
 
 const SESSION_SECS: u64 = 5 * 3600;
 const WEEK_SECS: u64 = 7 * 86400;
+const CLAUDE_ARGUMENTS: [&str; 3] = ["--settings", r#"{"disableAllHooks":true}"#, "--strict-mcp-config"];
 
 /// What each account of the installed agents has used, each read in its own environment.
 pub async fn read(accounts: Vec<(AgentAccount, Environment)>) -> Vec<AgentLimits> {
@@ -57,15 +58,26 @@ async fn read_account(account: &AgentAccount, environment: &Environment) -> Opti
 }
 
 async fn read_claude(environment: &Environment) -> anyhow::Result<AgentLimits> {
-    let arguments = ["--settings", r#"{"disableAllHooks":true}"#, "--strict-mcp-config"];
-    let answers = ask::claude(environment, &arguments, &["initialize", "get_usage"]).await?;
+    let answers = ask::claude(environment, &CLAUDE_ARGUMENTS, &["initialize", "get_usage"]).await?;
     let account = answers.get("initialize").cloned().unwrap_or(Ok(Value::Null)).unwrap_or_default();
     let usage = answers.get("get_usage").cloned().ok_or_else(|| anyhow::anyhow!("Claude Code didn't say"))?;
     Ok(claude_limits(&account["account"], &usage.map_err(anyhow::Error::msg)?))
 }
 
+/// Who is signed in to Claude Code in `environment`, and their plan.
+pub async fn claude_login(environment: &Environment) -> anyhow::Result<(Option<String>, Option<String>)> {
+    let answers = ask::claude(environment, &CLAUDE_ARGUMENTS, &["initialize"]).await?;
+    let answer = answers.get("initialize").cloned().ok_or_else(|| anyhow::anyhow!("Claude Code didn't say"))?;
+    let account = &answer.map_err(anyhow::Error::msg)?["account"];
+    Ok((account["email"].as_str().map(String::from), claude_plan(account)))
+}
+
+fn claude_plan(account: &Value) -> Option<String> {
+    account["subscriptionType"].as_str().map(|plan| plan.trim_start_matches("Claude ").to_string())
+}
+
 fn claude_limits(account: &Value, usage: &Value) -> AgentLimits {
-    let plan = account["subscriptionType"].as_str().map(|plan| plan.trim_start_matches("Claude ").to_string());
+    let plan = claude_plan(account);
     let windows = if usage["rate_limits_available"] == false { vec![] } else { claude_windows(&usage["rate_limits"]) };
     AgentLimits {
         agent: Agent::Claude,

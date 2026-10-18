@@ -1,5 +1,5 @@
 //! An account of an agent to add or change: its name, the folder its sign-in is kept in, and the
-//! variables its agent is given, with the command that signs it in.
+//! variables its agent is given, with the way to sign it in.
 
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
@@ -23,6 +23,29 @@ struct EditedVariable {
     shows_kept: bool,
 }
 
+/// Where signing a Claude Code account in is: its server runs the CLI's sign-in, the user signs
+/// in on the page it links to, and pastes the code that page shows.
+#[derive(Clone, PartialEq, Default)]
+enum SignInStep {
+    #[default]
+    Idle,
+    Starting,
+    Waiting {
+        id: String,
+        url: String,
+    },
+    SignedIn(String),
+}
+
+#[derive(Default)]
+struct SignIn {
+    step: SignInStep,
+    finishing: bool,
+    error: Option<String>,
+    /// Who signed in before this sign-in, who still is if it fails.
+    before: SignInStep,
+}
+
 pub struct AccountSheet {
     store: Entity<Store>,
     page: WeakEntity<SettingsPage>,
@@ -30,6 +53,12 @@ pub struct AccountSheet {
     account: AgentAccount,
     name: Entity<InputState>,
     folder: Entity<InputState>,
+    code: Entity<InputState>,
+    sign_in: SignIn,
+    /// The account as signing in saved it, until something else changes.
+    saved_by_sign_in: Option<AgentAccount>,
+    /// The code's field has just appeared, empty, and takes the keys.
+    focus_code: bool,
     variables: Vec<EditedVariable>,
     next_variable: usize,
     /// The folder last filled in from the name, which a typed one takes the place of.
@@ -55,13 +84,21 @@ impl AccountSheet {
                 .placeholder(folder_placeholder(account.agent))
                 .default_value(account.folder.clone())
         });
+        let code = cx.new(|cx| InputState::new(window, cx).placeholder("Paste the code"));
         let subscriptions = vec![
             cx.subscribe_in(&name, window, |this, _, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::Change) {
                     this.suggest_folder(window, cx);
                 }
             }),
-            cx.subscribe(&folder, |_, _, _: &InputEvent, cx| cx.notify()),
+            cx.subscribe(&folder, |this, _, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    this.cancel_sign_in(cx);
+                }
+                cx.notify();
+            }),
+            cx.subscribe(&code, |_, _, _: &InputEvent, cx| cx.notify()),
+            cx.on_release(|this, cx| this.cancel_sign_in(cx)),
         ];
         name.update(cx, |name, cx| name.focus(window, cx));
         let mut sheet = Self {
@@ -71,6 +108,10 @@ impl AccountSheet {
             account: account.clone(),
             name,
             folder,
+            code,
+            sign_in: SignIn::default(),
+            saved_by_sign_in: None,
+            focus_code: false,
             variables: Vec::new(),
             next_variable: 0,
             suggested_folder: String::new(),
@@ -104,7 +145,8 @@ impl AccountSheet {
     /// Fills a new account's folder from its name until the folder is typed by hand.
     fn suggest_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let folder = self.folder.read(cx).value().to_string();
-        if !self.is_new() || !(folder.is_empty() || folder == self.suggested_folder) {
+        let typed = !(folder.is_empty() || folder == self.suggested_folder);
+        if !self.is_new() || self.sign_in.step != SignInStep::Idle || typed {
             return cx.notify();
         }
         self.suggested_folder = self.edited(cx).suggested_folder(&self.server.agent_accounts);
@@ -115,6 +157,7 @@ impl AccountSheet {
 
     fn choose_agent(&mut self, agent: Agent, window: &mut Window, cx: &mut Context<Self>) {
         self.account.agent = agent;
+        self.cancel_sign_in(cx);
         self.folder.update(cx, |folder, cx| folder.set_placeholder(folder_placeholder(agent), window, cx));
         self.suggest_folder(window, cx);
     }
@@ -138,20 +181,7 @@ impl AccountSheet {
         if self.saving || self.name.read(cx).value().trim().is_empty() {
             return;
         }
-        let mut saved = self.edited(cx);
-        saved.variables = self
-            .variables
-            .iter()
-            .map(|edited| Variable {
-                name: edited.name.read(cx).value().to_string(),
-                value: edited.value.read(cx).value().to_string(),
-                sensitive: edited.sensitive,
-            })
-            .filter(|variable| !variable.name.trim().is_empty())
-            .collect();
-        if saved.agent != Agent::Codex {
-            saved.shares_sessions = false;
-        }
+        let saved = self.form(cx);
         self.saving = true;
         cx.notify();
         let (sheet, server) = (cx.weak_entity(), self.server.clone());
@@ -166,6 +196,214 @@ impl AccountSheet {
                 });
             })
         });
+    }
+
+    /// The account as Save, and signing in, keep it.
+    fn form(&self, cx: &App) -> AgentAccount {
+        let mut form = self.edited(cx);
+        form.variables = self
+            .variables
+            .iter()
+            .map(|edited| Variable {
+                name: edited.name.read(cx).value().to_string(),
+                value: edited.value.read(cx).value().to_string(),
+                sensitive: edited.sensitive,
+            })
+            .filter(|variable| !variable.name.trim().is_empty())
+            .collect();
+        if form.agent != Agent::Codex {
+            form.shares_sessions = false;
+        }
+        form
+    }
+
+    /// Signing in saved everything the form has, so there is nothing left to save or to throw away.
+    fn saved_as_is(&self, cx: &App) -> bool {
+        self.saved_by_sign_in.as_ref().is_some_and(|saved| *saved == self.form(cx))
+    }
+
+    /// Return finishes the sign-in from the code's field, and saves, or closes what signing in
+    /// saved, from any other.
+    fn press_return(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.code.read(cx).focus_handle(cx).is_focused(window) {
+            return self.finish_sign_in(cx);
+        }
+        if self.saved_as_is(cx) {
+            return self.close(cx);
+        }
+        self.save(cx);
+    }
+
+    /// Claude Code signs in here; Codex, and a server too old for it, with a command.
+    fn signs_in_here(&self, account: &AgentAccount) -> bool {
+        account.agent == Agent::Claude && self.server.signs_in_accounts()
+    }
+
+    fn can_start_sign_in(account: &AgentAccount) -> bool {
+        account.is_default() || !account.folder.trim().is_empty()
+    }
+
+    fn can_finish_sign_in(&self, cx: &App) -> bool {
+        !self.sign_in.finishing
+            && !self.code.read(cx).value().trim().is_empty()
+            && !self.name.read(cx).value().trim().is_empty()
+    }
+
+    /// Who is signed in to the folder the form has, as far as is known.
+    fn signed_in_as(&self, account: &AgentAccount) -> Option<String> {
+        if let SignInStep::SignedIn(who) = &self.sign_in.step {
+            return Some(who.clone());
+        }
+        let opened = &self.account;
+        let email = opened.email.as_ref().filter(|_| account.folder == opened.folder)?;
+        Some(match &opened.plan {
+            Some(plan) => format!("{email} · {plan}"),
+            None => email.clone(),
+        })
+    }
+
+    fn sign_in_caption(&self, account: &AgentAccount, cx: &App) -> String {
+        if matches!(self.sign_in.step, SignInStep::Waiting { .. }) {
+            return "Sign in on the page, then paste the code it shows.".into();
+        }
+        if !Self::can_start_sign_in(account) {
+            return "Give the account a folder to sign it in.".into();
+        }
+        if self.saved_as_is(cx) {
+            return "Signing in saved the account.".into();
+        }
+        format!("Opens Claude's sign-in page. Signing in saves the account on {}.", self.server.name)
+    }
+
+    fn start_sign_in(&mut self, cx: &mut Context<Self>) {
+        if self.sign_in.step == SignInStep::Starting {
+            return;
+        }
+        let signed_in = self.sign_in.step.clone();
+        self.cancel_sign_in(cx);
+        if matches!(signed_in, SignInStep::SignedIn(_)) {
+            self.sign_in.before = signed_in;
+        }
+        self.sign_in.step = SignInStep::Starting;
+        let account = self.form(cx);
+        let (sheet, server) = (cx.weak_entity(), self.server.clone());
+        self.store.update(cx, |store, _| {
+            store.start_agent_sign_in(account, &server, move |started, cx| {
+                let _ = sheet.update(cx, |sheet, cx| {
+                    if sheet.sign_in.step != SignInStep::Starting {
+                        return;
+                    }
+                    match started {
+                        Ok((id, url)) => {
+                            sheet.sign_in.step = SignInStep::Waiting { id, url };
+                            sheet.focus_code = true;
+                        }
+                        Err(message) => sheet.fail_sign_in(message),
+                    }
+                    cx.notify();
+                });
+            })
+        });
+        cx.notify();
+    }
+
+    fn finish_sign_in(&mut self, cx: &mut Context<Self>) {
+        let SignInStep::Waiting { id, .. } = &self.sign_in.step else { return };
+        if !self.can_finish_sign_in(cx) {
+            return;
+        }
+        let (id, code) = (id.clone(), self.code.read(cx).value().trim().to_string());
+        let account = self.form(cx);
+        self.sign_in.finishing = true;
+        self.sign_in.error = None;
+        let (sheet, server_id, waiting) = (cx.weak_entity(), self.server.id.clone(), id.clone());
+        self.store.update(cx, |store, _| {
+            store.finish_agent_sign_in(&server_id, id, code, account, move |signed_in, cx| {
+                let _ = sheet.update(cx, |sheet, cx| {
+                    if !matches!(&sheet.sign_in.step, SignInStep::Waiting { id, .. } if *id == waiting) {
+                        return;
+                    }
+                    sheet.sign_in.finishing = false;
+                    match signed_in {
+                        Ok((saved, who)) => {
+                            sheet.account.id = saved;
+                            sheet.saved_by_sign_in = Some(sheet.form(cx));
+                            sheet.sign_in.step = SignInStep::SignedIn(who);
+                        }
+                        Err(message) => sheet.refuse_sign_in(message),
+                    }
+                    cx.notify();
+                });
+            })
+        });
+        cx.notify();
+    }
+
+    /// A sign-in that is over says so; one refused for the account it would save waits for the
+    /// code again.
+    fn refuse_sign_in(&mut self, message: String) {
+        if !message.ends_with("Sign in again.") {
+            self.sign_in.error = Some(message);
+            return;
+        }
+        self.fail_sign_in(message);
+    }
+
+    /// Stops a sign-in that waits for its code, as closing the sheet or changing the folder does.
+    fn cancel_sign_in(&mut self, cx: &mut App) {
+        if let SignInStep::Waiting { id, .. } = &self.sign_in.step {
+            let (server_id, id) = (self.server.id.clone(), id.clone());
+            self.store.update(cx, |store, _| store.cancel_agent_sign_in(&server_id, id));
+        }
+        self.sign_in = SignIn::default();
+    }
+
+    fn fail_sign_in(&mut self, message: String) {
+        self.sign_in.step = self.sign_in.before.clone();
+        self.sign_in.error = Some(message);
+    }
+
+    fn sign_in_steps(&self, account: &AgentAccount, cx: &mut Context<Self>) -> AnyElement {
+        if let SignInStep::Waiting { url, .. } = &self.sign_in.step {
+            let code = div().flex_1().min_w_0().child(InputField::new(&self.code).monospaced(true));
+            let finish = ActionButton::new("finish-sign-in", "Sign In")
+                .primary()
+                .pending(self.sign_in.finishing)
+                .disabled(!self.can_finish_sign_in(cx))
+                .on_click(cx.listener(|this, _, _, cx| this.finish_sign_in(cx)));
+            return div()
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .child(CommandBox::new("sign-in-link", Some(url.clone())).link(url.clone()))
+                .child(div().flex().items_center().gap(px(6.)).child(code).child(finish))
+                .into_any_element();
+        }
+        let c = colors(cx);
+        let who = self.signed_in_as(account);
+        let start = ActionButton::new("start-sign-in", if who.is_none() { "Sign In" } else { "Sign In Again" })
+            .pending(self.sign_in.step == SignInStep::Starting)
+            .disabled(!Self::can_start_sign_in(account))
+            .on_click(cx.listener(|this, _, _, cx| this.start_sign_in(cx)));
+        div()
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .child(
+                div()
+                    .min_w_0()
+                    .px(px(4.))
+                    .text_size(px(13.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(if who.is_none() { c.muted_foreground } else { c.foreground })
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_ellipsis_middle()
+                    .child(who.map_or("Not signed in".to_string(), |who| format!("Signed in as {who}"))),
+            )
+            .child(div().flex_1().min_w(px(12.)))
+            .child(start)
+            .into_any_element()
     }
 
     /// Whether the server keeps the variable's value, which it never sends.
@@ -240,21 +478,39 @@ fn folder_placeholder(agent: Agent) -> &'static str {
 
 /// A field's title over it, and its caption under it.
 fn field(title: &str, caption: Option<String>, content: impl IntoElement, cx: &App) -> Div {
+    failing_field(title, caption, None, content, cx)
+}
+
+/// A field whose failure, while it has one, takes the place of its caption.
+fn failing_field(
+    title: &str,
+    caption: Option<String>,
+    failure: Option<String>,
+    content: impl IntoElement,
+    cx: &App,
+) -> Div {
     let c = colors(cx);
+    let tint = if failure.is_some() { c.destructive } else { c.muted_stronger_foreground };
     div()
         .flex()
         .flex_col()
         .gap(px(6.))
         .child(div().px(px(4.)).text_size(px(12.)).font_weight(FontWeight::MEDIUM).child(title.to_string()))
         .child(content)
-        .when_some(caption, |field, caption| {
-            field.child(div().px(px(4.)).text_size(px(11.5)).text_color(c.muted_stronger_foreground).child(caption))
+        .when_some(failure.or(caption), |field, caption| {
+            field.child(div().px(px(4.)).text_size(px(11.5)).text_color(tint).child(caption))
         })
 }
 
 impl Render for AccountSheet {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.show_kept(window, cx);
+        if std::mem::take(&mut self.focus_code) {
+            self.code.update(cx, |code, cx| {
+                code.set_value("", window, cx);
+                code.focus(window, cx);
+            });
+        }
         let c = colors(cx);
         let account = self.edited(cx);
         let server = self.server.name.clone();
@@ -325,8 +581,30 @@ impl Render for AccountSheet {
         let variables_caption = format!(
             "Given to its agent: an API key or a router. A sensitive value stays on {server} and is never shown again."
         );
-        let sign_in_caption =
-            format!("Run it in a terminal on {server}. Who is signed in shows in the list once the agent says.");
+        let sign_in = if self.signs_in_here(&account) {
+            let caption = self.sign_in_caption(&account, cx);
+            let steps = self.sign_in_steps(&account, cx);
+            failing_field("Sign In", Some(caption), self.sign_in.error.clone(), steps, cx)
+        } else {
+            let caption =
+                format!("Run it in a terminal on {server}. Who is signed in shows in the list once the agent says.");
+            field("Sign In", Some(caption), CommandBox::new("sign-in", Some(account.sign_in_command())), cx)
+        };
+        let footer = if self.saved_as_is(cx) {
+            let done = ActionButton::new("account-done", "Done")
+                .primary()
+                .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
+            div().flex().justify_end().child(done)
+        } else {
+            let cancel =
+                ActionButton::new("account-cancel", "Cancel").on_click(cx.listener(|this, _, _, cx| this.close(cx)));
+            let save = ActionButton::new("account-save", "Save")
+                .primary()
+                .pending(self.saving)
+                .disabled(!can_save)
+                .on_click(cx.listener(|this, _, _, cx| this.save(cx)));
+            div().flex().justify_end().gap(px(8.)).child(cancel).child(save)
+        };
         let content = div()
             .p(px(20.))
             .flex()
@@ -339,35 +617,14 @@ impl Render for AccountSheet {
             .children(folder)
             .children(shares)
             .child(field("Variables", Some(variables_caption), variables.w_full(), cx))
-            .child(field(
-                "Sign In",
-                Some(sign_in_caption),
-                CommandBox::new("sign-in", Some(account.sign_in_command())),
-                cx,
-            ))
-            .child(
-                div()
-                    .flex()
-                    .justify_end()
-                    .gap(px(8.))
-                    .child(
-                        ActionButton::new("account-cancel", "Cancel")
-                            .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
-                    )
-                    .child(
-                        ActionButton::new("account-save", "Save")
-                            .primary()
-                            .pending(self.saving)
-                            .disabled(!can_save)
-                            .on_click(cx.listener(|this, _, _, cx| this.save(cx))),
-                    ),
-            );
+            .child(sign_in)
+            .child(footer);
         let (close, save) = (cx.weak_entity(), cx.weak_entity());
         modal("agent-account", div().id("agent-account-scroll").overflow_y_scroll().child(content), move |_, cx| {
             close.update(cx, |this, cx| this.close(cx)).ok();
         })
-        .on_return(move |_, cx| {
-            save.update(cx, |this, cx| this.save(cx)).ok();
+        .on_return(move |window, cx| {
+            save.update(cx, |this, cx| this.press_return(window, cx)).ok();
         })
         .width(460.)
         .leaving(self.leaving)
