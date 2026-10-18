@@ -25,6 +25,8 @@ internal class PanelItem(
 ) {
     /** Shown instead of `detail`, each part after its symbol. */
     var detailParts: List<Pair<Symbol, String>> = emptyList()
+    /** The detail follows the title on its line. */
+    var oneLine = false
     /** The keys of the command it runs, as the shortcuts have them. */
     var keys: String? = null
     /** Its place among what can be selected, for moving through with the arrow keys. */

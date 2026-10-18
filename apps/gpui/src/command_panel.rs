@@ -20,6 +20,7 @@ use crate::ui::{ActionButton, InputField, InputVariant, KeyCaps, Spinner, icons,
 const WIDTH: f32 = 620.;
 const RADIUS: f32 = Radius::XL;
 const ROW_HEIGHT: f32 = 52.;
+const ONE_LINE_HEIGHT: f32 = 40.;
 const ROW_RADIUS: f32 = Radius::MD;
 const SIDE_MARGIN: f32 = 8.;
 const TITLE_HEIGHT: f32 = 17.;
@@ -44,6 +45,8 @@ struct Item {
     detail: String,
     /// Shown instead of `detail`, each part after its symbol.
     detail_parts: Vec<(&'static str, String)>,
+    /// The detail follows the title on its line.
+    one_line: bool,
     icon: ItemIcon,
     /// The digit that runs it with ⌘, or Ctrl off the Mac.
     shortcut: Option<usize>,
@@ -80,6 +83,7 @@ impl Item {
             title: title.into(),
             detail: detail.into(),
             detail_parts: Vec::new(),
+            one_line: false,
             icon,
             shortcut: None,
             keys: None,
@@ -114,6 +118,10 @@ impl Item {
 
     fn selectable(&self) -> bool {
         !self.off && self.placeholder_lines == 0
+    }
+
+    fn height(&self) -> f32 {
+        if self.one_line { ONE_LINE_HEIGHT } else { ROW_HEIGHT }
     }
 }
 
@@ -221,10 +229,17 @@ impl CommandPanel {
 
     /// What is offered starts over from the first, and the folders under a typed path are asked for.
     fn query_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.highlighted = 0;
         self.store.update(cx, |store, _| store.panel_notice = None);
         self.browse(window, cx);
         self.refresh(cx);
+        self.highlighted = self.start_index(cx);
+    }
+
+    /// The highlight starts on the first project, past "No project" of each server.
+    fn start_index(&mut self, cx: &App) -> usize {
+        let sections = self.current(cx);
+        let first = sections.iter().flat_map(|section| &section.items).find(|item| item.selectable() && !item.one_line);
+        first.and_then(|item| item.index).unwrap_or(0)
     }
 
     fn server_name(&self, id: &str, cx: &App) -> String {
@@ -263,7 +278,7 @@ impl CommandPanel {
             PanelPage::Projects | PanelPage::DraftProject => {
                 let mut items = self.project_items(cx);
                 items.push(self.add_project());
-                vec![section("Projects", items)]
+                vec![section("Without a Project", self.no_project_items(cx)), section("Projects", items)]
             }
             PanelPage::Threads => vec![section("Threads", self.thread_items(cx))],
             PanelPage::Commands => {
@@ -273,6 +288,7 @@ impl CommandPanel {
                 if !query.is_empty() {
                     sections.push(section("Threads", self.thread_items(cx)));
                     sections.push(section("Start a thread in", self.project_items(cx)));
+                    sections.push(section("Without a Project", self.no_project_items(cx)));
                 }
                 sections
             }
@@ -337,8 +353,7 @@ impl CommandPanel {
             .collect()
     }
 
-    /// The projects, the one the open thread works in first, then by when a thread last started,
-    /// and "No project" of each server last.
+    /// The projects, the one the open thread works in first, then by when a thread last started.
     fn projects(&self, cx: &App) -> Vec<Project> {
         let store = self.store.read(cx);
         let mut projects: Vec<Project> = store.recent_projects().into_iter().cloned().collect();
@@ -347,7 +362,6 @@ impl CommandPanel {
             projects.retain(|project| project.id != current.id);
             projects.insert(0, current);
         }
-        projects.extend(store.live_no_projects().cloned());
         projects
     }
 
@@ -365,11 +379,7 @@ impl CommandPanel {
                     .server(Some(&project.server_id))
                     .map(|server| server.short_name.clone())
                     .unwrap_or_default();
-                let location = if project.no_project {
-                    "A folder of its own for each thread".into()
-                } else {
-                    project.path.clone()
-                };
+                let location = project.path.clone();
                 let parts = if server.is_empty() {
                     vec![("folder", location.clone())]
                 } else {
@@ -394,6 +404,41 @@ impl CommandPanel {
                 );
                 item.detail_parts = parts;
                 item.shortcut = (position < 9 && on_projects).then_some(position + 1);
+                item
+            })
+            .collect()
+    }
+
+    /// "No project" of each server, one line each.
+    fn no_project_items(&self, cx: &App) -> Vec<Item> {
+        let for_draft = self.page() == PanelPage::DraftProject;
+        let store = self.store.read(cx);
+        store
+            .live_no_projects()
+            .map(|project| {
+                let server =
+                    store.server(Some(&project.server_id)).map(|server| server.short_name.clone()).unwrap_or_default();
+                let id = project.id.clone();
+                let mut item = Item::new(
+                    format!("project-{}", project.id),
+                    "New thread",
+                    server.clone(),
+                    ItemIcon::Project(Box::new(Some(project.clone()))),
+                    move |this, _, cx| {
+                        let id = Some(id.clone());
+                        this.store.update(cx, |store, cx| {
+                            if for_draft {
+                                store.set_new_thread_project(id, cx);
+                            } else {
+                                store.start_new_thread(id, cx);
+                            }
+                        });
+                    },
+                );
+                if !server.is_empty() {
+                    item.detail_parts = vec![("server", server)];
+                }
+                item.one_line = true;
                 item
             })
             .collect()
@@ -1155,12 +1200,13 @@ impl CommandPanel {
     }
 
     /// The pages that fill as the server answers keep one height, so nothing moves when it does.
-    fn height(&self, sections: &[Section], rows: usize, notice: bool) -> f32 {
+    fn height(&self, sections: &[Section], notice: bool) -> f32 {
         if matches!(self.page(), PanelPage::Github(_) | PanelPage::Folder(_) | PanelPage::Icon(_)) {
             return MAX_HEIGHT;
         }
         let notice = if notice { NOTICE_HEIGHT } else { 0. };
-        (rows as f32 * ROW_HEIGHT + sections.len() as f32 * 32. + 10. + notice).clamp(90., MAX_HEIGHT)
+        let rows: f32 = sections.iter().flat_map(|section| &section.items).map(Item::height).sum();
+        (rows + sections.len() as f32 * 32. + 10. + notice).clamp(90., MAX_HEIGHT)
     }
 
     fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1331,7 +1377,7 @@ impl CommandPanel {
             .px(px(SIDE_MARGIN))
             .child(
                 div()
-                    .h(px(ROW_HEIGHT))
+                    .h(px(item.height()))
                     .px(px(10.))
                     .flex()
                     .items_center()
@@ -1408,19 +1454,23 @@ impl CommandPanel {
 
 /// The title and the detail, or the detail's parts each after its symbol.
 fn lines(item: &Item, c: &Colors) -> Div {
+    let title =
+        div().h(px(TITLE_HEIGHT)).text_size(px(14.)).line_height(px(TITLE_HEIGHT)).truncate().child(item.title.clone());
+    if item.one_line {
+        return div().flex().items_center().gap(px(4.)).min_w_0().child(title.flex_shrink_0()).when(
+            !item.detail_parts.is_empty(),
+            |line| {
+                line.child(div().text_size(px(12.)).text_color(c.muted_stronger_foreground).child("·"))
+                    .child(detail_parts(&item.detail_parts, c).min_w_0())
+            },
+        );
+    }
     div()
         .flex()
         .flex_col()
         .gap(px(2.))
         .min_w_0()
-        .child(
-            div()
-                .h(px(TITLE_HEIGHT))
-                .text_size(px(14.))
-                .line_height(px(TITLE_HEIGHT))
-                .truncate()
-                .child(item.title.clone()),
-        )
+        .child(title)
         .when(!item.detail_parts.is_empty(), |text| text.child(detail_parts(&item.detail_parts, c)))
         .when(item.detail_parts.is_empty() && !item.detail.is_empty(), |text| {
             text.child(
@@ -1525,9 +1575,8 @@ impl Render for CommandPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let sections = self.current(cx);
-        let rows: usize = sections.iter().map(|section| section.items.len()).sum();
         let notice = self.notice(cx);
-        let height = self.height(&sections, rows, notice.is_some());
+        let height = self.height(&sections, notice.is_some());
         self.follow_entries(&sections, notice, cx);
         let results =
             list(self.list.clone(), cx.processor(|this, index, _, cx| this.entry(index, cx))).h(px(height)).w_full();

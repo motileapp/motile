@@ -57,7 +57,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
     fun type(new: String) {
         if (new == query) return
         query = new
-        highlighted = 0
+        highlighted = startIndex
         if (store.panelNotice != null) store.panelNotice = null
         browse()
     }
@@ -101,7 +101,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
 
     fun arrive() {
         if (!inStack) store.goToPanelPage(page)
-        highlighted = 0
+        highlighted = startIndex
         store.panelNotice = null
         copied = false
         listing = null
@@ -124,9 +124,13 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
 
     fun steer(step: Int) {
         val count = sections(page).flatMap { it.items }.count { it.selectable }
-        highlighted = if (steered) (highlighted + step).coerceIn(0, maxOf(0, count - 1)) else 0
+        highlighted = if (steered) (highlighted + step).coerceIn(0, maxOf(0, count - 1)) else startIndex
         steered = true
     }
+
+    /** The highlight starts on the first project, past "No project" of each server. */
+    private val startIndex: Int
+        get() = sections(page).flatMap { it.items }.firstOrNull { it.selectable && !it.oneLine }?.index ?: 0
 
     fun runHighlighted() {
         val item = sections(page).flatMap { it.items }.firstOrNull { it.index == highlighted } ?: return
@@ -218,8 +222,14 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
     fun sections(page: PanelPage): List<PanelSection> {
         var narrows = true
         val sections = when (page) {
-            PanelPage.Projects -> listOf(PanelSection("Projects", projectItems { store.startNewThread(it) } + addProject))
-            PanelPage.DraftProject -> listOf(PanelSection("Projects", projectItems { store.setNewThreadProject(it.id) } + addProject))
+            PanelPage.Projects -> listOf(
+                PanelSection("Without a Project", noProjectItems { store.startNewThread(it) }),
+                PanelSection("Projects", projectItems { store.startNewThread(it) } + addProject),
+            )
+            PanelPage.DraftProject -> listOf(
+                PanelSection("Without a Project", noProjectItems { store.setNewThreadProject(it.id) }),
+                PanelSection("Projects", projectItems { store.setNewThreadProject(it.id) } + addProject),
+            )
             PanelPage.Threads -> listOf(PanelSection("Threads", threadItems))
             // The sheet hides the thread, so its actions stay on the thread's screen. Searching from here looks through everything.
             PanelPage.Commands -> buildList {
@@ -227,6 +237,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
                 if (query.isEmpty()) return@buildList
                 add(PanelSection("Threads", threadItems))
                 add(PanelSection("Start a thread in", projectItems { store.startNewThread(it) }))
+                add(PanelSection("Without a Project", noProjectItems { store.startNewThread(it) }))
             }
             PanelPage.Servers -> listOf(PanelSection("Servers", serverItems))
             is PanelPage.Sources -> {
@@ -276,20 +287,28 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
 
     private fun serverName(id: String): String = store.server(id)?.name ?: "your server"
 
-    /** The projects, the one the open thread works in first, then by when a thread last started, and "No project" of each server last. */
+    /** The projects, the one the open thread works in first, then by when a thread last started. */
     private val projects: List<Project>
         get() {
             val recent = store.recentProjects
             val current = store.composerProject
-            if (current == null || store.projects.none { it.id == current.id }) return recent + store.noProjects
-            return listOf(current) + recent.filter { it.id != current.id } + store.noProjects
+            if (current == null || store.projects.none { it.id == current.id }) return recent
+            return listOf(current) + recent.filter { it.id != current.id }
         }
 
     private fun projectItems(pick: (Project) -> Unit): List<PanelItem> = projects.map { project ->
         val server = store.server(project.serverID)?.shortName ?: ""
-        val location = if (project.noProject) "A folder of its own for each thread" else project.path
-        PanelItem("project-${project.id}", project.name, "$server $location", PanelIcon.Project(project)) { pick(project) }.apply {
-            detailParts = if (server.isEmpty()) listOf(Symbol.Folder to location) else listOf(Symbol.Server to server, Symbol.Folder to location)
+        PanelItem("project-${project.id}", project.name, "$server ${project.path}", PanelIcon.Project(project)) { pick(project) }.apply {
+            detailParts = if (server.isEmpty()) listOf(Symbol.Folder to project.path) else listOf(Symbol.Server to server, Symbol.Folder to project.path)
+        }
+    }
+
+    /** "No project" of each server, one line each. */
+    private fun noProjectItems(pick: (Project) -> Unit): List<PanelItem> = store.noProjects.map { project ->
+        val server = store.server(project.serverID)?.shortName ?: ""
+        PanelItem("project-${project.id}", "New thread", server, PanelIcon.Project(project)) { pick(project) }.apply {
+            detailParts = if (server.isEmpty()) emptyList() else listOf(Symbol.Server to server)
+            oneLine = true
         }
     }
 
