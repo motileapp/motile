@@ -10,27 +10,39 @@ let panelEndRoom: CGFloat = 64
 let panelEndRoom: CGFloat = 48
 #endif
 
-/// The agents the thread's agent has started, and what one of them did once it is opened.
+/// The agents the thread's agent has started, the ones at work first and the ones that ended
+/// folded under them, and the thread whose agent started this one. An agent opens in the thread's
+/// place: one started through your server in its own thread, any other read only.
 struct AgentsSurface: View {
     @Environment(AppStore.self) private var store
+    /// Whether the agents that ended are shown, once the user has said. Until then they are
+    /// while none works.
+    @State private var showsEnded: Bool?
 
     var body: some View {
         let agents = store.agents
-        if let agent = agents.first(where: { $0.id == store.rightPanel.shownAgent }) {
-            AgentTranscript(agent: agent)
-        } else if agents.isEmpty {
+        let parent = store.parentThread
+        if agents.isEmpty && parent == nil {
             PanelMessage(text: "The agents this thread starts show up here.")
         } else {
+            let working = agents.filter(\.working)
+            let ended = agents.filter { !$0.working }
+            let shown = showsEnded ?? working.isEmpty
             VStack(spacing: 0) {
                 PanelBar {
-                    Text(dotted: Self.summary(of: agents))
+                    Text(dotted: Self.summary(of: agents, parent: parent))
                         .font(.ui(size: 12, weight: .medium))
                         .foregroundStyle(Color.themeMutedForeground)
                     Spacer()
                 }
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(agents) { AgentRow(agent: $0) }
+                        if let parent { ParentRow(thread: parent) }
+                        ForEach(working) { AgentRow(agent: $0) }
+                        if !ended.isEmpty {
+                            EndedHeader(agents: ended, shown: shown) { showsEnded = !shown }
+                            if shown { ForEach(ended) { AgentRow(agent: $0) } }
+                        }
                     }
                     .padding(.horizontal, 8)
                     .padding(.top, 8 - panelRowMargin.top)
@@ -40,12 +52,15 @@ struct AgentsSurface: View {
         }
     }
 
-    /// "2 working · 1 done · 1 failed · 48k tokens", leaving out what there is none of.
-    static func summary(of agents: [AgentInfo]) -> String {
+    /// "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of.
+    static func summary(of agents: [AgentInfo], parent: ThreadInfo?) -> String {
+        guard !agents.isEmpty else { return parent.map { "Started by \($0.title)" } ?? "" }
         let counts: [(Int, String)] = [
-            (agents.count { $0.status == .running }, "working"),
-            (agents.count { $0.status == .succeeded }, "done"),
-            (agents.count { $0.status == .failed }, "failed"),
+            (agents.count { $0.state == .waiting }, "waiting"),
+            (agents.count { $0.state == .working }, "working"),
+            (agents.count { $0.state == .done }, "done"),
+            (agents.count { $0.state == .failed }, "failed"),
+            (agents.count { $0.state == .stopped }, "stopped"),
         ]
         let spent = agents.compactMap(\.tokens)
         let total = spent.isEmpty ? [] : [AgentInfo.tokens(spent.reduce(0, +))]
@@ -53,17 +68,92 @@ struct AgentsSurface: View {
     }
 }
 
-private struct AgentRow: View {
+/// The thread whose agent started this one, which a click opens.
+private struct ParentRow: View {
     @Environment(AppStore.self) private var store
-    let agent: AgentInfo
+    let thread: ThreadInfo
 
     var body: some View {
         Button {
-            store.rightPanel.showAgent(agent.id)
+            store.openStartedThread(thread.id)
         } label: {
-            HStack(alignment: .top, spacing: 9) {
-                AgentStatusIcon(status: agent.status)
-                    .frame(width: 16, height: 18)
+            HStack(spacing: 9) {
+                Image(.cornerLeftUp, size: 12)
+                    .foregroundStyle(Color.themeMutedForeground)
+                    .frame(width: 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Started by")
+                        .font(.ui(size: 11))
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
+                    Text(thread.title)
+                        .font(.ui(size: 13, weight: .medium))
+                        .foregroundStyle(Color.themeForeground)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                Image(.chevronRight, size: 11)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(panelRowMargin)
+        }
+        .buttonStyle(.highlight(inset: panelRowMargin))
+        .padding(.bottom, 4)
+    }
+}
+
+/// Over the agents that ended: how many, and how many of them failed. A click folds them.
+private struct EndedHeader: View {
+    let agents: [AgentInfo]
+    let shown: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        let failed = agents.count { $0.status == .failed }
+        Button(action: toggle) {
+            HStack(spacing: 8) {
+                Text("Previous agents")
+                    .font(.ui(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.themeForeground)
+                Text("\(agents.count)")
+                    .font(.ui(size: 12))
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                if failed > 0 {
+                    Text("\(failed) failed")
+                        .font(.ui(size: 12))
+                        .foregroundStyle(Color.themeDestructive)
+                }
+                Spacer(minLength: 6)
+                Image(shown ? .chevronDown : .chevronRight, size: 10)
+                    .foregroundStyle(Color.themeMutedStrongerForeground)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: ControlSize.regular.height)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(panelRowMargin)
+        }
+        .buttonStyle(.highlight(inset: panelRowMargin))
+        .padding(.top, 6)
+    }
+}
+
+/// An agent: how it is doing, what it is doing or said last, and what it runs on and has spent.
+/// One that works in a thread of its own can be stopped from here.
+private struct AgentRow: View {
+    @Environment(AppStore.self) private var store
+    let agent: AgentInfo
+    @State private var hovered = false
+
+    private var stoppable: Bool { agent.working && agent.threadID != nil }
+
+    var body: some View {
+        Button {
+            open()
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                AgentAvatar(agent: agent.agent, state: agent.state)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(agent.title)
@@ -77,20 +167,28 @@ private struct AgentRow: View {
                                 .lineLimit(1)
                                 .layoutPriority(-1)
                         }
+                        if agent.state.flagged {
+                            Text(agent.label)
+                                .font(.ui(size: 11, weight: .medium))
+                                .foregroundStyle(agent.state.color)
+                                .lineLimit(1)
+                        }
                         Spacer(minLength: 6)
                         AgentTime(agent: agent)
+                            .opacity(hovered && stoppable ? 0 : 1)
                     }
                     if !agent.detail.isEmpty {
                         Text(agent.detail)
                             .font(.ui(size: 12))
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(agent.status == .failed ? Color.themeDestructive : Color.themeMutedForeground)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
                     }
-                    if let usage = agent.usage {
-                        Text(usage)
+                    if let facts = facts {
+                        Text(facts)
                             .font(.ui(size: 11))
                             .foregroundStyle(Color.themeMutedStrongerForeground)
+                            .lineLimit(1)
                     }
                 }
             }
@@ -101,29 +199,40 @@ private struct AgentRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(panelRowMargin)
         }
-        .buttonStyle(.highlight(inset: panelRowMargin))
-    }
-}
-
-private struct AgentStatusIcon: View {
-    let status: ToolContent.Status
-
-    var body: some View {
-        switch status {
-        case .running: icon(.circleDashed, Color.themeProcess)
-        case .succeeded: icon(.check, Color.themeMutedForeground)
-        case .failed: icon(.x, Color.themeDestructive)
+        .buttonStyle(.highlight(selected: store.rightPanel.shownAgent == agent.id, inset: panelRowMargin))
+        .overlay(alignment: .topTrailing) {
+            if hovered && stoppable {
+                ActionButton(icon: .circleStop, help: "Stop \(agent.title)", size: .small) { stop() }
+                    .padding(.top, 8 - (ControlSize.small.height - 18) / 2 + panelRowMargin.top)
+                    .padding(.trailing, 6)
+            }
+        }
+        .onHover { hovered = $0 }
+        .contextMenu {
+            Button(agent.threadID == nil ? "Show What It Did" : "Open Thread") { open() }
+            if stoppable { Button("Stop Agent") { stop() } }
         }
     }
 
-    private func icon(_ name: Symbol, _ color: Color) -> some View {
-        Image(name, size: 11)
-            .foregroundStyle(color)
+    /// "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known.
+    private var facts: String? {
+        let parts = [agent.model, agent.account, agent.usage].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func open() {
+        if let thread = agent.threadID { return store.openStartedThread(thread) }
+        store.rightPanel.showAgent(agent.id)
+    }
+
+    private func stop() {
+        guard let thread = agent.threadID else { return }
+        store.stop(threadID: thread)
     }
 }
 
 /// How long the agent has worked so far, or worked in all.
-private struct AgentTime: View {
+struct AgentTime: View {
     let agent: AgentInfo
 
     var body: some View {
@@ -142,29 +251,5 @@ private struct AgentTime: View {
             .monospacedDigit()
             .foregroundStyle(color)
             .fixedSize()
-    }
-}
-
-private struct AgentTranscript: View {
-    @Environment(AppStore.self) private var store
-    let agent: AgentInfo
-
-    var body: some View {
-        VStack(spacing: 0) {
-            PanelBar {
-                ActionButton(icon: .chevronLeft, help: "All agents") { store.rightPanel.showAgents() }
-                    .padding(.leading, -8)
-                AgentStatusIcon(status: agent.status)
-                    .frame(width: 16)
-                Text(agent.title)
-                    .font(.ui(size: 12, weight: .medium))
-                    .foregroundStyle(Color.themeForeground)
-                    .lineLimit(1)
-                Spacer(minLength: 6)
-                AgentTime(agent: agent)
-                    .padding(.trailing, 6)
-            }
-            TranscriptRepresentable(store: store, ofAgent: true, bottomInset: panelEndRoom)
-        }
     }
 }

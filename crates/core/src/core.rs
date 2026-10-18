@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 
-use crate::api::{AccountView, Command, Config, Event, ProjectView, ServerView, ThreadView};
+use crate::api::{AccountView, Children, Command, Config, Event, ProjectView, ServerView, ThreadView, WaitingChild};
 use crate::browse;
 use crate::cache::{Cache, Page};
 use crate::connection::{NOT_CONNECTED, ServerAddr, bind, offline};
@@ -881,15 +881,17 @@ impl Core {
             }
             let server_id = device.public_key.clone();
             let cached = self.cache.threads(&server_id);
+            let threads: HashMap<String, Thread> =
+                cached.iter().map(|cached| (cached.thread.id.clone(), cached.thread.clone())).collect();
             let views: Vec<ThreadView> = cached
                 .iter()
                 .map(|cached| ThreadView {
                     unread: is_unread(&cached.thread, cached.seen_at),
                     thread: cached.thread.clone(),
                     server_id: server_id.clone(),
+                    children: children_of(&threads, &cached.thread.id),
                 })
                 .collect();
-            let threads = cached.into_iter().map(|cached| (cached.thread.id.clone(), cached.thread)).collect();
             self.servers.push(Server {
                 device,
                 removed,
@@ -1158,10 +1160,30 @@ impl Core {
     }
 
     fn thread_view(&self, server_id: &str, thread: &Thread) -> ThreadView {
+        let threads = self.servers.iter().find(|server| server.device.public_key == server_id);
         ThreadView {
             unread: is_unread(thread, self.cache.seen_at(&thread.id)),
             thread: thread.clone(),
             server_id: server_id.to_string(),
+            children: threads.and_then(|server| children_of(&server.threads, &thread.id)),
+        }
+    }
+
+    /// Tells the clients again of the threads whose agents started the thread's, which show how
+    /// it is doing.
+    fn emit_ancestors(&mut self, server_id: &str, parent: Option<&str>) {
+        let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else { return };
+        let mut seen = HashSet::new();
+        let mut ancestors = Vec::new();
+        let mut next = parent.map(String::from);
+        while let Some(id) = next.filter(|id| seen.insert(id.clone())) {
+            let Some(thread) = server.threads.get(&id) else { break };
+            next = thread.parent.as_ref().map(|parent| parent.thread_id.clone());
+            ancestors.push(thread.clone());
+        }
+        for thread in ancestors {
+            let view = self.thread_view(server_id, &thread);
+            self.emit(Event::ThreadUpsert { thread: Box::new(view) });
         }
     }
 
@@ -1266,14 +1288,14 @@ impl Core {
         let threads: Vec<Thread> = threads.into_iter().map(stopped).collect();
         self.cache.set_threads(origin, &threads);
         self.cache.set_projects(origin, &projects);
-        let views = threads.iter().map(|thread| self.thread_view(origin, thread)).collect();
         let behind: Vec<String> = threads
             .iter()
             .filter(|thread| self.open.contains_key(&thread.id) && self.cache.synced_rev(&thread.id) < thread.rev)
             .map(|thread| thread.id.clone())
             .collect();
         let Some(server) = self.server_mut(origin) else { return };
-        server.threads = threads.into_iter().map(|thread| (thread.id.clone(), thread)).collect();
+        server.threads = threads.iter().map(|thread| (thread.id.clone(), thread.clone())).collect();
+        let views = threads.iter().map(|thread| self.thread_view(origin, thread)).collect();
         self.emit(Event::Threads { server_id: origin.to_string(), threads: views });
         self.emit_projects(origin, projects);
         for thread_id in behind {
@@ -1338,10 +1360,11 @@ impl Core {
                 self.cache.set_server_info(server_id, &info);
                 self.cache.set_threads(server_id, &threads);
                 self.cache.set_projects(server_id, &projects);
-                let views = threads.iter().map(|thread| self.thread_view(server_id, thread)).collect();
                 let Some(server) = self.server_mut(server_id) else { return };
                 server.info = Some(info);
-                server.threads = threads.into_iter().map(|thread| (thread.id.clone(), thread)).collect();
+                server.threads = threads.iter().map(|thread| (thread.id.clone(), thread.clone())).collect();
+                let views = threads.iter().map(|thread| self.thread_view(server_id, thread)).collect();
+                let Some(server) = self.server_mut(server_id) else { return };
                 // Threads deleted while the client was away are no longer followed.
                 let known: HashSet<String> = server.threads.keys().cloned().collect();
                 self.open.retain(|thread_id, open| open.server_id != server_id || known.contains(thread_id));
@@ -1368,12 +1391,14 @@ impl Core {
             }
             Message::ThreadUpsert { thread } => {
                 self.cache.upsert_thread(server_id, &thread);
-                let view = self.thread_view(server_id, &thread);
                 let Some(server) = self.server_mut(server_id) else { return };
                 let thread_id = thread.id.clone();
                 let pull_request = thread.pull_request.clone();
-                let before = server.threads.insert(thread_id.clone(), thread);
+                let parent = thread.parent.as_ref().map(|parent| parent.thread_id.clone());
+                let before = server.threads.insert(thread_id.clone(), thread.clone());
+                let view = self.thread_view(server_id, &thread);
                 self.emit(Event::ThreadUpsert { thread: Box::new(view) });
+                self.emit_ancestors(server_id, parent.as_deref());
                 if before.and_then(|before| before.pull_request) != pull_request {
                     let projects = self.cache.projects(server_id);
                     self.emit_projects(server_id, projects);
@@ -1385,10 +1410,10 @@ impl Core {
                 self.cache.remove_thread(&thread_id);
                 self.open.remove(&thread_id);
                 self.followed.remove(&thread_id);
-                if let Some(server) = self.server_mut(server_id) {
-                    server.threads.remove(&thread_id);
-                }
+                let removed = self.server_mut(server_id).and_then(|server| server.threads.remove(&thread_id));
                 self.emit(Event::ThreadDeleted { thread_id });
+                let parent = removed.and_then(|thread| thread.parent).map(|parent| parent.thread_id);
+                self.emit_ancestors(server_id, parent.as_deref());
                 self.schedule_relay(RELAY_AFTER_CHANGE);
             }
             other => tracing::debug!("unexpected message on the thread list: {other:?}"),
@@ -2626,7 +2651,8 @@ impl Core {
             server.threads.get(thread_id).map(|thread| (server.device.public_key.clone(), thread.clone()))
         });
         let Some((server_id, thread)) = found else { return };
-        self.emit(Event::ThreadUpsert { thread: Box::new(ThreadView { thread, server_id, unread: false }) });
+        let view = ThreadView { unread: false, ..self.thread_view(&server_id, &thread) };
+        self.emit(Event::ThreadUpsert { thread: Box::new(view) });
     }
 
     fn highlight(&self, thread_id: &str, row_ids: &[String]) {
@@ -2684,6 +2710,47 @@ fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8
         let _ = std::fs::remove_file(entry.path());
     }
     Ok(())
+}
+
+/// How the agents the thread's agent started are doing, theirs too. `None` when it started none.
+fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Children> {
+    let mut descendants = Vec::new();
+    let mut parents = vec![thread_id.to_string()];
+    while let Some(parent) = parents.pop() {
+        let children =
+            threads.values().filter(|thread| thread.parent.as_ref().is_some_and(|of| of.thread_id == parent));
+        for child in children {
+            if descendants.iter().any(|known: &&Thread| known.id == child.id) || child.id == thread_id {
+                continue;
+            }
+            parents.push(child.id.clone());
+            descendants.push(child);
+        }
+    }
+    if descendants.is_empty() {
+        return None;
+    }
+    let running = descendants.iter().filter(|thread| thread.running || thread.monitoring).count() as u32;
+    let mut waiting: Vec<&&Thread> = descendants.iter().filter(|thread| thread.needs_approval).collect();
+    waiting.sort_by(|one, other| one.updated_at.total_cmp(&other.updated_at));
+    let waiting: Vec<WaitingChild> = waiting
+        .into_iter()
+        .map(|thread| WaitingChild {
+            thread_id: thread.id.clone(),
+            title: thread.title.clone(),
+            ask: thread.asking.unwrap_or(motile_protocol::wire::Ask::Approval),
+        })
+        .collect();
+    let waiting_text = match &waiting[..] {
+        [] => None,
+        [one] => Some(match one.ask {
+            motile_protocol::wire::Ask::Approval => format!("{} needs your approval", one.title),
+            motile_protocol::wire::Ask::Question => format!("{} asks a question", one.title),
+            motile_protocol::wire::Ask::Plan => format!("{} has a plan for you", one.title),
+        }),
+        several => Some(format!("{} agents need you", several.len())),
+    };
+    Some(Children { running, waiting, waiting_text })
 }
 
 fn agents_event(thread_id: &str, started: &[Item]) -> Event {
@@ -2862,6 +2929,7 @@ mod tests {
             watching: false,
             git_stage: None,
             interruption: None,
+            parent: None,
             rev: 3,
         }
     }

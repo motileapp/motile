@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.motile.BuildConfig
+import app.motile.panel.PanelTab
 import app.motile.panel.PanelTarget
 import app.motile.panel.RightPanel
 import app.motile.platform.Platform
@@ -690,16 +691,19 @@ class AppStore(private val context: Context) {
 
     // Lookups
 
+    /** The lists leave out the threads agents started, which their parents show. */
     private fun replaceThreads(new: Map<String, ThreadInfo>) {
         threads = new
-        activeThreads = new.values.filter { !it.isDone }.sortedWith(ThreadInfo.order)
-        doneThreads = new.values.filter { it.isDone }.sortedWith(ThreadInfo.order)
+        val listed = new.values.filter { it.parentID == null }
+        activeThreads = listed.filter { !it.isDone }.sortedWith(ThreadInfo.order)
+        doneThreads = listed.filter { it.isDone }.sortedWith(ThreadInfo.order)
     }
 
     /** Changes one thread, and moves it in its list only when its place there changed. */
     private fun setThread(thread: ThreadInfo?, id: String) {
         val before = threads[id]
         threads = if (thread == null) threads - id else threads + (id to thread)
+        if ((thread ?: before)?.parentID != null) return
         if (before != null && thread != null && before.isDone == thread.isDone && before.listedAt == thread.listedAt) {
             changeList(thread.isDone) { list -> list.indexOfListed(before)?.let { list[it] = thread } }
             return
@@ -714,6 +718,20 @@ class AppStore(private val context: Context) {
 
     val selectedThread: ThreadInfo?
         get() = (selection as? Selection.Thread)?.let { threads[it.id] }
+
+    /** The thread whose agent started the open one. */
+    val parentThread: ThreadInfo?
+        get() = selectedThread?.parentID?.let { threads[it] }
+
+    /** Opens the thread an agent the open thread's agent started works in, or the one whose agent started it. On a phone the panel it was opened from goes away. */
+    fun openStartedThread(threadID: String) {
+        if (threads[threadID] == null) return
+        // The agents stay in view on the way between a thread and the agents it started.
+        val showsAgents = rightPanel.isOpen && rightPanel.tabs.active == PanelTab.Agents && !Platform.panelCoversThread
+        select(Selection.Thread(threadID))
+        if (showsAgents) rightPanel.open(PanelTab.Agents)
+        if (Platform.panelCoversThread) rightPanel.isOpen = false
+    }
 
     val selectedDraft: ThreadDraft?
         get() = (selection as? Selection.Draft)?.let { selected -> threadDrafts.firstOrNull { it.id == selected.id } }
@@ -2112,9 +2130,19 @@ class AppStore(private val context: Context) {
 
     fun stop() {
         val thread = selectedThread ?: return
+        stop(thread.id)
+    }
+
+    /** Stops the thread's agent, and the agents it started. */
+    fun stop(threadID: String) {
+        val thread = threads[threadID] ?: return
         if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "stop", "thread_id" to thread.id))
     }
+
+    /** The agent the open thread's agent started that shows in the thread's place, read only. */
+    val shownAgent: AgentInfo?
+        get() = rightPanel.shownAgent?.let { id -> agents.firstOrNull { it.id == id } }
 
     /** Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by question, when the call asks questions. */
     fun answer(approval: Approval, allow: Boolean, answers: Map<String, String> = emptyMap()) {

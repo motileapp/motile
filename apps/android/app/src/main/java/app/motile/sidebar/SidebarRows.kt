@@ -148,7 +148,7 @@ val Project.checkoutSymbol: Symbol
 
 /** The colour of its status when it waits for the user: an approval, or a reply they haven't seen. */
 fun ThreadInfo.attentionColor(palette: Palette): Color? = when {
-    needsApproval -> palette.warning
+    waitsFor != null -> palette.warning
     unread -> palette.success
     else -> null
 }
@@ -475,16 +475,21 @@ fun NewThreadRow(modifier: Modifier = Modifier) {
 @Composable
 fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
     val palette = Theme.colors
-    val asking = thread.asking
+    val asking = thread.waitsFor
     val stage = thread.gitStage
     val interruption = thread.interruption
     when {
         readOnly -> StatusLabel("Read-only", palette.warning, Modifier.semantics { contentDescription = readOnlyHelp }) { Icon(Symbol.Unlink, 11f) }
-        asking != null -> StatusLabel(asking.word, palette.warning) { Icon(asking.symbol, 11f) }
-        thread.running -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (thread.agents > 0) {
-                val working = if (thread.agents == 1) "1 agent is working" else "${thread.agents} agents are working"
-                StatusLabel("${thread.agents}", palette.pending, Modifier.semantics { contentDescription = working }) { Icon(Symbol.Users, 11f) }
+        asking != null -> {
+            val help = thread.children?.waitingText?.takeIf { thread.asking == null }
+            val described = if (help == null) Modifier else Modifier.semantics { contentDescription = help }
+            StatusLabel(asking.word, palette.warning, described) { Icon(asking.symbol, 11f) }
+        }
+        thread.working -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+            val agents = maxOf(thread.agents, thread.children?.running ?: 0)
+            if (agents > 0) {
+                val working = if (agents == 1) "1 agent is working" else "$agents agents are working"
+                StatusLabel("$agents", palette.pending, Modifier.semantics { contentDescription = working }) { Icon(Symbol.Users, 11f) }
             }
             StatusLabel(Time.elapsed(thread.updatedAt, everySecond()), palette.process) { Icon(Symbol.CircleDashed, 10f) }
         }

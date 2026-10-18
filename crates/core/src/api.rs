@@ -645,6 +645,29 @@ pub struct ThreadView {
     pub server_id: String,
     /// A turn ended since the user last looked at the thread on this device.
     pub unread: bool,
+    /// How the agents its agent started are doing, theirs too, when it started any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<Children>,
+}
+
+/// The agents a thread's agent started, and theirs, as the thread shows them.
+#[derive(Serialize, Clone, Debug, PartialEq, Default)]
+pub struct Children {
+    /// How many of them work.
+    pub running: u32,
+    /// The ones that wait for the user, the one that has waited longest first.
+    pub waiting: Vec<WaitingChild>,
+    /// What the thread says of those that wait: "Run greet.py needs your approval",
+    /// "2 agents need you".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waiting_text: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct WaitingChild {
+    pub thread_id: String,
+    pub title: String,
+    pub ask: motile_protocol::wire::Ask,
 }
 
 #[cfg(test)]
@@ -682,8 +705,9 @@ mod tests {
             "done_at": null, "undone_at": null, "running": true, "needs_approval": false, "turn_ended_at": null, "rev": 3,
         }))
         .unwrap();
-        let event =
-            Event::ThreadUpsert { thread: Box::new(ThreadView { thread, server_id: "h".into(), unread: false }) };
+        let event = Event::ThreadUpsert {
+            thread: Box::new(ThreadView { thread, server_id: "h".into(), unread: false, children: None }),
+        };
         let json = serde_json::to_value(event).unwrap();
 
         assert_eq!(json["type"], "thread_upsert");

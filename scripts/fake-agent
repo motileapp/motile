@@ -37,6 +37,17 @@ made up on the spot instead:
   FAKE_AGENT_STEP seconds, and reports.
 - "run the workflow": a turn that runs a workflow of two phases and waits for it. Its agents start
   and finish a step every FAKE_AGENT_STEP seconds, and the last one fails.
+- "ask another account": a turn that starts Codex through your server's `motile` MCP server to
+  look over greet.py, waits for it, and says what it found.
+- "ask agents in the background": a turn that starts two agents through it, Codex and Claude Code,
+  and ends. Told one finished, it says what that one found.
+- "ask three agents": the same with a third agent, which fails.
+- "ask a supervised agent": a turn that starts a supervised agent to run greet.py, which asks
+  before each step, and ends.
+- "ask an agent which color": a turn that starts an agent that asks which color; told it asks, it
+  answers blue.
+- "look over": a turn that reads greet.py and runs the tests, a step every FAKE_AGENT_CHILD_STEP
+  seconds, and says what it would change. Codex does the same.
 
 Called as `app-server` it is Codex: it answers the requests that start a thread and its turns,
 takes a prompt steered into a running turn after the turn's next tool call, and stops a turn when
@@ -82,6 +93,7 @@ import struct
 import sys
 import threading
 import time
+import urllib.request
 import uuid
 import zlib
 
@@ -380,6 +392,18 @@ def title_answer():
         title = "Recording of the Sign-Up Flow"
     if "greet by name" in message:
         title = "Greet by Name"
+    if "ask another account" in message:
+        title = "Review greet.py With Codex"
+    if "ask agents in the background" in message:
+        title = "Review in the Background"
+    if "ask three agents" in message:
+        title = "Three Agents at Once"
+    if "ask a supervised agent" in message:
+        title = "Run greet.py Under Supervision"
+    if "ask an agent which color" in message:
+        title = "Pick the Button's Color"
+    if "ask two agents" in message:
+        title = "Read and Test greet.py"
     return {"title": os.environ.get("FAKE_AGENT_TITLE", title), "needsRefinement": "fix this" in message}
 
 
@@ -682,6 +706,119 @@ def watch_the_deploy():
 
 
 AGENT_STEP = float(os.environ.get("FAKE_AGENT_STEP", "0.4"))
+CHILD_STEP = float(os.environ.get("FAKE_AGENT_CHILD_STEP", "2"))
+REVIEW = "`greet.py` is fine. I'd add a docstring to `greet` and a test for an empty name."
+
+
+def motile(tool, arguments):
+    """Calls a tool of your server's `motile` MCP server, as Claude Code does, and returns its answer."""
+    server = json.loads(argument("--mcp-config"))["mcpServers"]["motile"]
+    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
+               "MCP-Protocol-Version": "2025-06-18", "Authorization": os.environ.get("MOTILE_MCP_AUTHORIZATION", "")}
+
+    def post(body):
+        request = urllib.request.Request(server["url"], data=json.dumps(body).encode(), headers=headers)
+        with urllib.request.urlopen(request, timeout=3600) as response:
+            return json.loads(response.read() or b"null")
+
+    client = {"name": "fake-agent", "version": "1"}
+    post({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+          "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": client}})
+    answer = post({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": tool, "arguments": arguments}})
+    return answer["result"]["content"][0]["text"]
+
+
+def call_motile(turn, tool, arguments):
+    """A tool call to the `motile` MCP server, shown as Claude Code shows it. Its answer, as JSON."""
+    answered = {}
+
+    def output(_):
+        answered["text"] = motile(tool, arguments)
+        return answered["text"]
+
+    turn.tool(f"mcp__motile__{tool}", arguments, output, seconds=0.05)
+    try:
+        return json.loads(answered["text"])
+    except ValueError:
+        return {"error": answered["text"]}
+
+
+def ask_another_account():
+    turn = Turn("00000000-0000-4000-8000-0000000ac0de")
+    turn.text("I'll have Codex look over `greet.py`.")
+    found = call_motile(turn, "start_agent", {
+        "prompt": "Look over greet.py and say what you would change.", "title": "Review greet.py",
+        "role": "reviewer", "agent": "codex", "model": "gpt-6.1-sol", "wait": True})
+    turn.text(f"Codex looked it over: {found.get('reply', found.get('error', ''))}")
+    turn.done()
+
+
+def ask_agents_in_the_background():
+    turn = Turn("00000000-0000-4000-8000-0000000ba6c0")
+    turn.text("I'll have Codex and another Claude Code look at this while I wait.")
+    call_motile(turn, "start_agent", {"prompt": "Look over greet.py and say what you would change.",
+                                      "title": "Review greet.py", "role": "reviewer", "agent": "codex",
+                                      "model": "gpt-6.1-sol"})
+    call_motile(turn, "start_agent", {"prompt": "Look over the tests and say what is missing.",
+                                      "title": "Check the tests", "agent": "claude"})
+    turn.text("Both are working. I'll tell you what they find.")
+    turn.done()
+
+
+def ask_three_agents():
+    turn = Turn("00000000-0000-4000-8000-0000000a3a3a")
+    turn.text("I'll have three agents look at this.")
+    call_motile(turn, "start_agent", {"prompt": "Look over greet.py and say what you would change.",
+                                      "title": "Review greet.py", "role": "reviewer", "agent": "codex",
+                                      "model": "gpt-6.1-sol"})
+    call_motile(turn, "start_agent", {"prompt": "Look over the tests and say what is missing.",
+                                      "title": "Check the tests", "agent": "claude"})
+    call_motile(turn, "start_agent", {"prompt": "crash before taking this", "title": "Profile greet.py",
+                                      "agent": "claude"})
+    turn.text("All three are working. I'll tell you what they find.")
+    turn.done()
+
+
+def ask_a_supervised_agent():
+    turn = Turn("00000000-0000-4000-8000-0000000a5c01")
+    call_motile(turn, "start_agent", {"prompt": "Run greet.py.", "title": "Run greet.py", "access": "supervised"})
+    turn.text("An agent is running `greet.py`. It asks you before each step.")
+    turn.done()
+
+
+def ask_an_agent_which_color():
+    turn = Turn("00000000-0000-4000-8000-0000000ac010")
+    call_motile(turn, "start_agent", {"prompt": "Ask which color the button should be.", "title": "Pick a color"})
+    turn.text("An agent is picking the button's color.")
+    turn.done()
+
+
+def hear_from_an_agent():
+    """Told an agent it started finished, or asks something."""
+    turn = Turn("00000000-0000-4000-8000-0000000be1d0")
+    said = message_of(prompt_now[0])
+    named = re.match(r'Agent "(.*?)" \((\S+?),', said)
+    title, child = (named.group(1), named.group(2)) if named else ("", "")
+    if ") failed: " in said or "was stopped before it finished" in said:
+        turn.text(f"{title} didn't finish. I'll carry on without it.")
+    elif " asks:\n" in said:
+        question = re.search(r"- (.*?)(?: Options:|$)", said, re.M)
+        call_motile(turn, "answer_agent", {"id": child, "answers": {question.group(1): "Blue"}})
+        turn.text(f"I told {title} to make it blue.")
+    else:
+        reply = said.split("Its reply:\n\n", 1)[-1] if "Its reply:" in said else said
+        turn.text(f"{title} is done: {reply}")
+    turn.done()
+
+
+def look_over():
+    turn = Turn("00000000-0000-4000-8000-0000000100c0")
+    turn.tool("Read", {"file_path": os.path.join(os.getcwd(), "greet.py")}, "1\tdef greet(name):\n", seconds=CHILD_STEP)
+    turn.tool("Bash", {"command": "python3 -m pytest -q", "description": "Run the tests"}, "2 passed in 0.03s",
+              seconds=CHILD_STEP)
+    turn.thinking(CHILD_STEP)
+    turn.text(REVIEW)
+    turn.done()
 
 
 def ask_two_agents():
@@ -1132,6 +1269,12 @@ class Codex:
     def long_reply(self, params):
         self.text("Here is the whole change.\n\n" + "A line of the change.\n" * 400)
 
+    def look_over(self, params):
+        self.command("cat greet.py", "def greet(name):\n", seconds=CHILD_STEP)
+        self.command("python3 -m pytest -q", "2 passed in 0.03s\n", seconds=CHILD_STEP)
+        self.pause(CHILD_STEP)
+        self.text(REVIEW)
+
     def hit_the_limit(self, params):
         self.command("cat greet.py", "def greet(name):\n")
         window = {"usedPercent": 100, "resetsAt": limit_resets(), "windowDurationMins": 300}
@@ -1169,6 +1312,7 @@ class Codex:
         "ask an agent": ask_an_agent,
         "long reply with a lot of code": long_reply,
         "hit the limit": hit_the_limit,
+        "look over": look_over,
     }
 
     def turn(self, params):
@@ -1212,6 +1356,17 @@ if APP_SERVER:
     sys.exit(0)
 
 SCRIPTED = {
+    "ask another account": ask_another_account,
+    "ask agents in the background": ask_agents_in_the_background,
+    "ask three agents": ask_three_agents,
+    "ask a supervised agent": ask_a_supervised_agent,
+    "ask an agent which color": ask_an_agent_which_color,
+    "finished. its reply:": hear_from_an_agent,
+    ") failed: ": hear_from_an_agent,
+    "was stopped before it finished": hear_from_an_agent,
+    " asks:\n": hear_from_an_agent,
+    "look over": look_over,
+    "ask which color": which_color,
     "show the screenshot": show_screenshot,
     "send the report": send_the_report,
     "show the recording": show_the_recording,
@@ -1253,7 +1408,12 @@ def follow_skill(name, arguments):
     turn.done()
 
 
+# The prompt the turn that runs answers.
+prompt_now = [prompt]
+
+
 def answer(prompt):
+    prompt_now[0] = prompt
     said = message_of(prompt).lower()
     names = [command["name"] for command in claude_commands() if not command.get("builtin")]
     started = re.search(r"(?:\A|\n\n)/([\w:-]+)[ \t]*(.*)\Z", message_of(prompt), re.S)

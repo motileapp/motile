@@ -935,7 +935,7 @@ private struct OnRowSurface<Content: View>: View {
 extension ThreadInfo {
     /// The colour of its status when it waits for the user: an approval, or a reply they haven't seen.
     var attentionColor: Color? {
-        if needsApproval { return .themeWarning }
+        if waitsFor != nil { return .themeWarning }
         if unread { return .themeSuccess }
         return nil
     }
@@ -953,17 +953,19 @@ struct ThreadStatus: View {
                 symbol(.unlink)
             }
             .help("Its server is unlinked, so this thread can only be read or continued on another server.")
-        } else if let asking = thread.asking {
+        } else if let asking = thread.waitsFor {
             label(asking.word, Color.themeWarning) {
                 symbol(asking.symbol)
             }
-        } else if thread.running {
+            .help(thread.asking == nil ? thread.children?.waitingText ?? "" : "")
+        } else if thread.working {
+            let agents = max(thread.agents, thread.children?.running ?? 0)
             HStack(spacing: 9) {
-                if thread.agents > 0 {
-                    label("\(thread.agents)", Color.themePending) {
+                if agents > 0 {
+                    label("\(agents)", Color.themePending) {
                         symbol(.users)
                     }
-                    .help(thread.agents == 1 ? "1 agent is working" : "\(thread.agents) agents are working")
+                    .help(agents == 1 ? "1 agent is working" : "\(agents) agents are working")
                 }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeProcess) {

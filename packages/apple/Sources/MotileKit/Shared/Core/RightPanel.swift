@@ -224,7 +224,7 @@ final class RightPanel {
     private(set) var tabsByKey: [String: PanelTabs]
     /// The turns of the open thread that changed files, the first one first.
     var turns: [TurnChange] = []
-    /// The agent whose transcript the agents tab shows. Without one it lists them.
+    /// The agent whose transcript shows in the thread's place, read only.
     private(set) var shownAgent: String?
 
     private(set) var diff: Loaded<CodeDocument> = .loading
@@ -409,17 +409,18 @@ final class RightPanel {
 
     // MARK: Agents
 
-    /// Opens the agents tab on what the agent did that the tool call started.
+    /// Shows what the agent did that the tool call started in the thread's place, read only. On
+    /// a phone the panel it was opened from goes away.
     func showAgent(_ id: String) {
         guard let store, let threadID = store.transcript.threadID else { return }
         shownAgent = id
         store.agentTranscript.begin(threadID: threadID, live: store.transcript.live)
         agentsChanged()
         store.core.send("open_agent", ["thread_id": threadID, "agent_id": id])
-        open(.agents)
+        if Platform.panelCoversThread { isOpen = false }
     }
 
-    /// Goes back to the list of agents.
+    /// Goes back from the agent shown to the thread.
     func showAgents() {
         guard let store, shownAgent != nil else { return }
         shownAgent = nil

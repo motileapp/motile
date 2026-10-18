@@ -18,11 +18,19 @@ struct ThreadScreen: View {
     }
 
     var body: some View {
+        let agent = store.shownAgent
         ZStack(alignment: .bottom) {
             if isStart {
                 start
             }
-            if store.openThreadRemovedServer != nil {
+            if let agent, !isStart {
+                AgentBar(agent: agent)
+                    .padding(.horizontal, Theme.composerPadding)
+                    .padding(.top, TranscriptView.composerGap)
+                    .padding(.bottom, Self.composerBottomGap)
+                    .frame(maxWidth: .infinity)
+                    .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
+            } else if store.openThreadRemovedServer != nil {
                 RoomWithoutComposer(bottomGap: Self.composerBottomGap)
             } else if !isStart || !store.projects.isEmpty || !store.noProjects.isEmpty {
                 ComposerView()
@@ -40,7 +48,7 @@ struct ThreadScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .coordinateSpace(.named(ComposerView.roomSpace))
-        .transcriptBehind(of: store, shown: !isStart, under: .vertical)
+        .transcriptBehind(of: store, ofAgent: agent != nil, shown: !isStart, under: .vertical)
         .takingDroppedFiles()
         .background(Color.themeBackground.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
@@ -92,7 +100,7 @@ struct ThreadScreen: View {
     private var attention: Color? {
         let others = store.activeThreads.filter { store.selection != .thread($0.id) }
         if let color = others.lazy.compactMap(\.attentionColor).first { return color }
-        if others.contains(where: { $0.running || $0.gitStage != nil }) { return .themeProcess }
+        if others.contains(where: { $0.working || $0.gitStage != nil }) { return .themeProcess }
         guard others.contains(where: \.monitoring) else { return nil }
         return .themeForeground
     }
@@ -115,17 +123,41 @@ struct ThreadScreen: View {
         }
     }
 
+    /// The thread's name, after the thread whose agent started it, or for an agent shown in its
+    /// place, the agent's after the thread's. Then the project.
     private var title: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(store.selectedThread?.title ?? "New thread")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+            // A narrow screen keeps the title whole and the way back only as its symbol.
+            ViewThatFits(in: .horizontal) {
+                titleLine(compact: false)
+                titleLine(compact: true)
+            }
             if let parts = store.composerProjectLine {
                 ProjectLine(project: store.composerProject, parts: parts, size: 12, iconSize: 12)
             }
         }
         .lineLimit(1)
         .frame(idealWidth: 10000, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func titleLine(compact: Bool) -> some View {
+        HStack(spacing: 4) {
+            if let agent = store.shownAgent, let thread = store.selectedThread {
+                TitleCrumb(title: thread.title, compact: compact) { store.rightPanel.showAgents() }
+                titleText(agent.title)
+            } else if let parent = store.parentThread {
+                TitleCrumb(title: parent.title, compact: compact) { store.openStartedThread(parent.id) }
+                titleText(store.selectedThread?.title ?? "")
+            } else {
+                titleText(store.selectedThread?.title ?? "New thread")
+            }
+        }
+    }
+
+    private func titleText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Color.themeForeground)
     }
 
     /// The empty state of a new thread: a question, over the composer.

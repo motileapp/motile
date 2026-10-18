@@ -32,6 +32,8 @@ protocol RowOwner: AnyObject {
     func openDiff(turn itemID: String, path: String?)
     /// Shows what the agent did that the item's tool call started.
     func openAgent(itemID: String)
+    /// Opens the thread an agent the thread's agent started works in.
+    func openThread(id: String)
     /// Whether a file that couldn't be fetched can be asked for again: not from a removed server.
     var fetchesAgain: Bool { get }
     /// Opens a new thread on another server that goes on from this one, whose server was unlinked.
@@ -76,7 +78,7 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .removed(let content):
             return RemovedRowView.height(textHeight: TextMeasure.height(of: content.message, width: RemovedRowView.inner(width)))
-        case .code, .tool, .thinking, .group, .fold, .media, .file, .changes, .turnEnd, .handoff, .queued:
+        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued:
             return estimatedHeight(row, width: width)
         }
     }
@@ -92,6 +94,10 @@ class RowView: FlippedView {
             return CodeRowView.height(lines: content.lineCount)
         case .tool, .thinking, .group, .fold:
             return ToolRowView.rowHeight + row.above
+        case .agent(let content):
+            return AgentRowView.height(content)
+        case .agents:
+            return AgentRowView.rowHeight
         case .media(let content):
             return MediaRowView.height(content, width: width)
         case .file:
@@ -123,6 +129,8 @@ class RowView: FlippedView {
         case .prose: return ProseRowView()
         case .code: return CodeRowView()
         case .tool, .thinking, .group, .fold: return ToolRowView()
+        case .agent: return AgentRowView()
+        case .agents: return AgentsRowView()
         case .media: return MediaRowView()
         case .file: return FileRowView()
         case .error: return ErrorRowView()
@@ -140,6 +148,8 @@ class RowView: FlippedView {
         case .prose: return "prose"
         case .code: return "code"
         case .tool, .thinking, .group, .fold: return "tool"
+        case .agent: return "agent"
+        case .agents: return "agents"
         case .media: return "media"
         case .file: return "file"
         case .error: return "error"
@@ -565,8 +575,6 @@ final class ToolRowView: RowView {
     private let elapsed = TextLabel(font: .uiDigits(12), color: Theme.mutedStrongerForeground)
     private var startedAt: Double?
     private var timer: Timer?
-    /// The call started an agent: the row opens what that agent did.
-    private var opensAgent = false
     private let detailSurface = SurfaceView()
     private let detail = RowTextView.make()
     private var detailText: (() -> NSAttributedString)?
@@ -602,10 +610,6 @@ final class ToolRowView: RowView {
         }
         header.onPress = { [weak self] _ in
             guard let self, self.hasDetail else { return }
-            guard !self.opensAgent else {
-                self.owner?.openAgent(itemID: self.itemID)
-                return
-            }
             guard self.open == nil else {
                 self.owner?.toggleRow(id: self.rowID)
                 return
@@ -624,15 +628,13 @@ final class ToolRowView: RowView {
         highlight.fill = .clear
         open = nil
         startedAt = nil
-        opensAgent = false
         switch row.kind {
         case .tool(let tool):
             icon.show(tool.symbol)
             running = tool.status == .running
             startedAt = tool.startedAt
-            opensAgent = tool.agent
-            setTitle(tool.verb, target: tool.target, note: tool.progress, failed: tool.status == .failed)
-            hasDetail = tool.hasDetail || tool.agent
+            setTitle(tool.verb, target: tool.target, failed: tool.status == .failed)
+            hasDetail = tool.hasDetail
             detailText = { tool.detail() }
         case .thinking(let thought):
             icon.show(.brain)
@@ -679,19 +681,14 @@ final class ToolRowView: RowView {
         self.timer = timer
     }
 
-    /// A running call's title is all muted, so the band shows on every part of it. `note` is
-    /// what an agent the call started is doing.
-    private func setTitle(_ words: String, target: String = "", note: String? = nil, failed: Bool = false) {
+    /// A running call's title is all muted, so the band shows on every part of it.
+    private func setTitle(_ words: String, target: String = "", failed: Bool = false) {
         let text = NSMutableAttributedString(
             string: target.isEmpty ? words : words + " ",
             attributes: [.font: Self.titleFont, .foregroundColor: Theme.mutedStrongerForeground]
         )
         let targetColor = failed ? Theme.destructive : running ? Theme.mutedStrongerForeground : Theme.mutedForeground
         text.append(NSAttributedString(string: target, attributes: [.font: Theme.inlineCodeFont, .foregroundColor: targetColor]))
-        if let note {
-            let attributes: [NSAttributedString.Key: Any] = [.font: Self.titleFont, .foregroundColor: Theme.mutedStrongerForeground]
-            text.append(NSAttributedString(string: "  \(note)", attributes: attributes))
-        }
         // Without this a title too long for the row wraps, and loses its last words unseen.
         let cut = NSMutableParagraphStyle()
         cut.lineBreakMode = .byTruncatingTail
@@ -967,6 +964,263 @@ final class TurnEndRowView: RowView {
     override func layout(width: CGFloat) -> CGFloat {
         meta.frame = CGRect(x: 0, y: 0, width: width, height: MessageMeta.height)
         return Self.height
+    }
+}
+
+/// An agent the thread's agent started, or what it was told of one: its avatar, its title and word,
+/// then what it runs on and does or said, and how long it worked. A click opens it: its thread, or
+/// what it did. In the card of an open group it lies on the card.
+final class AgentRowView: RowView {
+    static let rowHeight = scaled(50)
+    private static let avatarGap = scaled(10)
+    /// How far a row in a group's card stands in from the card's sides.
+    private static let cardPadding = scaled(8)
+    /// How far the light reaches past the row's sides, so that the avatar lines up with the text.
+    private static let bleed = scaled(6)
+    /// The room above a group's card and under it.
+    private static let cardAbove = scaled(4)
+    private static let cardBelow = scaled(10)
+
+    static func height(_ content: AgentContent) -> CGFloat {
+        rowHeight + (content.card == .first ? cardAbove : 0) + (content.card == .last ? cardBelow : 0)
+    }
+
+    private let card = SurfaceView()
+    private let highlight = SurfaceView()
+    private let avatar = AgentAvatarView()
+    private let title = TextLabel(font: .ui(13, weight: .medium), color: Theme.foreground)
+    private let role = TextLabel(font: .ui(11), color: Theme.mutedStrongerForeground)
+    private let label = TextLabel(font: .ui(11, weight: .medium), color: Theme.mutedForeground)
+    private let line = TextLabel(font: .ui(12), color: Theme.mutedForeground)
+    private let time = TextLabel(font: .uiDigits(12), color: Theme.mutedStrongerForeground)
+    private let chevron = SymbolView(tint: Theme.mutedStrongerForeground)
+    private var content: AgentContent?
+    private var timer: Timer?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        card.fill = Theme.card
+        card.stroke = Theme.borderCard
+        card.radius = Radius.lg
+        highlight.radius = Radius.md
+        [card, highlight, avatar, title, role, label, line, time, chevron].forEach { addSubview($0) }
+        // A row of a card draws only its own part of the card.
+        #if os(macOS)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        #else
+        clipsToBounds = true
+        #endif
+        onHover = { [weak self] point in
+            guard let self else { return }
+            // A row of a card lights in the card's own accent, inside the card's border.
+            let light = self.content?.card == nil ? Theme.backgroundAccentLarger : Theme.cardAccent
+            self.highlight.fill = point != nil ? light : .clear
+        }
+        onPress = { [weak self] _ in
+            guard let self, let content = self.content else { return }
+            if let thread = content.thread { return self.owner?.openThread(id: thread) ?? () }
+            self.owner?.openAgent(itemID: self.itemID)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    deinit { timer?.invalidate() }
+
+    override func configure(_ row: RowModel) {
+        super.configure(row)
+        guard case .agent(let content) = row.kind else { return }
+        self.content = content
+        highlight.fill = .clear
+        avatar.agent = content.agent
+        avatar.state = content.state
+        avatar.ground = content.card == nil ? Theme.background : Theme.card
+        card.isHidden = content.card == nil
+        title.string = content.title
+        role.string = content.role ?? ""
+        role.isHidden = content.role == nil
+        label.string = content.label
+        label.color = content.state.flagged ? content.state.platformColor : Theme.mutedForeground
+        label.isHidden = !content.flagged
+        line.string = content.line
+        line.color = content.state == .failed ? Theme.destructive : Theme.mutedForeground
+        chevron.show(.chevronRight, size: 9)
+        keepTime()
+    }
+
+    /// Counts the seconds of an agent that works, for as long as the row is on screen.
+    private func keepTime() {
+        timer?.invalidate()
+        timer = nil
+        guard let content else { return }
+        if let at = content.at {
+            time.string = Time.stamp(at)
+            return
+        }
+        guard content.state == .working || content.state == .waiting else {
+            time.string = content.durationMs.map { Time.duration(milliseconds: $0) } ?? ""
+            return
+        }
+        time.string = Time.elapsed(since: content.startedAt)
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] timer in
+            guard let self, self.superview != nil else { return timer.invalidate() }
+            self.time.string = Time.elapsed(since: content.startedAt)
+            self.layoutNow()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    override func layoutNow() {
+        _ = layout(width: bounds.width)
+    }
+
+    override func layout(width: CGFloat) -> CGFloat {
+        guard let content else { return Self.rowHeight }
+        let height = Self.rowHeight
+        let place = content.card
+        let inset = place == nil ? 0 : Self.cardPadding
+        let y = place == .first ? Self.cardAbove : 0
+        // A card's rows are one card: each draws the part of it that is its own.
+        let overhang = Radius.lg + 1
+        let top: CGFloat = place == .first || place == nil ? y : -overhang
+        let bottom: CGFloat = place == .last || place == nil ? y + height : y + height + overhang
+        card.frame = CGRect(x: 0, y: top, width: width, height: bottom - top)
+        // In a card the light keeps clear of the card's border.
+        let lit = place == nil ? -Self.bleed : scaled(4)
+        highlight.frame = CGRect(x: lit, y: y + 2, width: width - lit * 2, height: height - 4)
+        let side = AgentAvatarDrawing.side
+        avatar.frame = CGRect(x: inset, y: y + ((height - side) / 2).rounded(), width: side, height: side)
+        let textX = inset + side + Self.avatarGap
+        let right = width - inset
+        chevron.frame = CGRect(x: right - 14, y: y + ((height - 16) / 2).rounded(), width: 14, height: 16)
+        let timeWidth = time.string.isEmpty ? 0 : time.naturalWidth + 4
+        let timeY = y + ((height - scaled(16)) / 2).rounded()
+        time.frame = CGRect(x: chevron.frame.minX - 6 - timeWidth, y: timeY, width: timeWidth, height: scaled(16))
+        let room = time.frame.minX - 12 - textX
+        let lineHeight = scaled(18)
+        let titleY = y + (height / 2 - lineHeight + 1).rounded()
+        var x = textX
+        for (view, gap) in [(title, CGFloat(6)), (role, 6), (label, 0)] where !view.isHidden {
+            let width = min(view.naturalWidth + 4, max(0, textX + room - x))
+            view.frame = CGRect(x: x, y: titleY, width: width, height: lineHeight)
+            x += width + gap
+        }
+        line.frame = CGRect(x: textX, y: y + (height / 2 + 1).rounded(), width: max(0, room), height: scaled(16))
+        return Self.height(content)
+    }
+}
+
+/// Agents started one after the other: their avatars side by side, how many and how they are
+/// doing, and how long they have worked. A click opens it into a card of their rows.
+final class AgentsRowView: RowView {
+    private static let bleed = scaled(6)
+    private static let step = AgentAvatarDrawing.side * 3 / 4
+
+    private let highlight = SurfaceView()
+    private var avatars: [AgentAvatarView] = []
+    private let more = TextLabel(font: .ui(10, weight: .medium), color: Theme.mutedForeground)
+    private let moreSurface = SurfaceView()
+    private let title = TextLabel(font: .ui(13, weight: .semibold), color: Theme.foreground)
+    private let summary = TextLabel(font: .ui(12), color: Theme.mutedForeground)
+    private let time = TextLabel(font: .uiDigits(12), color: Theme.mutedStrongerForeground)
+    private let chevron = SymbolView(tint: Theme.mutedStrongerForeground)
+    private var content: AgentsContent?
+    private var timer: Timer?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        highlight.radius = Radius.md
+        moreSurface.fill = Theme.backgroundAccent
+        moreSurface.stroke = Theme.borderAccent
+        moreSurface.radius = AgentAvatarDrawing.side / 2
+        [highlight, moreSurface, more, title, summary, time, chevron].forEach { addSubview($0) }
+        onHover = { [weak self] point in
+            guard let self else { return }
+            self.highlight.fill = point != nil ? Theme.backgroundAccentLarger : .clear
+        }
+        onPress = { [weak self] _ in
+            guard let self else { return }
+            self.owner?.toggleRow(id: self.rowID)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    deinit { timer?.invalidate() }
+
+    override func configure(_ row: RowModel) {
+        super.configure(row)
+        guard case .agents(let content) = row.kind else { return }
+        self.content = content
+        highlight.fill = .clear
+        avatars.forEach { $0.removeFromSuperview() }
+        // The first lies over the second, so it is added last.
+        avatars = content.avatars.map { avatar in
+            let view = AgentAvatarView()
+            view.agent = avatar.agent
+            // Side by side they leave how they are doing to the summary.
+            view.state = content.avatars.count > 1 ? nil : avatar.state
+            view.ringed = content.avatars.count > 1
+            return view
+        }
+        avatars.reversed().forEach { addSubview($0) }
+        more.string = "+\(content.more)"
+        more.isHidden = content.more == 0
+        moreSurface.isHidden = content.more == 0
+        title.string = content.title
+        summary.string = content.summary
+        summary.color = content.state == .done ? Theme.mutedForeground : content.state.platformColor
+        chevron.show(content.open ? .chevronDown : .chevronRight, size: 9)
+        keepTime()
+    }
+
+    private func keepTime() {
+        timer?.invalidate()
+        timer = nil
+        guard let content else { return }
+        guard let startedAt = content.startedAt else {
+            time.string = content.durationMs.map { Time.duration(milliseconds: $0) } ?? ""
+            return
+        }
+        time.string = Time.elapsed(since: startedAt)
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] timer in
+            guard let self, self.superview != nil else { return timer.invalidate() }
+            self.time.string = Time.elapsed(since: startedAt)
+            self.layoutNow()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    override func layoutNow() {
+        _ = layout(width: bounds.width)
+    }
+
+    override func layout(width: CGFloat) -> CGFloat {
+        let height = AgentRowView.rowHeight
+        let side = AgentAvatarDrawing.side
+        highlight.frame = CGRect(x: -Self.bleed, y: 2, width: width + Self.bleed * 2, height: height - 4)
+        let y = ((height - side) / 2).rounded()
+        for (index, avatar) in avatars.enumerated() {
+            avatar.frame = CGRect(x: CGFloat(index) * Self.step, y: y, width: side, height: side)
+        }
+        var end = avatars.last.map { $0.frame.maxX } ?? 0
+        if !moreSurface.isHidden {
+            moreSurface.frame = CGRect(x: CGFloat(avatars.count) * Self.step, y: y, width: side, height: side)
+            let size = more.natural
+            more.frame = CGRect(x: moreSurface.frame.midX - size.width / 2, y: moreSurface.frame.midY - size.height / 2, width: size.width, height: size.height)
+            end = moreSurface.frame.maxX
+        }
+        let textX = end + scaled(10)
+        chevron.frame = CGRect(x: width - 14, y: ((height - 16) / 2).rounded(), width: 14, height: 16)
+        let timeWidth = time.string.isEmpty ? 0 : time.naturalWidth + 4
+        time.frame = CGRect(x: chevron.frame.minX - 6 - timeWidth, y: ((height - scaled(16)) / 2).rounded(), width: timeWidth, height: scaled(16))
+        let room = max(0, time.frame.minX - 12 - textX)
+        title.frame = CGRect(x: textX, y: (height / 2 - scaled(18) + 1).rounded(), width: room, height: scaled(18))
+        summary.frame = CGRect(x: textX, y: (height / 2 + 1).rounded(), width: room, height: scaled(16))
+        return height
     }
 }
 

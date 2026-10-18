@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -50,17 +51,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
+import app.motile.composer.AgentBar
 import app.motile.composer.ComposerView
+import app.motile.composer.FirstThatFits
+import app.motile.composer.TitleCrumb
 import app.motile.core.AppStore
 import app.motile.core.Notice
 import app.motile.core.PanelPage
 import app.motile.core.Project
 import app.motile.core.Selection
 import app.motile.core.Server
-import app.motile.core.ThreadInfo
 import app.motile.layout.LocalDrawer
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.sidebar.attentionColor
 import app.motile.theme.ControlSize
 import app.motile.theme.Palette
 import app.motile.theme.Radius
@@ -92,28 +96,34 @@ fun ThreadScreen(overSidebar: Boolean = true) {
     val density = LocalDensity.current
     var composerHeight by remember { mutableStateOf(120.dp) }
     val isStart = store.isStart
+    // An agent the thread's agent started shows in the thread's place, with a bar in the composer's.
+    val agent = store.shownAgent?.takeIf { !isStart }
     // A thread whose server was removed ends with the row that says so, in the composer's place.
-    val removed = store.openThreadRemovedServer != null
+    val removed = agent == null && store.openThreadRemovedServer != null
     val below = WindowInsets.ime.union(WindowInsets.navigationBars).only(WindowInsetsSides.Bottom)
     val top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + barHeight
     FileDrop(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(Theme.colors.background)) {
             if (!isStart) {
                 val bottom = below.asPaddingValues().calculateBottomPadding() + if (removed) composerBottomGap else composerHeight
-                TranscriptView(store.transcript, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), underComposer = !removed)
+                val model = if (agent != null) store.agentTranscript else store.transcript
+                key(model) {
+                    TranscriptView(model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), underComposer = !removed)
+                }
             }
             Column(Modifier.fillMaxSize()) {
                 TopBar(overSidebar)
                 Box(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(below)) {
                     if (isStart) Start(composerHeight)
-                    if (!removed && (!isStart || store.projects.isNotEmpty() || store.noProjects.isNotEmpty())) {
-                        ComposerView(
-                            Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .onSizeChanged { composerHeight = with(density) { it.height.toDp() } }
-                                .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = TranscriptView.composerGap, bottom = composerBottomGap),
-                        )
+                    val composerPlace = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .onSizeChanged { composerHeight = with(density) { it.height.toDp() } }
+                        .padding(start = Theme.composerPadding, end = Theme.composerPadding, top = TranscriptView.composerGap, bottom = composerBottomGap)
+                    if (agent != null) {
+                        Box(composerPlace, contentAlignment = Alignment.BottomCenter) { AgentBar(agent) }
+                    } else if (!removed && (!isStart || store.projects.isNotEmpty() || store.noProjects.isNotEmpty())) {
+                        ComposerView(composerPlace)
                     }
                 }
             }
@@ -184,16 +194,9 @@ private fun TopBar(overSidebar: Boolean) {
 private fun AppStore.attention(palette: Palette): Color? {
     val others = activeThreads.filter { selection != Selection.Thread(it.id) }
     others.firstNotNullOfOrNull { it.attentionColor(palette) }?.let { return it }
-    if (others.any { it.running || it.gitStage != null }) return palette.process
+    if (others.any { it.working || it.gitStage != null }) return palette.process
     if (others.none { it.monitoring }) return null
     return palette.foreground
-}
-
-/** The colour of its status when it waits for the user: an approval, or a reply they haven't seen. */
-private fun ThreadInfo.attentionColor(palette: Palette): Color? = when {
-    needsApproval -> palette.warning
-    unread -> palette.success
-    else -> null
 }
 
 /** The menu icon, with a dot on its top right corner, cut out of the icon, when another thread needs attention, works or monitors, in the colour of its status. */
@@ -218,12 +221,36 @@ private fun MenuIcon(attention: Color?) {
     )
 }
 
+/** The thread's name, after the thread whose agent started it, or for an agent shown in its place, the agent's after the thread's. Then the project. */
 @Composable
 private fun Title(modifier: Modifier) {
     val store = LocalStore.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        Text(store.selectedThread?.title ?: "New thread", style = system(15f, FontWeight.SemiBold), maxLines = 1)
+        // A narrow screen keeps the title whole and the way back only as its symbol.
+        FirstThatFits(Modifier.fillMaxWidth(), { TitleLine(compact = false) }, { TitleLine(compact = true) })
         store.composerProjectLine?.let { parts -> ProjectLine(store.composerProject, parts, size = 12f, iconSize = 12f) }
+    }
+}
+
+@Composable
+private fun TitleLine(compact: Boolean) {
+    val store = LocalStore.current
+    val agent = store.shownAgent
+    val thread = store.selectedThread
+    val parent = store.parentThread
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        val title = @Composable { text: String -> Text(text, Modifier.weight(1f, fill = false), style = system(15f, FontWeight.SemiBold), maxLines = 1) }
+        when {
+            agent != null && thread != null -> {
+                TitleCrumb(thread.title, compact = compact) { store.rightPanel.showAgents() }
+                title(agent.title)
+            }
+            parent != null -> {
+                TitleCrumb(parent.title, compact = compact) { store.openStartedThread(parent.id) }
+                title(thread?.title.orEmpty())
+            }
+            else -> title(thread?.title ?: "New thread")
+        }
     }
 }
 

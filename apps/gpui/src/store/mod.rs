@@ -723,10 +723,12 @@ impl Store {
         &self.done
     }
 
+    /// The lists leave out the threads agents started, which their parents show.
     fn set_threads(&mut self, threads: HashMap<String, ThreadInfo>) {
         self.threads = threads;
-        let mut active: Vec<ThreadInfo> = self.threads.values().filter(|thread| !thread.is_done()).cloned().collect();
-        let mut done: Vec<ThreadInfo> = self.threads.values().filter(|thread| thread.is_done()).cloned().collect();
+        let listed = || self.threads.values().filter(|thread| thread.parent_id().is_none());
+        let mut active: Vec<ThreadInfo> = listed().filter(|thread| !thread.is_done()).cloned().collect();
+        let mut done: Vec<ThreadInfo> = listed().filter(|thread| thread.is_done()).cloned().collect();
         active.sort_by(ThreadInfo::listed_order);
         done.sort_by(ThreadInfo::listed_order);
         self.active = active;
@@ -739,6 +741,9 @@ impl Store {
             Some(thread) => self.threads.insert(id.to_string(), thread.clone()),
             None => self.threads.remove(id),
         };
+        if thread.as_ref().or(before.as_ref()).is_some_and(|thread| thread.parent_id().is_some()) {
+            return;
+        }
         if let (Some(before), Some(thread)) = (&before, &thread)
             && before.is_done() == thread.is_done()
             && before.listed_at() == thread.listed_at()
@@ -769,6 +774,11 @@ impl Store {
     pub fn selected_thread(&self) -> Option<&ThreadInfo> {
         let Selection::Thread(id) = &self.selection else { return None };
         self.threads.get(id)
+    }
+
+    /// The thread whose agent started the open one.
+    pub fn parent_thread(&self) -> Option<&ThreadInfo> {
+        self.threads.get(self.selected_thread()?.parent_id()?)
     }
 
     pub fn selected_draft(&self) -> Option<&ThreadDraft> {

@@ -1,5 +1,6 @@
 package app.motile.core
 
+import app.motile.transcript.AgentContent
 import app.motile.transcript.RemovedContent
 import app.motile.transcript.RowModel
 import org.junit.Assert.assertEquals
@@ -112,6 +113,59 @@ class ModelsTest {
         val message = "This thread is read-only. You can delete “build-box” in settings to remove its threads."
         val row = RowModel.parse(json("id" to "removed", "item" to "removed", "kind" to "removed", "server" to "build-box", "title" to title, "message" to message))
         assertEquals(RemovedContent("build-box", title, message), (row?.kind as? RowModel.Kind.Removed)?.content)
+    }
+
+    @Test
+    fun aThreadWaitsForWhatTheAgentsItStartedWaitFor() {
+        val waiting = mapOf("thread_id" to "c", "title" to "Run greet.py", "ask" to "question")
+        val children = mapOf("running" to 2, "waiting" to listOf(waiting), "waiting_text" to "Run greet.py has a question")
+        val base = thread("p", 1.0)
+        val parent = ThreadInfo(json("id" to "p", "server_id" to "s", "agent" to "claude", "children" to children))
+        assertTrue(parent.working)
+        assertEquals(Ask.Question, parent.waitsFor)
+        assertEquals("c", parent.children?.waiting?.first()?.threadID)
+        assertFalse(base.working)
+        assertNull(base.waitsFor)
+        val child = ThreadInfo(json("id" to "c", "server_id" to "s", "agent" to "claude", "parent" to mapOf("thread_id" to "p")))
+        assertEquals("p", child.parentID)
+    }
+
+    @Test
+    fun anAgentsRowSaysWhatItRunsOnThenWhatItDoesOrElseItsWord() {
+        fun agent(vararg extra: Pair<String, Any?>) = RowModel.parse(
+            json("id" to "t1", "item" to "t1", "kind" to "agent", "title" to "Review", "state" to "waiting", "label" to "Needs approval", "flagged" to true, "started_at" to 1.0, *extra),
+        )?.kind as? RowModel.Kind.Agent
+        val running = agent("agent" to "codex", "runs_on" to "6.1-Sol · work", "detail" to "Reading a.rs", "thread" to "c", "card" to "last")?.content
+        assertEquals("6.1-Sol · work · Reading a.rs", running?.line)
+        assertEquals(Agent.Codex, running?.agent)
+        assertEquals(AgentState.Waiting, running?.state)
+        assertEquals(AgentContent.Card.Last, running?.card)
+        assertEquals("c", running?.thread)
+        val bare = agent()?.content
+        assertEquals("Needs approval", bare?.line)
+        assertNull(bare?.card)
+    }
+
+    @Test
+    fun agentsStartedTogetherAreOneRowOfTheirAvatars() {
+        val avatars = listOf(mapOf("agent" to "claude", "state" to "done"), mapOf("state" to "failed"))
+        val row = RowModel.parse(
+            json("id" to "t1/agents", "item" to "t1", "kind" to "agents", "title" to "2 agents", "summary" to "1 done · 1 failed", "state" to "failed", "avatars" to avatars, "more" to 0, "duration_ms" to 4000, "open" to true),
+        )
+        val agents = (row?.kind as? RowModel.Kind.Agents)?.content
+        assertEquals(listOf(Agent.Claude to AgentState.Done, null to AgentState.Failed), agents?.avatars)
+        assertEquals(AgentState.Failed, agents?.state)
+        assertEquals(4000, agents?.durationMs)
+        assertNull(agents?.startedAt)
+        assertTrue(agents?.open == true)
+    }
+
+    @Test
+    fun theQueueLeavesOutWhatTheAgentIsToldOfTheAgentsItStarted() {
+        val notice = mapOf("thread_id" to "c", "title" to "Review", "event" to "finished")
+        val queued = listOf(mapOf("id" to "1", "text" to "hi"), mapOf("id" to "2", "text" to "Review finished", "notice" to notice))
+        val activity = Activity.of(json("queued" to queued), emptyList())
+        assertEquals(listOf("1"), activity.queued.map { it.id })
     }
 
     @Test

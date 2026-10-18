@@ -37,6 +37,7 @@ struct TranscriptRepresentable {
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
         view.onOpenAgent = { itemID in store.rightPanel.showAgent(itemID) }
+        view.onOpenThread = { threadID in store.openStartedThread(threadID) }
         view.canFetchAgain = { store.openThreadRemovedServer == nil }
         view.onContinueElsewhere = { store.continueOnAnotherServer() }
         view.onOpenServerSettings = { store.openSettings(.servers) }
@@ -87,17 +88,23 @@ extension View {
     /// the safe area of `edges`, the keyboard too: it lifts the composer and leaves the
     /// transcript as tall as it was. The transcript leaves room for the composer and fades out
     /// from the middle of its box down to its own bottom, wherever the two are.
-    func transcriptBehind(of store: AppStore, shown: Bool, under edges: Edge.Set) -> some View {
+    /// With `ofAgent` it is the transcript of the agent shown in the thread's place.
+    func transcriptBehind(of store: AppStore, ofAgent: Bool = false, shown: Bool, under edges: Edge.Set) -> some View {
         backgroundPreferenceValue(ComposerPlace.self) { place in
             if shown {
                 GeometryReader { safe in
                     GeometryReader { proxy in
-                        TranscriptRepresentable(
-                            store: store,
-                            topInset: edges.contains(.top) ? safe.safeAreaInsets.top : 0,
-                            bottomInset: place.room.map { proxy.size.height - proxy[$0].minY } ?? 0,
-                            bottomFade: place.box.map { proxy.size.height - proxy[$0].midY } ?? 0
-                        )
+                        let transcript = { (ofAgent: Bool) in
+                            TranscriptRepresentable(
+                                store: store,
+                                ofAgent: ofAgent,
+                                topInset: edges.contains(.top) ? safe.safeAreaInsets.top : 0,
+                                bottomInset: place.room.map { proxy.size.height - proxy[$0].minY } ?? 0,
+                                bottomFade: place.box.map { proxy.size.height - proxy[$0].midY } ?? 0
+                            )
+                        }
+                        // Each is a view of its own, joined to its own model.
+                        if ofAgent { transcript(true) } else { transcript(false) }
                     }
                     .ignoresSafeArea(.all, edges: edges)
                 }

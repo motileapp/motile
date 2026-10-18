@@ -565,23 +565,28 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
             .tooltip(tooltip("Its server is unlinked, so this thread can only be read or continued on another server."))
             .into_any_element();
     }
-    if let Some(ask) = thread.asking() {
+    if let Some(ask) = thread.waits_for() {
         let (word, name) = ask_label(ask);
-        return label(word.into(), c.warning, symbol(name)).into_any_element();
+        let status = label(word.into(), c.warning, symbol(name));
+        // An agent it started waits: the tooltip says which.
+        let waiting = thread.asking().is_none().then(|| thread.children.as_ref()?.waiting_text.clone()).flatten();
+        let Some(waiting) = waiting else { return status.into_any_element() };
+        return status
+            .id(SharedString::from(format!("waiting-{}", thread.id)))
+            .tooltip(tooltip(waiting))
+            .into_any_element();
     }
-    if thread.running {
+    if thread.working() {
+        let agents = thread.agents.max(thread.children.as_ref().map_or(0, |children| children.running));
         return div()
             .flex()
             .items_center()
             .gap(px(9.))
-            .when(thread.agents > 0, |status| {
-                let help = if thread.agents == 1 {
-                    "1 agent is working".to_string()
-                } else {
-                    format!("{} agents are working", thread.agents)
-                };
+            .when(agents > 0, |status| {
+                let help =
+                    if agents == 1 { "1 agent is working".to_string() } else { format!("{agents} agents are working") };
                 status.child(
-                    label(thread.agents.to_string(), c.pending, symbol("users"))
+                    label(agents.to_string(), c.pending, symbol("users"))
                         .id(SharedString::from(format!("agents-{}", thread.id)))
                         .tooltip(tooltip(help)),
                 )

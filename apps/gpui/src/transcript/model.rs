@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use gpui_kit::*;
 use motile_core::api::Event;
+use motile_core::render::agents::AgentState;
 use motile_core::render::markdown::ParaKind;
 use motile_core::render::rows::{After, Row, RowKind};
 
@@ -272,6 +273,18 @@ impl Transcript {
     /// The prose rows that grew while a reply streamed, and when, while what they grew by fades in.
     pub fn grown_rows(&self) -> HashMap<String, Instant> {
         self.grown.iter().filter(|(_, at)| at.elapsed() < FADE).map(|(id, at)| (id.clone(), *at)).collect()
+    }
+
+    /// Whether a time on screen goes on: the turn's, or that of agents that work.
+    pub fn ticks(&self) -> bool {
+        self.activity.running
+            || self.rows.iter().any(|model| match &model.row.kind {
+                RowKind::Agent { agent } => {
+                    agent.at.is_none() && matches!(agent.state, AgentState::Working | AgentState::Waiting)
+                }
+                RowKind::Agents { started_at, .. } => started_at.is_some(),
+                _ => false,
+            })
     }
 
     pub fn is_empty(&self) -> bool {

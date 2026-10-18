@@ -21,8 +21,8 @@ use motile_protocol::wire::{
     AccountSkills, Activity, Agent, AgentAccount, AgentLimits, Approval, BranchInstructions, CONTINUE_PROMPT,
     ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
     HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread, OriginUsage, Project,
-    PullRequest, PullRequestAction, Queued, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread, ThreadChange,
-    ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    PullRequest, PullRequestAction, Queued, RunsOn, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread,
+    ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -43,6 +43,10 @@ use crate::ricrac::Ricrac;
 use crate::sign_in::SignIns;
 use crate::store::{Continuation, Purpose, Session, Store, StoredProject, StoredThread, StoredWorktree, TitleSource};
 use crate::{agent_accounts, drafts, files, git, github, icons, limits, pacing, pull_requests, title};
+
+mod children;
+
+pub use children::{LONGEST_WAIT, WAIT};
 use motile_protocol::wire::{
     CheckStatus, EventKind, Mergeable, PullRequestDetail, PullRequestEdit, PullRequestSettings, PullRequestState,
 };
@@ -161,6 +165,13 @@ pub struct Hub {
     mcp_tokens: Arc<mcp::Tokens>,
     mcp_port: std::sync::OnceLock<u16>,
     sign_ins: Arc<SignIns>,
+    /// The threads agents started whose parents have news to hear, and where that is read.
+    children_changed: mpsc::UnboundedSender<String>,
+    children_changes: std::sync::Mutex<Option<mpsc::UnboundedReceiver<String>>>,
+    /// How many of an agent's calls wait for each thread it started, by thread.
+    waiting_on: std::sync::Mutex<HashMap<String, usize>>,
+    /// The threads agents started, by the thread that started each and the id it gave the request.
+    started: std::sync::Mutex<HashMap<(String, String), String>>,
 }
 
 /// What the agent of a thread that watches its pull request was last told about.
@@ -228,6 +239,8 @@ struct Live {
     handoff_item: Option<String>,
     /// The skills the thread's messages started, which Claude Code is given as its commands.
     skills: Vec<SkillMention>,
+    /// The question the agent that started the thread was told it asks.
+    told_question: Option<String>,
 }
 
 struct StartedTurn {
@@ -334,7 +347,12 @@ impl Hub {
         let projects = Mutex::new(projects);
         let (list_updates, _) = broadcast::channel(UPDATES_BUFFER);
         let git = std::sync::Mutex::default();
+        let (children_changed, children_changes) = mpsc::unbounded_channel();
         Ok(Arc::new(Self {
+            children_changed,
+            children_changes: std::sync::Mutex::new(Some(children_changes)),
+            waiting_on: std::sync::Mutex::default(),
+            started: std::sync::Mutex::default(),
             agent_accounts: std::sync::Mutex::new(accounts),
             models: std::sync::Mutex::new(
                 store.setting(MODELS).and_then(|models| serde_json::from_str(&models).ok()).unwrap_or_default(),
@@ -377,9 +395,10 @@ impl Hub {
         }))
     }
 
-    /// Serves the tool the agents read threads with. Agents started before it serves go without.
-    pub async fn serve_mcp(&self) -> anyhow::Result<()> {
-        let port = mcp::serve(self.store.clone(), self.mcp_tokens.clone()).await?;
+    /// Serves the tools the agents read threads and start agents with. Agents started before it
+    /// serves go without.
+    pub async fn serve_mcp(self: &Arc<Self>) -> anyhow::Result<()> {
+        let port = mcp::serve(Arc::downgrade(self), self.mcp_tokens.clone()).await?;
         let _ = self.mcp_port.set(port);
         Ok(())
     }
@@ -863,7 +882,7 @@ impl Hub {
                     Some(from) => Some(self.copied_history(from)?),
                     None => None,
                 };
-                let mut stored = self.new_thread(new_thread, &text, &attachments).await?;
+                let mut stored = self.new_thread(new_thread, &text, &attachments, None).await?;
                 if let Some((copied, _)) = &from {
                     stored.thread.title = copied.title.clone();
                     stored.title_source = TitleSource::Generated;
@@ -889,7 +908,16 @@ impl Hub {
         let prompt = prompt(&text, &attachments);
         let skills = self.mentioned_skills(&live.stored.thread, &text);
         if live.preparing.is_some() {
-            live.queued.push(Queued { id: new_id(), text, attachments, media, skills, held: false, sending: false });
+            live.queued.push(Queued {
+                id: new_id(),
+                text,
+                attachments,
+                media,
+                skills,
+                held: false,
+                sending: false,
+                notice: None,
+            });
             live.save_queued(&self.store)?;
             live.send_activity();
             return Ok(thread_id);
@@ -907,6 +935,7 @@ impl Hub {
                     skills,
                     held: false,
                     sending: false,
+                    notice: None,
                 });
                 if now && !idle && live.steer(&self.store, live.queued.len() - 1)? {
                     return Ok(thread_id);
@@ -962,11 +991,14 @@ impl Hub {
         Ok((thread, self.store.copied_items(&from.origin, &from.thread_id)?))
     }
 
+    /// A new thread from what a client asked for. With `folder` and no worktree it works in that
+    /// folder, as a thread an agent started works in the folder of the thread that started it.
     async fn new_thread(
         &self,
         new_thread: NewThread,
         text: &str,
         attachments: &[String],
+        folder: Option<String>,
     ) -> anyhow::Result<StoredThread> {
         let projects = self.projects.lock().await;
         let project = projects
@@ -1002,10 +1034,11 @@ impl Hub {
             }
             None => None,
         };
-        let (cwd, worktree) = match worktree {
-            Some((folder, worktree)) => (folder, Some(worktree)),
-            None if no_project => (self.make_no_project_folder(&id, text, created_at)?, None),
-            None => (project.path.clone(), None),
+        let (cwd, worktree) = match (worktree, folder) {
+            (Some((folder, worktree)), _) => (folder, Some(worktree)),
+            (None, Some(folder)) => (folder, None),
+            (None, None) if no_project => (self.make_no_project_folder(&id, text, created_at)?, None),
+            (None, None) => (project.path.clone(), None),
         };
         let thread = Thread {
             id,
@@ -1031,9 +1064,11 @@ impl Hub {
             watching: false,
             git_stage: None,
             interruption: None,
+            parent: None,
             rev: 0,
         };
-        Ok(StoredThread { thread, session_id: None, title_source: TitleSource::Placeholder, next_seq: 0, worktree })
+        let title_source = TitleSource::Placeholder;
+        Ok(StoredThread { thread, session_id: None, title_source, next_seq: 0, worktree, reports: false })
     }
 
     async fn title_from_first_message(self: Arc<Self>, thread_id: String, text: String) {
@@ -1237,7 +1272,31 @@ impl Hub {
         Ok(())
     }
 
+    /// Stops the thread's agent and every agent it started, theirs first. What they would have
+    /// told it of their ends isn't told: the user stopped it all.
     pub async fn stop(self: &Arc<Self>, thread_id: &str) {
+        let children = {
+            let mut threads = self.threads.lock().await;
+            if let Some(live) = threads.get_mut(thread_id) {
+                live.queued.retain(|queued| queued.notice.is_none());
+            }
+            let children = children::descendants(&threads, thread_id);
+            for id in &children {
+                let Some(child) = threads.get_mut(id) else { continue };
+                child.stored.reports = false;
+                if let Err(error) = self.store.save_thread(&child.stored) {
+                    tracing::error!(thread_id, "couldn't save a thread: {error:#}");
+                }
+            }
+            children
+        };
+        for child in children {
+            self.stop_one(&child).await;
+        }
+        self.stop_one(thread_id).await;
+    }
+
+    async fn stop_one(self: &Arc<Self>, thread_id: &str) {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return };
         if let Some(preparing) = live.preparing.take() {
@@ -1371,7 +1430,16 @@ impl Hub {
         Ok(())
     }
 
+    /// Deletes the thread and the threads its agent started, theirs first.
     pub async fn delete(&self, thread_id: &str) -> anyhow::Result<()> {
+        let children = children::descendants(&*self.threads.lock().await, thread_id);
+        for child in children {
+            self.delete_one(&child).await?;
+        }
+        self.delete_one(thread_id).await
+    }
+
+    async fn delete_one(&self, thread_id: &str) -> anyhow::Result<()> {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.remove(thread_id) else { return Ok(()) };
         if let Some(run) = &live.run {
@@ -1391,6 +1459,7 @@ impl Hub {
             self.lock_git().remove(&live.stored.thread.cwd);
             self.announce_projects(&self.projects.lock().await);
         }
+        self.mcp_tokens.forget(thread_id);
         let shown = self.store.media_of(thread_id)?;
         let attached = self.store.attachments(Some(thread_id))?;
         self.store.delete_thread(thread_id)?;
@@ -2745,6 +2814,9 @@ impl Hub {
 
     fn announce(&self, thread: &Thread) {
         let _ = self.list_updates.send(Message::ThreadUpsert { thread: thread.clone() });
+        if thread.parent.is_some() {
+            let _ = self.children_changed.send(thread.id.clone());
+        }
     }
 
     fn start_turn(self: &Arc<Self>, live: &mut Live, prompt: String) -> anyhow::Result<()> {
@@ -2983,6 +3055,7 @@ impl Hub {
         }
         if let Some(mcp) = turn.mcp {
             command.env(mcp::AUTHORIZATION_VARIABLE, format!("Bearer {}", mcp.token));
+            command.env("MCP_TOOL_TIMEOUT", (mcp::TOOL_TIMEOUT_SECS * 1000).to_string());
         }
         command.spawn().with_context(|| format!("{name} couldn't be started."))
     }
@@ -3063,6 +3136,9 @@ impl Hub {
             tracing::error!(thread_id, "couldn't save a thread update: {error:#}");
         }
         self.read_changes(live);
+        if live.stored.thread.parent.is_some() {
+            let _ = self.children_changed.send(thread_id.to_string());
+        }
         if was_running && !live.stored.thread.running {
             self.after_turn(live).await;
         }
@@ -3125,8 +3201,11 @@ impl Hub {
             }
             AgentEvent::ToolInput { id, name, input } => live.tool_input(store, id, name, input)?,
             AgentEvent::ToolResult { id, output, is_error } => live.tool_result(store, id, output, is_error)?,
-            AgentEvent::Tool { call } => {
+            AgentEvent::Tool { mut call } => {
                 live.set_thinking(false);
+                if let Some(agent) = call.agent.as_mut().filter(|agent| agent.runs_on.is_none()) {
+                    agent.runs_on = Some(Box::new(self.runs_on(live, &call.input)));
+                }
                 live.upsert(store, call.id.clone(), ItemKind::Tool { call })?;
             }
             AgentEvent::Sub { parent, event } => {
@@ -3135,7 +3214,11 @@ impl Hub {
                 live.parent = None;
                 added?;
             }
-            AgentEvent::Task { tool_id, agent } => {
+            AgentEvent::Task { tool_id, mut agent } => {
+                if agent.runs_on.is_none() {
+                    let input = live.tool_call(&tool_id).map(|call| call.input).unwrap_or_default();
+                    agent.runs_on = Some(Box::new(self.runs_on(live, &input)));
+                }
                 live.update_subagent(store, &tool_id, agent)?;
                 self.count_agents(live);
             }
@@ -3383,7 +3466,7 @@ impl Hub {
         let prompt = prompt(&queued.text, &queued.attachments);
         live.save_queued(&self.store)?;
         self.note_handoff(live)?;
-        live.append_message(&self.store, queued.id, queued.text, queued.attachments, queued.media, queued.skills)?;
+        live.append_queued(&self.store, queued)?;
         self.start_turn(live, prompt)
     }
 
@@ -3425,6 +3508,28 @@ impl Hub {
         let undated = base.rsplit_once('-').filter(|(_, date)| date.len() == 8).map_or(base, |(undated, _)| undated);
         let found = [model, base, undated].into_iter().find_map(listed).map(|listed| listed.name.clone());
         found.or_else(|| (agent == Agent::Claude && model.starts_with("claude-")).then(|| models::claude_name(undated)))
+    }
+
+    /// What an agent the thread's agent started on its own runs on: the thread's account, and the
+    /// model the tool call that started it names, or else the thread's.
+    fn runs_on(&self, live: &Live, input: &str) -> RunsOn {
+        let thread = &live.stored.thread;
+        let account = self.account_of(thread);
+        let input: serde_json::Value = serde_json::from_str(input).unwrap_or_default();
+        let named = input["model"].as_str().filter(|model| !model.is_empty() && *model != "inherit");
+        let listed = |alias: &str| {
+            let alias = alias.to_ascii_lowercase();
+            let models = self.models().into_iter().filter(|model| model.account == account.id);
+            models
+                .into_iter()
+                .find(|model| model.id.contains(&alias) || model.name.to_ascii_lowercase().contains(&alias))
+        };
+        let model = match named {
+            Some(alias) => listed(alias).map(|model| model.name).or_else(|| Some(alias.to_string())),
+            None => thread.model.clone().or_else(|| live.session_model.clone()),
+        };
+        let model = model.map(|model| self.model_name(thread.agent, &model).unwrap_or(model));
+        RunsOn { agent: thread.agent, model, account: self.account_name(&account), thread_id: None }
     }
 
     /// Gives the handoff that waited for it the model the new session runs.
@@ -3478,6 +3583,7 @@ impl Live {
             turn: None,
             retry: None,
             mcp_token: None,
+            told_question: None,
             session_model: None,
             handoff_item: None,
             skills: Vec::new(),
@@ -3612,8 +3718,7 @@ impl Live {
     fn note_given(&mut self, store: &Store, index: usize) -> anyhow::Result<()> {
         let queued = self.queued.remove(index);
         self.save_queued(store)?;
-        let Queued { id, text, attachments, media, skills, .. } = queued.clone();
-        self.append_message(store, id, text, attachments, media, skills)?;
+        self.append_queued(store, queued.clone())?;
         self.given.push(queued);
         self.send_activity();
         Ok(())
@@ -3675,6 +3780,9 @@ impl Live {
                 tool_uses: update.tool_uses.or(known.tool_uses),
                 duration_ms: update.duration_ms.or(known.duration_ms),
                 workflow: update.workflow.or(known.workflow),
+                runs_on: update.runs_on.or(known.runs_on),
+                waits: update.waits,
+                stopped: update.stopped,
             },
             None => update,
         };
@@ -3741,6 +3849,39 @@ impl Live {
         store.save_item(&self.stored.thread.id, &item)?;
         let _ = self.updates.send(Message::Items { items: vec![item] });
         Ok(())
+    }
+
+    /// Adds a message that waited to the transcript, as the user's message or as the notice it is.
+    fn append_queued(&mut self, store: &Store, queued: Queued) -> anyhow::Result<()> {
+        let Some(notice) = queued.notice else {
+            return self.append_message(store, queued.id, queued.text, queued.attachments, queued.media, queued.skills);
+        };
+        let item = self.new_item(queued.id, ItemKind::Notice { notice, text: queued.text });
+        self.last_message_seq = Some(item.seq);
+        self.save(store, item)
+    }
+
+    /// Changes a tool call of the transcript, whether the running turn may still change it or not.
+    /// `change` says whether it changed anything.
+    fn change_tool(
+        &mut self,
+        store: &Store,
+        tool_id: &str,
+        change: impl FnOnce(&mut ToolCall) -> bool,
+    ) -> anyhow::Result<()> {
+        if let Some(mut call) = self.tool_call(tool_id) {
+            if !change(&mut call) {
+                return Ok(());
+            }
+            return self.upsert(store, tool_id.to_string(), ItemKind::Tool { call });
+        }
+        let Some(mut item) = store.item(&self.stored.thread.id, tool_id)? else { return Ok(()) };
+        let ItemKind::Tool { call } = &mut item.kind else { return Ok(()) };
+        if !change(call) {
+            return Ok(());
+        }
+        item.rev = self.next_rev();
+        self.save(store, item)
     }
 
     /// Makes another thread's transcript the beginning of this one's, which its agent is then told
@@ -3894,8 +4035,11 @@ impl Live {
                     call.output.get_or_insert_with(|| "Interrupted".to_string());
                 }
             }
-            if let Some(agent) = &mut call.agent {
+            // An agent that works in a thread of its own goes on without the turn that started it.
+            let own_thread = |agent: &Subagent| agent.runs_on.as_ref().is_some_and(|on| on.thread_id.is_some());
+            if let Some(agent) = call.agent.as_mut().filter(|agent| !own_thread(agent)) {
                 agent.status = ToolStatus::Failed;
+                agent.stopped = interrupted;
             }
             self.upsert(store, item.id, ItemKind::Tool { call })?;
         }

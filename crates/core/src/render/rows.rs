@@ -15,7 +15,7 @@ use motile_protocol::wire::{
 use serde::Serialize;
 use serde_json::Value;
 
-use super::agents::{workflow_name, workflow_progress};
+use super::agents::{self, AgentState, AgentView, workflow_name};
 use super::highlight::{self, Incremental, Spans};
 use super::markdown::{self, Block, ParaKind, Prose};
 
@@ -156,6 +156,31 @@ pub enum RowKind {
         from: HandoffLabel,
         to: HandoffLabel,
     },
+    /// An agent the thread's agent started, or what it was told of one, which opens from the row.
+    Agent {
+        #[serde(flatten)]
+        agent: AgentRow,
+    },
+    /// Agents started one after the other, as one row that opens into a card of them.
+    Agents {
+        /// "3 agents".
+        title: String,
+        /// "2 working · 1 done".
+        summary: String,
+        /// What the summary is coloured by: whether one waits, works or failed.
+        state: AgentState,
+        /// The first few, whose avatars stand side by side.
+        avatars: Vec<Avatar>,
+        /// How many more there are.
+        more: usize,
+        /// When the first started, while some work.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        started_at: Option<f64>,
+        /// From the first one's start to the last one's end, once all have ended.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
+        open: bool,
+    },
     /// The thread's server was unlinked from the account: the thread is a read-only copy that can
     /// only go on on another server. The last row, in place of the composer, which says why.
     Removed {
@@ -171,6 +196,83 @@ pub enum RowKind {
         /// How it waits: queued or held.
         status: &'static str,
     },
+}
+
+/// An agent as its row shows it: its avatar, its title and word, what it does or said, and what
+/// it runs on.
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct AgentRow {
+    pub title: String,
+    /// The part it was started for: "Explore", "reviewer".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    pub state: AgentState,
+    /// "Working", "Needs approval", "Finished".
+    pub label: String,
+    /// The label is shown beside the title, as what the user is to look at.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub flagged: bool,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub detail: String,
+    /// Whose logo it shows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<Agent>,
+    /// The model's short name and the account, when they are known: "Opus 5.5 · work".
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub runs_on: String,
+    pub started_at: f64,
+    /// How long it worked, once it has ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// When the thread's agent was told, for what it was told.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<f64>,
+    /// The thread it works in, which the row opens. Without one, the row opens what it did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread: Option<String>,
+    /// Where it is in the card of an open group.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub card: Option<CardPlace>,
+}
+
+impl AgentRow {
+    fn new(view: AgentView, at: Option<f64>) -> Self {
+        let runs_on = [view.model.clone(), view.account.clone()].into_iter().flatten().collect::<Vec<_>>().join(" · ");
+        Self {
+            title: view.title,
+            role: view.kind,
+            state: view.state,
+            label: view.label,
+            flagged: view.state.flagged() || at.is_some(),
+            detail: view.detail,
+            agent: view.agent,
+            runs_on,
+            started_at: view.started_at,
+            duration_ms: view.duration_ms,
+            at,
+            thread: view.thread_id,
+            card: None,
+        }
+    }
+
+    /// When it ended, as far as that is known.
+    fn ended_at(&self) -> Option<f64> {
+        self.duration_ms.map(|duration| self.started_at + duration as f64 / 1000.0)
+    }
+}
+
+#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum CardPlace {
+    First,
+    Middle,
+    Last,
+}
+
+#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
+pub struct Avatar {
+    pub agent: Option<Agent>,
+    pub state: AgentState,
 }
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
@@ -266,12 +368,6 @@ pub struct Tool {
     /// When it started, while it runs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<f64>,
-    /// It started an agent, whose transcript is named by the row's item.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub agent: bool,
-    /// What that agent is doing now.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub progress: Option<String>,
 }
 
 /// A tool call the turn waits with until the user has answered it.
@@ -609,6 +705,8 @@ fn attached(paths: &[String], media: &[Media]) -> Vec<Attached> {
 
 /// The queued messages as rows, each saying how it waits.
 fn queued_rows(queued: &[Queued]) -> Vec<Row> {
+    // What the agent is told of the agents it started shows once it is told.
+    let queued = queued.iter().filter(|message| message.notice.is_none());
     let status = |message: &Queued| if message.held { "Held" } else { "Queued" };
     let row = |message: &Queued| Row {
         id: format!("queued/{}", message.id),
@@ -622,7 +720,7 @@ fn queued_rows(queued: &[Queued]) -> Vec<Row> {
         },
         after: None,
     };
-    queued.iter().map(row).collect()
+    queued.map(row).collect()
 }
 
 /// The rows to show for the items: each turn's, one turn after the other.
@@ -643,7 +741,7 @@ fn present<'a>(
             continue;
         }
         let next_turn = (start + 1..items.len()).find(|&index| {
-            matches!(items[index].kind, ItemKind::User { .. } | ItemKind::Handoff { .. })
+            matches!(items[index].kind, ItemKind::User { .. } | ItemKind::Notice { .. } | ItemKind::Handoff { .. })
                 || is_turn_end(&items[index - 1])
         });
         let end = next_turn.unwrap_or(items.len());
@@ -703,7 +801,7 @@ fn present_turn<'a>(
     opened: &HashSet<String>,
     shown: &mut Vec<Cow<'a, Row>>,
 ) {
-    let work_start = usize::from(matches!(items[0].kind, ItemKind::User { .. }));
+    let work_start = usize::from(matches!(items[0].kind, ItemKind::User { .. } | ItemKind::Notice { .. }));
     shown.extend(rendered[..work_start].iter().flatten().map(Cow::Borrowed));
 
     let ended = items.iter().rev().find_map(|item| match &item.kind {
@@ -732,12 +830,21 @@ fn present_turn<'a>(
         let open = opened.contains(&id);
         let kind = RowKind::Fold { duration_ms, stopped, open };
         shown.push(Cow::Owned(Row { id, item: items[work_start].id.clone(), nested: false, kind, after: None }));
+        // The agents it started stay in view, which the user goes on to.
         if !open {
+            let started: Vec<usize> = (work_start..shown_from).filter(|&at| starts_agent(&items[at])).collect();
+            present_agents(&started, rendered, opened, shown);
             index = shown_from;
         }
     }
 
     while index < items.len() {
+        if starts_agent(&items[index]) {
+            let end = (index..items.len()).find(|&next| !starts_agent(&items[next])).unwrap_or(items.len());
+            present_agents(&(index..end).collect::<Vec<_>>(), rendered, opened, shown);
+            index = end;
+            continue;
+        }
         if !is_work(&items[index]) {
             shown.extend(changes_row(&items[index], opened).map(Cow::Owned));
             shown.extend(rendered[index].iter().map(|row| match &row.kind {
@@ -857,9 +964,80 @@ fn shared_folder(files: &[&ChangedFile]) -> String {
     shared
 }
 
+fn starts_agent(item: &Item) -> bool {
+    matches!(&item.kind, ItemKind::Tool { call } if agents::starts_agent(call))
+}
+
+/// Agents started one after the other: a row for one, and for more a row of them all, which
+/// opens into a card of their rows.
+fn present_agents<'a>(
+    indices: &[usize],
+    rendered: &'a [Vec<Row>],
+    opened: &HashSet<String>,
+    shown: &mut Vec<Cow<'a, Row>>,
+) {
+    let rows: Vec<&'a Row> = indices.iter().flat_map(|&index| &rendered[index]).collect();
+    if rows.len() < 2 {
+        shown.extend(rows.into_iter().map(Cow::Borrowed));
+        return;
+    }
+    let agents: Vec<&AgentRow> = rows
+        .iter()
+        .filter_map(|row| match &row.kind {
+            RowKind::Agent { agent } => Some(agent),
+            _ => None,
+        })
+        .collect();
+    let id = format!("{}/agents", rows[0].item);
+    let open = opened.contains(&id);
+    let kind = agents_row(&agents, open);
+    shown.push(Cow::Owned(Row { id, item: rows[0].item.clone(), nested: false, kind, after: None }));
+    if !open {
+        return;
+    }
+    let last = rows.len() - 1;
+    for (place, row) in rows.into_iter().enumerate() {
+        let mut row = Row { nested: true, ..row.clone() };
+        if let RowKind::Agent { agent } = &mut row.kind {
+            agent.card = Some(match place {
+                0 => CardPlace::First,
+                _ if place == last => CardPlace::Last,
+                _ => CardPlace::Middle,
+            });
+        }
+        shown.push(Cow::Owned(row));
+    }
+}
+
+fn agents_row(agents: &[&AgentRow], open: bool) -> RowKind {
+    use AgentState::{Done, Failed, Stopped, Waiting, Working};
+    let count = |state: AgentState| agents.iter().filter(|agent| agent.state == state).count();
+    let words = [(Waiting, "waiting"), (Working, "working"), (Done, "done"), (Failed, "failed"), (Stopped, "stopped")];
+    let summary: Vec<String> = words
+        .iter()
+        .filter(|(state, _)| count(*state) > 0)
+        .map(|(state, word)| format!("{} {word}", count(*state)))
+        .collect();
+    let state = [Waiting, Working, Failed, Stopped].into_iter().find(|state| count(*state) > 0).unwrap_or(Done);
+    let working = count(Working) + count(Waiting) > 0;
+    let first = agents.iter().map(|agent| agent.started_at).fold(f64::INFINITY, f64::min);
+    let ended = agents.iter().map(|agent| agent.ended_at()).collect::<Option<Vec<f64>>>();
+    let last = ended.map(|ends| ends.into_iter().fold(first, f64::max));
+    RowKind::Agents {
+        title: format!("{} agents", agents.len()),
+        summary: summary.join(" · "),
+        state,
+        avatars: agents.iter().take(3).map(|agent| Avatar { agent: agent.agent, state: agent.state }).collect(),
+        more: agents.len().saturating_sub(3),
+        started_at: working.then_some(first),
+        duration_ms: last.filter(|_| !working).map(|last| ((last - first).max(0.0) * 1000.0) as u64),
+        open,
+    }
+}
+
 fn is_work(item: &Item) -> bool {
     match &item.kind {
-        ItemKind::Tool { call } => call.name != PLAN_TOOL,
+        ItemKind::Tool { call } => call.name != PLAN_TOOL && !agents::starts_agent(call),
         ItemKind::Thinking { .. } => true,
         _ => false,
     }
@@ -906,9 +1084,7 @@ fn group(run: &[Vec<Row>], live: bool, open: bool) -> RowKind {
     let started_at = tools.iter().rev().find_map(|tool| tool.started_at);
     let failed = tools.iter().any(|tool| tool.status == ToolStatus::Failed);
     let one_icon = tools.first().map(|tool| tool.icon).filter(|icon| tools.iter().all(|tool| tool.icon == *icon));
-    let agents = tools.iter().filter(|tool| tool.agent && tool.started_at.is_some()).count();
     let (title, target, icon) = match (live, run.last().and_then(|rows| rows.first()).map(|row| &row.kind)) {
-        _ if agents > 1 => (format!("Running {agents} agents"), String::new(), "agent"),
         (true, Some(RowKind::Tool { tool })) => (tool.verb.clone(), tool.target.clone(), tool.icon),
         _ => (summary(&tools), String::new(), one_icon.unwrap_or("tool")),
     };
@@ -987,7 +1163,10 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
             let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
             render_markdown(item, input["plan"].as_str().unwrap_or_default(), streaming)
         }
-        ItemKind::Tool { call } => vec![row(0, RowKind::Tool { tool: describe(call, cwd, item.created_at) })],
+        ItemKind::Tool { call } => match agents::starting(item, call) {
+            Some(view) => vec![row(0, RowKind::Agent { agent: AgentRow::new(view, None) })],
+            None => vec![row(0, RowKind::Tool { tool: describe(call, cwd, item.created_at) })],
+        },
         ItemKind::Error { message } => vec![row(0, RowKind::Error { message: message.clone() })],
         ItemKind::TurnEnd { summary } => vec![row(
             0,
@@ -1002,6 +1181,10 @@ fn render(item: &Item, cwd: &str, streaming: Option<&mut HashMap<String, Increme
         )],
         ItemKind::Handoff { from, to } => {
             vec![row(0, RowKind::Handoff { from: HandoffLabel::new(from), to: HandoffLabel::new(to) })]
+        }
+        ItemKind::Notice { notice, .. } => {
+            let view = agents::noticed(item, notice);
+            vec![row(0, RowKind::Agent { agent: AgentRow::new(view, Some(item.created_at)) })]
         }
     }
 }
@@ -1171,6 +1354,26 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
         "Task" | "Agent" => {
             ("agent", verb("Running an agent:", "Ran an agent:"), text("description"), text("prompt"), String::new())
         }
+        "mcp__motile__list_accounts" => {
+            ("tool", verb("Listing", "Listed"), "the accounts".to_string(), String::new(), String::new())
+        }
+        "mcp__motile__agent_status" => {
+            let waits = input["wait"].as_bool().unwrap_or(false);
+            let (doing, did) = if waits { ("Waiting for", "Waited for") } else { ("Checking on", "Checked on") };
+            let count = input["ids"].as_array().map_or(0, Vec::len);
+            let target = if count == 1 { "an agent".to_string() } else { format!("{count} agents") };
+            ("tool", verb(doing, did), target, String::new(), String::new())
+        }
+        "mcp__motile__message_agent" => {
+            ("tool", verb("Messaging", "Messaged"), "an agent".to_string(), text("text"), String::new())
+        }
+        "mcp__motile__answer_agent" => {
+            let answers = serde_json::to_string_pretty(&input["answers"]).unwrap_or_default();
+            ("question", verb("Answering", "Answered"), "an agent".to_string(), answers, "json".to_string())
+        }
+        "mcp__motile__stop_agent" => {
+            ("tool", verb("Stopping", "Stopped"), "an agent".to_string(), String::new(), String::new())
+        }
         "Workflow" => {
             let name = workflow.map_or_else(|| text("name"), |workflow| workflow_name(call, workflow));
             let arguments = serde_json::to_string_pretty(&input["args"]).unwrap_or_default();
@@ -1223,11 +1426,6 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
         input_language,
         output: call.output.as_deref().filter(|output| !output.trim().is_empty()).map(cap),
         started_at: running.then_some(at),
-        agent: call.agent.is_some(),
-        progress: match workflow {
-            Some(workflow) => running.then(|| workflow_progress(workflow, true)),
-            None => call.agent.as_ref().filter(|_| running).and_then(|agent| agent.progress.clone()),
-        },
     }
 }
 
@@ -1558,6 +1756,13 @@ mod tests {
             RowKind::Fold { open, .. } => format!("fold{}", if *open { " open" } else { "" }),
             RowKind::TurnEnd { folded, .. } => format!("end{}", if *folded { " folded" } else { "" }),
             RowKind::Handoff { from, to } => format!("{} -> {}", from.label, to.label),
+            RowKind::Agent { agent } => {
+                let card = agent.card.map(|card| format!(" {card:?}")).unwrap_or_default();
+                format!("({}: {}{card})", agent.title, agent.label)
+            }
+            RowKind::Agents { title, summary, open, .. } => {
+                format!("({title}: {summary}){}", if *open { " open" } else { "" })
+            }
             _ => "other".to_string(),
         });
         rows.collect()
@@ -1615,25 +1820,81 @@ mod tests {
             tool_uses: None,
             duration_ms: None,
             workflow: None,
+            runs_on: None,
+            waits: None,
+            stopped: false,
         });
         item
     }
 
+    fn agent_row(transcript: &Transcript, index: usize) -> AgentRow {
+        let RowKind::Agent { agent } = &transcript.rows()[index].kind else { panic!("not an agent's row") };
+        agent.clone()
+    }
+
     #[test]
-    fn an_agent_that_goes_on_after_its_call_returned_still_runs_and_says_what_it_does() {
+    fn agents_started_one_after_the_other_are_one_row_that_opens_into_a_card_of_them() {
         let mut transcript = Transcript::new("");
         transcript.load(vec![agent_call("t1", 0, "Review", Some("Reading a.rs"), ToolStatus::Running)]);
-        let RowKind::Tool { tool } = &transcript.rows()[0].kind else { panic!() };
-        assert_eq!((tool.verb.as_str(), tool.status, tool.agent), ("Running an agent:", ToolStatus::Running, true));
-        assert_eq!((tool.progress.as_deref(), tool.started_at), (Some("Reading a.rs"), Some(0.0)));
+        let review = agent_row(&transcript, 0);
+        assert_eq!(
+            (review.state, review.label.as_str(), review.detail.as_str()),
+            (AgentState::Working, "Working", "Reading a.rs")
+        );
+        assert!(!review.flagged);
 
         transcript.upsert(agent_call("t2", 1, "Test", None, ToolStatus::Running), true);
-        assert_eq!(outline(&transcript), ["[Running 2 agents]"]);
-        transcript.upsert(agent_call("t1", 0, "Review", Some("Reading a.rs"), ToolStatus::Succeeded), true);
-        transcript.upsert(agent_call("t2", 1, "Test", None, ToolStatus::Succeeded), true);
-        assert_eq!(outline(&transcript), ["[Ran an agent: Test]"]);
-        let RowKind::Group { running, started_at, .. } = &transcript.rows()[0].kind else { panic!() };
-        assert_eq!((*running, *started_at), (false, None));
+        assert_eq!(outline(&transcript), ["(2 agents: 2 working)"]);
+        let RowKind::Agents { started_at, avatars, .. } = &transcript.rows()[0].kind else { panic!() };
+        assert_eq!((*started_at, avatars.len()), (Some(0.0), 2));
+        transcript.toggle("t1/agents");
+        assert_eq!(
+            outline(&transcript),
+            ["(2 agents: 2 working) open", "(Review: Working First)", "(Test: Working Last)"]
+        );
+
+        let mut stopped = agent_call("t2", 1, "Test", None, ToolStatus::Failed);
+        let ItemKind::Tool { call } = &mut stopped.kind else { unreachable!() };
+        call.agent.as_mut().unwrap().stopped = true;
+        transcript.upsert(agent_call("t1", 0, "Review", None, ToolStatus::Succeeded), true);
+        transcript.upsert(stopped, true);
+        assert_eq!(outline(&transcript)[0], "(2 agents: 1 done · 1 stopped) open");
+        assert!(agent_row(&transcript, 2).flagged, "a stopped agent says so beside its title");
+    }
+
+    #[test]
+    fn an_agent_says_what_it_waits_for_and_what_it_runs_on() {
+        let mut item = agent_call("t1", 0, "Run greet.py", None, ToolStatus::Running);
+        let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+        let agent = call.agent.as_mut().unwrap();
+        agent.waits = Some(Ask::Approval);
+        agent.runs_on = Some(Box::new(motile_protocol::wire::RunsOn {
+            agent: Agent::Codex,
+            model: Some("GPT-6.1-Sol".into()),
+            account: Some("work".into()),
+            thread_id: Some("c".into()),
+        }));
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![item]);
+        let row = agent_row(&transcript, 0);
+        assert_eq!((row.state, row.label.as_str(), row.flagged), (AgentState::Waiting, "Needs approval", true));
+        assert_eq!(
+            (row.agent, row.runs_on.as_str(), row.thread.as_deref()),
+            (Some(Agent::Codex), "6.1-Sol · work", Some("c"))
+        );
+    }
+
+    #[test]
+    fn the_agents_a_finished_turn_started_stay_in_view_past_its_fold() {
+        let mut transcript = Transcript::new("");
+        transcript.load(vec![
+            item("u", 0, ItemKind::User { text: "Go".into(), attachments: Vec::new(), skills: Vec::new() }),
+            call("t0", 1, "Read", serde_json::json!({"file_path": "a.rs"}), ToolStatus::Succeeded),
+            agent_call("t1", 2, "Review", None, ToolStatus::Running),
+            assistant("a", 3, "It works on it."),
+            item("e", 4, ItemKind::TurnEnd { summary: Default::default() }),
+        ]);
+        assert_eq!(outline(&transcript), ["user", "fold", "(Review: Working)", "It works on it.", "end folded"]);
     }
 
     #[test]
@@ -1660,9 +1921,9 @@ mod tests {
         call.agent.as_mut().unwrap().workflow = Some(workflow);
         let mut transcript = Transcript::new("");
         transcript.load(vec![item]);
-        let RowKind::Tool { tool } = &transcript.rows()[0].kind else { panic!() };
-        assert_eq!((tool.verb.as_str(), tool.target.as_str(), tool.agent), ("Running a workflow:", "colours", true));
-        assert_eq!(tool.progress.as_deref(), Some("Ask · 1 of 2 agents done"));
+        let row = agent_row(&transcript, 0);
+        assert_eq!((row.title.as_str(), row.role.as_deref()), ("colours", Some("Workflow")));
+        assert_eq!(row.detail, "Ask · 1 of 2 agents done");
     }
 
     #[test]
@@ -1863,6 +2124,7 @@ mod tests {
             skills: Vec::new(),
             held,
             sending: false,
+            notice: None,
         };
         let statuses = |transcript: &Transcript| {
             let rows = transcript.rows().iter().filter_map(|row| match &row.kind {
@@ -1903,6 +2165,7 @@ mod tests {
             skills: Vec::new(),
             held: false,
             sending: false,
+            notice: None,
         };
         let mut transcript = Transcript::new("");
         transcript.load(vec![assistant("a", 0, "Working on it.")]);

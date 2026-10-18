@@ -11,6 +11,10 @@ import UIKit
 ///     type <text>                       writes in the composer
 ///     send                              sends what is written
 ///     panel diff|files|agents|close     opens a tab of the panel, or closes the panel
+///     agent <n>                         opens the nth agent of the agents tab, counting from 0
+///     child                             opens the first agent's thread that waits for the user
+///     parent                            goes back from an agent to the thread that started it
+///     group                             opens or closes the first row of agents started together
 ///     file <path>                       opens a file in the panel
 ///     change <path>                     opens what the latest turn changed in a file
 ///     sheet commands|projects|settings|usage|server|thread|close
@@ -67,6 +71,22 @@ enum DemoDriver {
         case "type": store.draft = rest
         case "send": store.send()
         case "stop": store.stop()
+        case "agent":
+            guard let index = Int(rest), store.agents.indices.contains(index) else { return }
+            let agent = store.agents[index]
+            if let thread = agent.threadID { store.openStartedThread(thread) } else { store.rightPanel.showAgent(agent.id) }
+        case "child":
+            guard let waiting = store.selectedThread?.children?.waiting.first else { return }
+            store.openStartedThread(waiting.threadID)
+        case "group":
+            guard let threadID = store.transcript.threadID,
+                  let row = store.transcript.rows.first(where: { if case .agents = $0.kind { true } else { false } })
+            else { return }
+            store.core.send("toggle_row", ["thread_id": threadID, "row_id": row.id])
+        case "parent":
+            if store.shownAgent != nil { return store.rightPanel.showAgents() }
+            guard let parent = store.parentThread else { return }
+            store.openStartedThread(parent.id)
         case "panel":
             switch rest {
             case "diff": store.rightPanel.showDiff()

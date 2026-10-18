@@ -2,12 +2,69 @@
 //! own: the items whose `parent` is the tool call that started it. A workflow's is its agents,
 //! under the phases they run in.
 
-use motile_protocol::wire::{Item, ItemKind, ToolCall, ToolStatus, Workflow, WorkflowAgent};
+use motile_protocol::wire::{
+    Agent, AgentNotice, Ask, Item, ItemKind, NoticeEvent, Subagent, ToolCall, ToolStatus, Workflow, WorkflowAgent,
+};
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use super::rows::short_model_name;
+
 /// What is shown of what an agent is doing or reported, at most.
 const MAX_DETAIL_CHARS: usize = 280;
+/// The tool calls that start agents, before they have said anything of them.
+const STARTING: [&str; 4] = ["Task", "Agent", "Workflow", "mcp__motile__start_agent"];
+
+/// How an agent is doing, which its avatar's dot shows.
+#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentState {
+    Working,
+    /// It waits for the user to answer it.
+    Waiting,
+    Done,
+    Failed,
+    Stopped,
+}
+
+impl AgentState {
+    fn of(status: ToolStatus, agent: Option<&Subagent>) -> Self {
+        match status {
+            ToolStatus::Running if agent.is_some_and(|agent| agent.waits.is_some()) => Self::Waiting,
+            ToolStatus::Running => Self::Working,
+            ToolStatus::Succeeded => Self::Done,
+            ToolStatus::Failed if agent.is_some_and(|agent| agent.stopped) => Self::Stopped,
+            ToolStatus::Failed => Self::Failed,
+        }
+    }
+
+    fn of_notice(event: NoticeEvent) -> Self {
+        match event {
+            NoticeEvent::Finished => Self::Done,
+            NoticeEvent::Failed => Self::Failed,
+            NoticeEvent::Stopped => Self::Stopped,
+            NoticeEvent::Asked => Self::Waiting,
+        }
+    }
+
+    /// The word for it, "Needs approval" for what it waits for.
+    fn label(self, waits: Option<Ask>) -> &'static str {
+        match (self, waits) {
+            (Self::Working, _) => "Working",
+            (Self::Waiting, Some(Ask::Question)) => "Has a question",
+            (Self::Waiting, Some(Ask::Plan)) => "Has a plan",
+            (Self::Waiting, _) => "Needs approval",
+            (Self::Done, _) => "Done",
+            (Self::Failed, _) => "Failed",
+            (Self::Stopped, _) => "Stopped",
+        }
+    }
+
+    /// Its word is shown beside its title: the user is to look at it.
+    pub fn flagged(self) -> bool {
+        matches!(self, Self::Waiting | Self::Failed | Self::Stopped)
+    }
+}
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct AgentView {
@@ -19,6 +76,9 @@ pub struct AgentView {
     /// The kind of agent it was started as: "Explore".
     pub kind: Option<String>,
     pub status: ToolStatus,
+    pub state: AgentState,
+    /// "Working", "Needs approval", "Failed".
+    pub label: String,
     /// What it is doing now, or what it reported once it has ended, on one line.
     pub detail: String,
     /// What it was asked to do.
@@ -28,44 +88,114 @@ pub struct AgentView {
     pub duration_ms: Option<u64>,
     pub tokens: Option<u64>,
     pub tool_uses: Option<u64>,
+    /// The thread it works in, when it was started through your server: opening it opens that.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+    /// The agent it runs as, whose logo it shows, when that is known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<Agent>,
+    /// The model's short name, "Opus 5.5", or else its id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// The account's name, when its agent has more than one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
 }
 
-/// The agent the item's tool call started, if it started one.
+/// The agent the item's tool call started, once the agent has said something of it.
 pub fn view(item: &Item) -> Option<AgentView> {
     let ItemKind::Tool { call } = &item.kind else { return None };
-    let agent = call.agent.as_ref()?;
+    call.agent.as_ref()?;
+    starting(item, call)
+}
+
+/// Whether the tool call starts an agent.
+pub fn starts_agent(call: &ToolCall) -> bool {
+    call.agent.is_some() || STARTING.contains(&call.name.as_str())
+}
+
+/// The agent the tool call starts, as far as it is known.
+pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
+    if !starts_agent(call) {
+        return None;
+    }
+    let agent = call.agent.as_ref();
     let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
     let text = |key: &str| input[key].as_str().unwrap_or_default().trim().to_string();
     let prompt = text("prompt");
-    let working = agent.status == ToolStatus::Running;
-    let (title, kind, detail) = match &agent.workflow {
+    let status = agent.map_or(call.status, |agent| agent.status);
+    let working = status == ToolStatus::Running;
+    let workflow = agent.and_then(|agent| agent.workflow.as_ref());
+    let (title, kind, detail) = match workflow {
         Some(workflow) => {
             (workflow_name(call, workflow), Some("Workflow".to_string()), workflow_progress(workflow, working))
         }
         None => {
-            let named = Some(text("description")).filter(|title| !title.is_empty());
+            let named = ["description", "title", "name"].iter().map(|key| text(key)).find(|title| !title.is_empty());
             let title = named.unwrap_or_else(|| prompt.lines().next().unwrap_or("Agent").to_string());
-            let reported = agent.result.as_deref().or(call.output.as_deref());
+            let reported = agent.and_then(|agent| agent.result.as_deref()).or(call.output.as_deref());
+            let progress = agent.and_then(|agent| agent.progress.as_deref());
             let detail = match working {
-                true => agent.progress.as_deref().or(reported),
-                false => reported.or(agent.progress.as_deref()),
+                true => progress.or(reported),
+                false => reported.or(progress),
             };
-            (title, agent.kind.clone(), detail.unwrap_or_default().to_string())
+            (title, agent.and_then(|agent| agent.kind.clone()), detail.unwrap_or_default().to_string())
         }
     };
+    let state = AgentState::of(status, agent);
+    let runs_on = agent.and_then(|agent| agent.runs_on.as_deref());
     Some(AgentView {
         id: item.id.clone(),
         parent: item.parent.clone(),
         title,
         kind,
-        status: agent.status,
+        status,
+        state,
+        label: state.label(agent.and_then(|agent| agent.waits)).to_string(),
         detail: one_line(&detail),
         prompt,
         started_at: item.created_at,
-        duration_ms: agent.duration_ms.filter(|_| !working),
-        tokens: agent.tokens,
-        tool_uses: agent.tool_uses,
+        duration_ms: agent.and_then(|agent| agent.duration_ms).filter(|_| !working),
+        tokens: agent.and_then(|agent| agent.tokens),
+        tool_uses: agent.and_then(|agent| agent.tool_uses),
+        thread_id: runs_on.and_then(|on| on.thread_id.clone()),
+        agent: runs_on.map(|on| on.agent),
+        model: runs_on
+            .and_then(|on| on.model.as_deref())
+            .map(|model| short_model_name(model).unwrap_or(model).to_string()),
+        account: runs_on.and_then(|on| on.account.clone()),
     })
+}
+
+/// What the thread's agent was told of an agent it started, as that agent: what happened to it,
+/// and what it said.
+pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
+    let state = AgentState::of_notice(notice.event);
+    let label = match notice.event {
+        NoticeEvent::Finished => "Finished",
+        NoticeEvent::Failed => "Failed",
+        NoticeEvent::Stopped => "Stopped",
+        NoticeEvent::Asked => "Asks a question",
+    };
+    AgentView {
+        id: item.id.clone(),
+        parent: None,
+        title: notice.title.clone(),
+        kind: None,
+        status: if state == AgentState::Done { ToolStatus::Succeeded } else { ToolStatus::Failed },
+        state,
+        label: label.to_string(),
+        detail: notice.summary.as_deref().map(one_line).unwrap_or_default(),
+        prompt: String::new(),
+        started_at: item.created_at,
+        duration_ms: None,
+        tokens: None,
+        tool_uses: None,
+        thread_id: Some(notice.thread_id.clone()),
+        agent: Some(notice.agent),
+        model: None,
+        account: None,
+    }
 }
 
 /// The workflow's name as the call gave it, or what its script says it does.
@@ -153,8 +283,10 @@ pub fn workflow_items(item: &Item) -> Vec<Item> {
     items
 }
 
+/// The text on one line, without the marks of Markdown's emphasis and code.
 fn one_line(text: &str) -> String {
-    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let plain = text.replace("**", "").replace('`', "");
+    let line = plain.split_whitespace().collect::<Vec<_>>().join(" ");
     if line.chars().count() <= MAX_DETAIL_CHARS {
         return line;
     }
@@ -178,6 +310,9 @@ mod tests {
             tool_uses: Some(3),
             duration_ms: Some(30_000),
             workflow: None,
+            runs_on: None,
+            waits: None,
+            stopped: false,
         };
         let call = ToolCall {
             id: "t".into(),

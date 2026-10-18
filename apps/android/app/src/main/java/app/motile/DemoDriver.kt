@@ -17,6 +17,7 @@ import app.motile.core.skillKey
 import app.motile.layout.LocalDrawerHolder
 import app.motile.panel.PanelTab
 import app.motile.platform.Platform
+import app.motile.transcript.RowModel
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -31,6 +32,10 @@ import java.util.concurrent.Executors
  *     type <text>                       writes in the composer
  *     send                              sends what is written
  *     panel diff|files|agents|close     opens a tab of the panel, or closes the panel
+ *     agent <n>                         opens the nth agent of the agents tab, counting from 0
+ *     child                             opens the first agent's thread that waits for the user
+ *     parent                            goes back from an agent to the thread that started it
+ *     group                             opens or closes the first row of agents started together
  *     file <path>                       opens a file in the panel
  *     change <path>                     opens what the latest turn changed in a file
  *     sheet commands|projects|settings|usage|server|thread|close
@@ -86,6 +91,25 @@ object DemoDriver {
             "type" -> store.draft = rest
             "send" -> store.send()
             "stop" -> store.stop()
+            "agent" -> {
+                val agent = rest.toIntOrNull()?.let { store.agents.getOrNull(it) } ?: return
+                val thread = agent.threadID
+                if (thread != null) store.openStartedThread(thread) else store.rightPanel.showAgent(agent.id)
+            }
+            "child" -> {
+                val waiting = store.selectedThread?.children?.waiting?.firstOrNull() ?: return
+                store.openStartedThread(waiting.threadID)
+            }
+            "parent" -> {
+                if (store.shownAgent != null) return store.rightPanel.showAgents()
+                val parent = store.parentThread ?: return
+                store.openStartedThread(parent.id)
+            }
+            "group" -> {
+                val threadID = store.transcript.threadID ?: return
+                val row = store.transcript.rows.firstOrNull { it.kind is RowModel.Kind.Agents } ?: return
+                store.core.send("toggle_row", mapOf("thread_id" to threadID, "row_id" to row.id))
+            }
             "panel" -> when (rest) {
                 "diff" -> store.rightPanel.showDiff()
                 "files" -> store.rightPanel.open(PanelTab.Files)

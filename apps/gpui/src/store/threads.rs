@@ -10,6 +10,7 @@ use motile_protocol::wire::{
 
 use super::{Continuation, PanelPage, Selection, SendingDraft, Store, ThreadDraft, UndoNotice};
 use crate::models::*;
+use crate::panel::state::PanelTab;
 use crate::transcript::model::RowModel;
 
 impl Store {
@@ -413,9 +414,30 @@ impl Store {
     }
 
     pub fn stop_thread(&mut self) {
-        let Some(thread) = self.changeable_thread() else { return };
+        let Some(thread) = self.selected_thread() else { return };
+        let id = thread.id.clone();
+        self.stop_thread_id(&id);
+    }
+
+    /// Stops the thread's agent, and the agents it started.
+    pub fn stop_thread_id(&mut self, id: &str) {
+        let Some(thread) = self.threads.get(id).filter(|thread| !self.on_removed_server(thread)) else { return };
         let (server_id, thread_id) = (thread.server_id.clone(), thread.id.clone());
         self.request(&server_id, Request::Stop { thread_id });
+    }
+
+    /// Opens the thread an agent the open thread's agent started works in, or the one whose agent
+    /// started it.
+    pub fn open_started_thread(&mut self, id: &str, cx: &mut Context<Self>) {
+        if !self.threads.contains_key(id) {
+            return;
+        }
+        // The agents stay in view on the way between a thread and the agents it started.
+        let shows_agents = self.right_panel.is_open && self.panel_tabs().active == Some(PanelTab::Agents);
+        self.select(Selection::Thread(id.to_string()), cx);
+        if shows_agents {
+            self.open_tab(PanelTab::Agents);
+        }
     }
 
     /// Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by

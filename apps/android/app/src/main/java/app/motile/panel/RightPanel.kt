@@ -271,7 +271,7 @@ class RightPanel {
         private set
     /** The turns of the open thread that changed files, the first one first. */
     var turns by mutableStateOf(emptyList<TurnChange>())
-    /** The agent whose transcript the agents tab shows. Without one it lists them. */
+    /** The agent whose transcript shows in the thread's place, read only. */
     var shownAgent by mutableStateOf<String?>(null)
         private set
 
@@ -414,7 +414,7 @@ class RightPanel {
 
     // Agents
 
-    /** Opens the agents tab on what the agent did that the tool call started. */
+    /** Shows what the agent did that the tool call started in the thread's place, read only. On a phone the panel it was opened from goes away. */
     fun showAgent(id: String) {
         val store = store ?: return
         val threadID = store.transcript.threadID ?: return
@@ -422,10 +422,10 @@ class RightPanel {
         store.agentTranscript.begin(threadID, live = store.transcript.live)
         agentsChanged()
         store.core.send("open_agent", json("thread_id" to threadID, "agent_id" to id))
-        open(PanelTab.Agents)
+        if (Platform.panelCoversThread) isOpen = false
     }
 
-    /** Goes back to the list of agents. */
+    /** Goes back from the agent shown to the thread. */
     fun showAgents() {
         val store = store ?: return
         if (shownAgent == null) return
