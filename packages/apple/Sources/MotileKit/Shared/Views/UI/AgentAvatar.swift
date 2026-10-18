@@ -4,7 +4,7 @@ extension AgentState {
     var platformColor: PlatformColor {
         switch self {
         case .working: Theme.process
-        case .waiting: Theme.warning
+        case .waiting, .limited: Theme.warning
         case .done: Theme.success
         case .failed: Theme.destructive
         case .stopped: Theme.mutedStrongerForeground
@@ -15,7 +15,7 @@ extension AgentState {
 }
 
 /// An agent's logo in a ring, with a dot on its corner in the colour of how it is doing, cut out
-/// of the ring as the menu button's dot is.
+/// of the ring.
 struct AgentAvatar: View {
     let agent: Agent?
     var state: AgentState?
@@ -107,8 +107,8 @@ final class AgentAvatarView: FlippedView {
 
 enum AgentAvatarDrawing {
     static let side = scaled(24)
-    /// The dot is the menu button's: as large on every system, and cut out of what it lies on.
-    static let dot: CGFloat = 8
+    /// The dot is as large on every system as the composer strips' are, and cut out of what it lies on.
+    static let dot: CGFloat = 6
     static let cut: CGFloat = 2
     private static let logos: [Agent: PlatformImage] = Dictionary(uniqueKeysWithValues: Agent.allCases.compactMap { agent in
         agent.logo.map { (agent, ImageFiles.tinted(ImageFiles.sized($0, 64), agent.platformColor)) }

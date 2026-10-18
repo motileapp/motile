@@ -3810,6 +3810,36 @@ async fn agents_started_in_the_background_wake_the_agent_that_started_them() {
 }
 
 #[tokio::test]
+async fn an_agent_hears_once_that_an_agent_it_started_reached_its_usage_limit() {
+    let (harness, connection, _list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let parent = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &parent).await;
+    let started = harness.recorded_requests("thread/start");
+    let server = &started.last().unwrap()["config"]["mcp_servers"]["motile"];
+    let url = server["url"].as_str().unwrap();
+    let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
+
+    // A call that waits for it hears of the limit at once, with when the limit resets.
+    let start = json!({"prompt": "hit the limit", "title": "Limited", "agent": "claude", "wait": true});
+    let (said, failed) = call_tool(url, token, "start_agent", start).await;
+    let state: serde_json::Value = serde_json::from_str(&said).unwrap();
+    assert!(!failed, "{said}");
+    assert_eq!(state["status"], "waiting_for_usage_limit", "{said}");
+    assert!(state["limit_resets"].as_str().is_some_and(|at| at.ends_with("UTC")), "{said}");
+
+    // One that nothing waits for is told to its agent.
+    let start = json!({"prompt": "hit the limit", "title": "Limited too", "agent": "claude"});
+    let (said, failed) = call_tool(url, token, "start_agent", start).await;
+    assert!(!failed, "{said}");
+    use motile_protocol::wire::NoticeEvent::Limited;
+    let told = |transcript: &Transcript| notices(transcript).contains(&("Limited too".to_string(), Limited));
+    let woken = transcript_once(&connection, &parent, told).await;
+    let limits = notices(&woken).into_iter().filter(|(_, event)| *event == Limited).count();
+    assert_eq!(limits, 1, "{:?}", notices(&woken));
+}
+
+#[tokio::test]
 async fn an_agent_answers_the_question_an_agent_it_started_asks() {
     let (harness, connection, _list) = with_children().await;
     let new_thread = full_access(&harness, &connection, Agent::Claude).await;

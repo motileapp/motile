@@ -32,7 +32,7 @@ import kotlin.math.roundToInt
 
 fun AgentState.color(palette: Palette): Color = when (this) {
     AgentState.Working -> palette.process
-    AgentState.Waiting -> palette.warning
+    AgentState.Waiting, AgentState.Limited -> palette.warning
     AgentState.Done -> palette.success
     AgentState.Failed -> palette.destructive
     AgentState.Stopped -> palette.mutedStrongerForeground
@@ -43,14 +43,14 @@ val AgentState.color: Color
 
 object AgentAvatar {
     val side = scaled(24f).dp
-    /** The dot is the menu button's: as large on every system, and cut out of what it lies on. */
-    val dot = 8.dp
+    /** The dot is as large on every system as the composer strips' are, and cut out of what it lies on. */
+    val dot = 6.dp
     val cut = 2.dp
 }
 
 /**
  * An agent's logo in a ring, with a dot on its corner in the colour of how it is doing, cut out of
- * the ring as the menu button's dot is. One `ringed` lies over another, from which a ring of
+ * the ring. One `ringed` lies over another, from which a ring of
  * `ground`, the colour of what it lies on, sets it apart.
  */
 @Composable

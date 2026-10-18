@@ -22,6 +22,8 @@ pub enum AgentState {
     Working,
     /// It waits for the user to answer it.
     Waiting,
+    /// It reached its account's usage limit, and waits for the limit to reset.
+    Limited,
     Done,
     Failed,
     Stopped,
@@ -31,6 +33,7 @@ impl AgentState {
     fn of(status: ToolStatus, agent: Option<&Subagent>) -> Self {
         match status {
             ToolStatus::Running if agent.is_some_and(|agent| agent.waits.is_some()) => Self::Waiting,
+            ToolStatus::Running if agent.is_some_and(|agent| agent.limited) => Self::Limited,
             ToolStatus::Running => Self::Working,
             ToolStatus::Succeeded => Self::Done,
             ToolStatus::Failed if agent.is_some_and(|agent| agent.stopped) => Self::Stopped,
@@ -44,6 +47,7 @@ impl AgentState {
             NoticeEvent::Failed => Self::Failed,
             NoticeEvent::Stopped => Self::Stopped,
             NoticeEvent::Asked => Self::Waiting,
+            NoticeEvent::Limited => Self::Limited,
         }
     }
 
@@ -54,6 +58,7 @@ impl AgentState {
             (Self::Waiting, Some(Ask::Question)) => "Has a question",
             (Self::Waiting, Some(Ask::Plan)) => "Has a plan",
             (Self::Waiting, _) => "Needs approval",
+            (Self::Limited, _) => "Usage limit",
             (Self::Done, _) => "Done",
             (Self::Failed, _) => "Failed",
             (Self::Stopped, _) => "Stopped",
@@ -62,7 +67,7 @@ impl AgentState {
 
     /// Its word is shown beside its title: the user is to look at it.
     pub fn flagged(self) -> bool {
-        matches!(self, Self::Waiting | Self::Failed | Self::Stopped)
+        matches!(self, Self::Waiting | Self::Limited | Self::Failed | Self::Stopped)
     }
 }
 
@@ -181,13 +186,18 @@ pub fn noticed(item: &Item, notice: &AgentNotice) -> AgentView {
         NoticeEvent::Failed => "Failed",
         NoticeEvent::Stopped => "Stopped",
         NoticeEvent::Asked => "Asks a question",
+        NoticeEvent::Limited => "Reached its usage limit",
     };
     AgentView {
         id: item.id.clone(),
         parent: None,
         title: notice.title.clone(),
         kind: None,
-        status: if state == AgentState::Done { ToolStatus::Succeeded } else { ToolStatus::Failed },
+        status: match state {
+            AgentState::Done => ToolStatus::Succeeded,
+            AgentState::Waiting | AgentState::Limited => ToolStatus::Running,
+            _ => ToolStatus::Failed,
+        },
         state,
         label: label.to_string(),
         detail: notice.summary.as_deref().map(one_line).unwrap_or_default(),
@@ -318,6 +328,7 @@ mod tests {
             runs_on: None,
             waits: None,
             stopped: false,
+            limited: false,
         };
         let call = ToolCall {
             id: "t".into(),

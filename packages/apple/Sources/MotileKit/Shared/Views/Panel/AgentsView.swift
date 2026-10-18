@@ -56,7 +56,7 @@ struct AgentsSurface: View {
     /// in its state's colour.
     static func summary(of agents: [AgentInfo]) -> Text {
         guard !agents.isEmpty else { return Text(verbatim: "No agents") }
-        let words: [(AgentState, String)] = [(.waiting, "waiting"), (.working, "working"), (.done, "done"), (.failed, "failed"), (.stopped, "stopped")]
+        let words: [(AgentState, String)] = [(.waiting, "waiting"), (.working, "working"), (.limited, "limited"), (.done, "done"), (.failed, "failed"), (.stopped, "stopped")]
         let counts = words.compactMap { state, word -> Text? in
             let count = agents.count { $0.state == state }
             return count > 0 ? Text(verbatim: "\(count) \(word)").foregroundStyle(state.color) : nil

@@ -222,6 +222,8 @@ pub enum NoticeEvent {
     Stopped,
     /// It asks a question, which the agent that started it can answer.
     Asked,
+    /// It reached its account's usage limit, and waits for the limit to reset.
+    Limited,
 }
 
 /// One side of a handoff.
@@ -284,6 +286,9 @@ pub struct Subagent {
     /// It ended because it was stopped, not because it failed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub stopped: bool,
+    /// It reached its account's usage limit, and waits for the limit to reset.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub limited: bool,
 }
 
 /// The agent, model and account an agent runs on, and the thread it works in when it was started

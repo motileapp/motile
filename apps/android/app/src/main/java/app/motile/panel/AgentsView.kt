@@ -99,7 +99,7 @@ object AgentsSummary {
     /** "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of, each count with its state. */
     fun parts(agents: List<AgentInfo>): List<Pair<String, AgentState?>> {
         if (agents.isEmpty()) return listOf("No agents" to null)
-        val counts = listOf(AgentState.Waiting, AgentState.Working, AgentState.Done, AgentState.Failed, AgentState.Stopped)
+        val counts = listOf(AgentState.Waiting, AgentState.Working, AgentState.Limited, AgentState.Done, AgentState.Failed, AgentState.Stopped)
             .map { state -> agents.count { it.state == state } to state }
             .filter { it.first > 0 }
             .map { (count, state) -> "$count ${state.raw}" to state }

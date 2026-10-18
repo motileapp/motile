@@ -481,6 +481,7 @@ mod tests {
             runs_on: None,
             waits: None,
             stopped: false,
+            limited: false,
         };
         let call = |id: &str, agent| ToolCall {
             id: id.into(),

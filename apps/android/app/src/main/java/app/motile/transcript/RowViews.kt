@@ -424,7 +424,7 @@ private fun AgentRow(row: RowModel, content: AgentContent) {
 /** How long the agent has worked, counted while it works, or for what it was told, when it was. */
 @Composable
 private fun agentTime(content: AgentContent): String {
-    val working = content.at == null && (content.state == AgentState.Working || content.state == AgentState.Waiting)
+    val working = content.at == null && content.state in listOf(AgentState.Working, AgentState.Waiting, AgentState.Limited)
     val now = ticking(working)
     return when {
         content.at != null -> Time.stamp(content.at)

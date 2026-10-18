@@ -899,10 +899,11 @@ data class ThreadChildren(
 
 /** How an agent is doing, which the dot on its avatar shows. */
 enum class AgentState(val raw: String) {
-    Working("working"), Waiting("waiting"), Done("done"), Failed("failed"), Stopped("stopped");
+    /** `Limited`: it reached its account's usage limit, and waits for the limit to reset. */
+    Working("working"), Waiting("waiting"), Limited("limited"), Done("done"), Failed("failed"), Stopped("stopped");
 
     /** Its word is in its colour: one that is done or works says so quietly. */
-    val flagged: Boolean get() = this == Waiting || this == Failed || this == Stopped
+    val flagged: Boolean get() = this == Waiting || this == Limited || this == Failed || this == Stopped
 
     companion object {
         fun of(raw: String?) = entries.firstOrNull { it.raw == raw } ?: Done

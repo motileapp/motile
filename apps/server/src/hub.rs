@@ -241,6 +241,8 @@ struct Live {
     skills: Vec<SkillMention>,
     /// The question the agent that started the thread was told it asks.
     told_question: Option<String>,
+    /// The agent that started the thread was told it waits for its usage limit to reset.
+    told_limit: bool,
 }
 
 struct StartedTurn {
@@ -3584,6 +3586,7 @@ impl Live {
             retry: None,
             mcp_token: None,
             told_question: None,
+            told_limit: false,
             session_model: None,
             handoff_item: None,
             skills: Vec::new(),
@@ -3783,6 +3786,7 @@ impl Live {
                 runs_on: update.runs_on.or(known.runs_on),
                 waits: update.waits,
                 stopped: update.stopped,
+                limited: update.limited,
             },
             None => update,
         };

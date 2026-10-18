@@ -343,6 +343,7 @@ impl Parser {
                 runs_on: None,
                 waits: None,
                 stopped: false,
+                limited: false,
             };
             vec![AgentEvent::Task { tool_id: parent.clone(), agent }]
         };
@@ -531,6 +532,7 @@ impl Parser {
                     runs_on: None,
                     waits: None,
                     stopped: false,
+                    limited: false,
                 };
                 let description = agent_title(item["agentPath"].as_str().unwrap_or_default());
                 let call = ToolCall {

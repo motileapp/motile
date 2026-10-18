@@ -699,8 +699,9 @@ final class AppStore {
     /// started it. On a phone the panel it was opened from goes away.
     func openStartedThread(_ threadID: String) {
         guard threads[threadID] != nil else { return }
-        // The agents stay in view on the way between a thread and the agents it started.
-        let showsAgents = rightPanel.isOpen && rightPanel.tabs.active == .agents && !Platform.panelCoversThread
+        // The agents stay in view on the way between a thread and the agents it started, and where
+        // the panel covers the thread, they are what it opens on there.
+        let showsAgents = rightPanel.isOpen && rightPanel.tabs.active == .agents
         select(.thread(threadID))
         if showsAgents { rightPanel.open(.agents) }
         if Platform.panelCoversThread { rightPanel.isOpen = false }

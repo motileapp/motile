@@ -146,7 +146,35 @@ export const threads: Thread[] = [
       },
       {
         kind: "text",
-        text: "### What changed\n- **The limiter** keeps one bucket per key, in memory.\n- **The middleware** runs after auth, so it limits keys, not addresses.\n- All 41 tests pass, four of them new.",
+        text: "Tests pass. I'll have Codex review the limiter and your Personal account load-test it.",
+      },
+      {
+        kind: "agents",
+        agents: [
+          {
+            agent: "codex",
+            title: "Review the limiter",
+            role: "reviewer",
+            state: "done",
+            runsOn: "6.1-Sol",
+            detail:
+              "The refill math holds. A burst right at the limit needed a test.",
+            took: "52s",
+          },
+          {
+            agent: "claude",
+            title: "Load-test the middleware",
+            state: "done",
+            runsOn: "Opus 5.5 · Personal",
+            detail:
+              "60 a minute per key hold; the 61st gets a 429 with Retry-After: 1.",
+            took: "1m 4s",
+          },
+        ],
+      },
+      {
+        kind: "text",
+        text: "### What changed\n- **The limiter** keeps one bucket per key, in memory.\n- **The middleware** runs after auth, so it limits keys, not addresses.\n- All 42 tests pass, five of them new, one for the burst Codex found.",
       },
       { kind: "changes" },
       { kind: "end", worked: "Worked for 1m 12s" },

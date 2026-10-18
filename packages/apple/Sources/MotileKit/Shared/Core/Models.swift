@@ -922,10 +922,11 @@ struct Activity: Equatable {
 
 /// How an agent is doing, which the dot on its avatar shows.
 enum AgentState: String {
-    case working, waiting, done, failed, stopped
+    /// `limited`: it reached its account's usage limit, and waits for the limit to reset.
+    case working, waiting, limited, done, failed, stopped
 
     /// Its word is in its colour: one that is done or works says so quietly.
-    var flagged: Bool { self == .waiting || self == .failed || self == .stopped }
+    var flagged: Bool { self == .waiting || self == .limited || self == .failed || self == .stopped }
 }
 
 /// The agents a thread's agent started, and theirs, as the thread shows them.

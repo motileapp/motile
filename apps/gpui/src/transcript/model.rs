@@ -191,6 +191,9 @@ pub enum Item {
     Working,
     /// The message on its way to the server.
     Pending,
+    /// The way back to the thread whose agent started this one, above the first row or, with
+    /// `true`, under the last.
+    StartedBy(bool),
     /// The room under the last row for what floats over the transcript's end.
     Bottom,
 }
@@ -201,6 +204,7 @@ enum Key {
     Row(String),
     Working,
     Pending,
+    StartedBy(bool),
     Bottom,
 }
 
@@ -217,6 +221,8 @@ pub struct Transcript {
     pub activity: Activity,
     /// The thread has turns before the first row.
     pub earlier: bool,
+    /// The thread whose agent started this one, by its id and title.
+    pub started_by: Option<(String, String)>,
     /// The thread has caught up with its server. What it had before that is simply there when
     /// the thread opens; only what arrives after it streams in.
     pub live: bool,
@@ -248,6 +254,7 @@ impl Transcript {
             pending: None,
             activity: Activity::default(),
             earlier: false,
+            started_by: None,
             live: false,
             keeps_rows: false,
             list,
@@ -280,7 +287,8 @@ impl Transcript {
         self.activity.running
             || self.rows.iter().any(|model| match &model.row.kind {
                 RowKind::Agent { agent } => {
-                    agent.at.is_none() && matches!(agent.state, AgentState::Working | AgentState::Waiting)
+                    agent.at.is_none()
+                        && matches!(agent.state, AgentState::Working | AgentState::Waiting | AgentState::Limited)
                 }
                 RowKind::Agents { started_at, .. } => started_at.is_some(),
                 _ => false,
@@ -344,6 +352,10 @@ impl Transcript {
         let working = self.shows_working().then(|| self.working_index());
         let mut items = vec![Item::Top];
         let mut keys = vec![Key::Top];
+        if self.started_by.is_some() && !self.earlier {
+            items.push(Item::StartedBy(false));
+            keys.push(Key::StartedBy(false));
+        }
         items.reserve(self.rows.len() + 3);
         keys.reserve(self.rows.len() + 3);
         for (index, row) in self.rows.iter().enumerate() {
@@ -365,6 +377,10 @@ impl Transcript {
         if working.is_some() && working == Some(self.rows.len() + usize::from(self.pending.is_some())) {
             items.push(Item::Working);
             keys.push(Key::Working);
+        }
+        if self.started_by.is_some() {
+            items.push(Item::StartedBy(true));
+            keys.push(Key::StartedBy(true));
         }
         items.push(Item::Bottom);
         keys.push(Key::Bottom);
@@ -520,6 +536,15 @@ impl Transcript {
         self.list.splice(last..last + 1, 1);
     }
 
+    /// Names the thread whose agent started this one, which the list leads back to.
+    pub fn set_started_by(&mut self, started_by: Option<(String, String)>) {
+        if self.started_by == started_by {
+            return;
+        }
+        self.started_by = started_by;
+        self.sync(&HashSet::new());
+    }
+
     pub fn row_index(&self, row_id: &str) -> Option<usize> {
         self.rows.iter().position(|model| model.row.id == row_id)
     }
@@ -530,7 +555,7 @@ impl Transcript {
         let index = match item {
             Item::Row(index) => *index,
             Item::Pending => return self.pending.as_ref().filter(|row| row.is_user()).map(|row| row.row.id.clone()),
-            Item::Working | Item::Top | Item::Bottom => return None,
+            Item::Working | Item::Top | Item::Bottom | Item::StartedBy(_) => return None,
         };
         let under = self.rows.get(index)?;
         if under.is_user() {

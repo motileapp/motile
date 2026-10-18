@@ -489,6 +489,7 @@ fn subagent(status: ToolStatus, object: &Value) -> Subagent {
         runs_on: None,
         waits: None,
         stopped: false,
+        limited: false,
     }
 }
 
@@ -665,6 +666,7 @@ mod tests {
             runs_on: None,
             waits: None,
             stopped: false,
+            limited: false,
         };
         let task = |agent| vec![AgentEvent::Task { tool_id: "toolu_1".to_string(), agent }];
 

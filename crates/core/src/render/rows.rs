@@ -1014,15 +1014,22 @@ fn present_agents<'a>(
 }
 
 fn agents_row(agents: &[&AgentRow], open: bool) -> RowKind {
-    use AgentState::{Done, Failed, Stopped, Waiting, Working};
+    use AgentState::{Done, Failed, Limited, Stopped, Waiting, Working};
     let count = |state: AgentState| agents.iter().filter(|agent| agent.state == state).count();
-    let words = [(Waiting, "waiting"), (Working, "working"), (Done, "done"), (Failed, "failed"), (Stopped, "stopped")];
+    let words = [
+        (Waiting, "waiting"),
+        (Working, "working"),
+        (Limited, "limited"),
+        (Done, "done"),
+        (Failed, "failed"),
+        (Stopped, "stopped"),
+    ];
     let summary = words
         .iter()
         .filter(|(state, _)| count(*state) > 0)
         .map(|(state, word)| StateCount { text: format!("{} {word}", count(*state)), state: *state })
         .collect();
-    let working = count(Working) + count(Waiting) > 0;
+    let working = count(Working) + count(Waiting) + count(Limited) > 0;
     let first = agents.iter().map(|agent| agent.started_at).fold(f64::INFINITY, f64::min);
     let ended = agents.iter().map(|agent| agent.ended_at()).collect::<Option<Vec<f64>>>();
     let last = ended.map(|ends| ends.into_iter().fold(first, f64::max));
@@ -1826,6 +1833,7 @@ mod tests {
             runs_on: None,
             waits: None,
             stopped: false,
+            limited: false,
         });
         item
     }

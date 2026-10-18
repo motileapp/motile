@@ -165,6 +165,7 @@ pub fn title_crumb(
         .help(format!("Open {title}"))
         .ghost()
         .small()
+        .symbol_size(ControlSize::Small.small_symbol())
         .inline()
         .truncates(true)
         .on_click(move |_, _, cx| {

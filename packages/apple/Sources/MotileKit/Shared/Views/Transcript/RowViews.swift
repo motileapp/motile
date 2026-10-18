@@ -1065,7 +1065,7 @@ final class AgentRowView: RowView {
             time.string = Time.stamp(at)
             return
         }
-        guard content.state == .working || content.state == .waiting else {
+        guard [.working, .waiting, .limited].contains(content.state) else {
             time.string = content.durationMs.map { Time.duration(milliseconds: $0) } ?? ""
             return
         }
@@ -1241,6 +1241,85 @@ final class AgentsRowView: RowView {
         title.frame = CGRect(x: textX, y: (height / 2 - scaled(18) + 1).rounded(), width: room, height: scaled(18))
         summary.frame = CGRect(x: textX, y: (height / 2 + 1).rounded(), width: room, height: scaled(16))
         return height
+    }
+}
+
+/// The way back to the thread whose agent started this one: a line across, broken by a round
+/// button that names it. The transcript shows it above its first row and under its last.
+final class LineageView: FlippedView {
+    static let height = ControlSize.large.height
+
+    private static let size = ControlSize.small
+    private static let lineGap = ControlSize.regular.padding
+
+    private let leading = SurfaceView()
+    private let trailing = SurfaceView()
+    private let pill = SurfaceView()
+    private let symbol = SymbolView(.cornerLeftUp, size: size.symbol, tint: Theme.mutedForeground)
+    private let words = TextLabel(font: .ui(size.textSize, weight: .medium), color: Theme.foreground)
+
+    var title = "" {
+        didSet {
+            guard title != oldValue else { return }
+            let line = NSMutableParagraphStyle()
+            line.lineBreakMode = .byTruncatingTail
+            let font = PlatformFont.ui(Self.size.textSize, weight: .medium)
+            let text = NSMutableAttributedString(string: "Started by ", attributes: [.font: font, .foregroundColor: Theme.mutedForeground, .paragraphStyle: line])
+            text.append(NSAttributedString(string: title, attributes: [.font: font, .foregroundColor: Theme.foreground, .paragraphStyle: line]))
+            words.attributed = text
+            describe("Started by \(title)", button: true)
+            placeParts()
+        }
+    }
+
+    var action: (() -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        leading.fill = Theme.border
+        trailing.fill = Theme.border
+        pill.radius = Self.size.height / 2
+        pill.stroke = Theme.borderAccent
+        [leading, trailing, pill, symbol, words].forEach { addSubview($0) }
+        light(false)
+        onHover = { [weak self] point in
+            guard let self else { return }
+            self.light(point.map { self.pill.frame.contains($0) } ?? false)
+        }
+        onPress = { [weak self] point in
+            guard let self, self.pill.frame.contains(point) else { return }
+            self.action?()
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override var frame: CGRect {
+        didSet { placeParts() }
+    }
+
+    private func light(_ lit: Bool) {
+        pill.fill = lit ? Theme.backgroundAccentLarger : Theme.backgroundAccent
+    }
+
+    private func placeParts() {
+        let size = Self.size
+        let side = size.symbolSide
+        let ends = size.padding - size.symbolOutset + side + size.gap + size.padding
+        let room = max(0, bounds.width - Self.lineGap * 2 - ends)
+        let wordsWidth = min(ceil(words.attributed.size().width) + 2, room)
+        let width = ends + wordsWidth
+        let x = ((bounds.width - width) / 2).rounded()
+        let y = ((bounds.height - size.height) / 2).rounded()
+        pill.frame = CGRect(x: x, y: y, width: width, height: size.height)
+        let symbolX = x + size.padding - size.symbolOutset
+        symbol.frame = CGRect(x: symbolX, y: y + ((size.height - side) / 2).rounded(), width: side, height: side)
+        let wordsHeight = scaled(16)
+        words.frame = CGRect(x: symbolX + side + size.gap, y: y + ((size.height - wordsHeight) / 2).rounded(), width: wordsWidth, height: wordsHeight)
+        let lineY = (bounds.height / 2).rounded()
+        leading.frame = CGRect(x: 0, y: lineY, width: max(0, x - Self.lineGap), height: 1)
+        let after = x + width + Self.lineGap
+        trailing.frame = CGRect(x: after, y: lineY, width: max(0, bounds.width - after), height: 1)
     }
 }
 

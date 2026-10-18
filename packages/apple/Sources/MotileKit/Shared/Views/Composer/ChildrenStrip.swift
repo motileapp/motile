@@ -89,6 +89,8 @@ struct TitleCrumb: View {
     let action: () -> Void
 
     var body: some View {
-        ActionButton(title, icon: .cornerLeftUp, help: "Open \(title)", variant: .ghost, size: .small, inline: true, action: action)
+        ActionButton(
+            title, icon: .cornerLeftUp, help: "Open \(title)", variant: .ghost, size: .small, symbolSize: ControlSize.small.smallSymbol,
+            inline: true, action: action)
     }
 }

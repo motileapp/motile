@@ -571,7 +571,5 @@ fn project_line(project: Option<&Project>, parts: &[String], cx: &App) -> impl I
 
 /// Before the thread's title, the way back is what a narrow bar cuts short first.
 fn gives_way(crumb: AnyElement) -> Div {
-    let mut wrap = div().min_w_0().flex();
-    wrap.style().flex_shrink = Some(100.);
-    wrap.child(crumb)
+    div().min_w_0().flex().flex_shrink(100.).child(crumb)
 }

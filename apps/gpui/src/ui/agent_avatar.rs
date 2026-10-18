@@ -1,6 +1,5 @@
 //! An agent's avatar, as the Mac app's `AgentAvatar.swift` draws it: its logo in a ring, with a
-//! dot on its corner in the colour of how it is doing, cut out of the ring as the menu button's
-//! dot is.
+//! dot on its corner in the colour of how it is doing, cut out of the ring.
 
 use std::f32::consts::FRAC_PI_4;
 
@@ -15,15 +14,15 @@ use crate::ui::{icons, logos};
 pub const SIDE: f32 = 24.;
 /// How far each avatar of a row of them stands from the one before it: they overlap by a quarter.
 const STEP: f32 = SIDE * 3. / 4.;
-/// The dot is the menu button's: as large on every system, and cut out of what it lies on.
-const DOT: f32 = 8.;
+/// The dot is as large on every system as the composer strips' are, and cut out of what it lies on.
+const DOT: f32 = 6.;
 const CUT: f32 = 2.;
 
 /// The colour of how an agent is doing.
 pub fn state_color(state: AgentState, c: &Colors) -> Hsla {
     match state {
         AgentState::Working => c.process,
-        AgentState::Waiting => c.warning,
+        AgentState::Waiting | AgentState::Limited => c.warning,
         AgentState::Done => c.success,
         AgentState::Failed => c.destructive,
         AgentState::Stopped => c.muted_stronger_foreground,

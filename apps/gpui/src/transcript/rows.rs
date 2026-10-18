@@ -1159,7 +1159,7 @@ fn agent_time(agent: &AgentRow) -> String {
     if let Some(at) = agent.at {
         return stamp(at);
     }
-    if matches!(agent.state, AgentState::Working | AgentState::Waiting) {
+    if matches!(agent.state, AgentState::Working | AgentState::Waiting | AgentState::Limited) {
         return elapsed(agent.started_at);
     }
     agent.duration_ms.map(duration).unwrap_or_default()
@@ -1585,6 +1585,53 @@ fn reply_text(rows: &[Arc<RowModel>], end_id: &str) -> String {
 }
 
 /// Shown under the transcript while the agent is at work or waits for an approval.
+/// The way back to the thread whose agent started this one: a line across, broken by a round
+/// button that names it. The transcript shows it above its first row and under its last.
+pub fn started_by(end: bool, ctx: &RowContext, cx: &App) -> AnyElement {
+    let c = colors(cx);
+    let Some((id, title)) = ctx.store.read(cx).parent_thread().map(|thread| (thread.id.clone(), thread.title.clone()))
+    else {
+        return div().into_any_element();
+    };
+    let size = ControlSize::Small;
+    let line = || div().flex_1().h(px(1.)).bg(c.border);
+    let store = ctx.store.clone();
+    let words = format!("Started by {title}");
+    let runs = vec![
+        run("Started by ".len(), font(theme::UI_FONT, FontWeight::MEDIUM, false), c.muted_foreground),
+        run(title.len(), font(theme::UI_FONT, FontWeight::MEDIUM, false), c.foreground),
+    ];
+    let pill = div()
+        .id(("started-by", usize::from(end)))
+        .min_w_0()
+        .h(px(size.height()))
+        .pl(px(size.padding() - size.symbol_outset()))
+        .pr(px(size.padding()))
+        .flex()
+        .items_center()
+        .gap(px(size.gap()))
+        .rounded_full()
+        .bg(c.background_accent)
+        .border_1()
+        .border_color(c.border_accent)
+        .hover(|pill| pill.bg(c.background_accent_larger))
+        .cursor_pointer()
+        .child(icons::symbol("corner-left-up", size.symbol()).text_color(c.muted_foreground))
+        .child(div().min_w_0().text_size(px(size.text_size())).truncate().child(StyledText::new(words).with_runs(runs)))
+        .on_click(move |_, _, cx| {
+            store.update(cx, |store, cx| store.open_started_thread(&id, cx));
+        });
+    div()
+        .h(px(ControlSize::Large.height()))
+        .flex()
+        .items_center()
+        .gap(px(ControlSize::Regular.padding()))
+        .child(line())
+        .child(pill)
+        .child(line())
+        .into_any_element()
+}
+
 pub fn working_line(activity: &crate::models::Activity, cx: &App) -> AnyElement {
     let c = colors(cx);
     let asking = activity.approvals.first().map(|waiting| waiting.ask);

@@ -97,6 +97,7 @@ fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
 @Composable
 fun TitleCrumb(title: String, modifier: Modifier = Modifier, compact: Boolean = false, action: () -> Unit) {
     // Compact, where the title has no room, it is only the symbol.
-    if (compact) return ActionButton(icon = Symbol.CornerLeftUp, modifier = modifier, help = "Open $title", size = ControlSize.Small, inline = true, onClick = action)
-    ActionButton(title, Symbol.CornerLeftUp, modifier, help = "Open $title", variant = ButtonVariant.Ghost, size = ControlSize.Small, inline = true, onClick = action)
+    val symbol = ControlSize.Small.smallSymbol
+    if (compact) return ActionButton(icon = Symbol.CornerLeftUp, modifier = modifier, help = "Open $title", size = ControlSize.Small, symbolSize = symbol, inline = true, onClick = action)
+    ActionButton(title, Symbol.CornerLeftUp, modifier, help = "Open $title", variant = ButtonVariant.Ghost, size = ControlSize.Small, symbolSize = symbol, inline = true, onClick = action)
 }

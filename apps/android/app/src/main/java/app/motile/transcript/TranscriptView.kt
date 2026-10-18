@@ -10,13 +10,16 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,6 +58,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -66,11 +73,13 @@ import app.motile.core.TranscriptModel
 import app.motile.panel.DiffScope
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.ShadowSize
 import app.motile.theme.Theme
 import app.motile.theme.shadow
 import app.motile.ui.Icon
+import app.motile.ui.Text
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.floor
@@ -151,6 +160,9 @@ private class Follower {
 /** The line that says the agent works, among the rows. */
 private object Working
 
+/** The way back to the thread whose agent started this one, above the first row or, with `end`, under the last. */
+private data class StartedBy(val end: Boolean)
+
 object TranscriptView {
     /** The room between the last row and the composer, which the bottom padding the transcript is given starts with. */
     val composerGap = 80.dp
@@ -187,11 +199,18 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
     val rows = model.rows
     val pending = model.pending
     val shown = remember(model.version, pending) { if (pending == null) rows.toList() else rows + pending }
-    val entries: List<Any> = remember(shown, model.showsWorking) {
-        if (!model.showsWorking) shown else shown.toMutableList<Any>().apply { add(workingIndex(shown, pending), Working) }
+    val parent = if (ofAgent) null else store.parentThread
+    val entries: List<Any> = remember(shown, model.showsWorking, parent != null, model.earlier) {
+        buildList {
+            if (parent != null && !model.earlier) add(StartedBy(end = false))
+            addAll(if (!model.showsWorking) shown else shown.toMutableList<Any>().apply { add(workingIndex(shown, pending), Working) })
+            if (parent != null) add(StartedBy(end = true))
+        }
     }
     val follower = remember(model, resets) { Follower() }
     val state = remember(model, resets) { LazyListState(firstVisibleItemIndex = max(0, entries.size - 1)) }
+    // The way back at the end only shows while the one at the top is out of sight; its room stays, so that nothing moves when it does.
+    val topInSight by remember(state, entries) { derivedStateOf { entries.firstOrNull() is StartedBy && state.firstVisibleItemIndex == 0 } }
     val actions = remember(model, resets) { TranscriptActions(store, model, ofAgent) }
     val scope = rememberCoroutineScope()
     val animates = model.activity.running && model.live && !Platform.reducesMotion
@@ -367,15 +386,26 @@ fun TranscriptView(model: TranscriptModel, modifier: Modifier = Modifier, conten
             ) {
                 items(
                     count = entries.size,
-                    key = { index -> (entries[index] as? RowModel)?.id ?: "working" },
-                    contentType = { index -> (entries[index] as? RowModel)?.contentType ?: "working" },
+                    key = { index -> entryKey(entries[index]) },
+                    contentType = { index ->
+                        when (val entry = entries[index]) {
+                            is RowModel -> entry.contentType
+                            is StartedBy -> "started-by"
+                            else -> "working"
+                        }
+                    },
                 ) { index ->
                     val entry = entries[index]
                     val row = entry as? RowModel
                     val fades = animates && row?.isSentMessage != true
                     val placed = Modifier.fillMaxWidth().animateItem(fadeInSpec = if (fades) tween(350) else null, placementSpec = null, fadeOutSpec = null)
                     Box(placed) {
-                        if (row == null) WorkingLine(model.activity, Modifier.padding(top = 2.dp)) else TranscriptRow(row)
+                        when {
+                            row != null -> TranscriptRow(row)
+                            entry is StartedBy && entry.end && topInSight -> Box(Modifier.height(ControlSize.Large.height))
+                            entry is StartedBy && parent != null -> StartedByLine(parent.title) { store.openStartedThread(parent.id) }
+                            else -> WorkingLine(model.activity, Modifier.padding(top = 2.dp))
+                        }
                     }
                 }
             }
@@ -474,5 +504,43 @@ private fun JumpButton(modifier: Modifier, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(Symbol.ArrowDown, 12f, color = palette.foreground)
+    }
+}
+
+private fun entryKey(entry: Any): String = when (entry) {
+    is RowModel -> entry.id
+    is StartedBy -> "started-by-${entry.end}"
+    else -> "working"
+}
+
+/** A line across, broken by a round button that names the thread whose agent started this one and opens it. */
+@Composable
+private fun StartedByLine(title: String, open: () -> Unit) {
+    val palette = LocalPalette.current
+    val size = ControlSize.Small
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val words = buildAnnotatedString {
+        withStyle(SpanStyle(color = palette.mutedForeground)) { append("Started by ") }
+        withStyle(SpanStyle(color = palette.foreground)) { append(title) }
+    }
+    Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f).height(1.dp).background(palette.border))
+        Row(
+            Modifier
+                .padding(horizontal = ControlSize.Regular.padding)
+                .weight(1f, fill = false)
+                .height(size.height)
+                .background(if (pressed) palette.backgroundAccentLarger else palette.backgroundAccent, CircleShape)
+                .border(1.dp, palette.borderAccent, CircleShape)
+                .clickable(interaction, indication = null, role = Role.Button, onClick = open)
+                .padding(start = size.padding - size.symbolOutset, end = size.padding),
+            horizontalArrangement = Arrangement.spacedBy(size.gap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Symbol.CornerLeftUp, size.symbol, color = palette.mutedForeground)
+            Text(words, style = size.font, maxLines = 1)
+        }
+        Box(Modifier.weight(1f).height(1.dp).background(palette.border))
     }
 }

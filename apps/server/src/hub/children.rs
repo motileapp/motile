@@ -11,8 +11,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, bail};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Access, Agent, AgentAccount, AgentNotice, Approval, Ask, ItemKind, Message, NewThread, NewWorktree, NoticeEvent,
-    Queued, RunsOn, Subagent, Thread, ThreadParent, ToolCall, ToolStatus,
+    Access, Agent, AgentAccount, AgentNotice, Approval, Ask, Interruption, ItemKind, Message, NewThread, NewWorktree,
+    NoticeEvent, Queued, RunsOn, Subagent, Thread, ThreadParent, ToolCall, ToolStatus,
 };
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -52,6 +52,9 @@ pub struct ChildState {
     /// What it asks, while it does.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub questions: Option<Value>,
+    /// When its usage limit resets, while it waits for that.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_resets: Option<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub wait_timed_out: bool,
 }
@@ -285,6 +288,7 @@ impl Hub {
                 runs_on: Some(Box::new(runs_on)),
                 waits: None,
                 stopped: false,
+                limited: false,
             };
             parent.change_tool(&self.store, tool_id, |call| {
                 call.agent = Some(agent);
@@ -407,9 +411,14 @@ impl Hub {
                 }
                 let settled = states.iter().all(|state| state.status.settled());
                 let asking = states.iter().any(|state| state.status == Status::Asking);
-                if deadline.is_none() || timed_out || settled || asking {
+                // An agent that reached its usage limit is worth hearing of once, not waited for.
+                let limited = states.iter().any(|state| {
+                    state.status == Status::WaitingForUsageLimit
+                        && !threads.get(&state.id).is_some_and(|live| live.told_limit)
+                });
+                if deadline.is_none() || timed_out || settled || asking || limited {
                     for state in &mut states {
-                        state.wait_timed_out = timed_out && !settled && !asking;
+                        state.wait_timed_out = timed_out && !settled && !asking && !limited;
                         let Some(live) = threads.get_mut(&state.id) else { continue };
                         self.taken(live, state.status)?;
                     }
@@ -433,6 +442,7 @@ impl Hub {
         if status == Status::Asking {
             live.told_question = live.activity.approvals.first().map(|approval| approval.id.clone());
         }
+        live.told_limit = status == Status::WaitingForUsageLimit;
         Ok(())
     }
 
@@ -499,13 +509,17 @@ impl Hub {
             reply: None,
             error: None,
             questions: None,
+            limit_resets: None,
             wait_timed_out: false,
         };
         state.status = match approval.map(Approval::ask) {
             Some(Ask::Question) => Status::Asking,
             Some(_) => Status::NeedsApproval,
             None if live.busy() || thread.monitoring => Status::Running,
-            None if live.limited() => Status::WaitingForUsageLimit,
+            None if live.limited() => {
+                state.limit_resets = limit_resets(thread);
+                Status::WaitingForUsageLimit
+            }
             None => {
                 let items = self.store.last_turn(&thread.id)?;
                 let ended = items.iter().rev().find_map(|item| match &item.kind {
@@ -570,6 +584,9 @@ impl Hub {
             let agent = self.subagent_of(child, &state)?;
             let waited_on = self.lock_waiting().contains_key(child_id);
             let child = threads.get_mut(child_id).context("The agent's thread is gone.")?;
+            if state.status != Status::WaitingForUsageLimit {
+                child.told_limit = false;
+            }
             let notice = if waited_on { None } else { self.notice_due(child, &state)? };
             if let (Some(tool_id), Some(live)) = (&parent.tool_id, threads.get_mut(&parent.thread_id)) {
                 live.change_tool(&self.store, tool_id, |call| shows(call, agent))?;
@@ -629,6 +646,7 @@ impl Hub {
                 _ => None,
             },
             stopped: state.status == Status::Stopped,
+            limited: state.status == Status::WaitingForUsageLimit,
         })
     }
 
@@ -669,6 +687,25 @@ impl Hub {
                 (NoticeEvent::Failed, format!("{named} failed: {error}"))
             }
             Status::Stopped => (NoticeEvent::Stopped, format!("{named} was stopped before it finished.")),
+            Status::WaitingForUsageLimit => {
+                if live.told_limit {
+                    return Ok(None);
+                }
+                live.told_limit = true;
+                let resets =
+                    state.limit_resets.as_deref().map(|at| format!(" The limit resets at {at}.")).unwrap_or_default();
+                let continues = if limit_continues(thread) {
+                    " It goes on by itself once the limit resets."
+                } else {
+                    " It won't go on by itself: message it with message_agent once the limit resets."
+                };
+                let text = format!(
+                    "{named} reached its account's usage limit and waits.{resets}{continues} To go on sooner, stop it with \
+                     stop_agent and start the work again with start_agent on an account that has room left: list_accounts \
+                     says how much of its limits each account has used."
+                );
+                (NoticeEvent::Limited, text)
+            }
             _ => return Ok(None),
         };
         if state.status.settled() {
@@ -831,6 +868,18 @@ fn cut(reply: &str, chars: usize, thread_id: &str) -> String {
         }
         None => reply.to_string(),
     }
+}
+
+/// When the thread's usage limit resets, in UTC, when its agent said.
+fn limit_resets(thread: &Thread) -> Option<String> {
+    let Some(Interruption::Limit { resets_at: Some(at), .. }) = thread.interruption else { return None };
+    let at = chrono::DateTime::from_timestamp(at as i64, 0)?;
+    Some(at.format("%Y-%m-%d %H:%M UTC").to_string())
+}
+
+/// Whether the thread goes on by itself once its usage limit resets.
+fn limit_continues(thread: &Thread) -> bool {
+    matches!(thread.interruption, Some(Interruption::Limit { continues: true, .. }))
 }
 
 fn wait_for(seconds: Option<u64>) -> Duration {

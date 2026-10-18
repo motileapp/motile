@@ -1864,6 +1864,7 @@ fn summary(agents: &[AgentView], c: &Colors) -> StyledText {
     let parts = [
         (AgentState::Waiting, "waiting"),
         (AgentState::Working, "working"),
+        (AgentState::Limited, "limited"),
         (AgentState::Done, "done"),
         (AgentState::Failed, "failed"),
         (AgentState::Stopped, "stopped"),

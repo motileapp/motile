@@ -726,8 +726,9 @@ class AppStore(private val context: Context) {
     /** Opens the thread an agent the open thread's agent started works in, or the one whose agent started it. On a phone the panel it was opened from goes away. */
     fun openStartedThread(threadID: String) {
         if (threads[threadID] == null) return
-        // The agents stay in view on the way between a thread and the agents it started.
-        val showsAgents = rightPanel.isOpen && rightPanel.tabs.active == PanelTab.Agents && !Platform.panelCoversThread
+        // The agents stay in view on the way between a thread and the agents it started, and where the panel covers the
+        // thread, they are what it opens on there.
+        val showsAgents = rightPanel.isOpen && rightPanel.tabs.active == PanelTab.Agents
         select(Selection.Thread(threadID))
         if (showsAgents) rightPanel.open(PanelTab.Agents)
         if (Platform.panelCoversThread) rightPanel.isOpen = false

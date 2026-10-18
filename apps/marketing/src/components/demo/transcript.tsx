@@ -263,7 +263,11 @@ function AgentGroup({
     agents.filter((run) => run.state === state).length
   const order: AgentState[] = ["waiting", "working", "done", "failed"]
   const counted = order.filter((state) => count(state) > 0)
-  const longest = Math.max(...agents.map((run) => run.since ?? 0))
+  const working = agents.filter((run) => run.since !== undefined)
+  const longest = Math.max(...working.map((run) => run.since ?? 0))
+  const took = agents
+    .map((run) => run.took ?? "")
+    .reduce((most, one) => (seconds(one) > seconds(most) ? one : most), "")
   const Chevron = open ? ChevronDownIcon : ChevronRightIcon
   return (
     <>
@@ -295,7 +299,7 @@ function AgentGroup({
           </span>
         </span>
         <span className="shrink-0 text-[12px] text-muted-stronger-foreground tabular-nums">
-          {elapsed(longest)}
+          {working.length > 0 ? elapsed(longest) : took}
         </span>
         <Chevron className="size-3 shrink-0 text-muted-stronger-foreground" />
       </button>
@@ -308,6 +312,12 @@ function AgentGroup({
       )}
     </>
   )
+}
+
+/** "1m 4s" in seconds. */
+function seconds(took: string) {
+  const minutes = Number(/(\d+)m/.exec(took)?.[1] ?? 0)
+  return minutes * 60 + Number(/(\d+)s/.exec(took)?.[1] ?? 0)
 }
 
 function Handoff({ end }: { end: HandoffEnd }) {

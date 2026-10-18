@@ -106,7 +106,7 @@ export function AgentAvatar({
         style={
           state
             ? {
-                mask: "radial-gradient(circle at 18px 18px, transparent 6px, black 6.5px)",
+                mask: "radial-gradient(circle at 19px 19px, transparent 5px, black 5.5px)",
               }
             : undefined
         }
@@ -116,7 +116,7 @@ export function AgentAvatar({
       {state && (
         <span
           className={cn(
-            "absolute right-0.5 bottom-0.5 size-2 rounded-full",
+            "absolute right-0.5 bottom-0.5 size-1.5 rounded-full",
             STATE_DOTS[state]
           )}
         />

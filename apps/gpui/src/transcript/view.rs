@@ -16,7 +16,7 @@ use motile_core::api::Command;
 use super::model::{FADE, Item, RowModel, Transcript};
 use super::rows::{self, META_FADE, RowContext};
 use crate::store::Store;
-use crate::theme::{self, colors};
+use crate::theme::{self, ControlSize, colors};
 use crate::ui::icons;
 
 /// Room above the first row, which the transcript fades out in.
@@ -48,6 +48,8 @@ pub struct TranscriptView {
     meta_fades: HashMap<String, (bool, Instant)>,
     /// Whether earlier turns are asked for, or turns far above let go of, until the core answers.
     loading_earlier: bool,
+    /// The way back at the top of the list is in sight, so the one at the end leaves its room empty.
+    top_in_sight: bool,
     trimming: bool,
     /// Room left under the last row for what floats over the transcript's end.
     bottom_inset: f32,
@@ -98,6 +100,7 @@ impl TranscriptView {
             hovered: None,
             meta_fades: HashMap::new(),
             loading_earlier: false,
+            top_in_sight: false,
             trimming: false,
             bottom_inset: 0.,
             measures_after_layout: false,
@@ -114,10 +117,15 @@ impl TranscriptView {
     fn watch_scroll(&self, cx: &mut Context<Self>) {
         let list = self.model.read(cx).list.clone();
         let view = cx.entity().downgrade();
-        list.set_scroll_handler(move |_, _, cx| {
+        list.set_scroll_handler(move |event, _, cx| {
             let view = view.clone();
+            let top_in_sight = event.visible_range.start <= 1;
             cx.defer(move |cx| {
                 let _ = view.update(cx, |view, cx| {
+                    if view.top_in_sight != top_in_sight {
+                        view.top_in_sight = top_in_sight;
+                        cx.notify();
+                    }
                     view.glide = None;
                     view.load_earlier_if_near(cx);
                     view.trim_earlier_if_far(cx);
@@ -403,9 +411,18 @@ impl Render for TranscriptView {
         let show_jump = !self.pinned(cx)
             && !self.model.read(cx).rows.is_empty()
             && self.distance_to_end(cx) >= (viewport / 2.).max(200.);
+        let started_by = match self.agent {
+            true => None,
+            false => self.store.read(cx).parent_thread().map(|thread| (thread.id.clone(), thread.title.clone())),
+        };
+        self.model.update(cx, |model, _| model.set_started_by(started_by));
         let model = self.model.read(cx);
         let list_state = model.list.clone();
         let items = model.items.clone();
+        // The way back at the end only shows while the one at the top is out of sight; its room
+        // stays, so that nothing moves when it does.
+        let top_in_sight =
+            items.get(1) == Some(&Item::StartedBy(false)) && list_state.logical_scroll_top().item_ix <= 1;
         let rows = model.rows.clone();
         let pending = model.pending.clone();
         let activity = model.activity.clone();
@@ -454,6 +471,10 @@ impl Render for TranscriptView {
                     None => (div().into_any_element(), None),
                 },
                 Item::Working => (rows::working_line(&activity, cx), None),
+                Item::StartedBy(true) if top_in_sight => {
+                    (div().h(px(ControlSize::Large.height())).into_any_element(), None)
+                }
+                Item::StartedBy(end) => (rows::started_by(*end, &ctx, cx), None),
                 Item::Pending => match &pending {
                     Some(model) => (rows::render_row(model, &ctx, window, cx), key(model)),
                     None => (div().into_any_element(), None),

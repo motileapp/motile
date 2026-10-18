@@ -98,8 +98,23 @@ final class TranscriptView: FlippedView, RowOwner {
         }
     }
 
-    /// Room above the first row, which the transcript fades out in.
-    private var topPadding: CGFloat { 20 + topInset }
+    /// Room above the first row, which the transcript fades out in, and the way back to the
+    /// thread that started this one once the first row is the thread's first.
+    private var topPadding: CGFloat { 20 + topInset + topLineage }
+
+    /// The thread whose agent started this one, which a line above the first row and under the
+    /// last leads back to.
+    var startedBy: (id: String, title: String)? {
+        didSet {
+            guard startedBy?.id != oldValue?.id || startedBy?.title != oldValue?.title else { return }
+            lineageTop.title = startedBy?.title ?? ""
+            lineageEnd.title = startedBy?.title ?? ""
+            updateVisible()
+        }
+    }
+
+    private var topLineage: CGFloat { startedBy != nil && !hasEarlier ? LineageView.height : 0 }
+    private var endLineage: CGFloat { startedBy == nil ? 0 : LineageView.height }
     private static let overscan: CGFloat = 400
     private static let pooledPerKind = 10
     /// As tall as the row that ends a turn, which takes the working line's place.
@@ -115,6 +130,8 @@ final class TranscriptView: FlippedView, RowOwner {
     private let scroller = TranscriptScroller()
     private var document: FlippedView { scroller.document }
     private let working = WorkingView()
+    private let lineageTop = LineageView()
+    private let lineageEnd = LineageView()
     private let jumpButton = SurfaceView()
     /// Fades the rows out under the top bar, unless the system blurs them there, and from the
     /// composer's middle down. The jump
@@ -192,6 +209,14 @@ final class TranscriptView: FlippedView, RowOwner {
         scroller.fadeMask = fadeMask
         document.addSubview(working)
         working.isHidden = true
+        for lineage in [lineageTop, lineageEnd] {
+            lineage.isHidden = true
+            lineage.action = { [weak self] in
+                guard let self, let parent = self.startedBy else { return }
+                self.onOpenThread?(parent.id)
+            }
+            document.addSubview(lineage)
+        }
 
         let side = Self.jumpButtonSide
         jumpButton.fill = Theme.popover
@@ -267,7 +292,7 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private var contentHeight: CGFloat {
         let workingHeight = showsWorking ? Self.workingHeight : 0
-        return topPadding + (offsets.last ?? 0) + workingHeight + bottomInset
+        return topPadding + (offsets.last ?? 0) + workingHeight + endLineage + bottomInset
     }
 
     private func layoutFade() {
@@ -484,7 +509,9 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     func setEarlier(_ earlier: Bool) {
+        let shown = topLineage
         hasEarlier = earlier
+        if topLineage != shown { updateVisible() }
         loadEarlierIfNear()
     }
 
@@ -726,6 +753,13 @@ final class TranscriptView: FlippedView, RowOwner {
         let workingY = firstLowered < offsets.count ? offsets[firstLowered] : 0
         working.frame = CGRect(x: x, y: topPadding + workingY + 2, width: width, height: Self.workingHeight)
         working.isHidden = !showsWorking
+        lineageTop.frame = CGRect(x: x, y: topPadding - topLineage, width: width, height: LineageView.height)
+        lineageTop.isHidden = topLineage == 0
+        lineageEnd.frame = CGRect(x: x, y: topPadding + (offsets.last ?? 0) + workingRoom, width: width, height: LineageView.height)
+        // The one at the end only shows while the one at the top is out of sight; its room stays,
+        // so that nothing moves when it does.
+        let topInSight = topLineage > 0 && lineageTop.frame.maxY > scroller.offsetY + topInset
+        lineageEnd.isHidden = endLineage == 0 || topInSight
         updateJumpButton()
         updateMetaRow()
         if !pendingHighlight.isEmpty {
