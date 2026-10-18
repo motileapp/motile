@@ -34,9 +34,10 @@ pub const HEIGHT: f32 = ControlSize::Regular.height() + INSET * 2.;
 /// How far the top strip's open edge goes under the composer, which is drawn after it and
 /// covers its outline there. The bottom strip starts under the composer's outline instead.
 const OVERLAP: f32 = 1.;
-/// The room around a control in a strip, which is the control's to click.
+/// The room around a control in a strip, which is the control's to click. One that ends the
+/// strip stands as far from its side as from its top and bottom.
 pub fn margin() -> Edges<f32> {
-    edges(INSET, 4., INSET, 8.)
+    edges(INSET, 4., INSET, INSET)
 }
 
 /// A strip of `height`, or as tall as what is in it with none. Its outline is inside it, so it is
@@ -126,7 +127,7 @@ pub fn agents_strip(
 }
 
 const SPACER: f32 = 8.;
-const AVATAR_SIDE: f32 = 16.;
+const AVATAR_SIDE: f32 = 20.;
 const AGENTS_DOT: f32 = 3.;
 /// The monitoring dot and the room either side of it.
 const MONITORING_DOT_ROOM: f32 = 14. + 6. + 8.;
@@ -159,12 +160,12 @@ fn stop_button(store: &Entity<Store>, id: &'static str, help: &str, cx: &App) ->
 /// in `room` it only counts them.
 fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: &mut Window, cx: &App) -> ActionButton {
     let text = children.running_text.clone().unwrap_or_default();
-    let button = |words: String, window: &mut Window| {
+    let button = |words: String| {
         let more = (children.running as usize).saturating_sub(children.working.len());
-        let avatars = AgentAvatars::new(children.working.iter().copied().map(Some).collect(), more)
-            .side(AVATAR_SIDE)
-            .without_rings();
-        let width = avatars.width(window);
+        let avatars = AgentAvatars::new(children.working.iter().copied().map(Some).collect(), more).side(AVATAR_SIDE);
+        let width = avatars.width();
+        // Taller than the words, they reach into the button's room above and below them.
+        let avatars = div().my(px((ControlSize::Regular.symbol_side() - AVATAR_SIDE) / 2.)).child(avatars);
         let store = store.clone();
         ActionButton::new("composer-agents", words)
             .pictures(avatars, width)
@@ -180,11 +181,11 @@ fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: 
                 })
             })
     };
-    let full = button(text.clone(), window);
+    let full = button(text.clone());
     if full.natural_width(window, cx) <= room {
         return full;
     }
-    button(children.running.to_string(), window)
+    button(children.running.to_string())
 }
 
 /// Why the agent stopped before it finished: the usage limit, with when the thread goes on by
@@ -731,9 +732,8 @@ pub fn context_strip(
         Words::of_control(branch.clone(), natural, window)
     });
 
-    let branch_margin = INSET - margin().right;
-    // The strip's sides, the divider after the server and the branch's margin take no part.
-    let fixed = 2. + if server.is_some() { 20. } else { 0. } + if branch.is_some() { branch_margin } else { 0. };
+    // The strip's sides and the divider after the server take no part.
+    let fixed = 2. + if server.is_some() { 20. } else { 0. };
     let room = width - 2. * RADIUS - fixed;
     let labeled = words_of_workspace(true, window, cx);
     let ideal: f32 = server_words
@@ -834,7 +834,7 @@ pub fn context_strip(
         .child(div().flex_1().min_w(px(Room::SPACER.least)))
         .children(workspace_part)
         .when(divides, |strip| strip.child(composer_divider(&c)))
-        .children(branch_part.map(|part| div().flex_shrink_0().mr(px(branch_margin)).child(part)))
+        .children(branch_part.map(|part| div().flex_shrink_0().child(part)))
 }
 
 const PICKER_WIDTH: f32 = 300.;

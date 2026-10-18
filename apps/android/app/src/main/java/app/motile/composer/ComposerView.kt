@@ -203,7 +203,7 @@ private fun AgentsStrip(text: String, children: ThreadChildren) {
 }
 
 private object AgentsButton {
-    val avatarSide = 16.dp
+    val avatarSide = 20.dp
     /** The room between the agents button's side and its avatars. */
     val lead = ControlSize.Regular.padding - ControlSize.Regular.symbolOutset
 }
@@ -217,9 +217,11 @@ private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modif
             words, help = text, variant = ButtonVariant.Ghost, tint = Theme.colors.process,
             margin = PaddingValues(vertical = ComposerStrip.inset),
             pictures = {
+                // Taller than the words, they reach into the button's room above and below them.
                 AgentAvatars(
                     children.working.map { it to null }, more = (children.running - children.working.size).coerceAtLeast(0),
-                    side = AgentsButton.avatarSide, ground = null,
+                    Modifier.overhang(vertical = (AgentsButton.avatarSide - ControlSize.Regular.symbolSide) / 2),
+                    side = AgentsButton.avatarSide,
                 )
             },
         ) { store.rightPanel.open(PanelTab.Agents) }

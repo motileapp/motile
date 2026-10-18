@@ -47,7 +47,7 @@ export function Composer({
           <button
             type="button"
             onClick={onStop}
-            className="mr-2 ml-auto h-7 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+            className="mr-[2px] ml-auto h-7 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
           >
             Stop
           </button>
@@ -61,7 +61,7 @@ export function Composer({
           </span>
           <button
             type="button"
-            className="mr-2 ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+            className="mr-[2px] ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
           >
             Stop
           </button>
@@ -75,7 +75,7 @@ export function Composer({
           </span>
           <button
             type="button"
-            className="mr-2 ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+            className="mr-[2px] ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
           >
             Open Approval
           </button>
@@ -185,7 +185,7 @@ export function Composer({
           {thread.worktree ? "Worktree" : "Local checkout"}
         </span>
         <span className="ml-2.5 h-3 w-px bg-border-composer" />
-        <span className="mr-2 flex items-center">
+        <span className="mr-[2px] flex items-center">
           <Control
             icon={<GitBranchIcon className="size-3.5" />}
             plain={!!thread.worktree}

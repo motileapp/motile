@@ -55,27 +55,58 @@ struct AgentAvatar: View {
     }
 }
 
-/// Avatars side by side, each over the last, and how many more there are.
+/// Avatars side by side, each over the next, which has it cut out with a ring around it, and an
+/// ellipsis for the agents there is no room for.
 struct AgentAvatars: View {
     let avatars: [(agent: Agent?, state: AgentState?)]
     var more = 0
     var side: CGFloat = AgentAvatarDrawing.side
 
     var body: some View {
-        HStack(spacing: -side / 4) {
-            ForEach(Array(avatars.enumerated()), id: \.offset) { _, avatar in
+        HStack(spacing: AgentAvatarDrawing.step(side) - side) {
+            ForEach(Array(avatars.enumerated()), id: \.offset) { index, avatar in
                 AgentAvatar(agent: avatar.agent, state: avatar.state, side: side)
+                    .cutUnder(index > 0, side: side)
             }
             if more > 0 {
-                Text("+\(more)")
-                    .font(.ui(size: 10, weight: .medium))
-                    .foregroundStyle(Color.themeMutedForeground)
-                    .padding(.horizontal, AgentAvatarDrawing.morePadding)
-                    .frame(minWidth: side)
-                    .frame(height: side)
-                    .background(Capsule().fill(Color(platform: Theme.borderAccent)))
+                MoreAvatar(side: side)
+                    .cutUnder(!avatars.isEmpty, side: side)
             }
         }
+    }
+}
+
+extension View {
+    /// Cuts the avatar before it out of it, with a ring around it, where that one lies over it.
+    fileprivate func cutUnder(_ cut: Bool, side: CGFloat) -> some View {
+        let ring = AgentAvatarDrawing.ring(side)
+        return mask {
+            Rectangle()
+                .overlay(alignment: .leading) {
+                    if cut {
+                        Circle()
+                            .frame(width: side + ring * 2, height: side + ring * 2)
+                            .offset(x: -AgentAvatarDrawing.step(side) - ring)
+                            .blendMode(.destinationOut)
+                    }
+                }
+                .compositingGroup()
+        }
+    }
+}
+
+/// An avatar's ring around an ellipsis, standing for the agents there is no room for.
+private struct MoreAvatar: View {
+    let side: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle().fill(Color(platform: Theme.backgroundAccent))
+            Circle().strokeBorder(Color(platform: Theme.borderAccent), lineWidth: 1)
+            Image(.ellipsis, size: (side * AgentAvatarDrawing.ellipsis).rounded())
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .frame(width: side, height: side)
     }
 }
 
@@ -83,9 +114,10 @@ struct AgentAvatars: View {
 final class AgentAvatarView: FlippedView {
     var agent: Agent? { didSet { if agent != oldValue { redraw() } } }
     var state: AgentState? { didSet { if state != oldValue { redraw() } } }
-    var ground = Theme.background { didSet { if ground != oldValue { redraw() } } }
-    /// It lies over another, from which a ring of the ground sets it apart.
-    var ringed = false { didSet { if ringed != oldValue { redraw() } } }
+    /// The avatar before it lies over it, which is cut out of it with a ring around it.
+    var cut = false { didSet { if cut != oldValue { redraw() } } }
+    /// It stands for the agents there is no room for.
+    var more = false { didSet { if more != oldValue { redraw() } } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -103,7 +135,7 @@ final class AgentAvatarView: FlippedView {
     #endif
 
     override func draw(_ dirtyRect: CGRect) {
-        AgentAvatarDrawing.draw(agent: agent, state: state, ground: ground, ringed: ringed, in: bounds)
+        AgentAvatarDrawing.draw(agent: agent, state: state, cut: cut, more: more, in: bounds)
     }
 }
 
@@ -112,40 +144,56 @@ enum AgentAvatarDrawing {
     /// The dot is as large on every system as the composer strips' are, and cut out of what it lies on.
     static let dot: CGFloat = 6
     static let cut: CGFloat = 2
-    /// The room either side of how many more there are, in its pill of the avatars' outline colour.
-    static let morePadding: CGFloat = 3
+    /// The ellipsis that stands for the agents there is no room for, as a share of its circle.
+    static let ellipsis: CGFloat = 0.6
     private static let logos: [Agent: PlatformImage] = Dictionary(uniqueKeysWithValues: Agent.allCases.compactMap { agent in
         agent.logo.map { (agent, ImageFiles.tinted(ImageFiles.sized($0, 64), agent.platformColor)) }
     })
 
-    /// Draws the avatar in `rect`, a square, in the current context.
-    static func draw(agent: Agent?, state: AgentState?, ground: PlatformColor, ringed: Bool = false, in rect: CGRect) {
+    /// Cuts the circle in `rect` out of what is drawn.
+    private static func clear(_ rect: CGRect) {
+        guard let context = Platform.drawing else { return }
+        context.saveGState()
+        context.setBlendMode(.clear)
+        RoundedBox.fill(rect, radius: rect.width / 2)
+        context.restoreGState()
+    }
+
+    /// How far each avatar side by side stands from the one before it: they overlap by a quarter.
+    static func step(_ side: CGFloat) -> CGFloat { side * 3 / 4 }
+
+    /// The ring around an avatar that is cut out of the one under it.
+    static func ring(_ side: CGFloat) -> CGFloat { max(1, (side / 12).rounded(.down)) }
+
+    /// Draws the avatar in `rect`, a square, in the current context, with the one before it cut
+    /// out where it lies over it.
+    static func draw(agent: Agent?, state: AgentState?, cut under: Bool = false, more: Bool = false, in rect: CGRect) {
         let box = min(rect.width, rect.height)
         // The circle leaves the box's corner to the dot, which sits on its edge.
         let side = state == nil ? box : box - cut
         let whole = CGRect(x: rect.minX, y: rect.minY, width: side, height: side)
-        if ringed {
-            ground.setFill()
-            RoundedBox.fill(whole, radius: side / 2)
-        }
-        let circle = whole.insetBy(dx: ringed ? 2 : 0.5, dy: ringed ? 2 : 0.5)
+        let circle = whole.insetBy(dx: 0.5, dy: 0.5)
         Theme.backgroundAccent.setFill()
         RoundedBox.fill(circle, radius: side / 2)
         Theme.borderAccent.setStroke()
         RoundedBox.stroke(circle, radius: side / 2)
         let mark = (circle.width * 0.56).rounded()
         let markRect = CGRect(x: circle.midX - mark / 2, y: circle.midY - mark / 2, width: mark, height: mark)
-        if let agent, let logo = logos[agent] {
+        if more {
+            TintedSymbol.draw(.ellipsis, size: (circle.width * ellipsis).rounded(), color: Theme.mutedForeground, in: circle)
+        } else if let agent, let logo = logos[agent] {
             logo.drawUpright(in: markRect)
         } else {
             TintedSymbol.draw(.bot, size: mark * 0.85, color: Theme.mutedForeground, in: markRect)
         }
-        guard let state, let context = Platform.drawing else { return }
+        if under {
+            let ring = ring(box)
+            let over = CGRect(x: rect.minX - step(box), y: rect.minY, width: box, height: box).insetBy(dx: -ring, dy: -ring)
+            clear(over)
+        }
+        guard let state else { return }
         let outer = CGRect(x: rect.minX + box - dot - cut, y: rect.minY + box - dot - cut, width: dot, height: dot)
-        context.saveGState()
-        context.setBlendMode(.clear)
-        RoundedBox.fill(outer.insetBy(dx: -cut, dy: -cut), radius: dot)
-        context.restoreGState()
+        clear(outer.insetBy(dx: -cut, dy: -cut))
         state.platformColor.setFill()
         RoundedBox.fill(outer, radius: dot / 2)
     }

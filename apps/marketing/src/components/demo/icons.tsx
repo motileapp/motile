@@ -79,24 +79,28 @@ const STATE_DOTS: Record<AgentState, string> = {
 
 /**
  * An agent's logo in a ring, as the Mac app draws it: with a dot in the colour of how it is
- * doing, cut out of the ring as the menu button's dot is, or ringed by what it lies on, the page
- * or its row's light, when it stands over another without one.
+ * doing, cut out of the ring as the menu button's dot is. One that another without a dot lies
+ * over has that one cut out of it with a ring around it.
  */
 export function AgentAvatar({
   agent,
   state,
-  ringed = false,
+  cut = false,
 }: {
   agent: Agent
   state?: AgentState
-  ringed?: boolean
+  cut?: boolean
 }) {
   return (
     <span
-      className={cn(
-        "relative size-6 shrink-0 rounded-full",
-        ringed && "ring-2 ring-background group-hover:ring-background-accent-larger"
-      )}
+      className="relative size-6 shrink-0 rounded-full"
+      style={
+        cut
+          ? {
+              mask: "radial-gradient(circle at -6px 12px, transparent 14px, black 14.5px)",
+            }
+          : undefined
+      }
     >
       <span
         className={cn(

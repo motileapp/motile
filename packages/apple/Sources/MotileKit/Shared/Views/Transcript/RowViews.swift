@@ -1042,7 +1042,6 @@ final class AgentRowView: RowView {
         highlight.fill = .clear
         avatar.agent = content.agent
         avatar.state = content.state
-        avatar.ground = content.card == nil ? Theme.background : Theme.card
         cardClip.isHidden = content.card == nil
         title.string = content.title
         role.string = content.role ?? ""
@@ -1125,12 +1124,10 @@ final class AgentRowView: RowView {
 /// doing, and how long they have worked. A click opens it into a card of their rows.
 final class AgentsRowView: RowView {
     private static let bleed = scaled(6)
-    private static let step = AgentAvatarDrawing.side * 3 / 4
+    private static let step = AgentAvatarDrawing.step(AgentAvatarDrawing.side)
 
     private let highlight = SurfaceView()
     private var avatars: [AgentAvatarView] = []
-    private let more = TextLabel(font: .ui(10, weight: .medium), color: Theme.mutedForeground)
-    private let moreSurface = SurfaceView()
     private let title = TextLabel(font: .ui(13, weight: .semibold), color: Theme.foreground)
     private let summary = TextLabel(font: .ui(12), color: Theme.mutedForeground)
     private let time = TextLabel(font: .uiDigits(12), color: Theme.mutedStrongerForeground)
@@ -1141,14 +1138,10 @@ final class AgentsRowView: RowView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         highlight.radius = Radius.md
-        moreSurface.fill = Theme.borderAccent
-        moreSurface.radius = AgentAvatarDrawing.side / 2
-        [highlight, moreSurface, more, title, summary, time, chevron].forEach { addSubview($0) }
+        [highlight, title, summary, time, chevron].forEach { addSubview($0) }
         onHover = { [weak self] point in
             guard let self else { return }
             self.highlight.fill = point != nil ? Theme.backgroundAccentLarger : .clear
-            // The ring that sets each avatar apart is of what it lies on.
-            self.avatars.forEach { $0.ground = point != nil ? Theme.backgroundAccentLarger : Theme.background }
         }
         onPress = { [weak self] _ in
             guard let self else { return }
@@ -1167,18 +1160,21 @@ final class AgentsRowView: RowView {
         highlight.fill = .clear
         avatars.forEach { $0.removeFromSuperview() }
         // The first lies over the second, so it is added last.
-        avatars = content.avatars.map { avatar in
+        avatars = content.avatars.enumerated().map { index, avatar in
             let view = AgentAvatarView()
             view.agent = avatar.agent
             // Side by side they leave how they are doing to the summary.
             view.state = content.avatars.count > 1 ? nil : avatar.state
-            view.ringed = content.avatars.count > 1
+            view.cut = index > 0
             return view
         }
+        if content.more > 0 {
+            let view = AgentAvatarView()
+            view.more = true
+            view.cut = !content.avatars.isEmpty
+            avatars.append(view)
+        }
         avatars.reversed().forEach { addSubview($0) }
-        more.string = "+\(content.more)"
-        more.isHidden = content.more == 0
-        moreSurface.isHidden = content.more == 0
         title.string = content.title
         summary.attributed = Self.summary(content.summary)
         chevron.show(content.open ? .chevronDown : .chevronRight, size: 9)
@@ -1227,14 +1223,7 @@ final class AgentsRowView: RowView {
         for (index, avatar) in avatars.enumerated() {
             avatar.frame = CGRect(x: CGFloat(index) * Self.step, y: y, width: side, height: side)
         }
-        var end = avatars.last.map { $0.frame.maxX } ?? 0
-        if !moreSurface.isHidden {
-            let size = more.natural
-            let pill = max(side, (size.width + AgentAvatarDrawing.morePadding * 2).rounded(.up))
-            moreSurface.frame = CGRect(x: CGFloat(avatars.count) * Self.step, y: y, width: pill, height: side)
-            more.frame = CGRect(x: moreSurface.frame.midX - size.width / 2, y: moreSurface.frame.midY - size.height / 2, width: size.width, height: size.height)
-            end = moreSurface.frame.maxX
-        }
+        let end = avatars.last.map { $0.frame.maxX } ?? 0
         let textX = end + scaled(10)
         chevron.frame = CGRect(x: width - 14, y: ((height - 16) / 2).rounded(), width: 14, height: 16)
         let timeWidth = time.string.isEmpty ? 0 : time.naturalWidth + 4

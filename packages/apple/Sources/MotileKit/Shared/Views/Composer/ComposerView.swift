@@ -195,6 +195,8 @@ struct ComposerView: View {
         let avatars = AgentAvatars(
             avatars: children.working.map { ($0, nil) }, more: max(0, children.running - children.working.count),
             side: ComposerView.avatarSide)
+            // Taller than the words, they reach into the button's room above and below them.
+            .padding(.vertical, (ControlSize.regular.symbolSide - ComposerView.avatarSide) / 2)
         // A narrow composer only counts them.
         return ViewThatFits(in: .horizontal) {
             ForEach([text, "\(children.running)"], id: \.self) { words in
@@ -206,7 +208,7 @@ struct ComposerView: View {
         }
     }
 
-    private static let avatarSide: CGFloat = 16
+    private static let avatarSide: CGFloat = 20
     /// The room between the agents button's side and its avatars.
     private static let agentsButtonLead = ControlSize.regular.padding - ControlSize.regular.symbolOutset
 
