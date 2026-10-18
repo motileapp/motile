@@ -26,9 +26,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.Integration
@@ -253,7 +256,7 @@ private fun PanelLauncher(target: PanelTarget) {
         Column(Modifier.width(250.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             LauncherRow(Symbol.Folder, "Files", null) { panel.open(PanelTab.Files) }
             LauncherRow(Symbol.Diff, "Diff", if (target.repository) null else "Available in git repositories.") { panel.showDiff() }
-            LauncherRow(Symbol.Bot, "Agents", null) { panel.open(PanelTab.Agents) }
+            LauncherRow(Symbol.Bot, "Agents", null, count = store.agents.count { it.working }) { panel.open(PanelTab.Agents) }
             LauncherRow(Symbol.GitPullRequest, "Pull Request", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequest) }
             if (store.pullRequestsExtended) {
                 LauncherRow(Symbol.List, "All Pull Requests", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequests) }
@@ -269,8 +272,9 @@ private fun PanelLauncher(target: PanelTarget) {
 }
 
 @Composable
-private fun LauncherRow(symbol: Symbol, title: String, reason: String?, action: () -> Unit) {
-    val foreground = LocalPalette.current.foreground
+private fun LauncherRow(symbol: Symbol, title: String, reason: String?, count: Int = 0, action: () -> Unit) {
+    val palette = LocalPalette.current
+    val foreground = palette.foreground
     Disabled(reason != null) {
         HighlightButton(onClick = action, modifier = Modifier.fillMaxWidth().opacity(Opacity.Disabled, on = reason != null)) {
             Row(
@@ -279,7 +283,16 @@ private fun LauncherRow(symbol: Symbol, title: String, reason: String?, action: 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.width(18.dp), contentAlignment = Alignment.Center) { Icon(symbol, 13f, color = foreground) }
-                Text(title, size = 13f, color = foreground, maxLines = 1)
+                // How many of its things work, in the working colour.
+                val words = buildAnnotatedString {
+                    append(title)
+                    if (count > 0) {
+                        append(" ")
+                        withStyle(SpanStyle(color = palette.mutedForeground)) { append("·") }
+                        withStyle(SpanStyle(color = palette.process)) { append(" $count") }
+                    }
+                }
+                Text(words, size = 13f, color = foreground, maxLines = 1)
             }
         }
     }

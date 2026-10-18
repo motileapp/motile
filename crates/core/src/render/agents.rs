@@ -107,6 +107,12 @@ pub struct AgentView {
     pub account: Option<String>,
 }
 
+/// How many of `count` agents stand side by side as avatars: all of four or fewer, else three
+/// beside a count of the rest, which is never one, since that one's avatar takes the same room.
+pub fn avatars_shown(count: usize) -> usize {
+    if count <= 4 { count } else { 3 }
+}
+
 /// The agent the item's tool call started, once the agent has said something of it.
 pub fn view(item: &Item) -> Option<AgentView> {
     let ItemKind::Tool { call } = &item.kind else { return None };

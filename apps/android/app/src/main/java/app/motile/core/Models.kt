@@ -881,6 +881,8 @@ data class Activity(
 /** The agents a thread's agent started, and theirs, as the thread shows them. */
 data class ThreadChildren(
     val running: Int,
+    /** The agents of the first few that work, whose avatars stand side by side. */
+    val working: List<Agent>,
     /** Those that wait for the user, the one that has waited longest first. */
     val waiting: List<Waiting>,
     /** "Run greet.py needs your approval", "2 agents need you". */
@@ -894,6 +896,7 @@ data class ThreadChildren(
 
     constructor(json: JSON) : this(
         running = json.int("running"),
+        working = json.strings("working").mapNotNull { Agent.of(it) },
         waiting = json.objects("waiting").map {
             Waiting(it.string("thread_id"), it.string("title"), Ask.of(it.string("ask")) ?: Ask.Approval)
         },

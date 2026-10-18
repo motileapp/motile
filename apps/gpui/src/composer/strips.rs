@@ -9,6 +9,7 @@ use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::Scrollbar;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::api::Children;
 use motile_core::render::rows::Waiting;
 use motile_protocol::wire::{Branch, Interruption};
 
@@ -17,12 +18,13 @@ use crate::composer::{RADIUS, composer_divider};
 use crate::models::{
     Project, Server, ThreadInfo, elapsed, interruption_detail, interruption_label, interruption_title, now,
 };
+use crate::panel::state::PanelTab;
 use crate::store::Store;
 use crate::theme::{self, ControlSize, Radius, Surface, colors};
 use crate::ui::control::{ControlIcon, ControlLabel};
 use crate::ui::menu::{Anchor, MenuIcon};
 use crate::ui::rich_text::RichText;
-use crate::ui::{ActionButton, ActionMenu, FadingScroll, Variant, edges, icons, logos, text_width};
+use crate::ui::{ActionButton, ActionMenu, AgentAvatars, FadingScroll, Variant, edges, icons, logos, text_width};
 
 pub const STRIP_RADIUS: f32 = Radius::LG;
 /// The room between a control and the strip's visible edges.
@@ -54,69 +56,135 @@ pub(super) fn strip(top: bool, height: Option<f32>, cx: &App) -> Div {
         .when(!top, |strip| strip.border_b_1().rounded_b(px(STRIP_RADIUS)))
 }
 
-/// The agent is watching something it left running: the strip says for how long, with the
-/// button that stops it.
-pub fn monitoring_strip(store: &Entity<Store>, thread: &ThreadInfo, cx: &App) -> impl IntoElement {
+/// The agent is watching something it left running: the strip says for how long, which agents
+/// it started work meanwhile, and has the button that stops it.
+pub fn monitoring_strip(
+    store: &Entity<Store>,
+    thread: &ThreadInfo,
+    width: f32,
+    window: &mut Window,
+    cx: &App,
+) -> impl IntoElement {
     let c = colors(cx);
-    let help = store.read(cx).shortcuts.help("Stop monitoring", "thread.stop");
-    let store = store.clone();
-    let since = thread.monitoring_since();
+    let children = thread.children.as_ref().filter(|children| children.running_text.is_some());
+    let help = if children.is_some() { "Stop monitoring and its agents" } else { "Stop monitoring" };
+    let stop = stop_button(store, "stop-monitoring", help, cx);
+    let label = format!("Monitoring for {}", elapsed(thread.monitoring_since()));
+    let size = ControlSize::Regular;
+    let room = width
+        - strip_sides()
+        - MONITORING_DOT_ROOM
+        - text_width(&label, size.text_size(), FontWeight::MEDIUM, window)
+        - AGENTS_DOT
+        - agents_button_lead()
+        - SPACER
+        - stop.natural_width(window, cx);
+    let agents = children.map(|children| agents_button(store, children, room, window, cx));
     strip(true, Some(HEIGHT), cx)
         .child(div().ml(px(14.)).mr(px(8.)).size(px(6.)).rounded_full().bg(c.foreground).flex_shrink_0())
         .child(
             div()
-                .text_size(px(12.5))
+                .flex_shrink_0()
+                .whitespace_nowrap()
+                .text_size(px(size.text_size()))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c.foreground)
-                .child(format!("Monitoring for {}", elapsed(since))),
+                .child(label),
         )
-        .child(div().flex_1().min_w(px(8.)))
-        .child(
-            ActionButton::new("stop-monitoring", "Stop")
-                .help(help)
-                .ghost()
-                .surface(Surface::Composer)
-                .margin(margin())
-                .on_click(move |_, _, cx| {
-                    store.update(cx, |store, cx| {
-                        store.stop_thread(cx);
-                        cx.notify();
-                    })
-                }),
-        )
+        .when_some(agents, |strip, agents| {
+            // The button's own room before its avatars is the dot's on its other side.
+            strip
+                .child(
+                    div()
+                        .ml(px(agents_button_lead()))
+                        .size(px(AGENTS_DOT))
+                        .rounded_full()
+                        .bg(c.muted_stronger_foreground)
+                        .flex_shrink_0(),
+                )
+                .child(agents)
+        })
+        .child(div().flex_1().min_w(px(SPACER)))
+        .child(stop)
 }
 
 /// The agents the thread's agent started work on after its turn: the strip says which, with the
 /// button that stops them.
-pub fn agents_strip(store: &Entity<Store>, text: String, cx: &App) -> impl IntoElement {
-    let c = colors(cx);
-    let help = store.read(cx).shortcuts.help("Stop its agents", "thread.stop");
-    let store = store.clone();
+pub fn agents_strip(
+    store: &Entity<Store>,
+    children: &Children,
+    width: f32,
+    window: &mut Window,
+    cx: &App,
+) -> impl IntoElement {
+    let stop = stop_button(store, "stop-agents", "Stop its agents", cx);
+    let room = width - strip_sides() - INSET - SPACER - stop.natural_width(window, cx);
     strip(true, Some(HEIGHT), cx)
-        .child(div().ml(px(14.)).mr(px(8.)).size(px(6.)).rounded_full().bg(c.process).flex_shrink_0())
-        .child(
-            div()
-                .min_w_0()
-                .text_size(px(12.5))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c.foreground)
-                .truncate()
-                .child(text),
-        )
-        .child(div().flex_1().min_w(px(8.)))
-        .child(
-            ActionButton::new("stop-agents", "Stop")
-                .help(help)
-                .ghost()
-                .surface(Surface::Composer)
-                .margin(margin())
-                .on_click(move |_, _, cx| {
-                    store.update(cx, |store, cx| {
-                        store.stop_thread(cx);
-                        cx.notify();
-                    })
-                }),
-        )
+        .child(div().pl(px(INSET)).flex_shrink_0().child(agents_button(store, children, room, window, cx)))
+        .child(div().flex_1().min_w(px(SPACER)))
+        .child(stop)
+}
+
+const SPACER: f32 = 8.;
+const AVATAR_SIDE: f32 = 16.;
+const AGENTS_DOT: f32 = 3.;
+/// The monitoring dot and the room either side of it.
+const MONITORING_DOT_ROOM: f32 = 14. + 6. + 8.;
+
+/// The room between the agents button's side and its avatars.
+fn agents_button_lead() -> f32 {
+    ControlSize::Regular.padding() - ControlSize::Regular.symbol_outset()
+}
+
+/// What a strip's sides take from the composer's width: its distance from the composer's
+/// sides and its outline.
+fn strip_sides() -> f32 {
+    RADIUS * 2. + 2.
+}
+
+fn stop_button(store: &Entity<Store>, id: &'static str, help: &str, cx: &App) -> ActionButton {
+    let help = store.read(cx).shortcuts.help(help, "thread.stop");
+    let store = store.clone();
+    ActionButton::new(id, "Stop").help(help).ghost().surface(Surface::Composer).margin(margin()).on_click(
+        move |_, _, cx| {
+            store.update(cx, |store, cx| {
+                store.stop_thread(cx);
+                cx.notify();
+            })
+        },
+    )
+}
+
+/// The agents that work, side by side, as the way to the Agents tab. Where its words don't fit
+/// in `room` it only counts them.
+fn agents_button(store: &Entity<Store>, children: &Children, room: f32, window: &mut Window, cx: &App) -> ActionButton {
+    let text = children.running_text.clone().unwrap_or_default();
+    let button = |words: String, window: &mut Window| {
+        let more = (children.running as usize).saturating_sub(children.working.len());
+        let avatars = AgentAvatars::new(children.working.iter().copied().map(Some).collect(), more)
+            .side(AVATAR_SIDE)
+            .without_rings();
+        let width = avatars.width(window);
+        let store = store.clone();
+        ActionButton::new("composer-agents", words)
+            .pictures(avatars, width)
+            .help(text.clone())
+            .ghost()
+            .tint(Some(colors(cx).process))
+            .surface(Surface::Composer)
+            .margin(edges(INSET, 0., INSET, 0.))
+            .on_click(move |_, _, cx| {
+                store.update(cx, |store, cx| {
+                    store.open_tab(PanelTab::Agents);
+                    cx.notify();
+                })
+            })
+    };
+    let full = button(text.clone(), window);
+    if full.natural_width(window, cx) <= room {
+        return full;
+    }
+    button(children.running.to_string(), window)
 }
 
 /// Why the agent stopped before it finished: the usage limit, with when the thread goes on by

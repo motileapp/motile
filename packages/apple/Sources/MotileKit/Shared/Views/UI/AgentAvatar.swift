@@ -70,8 +70,10 @@ struct AgentAvatars: View {
                 Text("+\(more)")
                     .font(.ui(size: 10, weight: .medium))
                     .foregroundStyle(Color.themeMutedForeground)
-                    .frame(width: side, height: side)
-                    .background(Circle().fill(Color.themeBackgroundSecondary))
+                    .padding(.horizontal, AgentAvatarDrawing.morePadding)
+                    .frame(minWidth: side)
+                    .frame(height: side)
+                    .background(Capsule().fill(Color(platform: Theme.borderAccent)))
             }
         }
     }
@@ -110,6 +112,8 @@ enum AgentAvatarDrawing {
     /// The dot is as large on every system as the composer strips' are, and cut out of what it lies on.
     static let dot: CGFloat = 6
     static let cut: CGFloat = 2
+    /// The room either side of how many more there are, in its pill of the avatars' outline colour.
+    static let morePadding: CGFloat = 3
     private static let logos: [Agent: PlatformImage] = Dictionary(uniqueKeysWithValues: Agent.allCases.compactMap { agent in
         agent.logo.map { (agent, ImageFiles.tinted(ImageFiles.sized($0, 64), agent.platformColor)) }
     })

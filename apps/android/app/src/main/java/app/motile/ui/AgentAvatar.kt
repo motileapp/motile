@@ -3,7 +3,9 @@ package app.motile.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -17,6 +19,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -48,6 +51,8 @@ object AgentAvatar {
     /** The dot is as large on every system as the composer strips' are, and cut out of what it lies on. */
     val dot = 6.dp
     val cut = 2.dp
+    /** The room either side of how many more there are, in its pill of the avatars' outline colour. */
+    val morePadding = 3.dp
 }
 
 /**
@@ -91,40 +96,53 @@ fun AgentAvatar(
     }
 }
 
-/** Avatars side by side, each a quarter over the next and ringed by the ground, without their dots, and how many more there are. */
+/**
+ * Avatars side by side, each a quarter over the next, without their dots, and how many more there
+ * are. A `ground`, the colour of what they lie on, rings each to set it apart; one under a light
+ * that changes, like a button's, has none.
+ */
 @Composable
 fun AgentAvatars(
-    avatars: List<Pair<Agent?, AgentState>>,
+    avatars: List<Pair<Agent?, AgentState?>>,
     more: Int,
     modifier: Modifier = Modifier,
     side: Dp = AgentAvatar.side,
-    ground: Color = rowGround(),
+    ground: Color? = rowGround(),
 ) {
     val palette = LocalPalette.current
-    val step = side * 3 / 4
+    val overlap = side / 4
     // Alone, it says how it is doing; side by side they leave that to what is written beside them.
     val alone = avatars.size == 1
-    Box(modifier.size(width = step * (avatars.size + (if (more > 0) 1 else 0) - 1) + side, height = side)) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        // The first lies over the second.
+        avatars.forEachIndexed { index, (agent, state) ->
+            AgentAvatar(
+                agent, if (alone) state else null,
+                Modifier.overlapping(if (index == 0) 0.dp else overlap).zIndex((avatars.size - index).toFloat()),
+                side = side, ground = ground ?: Color.Transparent, ringed = !alone && ground != null,
+            )
+        }
         if (more > 0) {
             Box(
                 Modifier
-                    .offset(x = step * avatars.size)
-                    .size(side)
-                    .background(palette.backgroundAccent, CircleShape)
-                    .border(1.dp, palette.borderAccent, CircleShape),
+                    .overlapping(if (avatars.isEmpty()) 0.dp else overlap)
+                    .height(side)
+                    .widthIn(min = side)
+                    .background(palette.borderAccent, CircleShape)
+                    .padding(horizontal = AgentAvatar.morePadding),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("+$more", size = 10f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
             }
         }
-        // The first lies over the second.
-        avatars.forEachIndexed { index, (agent, state) ->
-            AgentAvatar(
-                agent, if (alone) state else null, Modifier.offset(x = step * index).zIndex((avatars.size - index).toFloat()),
-                side = side, ground = ground, ringed = !alone,
-            )
-        }
     }
+}
+
+/** Lies `overlap` over what is before it, which takes that much less room. */
+private fun Modifier.overlapping(overlap: Dp): Modifier = layout { measurable, constraints ->
+    val shift = overlap.roundToPx()
+    val placeable = measurable.measure(constraints)
+    layout((placeable.width - shift).coerceAtLeast(0), placeable.height) { placeable.place(-shift, 0) }
 }
 
 /** What a row's avatars lie on: its light while it is lit, or else its surface. */

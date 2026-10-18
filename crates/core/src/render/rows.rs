@@ -1033,11 +1033,12 @@ fn agents_row(agents: &[&AgentRow], open: bool) -> RowKind {
     let first = agents.iter().map(|agent| agent.started_at).fold(f64::INFINITY, f64::min);
     let ended = agents.iter().map(|agent| agent.ended_at()).collect::<Option<Vec<f64>>>();
     let last = ended.map(|ends| ends.into_iter().fold(first, f64::max));
+    let shown = agents::avatars_shown(agents.len());
     RowKind::Agents {
         title: format!("{} agents", agents.len()),
         summary,
-        avatars: agents.iter().take(3).map(|agent| Avatar { agent: agent.agent, state: agent.state }).collect(),
-        more: agents.len().saturating_sub(3),
+        avatars: agents.iter().take(shown).map(|agent| Avatar { agent: agent.agent, state: agent.state }).collect(),
+        more: agents.len() - shown,
         started_at: working.then_some(first),
         duration_ms: last.filter(|_| !working).map(|last| ((last - first).max(0.0) * 1000.0) as u64),
         open,
@@ -1871,6 +1872,18 @@ mod tests {
         transcript.upsert(stopped, true);
         assert_eq!(outline(&transcript)[0], "(2 agents: 1 done · 1 stopped) open");
         assert!(agent_row(&transcript, 2).flagged, "a stopped agent says so beside its title");
+    }
+
+    #[test]
+    fn a_row_of_agents_shows_a_fourth_avatar_rather_than_one_more() {
+        let avatars = |count: u64| {
+            let mut transcript = Transcript::new("");
+            transcript
+                .load((0..count).map(|n| agent_call(&format!("t{n}"), n, "Look", None, ToolStatus::Running)).collect());
+            let RowKind::Agents { avatars, more, .. } = &transcript.rows()[0].kind else { panic!() };
+            (avatars.len(), *more)
+        };
+        assert_eq!([avatars(4), avatars(5)], [(4, 0), (3, 2)]);
     }
 
     #[test]

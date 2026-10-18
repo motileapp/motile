@@ -43,6 +43,8 @@ struct AgentBar: View {
     private static let height = ControlSize.large.height + 8
     /// The way back's arrow stands close to its words, as the crumb's does.
     private static let backGap: CGFloat = 4
+    /// What it says stands twice the bar's gap from the way back.
+    private static let backApart: CGFloat = 8
 
     var body: some View {
         // A narrow bar leaves out what it says of the agent rather than cut it.
@@ -76,6 +78,7 @@ struct AgentBar: View {
                     .foregroundStyle(Color.themeMutedForeground)
                     .lineLimit(1)
                     .fixedSize()
+                    .padding(.trailing, Self.backApart)
             }
             ActionButton("Go Back", icon: .cornerLeftUp, help: "Back to the thread", variant: .primary, gap: Self.backGap, round: true) { store.rightPanel.showAgents() }
         }

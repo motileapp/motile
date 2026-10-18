@@ -36,10 +36,12 @@ import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.AppStore
 import app.motile.core.Server
+import app.motile.core.ThreadChildren
 import app.motile.core.ThreadInfo
 import app.motile.core.Time
 import app.motile.core.closeSkillMenu
 import app.motile.layout.KeyboardFocus
+import app.motile.panel.PanelTab
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.theme.ControlSize
@@ -50,6 +52,7 @@ import app.motile.theme.ShadowSize
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.ui.ActionButton
+import app.motile.ui.AgentAvatars
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Disabled
 import app.motile.ui.Icon
@@ -101,7 +104,7 @@ fun ComposerView(modifier: Modifier = Modifier) {
                         thread != null && approval != null -> WaitingStrip(approval, store.activity.approvals.size)
                         waitingChild != null && waitingText != null -> ChildrenStrip(waitingText, waitingChild, children.waiting.size)
                         thread != null && store.activity.monitoring -> MonitoringStrip(thread)
-                        thread != null && thread.waitsOnAgents && !store.activity.running && children?.runningText != null -> AgentsStrip(children.runningText)
+                        thread != null && thread.waitsOnAgents && !store.activity.running && children?.runningText != null -> AgentsStrip(children.runningText, children)
                         thread != null && !thread.busy && !store.activity.busy && interruption != null -> InterruptionStrip(interruption)
                     }
                     ComposerBox(model, focus, press)
@@ -172,24 +175,57 @@ private fun MonitoringStrip(thread: ThreadInfo) {
             now = Time.now()
         }
     }
+    val children = thread.children
+    val agentsText = children?.runningText
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.padding(start = 14.dp, end = 8.dp).size(6.dp).background(Theme.colors.foreground, CircleShape))
-        Text("Monitoring for ${Time.elapsed(thread.monitoringSince, now)}", size = 12.5f, weight = FontWeight.Medium, color = Theme.colors.foreground, maxLines = 1)
-        Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
-        ActionButton("Stop", help = "Stop monitoring", variant = ButtonVariant.Ghost, margin = ComposerStrip.margin) { store.stop() }
+        Text("Monitoring for ${Time.elapsed(thread.monitoringSince, now)}", style = ControlSize.Regular.font, color = Theme.colors.foreground, maxLines = 1)
+        if (children != null && agentsText != null) {
+            // The button's own room before its avatars is the dot's on its other side.
+            Box(Modifier.padding(start = AgentsButton.lead).size(3.dp).background(Theme.colors.mutedStrongerForeground, CircleShape))
+            AgentsButton(agentsText, children, Modifier.weight(1f).padding(end = 8.dp))
+        } else {
+            Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
+        }
+        val help = if (agentsText == null) "Stop monitoring" else "Stop monitoring and its agents"
+        ActionButton("Stop", help = store.shortcuts.help(help, "thread.stop"), variant = ButtonVariant.Ghost, margin = ComposerStrip.margin) { store.stop() }
     }
 }
 
 /** The agents the thread's agent started work on after its turn: which, and the way to stop them. */
 @Composable
-private fun AgentsStrip(text: String) {
+private fun AgentsStrip(text: String, children: ThreadChildren) {
     val store = LocalStore.current
     Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.padding(start = 14.dp, end = 8.dp).size(6.dp).background(Theme.colors.process, CircleShape))
-        Text(text, Modifier.weight(1f, fill = false), size = 12.5f, weight = FontWeight.Medium, color = Theme.colors.foreground, maxLines = 1)
-        Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
-        ActionButton("Stop", help = "Stop its agents", variant = ButtonVariant.Ghost, margin = ComposerStrip.margin) { store.stop() }
+        AgentsButton(text, children, Modifier.weight(1f).padding(start = ComposerStrip.inset, end = 8.dp))
+        ActionButton("Stop", help = store.shortcuts.help("Stop its agents", "thread.stop"), variant = ButtonVariant.Ghost, margin = ComposerStrip.margin) { store.stop() }
     }
+}
+
+private object AgentsButton {
+    val avatarSide = 16.dp
+    /** The room between the agents button's side and its avatars. */
+    val lead = ControlSize.Regular.padding - ControlSize.Regular.symbolOutset
+}
+
+/** The agents that work, side by side, as the way to the Agents tab. */
+@Composable
+private fun AgentsButton(text: String, children: ThreadChildren, modifier: Modifier = Modifier) {
+    val store = LocalStore.current
+    val button = @Composable { words: String ->
+        ActionButton(
+            words, help = text, variant = ButtonVariant.Ghost, tint = Theme.colors.process,
+            margin = PaddingValues(vertical = ComposerStrip.inset),
+            pictures = {
+                AgentAvatars(
+                    children.working.map { it to null }, more = (children.running - children.working.size).coerceAtLeast(0),
+                    side = AgentsButton.avatarSide, ground = null,
+                )
+            },
+        ) { store.rightPanel.open(PanelTab.Agents) }
+    }
+    // A narrow composer only counts them.
+    FirstThatFits(modifier, { button(text) }, { button("${children.running}") })
 }
 
 @Composable

@@ -292,7 +292,9 @@ private struct PanelLauncher: View {
                 row(.diff, "Diff", command: "rightPanel.diff", reason: target.repository ? nil : "Available in git repositories.") {
                     store.rightPanel.showDiff()
                 }
-                row(.bot, "Agents", command: "rightPanel.agents", reason: nil) { store.rightPanel.open(.agents) }
+                row(.bot, "Agents", count: store.agents.filter(\.working).count, command: "rightPanel.agents", reason: nil) {
+                    store.rightPanel.open(.agents)
+                }
                 row(.gitPullRequest, "Pull Request", command: "rightPanel.pullRequest", reason: store.pullRequestsUnavailable) {
                     store.rightPanel.open(.pullRequest)
                 }
@@ -321,13 +323,21 @@ private struct PanelLauncher: View {
         }
     }
 
-    private func row(_ symbol: Symbol, _ title: String, command: String?, reason: String?, action: @escaping () -> Void) -> some View {
+    /// A tab to open, with how many of its things work, in the working colour, when any do.
+    private func row(_ symbol: Symbol, _ title: String, count: Int = 0, command: String?, reason: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(symbol, size: 13)
                     .frame(width: 18)
-                Text(title)
-                    .font(.ui(size: 13))
+                Group {
+                    if count > 0 {
+                        Text("\(title) ") + Text("·").foregroundStyle(Color.themeMutedForeground)
+                            + Text(" \(count)").foregroundStyle(Color.themeProcess)
+                    } else {
+                        Text(title)
+                    }
+                }
+                .font(.ui(size: 13))
                 Spacer()
                 #if os(macOS)
                 if let command, let caps = store.shortcuts.effective(command).first?.caps {

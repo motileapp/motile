@@ -81,14 +81,15 @@ enum class ButtonVariant {
 /** The sides of a control. */
 enum class HorizontalEdge { Leading, Trailing }
 
-/** What a button shows before its words: a symbol, or a picture of its own like a logo. */
+/** What a button shows before its words: a symbol, a picture of its own like a logo, or pictures side by side, as wide as they are. */
 sealed interface ControlIcon {
     data class Glyph(val symbol: Symbol) : ControlIcon
     class Picture(val content: @Composable () -> Unit) : ControlIcon
+    class Pictures(val content: @Composable () -> Unit) : ControlIcon
 
     companion object {
-        fun of(symbol: Symbol?, picture: (@Composable () -> Unit)?): ControlIcon? =
-            symbol?.let { Glyph(it) } ?: picture?.let { Picture(it) }
+        fun of(symbol: Symbol?, picture: (@Composable () -> Unit)?, pictures: (@Composable () -> Unit)? = null): ControlIcon? =
+            symbol?.let { Glyph(it) } ?: picture?.let { Picture(it) } ?: pictures?.let { Pictures(it) }
     }
 }
 
@@ -262,6 +263,7 @@ private fun ControlWords(
             icon is ControlIcon.Picture -> Box(Modifier.size(pictureSide), contentAlignment = Alignment.Center) {
                 icon.content()
             }
+            icon is ControlIcon.Pictures -> icon.content()
         }
         if (title != null) {
             val muted = LocalPalette.current.mutedStrongerForeground
@@ -347,6 +349,7 @@ fun ActionButton(
     icon: Symbol? = null,
     modifier: Modifier = Modifier,
     picture: (@Composable () -> Unit)? = null,
+    pictures: (@Composable () -> Unit)? = null,
     detail: Symbol? = null,
     help: String? = null,
     variant: ButtonVariant = if (title.isNullOrEmpty()) ButtonVariant.Ghost else ButtonVariant.Secondary,
@@ -374,7 +377,7 @@ fun ActionButton(
     val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, hover = hover)
     val label = @Composable {
         ControlLabel(
-            words, ControlIcon.of(icon, picture), size, chevron = opens, pending = pending, pendingTitle = pendingTitle, fills = fills,
+            words, ControlIcon.of(icon, picture, pictures), size, chevron = opens, pending = pending, pendingTitle = pendingTitle, fills = fills,
             alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail,
         )
     }
@@ -383,7 +386,7 @@ fun ActionButton(
     val vertical = ((size.height - line) / 2).coerceAtLeast(0.dp)
     val leading = when {
         words == null && !opens -> (size.height - size.symbolSide) / 2
-        else -> (padding ?: size.padding) - if (icon != null || picture != null) size.symbolOutset else 0.dp
+        else -> (padding ?: size.padding) - if (icon != null || picture != null || pictures != null) size.symbolOutset else 0.dp
     }
     // Its light hugs its words, while its press keeps the control's height.
     val lightInset = (vertical - 3.dp).coerceAtLeast(0.dp)

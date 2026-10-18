@@ -199,7 +199,7 @@ struct ComposerView: View {
         return ViewThatFits(in: .horizontal) {
             ForEach([text, "\(children.running)"], id: \.self) { words in
                 ActionButton(
-                    words, pictures: AnyView(avatars), help: text, variant: .ghost, tint: .themeForeground,
+                    words, pictures: AnyView(avatars), help: text, variant: .ghost, tint: .themeProcess,
                     margin: EdgeInsets(top: ComposerStrip.inset, leading: 0, bottom: ComposerStrip.inset, trailing: 0)
                 ) { store.rightPanel.open(.agents) }
             }
