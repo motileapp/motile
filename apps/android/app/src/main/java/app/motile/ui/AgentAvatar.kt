@@ -27,6 +27,8 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.theme.LocalPalette
+import app.motile.theme.LocalRow
+import app.motile.theme.LocalSurface
 import app.motile.theme.Palette
 import kotlin.math.roundToInt
 
@@ -96,7 +98,7 @@ fun AgentAvatars(
     more: Int,
     modifier: Modifier = Modifier,
     side: Dp = AgentAvatar.side,
-    ground: Color = LocalPalette.current.background,
+    ground: Color = rowGround(),
 ) {
     val palette = LocalPalette.current
     val step = side * 3 / 4
@@ -123,4 +125,12 @@ fun AgentAvatars(
             )
         }
     }
+}
+
+/** What a row's avatars lie on: its light while it is lit, or else its surface. */
+@Composable
+private fun rowGround(): Color {
+    val palette = LocalPalette.current
+    val surface = LocalSurface.current
+    return LocalRow.current?.let { surface.color(it, palette) } ?: surface.color(palette)
 }

@@ -57,7 +57,7 @@ export function Composer({
         <Strip edge="top">
           <span className="mr-2 ml-3.5 size-1.5 shrink-0 rounded-full bg-process" />
           <span className="truncate text-[12.5px] font-medium text-foreground">
-            Waiting on {status.count} agents
+            {status.count} agents working
           </span>
           <button
             type="button"

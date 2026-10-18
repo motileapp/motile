@@ -941,17 +941,20 @@ struct ThreadChildren: Equatable {
     }
 
     let running: Int
+    /// The agents of the first few that work, whose avatars stand side by side.
+    let working: [Agent]
     /// Those that wait for the user, the one that has waited longest first.
     let waiting: [Waiting]
     /// "Run greet.py needs your approval", "2 agents need you".
     let waitingText: String?
-    /// "Waiting on Run greet.py", "Waiting on 3 agents", while they work.
+    /// "1 agent working", "3 agents working", while they work.
     let runningText: String?
     /// "Stop 1 agent?", "Stop 3 agents?", while they work.
     let stopQuestion: String?
 
     init(json: JSON) {
         running = json.int("running")
+        working = json.strings("working").compactMap(Agent.init(rawValue:))
         waiting = json.objects("waiting").map {
             Waiting(threadID: $0.string("thread_id"), title: $0.string("title"), ask: Ask(rawValue: $0.string("ask")) ?? .approval)
         }

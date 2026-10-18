@@ -16,8 +16,8 @@ made up on the spot instead:
 - "rate limiter": a turn with thinking, tool calls and a reply that uses most of Markdown.
 - "huge transcript": four hundred messages with code and tool calls, for a very long thread.
 - "watch the deploy": a turn that starts a monitor. The process then stays, as Claude Code's does:
-  it answers the prompts it is given, and FAKE_AGENT_WATCH seconds after the last one it says what
-  the monitor saw and exits.
+  it answers the prompts it is given, "ask agents in the background" too, and FAKE_AGENT_WATCH
+  seconds after the last one it says what the monitor saw and exits.
 - "run greet.py": a turn that edits a file and runs it. With `--permission-mode default` it asks
   before each of the two and waits for the answer on stdin. Its reply ends with what it was told
   while it worked.
@@ -703,6 +703,9 @@ def watch_the_deploy():
             sys.exit(0)
         said = take(message)
         turn = Turn(session_id)
+        if "ask agents in the background" in said.lower():
+            start_agents_in_the_background(turn)
+            continue
         turn.text(f"Still rolling out; 2 of 3 services are up. You said: {said}")
         turn.done()
 
@@ -761,7 +764,10 @@ def ask_another_account():
 
 
 def ask_agents_in_the_background():
-    turn = Turn("00000000-0000-4000-8000-0000000ba6c0")
+    start_agents_in_the_background(Turn("00000000-0000-4000-8000-0000000ba6c0"))
+
+
+def start_agents_in_the_background(turn):
     turn.text("I'll have Codex and another Claude Code look at this while I wait.")
     call_motile(turn, "start_agent", {"prompt": "Look over greet.py and say what you would change.",
                                       "title": "Review greet.py", "role": "reviewer", "agent": "codex",

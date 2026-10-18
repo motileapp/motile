@@ -8,7 +8,7 @@ use gpui_kit::*;
 use motile_core::render::agents::AgentState;
 use motile_protocol::wire::Agent;
 
-use crate::theme::{Colors, colors};
+use crate::theme::{Colors, Layer, Surface, colors};
 use crate::ui::{icons, logos};
 
 pub const SIDE: f32 = 24.;
@@ -35,11 +35,13 @@ pub struct AgentAvatar {
     state: Option<AgentState>,
     /// It lies over another, from which a ring of this colour sets it apart.
     ring: Option<Hsla>,
+    /// The ring's colour while the pointer is over the row `group` names, which lights up.
+    lit_ring: Option<(SharedString, Hsla)>,
 }
 
 impl AgentAvatar {
     pub fn new(agent: Option<Agent>) -> Self {
-        Self { agent, state: None, ring: None }
+        Self { agent, state: None, ring: None, lit_ring: None }
     }
 
     pub fn state(mut self, state: impl Into<Option<AgentState>>) -> Self {
@@ -47,8 +49,9 @@ impl AgentAvatar {
         self
     }
 
-    fn ringed(mut self, ground: Hsla) -> Self {
+    fn ringed(mut self, ground: Hsla, lit: Option<(SharedString, Hsla)>) -> Self {
         self.ring = Some(ground);
+        self.lit_ring = lit;
         self
     }
 }
@@ -74,7 +77,11 @@ impl RenderOnce for AgentAvatar {
             .size(px(SIDE))
             .flex_none()
             .when_some(self.ring, |avatar, ring| {
-                avatar.child(div().absolute().size(px(circle)).rounded_full().bg(ring))
+                let ring = div().absolute().size(px(circle)).rounded_full().bg(ring);
+                avatar.child(match self.lit_ring {
+                    Some((group, lit)) => ring.group_hover(group, move |ring| ring.bg(lit)),
+                    None => ring,
+                })
             })
             .child(disc.flex().items_center().justify_center().child(logo))
             .when_some(self.state, |avatar, state| {
@@ -137,11 +144,18 @@ fn cut_circle(side: f32, fill: Hsla, outline: Hsla) -> impl IntoElement {
 pub struct AgentAvatars {
     agents: Vec<Option<Agent>>,
     more: usize,
+    /// The row that lights up under the pointer, whose light the rings take then.
+    lit_in: Option<SharedString>,
 }
 
 impl AgentAvatars {
     pub fn new(agents: Vec<Option<Agent>>, more: usize) -> Self {
-        Self { agents, more }
+        Self { agents, more, lit_in: None }
+    }
+
+    pub fn lit_in(mut self, group: impl Into<SharedString>) -> Self {
+        self.lit_in = Some(group.into());
+        self
     }
 }
 
@@ -168,10 +182,11 @@ impl RenderOnce for AgentAvatars {
                 .text_color(c.muted_foreground)
                 .child(format!("+{}", self.more))
         });
+        let lit = self.lit_in.map(|group| (group, Surface::Background.layer(Layer::Row, c)));
         // The first lies over the second, so it is drawn last.
         let avatars = self.agents.into_iter().enumerate().rev().map(move |(index, agent)| {
             let avatar = AgentAvatar::new(agent);
-            let avatar = if ringed { avatar.ringed(c.background) } else { avatar };
+            let avatar = if ringed { avatar.ringed(c.background, lit.clone()) } else { avatar };
             div().absolute().left(px(index as f32 * STEP)).child(avatar)
         });
         div().relative().flex_none().w(px(width)).h(px(SIDE)).children(more).children(avatars)
