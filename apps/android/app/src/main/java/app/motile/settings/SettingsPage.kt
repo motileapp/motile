@@ -71,7 +71,7 @@ fun SettingsPage(section: SettingsSection) {
                 Preferences.set(AppStore.STEERS_KEY, it)
             }
             SettingsSection.Servers -> servers(store, navigator)
-            SettingsSection.Agents -> agentAccounts(store, edit = { server, account -> edited = EditedAccount(server, account) }) { removal = it }
+            SettingsSection.Accounts -> agentAccounts(store, edit = { server, account -> edited = EditedAccount(server, account) }) { removal = it }
             SettingsSection.Projects -> projects(store, navigator)
             SettingsSection.TextGeneration -> textGeneration(store, navigator)
             SettingsSection.PullRequests -> pullRequests(store)
@@ -166,7 +166,7 @@ private fun SettingsGroups.agentAccounts(store: AppStore, edit: (Server, AgentAc
             }
             row {
                 SettingsPressRow({ edit(server, AgentAccount.new(installed.firstOrNull() ?: Agent.Claude)) }, enabled = installed.isNotEmpty()) {
-                    SettingsActionLabel("Add an Account", Symbol.Plus)
+                    SettingsActionLabel("Add Account", Symbol.Plus)
                 }
             }
         }

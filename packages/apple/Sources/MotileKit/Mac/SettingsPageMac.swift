@@ -21,7 +21,7 @@ struct SettingsPage: View {
                     switch section {
                     case .general: general
                     case .servers: servers
-                    case .agents: agentAccounts
+                    case .accounts: agentAccounts
                     case .projects: projects
                     case .textGeneration: textGeneration
                     case .pullRequests: pullRequests
@@ -329,7 +329,7 @@ struct SettingsPage: View {
                 ThemeDivider()
             }
             SettingsRow {
-                ActionButton("Add an Account", icon: .plus, variant: .outline, size: .large) {
+                ActionButton("Add Account", icon: .plus, variant: .outline, size: .large) {
                     editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
                 }
                 .padding(.leading, -rowOutset(for: ControlSize.large.height))

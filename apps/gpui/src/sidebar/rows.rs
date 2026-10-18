@@ -576,6 +576,23 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
             .tooltip(tooltip(waiting))
             .into_any_element();
     }
+    if thread.waits_on_agents() {
+        let agents = thread.children.as_ref().map_or(0, |children| children.running);
+        let help = thread.children.as_ref().and_then(|children| children.running_text.clone()).unwrap_or_default();
+        return div()
+            .id(SharedString::from(format!("waits-on-agents-{}", thread.id)))
+            .flex()
+            .items_center()
+            .gap(px(9.))
+            .child(label(agents.to_string(), c.pending, symbol("users")))
+            .child(label(
+                elapsed(thread.monitoring_since()),
+                c.muted_foreground,
+                icons::symbol("circle-dot-dashed", 10.).into_any_element(),
+            ))
+            .tooltip(tooltip(help))
+            .into_any_element();
+    }
     if thread.working() {
         let agents = thread.agents.max(thread.children.as_ref().map_or(0, |children| children.running));
         return div()

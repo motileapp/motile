@@ -105,7 +105,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         switch self {
         case .diff, .change: .diff
         case .files: .folder
-        case .agents: .users
+        case .agents: .bot
         case .pullRequest, .pullRequestNumber, .pullRequests: .gitPullRequest
         case .linear, .linearIssue: .linear
         case .ricrac, .ricracIssue: .ricrac

@@ -133,7 +133,10 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
         None => {
             let named = ["description", "title", "name"].iter().map(|key| text(key)).find(|title| !title.is_empty());
             let title = named.unwrap_or_else(|| prompt.lines().next().unwrap_or("Agent").to_string());
-            let reported = agent.and_then(|agent| agent.result.as_deref()).or(call.output.as_deref());
+            // An agent in a thread of its own reports in it; its call's reply only says it started.
+            let own_thread = agent.and_then(|agent| agent.runs_on.as_ref()).is_some_and(|on| on.thread_id.is_some());
+            let reply = call.output.as_deref().filter(|_| !own_thread);
+            let reported = agent.and_then(|agent| agent.result.as_deref()).or(reply);
             let progress = agent.and_then(|agent| agent.progress.as_deref());
             let detail = match working {
                 true => progress.or(reported),
@@ -143,6 +146,8 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
         }
     };
     let state = AgentState::of(status, agent);
+    let label = state.label(agent.and_then(|agent| agent.waits)).to_string();
+    let detail = if detail.trim().is_empty() && working { label.clone() } else { detail };
     let runs_on = agent.and_then(|agent| agent.runs_on.as_deref());
     Some(AgentView {
         id: item.id.clone(),
@@ -151,7 +156,7 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
         kind,
         status,
         state,
-        label: state.label(agent.and_then(|agent| agent.waits)).to_string(),
+        label,
         detail: one_line(&detail),
         prompt,
         started_at: item.created_at,
@@ -296,7 +301,7 @@ fn one_line(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use motile_protocol::wire::Subagent;
+    use motile_protocol::wire::{Agent, RunsOn, Subagent};
 
     use super::*;
 
@@ -334,6 +339,18 @@ mod tests {
 
         let ended = view(&started(ToolStatus::Succeeded, Some("Reading a.txt"), Some("Three\n\nfiles"))).unwrap();
         assert_eq!((ended.detail.as_str(), ended.duration_ms), ("Three files", Some(30_000)));
+    }
+
+    #[test]
+    fn an_agent_in_a_thread_of_its_own_never_shows_the_reply_that_started_it() {
+        let mut item = started(ToolStatus::Running, None, None);
+        let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+        call.name = "mcp__motile__start_agent".into();
+        call.output = Some(r#"{"id":"c1","title":"Count the files"}"#.into());
+        let agent = call.agent.as_mut().unwrap();
+        agent.runs_on =
+            Some(Box::new(RunsOn { agent: Agent::Codex, model: None, account: None, thread_id: Some("c1".into()) }));
+        assert_eq!(view(&item).unwrap().detail, "Working");
     }
 
     fn workflow_call(status: ToolStatus, agents: &[(&str, &str, ToolStatus)]) -> Item {

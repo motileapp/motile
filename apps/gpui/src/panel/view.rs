@@ -509,7 +509,7 @@ impl RightPanelView {
                     ))
                     .child(row(
                         "launch-agents",
-                        "users",
+                        "bot",
                         "Agents",
                         Some("rightPanel.agents"),
                         None,
@@ -1172,10 +1172,7 @@ impl RightPanelView {
         if agents.is_empty() && parent.is_none() {
             return Self::message("The agents this thread starts show up here.", false, cx);
         }
-        let said = match &parent {
-            Some((_, title)) if agents.is_empty() => StyledText::new(format!("Started by {title}")),
-            _ => summary(&agents, c),
-        };
+        let said = if agents.is_empty() { StyledText::new("No agents") } else { summary(&agents, c) };
         let bar = Self::bar(
             div().flex().w_full().child(
                 div().text_size(px(12.)).font_weight(FontWeight::MEDIUM).text_color(c.muted_foreground).child(said),
@@ -1641,8 +1638,7 @@ fn parent_row(id: &str, title: &str, store: &Entity<Store>, cx: &App) -> Div {
                                     .truncate()
                                     .child(title.to_string()),
                             ),
-                    )
-                    .child(icons::symbol("chevron-right", 11.).text_color(c.muted_stronger_foreground)),
+                    ),
             )
             .on_click(act(store, move |store, cx| store.open_started_thread(&id, cx))),
     )
@@ -1778,17 +1774,20 @@ fn agent_row(
                                         .child(agent_time(agent, cx)),
                                 ),
                         )
-                        .when(!agent.detail.is_empty(), |text| {
-                            let failed = agent.status == ToolStatus::Failed;
-                            text.child(
-                                div()
-                                    .text_size(px(12.))
-                                    .line_height(px(16.))
-                                    .text_color(if failed { c.destructive } else { c.muted_foreground })
-                                    .line_clamp(2)
-                                    .child(agent.detail.clone()),
-                            )
-                        })
+                        // Always one line, so that a row keeps its height as what its agent does changes.
+                        .child(
+                            div()
+                                .h(px(16.))
+                                .text_size(px(12.))
+                                .line_height(px(16.))
+                                .text_color(if agent.status == ToolStatus::Failed {
+                                    c.destructive
+                                } else {
+                                    c.muted_foreground
+                                })
+                                .truncate()
+                                .child(agent.detail.clone()),
+                        )
                         .when_some(agent.facts(), |text, facts| {
                             text.child(
                                 div()

@@ -253,7 +253,7 @@ private fun PanelLauncher(target: PanelTarget) {
         Column(Modifier.width(250.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             LauncherRow(Symbol.Folder, "Files", null) { panel.open(PanelTab.Files) }
             LauncherRow(Symbol.Diff, "Diff", if (target.repository) null else "Available in git repositories.") { panel.showDiff() }
-            LauncherRow(Symbol.Users, "Agents", null) { panel.open(PanelTab.Agents) }
+            LauncherRow(Symbol.Bot, "Agents", null) { panel.open(PanelTab.Agents) }
             LauncherRow(Symbol.GitPullRequest, "Pull Request", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequest) }
             if (store.pullRequestsExtended) {
                 LauncherRow(Symbol.List, "All Pull Requests", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequests) }

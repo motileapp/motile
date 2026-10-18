@@ -53,6 +53,20 @@ export function Composer({
           </button>
         </Strip>
       )}
+      {status.kind === "agents" && !status.waiting && (
+        <Strip edge="top">
+          <span className="mr-2 ml-3.5 size-1.5 shrink-0 rounded-full bg-process" />
+          <span className="truncate text-[12.5px] font-medium text-foreground">
+            Waiting on {status.count} agents
+          </span>
+          <button
+            type="button"
+            className="mr-2 ml-auto h-7 shrink-0 rounded-md px-[11px] text-[12px] font-medium text-muted-foreground hover:bg-border-composer hover:text-foreground"
+          >
+            Stop
+          </button>
+        </Strip>
+      )}
       {status.kind === "agents" && status.waiting && (
         <Strip edge="top">
           <ShieldIcon className="mr-[7px] ml-3.5 size-[13px] text-warning" />

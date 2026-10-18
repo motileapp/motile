@@ -127,11 +127,7 @@ struct ThreadScreen: View {
     /// place, the agent's after the thread's. Then the project.
     private var title: some View {
         VStack(alignment: .leading, spacing: 1) {
-            // A narrow screen keeps the title whole and the way back only as its symbol.
-            ViewThatFits(in: .horizontal) {
-                titleLine(compact: false)
-                titleLine(compact: true)
-            }
+            titleLine
             if let parts = store.composerProjectLine {
                 ProjectLine(project: store.composerProject, parts: parts, size: 12, iconSize: 12)
             }
@@ -140,18 +136,20 @@ struct ThreadScreen: View {
         .frame(idealWidth: 10000, maxWidth: .infinity, alignment: .leading)
     }
 
-    private func titleLine(compact: Bool) -> some View {
+    /// A narrow screen keeps the title whole and cuts the way back short.
+    private var titleLine: some View {
         HStack(spacing: 4) {
             if let agent = store.shownAgent, let thread = store.selectedThread {
-                TitleCrumb(title: thread.title, compact: compact) { store.rightPanel.showAgents() }
-                titleText(agent.title)
+                TitleCrumb(title: thread.title) { store.rightPanel.showAgents() }
+                titleText(agent.title).layoutPriority(1)
             } else if let parent = store.parentThread {
-                TitleCrumb(title: parent.title, compact: compact) { store.openStartedThread(parent.id) }
-                titleText(store.selectedThread?.title ?? "")
+                TitleCrumb(title: parent.title) { store.openStartedThread(parent.id) }
+                titleText(store.selectedThread?.title ?? "").layoutPriority(1)
             } else {
                 titleText(store.selectedThread?.title ?? "New thread")
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func titleText(_ text: String) -> some View {

@@ -30,6 +30,9 @@ struct ComposerView: View {
                     ChildrenStrip(text: text, first: first, count: children.waiting.count)
                 } else if store.selectedThread != nil, store.activity.monitoring {
                     monitoringStrip
+                } else if let thread = store.selectedThread, thread.waitsOnAgents, !store.activity.running,
+                          let text = thread.children?.runningText {
+                    agentsStrip(text)
                 } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {
                     InterruptionStrip(interruption: interruption)
                 }
@@ -157,6 +160,26 @@ struct ComposerView: View {
             }
             Spacer(minLength: 8)
             ActionButton("Stop", help: store.shortcuts.help("Stop monitoring", "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
+        }
+        .modifier(ComposerStrip(edge: .top))
+    }
+
+    /// While the agents the thread's agent started work on after its turn: which, and the way to
+    /// stop them.
+    private func agentsStrip(_ text: String) -> some View {
+        HStack(spacing: 0) {
+            Circle()
+                .fill(Color.themeProcess)
+                .frame(width: 6, height: 6)
+                .padding(.leading, 14)
+                .padding(.trailing, 8)
+            Text(text)
+                .font(.ui(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.themeForeground)
+                .lineLimit(1)
+                .help(text)
+            Spacer(minLength: 8)
+            ActionButton("Stop", help: store.shortcuts.help("Stop its agents", "thread.stop"), variant: .ghost, margin: ComposerStrip.margin) { store.stop() }
         }
         .modifier(ComposerStrip(edge: .top))
     }

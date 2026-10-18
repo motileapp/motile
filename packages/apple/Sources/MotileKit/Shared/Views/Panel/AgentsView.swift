@@ -30,7 +30,7 @@ struct AgentsSurface: View {
             let shown = showsEnded ?? working.isEmpty
             VStack(spacing: 0) {
                 PanelBar {
-                    Self.summary(of: agents, parent: parent)
+                    Self.summary(of: agents)
                         .font(.ui(size: 12, weight: .medium))
                         .foregroundStyle(Color.themeMutedForeground)
                     Spacer()
@@ -54,8 +54,8 @@ struct AgentsSurface: View {
 
     /// "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of, each count
     /// in its state's colour.
-    static func summary(of agents: [AgentInfo], parent: ThreadInfo?) -> Text {
-        guard !agents.isEmpty else { return Text(verbatim: parent.map { "Started by \($0.title)" } ?? "") }
+    static func summary(of agents: [AgentInfo]) -> Text {
+        guard !agents.isEmpty else { return Text(verbatim: "No agents") }
         let words: [(AgentState, String)] = [(.waiting, "waiting"), (.working, "working"), (.done, "done"), (.failed, "failed"), (.stopped, "stopped")]
         let counts = words.compactMap { state, word -> Text? in
             let count = agents.count { $0.state == state }
@@ -90,8 +90,6 @@ private struct ParentRow: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 6)
-                Image(.chevronRight, size: 11)
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -176,13 +174,11 @@ private struct AgentRow: View {
                         AgentTime(agent: agent)
                             .opacity(hovered && stoppable ? 0 : 1)
                     }
-                    if !agent.detail.isEmpty {
-                        Text(agent.detail)
-                            .font(.ui(size: 12))
-                            .foregroundStyle(agent.status == .failed ? Color.themeDestructive : Color.themeMutedForeground)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                    }
+                    // Always one line, so that a row keeps its height as what its agent does changes.
+                    Text(agent.detail)
+                        .font(.ui(size: 12))
+                        .foregroundStyle(agent.status == .failed ? Color.themeDestructive : Color.themeMutedForeground)
+                        .lineLimit(1, reservesSpace: true)
                     if let facts = facts {
                         Text(facts)
                             .font(.ui(size: 11))

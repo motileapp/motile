@@ -100,10 +100,10 @@ struct ThreadPane: View {
             HStack(spacing: 4) {
                 if let agent = store.shownAgent, let thread = store.selectedThread {
                     TitleCrumb(title: thread.title) { store.rightPanel.showAgents() }
-                    titleText(agent.title)
+                    titleText(agent.title).layoutPriority(1)
                 } else if let parent = store.parentThread {
                     TitleCrumb(title: parent.title) { store.openStartedThread(parent.id) }
-                    titleText(store.selectedThread?.title ?? "")
+                    titleText(store.selectedThread?.title ?? "").layoutPriority(1)
                 } else {
                     titleText(store.selectedThread?.title ?? "New thread")
                 }

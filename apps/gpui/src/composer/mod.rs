@@ -21,7 +21,7 @@ use gpui_kit::*;
 use motile_protocol::wire::{Access, Interruption};
 
 use self::questions::Questions;
-use self::strips::{BranchPicker, context_strip, interruption_strip, monitoring_strip, waiting_strip};
+use self::strips::{BranchPicker, agents_strip, context_strip, interruption_strip, monitoring_strip, waiting_strip};
 use crate::models::{ACCESSES, ModelInfoExt, ThreadInfo, access_detail, access_label};
 use crate::store::Store;
 use crate::theme::{self, ControlSize, Surface, colors};
@@ -832,6 +832,10 @@ impl Render for Composer {
             Some((children.waiting_text.clone()?, children.waiting.first()?.clone(), children.waiting.len()))
         });
         let monitoring = thread.is_some() && store.activity.monitoring;
+        let agents_text = thread
+            .as_ref()
+            .filter(|thread| thread.waits_on_agents() && !store.activity.running)
+            .and_then(|thread| thread.children.as_ref()?.running_text.clone());
         let interrupted = thread.as_ref().and_then(|thread| interruption(thread, store));
         let project = store.composer_project();
         let server = project.as_ref().and_then(|project| store.server(Some(&project.server_id)).cloned());
@@ -842,6 +846,8 @@ impl Render for Composer {
             Some(children::children_strip(&self.store, text, &first, count, cx).into_any_element())
         } else if let Some(thread) = thread.as_ref().filter(|_| monitoring) {
             Some(monitoring_strip(&self.store, thread, cx).into_any_element())
+        } else if let Some(text) = agents_text {
+            Some(agents_strip(&self.store, text, cx).into_any_element())
         } else {
             interrupted.map(|interruption| interruption_strip(&self.store, interruption, cx).into_any_element())
         };

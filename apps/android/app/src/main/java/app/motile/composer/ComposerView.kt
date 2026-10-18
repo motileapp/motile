@@ -101,6 +101,7 @@ fun ComposerView(modifier: Modifier = Modifier) {
                         thread != null && approval != null -> WaitingStrip(approval, store.activity.approvals.size)
                         waitingChild != null && waitingText != null -> ChildrenStrip(waitingText, waitingChild, children.waiting.size)
                         thread != null && store.activity.monitoring -> MonitoringStrip(thread)
+                        thread != null && thread.waitsOnAgents && !store.activity.running && children?.runningText != null -> AgentsStrip(children.runningText)
                         thread != null && !thread.busy && !store.activity.busy && interruption != null -> InterruptionStrip(interruption)
                     }
                     ComposerBox(model, focus, press)
@@ -176,6 +177,18 @@ private fun MonitoringStrip(thread: ThreadInfo) {
         Text("Monitoring for ${Time.elapsed(thread.monitoringSince, now)}", size = 12.5f, weight = FontWeight.Medium, color = Theme.colors.foreground, maxLines = 1)
         Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
         ActionButton("Stop", help = "Stop monitoring", variant = ButtonVariant.Ghost, margin = ComposerStrip.margin) { store.stop() }
+    }
+}
+
+/** The agents the thread's agent started work on after its turn: which, and the way to stop them. */
+@Composable
+private fun AgentsStrip(text: String) {
+    val store = LocalStore.current
+    Row(Modifier.fillMaxWidth().composerStrip(ComposerStrip.Edge.Top), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.padding(start = 14.dp, end = 8.dp).size(6.dp).background(Theme.colors.process, CircleShape))
+        Text(text, Modifier.weight(1f, fill = false), size = 12.5f, weight = FontWeight.Medium, color = Theme.colors.foreground, maxLines = 1)
+        Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
+        ActionButton("Stop", help = "Stop its agents", variant = ButtonVariant.Ghost, margin = ComposerStrip.margin) { store.stop() }
     }
 }
 

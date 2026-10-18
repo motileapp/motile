@@ -4,15 +4,16 @@ import app.motile.platform.Symbol
 
 /** A page of the settings, listed in the settings' sidebar. */
 enum class SettingsSection(val raw: String) {
-    General("general"), Keyboard("keyboard"), Servers("servers"), Agents("agents"), Projects("projects"),
-    TextGeneration("textGeneration"), PullRequests("pullRequests"), Integrations("integrations");
+    // In the order they are reached for: what the client is, then what it works with, and the keys last.
+    General("general"), Accounts("accounts"), Servers("servers"), Projects("projects"),
+    PullRequests("pullRequests"), TextGeneration("textGeneration"), Integrations("integrations"), Keyboard("keyboard");
 
     val title: String
         get() = when (this) {
             General -> "General"
             Keyboard -> "Keybindings"
             Servers -> "Servers"
-            Agents -> "Agents"
+            Accounts -> "Accounts"
             Projects -> "Projects"
             TextGeneration -> "Text Generation"
             PullRequests -> "Pull Requests"
@@ -24,7 +25,7 @@ enum class SettingsSection(val raw: String) {
             General -> Symbol.SlidersHorizontal
             Keyboard -> Symbol.Keyboard
             Servers -> Symbol.Server
-            Agents -> Symbol.Bot
+            Accounts -> Symbol.Bot
             Projects -> Symbol.Folder
             TextGeneration -> Symbol.PencilLine
             PullRequests -> Symbol.GitPullRequest
@@ -55,19 +56,19 @@ data class SettingsEntry(
             SettingsEntry("appearance", "Theme", SettingsSection.General, "appearance light dark system mode"),
             SettingsEntry("messages", "Sent while the agent works", SettingsSection.General, "messages queue steer interrupt"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
-            SettingsEntry("shortcuts", "Keybindings", SettingsSection.Keyboard, "keys keyboard shortcuts hotkeys commands record keybindings.json"),
+            SettingsEntry("agent-accounts", "Accounts", SettingsSection.Accounts, "agents claude codex sign in login folder subscription plan api key router"),
             SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove unlink unlinked delete copies machine agents connected"),
             SettingsEntry("continue-limits", "Continue after usage limits", SettingsSection.Servers, "rate limit reset resume quota wait"),
             SettingsEntry("continue-restarts", "Continue after restarts", SettingsSection.Servers, "restart update crash resume interrupted"),
-            SettingsEntry("agent-accounts", "Accounts", SettingsSection.Agents, "claude codex sign in login folder subscription plan api key router"),
             SettingsEntry("projects", "Projects", SettingsSection.Projects, "add remove folder icon setup worktree script"),
-            SettingsEntry("text-model", "Model", SettingsSection.TextGeneration, "titles branch names commit messages pull requests writer"),
-            SettingsEntry("branch-names", "Branch names", SettingsSection.TextGeneration, "instructions prefix naming"),
             SettingsEntry("merged", "Mark the thread done after merge or close", SettingsSection.PullRequests, "merge close finished"),
             SettingsEntry("worktrees", "Remove the thread's worktree after merge", SettingsSection.PullRequests, "merge pushed branch clean up"),
             SettingsEntry("pull", "Automatically pull", SettingsSection.PullRequests, "default branch main merge sync fetch fast-forward"),
+            SettingsEntry("text-model", "Model", SettingsSection.TextGeneration, "titles branch names commit messages pull requests writer"),
+            SettingsEntry("branch-names", "Branch names", SettingsSection.TextGeneration, "instructions prefix naming"),
             SettingsEntry("integration-linear", "Linear", SettingsSection.Integrations, "issues tracker tab connect"),
             SettingsEntry("integration-ricrac", "Ricrac", SettingsSection.Integrations, "issues tracker tab connect"),
+            SettingsEntry("shortcuts", "Keybindings", SettingsSection.Keyboard, "keys keyboard shortcuts hotkeys commands record keybindings.json"),
         )
 
         /** The groups every word of the query is found in, by title, section or keywords, and the shortcuts' commands it finds by name. */

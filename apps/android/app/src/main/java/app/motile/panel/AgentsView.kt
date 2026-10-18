@@ -75,7 +75,7 @@ fun AgentsSurface() {
     val shown = showsEnded ?: working.isEmpty()
     Column(Modifier.fillMaxSize()) {
         PanelBar {
-            Text(AgentsSummary.styled(agents, parent, palette), Modifier.weight(1f), size = 12f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
+            Text(AgentsSummary.styled(agents, palette), Modifier.weight(1f), size = 12f, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
         }
         LazyColumn(
             Modifier.fillMaxSize(),
@@ -97,8 +97,8 @@ fun AgentsSurface() {
 
 object AgentsSummary {
     /** "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of, each count with its state. */
-    fun parts(agents: List<AgentInfo>, parent: ThreadInfo? = null): List<Pair<String, AgentState?>> {
-        if (agents.isEmpty()) return listOfNotNull(parent?.let { "Started by ${it.title}" to null })
+    fun parts(agents: List<AgentInfo>): List<Pair<String, AgentState?>> {
+        if (agents.isEmpty()) return listOf("No agents" to null)
         val counts = listOf(AgentState.Waiting, AgentState.Working, AgentState.Done, AgentState.Failed, AgentState.Stopped)
             .map { state -> agents.count { it.state == state } to state }
             .filter { it.first > 0 }
@@ -109,8 +109,8 @@ object AgentsSummary {
     }
 
     /** The same, each count in its state's colour, between muted dots. */
-    fun styled(agents: List<AgentInfo>, parent: ThreadInfo?, palette: Palette): AnnotatedString = buildAnnotatedString {
-        parts(agents, parent).forEachIndexed { index, (part, state) ->
+    fun styled(agents: List<AgentInfo>, palette: Palette): AnnotatedString = buildAnnotatedString {
+        parts(agents).forEachIndexed { index, (part, state) ->
             if (index > 0) withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
             if (state == null) append(part) else withStyle(SpanStyle(color = state.color(palette))) { append(part) }
         }
@@ -133,7 +133,6 @@ private fun ParentRow(thread: ThreadInfo) {
                 Text("Started by", size = 11f, color = palette.mutedStrongerForeground, maxLines = 1)
                 Text(thread.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
             }
-            Icon(Symbol.ChevronRight, 11f, color = palette.mutedStrongerForeground)
         }
     }
 }
@@ -202,10 +201,9 @@ private fun AgentRow(agent: AgentInfo) {
                         }
                         AgentTime(agent, Modifier.padding(start = 6.dp))
                     }
-                    if (agent.detail.isNotEmpty()) {
-                        val color = if (agent.status == ToolStatus.Failed) palette.destructive else palette.mutedForeground
-                        Text(agent.detail, size = 12f, color = color, maxLines = 2)
-                    }
+                    // Always one line, so that a row keeps its height as what its agent does changes.
+                    val color = if (agent.status == ToolStatus.Failed) palette.destructive else palette.mutedForeground
+                    Text(agent.detail, size = 12f, color = color, maxLines = 1)
                     facts?.let { Text(it, size = 11f, color = palette.mutedStrongerForeground, maxLines = 1) }
                 }
             }

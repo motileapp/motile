@@ -492,7 +492,7 @@ impl SettingsPage {
         }
         let first = installed.first().copied().unwrap_or(Agent::Claude);
         let add = self.edit_account(server, new_account(first), cx);
-        let button = large(("add-account", index), "Add an Account")
+        let button = large(("add-account", index), "Add Account")
             .symbol("plus")
             .disabled(installed.is_empty())
             .on_click(move |_, window, cx| add(window, cx));
@@ -805,7 +805,7 @@ impl Render for SettingsPage {
             SettingsSection::General => self.general(cx),
             SettingsSection::Keyboard => self.keyboard(window, cx),
             SettingsSection::Servers => self.servers(cx),
-            SettingsSection::Agents => self.agents(cx),
+            SettingsSection::Accounts => self.agents(cx),
             SettingsSection::Projects => self.projects(cx),
             SettingsSection::TextGeneration => self.text_generation(cx),
             SettingsSection::PullRequests => self.pull_requests(cx),

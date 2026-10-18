@@ -41,6 +41,8 @@ struct AgentBar: View {
     let agent: AgentInfo
 
     private static let height = ControlSize.large.height + 8
+    /// The way back's arrow stands close to its words, as the crumb's does.
+    private static let backGap: CGFloat = 4
 
     var body: some View {
         // A narrow bar leaves out what it says of the agent rather than cut it.
@@ -48,11 +50,13 @@ struct AgentBar: View {
             line(saying: true)
             line(saying: false)
         }
-        .padding(.leading, 16)
+        // A pill, whose round avatar and round button keep as far from its top and bottom as from
+        // its ends, so that their curves follow its own.
+        .padding(.leading, (Self.height - AgentAvatarDrawing.side) / 2)
         .padding(.trailing, (Self.height - ControlSize.regular.height) / 2)
         .frame(maxWidth: .infinity)
         .frame(height: Self.height)
-        .composerSurface(in: RoundedRectangle(cornerRadius: ComposerView.radius, style: .continuous))
+        .composerSurface(in: Capsule())
         .composerOutlineShadow()
         .frame(maxWidth: Theme.composerWidth)
     }
@@ -73,7 +77,7 @@ struct AgentBar: View {
                     .lineLimit(1)
                     .fixedSize()
             }
-            ActionButton("Open Parent", icon: .cornerLeftUp, variant: .ghost) { store.rightPanel.showAgents() }
+            ActionButton("Go Back", icon: .cornerLeftUp, help: "Back to the thread", variant: .primary, gap: Self.backGap, round: true) { store.rightPanel.showAgents() }
         }
     }
 }
@@ -82,15 +86,9 @@ struct AgentBar: View {
 /// the open one, or the thread of the agent shown.
 struct TitleCrumb: View {
     let title: String
-    /// Only the symbol, where the title has no room.
-    var compact = false
     let action: () -> Void
 
     var body: some View {
-        if compact {
-            ActionButton(icon: .cornerLeftUp, help: "Open \(title)", size: .small, action: action)
-        } else {
-            ActionButton(title, icon: .cornerLeftUp, help: "Open \(title)", variant: .ghost, size: .small, action: action)
-        }
+        ActionButton(title, icon: .cornerLeftUp, help: "Open \(title)", variant: .ghost, size: .small, inline: true, action: action)
     }
 }

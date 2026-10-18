@@ -2,7 +2,9 @@ import Foundation
 
 /// A page of the settings, listed in the settings' sidebar.
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case general, keyboard, servers, agents, projects, textGeneration, pullRequests, integrations
+    /// In the order they are reached for: what the client is, then what it works with, and the
+    /// keys last.
+    case general, accounts, servers, projects, pullRequests, textGeneration, integrations, keyboard
 
     var id: String { rawValue }
 
@@ -16,7 +18,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: "General"
         case .keyboard: "Keybindings"
         case .servers: "Servers"
-        case .agents: "Agents"
+        case .accounts: "Accounts"
         case .projects: "Projects"
         case .textGeneration: "Text Generation"
         case .pullRequests: "Pull Requests"
@@ -29,7 +31,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .general: .slidersHorizontal
         case .keyboard: .keyboard
         case .servers: .server
-        case .agents: .bot
+        case .accounts: .bot
         case .projects: .folder
         case .textGeneration: .pencilLine
         case .pullRequests: .gitPullRequest
@@ -55,19 +57,19 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "appearance", title: "Theme", section: .general, keywords: "appearance light dark system mode"),
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
-        SettingsEntry(id: "shortcuts", title: "Keybindings", section: .keyboard, keywords: "keys keyboard shortcuts hotkeys commands record keybindings.json"),
+        SettingsEntry(id: "agent-accounts", title: "Accounts", section: .accounts, keywords: "agents claude codex sign in login folder subscription plan api key router"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
-        SettingsEntry(id: "agent-accounts", title: "Accounts", section: .agents, keywords: "claude codex sign in login folder subscription plan api key router"),
         SettingsEntry(id: "projects", title: "Projects", section: .projects, keywords: "add remove folder icon setup worktree script"),
-        SettingsEntry(id: "text-model", title: "Model", section: .textGeneration, keywords: "titles branch names commit messages pull requests writer"),
-        SettingsEntry(id: "branch-names", title: "Branch names", section: .textGeneration, keywords: "instructions prefix naming"),
         SettingsEntry(id: "merged", title: "Mark the thread done after merge or close", section: .pullRequests, keywords: "merge close finished"),
         SettingsEntry(id: "worktrees", title: "Remove the thread's worktree after merge", section: .pullRequests, keywords: "merge pushed branch clean up"),
         SettingsEntry(id: "pull", title: "Automatically pull", section: .pullRequests, keywords: "default branch main merge sync fetch fast-forward"),
+        SettingsEntry(id: "text-model", title: "Model", section: .textGeneration, keywords: "titles branch names commit messages pull requests writer"),
+        SettingsEntry(id: "branch-names", title: "Branch names", section: .textGeneration, keywords: "instructions prefix naming"),
         SettingsEntry(id: "integration-linear", title: "Linear", section: .integrations, keywords: "issues tracker tab connect"),
         SettingsEntry(id: "integration-ricrac", title: "Ricrac", section: .integrations, keywords: "issues tracker tab connect"),
+        SettingsEntry(id: "shortcuts", title: "Keybindings", section: .keyboard, keywords: "keys keyboard shortcuts hotkeys commands record keybindings.json"),
     ]
 
     /// The groups every word of the query is found in, by title, section or keywords, and the

@@ -289,6 +289,9 @@ struct ActionButton: View {
     private var padding: CGFloat?
     private let detail: Symbol?
     private let margin: EdgeInsets
+    /// It stands in a line of text: its symbol or words start where the line does, and it is no
+    /// taller than its words, so that nothing moves for it. Its light and its press reach around.
+    private var inline = false
     private let action: () -> Void
 
     init(
@@ -297,9 +300,10 @@ struct ActionButton: View {
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
         fills: Bool = false, alignment: HorizontalAlignment = .center, opens: Bool = false, joined: HorizontalEdge.Set = [],
-        tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
+        tint: Color? = nil, margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
     ) {
         chevron = opens
+        self.inline = inline
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture)
         self.detail = detail
@@ -321,9 +325,10 @@ struct ActionButton: View {
     init(
         icon: Symbol, help: String, variant: ButtonVariant = .ghost, size: ControlSize = .regular, symbolSize: CGFloat? = nil,
         pending: Bool = false, selected: Bool = false, round: Bool = false, joined: HorizontalEdge.Set = [], tint: Color? = nil,
-        margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void
+        margin: EdgeInsets = EdgeInsets(), inline: Bool = false, action: @escaping () -> Void
     ) {
         title = nil
+        self.inline = inline
         self.icon = .symbol(icon)
         detail = nil
         self.help = help
@@ -350,18 +355,42 @@ struct ActionButton: View {
 
     var body: some View {
         let reach = ControlReach(size: look.size, wordless: words == nil && !chevron, margin: margin)
-        Button(action: action) {
+        var light = reach.around
+        if inline {
+            light.top += inlineVertical - Self.inlineLightRoom
+            light.bottom += inlineVertical - Self.inlineLightRoom
+        }
+        return Button(action: action) {
             ControlLabel(
                 title: words, icon: icon, size: look.size, chevron: chevron, pending: pending, pendingTitle: pendingTitle, fills: fills,
                 alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail
             )
             .padding(reach.around)
         }
-        .buttonStyle(ControlButtonStyle(look: look, pending: pending, margin: reach.around))
+        .buttonStyle(ControlButtonStyle(look: look, pending: pending, margin: light))
         .padding(reach.outset)
+        .padding(inline ? inlineBleed : EdgeInsets())
         .allowsHitTesting(!pending)
         .help(help ?? "")
         .accessibilityLabel(words ?? help ?? "")
+    }
+
+    /// How far an inline button's light reaches above and below its words.
+    private static let inlineLightRoom: CGFloat = 3
+
+    /// How much taller than its words the button is, on each side.
+    private var inlineVertical: CGFloat {
+        let size = look.size
+        return max(0, (size.height - PlatformFont.ui(size.textSize, weight: .medium).textLineHeight) / 2)
+    }
+
+    /// The room an inline button takes around its symbol and words, which the line doesn't give it.
+    private var inlineBleed: EdgeInsets {
+        let size = look.size
+        let leading = words == nil && !chevron
+            ? (size.height - size.symbolSide) / 2
+            : (padding ?? size.padding) - (icon == nil ? 0 : size.symbolOutset)
+        return EdgeInsets(top: -inlineVertical, leading: -leading, bottom: -inlineVertical, trailing: 0)
     }
 }
 

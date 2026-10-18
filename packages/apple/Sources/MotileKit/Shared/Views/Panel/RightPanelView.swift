@@ -292,7 +292,7 @@ private struct PanelLauncher: View {
                 row(.diff, "Diff", command: "rightPanel.diff", reason: target.repository ? nil : "Available in git repositories.") {
                     store.rightPanel.showDiff()
                 }
-                row(.users, "Agents", command: "rightPanel.agents", reason: nil) { store.rightPanel.open(.agents) }
+                row(.bot, "Agents", command: "rightPanel.agents", reason: nil) { store.rightPanel.open(.agents) }
                 row(.gitPullRequest, "Pull Request", command: "rightPanel.pullRequest", reason: store.pullRequestsUnavailable) {
                     store.rightPanel.open(.pullRequest)
                 }

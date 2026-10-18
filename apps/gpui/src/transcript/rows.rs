@@ -1137,9 +1137,15 @@ const CARD_PADDING: f32 = 8.;
 /// How far the light of an agent's row reaches past its sides, so that the avatar lines up with
 /// the text.
 const AGENT_BLEED: f32 = 6.;
-/// The room above a group's card and under it.
-const CARD_ABOVE: f32 = 4.;
-const CARD_BELOW: f32 = 10.;
+/// How far the light of an agent's row stands in from its top and bottom, half the room between
+/// two lights.
+const LIGHT_GAP: f32 = 2.;
+/// How far in from the card's border a row in it lights, on every side.
+const CARD_LIGHT: f32 = 4.;
+/// The room above a group's card and under it, which its border stands in from by what the light
+/// leaves at the card's ends.
+const CARD_ABOVE: f32 = 4. + CARD_LIGHT - LIGHT_GAP;
+const CARD_BELOW: f32 = 10. + CARD_LIGHT - LIGHT_GAP;
 
 /// What the second line of an agent's row says: what it runs on, then what it does or said.
 fn agent_line(agent: &AgentRow) -> String {
@@ -1203,11 +1209,12 @@ fn agent_row(model: &RowModel, agent: &AgentRow, ctx: &RowContext, cx: &App) -> 
     let above = if place == Some(CardPlace::First) { CARD_ABOVE } else { 0. };
     let below = if place == Some(CardPlace::Last) { CARD_BELOW } else { 0. };
     let overhang = Radius::LG + 1.;
+    let ends = CARD_LIGHT - LIGHT_GAP;
     let card = place.map(|place| {
         let (top, bottom) = match place {
-            CardPlace::First => (CARD_ABOVE, -overhang),
+            CardPlace::First => (CARD_ABOVE - ends, -overhang),
             CardPlace::Middle => (-overhang, -overhang),
-            CardPlace::Last => (-overhang, CARD_BELOW),
+            CardPlace::Last => (-overhang, CARD_BELOW - ends),
         };
         div()
             .absolute()
@@ -1220,9 +1227,10 @@ fn agent_row(model: &RowModel, agent: &AgentRow, ctx: &RowContext, cx: &App) -> 
             .border_color(c.border_card)
             .rounded(px(Radius::LG))
     });
-    // In a card the light keeps clear of the card's border, in the card's accent.
-    let side = if place.is_some() { 4. } else { -AGENT_BLEED };
-    let light = Highlight::new().radius(Radius::MD).inset(edges(above + 2., side, below + 2., side));
+    // In a card the light keeps as far from the card's border as from the next row's light, in the
+    // card's accent.
+    let side = if place.is_some() { CARD_LIGHT } else { -AGENT_BLEED };
+    let light = Highlight::new().radius(Radius::MD).inset(edges(above + LIGHT_GAP, side, below + LIGHT_GAP, side));
     let light = if place.is_some() { light.fill(c.card_accent) } else { light };
     let avatar = crate::ui::AgentAvatar::new(agent.agent).state(agent.state);
     let label_color =

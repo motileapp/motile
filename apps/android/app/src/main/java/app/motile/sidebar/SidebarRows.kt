@@ -485,6 +485,14 @@ fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
             val described = if (help == null) Modifier else Modifier.semantics { contentDescription = help }
             StatusLabel(asking.word, palette.warning, described) { Icon(asking.symbol, 11f) }
         }
+        thread.waitsOnAgents -> Row(
+            Modifier.semantics { contentDescription = thread.children?.runningText.orEmpty() },
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StatusLabel("${thread.children?.running ?: 0}", palette.pending) { Icon(Symbol.Users, 11f) }
+            StatusLabel(Time.elapsed(thread.monitoringSince, everySecond()), palette.mutedForeground) { Icon(Symbol.CircleDotDashed, 10f) }
+        }
         thread.working -> Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
             val agents = maxOf(thread.agents, thread.children?.running ?: 0)
             if (agents > 0) {

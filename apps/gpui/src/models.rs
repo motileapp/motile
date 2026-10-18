@@ -510,6 +510,11 @@ impl ThreadInfo {
         self.running || self.children.as_ref().is_some_and(|children| children.running > 0)
     }
 
+    /// Its agent ended its turn, and the agents it started work on.
+    pub fn waits_on_agents(&self) -> bool {
+        !self.running && self.children.as_ref().is_some_and(|children| children.running > 0)
+    }
+
     /// What it, or else an agent it started, waits for the user to answer.
     pub fn waits_for(&self) -> Option<Ask> {
         self.asking().or_else(|| self.children.as_ref()?.waiting.first().map(|child| child.ask))

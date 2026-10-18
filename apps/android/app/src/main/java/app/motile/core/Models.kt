@@ -671,6 +671,9 @@ data class ThreadInfo(
     /** It works, or an agent it started does. */
     val working: Boolean get() = running || (children?.running ?: 0) > 0
 
+    /** Its agent ended its turn, and the agents it started work on. */
+    val waitsOnAgents: Boolean get() = !running && (children?.running ?: 0) > 0
+
     /** What it, or else an agent it started, waits for the user to answer. */
     val waitsFor: Ask? get() = asking ?: children?.waiting?.firstOrNull()?.ask
 
@@ -879,6 +882,8 @@ data class ThreadChildren(
     val waiting: List<Waiting>,
     /** "Run greet.py needs your approval", "2 agents need you". */
     val waitingText: String?,
+    /** "Waiting on Run greet.py", "Waiting on 3 agents", while they work. */
+    val runningText: String?,
 ) {
     data class Waiting(val threadID: String, val title: String, val ask: Ask)
 
@@ -888,6 +893,7 @@ data class ThreadChildren(
             Waiting(it.string("thread_id"), it.string("title"), Ask.of(it.string("ask")) ?: Ask.Approval)
         },
         waitingText = json.optionalString("waiting_text"),
+        runningText = json.optionalString("running_text"),
     )
 }
 

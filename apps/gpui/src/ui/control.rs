@@ -429,6 +429,9 @@ impl RenderOnce for TurningSymbol {
     }
 }
 
+/// How far an inline button's light reaches above and below its words.
+const INLINE_LIGHT_ROOM: f32 = 3.;
+
 /// The button. It says what it does with words, a symbol or both, in one of three sizes. While
 /// `pending` it shows the spinner and takes no presses. `margin` is room around it that is its
 /// own, so that neighbours leave no gap to miss.
@@ -442,6 +445,9 @@ pub struct ActionButton {
     disabled: bool,
     /// It gives up room when there is too little, cutting its words short.
     truncates: bool,
+    /// It stands in a line of text: its symbol or words start where the line does, and it is no
+    /// taller than its words, so that nothing moves for it. Its light and its press reach around.
+    inline: bool,
     on_click: Option<OnClick>,
 }
 
@@ -459,6 +465,7 @@ impl ActionButton {
             margin: Edges::default(),
             disabled: false,
             truncates: false,
+            inline: false,
             on_click: None,
         }
     }
@@ -628,6 +635,28 @@ impl ActionButton {
         self
     }
 
+    /// It stands in a line of text, taking no more room than its symbol and words.
+    pub fn inline(mut self) -> Self {
+        self.inline = true;
+        self
+    }
+
+    /// The room its light takes around its symbol and words when inline, which the line doesn't
+    /// give it: before them, and above and below.
+    fn inline_bleed(&self, window: &Window) -> (f32, f32) {
+        let size = self.label.size;
+        let line = window.text_style().line_height.to_pixels(px(size.text_size()).into(), window.rem_size());
+        let vertical = (size.height() - f32::from(line)) / 2.;
+        let leading = match self.label.wordless() {
+            true => (size.height() - size.symbol_side()) / 2.,
+            false => {
+                self.label.padding.unwrap_or(size.padding())
+                    - if self.label.icon.is_some() { size.symbol_outset() } else { 0. }
+            }
+        };
+        (leading, vertical.max(0.))
+    }
+
     /// How wide it is with its margin when nothing cuts its words short.
     pub fn natural_width(&self, window: &mut Window, cx: &App) -> f32 {
         let border = if self.look.border(colors(cx)).is_some() { 2. } else { 0. };
@@ -674,7 +703,10 @@ impl RenderOnce for ActionButton {
         let foreground = look.foreground(active && *hovered.read(cx), c);
         let corners = look.corners();
         let truncates = self.truncates;
-        let label = self.label.render(cx).when(truncates, |label| label.min_w_0());
+        let bleed = self.inline.then(|| self.inline_bleed(window));
+        // An inline button's light hugs its words, while its press keeps the control's height.
+        let light_inset = bleed.map_or(0., |(_, vertical)| (vertical - INLINE_LIGHT_ROOM).max(0.));
+        let label = self.label.render(cx).when(truncates, |label| label.min_w_0()).my(px(-light_inset));
         div()
             .id(self.id.clone())
             .group(group.clone())
@@ -685,11 +717,13 @@ impl RenderOnce for ActionButton {
             .pl(px(self.margin.left))
             .pb(px(self.margin.bottom))
             .pr(px(self.margin.right))
+            .when_some(bleed, |button, (leading, vertical)| button.ml(px(-leading)).my(px(-vertical)))
             .when(self.disabled && !pending, |button| button.opacity(c.opacity(Opacity::Disabled)))
             .cursor_default()
             .child(
                 div()
                     .id("face")
+                    .my(px(light_inset))
                     .when(fills, |inner| inner.w_full())
                     .when(truncates, |inner| inner.min_w_0())
                     .rounded_tl(corners.top_left)

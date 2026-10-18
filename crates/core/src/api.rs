@@ -661,6 +661,10 @@ pub struct Children {
     /// "2 agents need you".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub waiting_text: Option<String>,
+    /// What the thread says while they work and it doesn't: "Waiting on Run greet.py",
+    /// "Waiting on 3 agents".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub running_text: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]

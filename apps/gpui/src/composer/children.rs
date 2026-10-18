@@ -7,7 +7,6 @@ use gpui_kit::*;
 use motile_core::api::WaitingChild;
 use motile_core::render::agents::AgentView;
 
-use super::RADIUS;
 use super::strips::{HEIGHT, margin, strip};
 use crate::models::{ask_label, ask_phrase};
 use crate::panel::view::agent_time;
@@ -96,6 +95,9 @@ impl RenderOnce for ShortWhenNarrow {
     }
 }
 
+/// The way back's arrow stands close to its words, as the crumb's does.
+const BACK_GAP: f32 = 4.;
+
 /// In place of the composer of an agent the thread's agent started, which runs on its own and
 /// can't be written to: how it is doing, and the way back to the thread.
 pub fn agent_bar(store: &Entity<Store>, agent: &AgentView, cx: &App) -> impl IntoElement {
@@ -106,13 +108,15 @@ pub fn agent_bar(store: &Entity<Store>, agent: &AgentView, cx: &App) -> impl Int
         .w_full()
         .max_w(px(theme::COMPOSER_WIDTH))
         .h(px(height))
-        .pl(px(16.))
+        // A pill, whose round avatar and round button keep as far from its top and bottom as from
+        // its ends, so that their curves follow its own.
+        .pl(px((height - crate::ui::agent_avatar::SIDE) / 2.))
         .pr(px((height - ControlSize::Regular.height()) / 2.))
         .flex()
         .items_center()
         .gap(px(8.))
         .bg(c.composer)
-        .rounded(px(RADIUS))
+        .rounded(px(height / 2.))
         .border_1()
         .border_color(c.border_composer)
         .shadow(c.shadow(theme::ShadowSize::Lg, theme::Opacity::Shadow))
@@ -132,9 +136,12 @@ pub fn agent_bar(store: &Entity<Store>, agent: &AgentView, cx: &App) -> impl Int
             div().min_w_0().text_size(px(TEXT_SIZE)).text_color(c.muted_foreground).truncate().child("Runs on its own"),
         )
         .child(
-            ActionButton::new("open-parent", "Open Parent")
+            ActionButton::new("go-back", "Go Back")
                 .symbol("corner-left-up")
-                .ghost()
+                .gap(BACK_GAP)
+                .help("Back to the thread")
+                .primary()
+                .round(true)
                 .surface(Surface::Composer)
                 .on_click(move |_, _, cx| {
                     store.update(cx, |store, cx| {
@@ -158,6 +165,7 @@ pub fn title_crumb(
         .help(format!("Open {title}"))
         .ghost()
         .small()
+        .inline()
         .truncates(true)
         .on_click(move |_, _, cx| {
             store.update(cx, |store, cx| {

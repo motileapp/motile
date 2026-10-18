@@ -13,25 +13,27 @@ use crate::models::Server;
 pub enum SettingsSection {
     #[default]
     General,
-    Keyboard,
+    Accounts,
     Servers,
-    Agents,
     Projects,
-    TextGeneration,
     PullRequests,
+    TextGeneration,
     Integrations,
+    Keyboard,
 }
 
 impl SettingsSection {
+    /// In the order they are reached for: what the client is, then what it works with, and the
+    /// keys last.
     pub const ALL: [SettingsSection; 8] = [
         SettingsSection::General,
-        SettingsSection::Keyboard,
+        SettingsSection::Accounts,
         SettingsSection::Servers,
-        SettingsSection::Agents,
         SettingsSection::Projects,
-        SettingsSection::TextGeneration,
         SettingsSection::PullRequests,
+        SettingsSection::TextGeneration,
         SettingsSection::Integrations,
+        SettingsSection::Keyboard,
     ];
 
     pub fn title(self) -> &'static str {
@@ -39,7 +41,7 @@ impl SettingsSection {
             SettingsSection::General => "General",
             SettingsSection::Keyboard => "Keybindings",
             SettingsSection::Servers => "Servers",
-            SettingsSection::Agents => "Agents",
+            SettingsSection::Accounts => "Accounts",
             SettingsSection::Projects => "Projects",
             SettingsSection::TextGeneration => "Text Generation",
             SettingsSection::PullRequests => "Pull Requests",
@@ -52,7 +54,7 @@ impl SettingsSection {
             SettingsSection::General => "sliders-horizontal",
             SettingsSection::Keyboard => "keyboard",
             SettingsSection::Servers => "server",
-            SettingsSection::Agents => "bot",
+            SettingsSection::Accounts => "bot",
             SettingsSection::Projects => "folder",
             SettingsSection::TextGeneration => "pencil-line",
             SettingsSection::PullRequests => "git-pull-request",
@@ -82,10 +84,10 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 18] = [
     ("messages", "Sent while the agent works", SettingsSection::General, "messages queue steer interrupt"),
     ("storage", "Images and videos", SettingsSection::General, "storage cache clear media disk"),
     (
-        "shortcuts",
-        "Keybindings",
-        SettingsSection::Keyboard,
-        "keys keyboard shortcuts hotkeys commands record keybindings.json",
+        "agent-accounts",
+        "Accounts",
+        SettingsSection::Accounts,
+        "agents claude codex sign in login folder subscription plan api key router",
     ),
     (
         "servers",
@@ -100,20 +102,7 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 18] = [
         SettingsSection::Servers,
         "restart update crash resume interrupted",
     ),
-    (
-        "agent-accounts",
-        "Accounts",
-        SettingsSection::Agents,
-        "claude codex sign in login folder subscription plan api key router",
-    ),
     ("projects", "Projects", SettingsSection::Projects, "add remove folder icon setup worktree script"),
-    (
-        "text-model",
-        "Model",
-        SettingsSection::TextGeneration,
-        "titles branch names commit messages pull requests writer",
-    ),
-    ("branch-names", "Branch names", SettingsSection::TextGeneration, "instructions prefix naming"),
     ("merged", "Mark the thread done after merge or close", SettingsSection::PullRequests, "merge close finished"),
     (
         "worktrees",
@@ -122,8 +111,21 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 18] = [
         "merge pushed branch clean up",
     ),
     ("pull", "Automatically pull", SettingsSection::PullRequests, "default branch main merge sync fetch fast-forward"),
+    (
+        "text-model",
+        "Model",
+        SettingsSection::TextGeneration,
+        "titles branch names commit messages pull requests writer",
+    ),
+    ("branch-names", "Branch names", SettingsSection::TextGeneration, "instructions prefix naming"),
     ("integration-linear", "Linear", SettingsSection::Integrations, "issues tracker tab connect"),
     ("integration-ricrac", "Ricrac", SettingsSection::Integrations, "issues tracker tab connect"),
+    (
+        "shortcuts",
+        "Keybindings",
+        SettingsSection::Keyboard,
+        "keys keyboard shortcuts hotkeys commands record keybindings.json",
+    ),
 ];
 
 impl SettingsEntry {

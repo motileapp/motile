@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,14 +28,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.dp
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
@@ -359,17 +366,45 @@ fun ActionButton(
     hover: Color? = null,
     margin: PaddingValues = PaddingValues(0.dp),
     disabled: Boolean = false,
+    inline: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val words = title?.takeIf { it.isNotEmpty() }
     val look = ControlLook(variant, size, selected = selected, round = round, joined = joined, tint = tint, hover = hover)
-    ControlButton(look, onClick, modifier, pending, disabled, margin, words ?: help, onLongClick) {
+    val label = @Composable {
         ControlLabel(
             words, ControlIcon.of(icon, picture), size, chevron = opens, pending = pending, pendingTitle = pendingTitle, fills = fills,
             alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail,
         )
     }
+    if (!inline) return ControlButton(look, onClick, modifier, pending, disabled, margin, words ?: help, onLongClick, label)
+    val line = with(LocalDensity.current) { rememberTextMeasurer().measure("M", size.font).size.height.toDp() }
+    val vertical = ((size.height - line) / 2).coerceAtLeast(0.dp)
+    val leading = when {
+        words == null && !opens -> (size.height - size.symbolSide) / 2
+        else -> (padding ?: size.padding) - if (icon != null || picture != null) size.symbolOutset else 0.dp
+    }
+    // Its light hugs its words, while its press keeps the control's height.
+    val lightInset = (vertical - 3.dp).coerceAtLeast(0.dp)
+    val direction = LocalLayoutDirection.current
+    val around = PaddingValues(
+        start = margin.calculateStartPadding(direction), top = margin.calculateTopPadding() + lightInset,
+        end = margin.calculateEndPadding(direction), bottom = margin.calculateBottomPadding() + lightInset,
+    )
+    ControlButton(look, onClick, modifier.bleeding(leading, vertical), pending, disabled, around, words ?: help, onLongClick) {
+        Box(Modifier.bleeding(0.dp, lightInset)) { label() }
+    }
+}
+
+/**
+ * An inline button stands in a line of text: its symbol or words start where the line does, and it is
+ * no taller than its words, so that nothing moves for it. Its light and its press reach around.
+ */
+private fun Modifier.bleeding(leading: Dp, vertical: Dp): Modifier = layout { measurable, constraints ->
+    val (side, edge) = leading.roundToPx() to vertical.roundToPx()
+    val placeable = measurable.measure(constraints.offset(horizontal = side, vertical = edge * 2))
+    layout(placeable.width - side, placeable.height - edge * 2) { placeable.place(-side, -edge) }
 }
 
 /** The half of a split button that opens what the other half doesn't do: only a chevron. */

@@ -599,6 +599,8 @@ impl Hub {
                 live.open.values().filter(|item| item.parent.is_none()).max_by_key(|item| item.seq).and_then(|item| {
                     match &item.kind {
                         ItemKind::Tool { call } => Some(doing(call, &thread.cwd)),
+                        ItemKind::Thinking { .. } => Some("Thinking".to_string()),
+                        ItemKind::Assistant { .. } => Some("Writing its reply".to_string()),
                         _ => None,
                     }
                 })

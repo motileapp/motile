@@ -375,15 +375,16 @@ private fun AgentRow(row: RowModel, content: AgentContent) {
     val card = if (place == null) Modifier else Modifier.clipToBounds().drawBehind {
         // A card's rows are one card: each draws the part of it that is its own.
         val overhang = (Radius.lg + 1.dp).toPx()
-        val from = if (place == AgentContent.Card.First) top.toPx() else -overhang
-        val to = if (place == AgentContent.Card.Last) size.height - bottom.toPx() else size.height + overhang
+        val ends = (AgentRow.cardLight - AgentRow.lightGap).toPx()
+        val from = if (place == AgentContent.Card.First) top.toPx() - ends else -overhang
+        val to = if (place == AgentContent.Card.Last) size.height - bottom.toPx() + ends else size.height + overhang
         val radius = CornerRadius(Radius.lg.toPx())
         val line = 1.dp.toPx()
         drawRoundRect(palette.card, Offset(0f, from), Size(size.width, to - from), radius)
         drawRoundRect(palette.borderCard, Offset(line / 2, from + line / 2), Size(size.width - line, to - from - line), radius, Stroke(line))
     }
     val time = agentTime(content)
-    // In a card the light keeps clear of the card's border, in the card's accent.
+    // In a card the light keeps as far from the card's border as from the next row's light, in the card's accent.
     val lit = if (place == null) 0.dp else (AgentRow.cardLight - (AgentRow.cardPadding - AgentRow.bleed)).coerceAtLeast(0.dp)
     CompositionLocalProvider(LocalSurface provides if (place == null) LocalSurface.current else Surface.Card) {
         Box(card.fillMaxWidth().padding(top = top, bottom = bottom).padding(horizontal = inset).height(AgentRow.height)) {
@@ -393,7 +394,7 @@ private fun AgentRow(row: RowModel, content: AgentContent) {
                     if (thread != null) actions.openThread(thread) else actions.openAgent(row.itemID)
                 },
                 modifier = Modifier.fillMaxSize().bleed(AgentRow.bleed),
-                inset = PaddingValues(horizontal = lit, vertical = 2.dp),
+                inset = PaddingValues(horizontal = lit, vertical = AgentRow.lightGap),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Row(Modifier.fillMaxSize().padding(horizontal = AgentRow.bleed), verticalAlignment = Alignment.CenterVertically) {
@@ -480,13 +481,15 @@ private object AgentRow {
     val avatarGap = scaled(10f).dp
     /** How far a row in a group's card stands in from the card's sides. */
     val cardPadding = scaled(8f).dp
-    /** How far in from the card's sides a row in it lights. */
+    /** How far in from the card's border a row in it lights, on every side. */
     val cardLight = scaled(4f).dp
+    /** How far the light stands in from the row's top and bottom, half the room between two lights. */
+    val lightGap = 2.dp
     /** How far the light reaches past the row's sides, so that the avatar lines up with the text. */
     val bleed = scaled(6f).dp
-    /** The room above a group's card and under it. */
-    val cardAbove = scaled(4f).dp
-    val cardBelow = scaled(10f).dp
+    /** The room above a group's card and under it, which its border stands in from by what the light leaves at the card's ends. */
+    val cardAbove = scaled(4f).dp + cardLight - lightGap
+    val cardBelow = scaled(10f).dp + cardLight - lightGap
 }
 
 /** Reaches `by` past both sides of the room it is given. */

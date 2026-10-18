@@ -162,7 +162,7 @@ impl ThreadPane {
                     .min_w_0()
                     .when_some(parts, |title, parts| title.child(project_line(project.as_ref(), &parts, cx)))
                     .child(
-                        div().min_w_0().flex().items_center().gap(px(4.)).children(crumb).child(
+                        div().min_w_0().flex().items_center().gap(px(4.)).children(crumb.map(gives_way)).child(
                             div()
                                 .min_w_0()
                                 .text_size(px(13.))
@@ -567,4 +567,11 @@ fn project_line(project: Option<&Project>, parts: &[String], cx: &App) -> impl I
             .truncate()
             .child(crate::ui::control::dotted(parts.join(" · "), c)),
     )
+}
+
+/// Before the thread's title, the way back is what a narrow bar cuts short first.
+fn gives_way(crumb: AnyElement) -> Div {
+    let mut wrap = div().min_w_0().flex();
+    wrap.style().flex_shrink = Some(100.);
+    wrap.child(crumb)
 }

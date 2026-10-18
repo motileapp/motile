@@ -2,6 +2,7 @@ import {
   ChartColumnIcon,
   ChevronRightIcon,
   CircleDashedIcon,
+  CircleDotDashedIcon,
   EyeIcon,
   GitBranchIcon,
   GitPullRequestIcon,
@@ -557,8 +558,8 @@ function ThreadStatus({
             <UsersIcon className="size-[11px]" />
             {thread.status.count}
           </span>
-          <span className={cn(label, "text-process")}>
-            <CircleDashedIcon className="size-[10px]" />
+          <span className={cn(label, "text-muted-foreground")}>
+            <CircleDotDashedIcon className="size-[10px]" />
             {elapsed(thread.status.since)}
           </span>
         </span>

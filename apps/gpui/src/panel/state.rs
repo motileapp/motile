@@ -116,7 +116,7 @@ impl PanelTab {
         match self {
             PanelTab::Diff | PanelTab::Change { .. } => "diff",
             PanelTab::Files => "folder",
-            PanelTab::Agents => "users",
+            PanelTab::Agents => "bot",
             PanelTab::PullRequest | PanelTab::PullRequestNumber(_) | PanelTab::PullRequests => "git-pull-request",
             PanelTab::Linear | PanelTab::LinearIssue { .. } => "linear",
             PanelTab::Ricrac | PanelTab::RicracIssue { .. } => "ricrac",

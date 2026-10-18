@@ -4,7 +4,7 @@ import SwiftUI
 /// The settings' sections in groups, each pushing its page, or selected beside it on a wide
 /// sheet. While a search is typed, the groups it finds take their place.
 struct SettingsSections: View {
-    private static let groups: [[SettingsSection]] = [[.general], [.servers, .agents, .projects], [.textGeneration, .pullRequests], [.integrations]]
+    private static let groups: [[SettingsSection]] = [[.general], [.accounts, .servers, .projects], [.pullRequests, .textGeneration], [.integrations]]
 
     @Environment(AppStore.self) private var store
     /// The section shown beside the list, on a wide sheet, lit in it. Without one, each pushes.
@@ -91,7 +91,7 @@ struct SettingsPage: View {
                 switch section {
                 case .general: general
                 case .servers: servers
-                case .agents: agentAccounts
+                case .accounts: agentAccounts
                 case .projects: projects
                 case .textGeneration: textGeneration
                 case .pullRequests: pullRequests
@@ -268,7 +268,7 @@ struct SettingsPage: View {
             Button {
                 editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
             } label: {
-                SettingsActionLabel("Add an Account", symbol: .plus)
+                SettingsActionLabel("Add Account", symbol: .plus)
             }
             .disabled(installed.isEmpty)
         }

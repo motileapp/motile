@@ -59,9 +59,10 @@ fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
         modifier
             .widthIn(max = Theme.composerWidth)
             .fillMaxWidth()
-            .composerSurface(RoundedCornerShape(ComposerView.radius), ShadowSize.Md)
+            // A pill, whose round avatar and round button keep as far from its top and bottom as from its ends, so that their curves follow its own.
+            .composerSurface(RoundedCornerShape(percent = 50), ShadowSize.Md)
             .height(height)
-            .padding(start = 16.dp, end = (height - ControlSize.Regular.height) / 2),
+            .padding(start = (height - AgentAvatar.side) / 2, end = (height - ControlSize.Regular.height) / 2),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -87,7 +88,8 @@ fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
                 }
             },
         )
-        ActionButton("Open Parent", Symbol.CornerLeftUp, variant = ButtonVariant.Ghost) { store.rightPanel.showAgents() }
+        // The way back's arrow stands close to its words, as the crumb's does.
+        ActionButton("Go Back", Symbol.CornerLeftUp, help = "Back to the thread", variant = ButtonVariant.Primary, gap = 4.dp, round = true) { store.rightPanel.showAgents() }
     }
 }
 
@@ -95,6 +97,6 @@ fun AgentBar(agent: AgentInfo, modifier: Modifier = Modifier) {
 @Composable
 fun TitleCrumb(title: String, modifier: Modifier = Modifier, compact: Boolean = false, action: () -> Unit) {
     // Compact, where the title has no room, it is only the symbol.
-    if (compact) return ActionButton(icon = Symbol.CornerLeftUp, modifier = modifier, help = "Open $title", size = ControlSize.Small, onClick = action)
-    ActionButton(title, Symbol.CornerLeftUp, modifier, help = "Open $title", variant = ButtonVariant.Ghost, size = ControlSize.Small, onClick = action)
+    if (compact) return ActionButton(icon = Symbol.CornerLeftUp, modifier = modifier, help = "Open $title", size = ControlSize.Small, inline = true, onClick = action)
+    ActionButton(title, Symbol.CornerLeftUp, modifier, help = "Open $title", variant = ButtonVariant.Ghost, size = ControlSize.Small, inline = true, onClick = action)
 }

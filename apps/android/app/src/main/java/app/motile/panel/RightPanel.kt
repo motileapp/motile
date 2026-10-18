@@ -128,7 +128,7 @@ sealed interface PanelTab {
         get() = when (this) {
             Diff, is Change -> Symbol.Diff
             Files -> Symbol.Folder
-            Agents -> Symbol.Users
+            Agents -> Symbol.Bot
             PullRequest, is PullRequestNumber, PullRequests -> Symbol.GitPullRequest
             Linear, is LinearIssue -> Symbol.Linear
             Ricrac, is RicracIssue -> Symbol.Ricrac

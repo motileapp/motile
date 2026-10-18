@@ -757,6 +757,9 @@ struct ThreadInfo: Equatable, Identifiable {
     /// It works, or an agent it started does.
     var working: Bool { running || (children?.running ?? 0) > 0 }
 
+    /// Its agent ended its turn, and the agents it started work on.
+    var waitsOnAgents: Bool { !running && (children?.running ?? 0) > 0 }
+
     /// What it, or else an agent it started, waits for the user to answer.
     var waitsFor: Ask? { asking ?? children?.waiting.first?.ask }
 
@@ -938,6 +941,8 @@ struct ThreadChildren: Equatable {
     let waiting: [Waiting]
     /// "Run greet.py needs your approval", "2 agents need you".
     let waitingText: String?
+    /// "Waiting on Run greet.py", "Waiting on 3 agents", while they work.
+    let runningText: String?
 
     init(json: JSON) {
         running = json.int("running")
@@ -945,6 +950,7 @@ struct ThreadChildren: Equatable {
             Waiting(threadID: $0.string("thread_id"), title: $0.string("title"), ask: Ask(rawValue: $0.string("ask")) ?? .approval)
         }
         waitingText = json.optionalString("waiting_text")
+        runningText = json.optionalString("running_text")
     }
 }
 

@@ -86,6 +86,39 @@ pub fn monitoring_strip(store: &Entity<Store>, thread: &ThreadInfo, cx: &App) ->
         )
 }
 
+/// The agents the thread's agent started work on after its turn: the strip says which, with the
+/// button that stops them.
+pub fn agents_strip(store: &Entity<Store>, text: String, cx: &App) -> impl IntoElement {
+    let c = colors(cx);
+    let help = store.read(cx).shortcuts.help("Stop its agents", "thread.stop");
+    let store = store.clone();
+    strip(true, Some(HEIGHT), cx)
+        .child(div().ml(px(14.)).mr(px(8.)).size(px(6.)).rounded_full().bg(c.process).flex_shrink_0())
+        .child(
+            div()
+                .min_w_0()
+                .text_size(px(12.5))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.foreground)
+                .truncate()
+                .child(text),
+        )
+        .child(div().flex_1().min_w(px(8.)))
+        .child(
+            ActionButton::new("stop-agents", "Stop")
+                .help(help)
+                .ghost()
+                .surface(Surface::Composer)
+                .margin(margin())
+                .on_click(move |_, _, cx| {
+                    store.update(cx, |store, cx| {
+                        store.stop_thread();
+                        cx.notify();
+                    })
+                }),
+        )
+}
+
 /// Why the agent stopped before it finished: the usage limit, with when the thread goes on by
 /// itself, or a restart of the server. The agent is continued from here.
 pub fn interruption_strip(store: &Entity<Store>, interruption: Interruption, cx: &App) -> impl IntoElement {

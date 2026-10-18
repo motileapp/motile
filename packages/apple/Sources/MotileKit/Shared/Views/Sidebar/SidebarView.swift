@@ -958,6 +958,19 @@ struct ThreadStatus: View {
                 symbol(asking.symbol)
             }
             .help(thread.asking == nil ? thread.children?.waitingText ?? "" : "")
+        } else if thread.waitsOnAgents {
+            let agents = thread.children?.running ?? 0
+            HStack(spacing: 9) {
+                label("\(agents)", Color.themePending) {
+                    symbol(.users)
+                }
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeMutedForeground) {
+                        Image(.circleDotDashed, size: 10)
+                    }
+                }
+            }
+            .help(thread.children?.runningText ?? "")
         } else if thread.working {
             let agents = max(thread.agents, thread.children?.running ?? 0)
             HStack(spacing: 9) {

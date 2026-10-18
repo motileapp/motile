@@ -977,14 +977,21 @@ final class AgentRowView: RowView {
     private static let cardPadding = scaled(8)
     /// How far the light reaches past the row's sides, so that the avatar lines up with the text.
     private static let bleed = scaled(6)
-    /// The room above a group's card and under it.
-    private static let cardAbove = scaled(4)
-    private static let cardBelow = scaled(10)
+    /// How far the light stands in from the row's top and bottom, half the room between two lights.
+    private static let lightGap: CGFloat = 2
+    /// How far in from the card's border a row in it lights, on every side.
+    private static let cardLight = scaled(4)
+    /// The room above a group's card and under it, which its border stands in from by what the
+    /// light leaves at the card's ends.
+    private static let cardAbove = scaled(4) + cardLight - lightGap
+    private static let cardBelow = scaled(10) + cardLight - lightGap
 
     static func height(_ content: AgentContent) -> CGFloat {
         rowHeight + (content.card == .first ? cardAbove : 0) + (content.card == .last ? cardBelow : 0)
     }
 
+    /// Holds the card, of which it shows only the row's own part.
+    private let cardClip = FlippedView()
     private let card = SurfaceView()
     private let highlight = SurfaceView()
     private let avatar = AgentAvatarView()
@@ -1003,13 +1010,13 @@ final class AgentRowView: RowView {
         card.stroke = Theme.borderCard
         card.radius = Radius.lg
         highlight.radius = Radius.md
-        [card, highlight, avatar, title, role, label, line, time, chevron].forEach { addSubview($0) }
-        // A row of a card draws only its own part of the card.
+        cardClip.addSubview(card)
+        [cardClip, highlight, avatar, title, role, label, line, time, chevron].forEach { addSubview($0) }
         #if os(macOS)
-        wantsLayer = true
-        layer?.masksToBounds = true
+        cardClip.wantsLayer = true
+        cardClip.layer?.masksToBounds = true
         #else
-        clipsToBounds = true
+        cardClip.clipsToBounds = true
         #endif
         onHover = { [weak self] point in
             guard let self else { return }
@@ -1036,7 +1043,7 @@ final class AgentRowView: RowView {
         avatar.agent = content.agent
         avatar.state = content.state
         avatar.ground = content.card == nil ? Theme.background : Theme.card
-        card.isHidden = content.card == nil
+        cardClip.isHidden = content.card == nil
         title.string = content.title
         role.string = content.role ?? ""
         role.isHidden = content.role == nil
@@ -1084,12 +1091,14 @@ final class AgentRowView: RowView {
         let y = place == .first ? Self.cardAbove : 0
         // A card's rows are one card: each draws the part of it that is its own.
         let overhang = Radius.lg + 1
-        let top: CGFloat = place == .first || place == nil ? y : -overhang
-        let bottom: CGFloat = place == .last || place == nil ? y + height : y + height + overhang
+        let ends = Self.cardLight - Self.lightGap
+        let top: CGFloat = place == .first ? y - ends : -overhang
+        let bottom: CGFloat = place == .last ? y + height + ends : y + height + overhang
+        cardClip.frame = CGRect(x: 0, y: 0, width: width, height: Self.height(content))
         card.frame = CGRect(x: 0, y: top, width: width, height: bottom - top)
-        // In a card the light keeps clear of the card's border.
-        let lit = place == nil ? -Self.bleed : scaled(4)
-        highlight.frame = CGRect(x: lit, y: y + 2, width: width - lit * 2, height: height - 4)
+        // In a card the light keeps as far from the card's border as from the next row's light.
+        let lit = place == nil ? -Self.bleed : Self.cardLight
+        highlight.frame = CGRect(x: lit, y: y + Self.lightGap, width: width - lit * 2, height: height - Self.lightGap * 2)
         let side = AgentAvatarDrawing.side
         avatar.frame = CGRect(x: inset, y: y + ((height - side) / 2).rounded(), width: side, height: side)
         let textX = inset + side + Self.avatarGap
