@@ -4,6 +4,7 @@
 //! the branch.
 
 pub mod attachments;
+pub mod children;
 mod questions;
 mod skills;
 mod strips;
@@ -826,6 +827,10 @@ impl Render for Composer {
         let thread = store.selected_thread().cloned();
         let approval = thread.as_ref().and_then(|_| store.activity.approvals.first().cloned());
         let count = store.activity.approvals.len();
+        let waiting_children = thread.as_ref().and_then(|thread| {
+            let children = thread.children.as_ref()?;
+            Some((children.waiting_text.clone()?, children.waiting.first()?.clone(), children.waiting.len()))
+        });
         let monitoring = thread.is_some() && store.activity.monitoring;
         let interrupted = thread.as_ref().and_then(|thread| interruption(thread, store));
         let project = store.composer_project();
@@ -833,6 +838,8 @@ impl Render for Composer {
         let top_strip: Option<AnyElement> = if let Some(approval) = &approval {
             let questions = self.questions.get(&approval.id).cloned();
             Some(waiting_strip(&self.store, approval, count, questions, cx).into_any_element())
+        } else if let Some((text, first, count)) = waiting_children {
+            Some(children::children_strip(&self.store, text, &first, count, cx).into_any_element())
         } else if let Some(thread) = thread.as_ref().filter(|_| monitoring) {
             Some(monitoring_strip(&self.store, thread, cx).into_any_element())
         } else {

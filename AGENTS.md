@@ -120,8 +120,16 @@ shadcn's own colours, opacities and radii are gone from the theme.
   resumes it with what it missed, a new one is told everything before. Items are told whole, as
   many as the model's context has room for, Codex's as messages (`thread/inject_items`). The
   transcript shows the switch as a `Handoff` item.
-- `mcp.rs`: the `read_thread` tool, an MCP server on the loopback interface that the agents read
-  any thread of the server with, by the token of their own thread, for what a handoff left out.
+- `mcp.rs`: the `motile` MCP server on the loopback interface, which an agent calls by the token of
+  its own thread: `read_thread` reads any thread of the server, for what a handoff left out, and
+  `list_accounts`, `start_agent`, `agent_status`, `message_agent`, `answer_agent` and `stop_agent`
+  start and follow agents on any of the server's accounts, Claude Code's or Codex's.
+- `hub/children.rs`: those agents. Each works in a thread of its own, which knows the thread and
+  the tool call that started it (`parent`); the sidebar doesn't list it. It gets only its prompt,
+  works in its parent's folder unless given a worktree, and never has more access than its parent.
+  Its parent's tool call follows how it does, and the parent's agent is told (`Notice`) when the
+  turn it gave the thread ends or the thread asks a question, unless a call of its own waited for
+  that. Stopping or deleting a thread stops or deletes the ones it started.
 - `pacing.rs`: passes a streamed reply on in finished blocks.
 - `agents/`: builds the command for a turn and parses its output into `AgentEvent`s
   (`claude.rs`, `codex.rs`). `skills.rs` asks each account's CLI for the skills it offers in a
@@ -189,7 +197,9 @@ for tests.
 - `core.rs`: one loop that owns all state. Anything that waits on the network runs in its own
   task. A server removed from the account stays, `removed`: its threads come from the copies its
   account's other servers keep, can be read and searched, and end with a row that says it was
-  removed, in place of the composer.
+  removed, in place of the composer. A thread says how the threads its agent started are doing
+  (`children`): how many work, and which wait for the user, for its sidebar row and the strip over
+  its composer.
 - `sync.rs`: carries the threads between the servers: a round a moment after a server connects or a
   thread changes asks each server how far its own log and its copies go, and moves what each lacks,
   from the origin itself or, for a removed server, from the server whose copy goes furthest. On a
@@ -266,7 +276,10 @@ to be AppKit on the Mac and UIKit on iOS has a twin in each, named alike (`KitMa
   `LimitsView.swift` is the Limits tab, what the agents' plans have used, and `SpendingView.swift`
   the Cost and Tokens tabs: a chart by agent and the models, projects and kinds of token under it.
   The Mac lays it out in `Mac/UsageRoute.swift`, iOS in `iOS/UsageSheet.swift`.
-- `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents and pull
+- `Shared/Views/Panel`: the panel on the right of the thread: changes, files, agents
+  (`AgentsView.swift`: the agents at work, the ones that ended folded under them, and the thread
+  that started this one; an agent opens in the thread's place, in its own thread when it has one
+  and read only with `AgentBar` otherwise) and pull
   requests (`PullRequestView.swift`, `PullRequestActivity.swift`, `PullRequestList.swift`,
   `LineCommentSheet.swift`, `PullRequestParts.swift`), Linear (`LinearView.swift`) and Ricrac
   (`RicracView.swift`).
@@ -541,6 +554,12 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "send the report" | Sends a file to download |
 | "greet by name" | Really changes files in its folder |
 | "ask two agents" (Claude Code), "ask an agent" (Codex) | Starts agents that say what they do and report |
+| "ask another account" | Starts Codex through `start_agent` to look over greet.py and waits for it (Claude Code) |
+| "ask agents in the background" | Starts Codex and Claude Code through `start_agent` and ends; told one finished, says what it found (Claude Code) |
+| "ask three agents" | Starts three agents through `start_agent`, the last of which fails (Claude Code) |
+| "ask a supervised agent" | Starts a supervised agent that runs greet.py, which waits for the user's approval (Claude Code) |
+| "ask an agent which color" | Starts an agent that asks which color; told it asks, answers blue through `answer_agent` (Claude Code) |
+| "look over" | Reads greet.py and runs the tests, a step every `FAKE_AGENT_CHILD_STEP` seconds, and says what it would change |
 | "run the workflow" | Runs a workflow of two phases, whose last agent fails (Claude Code) |
 | "which color" | Asks the user a question |
 | "plan the hello" | Presents a plan to approve |

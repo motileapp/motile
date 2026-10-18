@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
-use motile_protocol::wire::{Access, Agent, Item, Queued, Speaker, Thread, ThreadMatch, Tokens, UsageBucket};
+use motile_protocol::wire::{
+    Access, Agent, Item, Queued, Speaker, Thread, ThreadMatch, ThreadParent, Tokens, UsageBucket,
+};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::agents::ModelUsage;
@@ -28,6 +30,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0016_session_accounts.sql"),
     include_str!("../migrations/0017_drop_plan.sql"),
     include_str!("../migrations/0018_sync.sql"),
+    include_str!("../migrations/0019_thread_parents.sql"),
 ];
 
 pub struct Store {
@@ -92,6 +95,8 @@ pub struct StoredThread {
     pub next_seq: u64,
     /// Set when the thread works in a worktree of its own, which is its `cwd`.
     pub worktree: Option<StoredWorktree>,
+    /// The agent that started the thread is told when the turn it gave the thread ends.
+    pub reports: bool,
 }
 
 /// An agent and the folder it keeps its sessions in. Accounts that share one take over each
@@ -181,9 +186,9 @@ impl Store {
             "INSERT INTO threads (id, title, title_source, project_id, cwd, agent, model, effort, access,
                                   created_at, updated_at, done_at, needs_approval, turn_ended_at, position,
                                   worktree_branch, worktree_base, pull_request, watching, running, monitoring,
-                                  interruption, agent_account)
+                                  interruption, agent_account, parent_thread, parent_tool, reports)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-                     ?23)
+                     ?23, ?24, ?25, ?26)
              ON CONFLICT(id) DO UPDATE SET
                  title = excluded.title,
                  title_source = excluded.title_source,
@@ -202,7 +207,9 @@ impl Store {
                  watching = excluded.watching,
                  running = excluded.running,
                  monitoring = excluded.monitoring,
-                 interruption = excluded.interruption",
+                 interruption = excluded.interruption,
+                 parent_tool = excluded.parent_tool,
+                 reports = excluded.reports",
             params![
                 thread.id,
                 thread.title,
@@ -227,6 +234,9 @@ impl Store {
                 thread.monitoring,
                 thread.interruption.as_ref().and_then(|interruption| serde_json::to_string(interruption).ok()),
                 thread.agent_account,
+                thread.parent.as_ref().map(|parent| &parent.thread_id),
+                thread.parent.as_ref().and_then(|parent| parent.tool_id.as_ref()),
+                stored.reports,
             ],
         )?;
         Ok(())
@@ -593,6 +603,36 @@ impl Store {
         Ok(items)
     }
 
+    /// The thread's own items from its last message on: what its last turn did.
+    pub fn last_turn(&self, thread_id: &str) -> rusqlite::Result<Vec<Item>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT payload FROM items WHERE thread_id = ?1 AND json_extract(payload, '$.parent') IS NULL
+                 AND seq >= (SELECT COALESCE(MAX(seq), 0) FROM items WHERE thread_id = ?1
+                             AND json_extract(payload, '$.type') IN ('user', 'notice'))
+             ORDER BY seq",
+        )?;
+        let payloads = statement.query_map([thread_id], |row| row.get::<_, String>(0))?;
+        Ok(payloads.filter_map(|payload| serde_json::from_str(&payload.ok()?).ok()).collect())
+    }
+
+    /// How many tokens the thread's agents have spent, and how many tools its own agent called.
+    pub fn work_of(&self, thread_id: &str) -> rusqlite::Result<(u64, u64)> {
+        let connection = self.connection();
+        let tokens: i64 = connection.query_row(
+            "SELECT COALESCE(SUM(input + cache_read + cache_write + output), 0) FROM usage WHERE thread_id = ?1",
+            [thread_id],
+            |row| row.get(0),
+        )?;
+        let tools: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM items WHERE thread_id = ?1 AND json_extract(payload, '$.type') = 'tool'
+                 AND json_extract(payload, '$.parent') IS NULL",
+            [thread_id],
+            |row| row.get(0),
+        )?;
+        Ok((tokens as u64, tools as u64))
+    }
+
     pub fn item(&self, thread_id: &str, item_id: &str) -> rusqlite::Result<Option<Item>> {
         let payload: Option<String> = self
             .connection()
@@ -727,7 +767,8 @@ pub(crate) fn threads_where<P: rusqlite::Params>(
         "SELECT t.id, t.title, t.title_source, t.project_id, t.cwd, t.agent, t.model, t.effort, t.access,
                 t.session_id, t.created_at, t.updated_at, t.done_at, t.needs_approval, t.turn_ended_at, t.position,
                 COALESCE(MAX(i.rev), 0), COALESCE(MAX(i.seq) + 1, 0), t.worktree_branch, t.worktree_base,
-                t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account, t.change
+                t.pull_request, t.watching, t.running, t.monitoring, t.interruption, t.agent_account, t.change,
+                t.parent_thread, t.parent_tool, t.reports
          FROM threads t LEFT JOIN items i ON i.thread_id = t.id
          {filter}
          GROUP BY t.id {tail}"
@@ -739,6 +780,7 @@ pub(crate) fn threads_where<P: rusqlite::Params>(
         let pull_request: Option<String> = row.get(20)?;
         let interruption: Option<String> = row.get(24)?;
         let change: i64 = row.get(26)?;
+        let parent: Option<String> = row.get(27)?;
         let stored = StoredThread {
             thread: Thread {
                 id: row.get(0)?,
@@ -764,6 +806,7 @@ pub(crate) fn threads_where<P: rusqlite::Params>(
                 watching: row.get(21)?,
                 git_stage: None,
                 interruption: interruption.and_then(|json| serde_json::from_str(&json).ok()),
+                parent: parent.map(|thread_id| ThreadParent { thread_id, tool_id: row.get(28).ok().flatten() }),
                 rev: rev as u64,
             },
             session_id: row.get(9)?,
@@ -773,6 +816,7 @@ pub(crate) fn threads_where<P: rusqlite::Params>(
                 (Some(branch), Some(base)) => Some(StoredWorktree { branch, base }),
                 _ => None,
             },
+            reports: row.get(29)?,
         };
         Ok((stored, change as u64))
     })?;

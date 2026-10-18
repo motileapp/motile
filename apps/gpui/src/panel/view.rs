@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_core::render::agents::AgentView;
+use motile_core::render::agents::{AgentState, AgentView};
 use motile_protocol::wire::{DiffScope, Side, ToolStatus};
 
 use super::code_view::{CodeActions, CodeSnapshot, CodeView, counts_text};
@@ -25,7 +25,7 @@ use crate::panel::ricrac::RicracView;
 use crate::store::Store;
 use crate::store::integrations::Integration;
 use crate::theme::{self, ControlSize, Layer, Radius, colors};
-use crate::transcript::view::TranscriptView;
+use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, ActionMenu, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, Variant, edges, icons};
 
@@ -73,7 +73,6 @@ pub struct RightPanelView {
     /// The videos the tabs handed to the system's player, by tab.
     #[cfg(not(target_os = "macos"))]
     played_elsewhere: HashMap<PanelTab, std::path::PathBuf>,
-    agent: Entity<TranscriptView>,
     asked: u64,
     /// What each tab last asked its server with, by tab.
     triggers: HashMap<String, Trigger>,
@@ -89,6 +88,11 @@ pub struct RightPanelView {
     marks: Option<(MarksMadeOf, CodeMarks)>,
     agents: ListState,
     listed_agents: Vec<String>,
+    /// Whether the agents that ended are shown, once the user has said. Until then they are
+    /// while none works.
+    shows_ended: Option<bool>,
+    /// The agent row under the pointer, which offers to stop its agent.
+    hovered_agent: Option<String>,
     _ticks: Task<()>,
 }
 
@@ -141,8 +145,6 @@ impl RightPanelView {
             cx.notify()
         })
         .detach();
-        let model = store.read(cx).agent_transcript.clone();
-        let agent = cx.new(|cx| TranscriptView::new(store.clone(), model, true, cx));
         // The times of the agents that work go on.
         let ticks = cx.spawn(async move |this, cx| {
             loop {
@@ -173,7 +175,6 @@ impl RightPanelView {
             players: HashMap::new(),
             #[cfg(not(target_os = "macos"))]
             played_elsewhere: HashMap::new(),
-            agent,
             asked: 0,
             triggers: HashMap::new(),
             strip: ScrollHandle::new(),
@@ -184,6 +185,8 @@ impl RightPanelView {
             marks: None,
             agents: ListState::new(0, ListAlignment::Top, px(400.)),
             listed_agents: Vec::new(),
+            shows_ended: None,
+            hovered_agent: None,
             _ticks: ticks,
         }
     }
@@ -1158,74 +1161,67 @@ impl RightPanelView {
         Self::surface(bar, body)
     }
 
-    /// The agents the thread's agent has started, and what one of them did once it is opened.
+    /// The agents the thread's agent has started, the ones at work first and the ones that ended
+    /// folded under them, and the thread whose agent started this one.
     fn agents_surface(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let store = self.store.read(cx);
         let agents = store.agents.clone();
-        if let Some(agent) =
-            agents.iter().find(|agent| Some(&agent.id) == store.right_panel.shown_agent.as_ref()).cloned()
-        {
-            let bar = Self::bar(
-                div()
-                    .flex()
-                    .items_center()
-                    .w_full()
-                    .gap(px(4.))
-                    .child(
-                        div().ml(px(-8.)).child(
-                            ActionButton::icon("all-agents", "chevron-left", "All agents")
-                                .on_click(act(&self.store, |store, cx| store.show_agents(cx))),
-                        ),
-                    )
-                    .child(div().w(px(16.)).flex().justify_center().child(status_icon(agent.status, cx)))
-                    .child(
-                        div()
-                            .min_w_0()
-                            .text_size(px(12.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(c.foreground)
-                            .truncate()
-                            .child(agent.title.clone()),
-                    )
-                    .child(div().flex_1().min_w(px(6.)))
-                    .child(div().pr(px(6.)).child(agent_time(&agent, cx))),
-                cx,
-            );
-            return Self::surface(bar, div().size_full().child(self.agent.clone()).into_any_element());
-        }
-        if agents.is_empty() {
+        let parent = store.parent_thread().map(|thread| (thread.id.clone(), thread.title.clone()));
+        let shown_agent = store.right_panel.shown_agent.clone();
+        if agents.is_empty() && parent.is_none() {
             return Self::message("The agents this thread starts show up here.", false, cx);
         }
+        let said = match &parent {
+            Some((_, title)) if agents.is_empty() => format!("Started by {title}"),
+            _ => summary(&agents),
+        };
         let bar = Self::bar(
             div().flex().w_full().child(
                 div()
                     .text_size(px(12.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c.muted_foreground)
-                    .child(crate::ui::control::dotted(summary(&agents), c)),
+                    .child(crate::ui::control::dotted(said, c)),
             ),
             cx,
         );
-        let keys = agents
-            .iter()
-            .map(|agent| {
-                let usage = agent.usage().unwrap_or_default();
-                format!(
-                    "{}:{}:{:?}:{}:{usage}:{}",
-                    agent.id,
-                    agent.title,
-                    agent.kind,
-                    agent.detail,
-                    agent.parent.is_some()
-                )
-            })
-            .collect();
-        crate::ui::relist(&self.agents, &mut self.listed_agents, keys);
-        let (agents, store) = (Rc::new(agents), self.store.clone());
+        let (working, ended): (Vec<AgentView>, Vec<AgentView>) = agents.into_iter().partition(|agent| agent.working());
+        let shown = self.shows_ended.unwrap_or(working.is_empty());
+        let mut entries: Vec<AgentEntry> =
+            parent.into_iter().map(|(id, title)| AgentEntry::Parent { id, title }).collect();
+        entries.extend(working.into_iter().map(|agent| AgentEntry::Agent(Box::new(agent))));
+        if !ended.is_empty() {
+            let failed = ended.iter().filter(|agent| agent.status == ToolStatus::Failed).count();
+            entries.push(AgentEntry::Ended { count: ended.len(), failed, shown });
+            if shown {
+                entries.extend(ended.into_iter().map(|agent| AgentEntry::Agent(Box::new(agent))));
+            }
+        }
+        crate::ui::relist(&self.agents, &mut self.listed_agents, entries.iter().map(AgentEntry::key).collect());
+        let (entries, store, view) = (Rc::new(entries), self.store.clone(), cx.entity().downgrade());
+        let hovered = self.hovered_agent.clone();
         let list = list(self.agents.clone(), move |index, _, cx| {
-            let Some(agent) = agents.get(index) else { return div().into_any_element() };
-            agent_row(agent, &store, cx).into_any_element()
+            let Some(entry) = entries.get(index) else { return div().into_any_element() };
+            match entry {
+                AgentEntry::Parent { id, title } => parent_row(id, title, &store, cx).into_any_element(),
+                AgentEntry::Ended { count, failed, shown } => {
+                    let (view, shown) = (view.clone(), *shown);
+                    ended_header(*count, *failed, shown, cx)
+                        .on_click(move |_, _, cx| {
+                            let _ = view.update(cx, |view, cx| {
+                                view.shows_ended = Some(!shown);
+                                cx.notify();
+                            });
+                        })
+                        .into_any_element()
+                }
+                AgentEntry::Agent(agent) => {
+                    let selected = shown_agent.as_ref() == Some(&agent.id);
+                    let hovered = hovered.as_ref() == Some(&agent.id);
+                    agent_row(agent, selected, hovered, &store, &view, cx).into_any_element()
+                }
+            }
         })
         .size_full()
         .px(px(8.))
@@ -1569,12 +1565,159 @@ fn act_path(
     }
 }
 
-/// An agent the thread's agent started: how it went, what it is, what it does and what it took.
-/// A click opens what it did.
-fn agent_row(agent: &AgentView, store: &Entity<Store>, cx: &App) -> Stateful<Div> {
+/// A row of the agents tab.
+enum AgentEntry {
+    /// The thread whose agent started this one.
+    Parent {
+        id: String,
+        title: String,
+    },
+    Agent(Box<AgentView>),
+    /// Over the agents that ended, which it folds.
+    Ended {
+        count: usize,
+        failed: usize,
+        shown: bool,
+    },
+}
+
+impl AgentEntry {
+    fn key(&self) -> String {
+        match self {
+            Self::Parent { id, title } => format!("parent:{id}:{title}"),
+            Self::Ended { count, failed, shown } => format!("ended:{count}:{failed}:{shown}"),
+            Self::Agent(agent) => format!(
+                "agent:{}:{}:{:?}:{:?}:{:?}:{}:{:?}:{}:{}:{}",
+                agent.id,
+                agent.title,
+                agent.status,
+                agent.state,
+                agent.agent,
+                agent.label,
+                agent.kind,
+                agent.detail,
+                agent.facts().unwrap_or_default(),
+                agent.parent.is_some()
+            ),
+        }
+    }
+}
+
+/// The thread whose agent started this one, which a click opens.
+fn parent_row(id: &str, title: &str, store: &Entity<Store>, cx: &App) -> Div {
+    let c = colors(cx);
+    let group: SharedString = format!("agents-parent-{id}").into();
+    let id = id.to_string();
+    div().pb(px(4.)).child(
+        div()
+            .id(group.clone())
+            .group(group.clone())
+            .relative()
+            .px(px(10.))
+            .py(px(8. + super::ROW_MARGIN))
+            .child(light(group, Radius::MD, edges(super::ROW_MARGIN, 0., super::ROW_MARGIN, 0.), false, cx))
+            .child(
+                div()
+                    .relative()
+                    .flex()
+                    .items_center()
+                    .gap(px(9.))
+                    .child(
+                        div()
+                            .w(px(16.))
+                            .flex()
+                            .justify_center()
+                            .child(icons::symbol("corner-left-up", 12.).text_color(c.muted_foreground)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(div().text_size(px(11.)).text_color(c.muted_stronger_foreground).child("Started by"))
+                            .child(
+                                div()
+                                    .text_size(px(13.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(c.foreground)
+                                    .truncate()
+                                    .child(title.to_string()),
+                            ),
+                    )
+                    .child(icons::symbol("chevron-right", 11.).text_color(c.muted_stronger_foreground)),
+            )
+            .on_click(act(store, move |store, cx| store.open_started_thread(&id, cx))),
+    )
+}
+
+/// Over the agents that ended: how many, and how many of them failed. A click folds them.
+fn ended_header(count: usize, failed: usize, shown: bool, cx: &App) -> Stateful<Div> {
+    let c = colors(cx);
+    let group: SharedString = "agents-ended".into();
+    div()
+        .id(group.clone())
+        .group(group.clone())
+        .relative()
+        .mt(px(6.))
+        .px(px(10.))
+        .py(px(super::ROW_MARGIN))
+        .child(light(group, Radius::MD, edges(super::ROW_MARGIN, 0., super::ROW_MARGIN, 0.), false, cx))
+        .child(
+            div()
+                .relative()
+                .h(px(ControlSize::Regular.height()))
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .text_size(px(12.))
+                .child(div().font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("Previous agents"))
+                .child(div().text_color(c.muted_stronger_foreground).child(count.to_string()))
+                .when(failed > 0, |line| line.child(div().text_color(c.destructive).child(format!("{failed} failed"))))
+                .child(div().flex_1().min_w(px(6.)))
+                .child(
+                    icons::symbol(if shown { "chevron-down" } else { "chevron-right" }, 10.)
+                        .text_color(c.muted_stronger_foreground),
+                ),
+        )
+}
+
+/// An agent the thread's agent started: how it is doing, what it is doing or said last, and what
+/// it runs on and has spent. A click opens its thread, or what it did in the thread's place. One
+/// that works in a thread of its own can be stopped from here.
+fn agent_row(
+    agent: &AgentView,
+    selected: bool,
+    hovered: bool,
+    store: &Entity<Store>,
+    view: &WeakEntity<RightPanelView>,
+    cx: &App,
+) -> Stateful<Div> {
     let c = colors(cx);
     let group: SharedString = format!("agent-{}", agent.id).into();
-    let id = agent.id.clone();
+    let stoppable = agent.working() && agent.thread_id.is_some();
+    let open = {
+        let (id, thread) = (agent.id.clone(), agent.thread_id.clone());
+        move |store: &mut Store, cx: &mut Context<Store>| match &thread {
+            Some(thread) => store.open_started_thread(thread, cx),
+            None => store.show_agent(id.clone(), cx),
+        }
+    };
+    let stop = {
+        let thread = agent.thread_id.clone();
+        move |store: &mut Store, _: &mut Context<Store>| {
+            if let Some(thread) = &thread {
+                store.stop_thread_id(thread);
+            }
+        }
+    };
+    let (hover_view, hover_id) = (view.clone(), agent.id.clone());
+    let menu_store = store.clone();
+    let (menu_open, menu_stop) = (open.clone(), stop.clone());
+    let menu_title = if agent.thread_id.is_none() { "Show What It Did" } else { "Open Thread" };
+    // The stop button is as far from the row's top as the title's line is.
+    let stop_top = 8. - (ControlSize::Small.height() - 18.) / 2. + super::ROW_MARGIN;
     div()
         .id(group.clone())
         .group(group.clone())
@@ -1583,22 +1726,14 @@ fn agent_row(agent: &AgentView, store: &Entity<Store>, cx: &App) -> Stateful<Div
         .py(px(8. + super::ROW_MARGIN))
         // An agent that another agent started stands in from it.
         .when(agent.parent.is_some(), |row| row.pl(px(28.)))
-        .child(light(group, Radius::MD, edges(super::ROW_MARGIN, 0., super::ROW_MARGIN, 0.), false, cx))
+        .child(light(group, Radius::MD, edges(super::ROW_MARGIN, 0., super::ROW_MARGIN, 0.), selected, cx))
         .child(
             div()
                 .relative()
                 .flex()
                 .items_start()
-                .gap(px(9.))
-                .child(
-                    div()
-                        .w(px(16.))
-                        .h(px(18.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(status_icon(agent.status, cx)),
-                )
+                .gap(px(10.))
+                .child(AgentAvatar::new(agent.agent).state(agent.state))
                 .child(
                     div()
                         .flex_1()
@@ -1630,38 +1765,81 @@ fn agent_row(agent: &AgentView, store: &Entity<Store>, cx: &App) -> Stateful<Div
                                             .child(kind),
                                     )
                                 })
+                                .when(agent.state.flagged(), |line| {
+                                    line.child(
+                                        div()
+                                            .flex_shrink_0()
+                                            .text_size(px(11.))
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(state_color(agent.state, c))
+                                            .child(agent.label.clone()),
+                                    )
+                                })
                                 .child(div().flex_1().min_w(px(6.)))
-                                .child(agent_time(agent, cx)),
+                                .child(
+                                    div()
+                                        .when(hovered && stoppable, |time| time.opacity(0.))
+                                        .child(agent_time(agent, cx)),
+                                ),
                         )
                         .when(!agent.detail.is_empty(), |text| {
+                            let failed = agent.status == ToolStatus::Failed;
                             text.child(
                                 div()
                                     .text_size(px(12.))
                                     .line_height(px(16.))
-                                    .text_color(c.muted_foreground)
+                                    .text_color(if failed { c.destructive } else { c.muted_foreground })
                                     .line_clamp(2)
                                     .child(agent.detail.clone()),
                             )
                         })
-                        .when_some(agent.usage(), |text, usage| {
-                            text.child(div().text_size(px(11.)).text_color(c.muted_stronger_foreground).child(usage))
+                        .when_some(agent.facts(), |text, facts| {
+                            text.child(
+                                div()
+                                    .text_size(px(11.))
+                                    .text_color(c.muted_stronger_foreground)
+                                    .truncate()
+                                    .child(facts),
+                            )
                         }),
                 ),
         )
-        .on_click(act(store, move |store, cx| store.show_agent(id.clone(), cx)))
-}
-
-fn status_icon(status: ToolStatus, cx: &App) -> impl IntoElement {
-    let c = colors(cx);
-    match status {
-        ToolStatus::Running => icons::symbol("circle-dashed", 11.).text_color(c.process),
-        ToolStatus::Succeeded => icons::symbol("check", 11.).text_color(c.muted_foreground),
-        ToolStatus::Failed => icons::symbol("x", 11.).text_color(c.destructive),
-    }
+        .when(hovered && stoppable, |row| {
+            row.child(
+                div().absolute().top(px(stop_top)).right(px(6.)).child(
+                    ActionButton::icon(
+                        SharedString::from(format!("stop-agent-{}", agent.id)),
+                        "circle-stop",
+                        format!("Stop {}", agent.title),
+                    )
+                    .small()
+                    .on_click(act(store, stop.clone())),
+                ),
+            )
+        })
+        .on_hover(move |hovering, _, cx| {
+            let id = hover_id.clone();
+            let _ = hover_view.update(cx, |view, cx| {
+                let hovered =
+                    if *hovering { Some(id) } else { view.hovered_agent.clone().filter(|other| *other != id) };
+                if view.hovered_agent != hovered {
+                    view.hovered_agent = hovered;
+                    cx.notify();
+                }
+            });
+        })
+        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+            let mut menu = Menu::new().item(menu_title, choose(&menu_store, menu_open.clone()));
+            if stoppable {
+                menu = menu.item("Stop Agent", choose(&menu_store, menu_stop.clone()));
+            }
+            menu.show(event.position, window, cx);
+        })
+        .on_click(act(store, open))
 }
 
 /// How long the agent has worked so far, or worked in all.
-fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
+pub fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
     let c = colors(cx);
     let time = |text: String, color: Hsla| {
         div()
@@ -1682,15 +1860,17 @@ fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
     }
 }
 
-/// "2 working · 1 done · 1 failed · 48K tokens", leaving out what there is none of.
+/// "1 waiting · 2 working · 1 done · 48K tokens", leaving out what there is none of.
 fn summary(agents: &[AgentView]) -> String {
-    let count = |status: ToolStatus| agents.iter().filter(|agent| agent.status == status).count();
+    let count = |state: AgentState| agents.iter().filter(|agent| agent.state == state).count();
     let spent: Vec<u64> = agents.iter().filter_map(|agent| agent.tokens).collect();
     let total = (!spent.is_empty()).then(|| crate::models::tokens(spent.iter().sum()));
     [
-        (count(ToolStatus::Running), "working"),
-        (count(ToolStatus::Succeeded), "done"),
-        (count(ToolStatus::Failed), "failed"),
+        (count(AgentState::Waiting), "waiting"),
+        (count(AgentState::Working), "working"),
+        (count(AgentState::Done), "done"),
+        (count(AgentState::Failed), "failed"),
+        (count(AgentState::Stopped), "stopped"),
     ]
     .into_iter()
     .filter(|(count, _)| *count > 0)

@@ -57,8 +57,8 @@ import app.motile.ui.Text
 import kotlinx.coroutines.delay
 
 /**
- * Where messages are written. A strip above says what the agent waits for, that it is monitoring,
- * or why it stopped before it finished. The model, the effort and the access are in the thread's
+ * Where messages are written. A strip above says what the agent waits for, what the agents it
+ * started wait for, that it is monitoring, or why it stopped before it finished. The model, the effort and the access are in the thread's
  * settings, which the model's name opens, and the composer is one line until it is written in.
  */
 object ComposerView {
@@ -94,8 +94,12 @@ fun ComposerView(modifier: Modifier = Modifier) {
                     val thread = store.selectedThread
                     val approval = store.activity.approvals.firstOrNull()
                     val interruption = thread?.interruption
+                    val children = thread?.children
+                    val waitingChild = children?.waiting?.firstOrNull()
+                    val waitingText = children?.waitingText
                     when {
                         thread != null && approval != null -> WaitingStrip(approval, store.activity.approvals.size)
+                        waitingChild != null && waitingText != null -> ChildrenStrip(waitingText, waitingChild, children.waiting.size)
                         thread != null && store.activity.monitoring -> MonitoringStrip(thread)
                         thread != null && !thread.busy && !store.activity.busy && interruption != null -> InterruptionStrip(interruption)
                     }

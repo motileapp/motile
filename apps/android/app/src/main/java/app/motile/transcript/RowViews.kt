@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -27,10 +28,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -38,9 +42,11 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.core.Activity
+import app.motile.core.AgentState
 import app.motile.core.SettingsSection
 import app.motile.core.Time
 import app.motile.platform.Platform
@@ -58,11 +64,14 @@ import app.motile.theme.SurfaceBox
 import app.motile.theme.Theme
 import app.motile.theme.opacity
 import app.motile.theme.wash
+import app.motile.ui.AgentAvatar
+import app.motile.ui.AgentAvatars
 import app.motile.ui.AgentIcon
 import app.motile.ui.CopyButton
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.Text
+import app.motile.ui.color
 import kotlinx.coroutines.delay
 
 /** The view of one row, by its kind. */
@@ -74,6 +83,8 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.Prose -> ProseRow(row, kind.content)
         is RowModel.Kind.Code -> CodeRow(kind.content)
         is RowModel.Kind.Tool, is RowModel.Kind.Thinking, is RowModel.Kind.Group, is RowModel.Kind.Fold -> ToolRow(row)
+        is RowModel.Kind.Agent -> AgentRow(row, kind.content)
+        is RowModel.Kind.Agents -> AgentsRow(row, kind.content)
         is RowModel.Kind.Media -> MediaRow(kind.content)
         is RowModel.Kind.File -> FileRow(kind.content)
         is RowModel.Kind.Error -> ErrorRow(kind.message)
@@ -262,7 +273,7 @@ private fun ToolRow(row: RowModel) {
     val running = tool?.status == ToolContent.Status.Running || group?.running == true
     val startedAt = tool?.startedAt ?: group?.startedAt
     val hasDetail = when {
-        tool != null -> tool.hasDetail || tool.agent
+        tool != null -> tool.hasDetail
         thought != null -> thought.isNotEmpty()
         else -> true
     }
@@ -277,7 +288,7 @@ private fun ToolRow(row: RowModel) {
             fold != null -> fold.label to ""
             else -> "Thought" to ""
         }
-        toolTitle(words, target, tool?.progress, failed, running, palette)
+        toolTitle(words, target, failed, running, palette)
     }
     val inset = if (row.nested) 24.dp else 0.dp
     val line = ToolRow.height - 2.dp
@@ -287,7 +298,6 @@ private fun ToolRow(row: RowModel) {
             HighlightButton(
                 onClick = {
                     when {
-                        tool?.agent == true -> actions.openAgent(row.itemID)
                         open != null -> actions.toggleRow(row.id)
                         else -> actions.toggleExpansion(row.id)
                     }
@@ -338,8 +348,8 @@ object ToolRow {
     val height = 36.dp
 }
 
-/** A running call's title is all muted, so the band shows on every part of it. `note` is what an agent the call started is doing. */
-private fun toolTitle(words: String, target: String, note: String?, failed: Boolean, running: Boolean, palette: Palette): AnnotatedString = buildAnnotatedString {
+/** A running call's title is all muted, so the band shows on every part of it. */
+private fun toolTitle(words: String, target: String, failed: Boolean, running: Boolean, palette: Palette): AnnotatedString = buildAnnotatedString {
     append(if (target.isEmpty()) words else "$words ")
     val targetColor = when {
         failed -> palette.destructive
@@ -347,7 +357,136 @@ private fun toolTitle(words: String, target: String, note: String?, failed: Bool
         else -> palette.mutedForeground
     }
     withStyle(SpanStyle(fontFamily = Theme.mono, fontSize = Theme.inlineCodeFont.fontSize, color = targetColor)) { append(target) }
-    if (note != null) append("  $note")
+}
+
+/**
+ * An agent the thread's agent started, or what it was told of one: its avatar, its title and word,
+ * then what it runs on and does or said, and how long it worked. A tap opens it: its thread, or what
+ * it did. In the card of an open group it lies on the card, which its rows draw as one.
+ */
+@Composable
+private fun AgentRow(row: RowModel, content: AgentContent) {
+    val palette = LocalPalette.current
+    val actions = LocalTranscript.current
+    val place = content.card
+    val inset = if (place == null) 0.dp else AgentRow.cardPadding
+    val top = if (place == AgentContent.Card.First) AgentRow.cardAbove else 0.dp
+    val bottom = if (place == AgentContent.Card.Last) AgentRow.cardBelow else 0.dp
+    val card = if (place == null) Modifier else Modifier.clipToBounds().drawBehind {
+        // A card's rows are one card: each draws the part of it that is its own.
+        val overhang = (Radius.lg + 1.dp).toPx()
+        val from = if (place == AgentContent.Card.First) top.toPx() else -overhang
+        val to = if (place == AgentContent.Card.Last) size.height - bottom.toPx() else size.height + overhang
+        val radius = CornerRadius(Radius.lg.toPx())
+        val line = 1.dp.toPx()
+        drawRoundRect(palette.card, Offset(0f, from), Size(size.width, to - from), radius)
+        drawRoundRect(palette.borderCard, Offset(line / 2, from + line / 2), Size(size.width - line, to - from - line), radius, Stroke(line))
+    }
+    val time = agentTime(content)
+    // In a card the light keeps clear of the card's border, in the card's accent.
+    val lit = if (place == null) 0.dp else (AgentRow.cardLight - (AgentRow.cardPadding - AgentRow.bleed)).coerceAtLeast(0.dp)
+    CompositionLocalProvider(LocalSurface provides if (place == null) LocalSurface.current else Surface.Card) {
+        Box(card.fillMaxWidth().padding(top = top, bottom = bottom).padding(horizontal = inset).height(AgentRow.height)) {
+            HighlightButton(
+                onClick = {
+                    val thread = content.thread
+                    if (thread != null) actions.openThread(thread) else actions.openAgent(row.itemID)
+                },
+                modifier = Modifier.fillMaxSize().bleed(AgentRow.bleed),
+                inset = PaddingValues(horizontal = lit, vertical = 2.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Row(Modifier.fillMaxSize().padding(horizontal = AgentRow.bleed), verticalAlignment = Alignment.CenterVertically) {
+                    AgentAvatar(content.agent, content.state)
+                    Spacer(Modifier.width(AgentRow.avatarGap))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                        // The title first, then its role and its word in what room is left.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(content.title, size = 13f, weight = FontWeight.Medium, color = palette.foreground, maxLines = 1)
+                            content.role?.let { Text(it, Modifier.padding(start = 6.dp), size = 11f, color = palette.mutedStrongerForeground, maxLines = 1) }
+                            if (content.flagged) {
+                                val color = if (content.state.flagged) content.state.color else palette.mutedForeground
+                                Text(content.label, Modifier.padding(start = 6.dp), size = 11f, weight = FontWeight.Medium, color = color, maxLines = 1)
+                            }
+                        }
+                        val color = if (content.state == AgentState.Failed) palette.destructive else palette.mutedForeground
+                        Text(content.line, Modifier.padding(top = 1.dp), size = 12f, color = color, maxLines = 1)
+                    }
+                    if (time.isNotEmpty()) Text(time, Modifier.padding(start = 12.dp), style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground, maxLines = 1)
+                    AgentRowChevron(open = false)
+                }
+            }
+        }
+    }
+}
+
+/** How long the agent has worked, counted while it works, or for what it was told, when it was. */
+@Composable
+private fun agentTime(content: AgentContent): String {
+    val working = content.at == null && (content.state == AgentState.Working || content.state == AgentState.Waiting)
+    val now = ticking(working)
+    return when {
+        content.at != null -> Time.stamp(content.at)
+        working -> Time.elapsed(content.startedAt, now)
+        else -> content.durationMs?.let { Time.duration(it) } ?: ""
+    }
+}
+
+@Composable
+private fun AgentRowChevron(open: Boolean) {
+    Box(Modifier.padding(start = 6.dp).width(14.dp), contentAlignment = Alignment.Center) {
+        Icon(if (open) Symbol.ChevronDown else Symbol.ChevronRight, 9f, color = LocalPalette.current.mutedStrongerForeground)
+    }
+}
+
+/** Agents started one after the other: their avatars side by side, how many and how they are doing, and how long they have worked. A tap opens it into a card of their rows. */
+@Composable
+private fun AgentsRow(row: RowModel, content: AgentsContent) {
+    val palette = LocalPalette.current
+    val actions = LocalTranscript.current
+    val now = ticking(content.startedAt != null)
+    val time = content.startedAt?.let { Time.elapsed(it, now) } ?: content.durationMs?.let { Time.duration(it) } ?: ""
+    Box(Modifier.fillMaxWidth().height(AgentRow.height)) {
+        HighlightButton(
+            onClick = { actions.toggleRow(row.id) },
+            modifier = Modifier.fillMaxSize().bleed(AgentRow.bleed),
+            inset = PaddingValues(vertical = 2.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Row(Modifier.fillMaxSize().padding(horizontal = AgentRow.bleed), verticalAlignment = Alignment.CenterVertically) {
+                AgentAvatars(content.avatars, content.more)
+                Spacer(Modifier.width(AgentRow.avatarGap))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                    Text(content.title, size = 13f, weight = FontWeight.SemiBold, color = palette.foreground, maxLines = 1)
+                    val color = if (content.state == AgentState.Done) palette.mutedForeground else content.state.color
+                    Text(content.summary, Modifier.padding(top = 1.dp), size = 12f, color = color, maxLines = 1)
+                }
+                if (time.isNotEmpty()) Text(time, Modifier.padding(start = 12.dp), style = Theme.uiDigits(12f), color = palette.mutedStrongerForeground, maxLines = 1)
+                AgentRowChevron(content.open)
+            }
+        }
+    }
+}
+
+private object AgentRow {
+    val height = scaled(50f).dp
+    val avatarGap = scaled(10f).dp
+    /** How far a row in a group's card stands in from the card's sides. */
+    val cardPadding = scaled(8f).dp
+    /** How far in from the card's sides a row in it lights. */
+    val cardLight = scaled(4f).dp
+    /** How far the light reaches past the row's sides, so that the avatar lines up with the text. */
+    val bleed = scaled(6f).dp
+    /** The room above a group's card and under it. */
+    val cardAbove = scaled(4f).dp
+    val cardBelow = scaled(10f).dp
+}
+
+/** Reaches `by` past both sides of the room it is given. */
+private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints ->
+    val extra = by.roundToPx()
+    val placeable = measurable.measure(constraints.copy(minWidth = constraints.minWidth + extra * 2, maxWidth = constraints.maxWidth + extra * 2))
+    layout(placeable.width - extra * 2, placeable.height) { placeable.place(-extra, 0) }
 }
 
 @Composable

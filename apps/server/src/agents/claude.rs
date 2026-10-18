@@ -63,7 +63,7 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
             "--mcp-config".to_string(),
             json!({"mcpServers": {crate::mcp::SERVER_NAME: server}}).to_string(),
             "--allowedTools".to_string(),
-            crate::mcp::READ_THREAD_TOOL.to_string(),
+            crate::mcp::TOOLS.join(","),
         ]);
     }
     arguments.extend(
@@ -486,6 +486,9 @@ fn subagent(status: ToolStatus, object: &Value) -> Subagent {
         tool_uses: usage["tool_uses"].as_u64(),
         duration_ms: usage["duration_ms"].as_u64(),
         workflow: None,
+        runs_on: None,
+        waits: None,
+        stopped: false,
     }
 }
 
@@ -659,6 +662,9 @@ mod tests {
             tool_uses: None,
             duration_ms: None,
             workflow: None,
+            runs_on: None,
+            waits: None,
+            stopped: false,
         };
         let task = |agent| vec![AgentEvent::Task { tool_id: "toolu_1".to_string(), agent }];
 
@@ -944,7 +950,10 @@ mod tests {
         let server = &config["mcpServers"]["motile"];
         assert_eq!((&server["type"], &server["url"]), (&json!("http"), &json!("http://127.0.0.1:9/mcp")));
         assert_eq!(server["headers"]["Authorization"], "${MOTILE_MCP_AUTHORIZATION}");
-        assert_eq!(arguments[at + 2..at + 4], ["--allowedTools", "mcp__motile__read_thread"]);
+        assert_eq!(arguments[at + 2], "--allowedTools");
+        let allowed: Vec<&str> = arguments[at + 3].split(',').collect();
+        assert_eq!(allowed[..2], ["mcp__motile__read_thread", "mcp__motile__list_accounts"]);
+        assert!(allowed.contains(&"mcp__motile__start_agent"), "{allowed:?}");
         assert!(!arguments.iter().any(|argument| argument.contains("secret")));
     }
 

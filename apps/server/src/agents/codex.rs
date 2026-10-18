@@ -198,7 +198,8 @@ impl Parser {
         }
         if let Some(mcp) = turn.mcp {
             let headers = json!({"Authorization": format!("Bearer {}", mcp.token)});
-            let server = json!({"url": mcp.url, "http_headers": headers});
+            let server =
+                json!({"url": mcp.url, "http_headers": headers, "tool_timeout_sec": crate::mcp::TOOL_TIMEOUT_SECS});
             thread["config"] = json!({"mcp_servers": {crate::mcp::SERVER_NAME: server}});
         }
         Self {
@@ -339,6 +340,9 @@ impl Parser {
                 tool_uses: None,
                 duration_ms: params["turn"]["durationMs"].as_u64(),
                 workflow: None,
+                runs_on: None,
+                waits: None,
+                stopped: false,
             };
             vec![AgentEvent::Task { tool_id: parent.clone(), agent }]
         };
@@ -524,6 +528,9 @@ impl Parser {
                     tool_uses: None,
                     duration_ms: None,
                     workflow: None,
+                    runs_on: None,
+                    waits: None,
+                    stopped: false,
                 };
                 let description = agent_title(item["agentPath"].as_str().unwrap_or_default());
                 let call = ToolCall {
@@ -809,7 +816,8 @@ mod tests {
         let server = &asked[1]["params"]["config"]["mcp_servers"]["motile"];
         assert_eq!(
             server,
-            &json!({"url": "http://127.0.0.1:9/mcp", "http_headers": {"Authorization": "Bearer secret"}})
+            &json!({"url": "http://127.0.0.1:9/mcp", "http_headers": {"Authorization": "Bearer secret"},
+                    "tool_timeout_sec": 3900})
         );
 
         let events = parser.parse(r#"{"id":2,"result":{"thread":{"id":"t1"},"model":"gpt-6"}}"#);

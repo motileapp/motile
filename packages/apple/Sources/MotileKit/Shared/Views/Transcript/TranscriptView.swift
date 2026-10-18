@@ -35,6 +35,7 @@ final class TranscriptView: FlippedView, RowOwner {
     var onOpenDiff: ((String, String?) -> Void)?
     /// What the agent did that the item's tool call started is to be shown.
     var onOpenAgent: ((String) -> Void)?
+    var onOpenThread: ((String) -> Void)?
     /// Whether a file that couldn't be fetched can be asked for again.
     var canFetchAgain: (() -> Bool)?
     /// The thread, whose server was removed, is to go on on another server.
@@ -614,6 +615,8 @@ final class TranscriptView: FlippedView, RowOwner {
         case is ChangesRowView: "changes"
         case is QueuedRowView: "queued"
         case is HandoffRowView: "handoff"
+        case is AgentRowView: "agent"
+        case is AgentsRowView: "agents"
         case is RemovedRowView: "removed"
         default: "turnEnd"
         }
@@ -880,6 +883,8 @@ final class TranscriptView: FlippedView, RowOwner {
     func openDiff(turn itemID: String, path: String?) { onOpenDiff?(itemID, path) }
 
     func openAgent(itemID: String) { onOpenAgent?(itemID) }
+
+    func openThread(id: String) { onOpenThread?(id) }
 
     var fetchesAgain: Bool { canFetchAgain?() ?? true }
 

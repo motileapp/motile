@@ -25,6 +25,9 @@ struct ComposerView: View {
             VStack(spacing: 0) {
                 if store.selectedThread != nil, let approval = store.activity.approvals.first {
                     WaitingStrip(approval: approval, count: store.activity.approvals.count)
+                } else if let children = store.selectedThread?.children, let first = children.waiting.first,
+                          let text = children.waitingText {
+                    ChildrenStrip(text: text, first: first, count: children.waiting.count)
                 } else if store.selectedThread != nil, store.activity.monitoring {
                     monitoringStrip
                 } else if let thread = store.selectedThread, !thread.busy, !store.activity.busy, let interruption = thread.interruption {

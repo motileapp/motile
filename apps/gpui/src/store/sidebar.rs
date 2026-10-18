@@ -293,7 +293,12 @@ mod tests {
             "effort": null, "access": "full", "created_at": 1.0, "updated_at": 1.0, "done_at": null,
             "position": position, "running": false, "needs_approval": false, "turn_ended_at": null, "rev": 0,
         });
-        ThreadInfo { thread: serde_json::from_value(value).unwrap(), server_id: String::new(), unread: false }
+        ThreadInfo {
+            thread: serde_json::from_value(value).unwrap(),
+            server_id: String::new(),
+            unread: false,
+            children: None,
+        }
     }
 
     #[test]

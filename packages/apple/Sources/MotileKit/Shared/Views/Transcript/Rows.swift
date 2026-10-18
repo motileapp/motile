@@ -35,6 +35,10 @@ final class RowModel {
         case changes(ChangesContent)
         case turnEnd(TurnEnd)
         case handoff(HandoffContent)
+        /// An agent the thread's agent started, or what it was told of one.
+        case agent(AgentContent)
+        /// Agents started one after the other, as one row that opens into a card of them.
+        case agents(AgentsContent)
         case queued(QueuedContent)
         /// The thread's server was unlinked from the account: the last row, in place of the
         /// composer, which says why the thread can only be read.
@@ -93,6 +97,10 @@ final class RowModel {
             kind = .turnEnd(TurnEnd(json: json))
         case "handoff":
             kind = .handoff(HandoffContent(json: json))
+        case "agent":
+            kind = .agent(AgentContent(json: json))
+        case "agents":
+            kind = .agents(AgentsContent(json: json))
         case "queued":
             kind = .queued(QueuedContent(json: json))
         case "removed":
@@ -188,10 +196,6 @@ struct ToolContent {
     let output: String?
     /// When it started, while it runs.
     let startedAt: Double?
-    /// It started an agent, whose transcript the row's item names.
-    let agent: Bool
-    /// What that agent is doing now.
-    let progress: String?
 
     init(json: JSON) {
         name = json.string("name")
@@ -203,8 +207,6 @@ struct ToolContent {
         inputLanguage = json.string("input_language")
         output = json.optionalString("output")
         startedAt = json.optionalDouble("started_at")
-        agent = json.bool("agent")
-        progress = json.optionalString("progress")
     }
 
     var symbol: Symbol { Self.symbol(for: icon) }
@@ -382,6 +384,80 @@ struct TurnEnd {
         case (false, let duration?): return "Worked for \(duration)"
         case (false, nil): return "Done"
         }
+    }
+}
+
+/// An agent as its row shows it: its avatar, its title and word, what it does or said and what it
+/// runs on, and how long it worked.
+struct AgentContent {
+    /// Where the row is in the card of an open group.
+    enum Card: String {
+        case first, middle, last
+    }
+
+    let title: String
+    let role: String?
+    let state: AgentState
+    let label: String
+    /// The label is shown beside the title, as what the user is to look at.
+    let flagged: Bool
+    let detail: String
+    let agent: Agent?
+    /// "Opus 5.5 · work".
+    let runsOn: String
+    let startedAt: Double
+    let durationMs: Int?
+    /// When the thread's agent was told, for what it was told.
+    let at: Double?
+    /// The thread it works in, which the row opens. Without one the row shows what it did.
+    let thread: String?
+    let card: Card?
+
+    init(json: JSON) {
+        title = json.string("title")
+        role = json.optionalString("role")
+        state = AgentState(rawValue: json.string("state")) ?? .done
+        label = json.string("label")
+        flagged = json.bool("flagged")
+        detail = json.string("detail")
+        agent = json.optionalString("agent").flatMap(Agent.init(rawValue:))
+        runsOn = json.string("runs_on")
+        startedAt = json.double("started_at")
+        durationMs = (json["duration_ms"] as? NSNumber)?.intValue
+        at = json.optionalDouble("at")
+        thread = json.optionalString("thread")
+        card = json.optionalString("card").flatMap(Card.init(rawValue:))
+    }
+
+    /// What the second line says: what it runs on, then what it does or said.
+    var line: String {
+        let said = detail.isEmpty && runsOn.isEmpty ? label : detail
+        return [runsOn, said].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+}
+
+/// Agents started one after the other: their avatars, how many, and how they are doing.
+struct AgentsContent {
+    let title: String
+    let summary: String
+    let state: AgentState
+    let avatars: [(agent: Agent?, state: AgentState)]
+    let more: Int
+    let startedAt: Double?
+    let durationMs: Int?
+    let open: Bool
+
+    init(json: JSON) {
+        title = json.string("title")
+        summary = json.string("summary")
+        state = AgentState(rawValue: json.string("state")) ?? .done
+        avatars = json.objects("avatars").map {
+            ($0.optionalString("agent").flatMap(Agent.init(rawValue:)), AgentState(rawValue: $0.string("state")) ?? .done)
+        }
+        more = json.int("more")
+        startedAt = json.optionalDouble("started_at")
+        durationMs = (json["duration_ms"] as? NSNumber)?.intValue
+        open = json.bool("open")
     }
 }
 

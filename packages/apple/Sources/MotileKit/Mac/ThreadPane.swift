@@ -22,9 +22,17 @@ struct ThreadPane: View {
 
     var body: some View {
         @Bindable var store = store
+        let agent = store.shownAgent
         ZStack(alignment: .bottom) {
             if isStart {
                 start
+            } else if let agent {
+                AgentBar(agent: agent)
+                    .padding(.horizontal, Theme.composerPadding)
+                    .padding(.top, TranscriptView.composerGap)
+                    .padding(.bottom, Self.composerBottomGap)
+                    .frame(maxWidth: .infinity)
+                    .transformAnchorPreference(key: ComposerPlace.self, value: .bounds) { $0.room = $1 }
             } else if store.openThreadRemovedServer != nil {
                 RoomWithoutComposer(bottomGap: Self.composerBottomGap)
             } else {
@@ -38,7 +46,7 @@ struct ThreadPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .coordinateSpace(.named(ComposerView.roomSpace))
-        .transcriptBehind(of: store, shown: !isStart, under: [])
+        .transcriptBehind(of: store, ofAgent: agent != nil, shown: !isStart, under: [])
         .takingDroppedFiles()
         .overlay(alignment: .topLeading) { topBar }
         .navigationTitle(store.selectedThread?.title ?? "New thread")
@@ -63,7 +71,6 @@ struct ThreadPane: View {
         GeometryReader { proxy in
             HStack(spacing: 8) {
                 title
-                    .allowsHitTesting(false)
                 Spacer(minLength: 0)
                 if let project = store.gitProject, let control = project.gitControl {
                     GitButton(project: project, control: control)
@@ -82,16 +89,34 @@ struct ThreadPane: View {
         }
     }
 
+    /// The project, then the thread's name: after the thread whose agent started it, or for an
+    /// agent shown in its place, the agent's after the thread's.
     private var title: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let parts = store.composerProjectLine {
                 ProjectLine(project: store.composerProject, parts: parts, size: 11, iconSize: 12)
+                    .allowsHitTesting(false)
             }
-            Text(store.selectedThread?.title ?? "New thread")
-                .font(.ui(size: 13, weight: .semibold))
-                .foregroundStyle(Color.themeForeground)
+            HStack(spacing: 4) {
+                if let agent = store.shownAgent, let thread = store.selectedThread {
+                    TitleCrumb(title: thread.title) { store.rightPanel.showAgents() }
+                    titleText(agent.title)
+                } else if let parent = store.parentThread {
+                    TitleCrumb(title: parent.title) { store.openStartedThread(parent.id) }
+                    titleText(store.selectedThread?.title ?? "")
+                } else {
+                    titleText(store.selectedThread?.title ?? "New thread")
+                }
+            }
         }
         .lineLimit(1)
+    }
+
+    private func titleText(_ text: String) -> some View {
+        Text(text)
+            .font(.ui(size: 13, weight: .semibold))
+            .foregroundStyle(Color.themeForeground)
+            .allowsHitTesting(false)
     }
 
     /// The empty state of a new thread: a question, and the composer a little above the middle

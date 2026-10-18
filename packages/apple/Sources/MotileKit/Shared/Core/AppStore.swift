@@ -652,16 +652,19 @@ final class AppStore {
 
     // MARK: Lookups
 
+    /// The lists leave out the threads agents started, which their parents show.
     private func setThreads(_ new: [String: ThreadInfo]) {
         threads = new
-        activeThreads = new.values.filter { !$0.isDone }.sorted(by: ThreadInfo.listed)
-        doneThreads = new.values.filter(\.isDone).sorted(by: ThreadInfo.listed)
+        let listed = new.values.filter { $0.parentID == nil }
+        activeThreads = listed.filter { !$0.isDone }.sorted(by: ThreadInfo.listed)
+        doneThreads = listed.filter(\.isDone).sorted(by: ThreadInfo.listed)
     }
 
     /// Changes one thread, and moves it in its list only when its place there changed.
     private func setThread(_ thread: ThreadInfo?, id: String) {
         let before = threads[id]
         threads[id] = thread
+        guard (thread ?? before)?.parentID == nil else { return }
         if let before, let thread, before.isDone == thread.isDone, before.listedAt == thread.listedAt {
             changeList(done: thread.isDone) { list in
                 guard let index = list.index(of: before) else { return }
@@ -687,6 +690,20 @@ final class AppStore {
     var selectedThread: ThreadInfo? {
         guard case .thread(let id) = selection else { return nil }
         return threads[id]
+    }
+
+    /// The thread whose agent started the open one.
+    var parentThread: ThreadInfo? { selectedThread?.parentID.flatMap { threads[$0] } }
+
+    /// Opens the thread an agent the open thread's agent started works in, or the one whose agent
+    /// started it. On a phone the panel it was opened from goes away.
+    func openStartedThread(_ threadID: String) {
+        guard threads[threadID] != nil else { return }
+        // The agents stay in view on the way between a thread and the agents it started.
+        let showsAgents = rightPanel.isOpen && rightPanel.tabs.active == .agents && !Platform.panelCoversThread
+        select(.thread(threadID))
+        if showsAgents { rightPanel.open(.agents) }
+        if Platform.panelCoversThread { rightPanel.isOpen = false }
     }
 
     var selectedDraft: ThreadDraft? {
@@ -2176,9 +2193,18 @@ final class AppStore {
     }
 
     func stop() {
-        guard let thread = selectedThread, !onRemovedServer(thread) else { return }
+        guard let thread = selectedThread else { return }
+        stop(threadID: thread.id)
+    }
+
+    /// Stops the thread's agent, and the agents it started.
+    func stop(threadID: String) {
+        guard let thread = threads[threadID], !onRemovedServer(thread) else { return }
         request(thread.serverID, ["type": "stop", "thread_id": thread.id])
     }
+
+    /// The agent the open thread's agent started that shows in the thread's place, read only.
+    var shownAgent: AgentInfo? { rightPanel.shownAgent.flatMap { id in agents.first { $0.id == id } } }
 
     /// Allows or refuses a tool call the agent waits with. `answers` is what was chosen, by
     /// question, when the call asks questions.

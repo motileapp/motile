@@ -603,12 +603,15 @@ struct CommandPanel: View {
         return items
     }
 
+    /// The threads, then the ones agents started, each saying which thread started it.
     private var threadItems: [PanelItem] {
-        (store.activeThreads + store.doneThreads).map { thread in
+        let started = store.threads.values.filter { $0.parentID != nil }.sorted { $0.updatedAt > $1.updatedAt }
+        return (store.activeThreads + store.doneThreads + started).map { thread in
             let project = store.project(thread.projectID)
             let name = project?.name ?? URL(fileURLWithPath: thread.cwd).lastPathComponent
-            let state = thread.isDone ? "done" : thread.asking?.phrase ?? (thread.running ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt))
-            return PanelItem(id: "thread-\(thread.id)", title: thread.title, detail: "\(name) · \(state)", icon: .project(project)) {
+            let from = thread.parentID.flatMap { store.threads[$0]?.title }.map { " · from \($0)" } ?? ""
+            let state = thread.isDone ? "done" : thread.waitsFor?.phrase ?? (thread.working ? "working" : thread.monitoring ? "monitoring" : thread.interruption?.word ?? Time.ago(thread.updatedAt))
+            return PanelItem(id: "thread-\(thread.id)", title: thread.title, detail: "\(name)\(from) · \(state)", icon: .project(project)) {
                 store.show(.thread(thread.id))
             }
         }

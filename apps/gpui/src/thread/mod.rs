@@ -11,7 +11,8 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::composer::Composer;
-use crate::models::Project;
+use crate::composer::children::{agent_bar, title_crumb};
+use crate::models::{AgentViewExt, Project};
 use crate::store::{PanelPage, Store};
 use crate::theme::{self, Radius, colors};
 use crate::ui::menu::{Anchor, Menu, MenuIcon};
@@ -30,6 +31,8 @@ pub struct ThreadPane {
     store: Entity<Store>,
     composer: Entity<Composer>,
     transcript: Entity<crate::transcript::view::TranscriptView>,
+    /// The transcript of an agent the thread's agent started, shown in the thread's place.
+    agent_transcript: Entity<crate::transcript::view::TranscriptView>,
     /// How far the title starts from the pane's left edge: past the window's buttons when the
     /// sidebar is hidden.
     pub title_inset: f32,
@@ -48,6 +51,7 @@ pub struct ThreadPane {
     commit_sheet: Option<Entity<crate::git::CommitSheet>>,
     /// The title the window was last given.
     window_title: String,
+    _ticks: Task<()>,
 }
 
 impl ThreadPane {
@@ -60,10 +64,28 @@ impl ThreadPane {
         let composer = cx.new(|cx| Composer::new(store.clone(), window, cx));
         let model = store.read(cx).transcript.clone();
         let transcript = cx.new(|cx| crate::transcript::view::TranscriptView::new(store.clone(), model, false, cx));
+        let model = store.read(cx).agent_transcript.clone();
+        let agent_transcript =
+            cx.new(|cx| crate::transcript::view::TranscriptView::new(store.clone(), model, true, cx));
+        // The time of the agent shown goes on while it works.
+        let ticks = cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                let Ok(working) = this
+                    .read_with(cx, |this, cx| this.store.read(cx).shown_agent().is_some_and(|agent| agent.working()))
+                else {
+                    break;
+                };
+                if working && this.update(cx, |_, cx| cx.notify()).is_err() {
+                    break;
+                }
+            }
+        });
         Self {
             store,
             composer,
             transcript,
+            agent_transcript,
             title_inset: 20.,
             trailing_room: 0.,
             beside_panel: false,
@@ -74,6 +96,7 @@ impl ThreadPane {
             git_menu: Anchor::default(),
             commit_sheet: None,
             window_title: String::new(),
+            _ticks: ticks,
         }
     }
 
@@ -107,7 +130,7 @@ impl ThreadPane {
         let store = self.store.read(cx);
         let project = store.composer_project();
         let parts = store.composer_project_line();
-        let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
+        let (crumb, title) = self.title(cx);
         let git_project = store.git_project();
         let control: Option<AnyElement> = if let Some(button) = crate::git::git_button(&self.store, &self.git_menu, cx)
         {
@@ -139,16 +162,35 @@ impl ThreadPane {
                     .min_w_0()
                     .when_some(parts, |title, parts| title.child(project_line(project.as_ref(), &parts, cx)))
                     .child(
-                        div()
-                            .text_size(px(13.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c.foreground)
-                            .truncate()
-                            .child(title),
+                        div().min_w_0().flex().items_center().gap(px(4.)).children(crumb).child(
+                            div()
+                                .min_w_0()
+                                .text_size(px(13.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c.foreground)
+                                .truncate()
+                                .child(title),
+                        ),
                     ),
             )
             .child(div().flex_1())
             .children(control)
+    }
+
+    /// The thread's name, after the thread whose agent started it, or for an agent shown in its
+    /// place, the agent's after the thread's.
+    fn title(&self, cx: &App) -> (Option<AnyElement>, String) {
+        let store = self.store.read(cx);
+        let selected = store.selected_thread();
+        if let (Some(agent), Some(thread)) = (store.shown_agent(), selected) {
+            let crumb = title_crumb(&self.store, &thread.title, |store, cx| store.show_agents(cx));
+            return (Some(crumb.into_any_element()), agent.title.clone());
+        }
+        let title = selected.map(|thread| thread.title.clone());
+        let Some(parent) = store.parent_thread() else { return (None, title.unwrap_or("New thread".into())) };
+        let id = parent.id.clone();
+        let crumb = title_crumb(&self.store, &parent.title, move |store, cx| store.open_started_thread(&id, cx));
+        (Some(crumb.into_any_element()), title.unwrap_or_default())
     }
 
     /// The empty state of a new thread: a question, and the composer a little above the middle
@@ -393,6 +435,7 @@ impl Render for ThreadPane {
         let removing = store.removing_project.clone();
         let title = store.selected_thread().map(|thread| thread.title.clone()).unwrap_or("New thread".into());
         let removed = store.open_thread_removed();
+        let shown_agent = store.shown_agent().cloned().filter(|_| !is_start);
         let takes_drops = store.composer_server().is_some() && !removed;
         if self.window_title != title {
             window.set_window_title(&title);
@@ -430,8 +473,14 @@ impl Render for ThreadPane {
         );
         let measured = self.composer_height.clone();
         // A thread whose server was unlinked ends with the row that says so, in the composer's place.
-        let inset = if removed { COMPOSER_BOTTOM_GAP } else { self.composer_height.get() };
-        self.transcript.update(cx, |transcript, cx| transcript.set_bottom_inset(inset, cx));
+        let room_below = shown_agent.is_some() || !removed;
+        let inset = if room_below { self.composer_height.get() } else { COMPOSER_BOTTOM_GAP };
+        let transcript = if shown_agent.is_some() { self.agent_transcript.clone() } else { self.transcript.clone() };
+        transcript.update(cx, |transcript, cx| transcript.set_bottom_inset(inset, cx));
+        let below: AnyElement = match &shown_agent {
+            Some(agent) => agent_bar(&self.store, agent, cx).into_any_element(),
+            None => self.composer.clone().into_any_element(),
+        };
         div()
             .id("thread-pane")
             .size_full()
@@ -442,16 +491,8 @@ impl Render for ThreadPane {
                 div()
                     .size_full()
                     .relative()
-                    .child(
-                        div()
-                            .absolute()
-                            .top(px(theme::TOP_BAR))
-                            .left_0()
-                            .right_0()
-                            .bottom_0()
-                            .child(self.transcript.clone()),
-                    )
-                    .when(!removed, |thread| {
+                    .child(div().absolute().top(px(theme::TOP_BAR)).left_0().right_0().bottom_0().child(transcript))
+                    .when(room_below, |thread| {
                         thread.child(
                             div()
                                 .absolute()
@@ -471,7 +512,7 @@ impl Render for ThreadPane {
                                     .absolute()
                                     .inset_0(),
                                 )
-                                .child(self.composer.clone()),
+                                .child(below),
                         )
                     })
                     .into_any_element()

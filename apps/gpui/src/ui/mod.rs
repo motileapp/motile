@@ -1,6 +1,7 @@
 //! The small pieces every screen is made of, as the Mac app's `Views/UI` and `Views/Shared` draw
 //! them: the light under the pointer, the controls, modals, and the icons of agents and projects.
 
+pub mod agent_avatar;
 pub mod control;
 pub mod icons;
 pub mod logos;
@@ -17,6 +18,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use crate::theme::{Layer, Opacity, Radius, Surface, colors};
+pub use agent_avatar::{AgentAvatar, AgentAvatars};
 pub use control::{
     ActionButton, ActionMenu, Chip, InputField, InputVariant, Segmented, Spinner, Switch, TextArea, Variant,
     card_default, text_area_state,
@@ -111,7 +113,6 @@ impl Highlight {
         self
     }
 
-    #[expect(dead_code, reason = "for the views still to be ported")]
     pub fn fill(mut self, fill: Hsla) -> Self {
         self.fill = Some(fill);
         self

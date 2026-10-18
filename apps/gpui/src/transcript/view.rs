@@ -32,7 +32,7 @@ const NEAR_END: f32 = 80.;
 pub struct TranscriptView {
     store: Entity<Store>,
     model: Entity<Transcript>,
-    /// This transcript is the one of an agent the thread started, in the right panel.
+    /// This transcript is the one of an agent the thread started, shown in the thread's place.
     agent: bool,
     /// The tool calls opened here, to show their input and output.
     expanded: HashSet<String>,
@@ -80,8 +80,8 @@ impl TranscriptView {
         let ticks = cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_secs(1)).await;
-                let Ok(running) = this.read_with(cx, |this, cx| this.model.read(cx).activity.running) else { break };
-                if running && this.update(cx, |_, cx| cx.notify()).is_err() {
+                let Ok(ticks) = this.read_with(cx, |this, cx| this.model.read(cx).ticks()) else { break };
+                if ticks && this.update(cx, |_, cx| cx.notify()).is_err() {
                     break;
                 }
             }
@@ -99,7 +99,7 @@ impl TranscriptView {
             meta_fades: HashMap::new(),
             loading_earlier: false,
             trimming: false,
-            bottom_inset: if agent { AGENT_BOTTOM_INSET } else { 0. },
+            bottom_inset: 0.,
             measures_after_layout: false,
             glide: None,
             _ticks: ticks,
@@ -386,9 +386,6 @@ impl TranscriptView {
     }
 }
 
-/// The room the right panel's agent transcript leaves under its last row.
-const AGENT_BOTTOM_INSET: f32 = crate::panel::END_ROOM;
-
 impl Render for TranscriptView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
@@ -519,7 +516,7 @@ impl Render for TranscriptView {
             .relative()
             .child(list)
             .child(fade_top)
-            .when(bottom > 0. && !self.agent, |transcript| transcript.child(fade_bottom))
+            .when(bottom > 0., |transcript| transcript.child(fade_bottom))
             .child(scroller)
             .when(show_jump, |transcript| {
                 transcript.child(

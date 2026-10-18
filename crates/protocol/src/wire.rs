@@ -76,8 +76,20 @@ pub struct Thread {
     /// Why the agent stopped before it finished, until it works again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interruption: Option<Interruption>,
+    /// Set when another thread's agent started this one for a task of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<ThreadParent>,
     /// The transcript's revision; a client whose copy is older has catching up to do.
     pub rev: u64,
+}
+
+/// The thread whose agent started a thread, and the tool call it did it with.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct ThreadParent {
+    pub thread_id: String,
+    /// The tool call in the parent's transcript, once it is known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_id: Option<String>,
 }
 
 /// Why a thread's agent stopped before it finished.
@@ -183,6 +195,33 @@ pub enum ItemKind {
         from: HandoffEnd,
         to: HandoffEnd,
     },
+    /// What the server told the agent of a thread it started: `text` is what the agent read.
+    Notice {
+        notice: AgentNotice,
+        text: String,
+    },
+}
+
+/// Something that happened in a thread an agent started, which the server tells that agent.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct AgentNotice {
+    pub thread_id: String,
+    pub title: String,
+    pub event: NoticeEvent,
+    pub agent: Agent,
+    /// The start of its reply, why it failed, or what it asks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum NoticeEvent {
+    Finished,
+    Failed,
+    Stopped,
+    /// It asks a question, which the agent that started it can answer.
+    Asked,
 }
 
 /// One side of a handoff.
@@ -236,6 +275,30 @@ pub struct Subagent {
     /// Set when it is a workflow, which runs agents of its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<Workflow>,
+    /// What it runs on, as your server knows it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runs_on: Option<Box<RunsOn>>,
+    /// What it waits for the user to answer, while it works.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waits: Option<Ask>,
+    /// It ended because it was stopped, not because it failed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stopped: bool,
+}
+
+/// The agent, model and account an agent runs on, and the thread it works in when it was started
+/// through your server.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct RunsOn {
+    pub agent: Agent,
+    /// The model's name as the picker lists it, or else its id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// The account's name, when its agent has more than one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
 }
 
 /// A workflow's phases, in order, and the agents it has started so far.
@@ -2054,6 +2117,9 @@ pub struct Queued {
     /// Always false: what the agent is given leaves the queue. Older clients still read it.
     #[serde(default)]
     pub sending: bool,
+    /// Set when the server tells the agent of a thread it started, which the queue doesn't show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<AgentNotice>,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

@@ -1,16 +1,18 @@
-//! The `read_thread` tool, with which an agent reads what a handoff left out: an MCP server on
-//! the loopback interface that only the agents your server started can call, each with the token
-//! of its thread.
+//! The `motile` MCP server, on the loopback interface, which only the agents your server started
+//! can call, each with the token of its thread: `read_thread` reads what a handoff left out, and
+//! the other tools start agents on any of your server's accounts and follow them.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use anyhow::Context;
 use axum::extract::{Request, State};
+use axum::http::request::Parts;
 use axum::http::{StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use motile_protocol::wire::{Agent, HandoffEnd, Item, ItemKind};
+use rmcp::handler::server::common::Extension;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock, ServerCapabilities, ServerConfig};
@@ -18,19 +20,31 @@ use rmcp::schemars::{self, JsonSchema};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use rmcp::{ServerHandler, tool, tool_handler, tool_router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::agents::PLAN_TOOL;
 use crate::handoff::tool_status;
+use crate::hub::Hub;
 use crate::store::Store;
 
 pub const SERVER_NAME: &str = "motile";
-/// The tool as the agents name it.
-pub const READ_THREAD_TOOL: &str = "mcp__motile__read_thread";
+/// The tools as the agents name them.
+pub const TOOLS: [&str; 7] = [
+    "mcp__motile__read_thread",
+    "mcp__motile__list_accounts",
+    "mcp__motile__start_agent",
+    "mcp__motile__agent_status",
+    "mcp__motile__message_agent",
+    "mcp__motile__answer_agent",
+    "mcp__motile__stop_agent",
+];
 /// What Claude Code reads its `Authorization` header from.
 pub const AUTHORIZATION_VARIABLE: &str = "MOTILE_MCP_AUTHORIZATION";
+/// Longer than the longest an agent's call waits, so that the agent's own client never gives up
+/// on it first.
+pub const TOOL_TIMEOUT_SECS: u64 = 65 * 60;
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 100;
 const DEFAULT_CHARS: usize = 20_000;
@@ -54,8 +68,13 @@ impl Tokens {
         token
     }
 
-    pub fn knows(&self, token: &str) -> bool {
-        self.lock().contains_key(&hash(token))
+    /// The thread the token is for.
+    pub fn thread_of(&self, token: &str) -> Option<String> {
+        self.lock().get(&hash(token)).cloned()
+    }
+
+    pub fn forget(&self, thread_id: &str) {
+        self.lock().retain(|_, kept| kept != thread_id);
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<[u8; 32], String>> {
@@ -67,13 +86,17 @@ fn hash(token: &str) -> [u8; 32] {
     Sha256::digest(token.as_bytes()).into()
 }
 
-/// Serves the tool on a port of the loopback interface that the system picks, and answers it.
-pub async fn serve(store: Arc<Store>, tokens: Arc<Tokens>) -> anyhow::Result<u16> {
+/// The thread whose agent calls.
+#[derive(Clone)]
+struct Caller(String);
+
+/// Serves the tools on a port of the loopback interface that the system picks, and answers them.
+pub async fn serve(hub: Weak<Hub>, tokens: Arc<Tokens>) -> anyhow::Result<u16> {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.context("The thread reader can't listen.")?;
     let port = listener.local_addr()?.port();
     let config = StreamableHttpServerConfig::default().with_legacy_session_mode(false).with_json_response(true);
-    let reader = move || Ok(Reader { store: store.clone(), tool_router: Reader::tool_router() });
-    let service = StreamableHttpService::new(reader, Arc::new(LocalSessionManager::default()), config);
+    let tools = move || Ok(Tools { hub: hub.clone(), tool_router: Tools::tool_router() });
+    let service = StreamableHttpService::new(tools, Arc::new(LocalSessionManager::default()), config);
     let app =
         axum::Router::new().route_service("/mcp", service).layer(middleware::from_fn_with_state(tokens, authorize));
     tokio::spawn(async move {
@@ -84,39 +107,194 @@ pub async fn serve(store: Arc<Store>, tokens: Arc<Tokens>) -> anyhow::Result<u16
     Ok(port)
 }
 
-async fn authorize(State(tokens): State<Arc<Tokens>>, request: Request, next: Next) -> Response {
+async fn authorize(State(tokens): State<Arc<Tokens>>, mut request: Request, next: Next) -> Response {
     let given = request.headers().get(header::AUTHORIZATION).and_then(|value| value.to_str().ok());
     let token = given.and_then(|value| value.strip_prefix("Bearer "));
-    if !token.is_some_and(|token| tokens.knows(token)) {
+    let Some(thread_id) = token.and_then(|token| tokens.thread_of(token)) else {
         return StatusCode::UNAUTHORIZED.into_response();
-    }
+    };
+    request.extensions_mut().insert(Caller(thread_id));
     next.run(request).await
 }
 
 #[derive(Clone)]
-struct Reader {
-    store: Arc<Store>,
+struct Tools {
+    hub: Weak<Hub>,
     tool_router: ToolRouter<Self>,
 }
 
+impl Tools {
+    fn hub(&self) -> anyhow::Result<Arc<Hub>> {
+        self.hub.upgrade().context("Your server is stopping.")
+    }
+}
+
+fn caller(parts: &Parts) -> anyhow::Result<String> {
+    parts.extensions.get::<Caller>().map(|caller| caller.0.clone()).context("The caller has no thread.")
+}
+
+fn answered<T: Serialize>(result: anyhow::Result<T>) -> CallToolResult {
+    match result.and_then(|value| Ok(serde_json::to_string(&value)?)) {
+        Ok(text) => CallToolResult::success(vec![ContentBlock::text(text)]),
+        Err(error) => CallToolResult::error(vec![ContentBlock::text(format!("{error:#}"))]),
+    }
+}
+
 #[tool_router]
-impl Reader {
+impl Tools {
     /// Reads a thread of this server: its messages, or everything that happened in it, a page at
     /// a time.
     #[tool(name = "read_thread", annotations(title = "Read a thread", read_only_hint = true))]
     async fn read_thread(&self, Parameters(request): Parameters<ReadThread>) -> CallToolResult {
-        match read_thread(&self.store, &request) {
-            Ok(page) => CallToolResult::success(vec![ContentBlock::text(page.to_string())]),
-            Err(error) => CallToolResult::error(vec![ContentBlock::text(format!("{error:#}"))]),
-        }
+        answered(self.hub().and_then(|hub| read_thread(hub.store(), &request)))
+    }
+
+    /// Lists the accounts of your server you can start agents on: other Claude Code logins and
+    /// Codex, with the models each offers and how much of its plan's limits it has used. Yours is
+    /// marked.
+    #[tool(name = "list_accounts", annotations(title = "List accounts", read_only_hint = true))]
+    async fn list_accounts(&self, Extension(parts): Extension<Parts>) -> CallToolResult {
+        let accounts = async { self.hub()?.accounts_for(&caller(&parts)?).await };
+        answered(accounts.await)
+    }
+
+    /// Starts an agent in a thread of its own on one of your server's accounts, another Claude Code
+    /// login or Codex, to work on a task while you go on. It is given only `prompt`, none of this
+    /// conversation, so say everything it needs. It works in your folder unless `worktree` is set.
+    /// Without `wait` this returns at once, and you are told when the agent finishes or asks
+    /// something: end your turn then instead of checking on it. With `wait` it returns when the
+    /// agent finishes, asks a question, or `timeout_seconds` pass, which never stops the agent.
+    #[tool(name = "start_agent", annotations(title = "Start an agent"))]
+    async fn start_agent(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<StartAgent>,
+    ) -> CallToolResult {
+        let started = async { self.hub()?.start_child(&caller(&parts)?, request).await };
+        answered(started.await)
+    }
+
+    /// How the agents you started are doing, with the last reply of each that has finished. With
+    /// `wait`, returns once all of them have finished, one asks a question, or `timeout_seconds`
+    /// pass.
+    #[tool(name = "agent_status", annotations(title = "Check on agents", read_only_hint = true))]
+    async fn agent_status(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<AgentStatus>,
+    ) -> CallToolResult {
+        let wait = request.wait.then(|| {
+            let seconds = request.timeout_seconds.map(std::time::Duration::from_secs);
+            seconds.unwrap_or(crate::hub::WAIT).min(crate::hub::LONGEST_WAIT)
+        });
+        let states = async { self.hub()?.child_states(&caller(&parts)?, &request.ids, wait).await };
+        answered(states.await)
+    }
+
+    /// Gives an agent you started another message. It starts the agent's next turn, or reaches it
+    /// at once while it works, and you are told when that turn ends.
+    #[tool(name = "message_agent", annotations(title = "Message an agent"))]
+    async fn message_agent(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<MessageAgent>,
+    ) -> CallToolResult {
+        let state = async { self.hub()?.message_child(&caller(&parts)?, &request.id, request.text).await };
+        answered(state.await)
+    }
+
+    /// Answers the questions an agent you started asks, each question's text to the answer.
+    #[tool(name = "answer_agent", annotations(title = "Answer an agent"))]
+    async fn answer_agent(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<AnswerAgent>,
+    ) -> CallToolResult {
+        let state = async { self.hub()?.answer_child(&caller(&parts)?, &request.id, request.answers).await };
+        answered(state.await)
+    }
+
+    /// Stops an agent you started, and the agents it started.
+    #[tool(name = "stop_agent", annotations(title = "Stop an agent"))]
+    async fn stop_agent(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<StopAgent>,
+    ) -> CallToolResult {
+        let state = async { self.hub()?.stop_child(&caller(&parts)?, &request.id).await };
+        answered(state.await)
     }
 }
 
 #[tool_handler(router = self.tool_router)]
-impl ServerHandler for Reader {
+impl ServerHandler for Tools {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
     }
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct StartAgent {
+    /// Everything the agent needs to know to do the task. It sees nothing of your conversation.
+    pub prompt: String,
+    /// A few words its thread is called by.
+    pub title: Option<String>,
+    /// The part it plays, such as "reviewer". Its prompt starts by telling it.
+    pub role: Option<String>,
+    /// The account it runs on, by its name or id from list_accounts. Yours when neither this nor
+    /// `agent` is given.
+    pub account: Option<String>,
+    /// "claude" or "codex": that agent's default account, or yours when you are that agent.
+    pub agent: Option<String>,
+    /// A model the account offers. Yours when it runs your agent, and the account's default
+    /// otherwise.
+    pub model: Option<String>,
+    /// A reasoning effort the model offers.
+    pub effort: Option<String>,
+    /// "supervised", "accept_edits", "auto" or "full", never more than yours, which it has when
+    /// this isn't given. Leave it unless the user asks: a supervised agent waits for the user at
+    /// every action that needs approval.
+    pub access: Option<String>,
+    /// Works in a new git worktree from your branch instead of your folder. Changes you haven't
+    /// committed aren't in it.
+    #[serde(default)]
+    pub worktree: bool,
+    /// Returns once the agent finishes, asks a question, or `timeout_seconds` pass.
+    #[serde(default)]
+    pub wait: bool,
+    /// How long `wait` waits: 600 when not given, at most 3600.
+    pub timeout_seconds: Option<u64>,
+    /// The same id for each retry of one request, so that a retry doesn't start a second agent.
+    pub request_id: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct AgentStatus {
+    /// The ids start_agent gave you.
+    ids: Vec<String>,
+    /// Returns once all of them have finished, one asks a question, or `timeout_seconds` pass.
+    #[serde(default)]
+    wait: bool,
+    /// How long `wait` waits: 600 when not given, at most 3600.
+    timeout_seconds: Option<u64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct MessageAgent {
+    id: String,
+    text: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct AnswerAgent {
+    id: String,
+    /// Each question's text, as the agent asked it, to the answer.
+    answers: HashMap<String, String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct StopAgent {
+    id: String,
 }
 
 #[derive(Deserialize, JsonSchema, Default)]
@@ -179,7 +357,7 @@ fn shown(item: &Item, view: View) -> bool {
         return true;
     }
     let message = match &item.kind {
-        ItemKind::User { .. } | ItemKind::Assistant { .. } => true,
+        ItemKind::User { .. } | ItemKind::Assistant { .. } | ItemKind::Notice { .. } => true,
         ItemKind::Tool { call } => call.name == PLAN_TOOL,
         _ => false,
     };
@@ -224,6 +402,7 @@ fn described(item: &Item) -> (&'static str, &'static str, String) {
         ItemKind::TurnEnd { summary } if summary.stopped => ("turn_end", "done", "Turn stopped".to_string()),
         ItemKind::TurnEnd { .. } => ("turn_end", "done", "Turn ended".to_string()),
         ItemKind::Handoff { from, to } => ("handoff", "done", format!("{} → {}", end_name(from), end_name(to))),
+        ItemKind::Notice { text, .. } => ("notice", "done", text.clone()),
     }
 }
 
@@ -272,10 +451,17 @@ mod tests {
             watching: false,
             git_stage: None,
             interruption: None,
+            parent: None,
             rev: 0,
         };
-        let stored =
-            StoredThread { thread, session_id: None, title_source: TitleSource::User, next_seq: 0, worktree: None };
+        let stored = StoredThread {
+            thread,
+            session_id: None,
+            title_source: TitleSource::User,
+            next_seq: 0,
+            worktree: None,
+            reports: false,
+        };
         store.save_thread(&stored).unwrap();
         let call = |name: &str, input: &str| ToolCall {
             id: String::new(),
@@ -369,7 +555,7 @@ mod tests {
         let tokens = Tokens::default();
         let token = tokens.mint("t");
         assert_eq!(token.len(), 64);
-        assert!(tokens.knows(&token) && !tokens.knows("guess"));
+        assert_eq!((tokens.thread_of(&token).as_deref(), tokens.thread_of("guess")), (Some("t"), None));
         assert!(!tokens.lock().keys().any(|kept| hex::encode(kept) == token));
     }
 }

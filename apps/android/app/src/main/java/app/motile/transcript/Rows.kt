@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.motile.core.Agent
+import app.motile.core.AgentState
 import app.motile.core.AttachedFile
 import app.motile.core.JSON
 import app.motile.core.SkillSpan
@@ -58,6 +59,10 @@ class RowModel(
         class Changes(val content: ChangesContent) : Kind
         class TurnEnd(val content: TurnEndContent) : Kind
         class Handoff(val content: HandoffContent) : Kind
+        /** An agent the thread's agent started, or what it was told of one. */
+        class Agent(val content: AgentContent) : Kind
+        /** Agents started one after the other, as one row that opens into a card of them. */
+        class Agents(val content: AgentsContent) : Kind
         class Queued(val content: QueuedContent) : Kind
         /** The thread's server was unlinked from the account: the last row, in place of the composer, which says why the thread can only be read. */
         class Removed(val content: RemovedContent) : Kind
@@ -117,6 +122,8 @@ class RowModel(
                 "changes" -> Kind.Changes(ChangesContent(json))
                 "turn_end" -> Kind.TurnEnd(TurnEndContent(json))
                 "handoff" -> Kind.Handoff(HandoffContent(json))
+                "agent" -> Kind.Agent(AgentContent(json))
+                "agents" -> Kind.Agents(AgentsContent(json))
                 "queued" -> Kind.Queued(QueuedContent(MessageText(json, muted = true), json.objects("attachments").map(::AttachedFile), json.string("status")))
                 "removed" -> Kind.Removed(RemovedContent(json.string("server"), json.string("title"), json.string("message")))
                 else -> return null
@@ -288,10 +295,6 @@ class ToolContent(json: JSON) {
     val output = json.optionalString("output")
     /** When it started, while it runs. */
     val startedAt = json.optionalDouble("started_at")
-    /** It started an agent, whose transcript the row's item names. */
-    val agent = json.bool("agent")
-    /** What that agent is doing now. */
-    val progress = json.optionalString("progress")
 
     val symbol: Symbol get() = symbol(icon)
     val hasDetail: Boolean get() = input.isNotEmpty() || output != null
@@ -398,6 +401,76 @@ class TurnEndContent(json: JSON) {
             }
         }
     }
+}
+
+/** An agent as its row shows it: its avatar, its title and word, what it does or said and what it runs on, and how long it worked. */
+data class AgentContent(
+    val title: String,
+    val role: String?,
+    val state: AgentState,
+    val label: String,
+    /** The label is shown beside the title, as what the user is to look at. */
+    val flagged: Boolean,
+    val detail: String,
+    val agent: Agent?,
+    /** "Opus 5.5 · work". */
+    val runsOn: String,
+    val startedAt: Double,
+    val durationMs: Int?,
+    /** When the thread's agent was told, for what it was told. */
+    val at: Double?,
+    /** The thread it works in, which the row opens. Without one the row shows what it did. */
+    val thread: String?,
+    /** Where the row is in the card of an open group. */
+    val card: Card?,
+) {
+    enum class Card { First, Middle, Last }
+
+    constructor(json: JSON) : this(
+        title = json.string("title"),
+        role = json.optionalString("role"),
+        state = AgentState.of(json.string("state")),
+        label = json.string("label"),
+        flagged = json.bool("flagged"),
+        detail = json.string("detail"),
+        agent = Agent.of(json.optionalString("agent")),
+        runsOn = json.string("runs_on"),
+        startedAt = json.double("started_at"),
+        durationMs = json.optionalInt("duration_ms"),
+        at = json.optionalDouble("at"),
+        thread = json.optionalString("thread"),
+        card = Card.entries.firstOrNull { it.name.lowercase() == json.optionalString("card") },
+    )
+
+    /** What the second line says: what it runs on, then what it does or said. */
+    val line: String
+        get() {
+            val said = if (detail.isEmpty() && runsOn.isEmpty()) label else detail
+            return listOf(runsOn, said).filter { it.isNotEmpty() }.joinToString(" · ")
+        }
+}
+
+/** Agents started one after the other: their avatars, how many, and how they are doing. */
+data class AgentsContent(
+    val title: String,
+    val summary: String,
+    val state: AgentState,
+    val avatars: List<Pair<Agent?, AgentState>>,
+    val more: Int,
+    val startedAt: Double?,
+    val durationMs: Int?,
+    val open: Boolean,
+) {
+    constructor(json: JSON) : this(
+        title = json.string("title"),
+        summary = json.string("summary"),
+        state = AgentState.of(json.string("state")),
+        avatars = json.objects("avatars").map { Agent.of(it.optionalString("agent")) to AgentState.of(it.string("state")) },
+        more = json.int("more"),
+        startedAt = json.optionalDouble("started_at"),
+        durationMs = json.optionalInt("duration_ms"),
+        open = json.bool("open"),
+    )
 }
 
 /** The thread went on with another agent or account: the model before and the one after. */

@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::api::Command;
+use motile_core::render::agents::AgentView;
 use motile_protocol::wire::{Change, DiffScope, FileKind, Request};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -460,7 +461,7 @@ pub struct RightPanel {
     pub tabs_by_key: BTreeMap<String, PanelTabs>,
     /// The turns of the open thread that changed files, the first one first.
     pub turns: Vec<TurnChange>,
-    /// The agent whose transcript the agents tab shows. Without one it lists them.
+    /// The agent whose transcript shows in the thread's place, read only.
     pub shown_agent: Option<String>,
 
     pub diff: Loaded<Arc<CodeDocument>>,
@@ -798,7 +799,7 @@ impl Store {
 
     // Agents
 
-    /// Opens the agents tab on what the agent did that the tool call started.
+    /// Shows what the agent did that the tool call started in the thread's place, read only.
     pub fn show_agent(&mut self, id: String, cx: &mut Context<Self>) {
         let Some(thread_id) = self.transcript.read(cx).thread_id.clone() else { return };
         self.right_panel.shown_agent = Some(id.clone());
@@ -806,10 +807,15 @@ impl Store {
         self.agent_transcript.update(cx, |transcript, _| transcript.begin(Some(thread_id.clone()), live, false));
         self.agents_changed(cx);
         self.send(Command::OpenAgent { thread_id, agent_id: id });
-        self.open_tab(PanelTab::Agents);
     }
 
-    /// Goes back to the list of agents.
+    /// The agent the open thread's agent started that shows in the thread's place.
+    pub fn shown_agent(&self) -> Option<&AgentView> {
+        let id = self.right_panel.shown_agent.as_ref()?;
+        self.agents.iter().find(|agent| &agent.id == id)
+    }
+
+    /// Goes back from the agent shown to the thread.
     pub fn show_agents(&mut self, cx: &mut Context<Self>) {
         if self.right_panel.shown_agent.take().is_none() {
             return;
@@ -824,10 +830,7 @@ impl Store {
     /// The shown agent's transcript says that it works for as long as it does.
     pub fn agents_changed(&mut self, cx: &mut Context<Self>) {
         use crate::models::AgentViewExt;
-        let Some(agent) = self.agents.iter().find(|agent| Some(&agent.id) == self.right_panel.shown_agent.as_ref())
-        else {
-            return;
-        };
+        let Some(agent) = self.shown_agent() else { return };
         let activity = crate::models::Activity {
             running: agent.working(),
             started_at: Some(agent.started_at),

@@ -13,6 +13,7 @@ import app.motile.core.Project
 import app.motile.core.Repo
 import app.motile.core.RestartWhen
 import app.motile.core.Server
+import app.motile.core.ThreadInfo
 import app.motile.core.Time
 import app.motile.core.coreError
 import app.motile.platform.Platform
@@ -426,21 +427,29 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         return items
     }
 
+    /** The threads, then the ones agents started, each saying which thread started it. */
     private val threadItems: List<PanelItem>
-        get() = (store.activeThreads + store.doneThreads).map { thread ->
-            val project = store.project(thread.projectID)
-            val name = project?.name ?: thread.cwd.trimEnd('/').substringAfterLast('/')
-            val state = when {
-                thread.isDone -> "done"
-                thread.asking != null -> thread.asking.phrase
-                thread.running -> "working"
-                thread.monitoring -> "monitoring"
-                else -> thread.interruption?.word ?: Time.ago(thread.updatedAt)
-            }
-            PanelItem("thread-${thread.id}", thread.title, "$name · $state", PanelIcon.Project(project)) {
-                store.show(app.motile.core.Selection.Thread(thread.id))
-            }
+        get() {
+            val started = store.threads.values.filter { it.parentID != null }.sortedByDescending { it.updatedAt }
+            return (store.activeThreads + store.doneThreads + started).map(::threadItem)
         }
+
+    private fun threadItem(thread: ThreadInfo): PanelItem {
+        val project = store.project(thread.projectID)
+        val name = project?.name ?: thread.cwd.trimEnd('/').substringAfterLast('/')
+        val from = thread.parentID?.let { store.threads[it]?.title }?.let { " · from $it" } ?: ""
+        val waitsFor = thread.waitsFor
+        val state = when {
+            thread.isDone -> "done"
+            waitsFor != null -> waitsFor.phrase
+            thread.working -> "working"
+            thread.monitoring -> "monitoring"
+            else -> thread.interruption?.word ?: Time.ago(thread.updatedAt)
+        }
+        return PanelItem("thread-${thread.id}", thread.title, "$name$from · $state", PanelIcon.Project(project)) {
+            store.show(app.motile.core.Selection.Thread(thread.id))
+        }
+    }
 
     /** The servers that run an older version than the newest release. One whose agents work is updated once they finish, or now, with their threads going on after. */
     private val serverUpdates: List<PanelItem>

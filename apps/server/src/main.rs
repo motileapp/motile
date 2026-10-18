@@ -152,6 +152,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     }
     hub.refresh_models_soon();
     hub.keep_uploads_swept();
+    hub.keep_parents_told();
     hub.keep_pull_requests_current(PULL_REQUEST_FRESH);
     hub.watch_pull_requests(PULL_REQUEST_WATCH);
     hub.pull_default_branches();

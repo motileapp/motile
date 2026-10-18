@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use motile_core::api::{ProjectView, ServerView, ThreadView};
+use motile_core::api::{Children, ProjectView, ServerView, ThreadView};
 use motile_core::connection::PathKind;
 use motile_core::git::Control;
 use motile_core::link::State;
@@ -472,11 +472,13 @@ pub struct ThreadInfo {
     pub thread: Thread,
     pub server_id: String,
     pub unread: bool,
+    /// How the agents its agent started are doing, theirs too.
+    pub children: Option<Children>,
 }
 
 impl From<ThreadView> for ThreadInfo {
     fn from(view: ThreadView) -> Self {
-        Self { thread: view.thread, server_id: view.server_id, unread: view.unread }
+        Self { thread: view.thread, server_id: view.server_id, unread: view.unread, children: view.children }
     }
 }
 
@@ -496,6 +498,21 @@ impl ThreadInfo {
     /// The agent's process is still there, working or monitoring.
     pub fn busy(&self) -> bool {
         self.running || self.monitoring
+    }
+
+    /// The thread whose agent started this one. The sidebar lists only threads without one.
+    pub fn parent_id(&self) -> Option<&str> {
+        self.parent.as_ref().map(|parent| parent.thread_id.as_str())
+    }
+
+    /// It works, or an agent it started does.
+    pub fn working(&self) -> bool {
+        self.running || self.children.as_ref().is_some_and(|children| children.running > 0)
+    }
+
+    /// What it, or else an agent it started, waits for the user to answer.
+    pub fn waits_for(&self) -> Option<Ask> {
+        self.asking().or_else(|| self.children.as_ref()?.waiting.first().map(|child| child.ask))
     }
 
     /// Where it is listed among the active threads, the highest first: when it was created or
@@ -634,7 +651,8 @@ impl Activity {
             agents: activity.agents,
             started_at: activity.started_at,
             approvals: waiting,
-            queued: activity.queued,
+            // What the agent is told of the agents it started isn't the user's to send or take back.
+            queued: activity.queued.into_iter().filter(|queued| queued.notice.is_none()).collect(),
         }
     }
 
@@ -651,6 +669,7 @@ impl Activity {
 pub trait AgentViewExt {
     fn working(&self) -> bool;
     fn usage(&self) -> Option<String>;
+    fn facts(&self) -> Option<String>;
 }
 
 impl AgentViewExt for AgentView {
@@ -662,6 +681,13 @@ impl AgentViewExt for AgentView {
     fn usage(&self) -> Option<String> {
         let tools = self.tool_uses.map(|count| format!("{count} {}", if count == 1 { "tool" } else { "tools" }));
         let parts: Vec<String> = [tools, self.tokens.map(tokens)].into_iter().flatten().collect();
+        (!parts.is_empty()).then(|| parts.join(" · "))
+    }
+
+    /// "6.1-Sol · work · 3 tools · 21.4K tokens", as far as each is known.
+    fn facts(&self) -> Option<String> {
+        let parts: Vec<String> =
+            [self.model.clone(), self.account.clone(), self.usage()].into_iter().flatten().collect();
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
 }

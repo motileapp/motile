@@ -114,6 +114,9 @@ class TranscriptActions(val store: AppStore, val model: TranscriptModel, val ofA
     /** Shows what the agent did that the item's tool call started. */
     fun openAgent(itemID: String) = store.rightPanel.showAgent(itemID)
 
+    /** Opens the thread an agent the thread's agent started works in. */
+    fun openThread(id: String) = store.openStartedThread(id)
+
     /** Copies the reply that ends at the row: every stretch of prose and code back to the user's message. */
     fun copyReply(rowID: String) {
         val rows = model.rows

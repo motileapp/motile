@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_core::render::rows::{ChangeEntry, HandoffLabel, RowKind, Tool};
+use motile_core::render::agents::AgentState;
+use motile_core::render::rows::{AgentRow, CardPlace, ChangeEntry, HandoffLabel, RowKind, Tool};
 use motile_protocol::wire::{Agent, Ask, ToolStatus};
 
 use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dotted_outline};
@@ -896,11 +897,10 @@ struct ToolLine {
     symbol: &'static str,
     verb: String,
     target: String,
-    note: Option<String>,
     failed: bool,
     running: bool,
     started_at: Option<f64>,
-    /// It opens: a detail here, the rows of a group or a fold, or an agent's transcript.
+    /// It opens: a detail here, or the rows of a group or a fold.
     opens: bool,
     open: bool,
 }
@@ -977,7 +977,7 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
     let mut detail: Option<Div> = None;
     let line = match &model.row.kind {
         RowKind::Tool { tool } => {
-            if expanded_here && !tool.agent {
+            if expanded_here {
                 let parts = tool_detail(tool, c);
                 detail = Some(detail_box(inset, tool_detail_text(&row_id, parts, row_key(&row_id)), cx));
             }
@@ -985,11 +985,10 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 symbol: icons::tool_symbol(tool.icon),
                 verb: tool.verb.clone(),
                 target: tool.target.clone(),
-                note: tool.progress.clone(),
                 failed: tool.status == ToolStatus::Failed,
                 running: tool.status == ToolStatus::Running,
                 started_at: tool.started_at,
-                opens: !tool.input.is_empty() || tool.output.is_some() || tool.agent,
+                opens: !tool.input.is_empty() || tool.output.is_some(),
                 open: false,
             }
         }
@@ -1003,7 +1002,6 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 symbol: "brain",
                 verb: "Thought".into(),
                 target: String::new(),
-                note: None,
                 failed: false,
                 running: false,
                 started_at: None,
@@ -1015,7 +1013,6 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             symbol: icons::tool_symbol(icon),
             verb: title.clone(),
             target: target.clone(),
-            note: None,
             failed: *failed,
             running: *running,
             started_at: *started_at,
@@ -1026,7 +1023,6 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             symbol: "clock",
             verb: turn_label(*stopped, *duration_ms),
             target: String::new(),
-            note: None,
             failed: false,
             running: false,
             started_at: None,
@@ -1035,7 +1031,6 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         },
         _ => return div().into_any_element(),
     };
-    let agent = matches!(&model.row.kind, RowKind::Tool { tool } if tool.agent);
     let toggles_in_core = matches!(model.row.kind, RowKind::Group { .. } | RowKind::Fold { .. });
     let chevron_open = if toggles_in_core { line.open } else { expanded_here };
     let above = model.above();
@@ -1053,11 +1048,6 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         runs.push(run(line.target.len(), crate::fonts::inline_code(13., false), target_color));
         text.push_str(&line.target);
     }
-    if let Some(note) = &line.note {
-        let note = format!("  {note}");
-        runs.push(run(note.len(), font(theme::UI_FONT, FontWeight::NORMAL, false), c.muted_stronger_foreground));
-        text.push_str(&note);
-    }
     let title = div().min_w_0().pr(px(4.)).text_size(px(13.)).overflow_hidden();
     let title: AnyElement = if line.running {
         title
@@ -1068,8 +1058,6 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
     };
 
     let view = ctx.view.clone();
-    let store = ctx.store.clone();
-    let item = model.row.item.clone();
     let click_id = row_id.clone();
     // The header reaches past the row's sides by as much room as its icon has above it, so that
     // what it lights up stands out while the icon lines up with the text. It ends as far past the
@@ -1132,14 +1120,6 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         })
         .when(line.opens, |header| {
             header.on_click(move |_, _, cx| {
-                if agent {
-                    let item = item.clone();
-                    store.update(cx, |store, cx| {
-                        store.show_agent(item, cx);
-                        cx.notify();
-                    });
-                    return;
-                }
                 if toggles_in_core {
                     let _ = view.update(cx, |view, cx| view.toggle_in_core(&click_id, cx));
                     return;
@@ -1149,6 +1129,191 @@ fn tool_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
         });
 
     div().flex().flex_col().child(header.self_start()).children(detail).into_any_element()
+}
+
+const AGENT_ROW_HEIGHT: f32 = 50.;
+/// How far a row in a group's card stands in from the card's sides.
+const CARD_PADDING: f32 = 8.;
+/// How far the light of an agent's row reaches past its sides, so that the avatar lines up with
+/// the text.
+const AGENT_BLEED: f32 = 6.;
+/// The room above a group's card and under it.
+const CARD_ABOVE: f32 = 4.;
+const CARD_BELOW: f32 = 10.;
+
+/// What the second line of an agent's row says: what it runs on, then what it does or said.
+fn agent_line(agent: &AgentRow) -> String {
+    let said = if agent.detail.is_empty() && agent.runs_on.is_empty() { &agent.label } else { &agent.detail };
+    [&agent.runs_on, said].into_iter().filter(|part| !part.is_empty()).cloned().collect::<Vec<_>>().join(" · ")
+}
+
+/// When the thread's agent was told, for what it was told; else how long the agent has worked
+/// while it works, or worked in all.
+fn agent_time(agent: &AgentRow) -> String {
+    if let Some(at) = agent.at {
+        return stamp(at);
+    }
+    if matches!(agent.state, AgentState::Working | AgentState::Waiting) {
+        return elapsed(agent.started_at);
+    }
+    agent.duration_ms.map(duration).unwrap_or_default()
+}
+
+/// An agent's row and a group's: the avatar, two lines of text, then the time and the chevron.
+fn agent_line_box(avatar: impl IntoElement, title: Div, line: Div, time: String, open: bool, cx: &App) -> Div {
+    let c = colors(cx);
+    let time = (!time.is_empty()).then(|| {
+        let runs = vec![run(time.len(), digits_font(FontWeight::NORMAL), c.muted_stronger_foreground)];
+        div().pr(px(4.)).text_size(px(12.)).whitespace_nowrap().child(StyledText::new(time).with_runs(runs))
+    });
+    div()
+        .relative()
+        .h(px(AGENT_ROW_HEIGHT))
+        .flex()
+        .items_center()
+        .child(avatar)
+        .child(
+            div()
+                .ml(px(10.))
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(title.h(px(18.)).line_height(px(18.)).flex().items_center().overflow_hidden())
+                .child(line.h(px(16.)).line_height(px(16.)).text_size(px(12.)).truncate()),
+        )
+        .child(div().ml(px(12.)).flex_none().children(time))
+        .child(
+            div().ml(px(6.)).w(px(14.)).h(px(16.)).flex_none().flex().items_center().justify_center().child(
+                icons::symbol(if open { "chevron-down" } else { "chevron-right" }, 9.)
+                    .text_color(c.muted_stronger_foreground),
+            ),
+        )
+}
+
+/// An agent the thread's agent started, or what it was told of one: its avatar, its title and
+/// word, then what it runs on and does or said, and how long it worked. A click opens it: its
+/// thread, or what it did. In the card of an open group it lies on the card, of which each row
+/// draws its own part.
+fn agent_row(model: &RowModel, agent: &AgentRow, ctx: &RowContext, cx: &App) -> AnyElement {
+    let c = colors(cx);
+    let group: SharedString = format!("{}-agent", model.row.id).into();
+    let place = agent.card;
+    let inset = if place.is_some() { CARD_PADDING } else { 0. };
+    let above = if place == Some(CardPlace::First) { CARD_ABOVE } else { 0. };
+    let below = if place == Some(CardPlace::Last) { CARD_BELOW } else { 0. };
+    let overhang = Radius::LG + 1.;
+    let card = place.map(|place| {
+        let (top, bottom) = match place {
+            CardPlace::First => (CARD_ABOVE, -overhang),
+            CardPlace::Middle => (-overhang, -overhang),
+            CardPlace::Last => (-overhang, CARD_BELOW),
+        };
+        div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .top(px(top))
+            .bottom(px(bottom))
+            .bg(c.card)
+            .border_1()
+            .border_color(c.border_card)
+            .rounded(px(Radius::LG))
+    });
+    // In a card the light keeps clear of the card's border, in the card's accent.
+    let side = if place.is_some() { 4. } else { -AGENT_BLEED };
+    let light = Highlight::new().radius(Radius::MD).inset(edges(above + 2., side, below + 2., side));
+    let light = if place.is_some() { light.fill(c.card_accent) } else { light };
+    let avatar = crate::ui::AgentAvatar::new(agent.agent).state(agent.state);
+    let label_color =
+        if agent.state.flagged() { crate::ui::agent_avatar::state_color(agent.state, c) } else { c.muted_foreground };
+    let title = div()
+        .gap(px(6.))
+        .child(
+            div()
+                .flex_shrink_0()
+                .max_w_full()
+                .text_size(px(13.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.foreground)
+                .truncate()
+                .child(agent.title.clone()),
+        )
+        .when_some(agent.role.clone(), |title, role| {
+            title.child(
+                div().min_w_0().text_size(px(11.)).text_color(c.muted_stronger_foreground).truncate().child(role),
+            )
+        })
+        .when(agent.flagged, |title| {
+            title.child(
+                div()
+                    .min_w_0()
+                    .text_size(px(11.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(label_color)
+                    .truncate()
+                    .child(agent.label.clone()),
+            )
+        });
+    let failed = agent.state == AgentState::Failed;
+    let line = div().text_color(if failed { c.destructive } else { c.muted_foreground }).child(agent_line(agent));
+    let (store, item, thread) = (ctx.store.clone(), model.row.item.clone(), agent.thread.clone());
+    div()
+        .id(group.clone())
+        .group(group.clone())
+        .relative()
+        .pt(px(above))
+        .pb(px(below))
+        .px(px(inset))
+        .when(place.is_some(), |row| row.overflow_hidden())
+        .children(card)
+        .child(light.render(group, cx))
+        .child(agent_line_box(avatar, title, line, agent_time(agent), false, cx))
+        .on_click(move |_, _, cx| {
+            store.update(cx, |store, cx| {
+                match &thread {
+                    Some(thread) => store.open_started_thread(thread, cx),
+                    None => store.show_agent(item.clone(), cx),
+                }
+                cx.notify();
+            })
+        })
+        .into_any_element()
+}
+
+/// Agents started one after the other: their avatars side by side, how many and how they are
+/// doing, and how long they have worked. A click opens it into a card of their rows.
+fn agents_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
+    let RowKind::Agents { title, summary, state, avatars, more, started_at, duration_ms, open } = &model.row.kind
+    else {
+        return div().into_any_element();
+    };
+    let c = colors(cx);
+    let group: SharedString = format!("{}-agents", model.row.id).into();
+    let avatars = crate::ui::AgentAvatars::new(avatars.iter().map(|avatar| avatar.agent).collect(), *more);
+    let title = div()
+        .text_size(px(13.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c.foreground)
+        .child(div().min_w_0().truncate().child(title.clone()));
+    let summary_color =
+        if *state == AgentState::Done { c.muted_foreground } else { crate::ui::agent_avatar::state_color(*state, c) };
+    let line = div().text_color(summary_color).child(summary.clone());
+    let time = match started_at {
+        Some(started) => elapsed(*started),
+        None => duration_ms.map(duration).unwrap_or_default(),
+    };
+    let (view, row_id) = (ctx.view.clone(), model.row.id.clone());
+    div()
+        .id(group.clone())
+        .group(group.clone())
+        .relative()
+        .child(crate::ui::highlight(group, Radius::MD, edges(2., -AGENT_BLEED, 2., -AGENT_BLEED), false, cx))
+        .child(agent_line_box(avatars, title, line, time, *open, cx))
+        .on_click(move |_, _, cx| {
+            let _ = view.update(cx, |view, cx| view.toggle_in_core(&row_id, cx));
+        })
+        .into_any_element()
 }
 
 pub fn turn_label(stopped: bool, duration_ms: Option<u64>) -> String {
@@ -1619,6 +1784,8 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
         RowKind::Tool { .. } | RowKind::Thinking { .. } | RowKind::Group { .. } | RowKind::Fold { .. } => {
             tool_row(model, ctx, cx)
         }
+        RowKind::Agent { agent } => agent_row(model, agent, ctx, cx),
+        RowKind::Agents { .. } => agents_row(model, ctx, cx),
         RowKind::Media { .. } => crate::media::media_row(model, ctx, window, cx),
         RowKind::File { .. } => crate::media::file::file_row(model, ctx, window, cx),
         RowKind::Error { message } => error_row(model, message, cx),

@@ -39,8 +39,22 @@ pub fn instructions(turn: &Turn) -> String {
             text += &format!(" with {effort} reasoning effort");
         }
     }
-    text + ". No need to mention this otherwise. " + SHOWING_MEDIA
+    text += ". No need to mention this otherwise. ";
+    text += SHOWING_MEDIA;
+    if turn.mcp.is_some() {
+        text += STARTING_AGENTS;
+    }
+    text
 }
+
+/// How the agents start agents on the server's other accounts.
+const STARTING_AGENTS: &str = "\n\nYou can start agents on the other accounts of the user's server, other Claude Code \
+     logins or Codex, with the motile tools: list_accounts, start_agent, agent_status, message_agent, answer_agent and \
+     stop_agent. Use them when the user asks for another account, agent or model, or for work that goes better apart \
+     while you go on. For work your own subagents do as well, use those. Each agent is given only the prompt you write. \
+     You are told when one finishes or asks something, so end your turn instead of checking on it, unless you need its \
+     result to go on, which start_agent's and agent_status's wait is for. If a motile tool seems missing, call it \
+     anyway: some tools load only when first called.";
 
 pub use motile_protocol::wire::PLAN_TOOL;
 

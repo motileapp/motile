@@ -211,6 +211,7 @@ async fn serve(
     hub.watch_pull_requests(Duration::from_millis(300));
     hub.keep_limits_continued(Duration::from_millis(200));
     hub.continue_interrupted();
+    hub.keep_parents_told();
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
@@ -3702,6 +3703,214 @@ async fn an_agent_reads_any_thread_of_its_server_with_its_threads_token() {
         offset = page["items"][0]["next_text_offset"].clone();
     }
     assert_eq!(read, "What is in README.md?");
+}
+
+// ---- agents that agents start on the server's accounts ----
+
+/// A server whose agents start others, which work a step every few hundredths of a second.
+async fn with_children() -> (Harness, Connection, Follow) {
+    let variables = [("FAKE_AGENT_CHILD_STEP", "0.05"), ("FAKE_AGENT_PROMPTS_FILE", "prompts.txt")];
+    let harness = Harness::start_with(fixture(Agent::Claude), "0", &variables).await;
+    let connection = harness.connect().await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    next(&mut list).await;
+    (harness, connection, list)
+}
+
+/// The tool calls that started agents in their own threads, by the thread each started.
+fn started_agents(transcript: &Transcript) -> HashMap<String, motile_protocol::wire::Subagent> {
+    let started = transcript.items.iter().filter_map(|item| match &item.kind {
+        ItemKind::Tool { call } if call.name == "mcp__motile__start_agent" => call.agent.clone(),
+        _ => None,
+    });
+    started.filter_map(|agent| Some((agent.runs_on.as_ref()?.thread_id.clone()?, agent))).collect()
+}
+
+fn notices(transcript: &Transcript) -> Vec<(String, motile_protocol::wire::NoticeEvent)> {
+    let notices = transcript.items.iter().filter_map(|item| match &item.kind {
+        ItemKind::Notice { notice, .. } => Some((notice.title.clone(), notice.event)),
+        _ => None,
+    });
+    notices.collect()
+}
+
+/// The thread's transcript once `done` says it is as the test waits for.
+async fn transcript_once(connection: &Connection, thread_id: &str, done: impl Fn(&Transcript) -> bool) -> Transcript {
+    let mut transcript = Transcript::default();
+    let mut follow = open(connection, thread_id, 0).await;
+    while transcript.synced.is_none() || transcript.running || !done(&transcript) {
+        transcript.apply(next(&mut follow).await);
+    }
+    transcript
+}
+
+const REVIEW: &str = "`greet.py` is fine. I'd add a docstring to `greet` and a test for an empty name.";
+
+#[tokio::test]
+async fn an_agent_starts_codex_in_a_thread_of_its_own_and_waits_for_its_reply() {
+    let (harness, connection, mut list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let parent = send(&connection, None, new_thread, "Ask another account").await;
+
+    let child = thread_where(&mut list, |thread| thread.parent.is_some()).await;
+    assert_eq!(child.parent.as_ref().map(|parent| parent.thread_id.as_str()), Some(parent.as_str()));
+    assert_eq!((child.agent, child.title.as_str(), child.access), (Agent::Codex, "Review greet.py", AgentAccess::Full));
+    let transcript = finished_transcript(&connection, &parent).await;
+    assert_eq!(transcript.texts().last().copied(), Some(format!("Codex looked it over: {REVIEW}").as_str()));
+
+    let told = transcript_once(&connection, &parent, |transcript| {
+        started_agents(transcript).get(&child.id).is_some_and(|agent| agent.status == ToolStatus::Succeeded)
+    })
+    .await;
+    let agent = &started_agents(&told)[&child.id];
+    assert_eq!((agent.kind.as_deref(), agent.result.as_deref()), (Some("reviewer"), Some(REVIEW)));
+    let runs_on = agent.runs_on.as_ref().map(|on| (on.agent, on.account.clone(), on.model.clone()));
+    assert_eq!(runs_on, Some((Agent::Codex, None, Some("GPT-6.1-Sol".to_string()))));
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(notices(&finished_transcript(&connection, &parent).await).is_empty(), "the reply was waited for");
+
+    let child_transcript = finished_transcript(&connection, &child.id).await;
+    let asked = child_transcript.user_texts()[0];
+    assert!(asked.starts_with("Act as the reviewer agent for this task.\n\nLook over greet.py"), "{asked}");
+    assert_eq!(child_transcript.texts().last().copied(), Some(REVIEW));
+}
+
+#[tokio::test]
+async fn agents_started_in_the_background_wake_the_agent_that_started_them() {
+    let (harness, connection, mut list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let parent = send(&connection, None, new_thread, "Ask agents in the background").await;
+    let first = finished_transcript(&connection, &parent).await;
+    assert_eq!(first.texts().last().copied(), Some("Both are working. I'll tell you what they find."));
+
+    // The notice comes a moment before the parent is said to work again: done is its turn's end.
+    let answered = |transcript: &Transcript| {
+        matches!(transcript.items.last().map(|item| &item.kind), Some(ItemKind::TurnEnd { .. }))
+    };
+    let woken =
+        transcript_once(&connection, &parent, |transcript| notices(transcript).len() == 2 && answered(transcript))
+            .await;
+    let mut told = notices(&woken);
+    told.sort_by(|one, other| one.0.cmp(&other.0));
+    use motile_protocol::wire::NoticeEvent::Finished;
+    assert_eq!(told, [("Check the tests".to_string(), Finished), ("Review greet.py".to_string(), Finished)]);
+    assert!(woken.user_texts().len() == 1, "the notices aren't the user's messages");
+    // What the agent read: each notice once, with what the agent it names replied. One that reaches it
+    // while it answers the other is taken into that answer.
+    let read = harness.recorded_prompts();
+    for title in ["Check the tests", "Review greet.py"] {
+        let notices: Vec<&String> =
+            read.iter().filter(|prompt| prompt.starts_with(&format!("Agent \"{title}\""))).collect();
+        assert_eq!(notices.len(), 1, "{read:?}");
+        assert!(notices[0].ends_with(&format!("finished. Its reply:\n\n{REVIEW}")), "{}", notices[0]);
+    }
+
+    let children: Vec<Thread> = [thread_where(&mut list, |thread| thread.parent.is_some()).await].into();
+    assert!(children.iter().all(|child| child.parent.as_ref().unwrap().thread_id == parent));
+}
+
+#[tokio::test]
+async fn an_agent_answers_the_question_an_agent_it_started_asks() {
+    let (harness, connection, _list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let parent = send(&connection, None, new_thread, "Ask an agent which color").await;
+
+    let done = |transcript: &Transcript| {
+        transcript.texts().last().is_some_and(|text| text.starts_with("Pick a color is done"))
+    };
+    let told = transcript_once(&connection, &parent, done).await;
+    use motile_protocol::wire::NoticeEvent::{Asked, Finished};
+    let events: Vec<_> = notices(&told).into_iter().map(|(_, event)| event).collect();
+    assert_eq!(events, [Asked, Finished]);
+    assert!(told.texts().contains(&"I told Pick a color to make it blue."), "{:?}", told.texts());
+    assert_eq!(told.texts().last().copied(), Some("Pick a color is done: The button will be blue."));
+}
+
+#[tokio::test]
+async fn stopping_a_thread_stops_the_agents_it_started_and_deleting_it_deletes_them() {
+    let (harness, connection, mut list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let parent = send(&connection, None, new_thread, "Ask a supervised agent").await;
+    let child = thread_where(&mut list, |thread| thread.parent.is_some() && thread.needs_approval).await;
+    assert_eq!(child.access, AgentAccess::Supervised);
+
+    assert_eq!(connection.request(&Request::Stop { thread_id: parent.clone() }).await.unwrap(), Message::Ok);
+    thread_where(&mut list, |thread| thread.id == child.id && !thread.running).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let transcript = finished_transcript(&connection, &parent).await;
+    assert!(notices(&transcript).is_empty(), "a stop the user made isn't told to the agent");
+
+    let delete = Request::Delete { thread_id: parent.clone() };
+    assert_eq!(connection.request(&delete).await.unwrap(), Message::Ok);
+    let mut deleted = Vec::new();
+    while deleted.len() < 2 {
+        if let Message::ThreadDeleted { thread_id } = next(&mut list).await {
+            deleted.push(thread_id);
+        }
+    }
+    assert_eq!(deleted, [child.id, parent]);
+}
+
+/// Calls a tool of the `motile` MCP server, as an agent does, and returns what it answered and
+/// whether that is an error.
+async fn call_tool(url: &str, token: &str, name: &str, arguments: serde_json::Value) -> (String, bool) {
+    motile_protocol::tls::install();
+    let client = reqwest::Client::new();
+    let post = |body: serde_json::Value| {
+        client
+            .post(url)
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", "2025-06-18")
+            .bearer_auth(token)
+            .json(&body)
+            .send()
+    };
+    let client_info = json!({"name": "test", "version": "1"});
+    let initialize = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": client_info}});
+    post(initialize).await.unwrap();
+    let call =
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": name, "arguments": arguments}});
+    let answer: serde_json::Value = post(call).await.unwrap().json().await.unwrap();
+    let result = &answer["result"];
+    (result["content"][0]["text"].as_str().unwrap_or_default().to_string(), result["isError"] == true)
+}
+
+#[tokio::test]
+async fn an_agent_only_follows_the_agents_it_started_on_accounts_that_exist() {
+    let (harness, connection, mut list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    send(&connection, None, new_thread, "Ask agents in the background").await;
+    let child = thread_where(&mut list, |thread| thread.parent.is_some()).await;
+
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let other = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &other).await;
+    let started = harness.recorded_requests("thread/start");
+    let server = &started.last().unwrap()["config"]["mcp_servers"]["motile"];
+    assert_eq!(server["tool_timeout_sec"], 3900);
+    let url = server["url"].as_str().unwrap();
+    let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
+
+    let (said, failed) = call_tool(url, token, "agent_status", json!({"ids": [child.id]})).await;
+    assert!(failed && said.starts_with("No agent you started has the id"), "{said}");
+    let start = json!({"prompt": "Look over greet.py", "account": "nope"});
+    let (said, failed) = call_tool(url, token, "start_agent", start).await;
+    assert!(failed && said.contains("no account called nope"), "{said}");
+    let start = json!({"prompt": "Look over greet.py", "access": "everything"});
+    let (said, failed) = call_tool(url, token, "start_agent", start).await;
+    assert!(failed && said.contains("access is supervised"), "{said}");
+
+    let (said, failed) = call_tool(url, token, "list_accounts", json!({})).await;
+    let accounts: serde_json::Value = serde_json::from_str(&said).unwrap();
+    let named: Vec<(&str, bool)> = accounts["accounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|account| (account["agent"].as_str().unwrap(), account["yours"] == true))
+        .collect();
+    assert!(!failed);
+    assert_eq!(named, [("claude", false), ("codex", true)]);
 }
 
 // ---- copies of the account's threads on its other servers ----

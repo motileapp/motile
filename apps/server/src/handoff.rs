@@ -200,7 +200,9 @@ fn header(
 
 fn historical(item: &Item) -> Option<HistoricalItem> {
     let (kind, role, status, text) = match &item.kind {
-        ItemKind::User { text, .. } => ("user_message", Role::User, "done".to_string(), text.clone()),
+        ItemKind::User { text, .. } | ItemKind::Notice { text, .. } => {
+            ("user_message", Role::User, "done".to_string(), text.clone())
+        }
         ItemKind::Assistant { text } => ("assistant_message", Role::Assistant, "done".to_string(), text.clone()),
         ItemKind::Tool { call } if call.name == "Bash" => {
             let status = tool_status(call.status).to_string();

@@ -658,11 +658,21 @@ data class ThreadInfo(
     /** Why the agent stopped before it finished, until it works again. */
     val interruption: Interruption?,
     val unread: Boolean,
+    /** The thread whose agent started this one. The sidebar lists only threads without one. */
+    val parentID: String? = null,
+    /** How the agents its agent started are doing, theirs too. */
+    val children: ThreadChildren? = null,
 ) {
     val isDone: Boolean get() = doneAt != null
 
     /** The agent's process is still there, working or monitoring. */
     val busy: Boolean get() = running || monitoring
+
+    /** It works, or an agent it started does. */
+    val working: Boolean get() = running || (children?.running ?: 0) > 0
+
+    /** What it, or else an agent it started, waits for the user to answer. */
+    val waitsFor: Ask? get() = asking ?: children?.waiting?.firstOrNull()?.ask
 
     val monitoringSince: Double get() = turnEndedAt ?: updatedAt
 
@@ -703,6 +713,8 @@ data class ThreadInfo(
                 gitStage = json.optionalString("git_stage")?.let(GitStage::of),
                 interruption = json.obj("interruption")?.let(Interruption::of),
                 unread = json.bool("unread"),
+                parentID = json.obj("parent")?.optionalString("thread_id"),
+                children = json.obj("children")?.let(::ThreadChildren),
             )
         }
 
@@ -851,7 +863,8 @@ data class Activity(
             agents = json.int("agents"),
             startedAt = json.optionalDouble("started_at"),
             approvals = waiting.map(::Approval),
-            queued = json.objects("queued").map(::QueuedMessage),
+            // What the agent is told of the agents it started isn't the user's to send or take back.
+            queued = json.objects("queued").filter { it.obj("notice") == null }.map(::QueuedMessage),
         )
 
         /** What is shown between sending a first message and the server saying the turn runs. */
@@ -859,7 +872,38 @@ data class Activity(
     }
 }
 
-/** An agent the thread's agent started. What it did is a transcript of its own. */
+/** The agents a thread's agent started, and theirs, as the thread shows them. */
+data class ThreadChildren(
+    val running: Int,
+    /** Those that wait for the user, the one that has waited longest first. */
+    val waiting: List<Waiting>,
+    /** "Run greet.py needs your approval", "2 agents need you". */
+    val waitingText: String?,
+) {
+    data class Waiting(val threadID: String, val title: String, val ask: Ask)
+
+    constructor(json: JSON) : this(
+        running = json.int("running"),
+        waiting = json.objects("waiting").map {
+            Waiting(it.string("thread_id"), it.string("title"), Ask.of(it.string("ask")) ?: Ask.Approval)
+        },
+        waitingText = json.optionalString("waiting_text"),
+    )
+}
+
+/** How an agent is doing, which the dot on its avatar shows. */
+enum class AgentState(val raw: String) {
+    Working("working"), Waiting("waiting"), Done("done"), Failed("failed"), Stopped("stopped");
+
+    /** Its word is in its colour: one that is done or works says so quietly. */
+    val flagged: Boolean get() = this == Waiting || this == Failed || this == Stopped
+
+    companion object {
+        fun of(raw: String?) = entries.firstOrNull { it.raw == raw } ?: Done
+    }
+}
+
+/** An agent the thread's agent started. What it did is a transcript of its own, or a thread of its own when it was started through your server. */
 data class AgentInfo(
     /** The tool call that started it. */
     val id: String,
@@ -868,12 +912,23 @@ data class AgentInfo(
     val title: String,
     val kind: String?,
     val status: ToolStatus,
+    val state: AgentState,
+    /** "Working", "Needs approval", "Failed". */
+    val label: String,
     /** What it is doing now, or what it reported once it has ended. */
     val detail: String,
     val startedAt: Double,
     val durationMs: Int?,
     val tokens: Int?,
     val toolUses: Int?,
+    /** The thread it works in, when it was started through your server. */
+    val threadID: String? = null,
+    /** The agent it runs as, whose logo it shows, when that is known. */
+    val agent: Agent? = null,
+    /** The model's short name, "Opus 5.5". */
+    val model: String? = null,
+    /** The account's name, when its agent has more than one. */
+    val account: String? = null,
 ) {
     constructor(json: JSON) : this(
         id = json.string("id"),
@@ -881,11 +936,17 @@ data class AgentInfo(
         title = json.string("title"),
         kind = json.optionalString("kind"),
         status = ToolStatus.of(json.string("status")),
+        state = AgentState.of(json.string("state")),
+        label = json.string("label"),
         detail = json.string("detail"),
         startedAt = json.double("started_at"),
         durationMs = json.optionalInt("duration_ms"),
         tokens = json.optionalInt("tokens"),
         toolUses = json.optionalInt("tool_uses"),
+        threadID = json.optionalString("thread_id"),
+        agent = Agent.of(json.optionalString("agent")),
+        model = json.optionalString("model"),
+        account = json.optionalString("account"),
     )
 
     val working: Boolean get() = status == ToolStatus.Running

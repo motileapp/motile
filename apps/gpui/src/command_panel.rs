@@ -11,7 +11,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_protocol::wire::{GitHubState, Repo, RestartWhen};
 
-use crate::models::{FolderListing, Project, Server, ago, ask_phrase, interruption_label, last_component};
+use crate::models::{FolderListing, Project, Server, ThreadInfo, ago, ask_phrase, interruption_label, last_component};
 use crate::store::settings::SettingsSection;
 use crate::store::{AddingProject, PanelPage, Selection, Store};
 use crate::theme::{Colors, ControlSize, Layer, Opacity, Radius, ShadowSize, Surface, colors};
@@ -713,20 +713,30 @@ impl CommandPanel {
         items
     }
 
+    /// The threads, then the ones agents started, each saying which thread started it.
     fn thread_items(&self, cx: &App) -> Vec<Item> {
         let store = self.store.read(cx);
+        let mut started: Vec<&ThreadInfo> =
+            store.threads.values().filter(|thread| thread.parent_id().is_some()).collect();
+        started.sort_by(|one, other| other.updated_at.total_cmp(&one.updated_at));
         store
             .active_threads()
             .iter()
             .chain(store.done_threads())
+            .chain(started)
             .map(|thread| {
                 let project = store.project(Some(&thread.project_id)).cloned();
                 let name = project.as_ref().map_or_else(|| last_component(&thread.cwd), |project| project.name.clone());
+                let from = thread
+                    .parent_id()
+                    .and_then(|id| store.threads.get(id))
+                    .map(|parent| format!(" · from {}", parent.title))
+                    .unwrap_or_default();
                 let state = if thread.is_done() {
                     "done".to_string()
-                } else if let Some(ask) = thread.asking() {
+                } else if let Some(ask) = thread.waits_for() {
                     ask_phrase(ask).into()
-                } else if thread.running {
+                } else if thread.working() {
                     "working".into()
                 } else if thread.monitoring {
                     "monitoring".into()
@@ -739,7 +749,7 @@ impl CommandPanel {
                 Item::new(
                     format!("thread-{}", thread.id),
                     thread.title.clone(),
-                    format!("{name} · {state}"),
+                    format!("{name}{from} · {state}"),
                     ItemIcon::Project(Box::new(project)),
                     move |this, _, cx| {
                         let id = id.clone();

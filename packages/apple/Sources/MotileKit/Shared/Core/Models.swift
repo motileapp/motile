@@ -711,6 +711,10 @@ struct ThreadInfo: Equatable, Identifiable {
     /// Why the agent stopped before it finished, until it works again.
     var interruption: Interruption?
     let unread: Bool
+    /// The thread whose agent started this one. The sidebar lists only threads without one.
+    let parentID: String?
+    /// How the agents its agent started are doing, theirs too.
+    let children: ThreadChildren?
 
     init(json: JSON) {
         id = json.string("id")
@@ -741,12 +745,20 @@ struct ThreadInfo: Equatable, Identifiable {
         gitStage = json.optionalString("git_stage").map { GitStage(rawValue: $0) ?? .unknown }
         interruption = json.object("interruption").flatMap { Interruption(json: $0) }
         unread = json.bool("unread")
+        parentID = json.object("parent")?.optionalString("thread_id")
+        children = json.object("children").map(ThreadChildren.init(json:))
     }
 
     var isDone: Bool { doneAt != nil }
 
     /// The agent's process is still there, working or monitoring.
     var busy: Bool { running || monitoring }
+
+    /// It works, or an agent it started does.
+    var working: Bool { running || (children?.running ?? 0) > 0 }
+
+    /// What it, or else an agent it started, waits for the user to answer.
+    var waitsFor: Ask? { asking ?? children?.waiting.first?.ask }
 
     var monitoringSince: Double { turnEndedAt ?? updatedAt }
 
@@ -900,11 +912,44 @@ struct Activity: Equatable {
         agents = json.int("agents")
         startedAt = json.optionalDouble("started_at")
         approvals = waiting.map { Approval(json: $0) }
-        queued = json.objects("queued").map { QueuedMessage(json: $0) }
+        // What the agent is told of the agents it started isn't the user's to send or take back.
+        queued = json.objects("queued").filter { $0["notice"] == nil }.map { QueuedMessage(json: $0) }
     }
 }
 
-/// An agent the thread's agent started. What it did is a transcript of its own.
+/// How an agent is doing, which the dot on its avatar shows.
+enum AgentState: String {
+    case working, waiting, done, failed, stopped
+
+    /// Its word is in its colour: one that is done or works says so quietly.
+    var flagged: Bool { self == .waiting || self == .failed || self == .stopped }
+}
+
+/// The agents a thread's agent started, and theirs, as the thread shows them.
+struct ThreadChildren: Equatable {
+    struct Waiting: Equatable {
+        let threadID: String
+        let title: String
+        let ask: Ask
+    }
+
+    let running: Int
+    /// Those that wait for the user, the one that has waited longest first.
+    let waiting: [Waiting]
+    /// "Run greet.py needs your approval", "2 agents need you".
+    let waitingText: String?
+
+    init(json: JSON) {
+        running = json.int("running")
+        waiting = json.objects("waiting").map {
+            Waiting(threadID: $0.string("thread_id"), title: $0.string("title"), ask: Ask(rawValue: $0.string("ask")) ?? .approval)
+        }
+        waitingText = json.optionalString("waiting_text")
+    }
+}
+
+/// An agent the thread's agent started. What it did is a transcript of its own, or a thread of
+/// its own when it was started through your server.
 struct AgentInfo: Equatable, Identifiable {
     /// The tool call that started it.
     let id: String
@@ -913,12 +958,23 @@ struct AgentInfo: Equatable, Identifiable {
     let title: String
     let kind: String?
     let status: ToolContent.Status
+    let state: AgentState
+    /// "Working", "Needs approval", "Failed".
+    let label: String
     /// What it is doing now, or what it reported once it has ended.
     let detail: String
     let startedAt: Double
     let durationMs: Int?
     let tokens: Int?
     let toolUses: Int?
+    /// The thread it works in, when it was started through your server.
+    let threadID: String?
+    /// The agent it runs as, whose logo it shows, when that is known.
+    let agent: Agent?
+    /// The model's short name, "Opus 5.5".
+    let model: String?
+    /// The account's name, when its agent has more than one.
+    let account: String?
 
     init(json: JSON) {
         let number = { (key: String) in (json[key] as? NSNumber)?.intValue }
@@ -927,11 +983,17 @@ struct AgentInfo: Equatable, Identifiable {
         title = json.string("title")
         kind = json.optionalString("kind")
         status = ToolContent.Status(rawValue: json.string("status")) ?? .succeeded
+        state = AgentState(rawValue: json.string("state")) ?? .done
+        label = json.string("label")
         detail = json.string("detail")
         startedAt = json.double("started_at")
         durationMs = number("duration_ms")
         tokens = number("tokens")
         toolUses = number("tool_uses")
+        threadID = json.optionalString("thread_id")
+        agent = json.optionalString("agent").flatMap(Agent.init(rawValue:))
+        model = json.optionalString("model")
+        account = json.optionalString("account")
     }
 
     var working: Bool { status == .running }
