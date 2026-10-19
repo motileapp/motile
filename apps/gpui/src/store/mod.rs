@@ -110,6 +110,15 @@ pub struct StopQuestion {
     pub question: String,
 }
 
+/// A command a program asks to run, which waits for the user to allow it.
+#[derive(Clone, Debug)]
+pub struct UiConfirm {
+    pub thread_id: String,
+    pub row_id: String,
+    pub call_id: u64,
+    pub command: String,
+}
+
 /// The first message of a draft, on its way to the server.
 #[derive(Clone, Debug)]
 pub struct SendingDraft {
@@ -278,6 +287,8 @@ pub struct Store {
     pub error_message: Option<String>,
     /// The stop that waits for the user to say it may end the agents a thread started.
     pub stopping: Option<StopQuestion>,
+    /// A program's command the user is asked to allow before it runs.
+    pub ui_confirm: Option<UiConfirm>,
     pub thread_drafts: Vec<ThreadDraft>,
     /// What the open draft said when it was opened, if it said anything. Its row in the sidebar
     /// shows this, so the sidebar doesn't change while the draft is being written.
@@ -402,6 +413,7 @@ impl Store {
             sending_drafts: HashMap::new(),
             error_message: None,
             stopping: None,
+            ui_confirm: None,
             thread_drafts: Vec::new(),
             opened_draft_preview: None,
             undo: None,
@@ -725,7 +737,10 @@ impl Store {
                     }
                 }
             }
-            Event::Rows { .. } | Event::AgentRows { .. } | Event::UiConfirm { .. } => {}
+            Event::UiConfirm { thread_id, row_id, call_id, command } => {
+                self.ui_confirm = Some(UiConfirm { thread_id, row_id, call_id, command });
+            }
+            Event::Rows { .. } | Event::AgentRows { .. } => {}
             Event::OpenUrl { url } => cx.open_url(&url),
             Event::Copy { text } => cx.write_to_clipboard(ClipboardItem::new_string(text)),
             Event::Keybindings { keybindings } => self.shortcuts = keybindings.into(),
@@ -733,6 +748,13 @@ impl Store {
                 self.apply_thread_search(sidebar::MessageSearch::new(query, searching, matches))
             }
         }
+    }
+
+    /// Answers the program that asked to run its command, which the user allowed or not.
+    pub fn answer_ui_confirm(&mut self, allow: bool) {
+        let Some(asked) = self.ui_confirm.take() else { return };
+        let UiConfirm { thread_id, row_id, call_id, .. } = asked;
+        self.send(Command::UiConfirm { thread_id, row_id, call_id, allow });
     }
 
     // Lookups

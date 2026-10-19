@@ -3,6 +3,7 @@
 //! they come into view. What the user does goes back to core as `Command::Ui` events.
 
 mod frames;
+mod inputs;
 mod layout;
 pub mod patch;
 mod style;
@@ -162,7 +163,7 @@ pub fn node(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Sta
         | UiKind::RadioGroup { .. }
         | UiKind::DatePicker { .. }
         | UiKind::Timer { .. }
-        | UiKind::Form { .. } => div().id(cx.id(&node.id, "node")),
+        | UiKind::Form { .. } => inputs::input(node, cx, window, app),
         UiKind::SearchImage { .. }
         | UiKind::Image { .. }
         | UiKind::Icon { .. }
