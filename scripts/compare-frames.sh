@@ -36,7 +36,7 @@ for client in $clients; do
             (cd apps/gpui && scripts/patch-crates.sh && cargo test golden_tree)
             ;;
         android)
-            (cd apps/android && scripts/build-core.sh && ./gradlew -Pmotile.skipCore testDebugUnitTest --tests 'app.motile.transcript.openui.ProgramFramesTest')
+            (cd apps/android && scripts/build-core.sh && ./gradlew -Pmotile.skipCore testDebugUnitTest --rerun --tests 'app.motile.transcript.openui.ProgramFramesTest')
             ;;
     esac
 done

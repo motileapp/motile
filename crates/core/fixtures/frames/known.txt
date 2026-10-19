@@ -1,9 +1,2 @@
 # What a client is known to draw apart from the others, by program and component, and why. The
 # comparison lets these nodes and what lies around them differ; remove a line once it is fixed.
-game HtmlView The Apple clients still show a placeholder card for a web view (step 6-2).
-html HtmlView The Apple clients still show a placeholder card for a web view (step 6-2).
-primitives YouTube The Apple clients still show a placeholder card for a video (step 6-2).
-youtube YouTube The Apple clients still show a placeholder card for a video (step 6-2).
-map Map The Map is being finished on every client.
-roadtrip Map The Map is being finished on every client.
-route Map The Map is being finished on every client.
