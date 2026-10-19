@@ -243,6 +243,7 @@ struct RootView: View {
         } message: {
             Text(store.errorAlert.detail)
         }
+        .asking(Binding { store.programConfirm } set: { if $0 == nil { store.closeProgramConfirm() } }) { $0.confirmation(store) }
         .asking(Binding { store.stopping } set: { store.stopping = $0 }) { $0.confirmation(store) }
     }
 

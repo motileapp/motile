@@ -1,0 +1,70 @@
+import CoreGraphics
+import XCTest
+
+@testable import MotileKit
+
+/// Every program of the corpus laid out as the transcript lays it out: each node has a frame, the
+/// program fills the column, and nothing is drawn at a size that isn't one.
+final class ProgramFramesTests: XCTestCase {
+    private static let trees = Fixtures.repository.appendingPathComponent("crates/core/fixtures/openui")
+
+    private func programs() throws -> [(String, JSON)] {
+        let names = try FileManager.default.contentsOfDirectory(atPath: Self.trees.path).filter { $0.hasSuffix(".json") }.sorted()
+        return try names.map { name in
+            let data = try Data(contentsOf: Self.trees.appendingPathComponent(name))
+            return (name, try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? JSON))
+        }
+    }
+
+    func testEveryNodeOfTheCorpusHasAFrameAtBothWidths() throws {
+        for (name, tree) in try programs() {
+            for width: CGFloat in [390, 720] {
+                let frames = ProgramFrames.frames(tree: tree, width: width)
+                XCTAssertEqual(frames[""]?[2], Double(width), "\(name) at \(width) fills the column")
+                for id in Self.shownIDs(tree) {
+                    let frame = try XCTUnwrap(frames[id], "\(name) at \(width) has no frame for \(id)")
+                    XCTAssertTrue(frame.allSatisfy { $0.isFinite }, "\(name) \(id)")
+                    XCTAssertGreaterThanOrEqual(frame[2], 0, "\(name) \(id)")
+                    XCTAssertGreaterThanOrEqual(frame[3], 0, "\(name) \(id)")
+                }
+            }
+        }
+    }
+
+    func testANarrowColumnPadsCardsLess() throws {
+        let tree: JSON = [
+            "id": "", "component": "Card", "soft": false, "nested": false, "spacing": [0],
+            "children": [["id": "children/0", "component": "Spacer"]],
+        ]
+        XCTAssertEqual(ProgramFrames.frames(tree: tree, width: 720)["children/0"]?[0], 20)
+        XCTAssertEqual(ProgramFrames.frames(tree: tree, width: 390)["children/0"]?[0], 16)
+    }
+
+    func testAGridFitsAsManyColumnsAsTheirLeastWidthAllows() {
+        let grid = { (min: Double) in
+            UiKind.Grid(json: ["children": [], "columns": 4, "min_child_width": min, "gap": 12])
+        }
+        XCTAssertEqual(ProgramLayout.columns(grid(200), width: 720), 3)
+        XCTAssertEqual(ProgramLayout.columns(grid(200), width: 390), 1)
+        XCTAssertEqual(ProgramLayout.columns(grid(100), width: 720), 4)
+    }
+
+    /// The ids of the nodes a program shows in its row: not those of a popover's panel, which shows
+    /// over it, nor an Svg's shapes, which have none.
+    private static func shownIDs(_ value: Any, inPanel: Bool = false) -> [String] {
+        switch value {
+        case let node as JSON:
+            var ids: [String] = []
+            if !inPanel, let id = node["id"] as? String, node["component"] is String { ids.append(id) }
+            for (key, child) in node {
+                let panel = inPanel || node["component"] as? String == "Popover" && key == "content"
+                ids += shownIDs(child, inPanel: panel)
+            }
+            return ids
+        case let list as [Any]:
+            return list.flatMap { shownIDs($0, inPanel: inPanel) }
+        default:
+            return []
+        }
+    }
+}

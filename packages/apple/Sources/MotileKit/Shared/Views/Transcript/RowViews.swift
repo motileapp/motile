@@ -40,6 +40,8 @@ protocol RowOwner: AnyObject {
     func continueElsewhere()
     /// Opens the settings' servers, where an unlinked server's threads are deleted with it.
     func openServerSettings()
+    /// The user did something to a node of the program in the row.
+    func programEvent(rowID: String, node: String, event: JSON)
 }
 
 /// The base of every row. A row is as wide as the transcript's column; `layout(width:)` places
@@ -78,7 +80,9 @@ class RowView: FlippedView {
             return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
         case .removed(let content):
             return RemovedRowView.height(textHeight: TextMeasure.height(of: content.message, width: RemovedRowView.inner(width)))
-        case .code, .ui, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued, .unknown:
+        case .ui(let content):
+            return ProgramRowView.height(content, width: width)
+        case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .queued, .unknown:
             return estimatedHeight(row, width: width)
         }
     }
@@ -93,7 +97,7 @@ class RowView: FlippedView {
         case .code(let content):
             return CodeRowView.height(lines: content.lineCount)
         case .ui(let content):
-            return CodeRowView.height(lines: content.code.lineCount)
+            return ProgramRowView.height(content, width: width)
         case .tool, .thinking, .group, .fold:
             return ToolRowView.rowHeight + row.above
         case .agent(let content):
@@ -131,7 +135,8 @@ class RowView: FlippedView {
         switch row.kind {
         case .user: return UserRowView()
         case .prose: return ProseRowView()
-        case .code, .ui: return CodeRowView()
+        case .code: return CodeRowView()
+        case .ui: return ProgramRowView()
         case .tool, .thinking, .group, .fold: return ToolRowView()
         case .agent: return AgentRowView()
         case .agents: return AgentsRowView()
@@ -151,7 +156,8 @@ class RowView: FlippedView {
         switch row.kind {
         case .user: return "user"
         case .prose: return "prose"
-        case .code, .ui: return "code"
+        case .code: return "code"
+        case .ui: return "program"
         case .tool, .thinking, .group, .fold: return "tool"
         case .agent: return "agent"
         case .agents: return "agents"
@@ -514,11 +520,8 @@ final class CodeRowView: RowView {
     override func configure(_ row: RowModel) {
         super.configure(row)
         let content: CodeContent
-        switch row.kind {
-        case .code(let code): content = code
-        case .ui(let program): content = program.code
-        default: return
-        }
+        guard case .code(let code) = row.kind else { return }
+        content = code
         lines = content.lineCount
         header.show(language: content.language, code: content.code)
         text.content = content.attributed

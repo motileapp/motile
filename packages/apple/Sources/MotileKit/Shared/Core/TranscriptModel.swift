@@ -130,6 +130,13 @@ final class TranscriptModel {
         hooks?.live(live)
     }
 
+    /// A program row changed: it is shown as `make` makes it from the row it was.
+    func replace(rowID: String, with make: (RowModel) -> RowModel?) {
+        guard let index = rows.lastIndex(where: { $0.id == rowID }), let row = make(rows[index]) else { return }
+        rows[index] = row
+        hooks?.splice(index, 1, [row])
+    }
+
     func apply(spans: [NSNumber], rowID: String) {
         guard let row = rows.last(where: { $0.id == rowID }), case .code(let content) = row.kind else { return }
         content.apply(spans: spans)
