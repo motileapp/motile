@@ -72,6 +72,7 @@ enum Symbol: String {
     case fileBraces = "\u{e36b}"
     case image = "\u{e0f6}"
     case images = "\u{e5c4}"
+    case info = "\u{e0f9}"
     case keyboard = "\u{e284}"
     case layers = "\u{e529}"
     /// Linear's logo, which Lucide doesn't have.
@@ -81,6 +82,7 @@ enum Symbol: String {
     case listChecks = "\u{e1d0}"
     case listFilter = "\u{e460}"
     case loader = "\u{e109}"
+    case locateFixed = "\u{e1db}"
     case lockOpen = "\u{e10c}"
     case logOut = "\u{e10e}"
     case maximize2 = "\u{e113}"
@@ -89,6 +91,7 @@ enum Symbol: String {
     case messageSquareDashed = "\u{e40b}"
     case messageSquareText = "\u{e575}"
     case minimize2 = "\u{e11b}"
+    case minus = "\u{e11c}"
     case panelLeft = "\u{e12a}"
     case panelRight = "\u{e431}"
     case paperclip = "\u{e12d}"
@@ -154,6 +157,11 @@ extension PlatformImage {
     /// The side of the square a symbol for text of `size` is drawn in.
     static func symbolSide(_ size: CGFloat) -> CGFloat {
         (size * Platform.scale * symbolScale).rounded()
+    }
+
+    /// The text size whose symbol is drawn in a square of `side` on the Mac, and enlarged on iOS.
+    static func symbolSize(side: CGFloat) -> CGFloat {
+        side / symbolScale
     }
 
     /// The symbol in one colour that a view tints, sized for text of `size`. Each is made once.

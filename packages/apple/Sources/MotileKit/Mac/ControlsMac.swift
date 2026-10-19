@@ -239,4 +239,61 @@ private final class DayPickerController: NSViewController {
         popover?.close()
     }
 }
+
+/// The glass a `GlassButtonView` lies on, a capsule as tall as its frame: Liquid Glass where the
+/// system has it, and the popover's material with a hairline around it and a shadow before that.
+final class GlassView: NSView {
+    private let effect: NSView
+
+    override init(frame: NSRect) {
+        if #available(macOS 26.0, *) {
+            effect = NSGlassEffectView()
+        } else {
+            let blur = NSVisualEffectView()
+            blur.material = .popover
+            blur.blendingMode = .withinWindow
+            blur.state = .active
+            blur.wantsLayer = true
+            effect = blur
+        }
+        super.init(frame: frame)
+        addSubview(effect)
+        guard effect is NSVisualEffectView else { return }
+        effect.layer?.borderWidth = 1
+        applyShadow(.sm, .shadowStronger)
+        paint()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        effect.frame = bounds
+        let radius = bounds.height / 2
+        if #available(macOS 26.0, *), let glass = effect as? NSGlassEffectView {
+            glass.cornerRadius = radius
+            return
+        }
+        effect.layer?.cornerRadius = radius
+        effect.layer?.cornerCurve = .continuous
+        effect.layer?.masksToBounds = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard effect is NSVisualEffectView else { return }
+        applyShadow(.sm, .shadowStronger)
+        paint()
+    }
+
+    private func paint() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            effect.layer?.borderColor = Theme.border.cgColor
+        }
+    }
+}
 #endif

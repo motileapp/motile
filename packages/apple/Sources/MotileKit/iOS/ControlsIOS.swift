@@ -223,4 +223,41 @@ private final class DayPickerController: UIViewController, UIPopoverPresentation
         .none
     }
 }
+
+/// The glass a `GlassButtonView` lies on, a capsule as tall as its frame: Liquid Glass where the
+/// system has it, and the system's material with a hairline around it and a shadow before that.
+final class GlassView: UIView {
+    private let effect = UIVisualEffectView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        addSubview(effect)
+        if #available(iOS 26.0, *) {
+            effect.effect = UIGlassEffect()
+            effect.cornerConfiguration = .capsule()
+            return
+        }
+        effect.effect = UIBlurEffect(style: .systemMaterial)
+        effect.clipsToBounds = true
+        effect.layer.cornerCurve = .continuous
+        effect.layer.borderWidth = 1
+        paint()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in view.paint() }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        effect.frame = bounds
+        guard #unavailable(iOS 26.0) else { return }
+        effect.layer.cornerRadius = bounds.height / 2
+    }
+
+    private func paint() {
+        effect.layer.borderColor = Theme.border.resolvedColor(with: traitCollection).cgColor
+        applyShadow(.sm, .shadowStronger)
+    }
+}
 #endif

@@ -868,3 +868,131 @@ final class DateFieldView: FlippedView {
         describe(label ?? placeholder, role: .button, value: text)
     }
 }
+
+/// `GlassButton` for the views the transcript draws itself: words, a symbol or both on a capsule of
+/// glass that floats over a map or a picture, lit under the pointer. A symbol alone is round. One
+/// that `opens` has a chevron in its trailing padding and offers choices.
+final class GlassButtonView: FlippedView {
+    static let size = ControlSize.regular
+    private static let fadeDuration: TimeInterval = 0.12
+
+    let height: CGFloat
+    var title: String? { didSet { paint(); describeSelf(); relayout() } }
+    var symbol: Symbol? { didSet { showSymbol(); relayout() } }
+    /// The side of the square its symbol is drawn in, on the Mac.
+    var symbolSide: CGFloat { didSet { showSymbol(); relayout() } }
+    /// Its symbol stands after its words.
+    var symbolTrails = false { didSet { relayout() } }
+    var opens = false { didSet { chevron.isHidden = !opens; describeSelf(); relayout() } }
+    var padding: (leading: CGFloat, trailing: CGFloat) { didSet { relayout() } }
+    var help: String? { didSet { describeSelf() } }
+    /// Whether what it shows is open, for assistive technologies.
+    var expanded: Bool? { didSet { describeSelf() } }
+    var enabled = true { didSet { opacity = enabled ? 1 : Opacity.disabled.fixed } }
+    var action: () -> Void
+
+    private let glass = GlassView()
+    private let light = SurfaceView()
+    private let words = TextBlockView()
+    private let mark = SymbolView()
+    private let chevron = SymbolView()
+
+    init(
+        _ title: String? = nil, symbol: Symbol? = nil, symbolSide: CGFloat = GlassButtonView.size.symbolSide, help: String? = nil,
+        height: CGFloat = GlassButtonView.size.height, action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.symbol = symbol
+        self.symbolSide = symbolSide
+        self.help = help
+        self.height = height
+        self.action = action
+        padding = (Self.size.padding, Self.size.padding)
+        super.init(frame: .zero)
+        words.oneLine = true
+        light.fill = Surface.background.platform(.row)
+        light.opacity = 0
+        mark.tint = Theme.foreground
+        chevron.image = .symbol(.chevronDown, size: Self.size.textSize, trimmed: true)
+        chevron.tint = Theme.foreground
+        chevron.isHidden = true
+        for view in [glass, light, mark, words, chevron] as [PlatformView] { addSubview(view) }
+        focusable = true
+        pointer = .hand
+        onPress = { [weak self] _ in self?.press() }
+        onHover = { [weak self] point in self?.lightUp(point != nil) }
+        showSymbol()
+        paint()
+        describeSelf()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private var wordless: Bool { (title ?? "").isEmpty }
+    private var side: CGFloat { PlatformImage.symbolSide(PlatformImage.symbolSize(side: symbolSide)) }
+
+    /// How wide it is: as tall as it is when it shows a symbol alone.
+    var naturalWidth: CGFloat {
+        guard !wordless else { return height }
+        let text = ControlText.width(words.text)
+        let mark = symbol == nil ? 0 : side + Self.size.gap
+        return ceil(padding.leading + text + mark + padding.trailing)
+    }
+
+    override var focusShape: (rect: CGRect, radius: CGFloat) { (bounds, bounds.height / 2) }
+
+    override func layoutNow() {
+        glass.frame = bounds
+        light.frame = bounds
+        light.radius = bounds.height / 2
+        let side = self.side
+        let middle = ((bounds.height - side) / 2).rounded()
+        guard !wordless else {
+            mark.frame = CGRect(x: ((bounds.width - side) / 2).rounded(), y: middle, width: side, height: side)
+            return
+        }
+        let textWidth = ControlText.width(words.text)
+        let textHeight = ControlText.height(words.text, width: .greatestFiniteMagnitude)
+        var x = padding.leading
+        if symbol != nil, !symbolTrails {
+            mark.frame = CGRect(x: x, y: middle, width: side, height: side)
+            x += side + Self.size.gap
+        }
+        let end = bounds.width - padding.trailing - (symbol != nil && symbolTrails ? side + Self.size.gap : 0)
+        words.frame = CGRect(x: x, y: ((bounds.height - textHeight) / 2).rounded(), width: max(0, min(textWidth, end - x)), height: textHeight)
+        if symbol != nil, symbolTrails {
+            mark.frame = CGRect(x: words.frame.maxX + Self.size.gap, y: middle, width: side, height: side)
+        }
+        let chevronSide = chevron.image?.size ?? .zero
+        chevron.frame = CGRect(
+            x: bounds.width - padding.trailing + Self.size.gap, y: ((bounds.height - chevronSide.height) / 2).rounded(), width: chevronSide.width,
+            height: chevronSide.height)
+    }
+
+    private func showSymbol() {
+        mark.isHidden = symbol == nil
+        guard let symbol else { return }
+        mark.show(symbol, size: PlatformImage.symbolSize(side: symbolSide))
+    }
+
+    private func paint() {
+        words.text = ControlText.line(title ?? "", font: ControlView.font(Self.size), color: Theme.foreground)
+    }
+
+    private func lightUp(_ lit: Bool) {
+        let opacity: CGFloat = lit && enabled ? 1 : 0
+        guard !Platform.reducesMotion else { return light.opacity = opacity }
+        light.fade(to: opacity, duration: Self.fadeDuration)
+    }
+
+    func press() {
+        guard enabled else { return }
+        action()
+    }
+
+    private func describeSelf() {
+        let value = expanded.map { $0 ? "Expanded" : "Collapsed" }
+        describe(title.flatMap { $0.isEmpty ? nil : $0 } ?? help ?? "", role: opens ? .popUp : .button, value: value)
+        tip = help
+    }
+}

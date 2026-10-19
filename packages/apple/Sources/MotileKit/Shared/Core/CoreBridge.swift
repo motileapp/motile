@@ -100,3 +100,14 @@ private func coreEvent(_ json: UnsafePointer<CChar>?, _ context: UnsafeMutableRa
     let data = Data(bytes: json, count: strlen(json))
     Unmanaged<CoreBridge>.fromOpaque(context).takeUnretainedValue().received(data)
 }
+
+extension CoreBridge {
+    /// Asks the core's map maths (`map::map_json`) a question, answered at once on any thread:
+    /// a camera, a line or nothing.
+    static func uiMap(_ question: [String: Any]) -> Any? {
+        guard let data = try? JSONSerialization.data(withJSONObject: question), let json = String(data: data, encoding: .utf8) else { return nil }
+        guard let answer = json.withCString({ motile_ui_map($0) }) else { return nil }
+        defer { motile_free_string(answer) }
+        return try? JSONSerialization.jsonObject(with: Data(bytes: answer, count: strlen(answer)), options: .fragmentsAllowed)
+    }
+}
