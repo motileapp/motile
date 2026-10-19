@@ -5,6 +5,7 @@
 mod frames;
 mod inputs;
 mod layout;
+mod media;
 pub mod patch;
 mod style;
 mod text;
@@ -170,7 +171,7 @@ pub fn node(node: &UiNode, cx: &UiCx, window: &mut Window, app: &mut App) -> Sta
         | UiKind::Table { .. }
         | UiKind::Map { .. }
         | UiKind::MapMarker { .. }
-        | UiKind::YouTube { .. } => div().id(cx.id(&node.id, "node")),
+        | UiKind::YouTube { .. } => media::media(node, cx, window, app),
         UiKind::Math { .. }
         | UiKind::Chart { .. }
         | UiKind::Flashcard { .. }
