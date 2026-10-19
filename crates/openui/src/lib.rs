@@ -9,10 +9,13 @@
 //! and plans act as objects in expressions (`js`) and serialize as null.
 //!
 //! `fixtures/` holds the spec's conformance cases (`openui/1.0`, thesysdev/openui at 5a85af6) and
-//! the library open-intelligent-ui generates (`oiu`, at 0321343).
+//! the library open-intelligent-ui generates (`oiu`, at 0321343), each with its project's licence, and
+//! the prompts this crate writes (`prompt`).
 
 pub mod builtins;
 pub mod element;
+pub mod format;
+pub mod functions;
 pub mod js;
 pub mod library;
 pub mod schema;
