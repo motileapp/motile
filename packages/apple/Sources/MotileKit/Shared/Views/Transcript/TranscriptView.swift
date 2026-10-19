@@ -41,6 +41,8 @@ final class TranscriptView: FlippedView, RowOwner {
     /// The thread, whose server was removed, is to go on on another server.
     var onContinueElsewhere: (() -> Void)?
     var onOpenServerSettings: (() -> Void)?
+    /// What the user did to a node of a program: the row, the node and the event.
+    var onProgramEvent: ((String, String, JSON) -> Void)?
     /// Whether rows are measured for this view's width as they are decoded. Only one transcript
     /// can have that; another measures its rows when they arrive.
     var measuresAhead = true
@@ -319,7 +321,14 @@ final class TranscriptView: FlippedView, RowOwner {
             return
         }
         layoutWidth = bounds.width
-        if measuresAhead { TranscriptColumn.width = columnWidth }
+        if measuresAhead {
+            TranscriptColumn.width = columnWidth
+            #if os(macOS)
+            if let size = window?.contentLayoutRect.size { TranscriptColumn.window = size }
+            #else
+            if let size = window?.bounds.size { TranscriptColumn.window = size }
+            #endif
+        }
         // Wrapping changes with the width, so every height is an estimate again.
         let anchor = currentAnchor()
         for index in measured.indices { measured[index] = false }
@@ -635,6 +644,7 @@ final class TranscriptView: FlippedView, RowOwner {
         case is UserRowView: "user"
         case is ProseRowView: "prose"
         case is CodeRowView: "code"
+        case is ProgramRowView: "program"
         case is ToolRowView: "tool"
         case is MediaRowView: "media"
         case is FileRowView: "file"
@@ -925,6 +935,8 @@ final class TranscriptView: FlippedView, RowOwner {
     func continueElsewhere() { onContinueElsewhere?() }
 
     func openServerSettings() { onOpenServerSettings?() }
+
+    func programEvent(rowID: String, node: String, event: JSON) { onProgramEvent?(rowID, node, event) }
 
     func cancelQueued(messageID: String) { onCancelQueued?(messageID) }
 

@@ -7,13 +7,20 @@ import AppKit
 import UIKit
 #endif
 
-/// How wide the transcript's column is, for measuring rows on the thread that decodes them.
+/// How wide the transcript's column is, for measuring rows on the thread that decodes them, and
+/// how large its window is.
 enum TranscriptColumn {
     private static let shared = OSAllocatedUnfairLock<CGFloat>(initialState: 0)
+    private static let sharedWindow = OSAllocatedUnfairLock<CGSize>(initialState: CGSize(width: 1200, height: 800))
 
     static var width: CGFloat {
         get { shared.withLock { $0 } }
         set { shared.withLock { $0 = newValue } }
+    }
+
+    static var window: CGSize {
+        get { sharedWindow.withLock { $0 } }
+        set { sharedWindow.withLock { $0 = newValue } }
     }
 }
 
@@ -25,7 +32,7 @@ final class RowModel {
         /// `uncoloured` when code inside it still waits for highlighting.
         case prose(NSAttributedString, uncoloured: Bool)
         case code(CodeContent)
-        /// A program the core runs, shown as its source until its views come.
+        /// A program the core runs, drawn from the tree it resolved.
         case ui(UiContent)
         case tool(ToolContent)
         case thinking(NSAttributedString)
@@ -68,6 +75,16 @@ final class RowModel {
         above = 0
     }
 
+    /// The row with what it shows changed, measured for the column's width as a decoded row is.
+    init(_ row: RowModel, kind: Kind, measured: (width: CGFloat, height: CGFloat)?) {
+        id = row.id
+        itemID = row.itemID
+        nested = row.nested
+        above = row.above
+        self.kind = kind
+        self.measured = measured
+    }
+
     init?(json: JSON) {
         id = json.string("id")
         itemID = json.string("item")
@@ -82,7 +99,7 @@ final class RowModel {
         case "code":
             kind = .code(CodeContent(language: json.string("language"), code: json.string("code"), spans: json["spans"] as? [NSNumber]))
         case "ui":
-            kind = .ui(UiContent(json: json))
+            kind = .ui(UiContent(json: json, rowID: json.string("id")))
         case "tool":
             kind = .tool(ToolContent(json: json))
         case "thinking":
@@ -167,19 +184,45 @@ final class RowModel {
     var isSentMessage: Bool { isUser || isQueued }
 }
 
-/// A program row: its tree, which `ui_patch` events change, and its source.
+/// A program row: its tree, which `ui_patch` events change, what keeps it from running, and its
+/// source, which shows while it has no tree.
 struct UiContent {
     let code: CodeContent
     let tree: UiNode?
+    let errors: [String]
     let complete: Bool
     /// The thread's server is too old to run the program's tools.
     let limited: Bool
+    let cache: ProgramCache
+    let generation: Int
 
-    init(json: JSON) {
+    init(json: JSON, rowID: String) {
         code = CodeContent(language: "openui-lang", code: json.string("source"), spans: [])
+        let errors = json.strings("errors")
+        cache = ProgramStore.remember(rowID: rowID, tree: json["tree"] as? JSON, errors: errors)
+        generation = cache.current
         tree = (json["tree"] as? JSON).flatMap(UiNode.init(json:))
+        self.errors = errors
         complete = json.bool("complete")
         limited = json.bool("limited")
+    }
+
+    /// The content after a patch, whose tree and errors the store has.
+    init(_ content: UiContent, tree: JSON?, errors: [String], cache: ProgramCache) {
+        code = content.code
+        complete = content.complete
+        limited = content.limited
+        self.cache = cache
+        generation = cache.current
+        self.tree = tree.flatMap(UiNode.init(json:))
+        self.errors = errors
+    }
+
+    /// The program laid out in a column `width` wide.
+    func box(width: CGFloat) -> ProgramBox? {
+        guard let tree else { return nil }
+        let env = ProgramEnv(column: width, window: TranscriptColumn.window, cache: cache, generation: generation)
+        return ProgramLayout.layout(tree, width: width, env: env)
     }
 }
 
