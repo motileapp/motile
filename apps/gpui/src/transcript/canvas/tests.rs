@@ -63,17 +63,17 @@ impl Render for Shot {
 }
 
 #[cfg(target_os = "macos")]
-fn platform_text() -> Option<Arc<dyn PlatformTextSystem>> {
+pub(crate) fn platform_text() -> Option<Arc<dyn PlatformTextSystem>> {
     Some(Arc::new(gpui_apple::AppleTextSystem::new()))
 }
 
 #[cfg(target_os = "linux")]
-fn platform_text() -> Option<Arc<dyn PlatformTextSystem>> {
+pub(crate) fn platform_text() -> Option<Arc<dyn PlatformTextSystem>> {
     Some(Arc::new(gpui_wgpu::CosmicTextSystem::new(theme::UI_FONT)))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn platform_text() -> Option<Arc<dyn PlatformTextSystem>> {
+pub(crate) fn platform_text() -> Option<Arc<dyn PlatformTextSystem>> {
     None
 }
 

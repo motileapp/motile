@@ -530,6 +530,18 @@ impl Transcript {
         self.sync(&changed);
     }
 
+    /// Applies a program's patch to its row, wherever the row is.
+    pub fn patch_ui(&mut self, row_id: &str, ops: &[motile_core::render::openui::UiOp]) {
+        let Some(index) = self.rows.iter().rposition(|model| model.row.id == row_id) else { return };
+        let mut row = self.rows[index].row.clone();
+        let RowKind::Ui { ui } = &mut row.kind else { return };
+        super::openui::patch::apply(&mut ui.tree, &mut ui.errors, ops);
+        Rc::make_mut(&mut self.rows)[index] = Arc::new(RowModel::new(row));
+        let mut changed = HashSet::new();
+        changed.insert(row_id.to_string());
+        self.sync(&changed);
+    }
+
     /// Has the list measure the room under the last row again, which changed.
     pub fn bottom_changed(&self) {
         let Some(last) = self.items.len().checked_sub(1) else { return };

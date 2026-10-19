@@ -715,7 +715,17 @@ impl Store {
                     }
                 }
             }
-            Event::Rows { .. } | Event::AgentRows { .. } | Event::UiPatch { .. } | Event::UiConfirm { .. } => {}
+            Event::UiPatch { thread_id, row_id, ops } => {
+                for transcript in [self.transcript.clone(), self.agent_transcript.clone()] {
+                    if transcript.read(cx).thread_id.as_deref() == Some(&thread_id) {
+                        transcript.update(cx, |transcript, cx| {
+                            transcript.patch_ui(&row_id, &ops);
+                            cx.notify();
+                        });
+                    }
+                }
+            }
+            Event::Rows { .. } | Event::AgentRows { .. } | Event::UiConfirm { .. } => {}
             Event::OpenUrl { url } => cx.open_url(&url),
             Event::Copy { text } => cx.write_to_clipboard(ClipboardItem::new_string(text)),
             Event::Keybindings { keybindings } => self.shortcuts = keybindings.into(),
