@@ -7,6 +7,7 @@
 pub mod canvas;
 pub mod host;
 pub mod tree;
+pub mod web;
 
 #[cfg(test)]
 mod tests;
