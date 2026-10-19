@@ -1312,7 +1312,14 @@ impl Hub {
             }
             return;
         }
-        let Some(run) = live.run.as_ref().filter(|run| run.resting.is_none()) else { return };
+        let Some(run) = live.run.as_ref().filter(|run| run.resting.is_none()) else {
+            if live.limited()
+                && let Err(error) = self.stop_waiting_for_limit(live)
+            {
+                tracing::error!(thread_id, "couldn't stop a thread that waits for its usage limit: {error:#}");
+            }
+            return;
+        };
         run.interrupted.store(true, Ordering::Relaxed);
         let process_id = run.process_id;
         let thread = &live.stored.thread;
@@ -2808,6 +2815,23 @@ impl Hub {
             queued.held = true;
         }
         live.save_queued(&self.store)?;
+        self.store.save_thread(&live.stored)?;
+        live.send_activity();
+        self.announce(&live.stored.thread);
+        Ok(())
+    }
+
+    /// Ends the turn the usage limit cut off as stopped, so that the thread no longer goes on by
+    /// itself once the limit resets. What was queued for it stays, held.
+    fn stop_waiting_for_limit(&self, live: &mut Live) -> anyhow::Result<()> {
+        live.stored.thread.interruption = None;
+        live.settle(&self.store, None, None, "", true)?;
+        live.ended = None;
+        for queued in &mut live.queued {
+            queued.held = true;
+        }
+        live.save_queued(&self.store)?;
+        live.stored.thread.updated_at = now();
         self.store.save_thread(&live.stored)?;
         live.send_activity();
         self.announce(&live.stored.thread);

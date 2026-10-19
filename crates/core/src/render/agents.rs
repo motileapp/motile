@@ -171,7 +171,8 @@ pub fn starting(item: &Item, call: &ToolCall) -> Option<AgentView> {
         detail: one_line(&detail),
         prompt,
         started_at: item.created_at,
-        duration_ms: agent.and_then(|agent| agent.duration_ms).filter(|_| !working),
+        // One at its usage limit has stopped working for now, and says how long it worked.
+        duration_ms: agent.and_then(|agent| agent.duration_ms).filter(|_| !working || state == AgentState::Limited),
         tokens: agent.and_then(|agent| agent.tokens),
         tool_uses: agent.and_then(|agent| agent.tool_uses),
         thread_id: runs_on.and_then(|on| on.thread_id.clone()),
@@ -363,6 +364,15 @@ mod tests {
 
         let ended = view(&started(ToolStatus::Succeeded, Some("Reading a.txt"), Some("Three\n\nfiles"))).unwrap();
         assert_eq!((ended.detail.as_str(), ended.duration_ms), ("Three files", Some(30_000)));
+    }
+
+    #[test]
+    fn an_agent_at_its_usage_limit_says_how_long_it_worked() {
+        let mut item = started(ToolStatus::Running, Some("Reached its usage limit"), None);
+        let ItemKind::Tool { call } = &mut item.kind else { unreachable!() };
+        call.agent.as_mut().unwrap().limited = true;
+        let limited = view(&item).unwrap();
+        assert_eq!((limited.state, limited.duration_ms), (AgentState::Limited, Some(30_000)));
     }
 
     #[test]

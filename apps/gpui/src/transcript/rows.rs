@@ -1159,7 +1159,7 @@ fn agent_time(agent: &AgentRow) -> String {
     if let Some(at) = agent.at {
         return stamp(at);
     }
-    if matches!(agent.state, AgentState::Working | AgentState::Waiting | AgentState::Limited) {
+    if matches!(agent.state, AgentState::Working | AgentState::Waiting) {
         return elapsed(agent.started_at);
     }
     agent.duration_ms.map(duration).unwrap_or_default()

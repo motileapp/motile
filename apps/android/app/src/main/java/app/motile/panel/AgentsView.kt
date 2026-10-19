@@ -215,11 +215,11 @@ private fun AgentRow(agent: AgentInfo) {
     }
 }
 
-/** How long the agent has worked so far, or worked in all. */
+/** How long the agent has worked so far, or worked in all, or until its usage limit stopped it. */
 @Composable
 fun AgentTime(agent: AgentInfo, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
-    if (agent.working) {
+    if (agent.working && agent.state != AgentState.Limited) {
         var now by remember { mutableDoubleStateOf(Time.now()) }
         LaunchedEffect(agent.startedAt) {
             while (true) {

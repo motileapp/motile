@@ -613,7 +613,10 @@ impl Hub {
         let progress = match state.status {
             Status::NeedsApproval => Some("Waiting for your approval".to_string()),
             Status::Asking => Some("Asking a question".to_string()),
-            Status::WaitingForUsageLimit => Some("Waiting for its usage limit to reset".to_string()),
+            Status::WaitingForUsageLimit if limit_continues(thread) => {
+                Some("Waiting for its usage limit to reset".to_string())
+            }
+            Status::WaitingForUsageLimit => Some("Reached its usage limit".to_string()),
             Status::Running => {
                 live.open.values().filter(|item| item.parent.is_none()).max_by_key(|item| item.seq).and_then(|item| {
                     match &item.kind {
@@ -634,7 +637,8 @@ impl Hub {
             result: state.reply.clone().or_else(|| state.error.clone()).filter(|_| state.status.settled()),
             tokens,
             tool_uses: Some(tool_uses),
-            duration_ms: state.status.settled().then(|| ((ended - thread.created_at).max(0.0) * 1000.0) as u64),
+            duration_ms: (state.status.settled() || state.status == Status::WaitingForUsageLimit)
+                .then(|| ((ended - thread.created_at).max(0.0) * 1000.0) as u64),
             workflow: None,
             runs_on: Some(Box::new(RunsOn {
                 agent: thread.agent,

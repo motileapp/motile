@@ -146,9 +146,14 @@ val Project.checkoutSymbol: Symbol
         return if (worktree == null) Symbol.GitBranch else Symbol.FolderGit2
     }
 
-/** The colour of its status when it waits for the user: an approval, or a reply they haven't seen. */
+/**
+ * The colour of its status when it waits for the user, as its sidebar row shows it: an approval,
+ * its usage limit, or a reply they haven't seen. None while it or its agents work.
+ */
 fun ThreadInfo.attentionColor(palette: Palette): Color? = when {
     waitsFor != null -> palette.warning
+    working || gitStage != null || monitoring -> null
+    interruption != null -> palette.warning
     unread -> palette.success
     else -> null
 }

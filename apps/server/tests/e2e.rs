@@ -3860,6 +3860,33 @@ async fn an_agent_hears_once_that_an_agent_it_started_reached_its_usage_limit() 
 }
 
 #[tokio::test]
+async fn an_agent_stopped_at_its_usage_limit_stays_stopped_once_the_limit_resets() {
+    let (harness, connection, _list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let parent = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &parent).await;
+    let started = harness.recorded_requests("thread/start");
+    let server = &started.last().unwrap()["config"]["mcp_servers"]["motile"];
+    let url = server["url"].as_str().unwrap();
+    let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
+
+    let start = json!({"prompt": "hit the limit", "title": "Limited", "agent": "claude", "wait": true});
+    let (said, _) = call_tool(url, token, "start_agent", start).await;
+    let state: serde_json::Value = serde_json::from_str(&said).unwrap();
+    assert_eq!(state["status"], "waiting_for_usage_limit", "{said}");
+    let child = state["id"].as_str().unwrap().to_string();
+
+    let (said, failed) = call_tool(url, token, "stop_agent", json!({"id": child})).await;
+    assert!(!failed, "{said}");
+    let state: serde_json::Value = serde_json::from_str(&said).unwrap();
+    assert_eq!(state["status"], "stopped", "{said}");
+
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    let transcript = finished_transcript(&connection, &child).await;
+    assert!(!transcript.user_texts().contains(&CONTINUE_PROMPT), "the limit has reset, and it stays stopped");
+}
+
+#[tokio::test]
 async fn an_agent_answers_the_question_an_agent_it_started_asks() {
     let (harness, connection, _list) = with_children().await;
     let new_thread = full_access(&harness, &connection, Agent::Claude).await;
