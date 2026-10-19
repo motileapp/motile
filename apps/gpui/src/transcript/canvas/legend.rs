@@ -109,11 +109,6 @@ pub struct Arrangement {
     pub labels: Vec<Label>,
 }
 
-/// The view's height for a column `width` wide, its legend set in the app's typeface.
-pub fn height(scene: &Scene, width: f32, text: &Arc<TextSystem>) -> f32 {
-    arrange(scene, width, text).height
-}
-
 pub fn arrange(scene: &Scene, width: f32, measure: &impl Measure) -> Arrangement {
     let Some(legend) = scene.legend.as_ref().filter(|legend| !legend.entries.is_empty()) else {
         return Arrangement { width: scene.width, height: scene.height, ..Arrangement::default() };

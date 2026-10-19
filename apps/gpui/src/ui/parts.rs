@@ -686,3 +686,66 @@ impl RenderOnce for CheckMenu {
         div().relative().flex_shrink_0().child(anchor.track()).child(button).children(dropdown)
     }
 }
+
+/// A round symbol's button that floats on glass over what scrolls under it, as the map's controls
+/// do: the surface's colour at `lit` in its edge, with a small shadow.
+#[derive(IntoElement)]
+pub struct GlassButton {
+    id: ElementId,
+    symbol: SharedString,
+    help: SharedString,
+    surface: Surface,
+    on_click: Option<crate::ui::OnClick>,
+}
+
+impl GlassButton {
+    pub const SIDE: f32 = 34.;
+    const SYMBOL: f32 = 18.;
+
+    pub fn new(id: impl Into<ElementId>, symbol: impl Into<SharedString>, help: impl Into<SharedString>) -> Self {
+        Self { id: id.into(), symbol: symbol.into(), help: help.into(), surface: Surface::Background, on_click: None }
+    }
+
+    pub fn surface(mut self, surface: Surface) -> Self {
+        self.surface = surface;
+        self
+    }
+
+    pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+        self.on_click = Some(Rc::new(handler));
+        self
+    }
+}
+
+impl RenderOnce for GlassButton {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let c = colors(cx);
+        let base = self.surface.color(c);
+        let on_click = self.on_click;
+        div()
+            .id(self.id)
+            .size(px(Self::SIDE))
+            .flex_none()
+            .rounded_full()
+            .bg(c.at(base, Opacity::Lit))
+            .border_1()
+            .border_color(self.surface.border(c))
+            .shadow(c.shadow(ShadowSize::Sm, Opacity::ShadowStronger))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(c.foreground)
+            .cursor_pointer()
+            .hover(move |button| button.bg(base))
+            .role(Role::Button)
+            .aria_label(self.help.clone())
+            .tooltip(crate::ui::tooltip(self.help))
+            .child(icons::symbol(self.symbol, Self::SYMBOL / crate::theme::SYMBOL_SCALE))
+            .when_some(on_click, |button, on_click| {
+                button.on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    on_click(event, window, cx)
+                })
+            })
+    }
+}

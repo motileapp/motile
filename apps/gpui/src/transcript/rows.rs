@@ -63,6 +63,8 @@ pub struct RowContext {
     pub agent: bool,
     /// The thread's server was removed from the account, so what only it had can't be fetched.
     pub removed: bool,
+    /// The thread whose rows these are, which a program's events go to.
+    pub thread_id: Option<String>,
 }
 
 /// What the text of a row is known by, so that a selection keeps to the row.
@@ -123,17 +125,17 @@ pub fn stamp(at: f64) -> String {
 
 /// How a paragraph's plain text is set: its font, size, colour and weight, and whether it is a
 /// heading.
-struct Plain<'a> {
-    family: &'a str,
-    size: f32,
-    color: Hsla,
-    weight: FontWeight,
-    heading: bool,
+pub struct Plain<'a> {
+    pub family: &'a str,
+    pub size: f32,
+    pub color: Hsla,
+    pub weight: FontWeight,
+    pub heading: bool,
 }
 
 /// The runs of a paragraph: its plain text in `color`, and each styled stretch as the Mac draws
 /// it, bold in the text's colour, code in the code font on a tint, links in the link colour.
-fn text_runs(
+pub fn text_runs(
     text: &str,
     runs: &[(Range<usize>, u32)],
     links: &[(Range<usize>, String)],
@@ -188,7 +190,7 @@ fn text_runs(
         .collect()
 }
 
-fn open_link(url: &str, _: &mut Window, cx: &mut App) {
+pub fn open_link(url: &str, _: &mut Window, cx: &mut App) {
     cx.open_url(url);
 }
 
@@ -386,7 +388,7 @@ fn plain_parts(text: &str) -> Vec<Range<usize>> {
 }
 
 /// Code with its colours, selectable.
-fn code_text(
+pub fn code_text(
     id: ElementId,
     code: &SharedString,
     spans: Option<&Vec<(Range<usize>, u32)>>,
@@ -436,10 +438,9 @@ fn copy_button(
         })
 }
 
-/// The top of a code box: the language, and a button that copies the code.
-fn code_header(id: &str, language: &str, code: &SharedString, ctx: &RowContext, cx: &App) -> impl IntoElement {
+/// The top of a code box: the language, and the button that copies the code.
+fn code_header(language: &str, copy: AnyElement, cx: &App) -> impl IntoElement {
     let c = colors(cx);
-    let code = code.to_string();
     div()
         .h(px(CODE_HEADER))
         .pl(px(14.))
@@ -456,14 +457,22 @@ fn code_header(id: &str, language: &str, code: &SharedString, ctx: &RowContext, 
                 .truncate()
                 .child(if language.is_empty() { "text".to_string() } else { language.to_string() }),
         )
-        .child(copy_button(id.to_string(), "Copy code", ctx.copied(id), Surface::Secondary, ctx, move |cx| {
-            cx.write_to_clipboard(ClipboardItem::new_string(code.clone()))
-        }))
+        .child(copy)
 }
 
-/// A box of code with its language and a copy button above it. Code in a reply's prose wraps its
-/// long lines as the Mac's text does; a code row of its own keeps them and moves sideways.
-fn code_box(id: &str, code: &CodeBox, wraps: bool, key: u64, ctx: &RowContext, cx: &App) -> Div {
+/// The button of a code box of the row that copies its code.
+fn copy_code(id: &str, code: &SharedString, ctx: &RowContext) -> AnyElement {
+    let code = code.to_string();
+    copy_button(id.to_string(), "Copy code", ctx.copied(id), Surface::Secondary, ctx, move |cx| {
+        cx.write_to_clipboard(ClipboardItem::new_string(code.clone()))
+    })
+    .into_any_element()
+}
+
+/// A box of code with its language and a copy button above it, on `surface`. Code in a reply's
+/// prose wraps its long lines as the Mac's text does; a code row of its own keeps them and moves
+/// sideways.
+pub fn code_box(id: &str, code: &CodeBox, wraps: bool, key: u64, copy: AnyElement, surface: Surface, cx: &App) -> Div {
     let c = colors(cx);
     let text = code_text(SharedString::from(format!("{id}-code")).into(), &code.code, code.spans.as_ref(), key, c);
     let body =
@@ -471,12 +480,12 @@ fn code_box(id: &str, code: &CodeBox, wraps: bool, key: u64, ctx: &RowContext, c
     div()
         .ml(px(code.indent))
         .mb(px(12.))
-        .bg(c.background_secondary)
+        .bg(surface.layer(theme::Layer::Box, c))
         .border_1()
-        .border_color(c.border)
+        .border_color(surface.border(c))
         .rounded(px(Radius::LG))
         .overflow_hidden()
-        .child(code_header(id, &code.language, &code.code, ctx, cx))
+        .child(code_header(&code.language, copy, cx))
         .map(|block| match wraps {
             true => block.child(body.child(text)),
             false => block
@@ -486,14 +495,33 @@ fn code_box(id: &str, code: &CodeBox, wraps: bool, key: u64, ctx: &RowContext, c
 
 /// A reply's prose: its paragraphs as the Mac sets them.
 fn prose_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
-    let c = colors(cx);
     let Some(prepared) = &model.prose else { return div().into_any_element() };
     let above = model.above();
     let row_id = model.row.id.clone();
+    let key = row_key(&row_id);
+    let copy = |id: &str, code: &SharedString| copy_code(id, code, ctx);
+    let column = prose_blocks(&row_id, prepared, key, &copy, Surface::Background, cx);
+    let grown = ctx.grown.get(&row_id).copied();
+    div()
+        .pt(px(3. + above))
+        .pb(px(PROSE_GAP))
+        .child(GrowthFade::new(SharedString::from(format!("growth-{row_id}")), grown, colors(cx).background, column))
+        .into_any_element()
+}
+
+/// Prose's blocks as a column, its code boxes with the copy buttons `copy` makes, on `surface`.
+pub fn prose_blocks(
+    row_id: &str,
+    prepared: &prose::PreparedProse,
+    key: u64,
+    copy: &dyn Fn(&str, &SharedString) -> AnyElement,
+    surface: Surface,
+    cx: &App,
+) -> Div {
+    let c = colors(cx);
     let count = prepared.blocks.len();
     let mut column = div().flex().flex_col();
     let mut code_index = 0;
-    let key = row_key(&row_id);
     for (index, block) in prepared.blocks.iter().enumerate() {
         let last = index + 1 == count;
         let id: ElementId = SharedString::from(format!("{row_id}-{index}")).into();
@@ -578,7 +606,7 @@ fn prose_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
             ProseBlock::Code(code) => {
                 let code_id = format!("{row_id}-code-{code_index}");
                 code_index += 1;
-                code_box(&code_id, code, true, key, ctx, cx).into_any_element()
+                code_box(&code_id, code, true, key, copy(&code_id, &code.code), surface, cx).into_any_element()
             }
             ProseBlock::Rule => div()
                 .pt(px(4.))
@@ -589,17 +617,12 @@ fn prose_row(model: &RowModel, ctx: &RowContext, cx: &App) -> AnyElement {
                 .child(div().w_full().h(px(1.)).bg(c.border))
                 .into_any_element(),
             ProseBlock::Table { columns, rows, extra_above } => {
-                table(&row_id, index, *columns, rows, *extra_above, last, key, cx).into_any_element()
+                table(row_id, index, *columns, rows, *extra_above, last, key, cx).into_any_element()
             }
         };
         column = column.child(element);
     }
-    let grown = ctx.grown.get(&row_id).copied();
-    div()
-        .pt(px(3. + above))
-        .pb(px(PROSE_GAP))
-        .child(GrowthFade::new(SharedString::from(format!("growth-{row_id}")), grown, colors(cx).background, column))
-        .into_any_element()
+    column
 }
 
 fn quote_bars(depth: u8, c: &Colors) -> impl IntoElement {
@@ -888,7 +911,18 @@ fn code_row(model: &RowModel, language: &str, code: &str, ctx: &RowContext, cx: 
     div()
         .pt(px(4.))
         .pb(px(10.))
-        .child(code_box(&model.row.id, &code, false, key, ctx, cx).mb(px(0.)))
+        .child(
+            code_box(
+                &model.row.id,
+                &code,
+                false,
+                key,
+                copy_code(&model.row.id, &code.code, ctx),
+                Surface::Background,
+                cx,
+            )
+            .mb(px(0.)),
+        )
         .into_any_element()
 }
 
@@ -1346,39 +1380,39 @@ pub fn turn_label(stopped: bool, duration_ms: Option<u64>) -> String {
 }
 
 fn error_row(model: &RowModel, message: &str, cx: &App) -> AnyElement {
+    let id = format!("{}-error", model.row.id);
+    div().pt(px(4.)).pb(px(10.)).child(error_box(&id, message, row_key(&model.row.id), cx)).into_any_element()
+}
+
+/// An error on its tint, with its sign before it.
+pub fn error_box(id: &str, message: &str, key: u64, cx: &App) -> Div {
     let c = colors(cx);
     div()
-        .pt(px(4.))
-        .pb(px(10.))
+        .bg(c.destructive_tint)
+        .rounded(px(Radius::LG))
+        .py(px(10.))
+        .pl(px(12.))
+        .pr(px(14.))
+        .flex()
+        .gap(px(8.))
         .child(
             div()
-                .bg(c.destructive_tint)
-                .rounded(px(Radius::LG))
-                .py(px(10.))
-                .pl(px(12.))
-                .pr(px(14.))
+                .w(px(16.))
+                .h(px(18.))
                 .flex()
-                .gap(px(8.))
-                .child(
-                    div()
-                        .w(px(16.))
-                        .h(px(18.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(icons::symbol("circle-alert", 13.).text_color(c.destructive)),
-                )
-                .child(text_box(13., 20.5).flex_1().min_w_0().text_color(c.destructive).child(plain(
-                    &format!("{}-error", model.row.id),
-                    message,
-                    &[],
-                    &[],
-                    c.destructive,
-                    row_key(&model.row.id),
-                    cx,
-                ))),
+                .items_center()
+                .justify_center()
+                .child(icons::symbol("circle-alert", 13.).text_color(c.destructive)),
         )
-        .into_any_element()
+        .child(text_box(13., 20.5).flex_1().min_w_0().text_color(c.destructive).child(plain(
+            id,
+            message,
+            &[],
+            &[],
+            c.destructive,
+            key,
+            cx,
+        )))
 }
 
 /// "+12 −3" in green and red.
@@ -1854,7 +1888,7 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
         }
         RowKind::Prose { .. } => prose_row(model, ctx, cx),
         RowKind::Code { language, code, .. } => code_row(model, language, code, ctx, cx),
-        RowKind::Ui { ui } => code_row(model, "openui-lang", &ui.source, ctx, cx),
+        RowKind::Ui { .. } => super::openui::ui_row(model, ctx, window, cx),
         RowKind::Tool { .. } | RowKind::Thinking { .. } | RowKind::Group { .. } | RowKind::Fold { .. } => {
             tool_row(model, ctx, cx)
         }

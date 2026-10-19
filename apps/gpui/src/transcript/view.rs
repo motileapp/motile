@@ -442,6 +442,7 @@ impl Render for TranscriptView {
                 .clamp(0., theme::CONTENT_WIDTH),
             agent: self.agent,
             removed,
+            thread_id: model.thread_id.clone(),
         };
         let needs_highlight = self.needs_highlight.clone();
         let requested = self.requested_highlight.clone();

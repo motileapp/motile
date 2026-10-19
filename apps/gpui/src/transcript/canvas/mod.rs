@@ -9,17 +9,23 @@ mod paint;
 mod view;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::sync::Arc;
 
 use gpui_kit::*;
 use motile_core::render::openui::canvas::{self as core_canvas, Canvas, Scene};
 
-pub use hit::hit;
-pub use legend::{Arrangement, Measure, arrange, height};
-pub use motion::{ConfettiOverlay, PieceFrame, Turn, confetti_frames, flip_scale, squashed, turned};
-pub use paint::{Palette, Prepared, paint_scene};
+#[cfg(test)]
+use hit::hit;
+#[cfg(test)]
+use legend::{Measure, arrange};
+pub use motion::{ConfettiOverlay, Turn, squashed, turned};
+#[cfg(test)]
+use motion::{confetti_frames, flip_scale};
+#[cfg(test)]
+use paint::paint_scene;
+pub use paint::{Palette, Prepared};
 pub use view::SceneView;
 
 /// The scene of `{"kind", "props", "width", "text_size"}` as core lays it out; an empty one when

@@ -347,6 +347,14 @@ impl RenderOnce for Shimmer {
     }
 }
 
+/// A shimmer band's light `across` its width (0 to 1), its `alphas` at the Mac's gradient stops.
+fn band_alpha(alphas: &[f32; 7], across: f32) -> f32 {
+    let Some(index) = ShimmerGlyphs::STOPS.windows(2).position(|pair| across <= pair[1]) else { return 0. };
+    let (from, to) = (ShimmerGlyphs::STOPS[index], ShimmerGlyphs::STOPS[index + 1]);
+    let t = ((across - from) / (to - from)).clamp(0., 1.);
+    alphas[index] + (alphas[index + 1] - alphas[index]) * t
+}
+
 struct ShimmerGlyphs {
     line: TailLine,
     bright: Hsla,
@@ -359,10 +367,7 @@ impl ShimmerGlyphs {
     const STOPS: [f32; 7] = [0., 0.15, 0.35, 0.5, 0.65, 0.85, 1.];
 
     fn alpha_at(&self, across: f32) -> f32 {
-        let Some(index) = Self::STOPS.windows(2).position(|pair| across <= pair[1]) else { return 0. };
-        let (from, to) = (Self::STOPS[index], Self::STOPS[index + 1]);
-        let t = ((across - from) / (to - from)).clamp(0., 1.);
-        self.alphas[index] + (self.alphas[index + 1] - self.alphas[index]) * t
+        band_alpha(&self.alphas, across)
     }
 
     fn paint_band(&self, bounds: Bounds<Pixels>, window: &mut Window) {
@@ -684,5 +689,91 @@ impl Element for GrowthFade {
         let Some((from, cover)) = *covered else { return };
         let below = Bounds::from_corners(point(bounds.left(), bounds.top() + from), bounds.bottom_right());
         window.paint_quad(fill(below, self.background.opacity(self.background.a * cover)));
+    }
+}
+
+/// How long the band of a box's shimmer takes to sweep across it, and how much of the box it is.
+const BOX_SHIMMER_PERIOD: Duration = Duration::from_millis(1400);
+const BOX_SHIMMER_BAND: f32 = 0.6;
+
+/// What waits for a picture: a soft band of `color` that sweeps across the box it fills, from
+/// before its leading edge to past its trailing one, held still under reduced motion.
+#[derive(IntoElement)]
+pub struct ShimmerBox {
+    id: ElementId,
+    color: Hsla,
+    radius: f32,
+}
+
+impl ShimmerBox {
+    pub fn new(id: impl Into<ElementId>, color: Hsla) -> Self {
+        Self { id: id.into(), color, radius: 0. }
+    }
+
+    /// The corners of the box it fills, which the band keeps inside.
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
+        self
+    }
+}
+
+/// How far a box's rounded corner of `radius` lies inside its top and bottom `x` from its side.
+fn corner_inset(x: f32, radius: f32) -> f32 {
+    if x >= radius {
+        return 0.;
+    }
+    let across = radius - x.max(0.);
+    radius - (radius * radius - across * across).max(0.).sqrt()
+}
+
+impl RenderOnce for ShimmerBox {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let c = colors(cx);
+        let (edge, middle) = (c.opacity(Opacity::ShimmerBandEdge), c.opacity(Opacity::ShimmerBandMiddle));
+        let alphas = [0., edge, middle, 1., middle, edge, 0.];
+        let (color, radius) = (self.color, self.radius);
+        let band = move |phase: f32| {
+            canvas(
+                |_, _, _| {},
+                move |bounds, _, window, _| {
+                    let width = f32::from(bounds.size.width);
+                    let band = width * BOX_SHIMMER_BAND;
+                    let left = -band + (width + band) * phase;
+                    let strips = ((band / 2.).ceil() as usize).max(SHIMMER_STRIPS);
+                    let strip = band / strips as f32;
+                    for index in 0..strips {
+                        let alpha = band_alpha(&alphas, (index as f32 + 0.5) / strips as f32);
+                        let x = (left + index as f32 * strip).max(0.);
+                        let right = (left + (index + 1) as f32 * strip).min(width);
+                        if right <= x {
+                            continue;
+                        }
+                        let middle = (x + right) / 2.;
+                        let radius = radius.min(width / 2.).min(f32::from(bounds.size.height) / 2.);
+                        let inset = corner_inset(middle.min(width - middle), radius);
+                        let height = f32::from(bounds.size.height) - 2. * inset;
+                        if height <= 0. {
+                            continue;
+                        }
+                        let quad =
+                            Bounds::new(bounds.origin + point(px(x), px(inset)), size(px(right - x), px(height)));
+                        window.paint_quad(fill(quad, color.opacity(color.a * alpha)));
+                    }
+                },
+            )
+            .absolute()
+            .inset_0()
+        };
+        if crate::media::native::reduces_motion() {
+            return band(0.5).into_any_element();
+        }
+        div()
+            .absolute()
+            .inset_0()
+            .child(band(0.))
+            .with_animation(self.id, Animation::new(BOX_SHIMMER_PERIOD).repeat(), move |_, phase| {
+                div().absolute().inset_0().child(band(phase))
+            })
+            .into_any_element()
     }
 }
