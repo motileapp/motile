@@ -630,6 +630,7 @@ final class TranscriptView: FlippedView, RowOwner {
         guard let view = views.removeValue(forKey: id) else { return }
         stale.remove(id)
         view.clearSelection()
+        view.recycled()
         let key = reuseKey(of: view)
         if (pool[key]?.count ?? 0) < Self.pooledPerKind {
             view.isHidden = true
@@ -892,6 +893,13 @@ final class TranscriptView: FlippedView, RowOwner {
         updateVisible(anchor: anchor)
         pinned = wasPinned && contentHeight - (scroller.offsetY + viewportHeight) < Self.pinDistance
         updateJumpButton()
+    }
+
+    func rowResized(id: String) {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return }
+        rows[index].measured = nil
+        measured[index] = false
+        updateVisible()
     }
 
     func toggleRow(id: String) {

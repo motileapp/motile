@@ -42,6 +42,8 @@ protocol RowOwner: AnyObject {
     func openServerSettings()
     /// The user did something to a node of the program in the row.
     func programEvent(rowID: String, node: String, event: JSON)
+    /// The row's height changed without the core: it is measured again.
+    func rowResized(id: String)
 }
 
 /// The base of every row. A row is as wide as the transcript's column; `layout(width:)` places
@@ -61,6 +63,9 @@ class RowView: FlippedView {
     }
 
     func layout(width: CGFloat) -> CGFloat { 0 }
+
+    /// The row left the screen: its view goes to the pool or away.
+    func recycled() {}
 
     func clearSelection() {}
 

@@ -88,7 +88,7 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
     private let page: WebPage
     private let player: Bool
     private let address: URL
-    private var webView: WKWebView!
+    private var webView: PageWebView!
     private var loaded = false
 
     private static let scheme = "motile-page"
@@ -102,6 +102,7 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
         configuration.websiteDataStore = .nonPersistent()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.allowsPlayback()
+        configuration.preferences.isElementFullscreenEnabled = player
         if !player {
             configuration.setURLSchemeHandler(PageSchemeHandler(html: page.html), forURLScheme: Self.scheme)
         }
@@ -111,7 +112,7 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
             controller.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: world))
             controller.add(HeightHandler(view: self), contentWorld: world, name: page.handler)
         }
-        webView = WKWebView(frame: bounds, configuration: configuration)
+        webView = PageWebView(frame: bounds, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.clearsBackground()
@@ -166,8 +167,10 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
         return nil
     }
 
+    /// The player's frame is YouTube's, as are the frames it opens inside it; the page's own policy
+    /// lets no other frame in.
     private static func playsInFrame(_ url: URL) -> Bool {
-        url.scheme == "about" || (url.scheme == "https" && url.host == "www.youtube-nocookie.com")
+        url.scheme == "about" || url.scheme == "https"
     }
 
     private static func isYouTube(_ url: URL) -> Bool {

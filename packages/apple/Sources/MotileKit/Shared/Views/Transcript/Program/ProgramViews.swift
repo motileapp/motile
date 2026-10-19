@@ -15,6 +15,8 @@ protocol ProgramHost: AnyObject {
     func send(_ node: String, _ event: JSON)
     /// Hands over the file of an image the program shows.
     func media(_ id: String, done: @escaping (URL?) -> Void)
+    /// The node's height changed outside the tree: a page reported its own.
+    func resized(_ node: String)
 }
 
 extension ProgramHost {
@@ -92,6 +94,11 @@ class ProgramNodeView: FlippedView {
 
     /// The views of its children, by node id, for the frame dump's checks and for focus.
     var children: [String: ProgramNodeView] { childViews }
+
+    /// Lets go of what only lives while the row is on screen, its web pages.
+    func leave() {
+        for view in childViews.values { view.leave() }
+    }
 
     func open(_ url: URL) {
         Platform.open(url)
@@ -235,7 +242,8 @@ enum ProgramViews {
         case .svg, .math: ProgramSceneView()
         case .flashcard: ProgramFlashcardView()
         case .celebration: ProgramCelebrationView()
-        case .map, .youTube, .htmlView: ProgramCardView()
+        case .map: ProgramCardView()
+        case .youTube, .htmlView: ProgramWebView()
         case .spacer, .mapMarker, .g, .circle, .ellipse, .rect, .line, .path, .polyline, .polygon, .svgText: ProgramNodeView()
         }
     }

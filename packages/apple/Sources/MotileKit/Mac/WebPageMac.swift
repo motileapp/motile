@@ -2,6 +2,14 @@
 import AppKit
 import WebKit
 
+/// A web view that leaves the wheel to the transcript around it, since its page is as tall as it is
+/// shown.
+final class PageWebView: WKWebView {
+    override func scrollWheel(with event: NSEvent) {
+        nextResponder?.scrollWheel(with: event)
+    }
+}
+
 extension WKWebView {
     /// Shows the view behind it until the page draws its own background.
     func clearsBackground() {

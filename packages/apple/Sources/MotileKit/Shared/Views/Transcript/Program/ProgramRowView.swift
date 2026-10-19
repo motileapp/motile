@@ -88,6 +88,15 @@ final class ProgramRowView: RowView, ProgramHost {
         guard let owner else { return done(nil) }
         owner.media(id: id, done: done)
     }
+
+    func resized(_ node: String) {
+        content?.cache.forget(node)
+        owner?.rowResized(id: rowID)
+    }
+
+    override func recycled() {
+        root?.leave()
+    }
 }
 
 #if DEBUG
