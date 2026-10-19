@@ -231,6 +231,14 @@ fn types_into_a_bound_field() {
 }
 
 #[test]
+fn a_field_bound_to_null_is_empty() {
+    let mut thread = Thread::of("$price = null\nroot = Col([Input($price, \"Price\", \"number\")])");
+    thread.ui(PROGRAM);
+    let field = find(&thread.tree(), "Input", "Price").unwrap();
+    assert_eq!(node(&thread.tree(), &field)["value"], "");
+}
+
+#[test]
 fn keeps_an_unbound_field_under_its_label() {
     let mut thread = Thread::of("root = Col([Input(\"\", \"Name\"), Checkbox(false, \"Done\")])");
     thread.ui(PROGRAM);

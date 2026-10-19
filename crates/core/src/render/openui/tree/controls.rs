@@ -20,7 +20,7 @@ pub(super) fn number_text(value: f64) -> String {
 
 /// A field's value as text: `String(value ?? "")`.
 fn shown(value: Option<&Value>) -> String {
-    value.map(js::to_string).unwrap_or_default()
+    value.filter(|value| !value.is_null()).map(js::to_string).unwrap_or_default()
 }
 
 fn label(element: &Element) -> Option<String> {
