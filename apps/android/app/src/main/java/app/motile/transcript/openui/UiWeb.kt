@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -190,7 +193,7 @@ private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, on
         factory = { context -> sandboxed(context, opensYouTube) },
         modifier = modifier,
         update = { view ->
-            if (view.tag == page) return@AndroidView
+            if (view.tag == page || view.tag === Gone) return@AndroidView
             view.tag = page
             if (onHeight != null && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
                 WebViewCompat.removeWebMessageListener(view, page.handler)
@@ -202,6 +205,7 @@ private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, on
             view.loadDataWithBaseURL(page.base, page.html, "text/html", "utf-8", null)
         },
         onRelease = { view ->
+            if (view.tag === Gone) return@AndroidView
             (view.webChromeClient as? FullScreenChrome)?.leave()
             view.destroy()
         },
@@ -223,7 +227,7 @@ private fun sandboxed(context: Context, opensYouTube: Boolean): WebView = WebVie
         setGeolocationEnabled(false)
         mediaPlaybackRequiresUserGesture = true
     }
-    webChromeClient = FullScreenChrome(context)
+    webChromeClient = if (opensYouTube) FullScreenChrome(context) else Chrome()
     webViewClient = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             if (!request.isForMainFrame) return !opensYouTube
@@ -231,6 +235,37 @@ private fun sandboxed(context: Context, opensYouTube: Boolean): WebView = WebVie
             if (opensYouTube && request.hasGesture() && url.scheme == "https" && url.host?.let(::isYouTube) == true) Platform.open(url.toString())
             return true
         }
+
+        /** A page whose renderer crashed or was killed goes, instead of taking the app with it. */
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            (view.webChromeClient as? FullScreenChrome)?.leave()
+            view.tag = Gone
+            (view.parent as? ViewGroup)?.removeView(view)
+            view.destroy()
+            return true
+        }
+    }
+}
+
+/** What a web view's tag is once its renderer is gone: the view is destroyed. */
+private object Gone
+
+/** A page shows no dialogs and doesn't go full screen. */
+private open class Chrome : WebChromeClient() {
+    override fun onJsAlert(view: WebView, url: String?, message: String?, result: JsResult): Boolean = refuse(result)
+
+    override fun onJsConfirm(view: WebView, url: String?, message: String?, result: JsResult): Boolean = refuse(result)
+
+    override fun onJsPrompt(view: WebView, url: String?, message: String?, defaultValue: String?, result: JsPromptResult): Boolean =
+        refuse(result)
+
+    override fun onJsBeforeUnload(view: WebView, url: String?, message: String?, result: JsResult): Boolean = refuse(result)
+
+    override fun onShowCustomView(view: View, callback: CustomViewCallback) = callback.onCustomViewHidden()
+
+    private fun refuse(result: JsResult): Boolean {
+        result.cancel()
+        return true
     }
 }
 
@@ -238,7 +273,7 @@ private fun sandboxed(context: Context, opensYouTube: Boolean): WebView = WebVie
  * Shows what the page puts full screen, the player's video, over the whole app with the system's
  * bars hidden, as a browser does, until the player leaves it or the back gesture does.
  */
-private class FullScreenChrome(private val context: Context) : WebChromeClient() {
+private class FullScreenChrome(private val context: Context) : Chrome() {
     private var shown: View? = null
     private var callback: CustomViewCallback? = null
     private var back: OnBackPressedCallback? = null
