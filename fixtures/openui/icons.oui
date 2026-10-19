@@ -1,0 +1,1 @@
+root = Card([Row([Icon("sparkles", "sm"), Icon("map-pin"), Icon("camera", "lg"), Icon("bike", "xl"), Icon("heart", "lg", "danger"), Icon("check-circle", "lg", "success"), Icon("info", "lg", "info"), Icon("alert-triangle", "lg", "warning"), Icon("no-such-icon", "lg")], 4, null, null, true)])

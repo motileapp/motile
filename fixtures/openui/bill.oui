@@ -1,0 +1,23 @@
+root = Card([head, people, addPerson, Divider(), itemsHead, items, addItem, Divider(), rates, summary], null, 5, 4)
+$mode = "item"
+$people = ["You", "Alex", "Sam", "Jordan"]
+$items = [{name: "Burrata & sourdough", amount: 18, people: ["You", "Alex", "Sam", "Jordan"]}, {name: "Mains", amount: 96, people: ["You", "Alex", "Sam", "Jordan"]}, {name: "A bottle of red", amount: 42, people: ["You", "Alex", "Jordan"]}]
+$name = ""
+$itemName = ""
+$itemAmount = null
+$tax = 8.5
+$tip = 20
+head = Row([Col([Title("The check, please", "lg"), Text($mode == "item" ? "Tap names on an item to say who shared it." : "Everyone pays the same share.", "sm", "muted")], 1), Spacer(), SegmentedControl($mode, [{value: "item", label: "By item"}, {value: "equal", label: "Equally"}])], 3, null, null, true)
+people = Row(@Each($people, "p", Button(p, Action([@Set($people, @Remove($people, "", p)), @Set($items, @Each($items, "it", {name: it.name, amount: it.amount, people: @Remove(it.people, "", p)}))]), "soft", null, "sm", "x")), 2, null, null, true)
+addPerson = Row([Input($name, null, "text", "Add a person"), Button("Add", Action([@Set($people, @Append($people, $name)), @Set($items, @Each($items, "it", {name: it.name, amount: it.amount, people: @Append(it.people, $name)})), @Reset($name)]), "outline", null, null, "user-plus", $name == "" || @Includes($people, $name))], 2)
+itemsHead = Row([Title("Items", "md"), Spacer(), Text(@Format(subtotal, "currency"), "sm", "muted", "medium", false, false, true)])
+items = Col(@Each($items, "it", Card([Row([Text(it.name, "sm", null, "semibold"), Spacer(), Text(@Format(it.amount, "currency"), "sm", null, "medium", false, false, true), IconButton("trash-2", @Set($items, @Remove($items, "name", it.name)), "Remove " + it.name, "ghost")], 2), $mode == "item" ? Row(@Each($people, "p", Button(p, @Set($items, @Update($items, "name", it.name, "people", @Toggle(it.people, p))), @Includes(it.people, p) ? "solid" : "outline", null, "sm", @Includes(it.people, p) ? "check" : null)), 1, null, null, true) : null], null, 3, 2)), 2)
+addItem = Row([Input($itemName, null, "text", "Item"), Input($itemAmount, null, "number", "Price"), Button("Add item", Action([@Set($items, @Append($items, {name: $itemName, amount: $itemAmount, people: $people})), @Reset($itemName, $itemAmount)]), "outline", null, null, "plus", $itemName == "" || $itemAmount <= 0)], 2)
+rates = Grid([Slider($tax, 0, 15, 0.5, "Tax", "%"), Slider($tip, 0, 30, 1, "Tip", "%")], 2, 220, 6)
+subtotal = @Sum($items.amount)
+factor = 1 + ($tax + $tip) / 100
+unassigned = $mode == "equal" ? 0 : @Sum(@Each($items, "it", @Count(it.people) == 0 ? it.amount : 0))
+raw = @Each($people, "p", factor * ($mode == "equal" ? subtotal / @Max([@Count($people), 1]) : @Sum(@Each($items, "it", @Includes(it.people, p) ? it.amount / @Count(it.people) : 0))))
+cents = @Sum(raw) > 0 ? @Allocate(@Round(@Sum(raw), 2), raw) : raw
+shares = @Each(@Range(0, @Count($people)), "i", {name: $people[i], amount: cents[i]})
+summary = Card([Col(@Each(shares, "s", Row([Text(s.name), Spacer(), Text(@Format(s.amount, "currency"), null, null, "semibold", false, false, true)])), 2), Divider(), Row([Text("Total with tax and tip", "sm", "muted"), Spacer(), Title(@Format(subtotal * factor, "currency"), "lg")]), unassigned > 0 ? Text(@Format(unassigned, "currency") + " is not assigned to anyone yet.", "xs", "warning") : null, Button("Copy the split", @CopyToClipboard(@Join(@Each(shares, "s", s.name + ": " + @Format(s.amount, "currency")), "\n")), "solid", null, "sm", "copy")], "soft", 4, 3)

@@ -1,0 +1,723 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "The central limit theorem",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_lg",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Different populations. The same bell-shaped pattern.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        4.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "radio_group"
+      },
+      "component": "SegmentedControl",
+      "value": "Skewed",
+      "options": [
+        {
+          "value": "Skewed",
+          "label": "Skewed",
+          "description": null
+        },
+        {
+          "value": "Uniform",
+          "label": "Uniform",
+          "description": null
+        },
+        {
+          "value": "Bimodal",
+          "label": "Bimodal",
+          "description": null
+        }
+      ],
+      "selected": 0,
+      "block": false,
+      "disabled": null
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 4
+              },
+              "component": "Title",
+              "text": {
+                "text": "Population",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_sm",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "The values we draw from",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/2/children/0/children/2",
+              "a11y": {
+                "role": "image",
+                "label": "bar chart of value by key"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "bar",
+                  "data": [
+                    {
+                      "key": "0",
+                      "value": 74,
+                      "start": 0,
+                      "end": 0.05
+                    },
+                    {
+                      "key": "0.05",
+                      "value": 19,
+                      "start": 0.05,
+                      "end": 0.1
+                    },
+                    {
+                      "key": "0.1",
+                      "value": 13,
+                      "start": 0.1,
+                      "end": 0.15000000000000002
+                    },
+                    {
+                      "key": "0.15",
+                      "value": 11,
+                      "start": 0.15000000000000002,
+                      "end": 0.2
+                    },
+                    {
+                      "key": "0.2",
+                      "value": 9,
+                      "start": 0.2,
+                      "end": 0.25
+                    },
+                    {
+                      "key": "0.25",
+                      "value": 8,
+                      "start": 0.25,
+                      "end": 0.3
+                    },
+                    {
+                      "key": "0.3",
+                      "value": 7,
+                      "start": 0.30000000000000004,
+                      "end": 0.35000000000000003
+                    },
+                    {
+                      "key": "0.35",
+                      "value": 6,
+                      "start": 0.35000000000000003,
+                      "end": 0.4
+                    },
+                    {
+                      "key": "0.4",
+                      "value": 6,
+                      "start": 0.4,
+                      "end": 0.45
+                    },
+                    {
+                      "key": "0.45",
+                      "value": 6,
+                      "start": 0.45,
+                      "end": 0.5
+                    },
+                    {
+                      "key": "0.5",
+                      "value": 5,
+                      "start": 0.5,
+                      "end": 0.55
+                    },
+                    {
+                      "key": "0.55",
+                      "value": 5,
+                      "start": 0.55,
+                      "end": 0.6000000000000001
+                    },
+                    {
+                      "key": "0.6",
+                      "value": 4,
+                      "start": 0.6000000000000001,
+                      "end": 0.6500000000000001
+                    },
+                    {
+                      "key": "0.65",
+                      "value": 5,
+                      "start": 0.65,
+                      "end": 0.7000000000000001
+                    },
+                    {
+                      "key": "0.7",
+                      "value": 4,
+                      "start": 0.7000000000000001,
+                      "end": 0.7500000000000001
+                    },
+                    {
+                      "key": "0.75",
+                      "value": 4,
+                      "start": 0.75,
+                      "end": 0.8
+                    },
+                    {
+                      "key": "0.8",
+                      "value": 3,
+                      "start": 0.8,
+                      "end": 0.8500000000000001
+                    },
+                    {
+                      "key": "0.85",
+                      "value": 4,
+                      "start": 0.8500000000000001,
+                      "end": 0.9000000000000001
+                    },
+                    {
+                      "key": "0.9",
+                      "value": 4,
+                      "start": 0.9,
+                      "end": 0.9500000000000001
+                    },
+                    {
+                      "key": "0.95",
+                      "value": 3,
+                      "start": 0.9500000000000001,
+                      "end": 1
+                    }
+                  ],
+                  "x": "key",
+                  "series": [
+                    "value"
+                  ],
+                  "stacked": false,
+                  "height": 150
+                }
+              }
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/2/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/2/children/1/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 4
+              },
+              "component": "Title",
+              "text": {
+                "text": "Sample means",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_sm",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "The average of each sample of 5",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/2/children/1/children/2",
+              "component": "Box",
+              "children": [
+                {
+                  "id": "children/2/children/1/children/2/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Draw samples to see the pattern",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "muted-foreground",
+                  "weight": "regular",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [
+                0.0
+              ],
+              "sizing": [],
+              "padding": 24.0,
+              "background": {
+                "surface": "box"
+              },
+              "inner_surface": true,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "border": true,
+              "width": {
+                "unit": "fraction",
+                "value": 1.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 150.0
+              },
+              "flex": null,
+              "align": "center",
+              "justify": "center",
+              "wrap": false
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 260.0,
+      "gap": 16.0
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "adjustable",
+        "label": "Values per sample",
+        "value": "5"
+      },
+      "component": "Slider",
+      "value": 5.0,
+      "min": 1.0,
+      "max": 50.0,
+      "step": 1.0,
+      "at": 0.08163265306122448,
+      "label": "Values per sample",
+      "readout": "5",
+      "head": true,
+      "marks": [],
+      "disabled": null
+    },
+    {
+      "id": "children/4",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Draw 100 samples"
+          },
+          "component": "Button",
+          "label": "Draw 100 samples",
+          "variant": "primary",
+          "tint": null,
+          "size": "regular",
+          "icon": {
+            "name": "dices",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/4/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Draw 500"
+          },
+          "component": "Button",
+          "label": "Draw 500",
+          "variant": "outline",
+          "tint": null,
+          "size": "regular",
+          "icon": null,
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/4/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Reset"
+          },
+          "component": "Button",
+          "label": "Reset",
+          "variant": "ghost",
+          "tint": null,
+          "size": "regular",
+          "icon": {
+            "name": "rotate-ccw",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/5",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/5/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/5/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Samples",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/0/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "0",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": true,
+          "nested": true,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/5/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/5/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Mean of the means",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/1/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "-",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            },
+            {
+              "id": "children/5/children/1/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Population: 0.25",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "soft": true,
+          "nested": true,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/5/children/2",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/5/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Spread of the means",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/2/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "-",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            },
+            {
+              "id": "children/5/children/2/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Theory, σ/√n: 0.127",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "soft": true,
+          "nested": true,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 140.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "As the sample size grows, the averages of samples pile up in a bell shape around the population mean, even when the population itself is skewed.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/7",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/7/children/0",
+          "a11y": {
+            "role": "radio_group",
+            "label": "What changes when the sample size grows?"
+          },
+          "component": "RadioGroup",
+          "value": "",
+          "options": [
+            {
+              "value": "a",
+              "label": "The population becomes normal",
+              "description": null
+            },
+            {
+              "value": "b",
+              "label": "The sample means form a narrower bell shape",
+              "description": null
+            },
+            {
+              "value": "c",
+              "label": "Every mean becomes exactly the same",
+              "description": null
+            }
+          ],
+          "selected": null,
+          "label": "What changes when the sample size grows?",
+          "variant": "list",
+          "error": null,
+          "disabled": null
+        }
+      ],
+      "soft": true,
+      "nested": true,
+      "padding": 16.0,
+      "spacing": [
+        0.0
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": 20.0,
+  "spacing": [
+    0.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0
+  ]
+}

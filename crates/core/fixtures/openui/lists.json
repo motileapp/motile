@@ -1,0 +1,377 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "Sunday cooking schedule",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_heading",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Assuming you serve at 2:00 PM.",
+        "runs": [
+          [
+            22,
+            7,
+            1
+          ]
+        ],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "list"
+      },
+      "component": "List",
+      "items": [
+        {
+          "id": "children/2/items/0",
+          "a11y": {
+            "role": "list_item"
+          },
+          "component": "ListItem",
+          "title": {
+            "text": "Prepare everything",
+            "runs": [],
+            "links": []
+          },
+          "style": "body_card",
+          "medium": true,
+          "description": {
+            "text": "Season the lamb, peel the potatoes and trim the beans.",
+            "runs": [],
+            "links": []
+          },
+          "marker": {
+            "kind": "label",
+            "text": "10:45 AM"
+          },
+          "children": []
+        },
+        {
+          "id": "children/2/items/1",
+          "a11y": {
+            "role": "list_item"
+          },
+          "component": "ListItem",
+          "title": {
+            "text": "Start roasting",
+            "runs": [],
+            "links": []
+          },
+          "style": "body_card",
+          "medium": true,
+          "description": {
+            "text": "The lamb goes into a 200°C oven until it reaches 60°C inside.",
+            "runs": [],
+            "links": []
+          },
+          "marker": {
+            "kind": "label",
+            "text": "11:15 AM"
+          },
+          "children": []
+        },
+        {
+          "id": "children/2/items/2",
+          "a11y": {
+            "role": "list_item"
+          },
+          "component": "ListItem",
+          "title": {
+            "text": "Potatoes in",
+            "runs": [],
+            "links": []
+          },
+          "style": "body_card",
+          "medium": true,
+          "description": {
+            "text": "Parboil for 10 minutes, rough up the edges and roast in hot oil.",
+            "runs": [],
+            "links": []
+          },
+          "marker": {
+            "kind": "label",
+            "text": "12:00 PM"
+          },
+          "children": []
+        },
+        {
+          "id": "children/2/items/3",
+          "a11y": {
+            "role": "list_item"
+          },
+          "component": "ListItem",
+          "title": {
+            "text": "Rest and carve",
+            "runs": [],
+            "links": []
+          },
+          "style": "body_card",
+          "medium": true,
+          "description": {
+            "text": "Rest the lamb for 20 minutes while the gravy simmers.",
+            "runs": [],
+            "links": []
+          },
+          "marker": {
+            "kind": "label",
+            "text": "1:30 PM"
+          },
+          "children": []
+        }
+      ],
+      "marker": "plain",
+      "timeline": true,
+      "wide": true
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "hidden"
+      },
+      "component": "Divider"
+    },
+    {
+      "id": "children/4",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/4/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 4
+              },
+              "component": "Title",
+              "text": {
+                "text": "Packing",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_sm",
+              "color": "foreground"
+            },
+            {
+              "id": "children/4/children/0/children/1",
+              "a11y": {
+                "role": "list"
+              },
+              "component": "List",
+              "items": [
+                {
+                  "id": "children/4/children/0/children/1/items/0",
+                  "a11y": {
+                    "role": "list_item"
+                  },
+                  "component": "ListItem",
+                  "title": {
+                    "text": "Light rain jacket",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "body_card",
+                  "medium": false,
+                  "description": null,
+                  "marker": {
+                    "kind": "dot"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "children/4/children/0/children/1/items/1",
+                  "a11y": {
+                    "role": "list_item"
+                  },
+                  "component": "ListItem",
+                  "title": {
+                    "text": "Comfortable shoes",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "body_card",
+                  "medium": false,
+                  "description": null,
+                  "marker": {
+                    "kind": "dot"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "children/4/children/0/children/1/items/2",
+                  "a11y": {
+                    "role": "list_item"
+                  },
+                  "component": "ListItem",
+                  "title": {
+                    "text": "A reusable bottle",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "body_card",
+                  "medium": false,
+                  "description": null,
+                  "marker": {
+                    "kind": "dot"
+                  },
+                  "children": []
+                }
+              ],
+              "marker": "bullet",
+              "timeline": false,
+              "wide": false
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/4/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/4/children/1/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 4
+              },
+              "component": "Title",
+              "text": {
+                "text": "Steps",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_sm",
+              "color": "foreground"
+            },
+            {
+              "id": "children/4/children/1/children/1",
+              "a11y": {
+                "role": "list"
+              },
+              "component": "List",
+              "items": [
+                {
+                  "id": "children/4/children/1/children/1/items/0",
+                  "a11y": {
+                    "role": "list_item"
+                  },
+                  "component": "ListItem",
+                  "title": {
+                    "text": "Choose a direction",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "body_card",
+                  "medium": false,
+                  "description": null,
+                  "marker": {
+                    "kind": "number",
+                    "number": 1
+                  },
+                  "children": []
+                },
+                {
+                  "id": "children/4/children/1/children/1/items/1",
+                  "a11y": {
+                    "role": "list_item"
+                  },
+                  "component": "ListItem",
+                  "title": {
+                    "text": "Explore the answer",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "body_card",
+                  "medium": false,
+                  "description": null,
+                  "marker": {
+                    "kind": "number",
+                    "number": 2
+                  },
+                  "children": []
+                },
+                {
+                  "id": "children/4/children/1/children/1/items/2",
+                  "a11y": {
+                    "role": "list_item"
+                  },
+                  "component": "ListItem",
+                  "title": {
+                    "text": "Keep the conversation going",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "body_card",
+                  "medium": false,
+                  "description": null,
+                  "marker": {
+                    "kind": "number",
+                    "number": 3
+                  },
+                  "children": []
+                }
+              ],
+              "marker": "number",
+              "timeline": false,
+              "wide": false
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 240.0,
+      "gap": 24.0
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    8.0,
+    12.0,
+    12.0,
+    16.0
+  ]
+}

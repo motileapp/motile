@@ -199,7 +199,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
 pub async fn call(hub: &Hub, thread_id: &str, tool: &str, args: Value, confirmed: bool) -> Result<Value, Failure> {
     let thread = hub.thread(thread_id).await.context("That thread isn't one of your server's own.")?;
     let folder = Folder { cwd: &thread.cwd, access: thread.access, environment: hub.environment() };
-    let args = if args.is_null() { json!({}) } else { args };
+    let args = if args.is_null() { json!({}) } else { coerced(tool, args) };
     match tool {
         "list_files" => Ok(list_files(&folder, &path_of(args)?).await?),
         "read_file" => Ok(read_file(&folder, &arguments::<Path>(args)?.path)?),
@@ -269,6 +269,47 @@ struct Query {
 #[derive(Deserialize)]
 struct Command {
     command: String,
+}
+
+/// The arguments as a JavaScript host would pass them: a number or a boolean written as text
+/// becomes the one the tool's schema asks for. What doesn't read as one is left for the tool to refuse.
+fn coerced(tool: &str, args: Value) -> Value {
+    let Value::Object(mut fields) = args else { return args };
+    let Some(definition) = definitions().into_iter().find(|definition| definition.name == tool) else {
+        return Value::Object(fields);
+    };
+    let Some(properties) = definition.input_schema["properties"].as_object() else { return Value::Object(fields) };
+    for (name, value) in &mut fields {
+        let Some(kind) = properties.get(name).and_then(|property| property["type"].as_str()) else { continue };
+        if let Some(read) = read_as(kind, value) {
+            *value = read;
+        }
+    }
+    Value::Object(fields)
+}
+
+fn read_as(kind: &str, value: &Value) -> Option<Value> {
+    let number = match (kind, value) {
+        ("boolean", Value::String(text)) => {
+            return match text.as_str() {
+                "true" => Some(Value::Bool(true)),
+                "false" => Some(Value::Bool(false)),
+                _ => None,
+            };
+        }
+        ("integer" | "number", Value::String(text)) if !text.trim().is_empty() => {
+            motile_openui::js::string_to_number(text)
+        }
+        ("integer", Value::Number(number)) if number.is_f64() => number.as_f64()?,
+        _ => return None,
+    };
+    if !number.is_finite() {
+        return None;
+    }
+    if kind == "integer" {
+        return (number.fract() == 0.0).then(|| json!(number as i64));
+    }
+    serde_json::Number::from_f64(number).map(Value::Number)
 }
 
 fn arguments<T: DeserializeOwned>(args: Value) -> anyhow::Result<T> {
@@ -712,6 +753,26 @@ mod tests {
                     "status": "Todo", "status_type": "unstarted", "priority": 2, "assignee": "Ada", "labels": ["Bug"],
                     "updated_at": "1970-01-01T00:00:00Z" })
         );
+    }
+
+    #[test]
+    fn arguments_take_numbers_and_booleans_written_as_text() {
+        let days = |args: Value| arguments::<Days>(coerced("usage", args)).map(|days| days.days);
+        assert_eq!(days(json!({ "days": "14" })).unwrap(), Some(14));
+        assert_eq!(days(json!({ "days": " 7 " })).unwrap(), Some(7));
+        assert_eq!(days(json!({ "days": 14.0 })).unwrap(), Some(14));
+        assert_eq!(days(json!({})).unwrap(), None);
+        for wrong in
+            [json!({ "days": "two weeks" }), json!({ "days": "" }), json!({ "days": "1.5" }), json!({ "days": true })]
+        {
+            assert!(days(wrong).is_err());
+        }
+        let number = arguments::<Number>(coerced("pull_request", json!({ "number": "42" }))).unwrap();
+        assert_eq!(number.number, 42);
+        assert_eq!(read_as("boolean", &json!("true")), Some(json!(true)));
+        assert_eq!(read_as("boolean", &json!("yes")), None);
+        assert_eq!(read_as("number", &json!("2.5")), Some(json!(2.5)));
+        assert_eq!(coerced("read_file", json!({ "path": "12" })), json!({ "path": "12" }));
     }
 
     #[test]

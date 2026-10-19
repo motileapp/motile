@@ -185,12 +185,30 @@ extension PlatformImage {
     }
 
     private static func glyph(_ symbol: Symbol, side: CGFloat) -> CGPath? {
+        glyph(character: symbol.rawValue, side: side)
+    }
+
+    private static func glyph(character: String, side: CGFloat) -> CGPath? {
         guard let symbolFont else { return nil }
         let font = CTFontCreateWithFontDescriptor(symbolFont, side, nil)
-        var character = Array(symbol.rawValue.utf16)
+        var character = Array(character.utf16)
+        guard character.count == 1 else { return nil }
         var glyph = CGGlyph()
         guard CTFontGetGlyphsForCharacters(font, &character, &glyph, 1) else { return nil }
         return CTFontCreatePathForGlyph(font, glyph, nil)
+    }
+
+    /// Any of Lucide's icons by its character in the font, drawn in a square `side` wide, which a
+    /// view tints. A program names icons the apps' own `Symbol` doesn't have.
+    static func lucide(_ character: String, side: CGFloat) -> PlatformImage {
+        let side = side.rounded()
+        let key = "lucide/\(character)/\(side)"
+        symbolLock.lock()
+        defer { symbolLock.unlock() }
+        if let made = symbols[key] { return made }
+        let made = glyph(character: character, side: side).map { drawn($0, box: CGRect(x: 0, y: 0, width: side, height: side)) } ?? PlatformImage()
+        symbols[key] = made
+        return made
     }
 
     private static let linearLogo = "M2.3 14.4 9.6 21.7a10 10 0 0 1-7.3-7.3ZM2 11.4 12.6 22a10 10 0 0 0 2.6-.6L2.6 8.8a10 10 0 0 0-.6 2.6ZM3.3 7 17 20.7a10 10 0 0 0 1.9-1.4L4.7 5.1A10 10 0 0 0 3.3 7ZM5.8 3.8a10 10 0 0 1 14.4 14.4Z"
@@ -231,7 +249,10 @@ extension PlatformImage {
 
     private static func drawn(_ symbol: Symbol, side: CGFloat, trimmed: Bool) -> PlatformImage {
         guard let path = outline(symbol, side: side) else { return PlatformImage() }
-        let box = trimmed ? path.boundingBoxOfPath.integral : CGRect(x: 0, y: 0, width: side, height: side)
+        return drawn(path, box: trimmed ? path.boundingBoxOfPath.integral : CGRect(x: 0, y: 0, width: side, height: side))
+    }
+
+    private static func drawn(_ path: CGPath, box: CGRect) -> PlatformImage {
         #if os(macOS)
         let image = NSImage(size: box.size, flipped: false) { _ in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }

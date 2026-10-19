@@ -42,6 +42,10 @@ struct TranscriptRepresentable {
         view.canFetchAgain = { store.openThreadRemovedServer == nil }
         view.onContinueElsewhere = { store.continueOnAnotherServer() }
         view.onOpenServerSettings = { store.openSettings(.servers) }
+        view.onProgramEvent = { rowID, node, event in
+            guard let threadID = model.threadID else { return }
+            store.programEvent(threadID: threadID, rowID: rowID, node: node, event: event)
+        }
         if !ofAgent {
             view.onNeedEarlier = { done in
                 guard let threadID = model.threadID else { return done() }

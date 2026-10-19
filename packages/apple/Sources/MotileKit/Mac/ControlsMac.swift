@@ -5,6 +5,7 @@ import AppKit
 /// A click anywhere on the fill puts the cursor in it.
 final class FieldView: FlippedView, NSTextFieldDelegate {
     let size: ControlSize
+    let numeric: Bool
     var text: String {
         get { field.stringValue }
         set {
@@ -21,6 +22,8 @@ final class FieldView: FlippedView, NSTextFieldDelegate {
         }
     }
     var onChange: (String) -> Void
+    /// The user is typing in it.
+    var editing: Bool { field.currentEditor() != nil }
 
     private let frameView = SurfaceView()
     private let field = NSTextField()
@@ -29,6 +32,7 @@ final class FieldView: FlippedView, NSTextFieldDelegate {
     init(placeholder: String, size: ControlSize = .regular, numeric: Bool = false, onChange: @escaping (String) -> Void) {
         self.placeholder = placeholder
         self.size = size
+        self.numeric = numeric
         self.onChange = onChange
         super.init(frame: .zero)
         frameView.radius = size.radius
@@ -99,6 +103,8 @@ final class TextAreaView: FlippedView, NSTextViewDelegate {
         }
     }
     var onChange: (String) -> Void
+    /// The user is typing in it.
+    var editing: Bool { window?.firstResponder === textView }
 
     private let frameView = SurfaceView()
     private let scroll = NSScrollView()

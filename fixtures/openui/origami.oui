@@ -1,0 +1,17 @@
+root = Col([head, viewer, Title("All six steps", "md"), strip, tip])
+$step = 0
+head = Col([Title("Fold an origami fox", "xl"), Text("A simple fox face from one square of paper: no cutting, about five minutes. Orange on one side and white on the other works best.", "md", "muted"), Row([Badge("Beginner", "success"), Badge("5 minutes", "info"), Badge("One square sheet", "neutral")], 2, null, null, true)], 2)
+steps = [{title: "Start with a diamond", text: "Place the square white side up, with a corner pointing at you."}, {title: "Fold it in half", text: "Fold the top corner down to the bottom corner to make a triangle. Crease well."}, {title: "Corners to the point", text: "Fold the left and right corners down to the bottom point, making a small diamond."}, {title: "Make the ears", text: "Fold each flap's bottom tip back up and out past the top edge. These are the ears."}, {title: "Fold the forehead", text: "Fold the top point down a little to give the fox a flat forehead."}, {title: "Turn over and add a face", text: "Turn the paper over. Draw two eyes and a nose near the bottom point."}]
+o = "#F28C38"
+w = "#FBE6D2"
+e = "#B85E1C"
+d0 = Svg([Polygon("100,20 180,100 100,180 20,100", w, e, 2), Line(20, 100, 180, 100, e, 1.5, 0.5), Line(100, 34, 100, 156, e, 2, 0.8), Polygon("93,150 107,150 100,164", e)], "0 0 200 200")
+d1 = Svg([Polygon("20,100 180,100 100,180", o, e, 2), Line(100, 100, 100, 180, e, 1.5, 0.5)], "0 0 200 200")
+d2 = Svg([Polygon("100,100 60,140 100,180 140,140", w, e, 2), Line(100, 100, 100, 180, e, 1.5)], "0 0 200 200")
+d3 = Svg([Polygon("60,140 100,100 140,140 100,180", o, e, 2), Polygon("62,138 98,124 70,58", w, e, 2), Polygon("138,138 102,124 130,58", w, e, 2)], "0 0 200 200")
+d4 = Svg([Polygon("60,140 80,118 120,118 140,140 100,180", o, e, 2), Polygon("62,138 98,124 70,58", w, e, 2), Polygon("138,138 102,124 130,58", w, e, 2), Polygon("80,118 120,118 100,136", w, e, 1.5)], "0 0 200 200")
+d5 = Svg([Polygon("60,140 80,118 120,118 140,140 100,180", o, e, 2), Polygon("62,138 98,124 70,58", o, e, 2), Polygon("138,138 102,124 130,58", o, e, 2), Polygon("70,124 88,122 74,82", w), Polygon("130,124 112,122 126,82", w), Circle(86, 142, 4.5, "#2B2B2B"), Circle(114, 142, 4.5, "#2B2B2B"), Circle(100, 168, 5, "#2B2B2B")], "0 0 200 200")
+drawings = [d0, d1, d2, d3, d4, d5]
+viewer = Card([Row([Badge("Step " + ($step + 1) + " of 6", "info"), Spacer(), Caption(@Percent($step + 1, 6) + "% folded")], 2), Box([drawings[$step]], null, null, 3, "surface", "lg", null, "100%", null, null, "center", "center"), Title(steps[$step].title, "md"), Text(steps[$step].text, "sm"), Box([Box([], null, null, null, "chart1", "full", null, @Percent($step + 1, 6) + "%", 4)], null, null, null, "border", "full", null, "100%", 4), Row([Button("Back", @Set($step, @Clamp($step - 1, 0, 5)), "outline", null, null, "arrow-left", $step == 0), Spacer(), $step < 5 ? Button("Next fold", @Set($step, $step + 1), "solid", null, null, "arrow-right") : Button("Start again", @Set($step, 0), "solid", null, null, "rotate-ccw")], 2)], null, 4, 3)
+strip = Grid(@Each(@Range(0, 6), "i", Pressable([drawings[i], Caption((i + 1) + ". " + steps[i].title)], @Set($step, i), i == $step, 2)), 6, 96, 2)
+tip = Row([Icon("lightbulb", "sm", "warning"), Text("Sharp creases make the difference: run a fingernail along each fold before the next one.", "sm", "muted")], 2)

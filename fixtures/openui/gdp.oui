@@ -1,0 +1,15 @@
+root = Card([head, Caption("Total output"), total, bar, sliders, reset, Text("GDP = C + I + G + (X − M). Move any slider: the total and the bar follow.", "sm", "muted")])
+$c = 600
+$i = 200
+$g = 170
+$x = 30
+gdp = $c + $i + $g + $x
+head = Row([Col([Title("What makes up GDP?", "lg"), Text("An economy, in four parts.", "sm", "muted")], 1), Spacer(), Badge("Illustrative economy")], 3, "start")
+total = Title("$" + @Round(gdp / 1000, 2) + " trillion", "2xl")
+bar = Box([seg1, seg2, seg3, seg4], "row", 0.5, null, null, "md", null, "100%", 38)
+seg1 = Box([Text("$" + $c + "B", "xs", "#ffffff", "medium")], null, null, null, "chart1", 0, null, null, "100%", $c, "center", "center")
+seg2 = Box([Text("$" + $i + "B", "xs", "#ffffff", "medium")], null, null, null, "chart2", 0, null, null, "100%", $i, "center", "center")
+seg3 = Box([Text("$" + $g + "B", "xs", "#ffffff", "medium")], null, null, null, "chart4", 0, null, null, "100%", $g, "center", "center")
+seg4 = Box([], null, null, null, "chart3", 0, null, null, "100%", $x > 0 ? $x : 0)
+sliders = Grid([Slider($c, 0, 1200, 10, "Consumer spending", "B"), Slider($i, 0, 600, 10, "Business investment", "B"), Slider($g, 0, 500, 10, "Government spending", "B"), Slider($x, -200, 300, 10, "Net exports", "B")], 2, 240, 6)
+reset = Button("Reset economy", @Reset($c, $i, $g, $x), "ghost", null, "sm", "rotate-ccw")

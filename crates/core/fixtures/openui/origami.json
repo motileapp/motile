@@ -1,0 +1,1052 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "Fold an origami fox",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_xl",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "A simple fox face from one square of paper: no cutting, about five minutes. Orange on one side and white on the other works best.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "body",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        },
+        {
+          "id": "children/0/children/2",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/0/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Beginner",
+              "tone": "success",
+              "icon": null
+            },
+            {
+              "id": "children/0/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "5 minutes",
+              "tone": null,
+              "icon": null
+            },
+            {
+              "id": "children/0/children/2/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "One square sheet",
+              "tone": null,
+              "icon": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": true,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        8.0,
+        8.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Badge",
+              "text": "Step 1 of 6",
+              "tone": null,
+              "icon": null
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/1/children/0/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "16.666666666666664% folded",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        },
+        {
+          "id": "children/1/children/1",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "image"
+              },
+              "component": "Svg",
+              "canvas": {
+                "kind": "Svg",
+                "props": {
+                  "children": [
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "100,20 180,100 100,180 20,100",
+                        "fill": "#FBE6D2",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Line",
+                      "props": {
+                        "x1": 20,
+                        "y1": 100,
+                        "x2": 180,
+                        "y2": 100,
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 1.5,
+                        "opacity": 0.5
+                      }
+                    },
+                    {
+                      "kind": "Line",
+                      "props": {
+                        "x1": 100,
+                        "y1": 34,
+                        "x2": 100,
+                        "y2": 156,
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2,
+                        "opacity": 0.8
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "93,150 107,150 100,164",
+                        "fill": "#B85E1C"
+                      }
+                    }
+                  ],
+                  "viewBox": "0 0 200 200"
+                }
+              }
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 12.0,
+          "background": {
+            "surface": "box"
+          },
+          "inner_surface": true,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "border": false,
+          "width": {
+            "unit": "fraction",
+            "value": 1.0
+          },
+          "height": null,
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "heading",
+            "level": 3
+          },
+          "component": "Title",
+          "text": {
+            "text": "Start with a diamond",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_md",
+          "color": "foreground"
+        },
+        {
+          "id": "children/1/children/3",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Place the square white side up, with a corner pointing at you.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        },
+        {
+          "id": "children/1/children/4",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/1/children/4/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": "chart-1",
+              "inner_surface": true,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": false,
+              "width": {
+                "unit": "fraction",
+                "value": 0.16666667
+              },
+              "height": {
+                "unit": "points",
+                "value": 4.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 0.0,
+          "background": {
+            "surface": "border"
+          },
+          "inner_surface": true,
+          "radius": {
+            "kind": "full",
+            "points": 0.0
+          },
+          "border": false,
+          "width": {
+            "unit": "fraction",
+            "value": 1.0
+          },
+          "height": {
+            "unit": "points",
+            "value": 4.0
+          },
+          "flex": null,
+          "align": "stretch",
+          "justify": "start",
+          "wrap": false
+        },
+        {
+          "id": "children/1/children/5",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/1/children/5/children/0",
+              "a11y": {
+                "role": "button",
+                "label": "Back"
+              },
+              "component": "Button",
+              "label": "Back",
+              "variant": "outline",
+              "tint": null,
+              "size": "regular",
+              "icon": {
+                "name": "arrow-left",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": "program"
+            },
+            {
+              "id": "children/1/children/5/children/1",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/1/children/5/children/2",
+              "a11y": {
+                "role": "button",
+                "label": "Next fold"
+              },
+              "component": "Button",
+              "label": "Next fold",
+              "variant": "primary",
+              "tint": null,
+              "size": "regular",
+              "icon": {
+                "name": "arrow-right",
+                "glyph": ""
+              },
+              "block": false,
+              "disabled": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0
+      ]
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "All six steps",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/3",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "1. Start with a diamond",
+            "on": true
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "a11y": {
+                "role": "image"
+              },
+              "component": "Svg",
+              "canvas": {
+                "kind": "Svg",
+                "props": {
+                  "children": [
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "100,20 180,100 100,180 20,100",
+                        "fill": "#FBE6D2",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Line",
+                      "props": {
+                        "x1": 20,
+                        "y1": 100,
+                        "x2": 180,
+                        "y2": 100,
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 1.5,
+                        "opacity": 0.5
+                      }
+                    },
+                    {
+                      "kind": "Line",
+                      "props": {
+                        "x1": 100,
+                        "y1": 34,
+                        "x2": 100,
+                        "y2": 156,
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2,
+                        "opacity": 0.8
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "93,150 107,150 100,164",
+                        "fill": "#B85E1C"
+                      }
+                    }
+                  ],
+                  "viewBox": "0 0 200 200"
+                }
+              }
+            },
+            {
+              "id": "children/3/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "1. Start with a diamond",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": true,
+          "ring": true,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "2. Fold it in half",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/1/children/0",
+              "a11y": {
+                "role": "image"
+              },
+              "component": "Svg",
+              "canvas": {
+                "kind": "Svg",
+                "props": {
+                  "children": [
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "20,100 180,100 100,180",
+                        "fill": "#F28C38",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Line",
+                      "props": {
+                        "x1": 100,
+                        "y1": 100,
+                        "x2": 100,
+                        "y2": 180,
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 1.5,
+                        "opacity": 0.5
+                      }
+                    }
+                  ],
+                  "viewBox": "0 0 200 200"
+                }
+              }
+            },
+            {
+              "id": "children/3/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "2. Fold it in half",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "3. Corners to the point",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/2/children/0",
+              "a11y": {
+                "role": "image"
+              },
+              "component": "Svg",
+              "canvas": {
+                "kind": "Svg",
+                "props": {
+                  "children": [
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "100,100 60,140 100,180 140,140",
+                        "fill": "#FBE6D2",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Line",
+                      "props": {
+                        "x1": 100,
+                        "y1": 100,
+                        "x2": 100,
+                        "y2": 180,
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 1.5
+                      }
+                    }
+                  ],
+                  "viewBox": "0 0 200 200"
+                }
+              }
+            },
+            {
+              "id": "children/3/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "3. Corners to the point",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "4. Make the ears",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/3/children/0",
+              "a11y": {
+                "role": "image"
+              },
+              "component": "Svg",
+              "canvas": {
+                "kind": "Svg",
+                "props": {
+                  "children": [
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "60,140 100,100 140,140 100,180",
+                        "fill": "#F28C38",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "62,138 98,124 70,58",
+                        "fill": "#FBE6D2",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "138,138 102,124 130,58",
+                        "fill": "#FBE6D2",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    }
+                  ],
+                  "viewBox": "0 0 200 200"
+                }
+              }
+            },
+            {
+              "id": "children/3/children/3/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "4. Make the ears",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/4",
+          "a11y": {
+            "role": "button",
+            "label": "5. Fold the forehead",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/4/children/0",
+              "a11y": {
+                "role": "image"
+              },
+              "component": "Svg",
+              "canvas": {
+                "kind": "Svg",
+                "props": {
+                  "children": [
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "60,140 80,118 120,118 140,140 100,180",
+                        "fill": "#F28C38",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "62,138 98,124 70,58",
+                        "fill": "#FBE6D2",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "138,138 102,124 130,58",
+                        "fill": "#FBE6D2",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "80,118 120,118 100,136",
+                        "fill": "#FBE6D2",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 1.5
+                      }
+                    }
+                  ],
+                  "viewBox": "0 0 200 200"
+                }
+              }
+            },
+            {
+              "id": "children/3/children/4/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "5. Fold the forehead",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/3/children/5",
+          "a11y": {
+            "role": "button",
+            "label": "6. Turn over and add a face",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/3/children/5/children/0",
+              "a11y": {
+                "role": "image"
+              },
+              "component": "Svg",
+              "canvas": {
+                "kind": "Svg",
+                "props": {
+                  "children": [
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "60,140 80,118 120,118 140,140 100,180",
+                        "fill": "#F28C38",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "62,138 98,124 70,58",
+                        "fill": "#F28C38",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "138,138 102,124 130,58",
+                        "fill": "#F28C38",
+                        "stroke": "#B85E1C",
+                        "strokeWidth": 2
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "70,124 88,122 74,82",
+                        "fill": "#FBE6D2"
+                      }
+                    },
+                    {
+                      "kind": "Polygon",
+                      "props": {
+                        "points": "130,124 112,122 126,82",
+                        "fill": "#FBE6D2"
+                      }
+                    },
+                    {
+                      "kind": "Circle",
+                      "props": {
+                        "cx": 86,
+                        "cy": 142,
+                        "r": 4.5,
+                        "fill": "#2B2B2B"
+                      }
+                    },
+                    {
+                      "kind": "Circle",
+                      "props": {
+                        "cx": 114,
+                        "cy": 142,
+                        "r": 4.5,
+                        "fill": "#2B2B2B"
+                      }
+                    },
+                    {
+                      "kind": "Circle",
+                      "props": {
+                        "cx": 100,
+                        "cy": 168,
+                        "r": 5,
+                        "fill": "#2B2B2B"
+                      }
+                    }
+                  ],
+                  "viewBox": "0 0 200 200"
+                }
+              }
+            },
+            {
+              "id": "children/3/children/5/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "6. Turn over and add a face",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "padding": 8.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "columns": 6,
+      "min_child_width": 96.0,
+      "gap": 8.0
+    },
+    {
+      "id": "children/4",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "lightbulb",
+            "glyph": ""
+          },
+          "size": 14.0,
+          "color": "warning"
+        },
+        {
+          "id": "children/4/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "Sharp creases make the difference: run a fingernail along each fold before the next one.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0
+  ]
+}

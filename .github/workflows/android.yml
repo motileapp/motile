@@ -59,3 +59,29 @@ jobs:
 
       - name: Lint and test
         run: ./gradlew -Pmotile.skipCore lintDebug testDebugUnitTest assembleDebug
+
+      # The tests laid the corpus out (ProgramFramesTest): its frames against iOS's.
+      - name: Compare the frames with iOS's
+        working-directory: .
+        run: cargo run -q --release -p motile-core --example compare_frames -- crates/core/fixtures/frames/ios build/frames/android --mobile --known crates/core/fixtures/frames/known.txt
+
+      - name: Lay the pictures side by side
+        if: always()
+        working-directory: .
+        run: cargo run -q --release -p motile-core --example program_sheet -- build/programs/sheets
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canvas-android
+          path: build/canvas/android
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: programs-android
+          path: |
+            build/frames/android
+            build/programs
+          if-no-files-found: ignore

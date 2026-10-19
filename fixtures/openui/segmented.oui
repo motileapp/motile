@@ -1,0 +1,9 @@
+root = Card([head, body, summary])
+$mode = "item"
+$people = 4
+$tip = 18
+head = Row([Title("What are you splitting?", "md"), Spacer(), SegmentedControl($mode, [{value: "item", label: "By item"}, {value: "equal", label: "Equally"}])], 3, null, null, true)
+body = $mode == "item" ? items : equal
+items = Col([Row([Text("Burrata & sourdough"), Spacer(), Text("$18", null, null, "medium", null, null, true)]), Row([Text("Mains"), Spacer(), Text("$96", null, null, "medium", null, null, true)]), Row([Text("A bottle of red"), Spacer(), Text("$42", null, null, "medium", null, null, true)])], 3)
+equal = Grid([Input($people, "People at the table", "number"), Slider($tip, 0, 30, 1, "Tip", "%", [{value: 0, label: "None"}, {value: 15, label: "15%"}, {value: 30, label: "30%"}])], 2, 220, 6)
+summary = Card([Row([Text("Total with tip"), Spacer(), Title("$" + @Round(156 * (1 + $tip / 100), 2), "lg")]), Row([Text("Each of " + $people, "sm", "muted"), Spacer(), Text("$" + @Round(156 * (1 + $tip / 100) / ($people > 0 ? $people : 1), 2), "sm", null, "medium", null, null, true)])], "soft", null, 2)

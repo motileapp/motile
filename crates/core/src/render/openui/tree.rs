@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use motile_openui::Value;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub use super::canvas::scene::{Color, Layer};
 use crate::render::highlight::Spans;
@@ -24,11 +24,11 @@ mod tests;
 mod text;
 
 pub use icons::glyph;
-pub use resolve::{NoState, ResolveCtx, Resolver, Route, UiState, Widgets, grid_columns, node_id, resolve};
+pub use resolve::{NoState, ResolveCtx, Resolver, Route, UiState, Widgets, grid_columns, resolve};
 
 pub type Nodes = Vec<Arc<UiNode>>;
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct UiNode {
     /// The path from the program's root, its props and indexes joined by `/`: `children/2`.
     pub id: String,
@@ -38,7 +38,7 @@ pub struct UiNode {
     pub kind: UiKind,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "component")]
 pub enum UiKind {
     /// Its children stacked, each `spacing` below the one before.
@@ -398,7 +398,7 @@ pub enum UiKind {
 }
 
 /// Text with its inline formatting, as a prose row's: `[start, length, style bits]` runs.
-#[derive(Serialize, Clone, PartialEq, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
 pub struct Rich {
     pub text: String,
     pub runs: Vec<[u32; 3]>,
@@ -406,14 +406,14 @@ pub struct Rich {
 }
 
 /// Text or components, where a slot takes either.
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Slot {
     pub text: Option<Rich>,
     pub style: TextStyle,
     pub children: Nodes,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TextStyle {
     Body,
@@ -441,7 +441,7 @@ pub enum TextStyle {
     WordBack,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Weight {
     Regular,
@@ -449,13 +449,13 @@ pub enum Weight {
     Semibold,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub struct Length {
     pub unit: LengthUnit,
     pub value: f32,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum LengthUnit {
     Points,
@@ -467,14 +467,14 @@ pub enum LengthUnit {
     Window,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub struct Radius {
     pub kind: RadiusKind,
     /// 0 for `full`, half the shorter side.
     pub points: f32,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum RadiusKind {
     Sm,
@@ -485,7 +485,7 @@ pub enum RadiusKind {
     Points,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Align {
     Start,
@@ -494,7 +494,7 @@ pub enum Align {
     Stretch,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Justify {
     Start,
@@ -503,7 +503,7 @@ pub enum Justify {
     Between,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {
     Row,
@@ -511,7 +511,7 @@ pub enum Direction {
 }
 
 /// A row's child: its width before the row's space is shared.
-#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub struct Sizing {
     pub basis: Basis,
     pub length: Option<Length>,
@@ -519,7 +519,7 @@ pub struct Sizing {
     pub shrink: bool,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Basis {
     /// Its widest single line.
@@ -534,13 +534,13 @@ pub enum Basis {
 }
 
 /// A Lucide icon: its name, and its character in `lucide.ttf`.
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Glyph {
     pub name: String,
     pub glyph: String,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ListMarker {
     Bullet,
@@ -548,7 +548,7 @@ pub enum ListMarker {
     Plain,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ItemMarker {
     Blank,
@@ -566,14 +566,14 @@ pub enum ItemMarker {
     },
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MarkdownBlock {
     Prose { prose: Prose },
     Code { language: String, code: String, spans: Option<Spans> },
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ButtonVariant {
     Primary,
@@ -584,7 +584,7 @@ pub enum ButtonVariant {
     Ghost,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlSize {
     Small,
@@ -593,7 +593,7 @@ pub enum ControlSize {
 }
 
 /// Why a control takes no presses.
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Disabled {
     /// The program says so.
@@ -604,14 +604,14 @@ pub enum Disabled {
     NoTools,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Choice {
     pub value: String,
     pub label: String,
     pub description: Option<String>,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct SliderMark {
     /// From 0 to 1.
     pub at: f64,
@@ -619,7 +619,7 @@ pub struct SliderMark {
     pub edge: MarkEdge,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum MarkEdge {
     /// Leading at the track's start.
@@ -629,7 +629,7 @@ pub enum MarkEdge {
     End,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum RadioVariant {
     List,
@@ -637,14 +637,14 @@ pub enum RadioVariant {
     Cards,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct TimerButton {
     pub label: String,
     pub icon: Option<Glyph>,
     pub disabled: Option<Disabled>,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Fit {
     Cover,
@@ -652,14 +652,14 @@ pub enum Fit {
 }
 
 /// The photos found for an image's query.
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Photos {
     pub state: PhotoState,
     /// Media refs, best first.
     pub media: Vec<String>,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum PhotoState {
     /// Not looked for: the image has its own address.
@@ -670,21 +670,21 @@ pub enum PhotoState {
     Missing,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct TableColumn {
     pub title: String,
     /// Numbers: trailing, digits, one line.
     pub numeric: bool,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TableCell {
     Text { text: Rich },
     Node { node: Arc<UiNode> },
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum RouteKind {
     /// No route is drawn.
@@ -696,7 +696,7 @@ pub enum RouteKind {
     Overview,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct MapPin {
     /// The label, numbered when another pin has it too: "Café (2)".
     pub key: String,
@@ -714,13 +714,13 @@ pub struct MapPin {
 
 /// What `motile_ui_layout` lays out, which the client gives its width and text size: the
 /// component and its props by name, in order, an Svg's shapes as `{kind, props}` too.
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Canvas {
     pub kind: String,
     pub props: Value,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct A11y {
     pub role: Role,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -735,7 +735,7 @@ pub struct A11y {
     pub on: Option<bool>,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     Group,

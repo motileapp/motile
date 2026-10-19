@@ -1,0 +1,764 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/0/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "Support desk",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_lg",
+              "color": "foreground"
+            },
+            {
+              "id": "children/0/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Tickets opened in the selected period",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/0/children/2",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/0/children/2/children/0",
+              "a11y": {
+                "role": "pop_up_button",
+                "label": "Choose…",
+                "value": "All teams"
+              },
+              "component": "Select",
+              "value": "All",
+              "options": [
+                {
+                  "value": "All",
+                  "label": "All teams",
+                  "description": null
+                },
+                {
+                  "value": "Billing",
+                  "label": "Billing",
+                  "description": null
+                },
+                {
+                  "value": "Technical",
+                  "label": "Technical",
+                  "description": null
+                },
+                {
+                  "value": "Accounts",
+                  "label": "Accounts",
+                  "description": null
+                },
+                {
+                  "value": "Shipping",
+                  "label": "Shipping",
+                  "description": null
+                }
+              ],
+              "selected": 0,
+              "label": null,
+              "placeholder": "Choose…",
+              "error": null,
+              "disabled": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 0.0,
+          "background": null,
+          "inner_surface": false,
+          "radius": null,
+          "border": false,
+          "width": {
+            "unit": "points",
+            "value": 150.0
+          },
+          "height": null,
+          "flex": null,
+          "align": "stretch",
+          "justify": "start",
+          "wrap": false
+        },
+        {
+          "id": "children/0/children/3",
+          "a11y": {
+            "role": "radio_group"
+          },
+          "component": "SegmentedControl",
+          "value": "60",
+          "options": [
+            {
+              "value": "30",
+              "label": "30d",
+              "description": null
+            },
+            {
+              "value": "60",
+              "label": "60d",
+              "description": null
+            },
+            {
+              "value": "180",
+              "label": "6m",
+              "description": null
+            }
+          ],
+          "selected": 1,
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "length",
+          "length": {
+            "unit": "points",
+            "value": 150.0
+          },
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Opened",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "0",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Waiting",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "0",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            },
+            {
+              "id": "children/1/children/1/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "0 urgent",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Median time to solve",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/2/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "0 h",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            },
+            {
+              "id": "children/1/children/2/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Slowest 0 h",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/1/children/3",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/1/children/3/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Satisfaction",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/1/children/3/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "0 / 5",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 12.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 4,
+      "min_child_width": 150.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Opened and solved by week",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/0/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "bar chart of Opened, Solved by week"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "bar",
+                  "data": [],
+                  "x": "week",
+                  "series": [
+                    "Opened",
+                    "Solved"
+                  ]
+                }
+              }
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/2/children/1/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Average hours to solve, by team",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/2/children/1/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "bar chart of value by key"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "bar",
+                  "data": [],
+                  "x": "key",
+                  "series": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 300.0,
+      "gap": 16.0
+    },
+    {
+      "id": "children/3",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "How long tickets take (hours)",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/3/children/0/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "bar chart of value by key"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "bar",
+                  "data": [
+                    {
+                      "key": "0",
+                      "value": 0,
+                      "start": 0,
+                      "end": 0.08333333333333333
+                    },
+                    {
+                      "key": "0.083",
+                      "value": 0,
+                      "start": 0.08333333333333333,
+                      "end": 0.16666666666666666
+                    },
+                    {
+                      "key": "0.167",
+                      "value": 0,
+                      "start": 0.16666666666666666,
+                      "end": 0.25
+                    },
+                    {
+                      "key": "0.25",
+                      "value": 0,
+                      "start": 0.25,
+                      "end": 0.3333333333333333
+                    },
+                    {
+                      "key": "0.333",
+                      "value": 0,
+                      "start": 0.3333333333333333,
+                      "end": 0.41666666666666663
+                    },
+                    {
+                      "key": "0.417",
+                      "value": 0,
+                      "start": 0.41666666666666663,
+                      "end": 0.49999999999999994
+                    },
+                    {
+                      "key": "0.5",
+                      "value": 0,
+                      "start": 0.5,
+                      "end": 0.5833333333333334
+                    },
+                    {
+                      "key": "0.583",
+                      "value": 0,
+                      "start": 0.5833333333333333,
+                      "end": 0.6666666666666666
+                    },
+                    {
+                      "key": "0.667",
+                      "value": 0,
+                      "start": 0.6666666666666666,
+                      "end": 0.75
+                    },
+                    {
+                      "key": "0.75",
+                      "value": 0,
+                      "start": 0.75,
+                      "end": 0.8333333333333334
+                    },
+                    {
+                      "key": "0.833",
+                      "value": 0,
+                      "start": 0.8333333333333333,
+                      "end": 0.9166666666666666
+                    },
+                    {
+                      "key": "0.917",
+                      "value": 0,
+                      "start": 0.9166666666666666,
+                      "end": 1
+                    }
+                  ],
+                  "x": "key",
+                  "series": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/3/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/3/children/1/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 3
+              },
+              "component": "Title",
+              "text": {
+                "text": "Satisfaction, 7-day average",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_title",
+              "color": "foreground"
+            },
+            {
+              "id": "children/3/children/1/children/1",
+              "a11y": {
+                "role": "image",
+                "label": "line chart of value by key"
+              },
+              "component": "Chart",
+              "canvas": {
+                "kind": "Chart",
+                "props": {
+                  "type": "line",
+                  "data": [],
+                  "x": "key",
+                  "series": [
+                    "value"
+                  ]
+                }
+              }
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 300.0,
+      "gap": 16.0
+    },
+    {
+      "id": "children/4",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 3
+          },
+          "component": "Title",
+          "text": {
+            "text": "Waiting longest",
+            "runs": [],
+            "links": []
+          },
+          "style": "card_title",
+          "color": "foreground"
+        },
+        {
+          "id": "children/4/children/1",
+          "a11y": {
+            "role": "table"
+          },
+          "component": "Table",
+          "columns": [
+            {
+              "title": "Ticket",
+              "numeric": false
+            },
+            {
+              "title": "Team",
+              "numeric": false
+            },
+            {
+              "title": "Priority",
+              "numeric": false
+            },
+            {
+              "title": "Waiting",
+              "numeric": false
+            }
+          ],
+          "rows": []
+        }
+      ],
+      "soft": false,
+      "nested": false,
+      "padding": 16.0,
+      "spacing": [
+        0.0,
+        8.0
+      ]
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0
+  ]
+}

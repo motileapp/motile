@@ -20,4 +20,7 @@ object Native {
     /** Lays out a canvas component, a `canvas::Canvas`, into its `canvas::Scene`. Any thread. */
     @JvmStatic external fun uiLayout(input: String): String
     @JvmStatic external fun uiMap(input: String): String
+
+    /** Builds the page an HtmlView or a YouTube shows, a `web::PageRequest`, into its `web::Page`. Any thread. */
+    @JvmStatic external fun uiPage(input: String): String
 }

@@ -210,10 +210,15 @@ fn ticks(lo: f64, hi: f64, step: f64) -> Vec<f64> {
     (0..=count as usize).map(|k| lo + k as f64 * step).collect()
 }
 
+/// A label's width by a generous estimate: DM Sans's widest common characters, 0.7 em each.
+fn label_width(label: &str, size: f64) -> f64 {
+    js::utf16_len(label) as f64 * size * 0.7
+}
+
 /// The y axis's gutter: wide enough for its longest tick label.
 fn gutter(ticks: &[f64], format: &Format) -> f64 {
-    let longest = ticks.iter().map(|tick| js::utf16_len(&format.write(*tick, true))).max().unwrap_or(0);
-    longest as f64 * 6.4 + 12.0
+    let longest = ticks.iter().map(|tick| label_width(&format.write(*tick, true), 11.0)).fold(0.0, f64::max);
+    longest + 12.0
 }
 
 fn legend(spec: &Spec) -> Option<Legend> {
@@ -248,6 +253,18 @@ fn tick_label(text_: String, x: f64, y: f64, anchor: Anchor) -> Item {
     text(text_, x, y, anchor, Font::Tick, Color::token("muted-stronger-foreground"))
 }
 
+/// Where a label centred on `x` goes: against the scene's edge instead where it would cross it.
+fn centred(label: &str, x: f64, size: f64, width: f64) -> (f64, Anchor) {
+    let half = label_width(label, size) / 2.0;
+    if x - half < 0.0 {
+        return (0.0, Anchor::Start);
+    }
+    if x + half > width {
+        return (width, Anchor::End);
+    }
+    (x, Anchor::Middle)
+}
+
 fn dot(cx: f64, cy: f64, r: f64, color: Color) -> Item {
     Item::Circle {
         cx: round(cx),
@@ -266,20 +283,43 @@ fn tip_x(x: f64, width: f64) -> f64 {
     x.max(TIP_INSET).min(width - TIP_INSET)
 }
 
-/// SVG's `rect` with `rx` alone: its corners as round as fit.
-fn bar(x: f64, y: f64, width: f64, height: f64, radius: f64, color: Color) -> Option<Item> {
+/// The end of a bar away from its baseline, the only one that is rounded.
+#[derive(Clone, Copy, PartialEq)]
+enum End {
+    Top,
+    Bottom,
+}
+
+/// A bar whose two corners at `end` are rounded as far as they fit, the others square.
+fn bar(x: f64, y: f64, width: f64, height: f64, radius: f64, end: Option<End>, color: Color) -> Option<Item> {
     if width <= 0.0 || height <= 0.0 {
         return None;
     }
-    Some(Item::Rect {
-        x: round(x),
-        y: round(y),
-        width: round(width),
-        height: round(height),
-        rx: round(radius.min(width / 2.0)),
-        ry: round(radius.min(height / 2.0)),
-        paint: Paint::fill(color),
-    })
+    let radius = radius.min(width / 2.0).min(height);
+    let Some(end) = end.filter(|_| radius > 0.0) else {
+        let (x, y, width, height) = (round(x), round(y), round(width), round(height));
+        return Some(Item::Rect { x, y, width, height, rx: 0.0, ry: 0.0, paint: Paint::fill(color) });
+    };
+    const KAPPA: f64 = 0.552_284_749_830_793_6;
+    let (right, bottom, k) = (x + width, y + height, radius * KAPPA);
+    let mut path = PathBuilder::new(Affine::IDENTITY);
+    if end == End::Top {
+        path.move_to(x, bottom);
+        path.line_to(x, y + radius);
+        path.cubic_to(x, y + radius - k, x + radius - k, y, x + radius, y);
+        path.line_to(right - radius, y);
+        path.cubic_to(right - radius + k, y, right, y + radius - k, right, y + radius);
+        path.line_to(right, bottom);
+    } else {
+        path.move_to(x, y);
+        path.line_to(right, y);
+        path.line_to(right, bottom - radius);
+        path.cubic_to(right, bottom - radius + k, right - radius + k, bottom, right - radius, bottom);
+        path.line_to(x + radius, bottom);
+        path.cubic_to(x + radius - k, bottom, x, bottom - radius + k, x, bottom - radius);
+    }
+    path.close();
+    path.finish().map(|path| Item::Path { path, paint: Paint::fill(color) })
 }
 
 /// A number as `toFixed(1)` writes it, as the reference's path data has it.
@@ -332,23 +372,27 @@ fn cartesian(spec: &Spec, width: f64) -> Scene {
     }
     for (i, row) in rows.iter().enumerate().step_by(every) {
         let label = spec.label(row);
-        items.push(text(label, x_at(i), height - 6.0, Anchor::Middle, Font::Caption, Color::token("muted-foreground")));
+        let (x, anchor) = centred(&label, x_at(i), 12.0, width);
+        items.push(text(label, x, height - 6.0, anchor, Font::Caption, Color::token("muted-foreground")));
     }
     let under_marks = items.len() as u32;
     if *kind == Kind::Bar {
         for (i, row) in rows.iter().enumerate() {
             let inner = (band * 0.7).min(72.0 * if stacked { 1.0 } else { series.len().max(1) as f64 });
             if stacked {
-                for (si, _) in series.iter().enumerate() {
-                    let top = y(tops[i][si]);
-                    let base = y(if si == 0 { 0.0 } else { tops[i][si - 1] });
-                    let radius = if si == series.len() - 1 { 4.0 } else { 0.0 };
+                let base_of = |si: usize| if si == 0 { 0.0 } else { tops[i][si - 1] };
+                let topmost = (0..series.len()).rev().find(|&si| tops[i][si] > base_of(si));
+                for (si, &stacked_top) in tops[i].iter().enumerate() {
+                    let top = y(stacked_top);
+                    let base = y(base_of(si));
+                    let end = (Some(si) == topmost).then_some(End::Top);
                     items.extend(bar(
                         x_at(i) - inner / 2.0,
                         top,
                         inner,
                         (base - top).max(0.0),
-                        radius,
+                        4.0,
+                        end,
                         series_color(si),
                     ));
                 }
@@ -358,8 +402,16 @@ fn cartesian(spec: &Spec, width: f64) -> Scene {
             for (si, key) in series.iter().enumerate() {
                 let v = num(row.get(key));
                 let x = x_at(i) - inner / 2.0 + each * si as f64 + 1.0;
-                let item =
-                    bar(x, y(v).min(y(0.0)), (each - 2.0).max(1.0), (y(0.0) - y(v)).abs(), 4.0, series_color(si));
+                let end = if v < 0.0 { End::Bottom } else { End::Top };
+                let item = bar(
+                    x,
+                    y(v).min(y(0.0)),
+                    (each - 2.0).max(1.0),
+                    (y(0.0) - y(v)).abs(),
+                    4.0,
+                    Some(end),
+                    series_color(si),
+                );
                 items.extend(item);
             }
         }
@@ -522,7 +574,9 @@ fn scatter(spec: &Spec, width: f64) -> Scene {
         items.push(tick_label(format.write(*tick, true), left - 10.0, py(*tick) + 4.0, Anchor::End));
     }
     for tick in xa.ticks.iter().step_by(every) {
-        items.push(tick_label(scatter_tick(*tick), px(*tick), height - 6.0, Anchor::Middle));
+        let label = scatter_tick(*tick);
+        let (x, anchor) = centred(&label, px(*tick), 11.0, width);
+        items.push(tick_label(label, x, height - 6.0, anchor));
     }
     let point = |cx: f64, cy: f64, r: f64, si: usize| Item::Circle {
         cx: round(cx),

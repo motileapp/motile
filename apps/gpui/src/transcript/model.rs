@@ -55,7 +55,14 @@ impl RowModel {
         let kind = if queued {
             RowKind::Queued { text, skills: Vec::new(), attachments, status: "Queued" }
         } else {
-            RowKind::User { text, links: Vec::new(), skills: Vec::new(), attachments, at: crate::models::now() }
+            RowKind::User {
+                text,
+                links: Vec::new(),
+                skills: Vec::new(),
+                attachments,
+                values: None,
+                at: crate::models::now(),
+            }
         };
         Self::new(Row { id: Self::PENDING_ID.into(), item: Self::PENDING_ID.into(), nested: false, kind, after: None })
     }
@@ -524,6 +531,18 @@ impl Transcript {
         let RowKind::Code { language, code, .. } = &self.rows[index].row.kind else { return };
         let mut row = self.rows[index].row.clone();
         row.kind = RowKind::Code { language: language.clone(), code: code.clone(), spans: Some(spans) };
+        Rc::make_mut(&mut self.rows)[index] = Arc::new(RowModel::new(row));
+        let mut changed = HashSet::new();
+        changed.insert(row_id.to_string());
+        self.sync(&changed);
+    }
+
+    /// Applies a program's patch to its row, wherever the row is.
+    pub fn patch_ui(&mut self, row_id: &str, ops: &[motile_core::render::openui::UiOp]) {
+        let Some(index) = self.rows.iter().rposition(|model| model.row.id == row_id) else { return };
+        let mut row = self.rows[index].row.clone();
+        let RowKind::Ui { ui } = &mut row.kind else { return };
+        super::openui::patch::apply(&mut ui.tree, &mut ui.errors, ops);
         Rc::make_mut(&mut self.rows)[index] = Arc::new(RowModel::new(row));
         let mut changed = HashSet::new();
         changed.insert(row_id.to_string());

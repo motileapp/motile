@@ -1,0 +1,59 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "Neon Invaders",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_lg",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "A tiny retro shooter. Clear each wave before the invaders land; every wave is faster than the last.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "region",
+        "label": "Neon Invaders"
+      },
+      "component": "HtmlView",
+      "html": "<style>\nbody{padding:12px;display:flex;flex-direction:column;gap:10px;align-items:center;background:#0b0b1a;color:#e6e6ff;font-family:ui-monospace,Menlo,monospace}\n.top{display:flex;justify-content:space-between;width:100%;max-width:400px;font-size:13px;letter-spacing:.06em}\ncanvas{width:100%;max-width:400px;aspect-ratio:4/5;border-radius:10px;background:#05050f;box-shadow:0 0 0 1px #2a2a55,0 0 24px #3b1d6e66;touch-action:none;outline:none}\n.pad{display:flex;gap:8px;width:100%;max-width:400px}\n.pad button{flex:1;padding:12px 0;font:600 14px ui-monospace,Menlo,monospace;color:#e6e6ff;background:#1a1a3a;border:1px solid #3a3a7a;border-radius:10px;user-select:none;-webkit-user-select:none;touch-action:none;cursor:pointer}\n.pad button:active{background:#2c2c66}\n#start{background:#ff2bd6;border-color:#ff2bd6;color:#0b0b1a}\np{margin:0;font-size:12px;opacity:.7}\n</style>\n<div class=\"top\"><span id=\"score\">SCORE 0</span><span id=\"wave\">WAVE 1</span><span id=\"lives\">♥♥♥</span></div>\n<canvas id=\"c\" width=\"400\" height=\"500\" tabindex=\"0\"></canvas>\n<div class=\"pad\"><button id=\"left\" aria-label=\"Move left\">◀</button><button id=\"fire\">FIRE</button><button id=\"right\" aria-label=\"Move right\">▶</button></div>\n<div class=\"pad\"><button id=\"start\">START GAME</button></div>\n<p>Arrow keys move, space fires. On a phone, use the buttons.</p>\n<script>\nconst c=document.getElementById('c'),g=c.getContext('2d'),W=400,H=500,S=id=>document.getElementById(id),keys={};\nlet ship,shots,bombs,aliens,dir,speed,score=0,lives=3,wave=1,running=false,over=false,last=0,cool=0;\nconst stars=Array.from({length:60},()=>[Math.random()*W,Math.random()*H,Math.random()*1.5+.3]);\nconst colors=['#ff2bd6','#ffb000','#2bf0ff','#7dff5a'];\nfunction newWave(){aliens=[];for(let r=0;r<4;r++)for(let k=0;k<8;k++)aliens.push({x:40+k*42,y:50+r*34,r});dir=1;speed=20+wave*8}\nfunction reset(){ship={x:W/2};shots=[];bombs=[];score=0;lives=3;wave=1;over=false;newWave();hud()}\nfunction hud(){S('score').textContent='SCORE '+score;S('wave').textContent='WAVE '+wave;S('lives').textContent='♥'.repeat(Math.max(lives,0))||'-'}\nfunction fire(){if(running&&cool<=0&&shots.length<3){shots.push({x:ship.x,y:H-48});cool=.28}}\nfunction step(dt){\nconst mv=(keys.ArrowLeft||keys.left?-1:0)+(keys.ArrowRight||keys.right?1:0);\nship.x=Math.max(20,Math.min(W-20,ship.x+mv*240*dt));cool-=dt;if(keys[' ']||keys.fire)fire();\nshots.forEach(s=>s.y-=420*dt);\nlet edge=false;aliens.forEach(a=>{a.x+=dir*speed*dt;if(a.x<16||a.x>W-16)edge=true});\nif(edge){dir*=-1;aliens.forEach(a=>{a.y+=14;a.x+=dir*2})}\nif(aliens.length&&Math.random()<dt*(.8+wave*.3)){const a=aliens[Math.floor(Math.random()*aliens.length)];bombs.push({x:a.x,y:a.y+10})}\nbombs.forEach(b=>b.y+=(150+wave*15)*dt);\nfor(const s of shots)for(const a of aliens)if(!a.dead&&!s.hit&&Math.abs(s.x-a.x)<14&&Math.abs(s.y-a.y)<11){a.dead=s.hit=true;score+=10*(4-a.r)}\naliens=aliens.filter(a=>!a.dead);shots=shots.filter(s=>!s.hit&&s.y>-10);\nfor(const b of bombs)if(Math.abs(b.x-ship.x)<16&&b.y>H-46&&b.y<H-20){b.hit=true;lives--}\nbombs=bombs.filter(b=>!b.hit&&b.y<H);\nif(aliens.some(a=>a.y>H-70))lives=0;\nif(!aliens.length){wave++;newWave()}\nif(lives<=0){running=false;over=true;S('start').textContent='PLAY AGAIN'}\nhud()}\nfunction draw(){\ng.fillStyle='#05050f';g.fillRect(0,0,W,H);g.fillStyle='#fff';\nstars.forEach(s=>{g.globalAlpha=s[2]/2;g.fillRect(s[0],s[1],s[2],s[2])});g.globalAlpha=1;\naliens.forEach(a=>{g.fillStyle=colors[a.r];g.shadowColor=colors[a.r];g.shadowBlur=8;g.fillRect(a.x-12,a.y-7,24,14);g.shadowBlur=0;g.fillStyle='#05050f';g.fillRect(a.x-7,a.y-3,4,4);g.fillRect(a.x+3,a.y-3,4,4)});\ng.shadowBlur=10;g.shadowColor='#2bf0ff';g.fillStyle='#2bf0ff';g.beginPath();g.moveTo(ship.x,H-46);g.lineTo(ship.x+16,H-24);g.lineTo(ship.x-16,H-24);g.closePath();g.fill();\ng.fillStyle='#fff';shots.forEach(s=>g.fillRect(s.x-1.5,s.y-8,3,10));\ng.fillStyle='#ff4d4d';g.shadowColor='#ff4d4d';bombs.forEach(b=>g.fillRect(b.x-2,b.y-6,4,9));g.shadowBlur=0;\nif(!running){g.fillStyle='rgba(5,5,15,.75)';g.fillRect(0,H/2-50,W,100);g.textAlign='center';g.fillStyle='#ff2bd6';g.font='bold 28px ui-monospace,Menlo,monospace';g.fillText(over?'GAME OVER':'NEON INVADERS',W/2,H/2-5);g.fillStyle='#e6e6ff';g.font='13px ui-monospace,Menlo,monospace';g.fillText(over?'Score '+score+'. Press play again':'Press start to play',W/2,H/2+22)}}\nfunction loop(t){const dt=Math.min(.05,(t-last)/1000||0);last=t;if(running)step(dt);draw();requestAnimationFrame(loop)}\naddEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight',' '].includes(e.key)){keys[e.key]=true;e.preventDefault()}});\naddEventListener('keyup',e=>{keys[e.key]=false});\nfor(const id of ['left','right','fire']){const b=S(id);b.addEventListener('pointerdown',e=>{keys[id]=true;b.setPointerCapture(e.pointerId)});b.addEventListener('pointerup',()=>{keys[id]=false});b.addEventListener('pointercancel',()=>{keys[id]=false})}\nS('start').onclick=()=>{reset();running=true;S('start').textContent='RESTART';c.focus()};\nreset();requestAnimationFrame(loop);\n</script>",
+      "height": null,
+      "title": "Neon Invaders",
+      "streaming": false
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    12.0,
+    12.0
+  ]
+}

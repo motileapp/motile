@@ -29,6 +29,8 @@ import UIKit
 ///     skill up|down|pick|dismiss        presses a key of the skills' menu
 ///     search [text]                     gives the front field the keyboard, and types in it
 ///     access <supervised|…>             sets how much the agent may do without asking
+///     slide <label> <share>             drags the program's slider with that label to a share of its track
+///     press <label>                     presses the program's button with that label
 enum DemoDriver {
     private static var watcher: Timer?
     private static var done = 0
@@ -56,6 +58,15 @@ enum DemoDriver {
         }
         guard !store.account.signedIn else { return }
         store.devSignIn(email: email)
+    }
+
+    /// The views of a kind in the key window.
+    private static func views<View: UIView>(_ type: View.Type) -> [View] {
+        func find(in view: UIView) -> [View] {
+            ((view as? View).map { [$0] } ?? []) + view.subviews.flatMap(find)
+        }
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        return window.map(find) ?? []
     }
 
     private static func run(_ step: String, store: AppStore, drawer: Drawer) {
@@ -205,6 +216,18 @@ enum DemoDriver {
                 return ViewedMedia(name: media.name, video: media.video, source: .media(media.id))
             }
             store.view(shown, at: 0)
+        case "slide":
+            let words = rest.split(separator: " ").map(String.init)
+            guard let share = words.last.flatMap(Double.init),
+                  let slider = views(SliderView.self).last(where: { $0.label == words.dropLast().joined(separator: " ") })
+            else { return }
+            let y = slider.bounds.maxY - 8
+            slider.onDrag?(.began, CGPoint(x: slider.bounds.width / 2, y: y))
+            slider.onDrag?(.moved, CGPoint(x: slider.bounds.width * share, y: y))
+            slider.onDrag?(.ended, CGPoint(x: slider.bounds.width * share, y: y))
+        case "press":
+            guard let button = views(ControlView.self).last(where: { $0.title == rest }) else { return }
+            button.onPress?(CGPoint(x: button.bounds.midX, y: button.bounds.midY))
         case "branches":
             guard let project = store.composerProject else { return }
             store.showsThreadSettings = true

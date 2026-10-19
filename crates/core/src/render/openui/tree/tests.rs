@@ -4,14 +4,16 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use motile_openui::{FixedEnv, NoForms, Runtime, Step, Value, motile};
+use motile_openui::{FixedEnv, Runtime, Step, Value};
 use serde_json::json;
 
 use super::*;
 use crate::render::markdown::{BOLD, CODE, LINK};
 
 fn runtime(program: &str) -> Runtime {
-    let mut runtime = Runtime::new(Arc::new(motile::library()), Arc::new(FixedEnv::default()), Arc::new(NoForms));
+    let library = crate::render::openui::host::library();
+    let forms = Arc::new(crate::render::openui::LibraryForms::new(library.clone()));
+    let mut runtime = Runtime::new(library, Arc::new(FixedEnv::default()), forms);
     runtime.set_text(program, true);
     runtime
 }
@@ -103,6 +105,31 @@ fn the_corpus_resolves_as_its_goldens_say() {
         }
     }
     assert!(stale.is_empty(), "these trees changed (OPENUI_BLESS=1 rewrites them): {stale:?}");
+}
+
+#[test]
+fn a_tree_reads_back_as_it_was_written() {
+    fn same(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+        use serde_json::Value::{Array, Number, Object};
+        match (a, b) {
+            (Number(a), Number(b)) => {
+                let (a, b) = (a.as_f64().unwrap(), b.as_f64().unwrap());
+                (a - b).abs() <= 1e-6 * a.abs().max(1.0)
+            }
+            (Array(a), Array(b)) => a.len() == b.len() && a.iter().zip(b).all(|(a, b)| same(a, b)),
+            (Object(a), Object(b)) => {
+                a.len() == b.len() && a.iter().all(|(key, value)| b.get(key).is_some_and(|other| same(value, other)))
+            }
+            (a, b) => a == b,
+        }
+    }
+    let goldens = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/openui");
+    for entry in std::fs::read_dir(goldens).unwrap() {
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(entry.unwrap().path()).unwrap()).unwrap();
+        let tree: UiNode = serde_json::from_value(json.clone()).unwrap();
+        assert!(same(&serde_json::to_value(&tree).unwrap(), &json));
+    }
 }
 
 #[test]
@@ -248,6 +275,7 @@ fn grids_drop_columns_that_get_too_narrow() {
     assert_eq!(grid_columns(3, Some(150.0), 16.0, 720.0), 3);
     assert_eq!(grid_columns(3, Some(150.0), 16.0, 390.0), 2);
     assert_eq!(grid_columns(3, Some(150.0), 16.0, 140.0), 1);
+    assert_eq!(grid_columns(3, Some(100.0), 8.0, 390.0), 3, "three columns that just fit");
     assert_eq!(grid_columns(2, Some(200.0), 16.0, 390.0), 1);
     assert_eq!(grid_columns(40, None, 12.0, 300.0), 12);
     let UiKind::Grid { columns, min_child_width, gap, .. } =
@@ -350,7 +378,7 @@ fn grid_cells_and_carousel_items_that_flow_take_card_typography() {
 
 #[test]
 fn rows_around_an_image_are_media_rows() {
-    let program = r#"root = Col([Row([SearchImage("Belém Tower", 2), Col([Title("Belém")])], 2, "center"), Row([Box([Image("https://x.dev/a.png", "A")]), Text("t")]), Row([Box([Image("https://x.dev/a.png", "A"), Text("t")])])])"#;
+    let program = r#"root = Col([Row([SearchImage("Belém Tower", 2), Col([Title("Belém")])], 2, "center"), Row([Box([Image("https://x.dev/a.png", "A")], "col", 0, 0, null, null, false, 64, 64), Text("t")]), Row([Box([Image("https://x.dev/a.png", "A"), Text("t")])])])"#;
     let tree = tree(program);
     let UiKind::Row { gap, align, sizing, .. } = &at(&tree, "children/0").kind else { panic!() };
     assert_eq!((*gap, *align, sizing[0].basis, sizing[1].basis), (16.0, Align::Start, Basis::Media, Basis::Content));
@@ -358,6 +386,10 @@ fn rows_around_an_image_are_media_rows() {
     assert_eq!(*aspect_ratio, 4.0 / 3.0);
     let UiKind::Row { sizing, .. } = &at(&tree, "children/1").kind else { panic!() };
     assert_eq!(sizing[0].basis, Basis::Media);
+    let UiKind::Image { aspect_ratio, .. } = &at(&tree, "children/1/children/0/children/0").kind else { panic!() };
+    assert_eq!(*aspect_ratio, 4.0 / 3.0, "a box's only image in a media row is 4:3 too");
+    let UiKind::Box { width, height, .. } = &at(&tree, "children/1/children/0").kind else { panic!() };
+    assert_eq!((width, height), (&None, &None), "the media row sizes the box around the image");
     let UiKind::Row { gap, sizing, .. } = &at(&tree, "children/2").kind else { panic!() };
     assert_eq!((*gap, sizing[0].basis), (8.0, Basis::Content));
 }
@@ -495,7 +527,19 @@ impl UiState for Running {
     }
 
     fn widgets(&self, _id: &str) -> Widgets {
-        Widgets { open: true, flipped: true, running: true, started: Some(90.0), filter: Some("food".into()), burst: 2 }
+        Widgets {
+            open: true,
+            flipped: true,
+            running: true,
+            started: Some(90.0),
+            filter: Some("food".into()),
+            burst: 2,
+            failed: false,
+        }
+    }
+
+    fn spans(&self, _language: &str, _code: &str) -> Option<crate::render::highlight::Spans> {
+        None
     }
 }
 
@@ -596,7 +640,7 @@ root = Col([Card([Title("Fixed")]), Text("" + $n), Input($n)])"#,
 
 #[test]
 fn every_component_resolves_to_its_own_kind() {
-    let library = motile::library();
+    let library = motile_openui::motile::library();
     let program = r#"root = Col([Col([]), Row([]), Box(), Grid([]), Card([]), Carousel([]), Popover("a", "b"), Divider(), Spacer(), Title("t"), Text("t"), Caption("c"), Label("l"), Badge("b"), Link("l", "https://a.b"), List([]), ListItem("i"), Markdown("m"), Quote("q"), Code("c"), Math("x"), Button("b"), IconButton("x"), Pressable([]), Input(""), TextArea(""), Select("", []), SegmentedControl("", []), Slider(1, 0, 2), Checkbox(false, "c"), RadioGroup("", []), DatePicker(""), Timer(1), Form([]), SearchImage("q"), Image("https://a.b/c.png", "a"), Icon("x"), Table([], []), Chart("bar", []), Map([]), MapMarker("m", 1, 2), YouTube("v"), Flashcard("a", "b"), Celebration(false), Svg([], "0 0 1 1"), G([]), Circle(1, 1, 1), Ellipse(1, 1, 1, 1), Rect(1, 1, 1, 1), Line(1, 1, 1, 1), Path("M0 0"), Polyline("0,0"), Polygon("0,0"), SvgText("t", 1, 1), HtmlView("<p>")])"#;
     let tree = tree(program);
     let names: Vec<String> = children(&tree)

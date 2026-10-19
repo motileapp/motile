@@ -6,6 +6,7 @@ use motile_core::api::{AccountView, Command};
 use motile_protocol::wire::RestartWhen;
 
 use super::Store;
+use crate::media::pictures::download;
 use crate::models::{EnrollToken, Server, ServerUpdate, is_older, now};
 
 impl Store {
@@ -291,20 +292,4 @@ fn picture_key(url: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     url.hash(&mut hasher);
     hasher.finish()
-}
-
-/// Fetches the file at `url` into `file`. Whether it did.
-fn download(url: &str, file: &std::path::Path) -> bool {
-    motile_protocol::tls::install();
-    let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return false };
-    let bytes = runtime.block_on(async {
-        let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().ok()?;
-        let response = client.get(url).send().await.ok()?.error_for_status().ok()?;
-        response.bytes().await.ok()
-    });
-    let Some(bytes) = bytes.filter(|bytes| !bytes.is_empty()) else { return false };
-    if let Some(folder) = file.parent() {
-        let _ = std::fs::create_dir_all(folder);
-    }
-    std::fs::write(file, bytes).is_ok()
 }

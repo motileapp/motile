@@ -170,6 +170,9 @@ final class AppStore {
     private(set) var gitFiles: [ChangedFile] = []
     /// An action that pushes from the default branch, until the user says where it should happen.
     var pendingGit: PendingGit?
+    /// A program asks to run a command, which waits for the user's answer.
+    var programConfirm: ProgramConfirm?
+    @ObservationIgnored private var answeredConfirms: Set<String> = []
     /// The stage a git action is at, by the checkout it runs in.
     private(set) var gitStages: [String: GitStage] = [:]
     /// The projects whose folders their servers are making git repositories.
@@ -533,6 +536,26 @@ final class AppStore {
                 self.transcript.apply(spans: spans, rowID: rowID)
                 self.agentTranscript.apply(spans: spans, rowID: rowID)
             }
+        case "ui_patch":
+            let (threadID, rowID) = (event.string("thread_id"), event.string("row_id"))
+            guard let patched = ProgramStore.patch(rowID: rowID, ops: event.objects("ops")) else { return nil }
+            let width = TranscriptColumn.width
+            let remake = { (row: RowModel) -> RowModel? in
+                guard case .ui(let content) = row.kind else { return nil }
+                let changed = UiContent(content, tree: patched.tree, errors: patched.errors, cache: patched.cache)
+                let measured = width > 0 ? (width, ProgramRowView.height(changed, width: width)) : nil
+                return RowModel(row, kind: .ui(changed), measured: measured)
+            }
+            return { [weak self] in
+                guard let self else { return }
+                if self.transcript.threadID == threadID { self.transcript.replace(rowID: rowID, with: remake) }
+                if self.agentTranscript.threadID == threadID { self.agentTranscript.replace(rowID: rowID, with: remake) }
+            }
+        case "ui_confirm":
+            let confirm = ProgramConfirm(
+                threadID: event.string("thread_id"), rowID: event.string("row_id"), callID: (event["call_id"] as? NSNumber)?.uint64Value ?? 0,
+                command: event.string("command"))
+            return { [weak self] in self?.programConfirm = confirm }
         case "live":
             let threadID = event.string("thread_id")
             let live = event.bool("live")
@@ -552,6 +575,12 @@ final class AppStore {
         case "thread_error":
             let message = event.string("message")
             return { [weak self] in self?.errorMessage = message }
+        case "open_url":
+            guard let url = URL(string: event.string("url")) else { return nil }
+            return { Platform.open(url) }
+        case "copy":
+            let text = event.string("text")
+            return { Platform.copy(text) }
         default:
             return nil
         }
@@ -2253,6 +2282,25 @@ final class AppStore {
         guard let thread = selectedThread, !onRemovedServer(thread) else { return }
         let answer: JSON = ["type": "answer", "thread_id": thread.id, "approval_id": approval.id, "allow": allow, "answers": answers]
         request(thread.serverID, answer)
+    }
+
+    /// Tells the core what the user did to a node of a program in the thread's transcript.
+    func programEvent(threadID: String, rowID: String, node: String, event: JSON) {
+        core.send("ui", ["thread_id": threadID, "row_id": rowID, "node": node, "event": event])
+    }
+
+    /// Answers a program that asked to run a command.
+    func answer(_ confirm: ProgramConfirm, allow: Bool) {
+        if programConfirm?.id == confirm.id { programConfirm = nil }
+        guard answeredConfirms.insert(confirm.id).inserted else { return }
+        core.send("ui_confirm", ["thread_id": confirm.threadID, "row_id": confirm.rowID, "call_id": confirm.callID, "allow": allow])
+    }
+
+    /// The question went away: unless it was answered as it closed, the command doesn't run.
+    func closeProgramConfirm() {
+        guard let confirm = programConfirm else { return }
+        programConfirm = nil
+        DispatchQueue.main.async { [weak self] in self?.answer(confirm, allow: false) }
     }
 
     /// Gives the agent a queued message now, in the turn that runs.

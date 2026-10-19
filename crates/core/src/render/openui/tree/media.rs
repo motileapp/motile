@@ -25,17 +25,17 @@ static PICTOGRAPHIC: LazyLock<Regex> =
 const MAP_NOTE: &str = "Drag to explore and use + and − to zoom. Select a place to highlight it.";
 
 impl Pass<'_, '_> {
-    fn photo_search(&mut self, query: &str, src: Option<&str>) -> Photos {
+    fn photo_search(&mut self, query: &str) -> Photos {
         if js::utf16_len(query) > 2 {
             return self.photos(query);
         }
-        Photos { state: if src.is_some() { PhotoState::Idle } else { PhotoState::Missing }, media: Vec::new() }
+        Photos { state: PhotoState::Missing, media: Vec::new() }
     }
 
     pub(super) fn search_image(&mut self, element: &Element, cx: Cx) -> UiKind {
         let query = string(element, "query").trim().to_owned();
         UiKind::SearchImage {
-            photos: self.photo_search(&query, None),
+            photos: self.photo_search(&query),
             query,
             aspect_ratio: aspect_ratio(element, cx),
             radius: image_radius(element),
@@ -46,8 +46,12 @@ impl Pass<'_, '_> {
     pub(super) fn image(&mut self, element: &Element, cx: Cx) -> UiKind {
         let alt = string(element, "alt").trim().to_owned();
         let src = str_of(element, "src").and_then(text::web_url);
+        let photos = match src.is_none() || self.widgets().failed {
+            true => self.photo_search(&alt),
+            false => Photos { state: PhotoState::Idle, media: Vec::new() },
+        };
         UiKind::Image {
-            photos: self.photo_search(&alt, src.as_deref()),
+            photos,
             src,
             alt,
             aspect_ratio: aspect_ratio(element, cx),

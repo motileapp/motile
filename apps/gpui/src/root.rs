@@ -163,8 +163,10 @@ impl Render for Root {
         let first_server = store.account.signed_in && store.servers.is_empty();
         let error = store.error_message.clone();
         let stopping = store.stopping.clone();
+        let ui_confirm = store.ui_confirm.clone();
         let error = crate::ui::modal::presented("error", error, window, cx);
         let stopping = crate::ui::modal::presented("stop", stopping, window, cx);
+        let ui_confirm = crate::ui::modal::presented("ui-confirm", ui_confirm, window, cx);
         let adding_server = self.connect.clone().filter(|_| !first_server);
         let adding_server = crate::ui::modal::presented("add-server", adding_server, window, cx);
         // One scrim for every page of the command panel, which fades as it opens and closes.
@@ -269,6 +271,25 @@ impl Render for Root {
                     })
                 };
                 root.child(confirmation("stop", shown, close, cx).leaving(leaving))
+            })
+            .when_some(ui_confirm, |root, (asked, leaving)| {
+                let (allows, refuses) = (self.store.clone(), self.store.clone());
+                let shown = Confirmation::new("Run this command?")
+                    .message(asked.command)
+                    .dismissal("Don't Run")
+                    .answer(Answer::new("Run", move |_, cx| {
+                        allows.update(cx, |store, cx| {
+                            store.answer_ui_confirm(true);
+                            cx.notify();
+                        })
+                    }));
+                let close = move |_: &mut Window, cx: &mut App| {
+                    refuses.update(cx, |store, cx| {
+                        store.answer_ui_confirm(false);
+                        cx.notify();
+                    })
+                };
+                root.child(confirmation("ui-confirm", shown, close, cx).leaving(leaving))
             })
             .child(crate::ui::modal::Scrim)
             .child(

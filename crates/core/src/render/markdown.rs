@@ -4,8 +4,10 @@
 use std::ops::Range;
 
 use linkify::{LinkFinder, LinkKind};
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMergeStream};
-use serde::Serialize;
+use pulldown_cmark::{
+    Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd, TextMergeWithOffset,
+};
+use serde::{Deserialize, Serialize};
 
 use super::highlight::Spans;
 
@@ -26,6 +28,11 @@ pub enum Block {
         language: String,
         code: String,
     },
+    /// A program in a top-level `openui-lang` fence. `closed` once its closing fence has come.
+    Ui {
+        code: String,
+        closed: bool,
+    },
     /// An image the client has a file for. It stands on its own, after the text it was written in.
     Image {
         src: String,
@@ -33,7 +40,7 @@ pub enum Block {
     },
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
 pub struct Prose {
     pub text: String,
     /// `[start, length, style bits]` for every stretch that isn't plain.
@@ -42,7 +49,7 @@ pub struct Prose {
     pub paras: Vec<Para>,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Link {
     pub start: u32,
     pub len: u32,
@@ -50,7 +57,7 @@ pub struct Link {
 }
 
 /// A paragraph of the text and how it is set. The range includes the paragraph's line break.
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Para {
     pub start: u32,
     pub len: u32,
@@ -58,7 +65,7 @@ pub struct Para {
     pub kind: ParaKind,
 }
 
-#[derive(Serialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ParaKind {
     Body,
@@ -111,6 +118,7 @@ struct CodeBlock {
     language: String,
     code: String,
     top_level: bool,
+    closed: bool,
 }
 
 #[derive(Default)]
@@ -131,6 +139,8 @@ struct Builder<'a> {
     table: Option<Table>,
     tables: u16,
     code: Option<CodeBlock>,
+    /// The fence that starts next has its closing fence.
+    fence_closed: bool,
     /// The marker waiting for the current list item's first paragraph.
     pending_marker: Option<String>,
     bold: u32,
@@ -147,10 +157,21 @@ pub fn parse(markdown: &str) -> Vec<Block> {
 pub fn parse_showing(markdown: &str, shown: &[&str]) -> Vec<Block> {
     let options = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let mut builder = Builder { shown, ..Builder::default() };
-    for event in TextMergeStream::new(Parser::new_ext(markdown, options)) {
+    for (event, range) in TextMergeWithOffset::new(Parser::new_ext(markdown, options).into_offset_iter()) {
+        if let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = &event {
+            builder.fence_closed = has_closing_fence(&markdown[range]);
+        }
         builder.event(event);
     }
     builder.finish()
+}
+
+/// Whether a fenced code block, as written, ends with the fence that closes it.
+fn has_closing_fence(block: &str) -> bool {
+    let mut lines = block.trim_end().lines();
+    let Some(fence) = lines.next().and_then(|opener| opener.trim_start().chars().next()) else { return false };
+    let Some(last) = lines.next_back().map(str::trim) else { return false };
+    last.len() >= 3 && last.chars().all(|c| c == fence)
 }
 
 /// Where the web addresses written out in `text` are, in bytes.
@@ -412,7 +433,8 @@ impl Builder<'_> {
                 if top_level {
                     self.flush_prose();
                 }
-                self.code = Some(CodeBlock { language, code: String::new(), top_level });
+                let closed = std::mem::take(&mut self.fence_closed);
+                self.code = Some(CodeBlock { language, code: String::new(), top_level, closed });
             }
             Tag::List(first) => {
                 self.close();
@@ -520,6 +542,10 @@ impl Builder<'_> {
         let Some(mut block) = self.code.take() else { return };
         if block.code.ends_with('\n') {
             block.code.pop();
+        }
+        if block.top_level && motile_openui::fences::holds_program(&block.language) {
+            self.blocks.push(Block::Ui { code: block.code, closed: block.closed });
+            return;
         }
         if block.top_level {
             self.blocks.push(Block::Code { language: block.language, code: block.code });
@@ -783,5 +809,21 @@ mod tests {
     fn single_line_breaks_are_kept() {
         let blocks = parse("first line\nsecond line");
         assert_eq!(prose(&blocks, 0).text, "first line\u{2028}second line");
+    }
+
+    #[test]
+    fn finds_the_programs_the_server_finds() {
+        let text = "```openui\na = 1\n```\n\n- ```openui-lang\n  b = 2\n  ```\n\n> ```openui\n> q = 1\n> ```\n\n| a |\n| - |\n| x |\n\n```rust\nc\n```\n\nText\n\n```openui-lang extra\nd = 3\n```\n\n```openui-lang\ne = 4";
+        let found: Vec<(String, bool)> = parse(text)
+            .into_iter()
+            .filter_map(|block| match block {
+                Block::Ui { code, closed } => Some((code, closed)),
+                _ => None,
+            })
+            .collect();
+        let server: Vec<String> =
+            motile_openui::fences::fences(text).iter().map(|fence| fence.trim_end().to_string()).collect();
+        assert_eq!(found.iter().map(|(code, _)| code.clone()).collect::<Vec<_>>(), server);
+        assert_eq!(found.iter().map(|(_, closed)| *closed).collect::<Vec<_>>(), [true, true, false]);
     }
 }

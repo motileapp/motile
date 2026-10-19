@@ -1,0 +1,10 @@
+root = Card([Row([Title("Your suitcase", "md"), Spacer(), Text(done + "/6 packed", "sm", "muted", null, null, null, true)]), bar, list, Button("Clear", @Reset($p1, $p2, $p3, $p4, $p5, $p6), "outline", null, "sm")], "soft")
+$p1 = true
+$p2 = false
+$p3 = true
+$p4 = false
+$p5 = false
+$p6 = false
+done = @Count(@Filter([$p1, $p2, $p3, $p4, $p5, $p6], "", "==", true))
+bar = Box([Box([], null, null, null, "ink", "full", null, (done / 6 * 100) + "%", 4)], null, null, null, "border", "full", null, "100%", 4)
+list = Grid([Checkbox($p1, "The everyday tee", true), Checkbox($p2, "Relaxed Oxford shirt", true), Checkbox($p3, "Unstructured jacket", true), Checkbox($p4, "Straight-leg trousers", true), Checkbox($p5, "Minimal leather sneakers", true), Checkbox($p6, "Everywhere tote", true)], 2, 220, 2)

@@ -1,0 +1,195 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "sparkles",
+            "glyph": ""
+          },
+          "size": 14.0,
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "map-pin",
+            "glyph": ""
+          },
+          "size": 18.0,
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/2",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "camera",
+            "glyph": ""
+          },
+          "size": 24.0,
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/3",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "bike",
+            "glyph": ""
+          },
+          "size": 32.0,
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/4",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "heart",
+            "glyph": ""
+          },
+          "size": 24.0,
+          "color": "destructive"
+        },
+        {
+          "id": "children/0/children/5",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "circle-check-big",
+            "glyph": ""
+          },
+          "size": 24.0,
+          "color": "success"
+        },
+        {
+          "id": "children/0/children/6",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "info",
+            "glyph": ""
+          },
+          "size": 24.0,
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/7",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": {
+            "name": "triangle-alert",
+            "glyph": ""
+          },
+          "size": 24.0,
+          "color": "warning"
+        },
+        {
+          "id": "children/0/children/8",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Icon",
+          "icon": null,
+          "size": 24.0,
+          "color": "foreground"
+        }
+      ],
+      "gap": 16.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0
+  ]
+}

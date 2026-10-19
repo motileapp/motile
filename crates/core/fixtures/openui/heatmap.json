@@ -1,0 +1,2101 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "When the café is busiest",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_title",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Caption",
+      "text": {
+        "text": "Average customers per hour, last 4 weeks",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_subtitle",
+      "color": "muted-foreground"
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Mon",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Tue",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Wed",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        },
+        {
+          "id": "children/2/children/3",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Thu",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        },
+        {
+          "id": "children/2/children/4",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Fri",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        },
+        {
+          "id": "children/2/children/5",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Sat",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        },
+        {
+          "id": "children/2/children/6",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Sun",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        }
+      ],
+      "columns": 7,
+      "min_child_width": null,
+      "gap": 4.0
+    },
+    {
+      "id": "children/3",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "12",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            190,
+            218,
+            242,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/1",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "14",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            182,
+            213,
+            239,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/2",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "13",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            186,
+            215,
+            240,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/3",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/3/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "15",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            179,
+            211,
+            238,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/4",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/4/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "18",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            167,
+            203,
+            235,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/5",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/5/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "34",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            103,
+            166,
+            217,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/6",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/6/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "30",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            119,
+            175,
+            222,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/7",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/7/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "28",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            127,
+            180,
+            224,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/8",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/8/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "30",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            119,
+            175,
+            222,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/9",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/9/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "29",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            123,
+            177,
+            223,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/10",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/10/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "31",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            115,
+            173,
+            220,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/11",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/11/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "36",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            95,
+            161,
+            215,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/12",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/12/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "52",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            32,
+            123,
+            197,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/13",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/13/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "47",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            52,
+            135,
+            203,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/14",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/14/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "41",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            75,
+            149,
+            209,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/15",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/15/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "44",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            63,
+            142,
+            206,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/16",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/16/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "40",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            79,
+            151,
+            210,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/17",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/17/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "45",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            60,
+            140,
+            205,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/18",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/18/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "50",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            40,
+            128,
+            199,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/19",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/19/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "58",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            8,
+            109,
+            190,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/20",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/20/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "49",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            44,
+            130,
+            200,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/21",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/21/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "22",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            151,
+            194,
+            230,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/22",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/22/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "24",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            143,
+            189,
+            228,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/23",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/23/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "23",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            147,
+            192,
+            229,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/24",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/24/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "27",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                13,
+                13,
+                13,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            131,
+            182,
+            225,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/25",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/25/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "38",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            87,
+            156,
+            213,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/26",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/26/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "44",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            63,
+            142,
+            206,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/27",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/27/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "35",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 4.0,
+          "background": [
+            99,
+            163,
+            216,
+            255
+          ],
+          "inner_surface": false,
+          "radius": {
+            "kind": "sm",
+            "points": 6.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "points",
+            "value": 32.0
+          },
+          "flex": null,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        }
+      ],
+      "columns": 7,
+      "min_child_width": null,
+      "gap": 4.0
+    },
+    {
+      "id": "children/4",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Quiet",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        },
+        {
+          "id": "children/4/children/1",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/1/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                238,
+                246,
+                255,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/1/children/1",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                179,
+                211,
+                238,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/1/children/2",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                119,
+                175,
+                222,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/1/children/3",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                60,
+                140,
+                205,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/1/children/4",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": [
+                0,
+                104,
+                188,
+                255
+              ],
+              "inner_surface": false,
+              "radius": {
+                "kind": "sm",
+                "points": 6.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            }
+          ],
+          "gap": 4.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 20.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            }
+          ]
+        },
+        {
+          "id": "children/4/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Caption",
+          "text": {
+            "text": "Busy",
+            "runs": [],
+            "links": []
+          },
+          "style": "caption",
+          "color": "muted-foreground"
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        }
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    8.0,
+    12.0,
+    12.0,
+    12.0
+  ]
+}

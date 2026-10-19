@@ -44,7 +44,7 @@
               },
               "fit": "cover",
               "photos": {
-                "state": "waiting",
+                "state": "idle",
                 "media": []
               }
             },
@@ -175,7 +175,7 @@
               },
               "fit": "cover",
               "photos": {
-                "state": "waiting",
+                "state": "idle",
                 "media": []
               }
             },
@@ -241,7 +241,7 @@
               },
               "fit": "cover",
               "photos": {
-                "state": "waiting",
+                "state": "idle",
                 "media": []
               }
             },

@@ -5,9 +5,9 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
+use motile_openui::fences::{fences, over};
 use motile_openui::{Library, Program, ToolSpec, motile};
 use motile_protocol::wire::{Item, ItemKind, NoticeEvent, ProgramState};
-use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -18,7 +18,6 @@ pub const MAX_STATE: usize = 256 * 1024;
 /// How many times the programs of a user's message are sent back to the agent to be fixed.
 pub const REPAIRS: usize = 2;
 const CONTEXT: &str = "context and form values = ";
-const LANGUAGES: [&str; 2] = ["openui-lang", "openui"];
 
 static LIBRARY: LazyLock<Library> = LazyLock::new(motile::library);
 
@@ -38,37 +37,6 @@ fn tool_spec(tool: ToolDefinition) -> ToolSpec {
         input_schema: (&tool.input_schema).into(),
         output_schema: Some((&tool.output_schema).into()),
     }
-}
-
-/// The text of each program of a reply: its top-level `openui-lang` fences, as the clients find
-/// them.
-pub fn fences(text: &str) -> Vec<String> {
-    let mut found = Vec::new();
-    let mut depth = 0usize;
-    let mut open: Option<String> = None;
-    for event in Parser::new(text) {
-        match event {
-            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info))) if depth == 0 => {
-                let language = info.split_whitespace().next().unwrap_or_default();
-                open = LANGUAGES.contains(&language).then(String::new);
-                depth += 1;
-            }
-            Event::Start(_) => depth += 1,
-            Event::End(_) => {
-                depth -= 1;
-                if depth == 0 {
-                    found.extend(open.take());
-                }
-            }
-            Event::Text(text) => {
-                if let Some(open) = &mut open {
-                    open.push_str(&text);
-                }
-            }
-            _ => {}
-        }
-    }
-    found
 }
 
 /// A program a reply shows.
@@ -94,16 +62,6 @@ pub fn shown(items: &[Item]) -> Vec<Shown> {
         }
     }
     shown
-}
-
-/// What a program draws over the thread's latest one, and whether it is a patch.
-fn over(latest: Option<&str>, program: &str) -> (String, bool) {
-    match latest {
-        Some(latest) if !motile_openui::parse(program).statements.contains_key("root") => {
-            (motile_openui::merge(latest, program), true)
-        }
-        _ => (program.to_string(), false),
-    }
 }
 
 /// What `check_ui` answers of a program: its errors (language.md §8.3) with their hints, the
@@ -335,13 +293,6 @@ note = Badge(\"Tuesday was the best day\", \"success\")";
             let checked = check(&std::fs::read_to_string(&path).unwrap(), None);
             assert!(checked.valid, "{}: {checked:?}", path.display());
         }
-    }
-
-    #[test]
-    fn only_top_level_program_fences_are_programs() {
-        let text =
-            "```openui\na = 1\n```\n\n- ```openui-lang\n  b = 2\n  ```\n\n```rust\nc\n```\n\n```openui-lang\nd = 3";
-        assert_eq!(fences(text), ["a = 1\n", "d = 3"]);
     }
 
     #[test]

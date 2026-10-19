@@ -1,0 +1,1073 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/0/children/0/children/0",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "What makes up GDP?",
+                "runs": [],
+                "links": []
+              },
+              "style": "title_lg",
+              "color": "foreground"
+            },
+            {
+              "id": "children/0/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "An economy, in four parts.",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/0/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "Illustrative economy",
+          "tone": null,
+          "icon": null
+        }
+      ],
+      "gap": 12.0,
+      "align": "start",
+      "justify": "start",
+      "wrap": false,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": true
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Caption",
+      "text": {
+        "text": "Total output",
+        "runs": [],
+        "links": []
+      },
+      "style": "caption",
+      "color": "muted-foreground"
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "$1 trillion",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_heading",
+      "color": "foreground"
+    },
+    {
+      "id": "children/3",
+      "component": "Box",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "$600B",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 0.0,
+          "background": "chart-1",
+          "inner_surface": true,
+          "radius": {
+            "kind": "points",
+            "points": 0.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "fraction",
+            "value": 1.0
+          },
+          "flex": 600.0,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/1",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "$200B",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 0.0,
+          "background": "chart-2",
+          "inner_surface": true,
+          "radius": {
+            "kind": "points",
+            "points": 0.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "fraction",
+            "value": 1.0
+          },
+          "flex": 200.0,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/2",
+          "component": "Box",
+          "children": [
+            {
+              "id": "children/3/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "$170B",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "caption",
+              "color": [
+                255,
+                255,
+                255,
+                255
+              ],
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [
+            0.0
+          ],
+          "sizing": [],
+          "padding": 0.0,
+          "background": "chart-4",
+          "inner_surface": true,
+          "radius": {
+            "kind": "points",
+            "points": 0.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "fraction",
+            "value": 1.0
+          },
+          "flex": 170.0,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        },
+        {
+          "id": "children/3/children/3",
+          "component": "Box",
+          "children": [],
+          "direction": "col",
+          "gap": 0.0,
+          "spacing": [],
+          "sizing": [],
+          "padding": 0.0,
+          "background": "chart-3",
+          "inner_surface": true,
+          "radius": {
+            "kind": "points",
+            "points": 0.0
+          },
+          "border": false,
+          "width": null,
+          "height": {
+            "unit": "fraction",
+            "value": 1.0
+          },
+          "flex": 30.0,
+          "align": "center",
+          "justify": "center",
+          "wrap": false
+        }
+      ],
+      "direction": "row",
+      "gap": 2.0,
+      "spacing": [],
+      "sizing": [
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 600.0,
+          "shrink": false
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 200.0,
+          "shrink": false
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 170.0,
+          "shrink": false
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 30.0,
+          "shrink": false
+        }
+      ],
+      "padding": 0.0,
+      "background": null,
+      "inner_surface": false,
+      "radius": {
+        "kind": "md",
+        "points": 8.0
+      },
+      "border": false,
+      "width": {
+        "unit": "fraction",
+        "value": 1.0
+      },
+      "height": {
+        "unit": "points",
+        "value": 38.0
+      },
+      "flex": null,
+      "align": "center",
+      "justify": "start",
+      "wrap": false
+    },
+    {
+      "id": "children/4",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/4/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/0/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": "chart-1",
+              "inner_surface": true,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Consumer spending",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/4/children/0/children/2",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/4/children/0/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "$600B",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        },
+        {
+          "id": "children/4/children/1",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/1/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": "chart-2",
+              "inner_surface": true,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Business investment",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/4/children/1/children/2",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/4/children/1/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "$200B",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        },
+        {
+          "id": "children/4/children/2",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/2/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": "chart-4",
+              "inner_surface": true,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Government spending",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/4/children/2/children/2",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/4/children/2/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "$170B",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        },
+        {
+          "id": "children/4/children/3",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/4/children/3/children/0",
+              "component": "Box",
+              "children": [],
+              "direction": "col",
+              "gap": 0.0,
+              "spacing": [],
+              "sizing": [],
+              "padding": 0.0,
+              "background": "chart-3",
+              "inner_surface": true,
+              "radius": {
+                "kind": "full",
+                "points": 0.0
+              },
+              "border": false,
+              "width": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "height": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "flex": null,
+              "align": "stretch",
+              "justify": "start",
+              "wrap": false
+            },
+            {
+              "id": "children/4/children/3/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Net exports",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/4/children/3/children/2",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Spacer"
+            },
+            {
+              "id": "children/4/children/3/children/3",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "$30B",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "muted-foreground",
+              "weight": "medium",
+              "italic": false,
+              "strike": false,
+              "digits": true,
+              "max_lines": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "length",
+              "length": {
+                "unit": "points",
+                "value": 10.0
+              },
+              "grow": 0.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "zero",
+              "length": null,
+              "grow": 1.0,
+              "shrink": false
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 220.0,
+      "gap": 8.0
+    },
+    {
+      "id": "children/6",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/6/children/0",
+          "a11y": {
+            "role": "adjustable",
+            "label": "Consumer spending, $ billions",
+            "value": "600"
+          },
+          "component": "Slider",
+          "value": 600.0,
+          "min": 0.0,
+          "max": 1200.0,
+          "step": 10.0,
+          "at": 0.5,
+          "label": "Consumer spending, $ billions",
+          "readout": "600",
+          "head": true,
+          "marks": [],
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/1",
+          "a11y": {
+            "role": "adjustable",
+            "label": "Business investment, $ billions",
+            "value": "200"
+          },
+          "component": "Slider",
+          "value": 200.0,
+          "min": 0.0,
+          "max": 600.0,
+          "step": 10.0,
+          "at": 0.3333333333333333,
+          "label": "Business investment, $ billions",
+          "readout": "200",
+          "head": true,
+          "marks": [],
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/2",
+          "a11y": {
+            "role": "adjustable",
+            "label": "Government spending, $ billions",
+            "value": "170"
+          },
+          "component": "Slider",
+          "value": 170.0,
+          "min": 0.0,
+          "max": 500.0,
+          "step": 10.0,
+          "at": 0.34,
+          "label": "Government spending, $ billions",
+          "readout": "170",
+          "head": true,
+          "marks": [],
+          "disabled": null
+        },
+        {
+          "id": "children/6/children/3",
+          "a11y": {
+            "role": "adjustable",
+            "label": "Net exports, $ billions",
+            "value": "30"
+          },
+          "component": "Slider",
+          "value": 30.0,
+          "min": -200.0,
+          "max": 300.0,
+          "step": 10.0,
+          "at": 0.46,
+          "label": "Net exports, $ billions",
+          "readout": "30",
+          "head": true,
+          "marks": [],
+          "disabled": null
+        }
+      ],
+      "columns": 2,
+      "min_child_width": 240.0,
+      "gap": 24.0
+    },
+    {
+      "id": "children/7",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/7/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Reset economy"
+          },
+          "component": "Button",
+          "label": "Reset economy",
+          "variant": "ghost",
+          "tint": null,
+          "size": "small",
+          "icon": {
+            "name": "rotate-ccw",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        },
+        {
+          "id": "children/7/children/1",
+          "a11y": {
+            "role": "hidden"
+          },
+          "component": "Spacer"
+        },
+        {
+          "id": "children/7/children/2",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Badge",
+          "text": "GDP = C + I + G + (X − M)",
+          "tone": "merged",
+          "icon": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        },
+        {
+          "basis": "zero",
+          "length": null,
+          "grow": 1.0,
+          "shrink": false
+        },
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    },
+    {
+      "id": "children/8",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "GDP counts the value of final goods and services produced within a country. Imports are subtracted because they were produced elsewhere.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/9",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/9/children/0",
+          "a11y": {
+            "role": "radio_group",
+            "label": "The same goods cost 10% more this year. What changes?"
+          },
+          "component": "RadioGroup",
+          "value": "",
+          "options": [
+            {
+              "value": "a",
+              "label": "Real GDP increases by 10%",
+              "description": null
+            },
+            {
+              "value": "b",
+              "label": "Nominal GDP rises; real GDP is unchanged",
+              "description": null
+            },
+            {
+              "value": "c",
+              "label": "Both measures stay the same",
+              "description": null
+            }
+          ],
+          "selected": null,
+          "label": "The same goods cost 10% more this year. What changes?",
+          "variant": "list",
+          "error": null,
+          "disabled": null
+        }
+      ],
+      "soft": true,
+      "nested": true,
+      "padding": 16.0,
+      "spacing": [
+        0.0
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": 20.0,
+  "spacing": [
+    0.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0,
+    16.0
+  ]
+}

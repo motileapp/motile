@@ -22,18 +22,16 @@ use gpui_kit::*;
 
 use crate::theme::{Layer, Opacity, Radius, Surface, colors};
 pub use agent_avatar::{AgentAvatar, AgentAvatars};
-#[allow(unused_imports, reason = "for the OpenUI components still to be written")]
-pub use control::Select;
 pub use control::{
-    ActionButton, ActionMenu, Chip, InputField, InputVariant, Segmented, Spinner, Switch, TextArea, Variant,
+    ActionButton, ActionMenu, Chip, InputField, InputVariant, Segmented, Select, Spinner, Switch, TextArea, Variant,
     card_default, text_area_state,
 };
-#[allow(unused_imports, reason = "for the OpenUI components still to be written")]
 pub use date_field::DateField;
-pub use parts::{CommandBox, FadingScroll, KeyCaps, PickMark, dropdown_card};
-#[allow(unused_imports, reason = "for the OpenUI components still to be written")]
+pub use parts::{
+    CommandBox, CopyButton, FadingScroll, GlassButton, KeyCaps, PickMark, anchored_popover, dropdown_card,
+    popover_card, popover_panel, tracks_bounds,
+};
 pub use pick::{OptionCard, PickRow};
-#[allow(unused_imports, reason = "for the OpenUI components still to be written")]
 pub use slider::Slider;
 
 pub type OnClick = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;

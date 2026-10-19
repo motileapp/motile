@@ -1,0 +1,4 @@
+root = Card([Title("Steep your tea", "md"), presets, Timer($left, "Time left"), done])
+$left = 180
+presets = Row([Button("Green · 2 min", @Set($left, 120), "outline", null, "sm"), Button("Black · 4 min", @Set($left, 240), "outline", null, "sm"), Button("Herbal · 6 min", @Set($left, 360), "outline", null, "sm")], 2, null, null, true)
+done = $left == 0 ? Text("**Ready.** Take the leaves out now.", "sm", "success") : Caption("Start the timer when the water reaches the leaves.")

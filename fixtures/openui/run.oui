@@ -1,0 +1,4 @@
+root = Card([head, status.status == "success" ? output : null, status.status == "error" ? Text(status.error, "sm", "danger") : null], null, 4, 3)
+status = Mutation("run", {command: "git status --short"})
+head = Row([Col([Title("Working tree", "md"), Caption("Runs git status --short in this thread's folder")], 1), Spacer(), Button("Run git status", @Run(status), "solid", null, "sm", "play", status.status == "loading")], 3)
+output = Col([status.data.stdout == "" ? Text("Nothing to commit.", "sm", "muted") : Code(status.data.stdout), Caption("Exited with " + status.data.exit_code)], 2)

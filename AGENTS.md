@@ -247,6 +247,14 @@ for tests.
   many servers share it, and a row for each window with when it starts over and its pace.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
+- `render/openui/host.rs`: runs the programs of an open thread's rows (`RowKind::Ui`), each in a
+  runtime of its own: the row carries its tree, then `ui_patch` events what changed in it, by node
+  id (the path from its root, `node_id` in `render/openui/mod.rs`). What the user does comes as
+  `Command::Ui`; the host calls the program's tools on the thread's server (a `run` asks the user
+  first, `ui_confirm`, unless the thread has full access), keeps its timers, sends its
+  `@ToAssistant` messages with their context, keeps its state with `SetUi` half a second after it
+  stops changing, and looks up its photos and routes. Which fences are programs and which patch
+  the one before is `motile_openui::fences`, as the server finds them.
 - `render/openui/tree.rs`: the tree a client draws for an OpenUI program, a `UiNode` for each
   component with its props final for drawing (`crates/openui/LAYOUT.md`): colours, points, text
   runs, the context rules. `tree/` resolves an evaluated program into it, reusing the components
@@ -258,6 +266,16 @@ for tests.
 - `render/openui/map.rs`: the map's camera in MapLibre's zoom levels: where the first pin and a fit
   put it, the fly between two cameras, the route revealed along its length. The Apple and Android
   clients ask it through `motile_ui_map` and `Native.uiMap`.
+- The frames the clients lay the corpus out in: each client's tests write `build/frames/<client>`
+  (`{"<node id>": [x, y, width, height]}`, every golden tree at 390 and 720) and a picture of each,
+  dark, to `build/programs/<client>`. `examples/compare_frames.rs` compares two clients node by
+  node: gaps, paddings, control heights and the widths a column or a grid gives within a point, what
+  text decides within whole lines and the typefaces' widths. `fixtures/frames/mac` and `ios` are the
+  references CI holds every client to (GPUI to the Mac's, Android to iOS's, as LAYOUT.md pairs
+  them), and `known.txt` the drift let through until the client that strays is fixed.
+  `scripts/compare-frames.sh` lays the corpus out on every client, compares them and lays their
+  pictures side by side in `build/programs/sheets` (`examples/program_sheet.rs`); `--bless` makes
+  the Mac's and iOS's frames the references, after a change to how a program is laid out.
 - `api.rs`: the JSON the client and the core exchange.
 - `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev app's
   account, project and threads.
@@ -349,7 +367,8 @@ gesture for what Esc does. Its package is `app.motile`, its application `app.mot
   `Root.kt` shows the sheets, the viewer and the alerts. `DemoDriver.kt` runs the steps `do.sh` writes.
 - `app/src/test` tests the models. `gestures/` uses the client with fingers (`GestureTests.kt`, the
   iOS app's gesture tests): a test module of its own that runs in a process of its own, so that it
-  can stop the client and open it again, as the iOS app's UI tests do.
+  can stop the client and open it again, as the iOS app's UI tests do. The unit tests lay programs
+  out with the core built for this machine, which `scripts/build-core.sh` puts in `app/build/hostLibs`.
 - `scripts/release.sh` builds the signed APK. Only a development build takes the dev scripts'
   variables (launch extras: `MOTILE_AUTH_URL`, `MOTILE_RELEASES_URL` and the others), since any app
   can start the client with extras. The dev app scripts are under Development.
@@ -415,7 +434,8 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - `scripts/dev-app.sh` opens its dev app on the Mac's dev stack (`apps/macos/scripts/dev-stack.sh`),
   a device of its own with its data in `apps/macos/build/dev/gpui`; `--mac` opens the Mac's dev
   app beside it to compare. `scripts/shot.sh` takes a picture of it, and `scripts/do.sh "click 85
-  330" "key cmd-k" "type hello"` clicks, types and runs commands in it, through `dev_drive.rs`.
+  330" "key cmd-k" "type hello" "slide Tip 1" "press Alex"` clicks, types, drags a program's
+  slider, presses its button and runs commands in it, through `dev_drive.rs`.
   `scripts/build-app.sh` builds `Motile GPUI.app`.
 
 ## General Rules:
@@ -493,8 +513,8 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - After you make code changes, run the checks below and fix what they raise.
 - A change must not break what CI runs on it: the checks, the e2e tests, the iOS UI tests and
   the Mac app's demo (`DemoDriver.swift`, run by `scripts/ci-demo.sh` in the `Release` and
-  `macOS` workflows), which signs in, adds a project, and drives threads, git and drafts end to
-  end. When a change touches what one of them does or expects, read it, update it in the same
+  `macOS` workflows), which signs in, adds a project, and drives threads, git, drafts and a program
+  (a slider dragged, a button pressed) end to end. When a change touches what one of them does or expects, read it, update it in the same
   change, and run it (`apps/macos/scripts/build-app.sh`, then `apps/macos/scripts/ci-demo.sh`,
   then read `screenshots/checks.txt`)
   before calling the change done. A push to `main` with a red workflow blocks the release.
@@ -527,6 +547,7 @@ Checks (`cargo test` needs the compose Postgres; it creates a throwaway database
                                                           # after changing the GPUI app, crates/core or crates/protocol
     (cd apps/android && ./gradlew lintDebug testDebugUnitTest assembleDebug)
                                                           # after changing the Android app, crates/core or crates/protocol
+    scripts/compare-frames.sh                             # after changing how a client lays out a program
 
 The `Release` workflow runs the demo on every push to `main` that touches the client or the server:
 

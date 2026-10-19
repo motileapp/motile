@@ -10,7 +10,9 @@ use super::color::{self, Ink};
 use super::media::{canvas, map_marker, youtube};
 use super::text::{self, Builder, collapse_lines, trim_block};
 use super::*;
-use crate::render::markdown::{self, Block};
+use crate::render::highlight::Spans;
+use crate::render::markdown::{self, Block, ParaKind};
+use crate::render::openui::node_id;
 
 /// What resolving reads besides the program's tree.
 pub struct ResolveCtx<'a> {
@@ -33,6 +35,8 @@ pub trait UiState {
     fn route(&self, stops: &[[f64; 2]]) -> Route;
     /// The state core keeps for a node: a timer, a popover, a flip, the map's filter.
     fn widgets(&self, id: &str) -> Widgets;
+    /// The highlighting of code, once it has been worked out.
+    fn spans(&self, language: &str, code: &str) -> Option<Spans>;
 }
 
 pub enum Route {
@@ -50,6 +54,8 @@ pub struct Widgets {
     pub started: Option<f64>,
     pub filter: Option<String>,
     pub burst: u32,
+    /// An image whose address couldn't be loaded: a photo is found for its `alt`.
+    pub failed: bool,
 }
 
 /// Nothing beside the tree: controls show their props and every lookup waits.
@@ -75,20 +81,10 @@ impl UiState for NoState {
     fn widgets(&self, _id: &str) -> Widgets {
         Widgets::default()
     }
-}
 
-pub fn node_id(path: &[Step]) -> String {
-    let mut id = String::new();
-    for step in path {
-        if !id.is_empty() {
-            id.push('/');
-        }
-        match step {
-            Step::Key(key) => id.push_str(key),
-            Step::Index(index) => id.push_str(&index.to_string()),
-        }
+    fn spans(&self, _language: &str, _code: &str) -> Option<Spans> {
+        None
     }
-    id
 }
 
 pub fn resolve(root: &Element, ctx: &ResolveCtx) -> UiNode {
@@ -204,6 +200,46 @@ impl Pass<'_, '_> {
         self.ctx.state.widgets(&self.id())
     }
 
+    /// The highlighting of code; a node whose code waits for it is built again.
+    pub fn spans(&mut self, language: &str, code: &str) -> Option<Spans> {
+        let spans = self.ctx.state.spans(language, code);
+        self.impure |= spans.is_none();
+        spans
+    }
+
+    fn markdown(&mut self, element: &Element) -> UiKind {
+        let mut blocks = Vec::new();
+        for block in markdown::parse(&string(element, "text")) {
+            match block {
+                Block::Prose(mut prose) => {
+                    for para in &mut prose.paras {
+                        let ParaKind::Pre { language, code, spans, .. } = &mut para.kind else { continue };
+                        *spans = self.spans(language, code);
+                    }
+                    blocks.push(MarkdownBlock::Prose { prose });
+                }
+                Block::Code { language, code } => {
+                    let spans = self.spans(&language, &code);
+                    blocks.push(MarkdownBlock::Code { language, code, spans });
+                }
+                Block::Ui { code, .. } => {
+                    let language = "openui-lang".to_owned();
+                    let spans = self.spans(&language, &code);
+                    blocks.push(MarkdownBlock::Code { language, code, spans });
+                }
+                Block::Image { .. } => {}
+            }
+        }
+        UiKind::Markdown { blocks }
+    }
+
+    fn code(&mut self, element: &Element) -> UiKind {
+        let language = string(element, "language");
+        let language = if language.is_empty() { "code".to_owned() } else { language };
+        let code = string(element, "code");
+        UiKind::Code { spans: self.spans(&language, &code), language, code }
+    }
+
     /// A component, from the last pass when nothing it reads changed.
     pub fn node(&mut self, element: &Arc<Element>, cx: Cx) -> Arc<UiNode> {
         let key = (Arc::as_ptr(element) as usize, self.id(), cx);
@@ -268,9 +304,9 @@ impl Pass<'_, '_> {
             "Link" => link(element),
             "List" => self.list(element, cx),
             "ListItem" => self.list_item(element, cx, None),
-            "Markdown" => markdown_of(element),
+            "Markdown" => self.markdown(element),
             "Quote" => quote(element),
-            "Code" => code(element),
+            "Code" => self.code(element),
             "Math" => UiKind::Math { canvas: canvas(element) },
             "Button" => self.button(element),
             "IconButton" => self.icon_button(element),
@@ -328,7 +364,7 @@ impl Pass<'_, '_> {
             typography: kind == Column::Card || (flow && cx.cell),
             cell: false,
             title_row: cx.title_row,
-            media: false,
+            media: cx.media && kind == Column::Plain,
             ink: cx.ink,
             part: Part::Plain,
         };
@@ -414,8 +450,8 @@ impl Pass<'_, '_> {
                 .prop("radius")
                 .map(|value| radius(value).unwrap_or(Radius { kind: RadiusKind::Points, points: 0.0 })),
             border: flag(element, "border"),
-            width: element.prop("width").and_then(length),
-            height: element.prop("height").and_then(length),
+            width: element.prop("width").and_then(length).filter(|_| !cx.media),
+            height: element.prop("height").and_then(length).filter(|_| !cx.media),
             flex: element
                 .prop("flex")
                 .and_then(Value::as_number)
@@ -754,8 +790,8 @@ fn sizing_of(value: &Value) -> Sizing {
     let Some(element) = value.as_element() else { return content };
     match element.component.as_str() {
         "Spacer" => Sizing { basis: Basis::Zero, length: None, grow: 1.0, shrink: false },
-        "Button" | "IconButton" | "Badge" => Sizing { shrink: false, ..content },
-        "Card" => Sizing { basis: Basis::Row, ..content },
+        "Button" | "IconButton" | "Badge" | "Icon" => Sizing { shrink: false, ..content },
+        "Card" | "Input" | "TextArea" | "Select" | "DatePicker" => Sizing { basis: Basis::Row, ..content },
         "Box" => {
             if let Some(flex) = number(element, "flex") {
                 return Sizing { basis: Basis::Zero, length: None, grow: flex.max(0.0) as f32, shrink: false };
@@ -829,30 +865,9 @@ fn link(element: &Element) -> UiKind {
     UiKind::Link { text, url }
 }
 
-fn markdown_of(element: &Element) -> UiKind {
-    let blocks = markdown::parse(&string(element, "text"))
-        .into_iter()
-        .filter_map(|block| match block {
-            Block::Prose(prose) => Some(MarkdownBlock::Prose { prose }),
-            Block::Code { language, code } => Some(MarkdownBlock::Code { language, code, spans: None }),
-            Block::Image { .. } => None,
-        })
-        .collect();
-    UiKind::Markdown { blocks }
-}
-
 fn quote(element: &Element) -> UiKind {
     let cite = str_of(element, "cite").filter(|cite| !cite.is_empty()).map(text::inline);
     UiKind::Quote { text: text::inline(&string(element, "text")), cite }
-}
-
-fn code(element: &Element) -> UiKind {
-    let language = string(element, "language");
-    UiKind::Code {
-        language: if language.is_empty() { "code".to_owned() } else { language },
-        code: string(element, "code"),
-        spans: None,
-    }
 }
 
 fn icon(element: &Element, cx: Cx) -> UiKind {
@@ -1096,7 +1111,10 @@ pub fn grid_columns(columns: u32, min_child_width: Option<f32>, gap: f32, width:
     let columns = columns.clamp(1, 12);
     let Some(min) = min_child_width else { return columns };
     let share = (width - (columns - 1) as f32 * gap) / columns as f32;
-    let least = width.min(min.max(share));
+    if share >= min {
+        return columns;
+    }
+    let least = width.min(min);
     if least + gap <= 0.0 {
         return 1;
     }

@@ -114,6 +114,21 @@ pub extern "system" fn Java_app_motile_core_Native_uiMap<'caller>(
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// Builds the page an HtmlView or a YouTube shows, a `web::PageRequest` as JSON, and answers with
+/// its `web::Page` as JSON. Synchronous, on any thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_app_motile_core_Native_uiPage<'caller>(
+    mut env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    input: JString<'caller>,
+) -> JString<'caller> {
+    env.with_env(|env| -> Result<JString<'caller>, jni::errors::Error> {
+        let page = motile_core::render::openui::web::page_json(&input.to_string());
+        JString::from_str(env, page)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// Gives the JVM and the application to the crates that ask Android itself through `ndk_context`,
 /// like iroh's DNS resolver, which reads the system's nameservers. The reference is kept for good.
 #[cfg(target_os = "android")]

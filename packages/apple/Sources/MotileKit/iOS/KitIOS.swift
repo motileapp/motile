@@ -406,9 +406,15 @@ final class ShimmerLabel: TextLabel {
 
 /// A symbol in one colour, in the middle of its frame.
 final class SymbolView: UIImageView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        contentMode = .center
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
     convenience init(_ symbol: Symbol? = nil, size: CGFloat = 12, tint: UIColor = Theme.mutedForeground) {
         self.init(frame: .zero)
-        contentMode = .center
         tintColor = tint
         if let symbol { show(symbol, size: size) }
     }

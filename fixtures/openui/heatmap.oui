@@ -1,0 +1,3 @@
+root = Card([Title("When the café is busiest", "md"), Caption("Average customers per hour, last 4 weeks"), Grid(@Each(days, "d", Caption(d)), 7, null, 1), Grid(@Each(visits, "v", Box([Text(v + "", "xs", null, "medium", false, false, true)], null, null, 1, @MixColor("#EEF6FF", "#0068BC", v / 60), "sm", null, null, 32, null, "center", "center")), 7, null, 1), Row([Caption("Quiet"), Row(@Each([0, 0.25, 0.5, 0.75, 1], "t", Box([], null, null, null, @MixColor("#EEF6FF", "#0068BC", t), "sm", null, 20, 10)), 1), Caption("Busy")], 2)])
+days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+visits = [12, 14, 13, 15, 18, 34, 30, 28, 30, 29, 31, 36, 52, 47, 41, 44, 40, 45, 50, 58, 49, 22, 24, 23, 27, 38, 44, 35]

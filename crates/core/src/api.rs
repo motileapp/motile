@@ -18,6 +18,8 @@ use crate::keybindings::{Rule, View as KeybindingsView};
 use crate::link::State;
 use crate::render::agents::AgentView;
 use crate::render::highlight::Spans;
+use crate::render::openui::UiOp;
+use crate::render::openui::host::UiEvent;
 use crate::render::rows::{Row, Waiting};
 use crate::search::MatchView;
 
@@ -416,6 +418,20 @@ pub enum Command {
         thread_id: String,
         row_ids: Vec<String>,
     },
+    /// What the user did to the node `node` of the program in the row: its id in the row's tree.
+    Ui {
+        thread_id: String,
+        row_id: String,
+        node: String,
+        event: UiEvent,
+    },
+    /// Whether the user allows the command a program asked to run with a `ui_confirm` event.
+    UiConfirm {
+        thread_id: String,
+        row_id: String,
+        call_id: u64,
+        allow: bool,
+    },
     /// Opens or closes a group of tool calls or a turn's fold.
     ToggleRow {
         thread_id: String,
@@ -569,6 +585,28 @@ pub enum Event {
         thread_id: String,
         row_id: String,
         spans: Spans,
+    },
+    /// Changes the tree of a program row, in the transcript or in the open agent's.
+    UiPatch {
+        thread_id: String,
+        row_id: String,
+        ops: Vec<UiOp>,
+    },
+    /// A program asks to run `command` in the thread's folder: the client asks the user, and
+    /// answers with `ui_confirm`.
+    UiConfirm {
+        thread_id: String,
+        row_id: String,
+        call_id: u64,
+        command: String,
+    },
+    /// A program opens a web page in the browser.
+    OpenUrl {
+        url: String,
+    },
+    /// A program copies text to the clipboard.
+    Copy {
+        text: String,
     },
     /// The highlighting of what the command `id` answered with: the spans of each line of its
     /// file number `file`, counted from the line's start.

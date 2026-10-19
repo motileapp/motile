@@ -5,6 +5,7 @@
 //! `input.json` is what `motile_ui_layout` reads (`canvas::Canvas`); `hit` lights that hit.
 
 #[path = "../tests/paint/mod.rs"]
+#[allow(dead_code)]
 mod paint;
 
 use motile_core::render::openui::canvas;

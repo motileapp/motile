@@ -14,6 +14,7 @@ import { Fragment, useState, type ReactNode } from "react"
 import { parseDiff } from "./diff"
 import { highlight } from "./highlight"
 import { AgentAvatar, AgentIcon } from "./icons"
+import { SavingsProgram } from "./program"
 import type {
   AgentState,
   HandoffEnd,
@@ -102,6 +103,8 @@ function Row({
           </pre>
         </div>
       )
+    case "ui":
+      return <SavingsProgram />
     case "tool": {
       const Icon = TOOL_ICONS[item.tool]
       return (

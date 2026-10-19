@@ -11,12 +11,13 @@ use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use iroh::Endpoint;
+use motile_openui::ToolError;
 use motile_protocol::auth_api::{Device, DeviceKind, Me};
 use motile_protocol::auth_client::{AuthClient, DeviceDescription};
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    AccountSkills, Activity, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Message, Project,
+    Access, AccountSkills, Activity, AgentLimits, ContinueSettings, FileKind, Item, ItemKind, Media, Message, Project,
     PullRequestSettings, Request, ServerInfo, Skill, Thread, ThreadMatch, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
@@ -38,7 +39,8 @@ use crate::pull_request;
 use crate::render::agents;
 use crate::render::diff;
 use crate::render::highlight::{self, Spans};
-use crate::render::rows::{Splice, Transcript, Uncoloured, short_model_name};
+use crate::render::openui::host::{Out, Programs, TimerKey};
+use crate::render::rows::{Row, RowKind, Splice, Transcript, Uncoloured, short_model_name};
 use crate::ricrac;
 use crate::search;
 use crate::skills;
@@ -71,7 +73,6 @@ const SEARCH_PROTOCOL: u32 = 26;
 const SKILLS_PROTOCOL: u32 = 28;
 /// The first protocol whose servers keep the state of programs and run their tools and lookups:
 /// `SetUi`, `UiTool`, `UiImages`, `UiRoute`, and a message's `context`.
-#[allow(dead_code)]
 const UI_PROTOCOL: u32 = 34;
 /// How long the skills a server listed are offered before it is asked again.
 const SKILLS_FRESH: Duration = Duration::from_secs(30);
@@ -190,6 +191,37 @@ enum Input {
         key: String,
         value: Value,
     },
+    /// What a program's tool call answered.
+    UiToolDone {
+        thread_id: String,
+        row_id: String,
+        serial: u64,
+        call: u64,
+        result: Result<Value, ToolError>,
+    },
+    UiTick {
+        thread_id: String,
+        key: TimerKey,
+    },
+    /// Time for the programs' saves and lookups that wait.
+    UiWake {
+        thread_id: String,
+    },
+    UiImagesFound {
+        thread_id: String,
+        query: String,
+        images: Vec<Media>,
+    },
+    UiRouted {
+        thread_id: String,
+        stops: Vec<[f64; 2]>,
+        points: Option<Vec<[f64; 2]>>,
+    },
+    UiHighlighted {
+        thread_id: String,
+        language: String,
+        code: String,
+    },
     Render,
     Tick,
     Stop,
@@ -227,6 +259,33 @@ struct OpenThread {
     /// Items whose streamed text isn't in the cache yet.
     unsaved: HashSet<String>,
     saved_at: Instant,
+    /// The programs its rows show, running.
+    programs: Programs,
+    /// The timers of its programs, which stop with it.
+    ui_timers: UiTimers,
+}
+
+#[derive(Default)]
+struct UiTimers(HashMap<TimerKey, AbortHandle>);
+
+impl UiTimers {
+    fn set(&mut self, key: TimerKey, task: AbortHandle) {
+        if let Some(before) = self.0.insert(key, task) {
+            before.abort();
+        }
+    }
+
+    fn stop(&mut self, key: &TimerKey) {
+        if let Some(task) = self.0.remove(key) {
+            task.abort();
+        }
+    }
+}
+
+impl Drop for UiTimers {
+    fn drop(&mut self) {
+        self.0.values().for_each(AbortHandle::abort);
+    }
 }
 
 struct Core {
@@ -551,6 +610,20 @@ impl Core {
             Input::Relayed(round) => self.relayed(round),
             Input::CopiesFetched { origin, projects, threads } => self.copies_fetched(&origin, projects, threads),
             Input::CopyOpened { thread_id, result } => self.copy_opened(&thread_id, result),
+            Input::UiToolDone { thread_id, row_id, serial, call, result } => {
+                self.with_programs(&thread_id, |programs| programs.tool_result(&row_id, serial, call, result))
+            }
+            Input::UiTick { thread_id, key } => self.with_programs(&thread_id, |programs| programs.tick(&key)),
+            Input::UiWake { thread_id } => self.with_programs(&thread_id, |programs| programs.wake(Instant::now())),
+            Input::UiImagesFound { thread_id, query, images } => {
+                self.with_programs(&thread_id, |programs| programs.images(&query, images))
+            }
+            Input::UiRouted { thread_id, stops, points } => {
+                self.with_programs(&thread_id, |programs| programs.route(&stops, points))
+            }
+            Input::UiHighlighted { thread_id, language, code } => {
+                self.with_programs(&thread_id, |programs| programs.highlighted(&language, &code))
+            }
             Input::Render => self.render(),
             Input::Stop => {}
             Input::Tick => {
@@ -1509,7 +1582,9 @@ impl Core {
         match message {
             Message::Opened { reset, activity } => {
                 open.live = false;
+                let mut cleared = Vec::new();
                 if reset {
+                    cleared = open.programs.clear();
                     open.transcript.clear();
                     open.agents.clear();
                     if let Some((_, transcript)) = &mut open.agent {
@@ -1522,6 +1597,7 @@ impl Core {
                 }
                 self.cache.set_activity(thread_id, &activity);
                 let (queued, event) = activity_changed(thread_id, &mut open.transcript, activity);
+                self.carry_out(thread_id, cleared);
                 if reset {
                     self.cache.clear_items(thread_id);
                     self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows: Vec::new() });
@@ -1580,6 +1656,8 @@ impl Core {
                 self.cache.save_items(thread_id, &to_save, synced);
                 open.saved_at = Instant::now();
                 let agents = agents_changed.then(|| agents_event(thread_id, &open.agents));
+                let restored: Vec<Out> = items.iter().flat_map(|item| open.programs.saved(item)).collect();
+                self.carry_out(thread_id, restored);
                 for splice in merge(splices) {
                     self.emit_rows(thread_id, false, splice);
                 }
@@ -1606,11 +1684,12 @@ impl Core {
                 self.schedule_render();
             }
             Message::Activity { activity } => {
-                if !activity.running {
-                    open.transcript.end_streaming();
-                }
+                let settled = if activity.running { None } else { open.transcript.end_streaming() };
                 self.cache.set_activity(thread_id, &activity);
                 let (queued, event) = activity_changed(thread_id, &mut open.transcript, activity);
+                if let Some(settled) = settled {
+                    self.emit_rows(thread_id, false, settled);
+                }
                 if let Some(queued) = queued {
                     self.emit_rows(thread_id, false, queued);
                 }
@@ -1624,7 +1703,8 @@ impl Core {
         }
     }
 
-    fn emit_rows(&self, thread_id: &str, reset: bool, splice: Splice) {
+    fn emit_rows(&mut self, thread_id: &str, reset: bool, mut splice: Splice) {
+        self.dress(thread_id, &mut splice.rows);
         self.emit(Event::Rows {
             thread_id: thread_id.to_string(),
             reset,
@@ -1635,15 +1715,188 @@ impl Core {
         });
     }
 
-    fn emit_agent_rows(&self, thread_id: &str, reset: bool, splice: Splice) {
+    fn emit_agent_rows(&mut self, thread_id: &str, reset: bool, mut splice: Splice) {
         let Some((agent_id, _)) = self.open.get(thread_id).and_then(|open| open.agent.as_ref()) else { return };
+        let agent_id = agent_id.clone();
+        self.dress(thread_id, &mut splice.rows);
         self.emit(Event::AgentRows {
             thread_id: thread_id.to_string(),
-            agent_id: agent_id.clone(),
+            agent_id,
             reset,
             start: splice.start,
             remove: splice.remove,
             rows: splice.rows,
+        });
+    }
+
+    /// Runs the programs among the rows about to be sent, and puts their trees in them.
+    fn dress(&mut self, thread_id: &str, rows: &mut [Row]) {
+        if !rows.iter().any(|row| matches!(row.kind, RowKind::Ui { .. })) {
+            return;
+        }
+        self.refresh_programs(thread_id);
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        let (transcript, agent) = (&open.transcript, open.agent.as_ref().map(|(_, transcript)| transcript));
+        let saved = |item_id: &str, block: u32| {
+            let item = transcript.item(item_id).or_else(|| agent.and_then(|agent| agent.item(item_id)));
+            item.and_then(|item| item.ui.get(&block).cloned())
+        };
+        let outs = open.programs.dress(rows, &saved);
+        self.carry_out(thread_id, outs);
+    }
+
+    /// Tells the thread's programs what its server can do and how much the thread may.
+    fn refresh_programs(&mut self, thread_id: &str) {
+        let Some(open) = self.open.get(thread_id) else { return };
+        let server = self.servers.iter().find(|server| server.device.public_key == open.server_id);
+        let limited = server.and_then(|server| server.info.as_ref()).is_some_and(|info| info.protocol < UI_PROTOCOL);
+        let thread = server.and_then(|server| server.threads.get(thread_id));
+        let full_access = thread.is_some_and(|thread| thread.access == Access::Full);
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        open.programs.limited = limited;
+        open.programs.full_access = full_access;
+    }
+
+    fn with_programs(&mut self, thread_id: &str, act: impl FnOnce(&mut Programs) -> Vec<Out>) {
+        self.refresh_programs(thread_id);
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        let outs = act(&mut open.programs);
+        self.carry_out(thread_id, outs);
+    }
+
+    /// Does what the thread's programs asked for.
+    fn carry_out(&mut self, thread_id: &str, outs: Vec<Out>) {
+        if outs.is_empty() {
+            return;
+        }
+        let Some(server_id) = self.open.get(thread_id).map(|open| open.server_id.clone()) else { return };
+        let link = self.link(&server_id);
+        let inputs = self.inputs.clone();
+        let mut sends = Vec::new();
+        for out in outs {
+            let thread_id = thread_id.to_string();
+            match out {
+                Out::Patch { row_id, ops } => self.emit(Event::UiPatch { thread_id, row_id, ops }),
+                Out::Confirm { row_id, call_id, command } => {
+                    self.emit(Event::UiConfirm { thread_id, row_id, call_id, command })
+                }
+                Out::OpenUrl { url } => self.emit(Event::OpenUrl { url }),
+                Out::Copy { text } => self.emit(Event::Copy { text }),
+                Out::Send { text, context } => sends.push((text, context)),
+                Out::Call { row_id, serial, call, tool, args, confirmed } => {
+                    let (link, inputs) = (link.clone(), inputs.clone());
+                    tokio::spawn(async move {
+                        let request = Request::UiTool { thread_id: thread_id.clone(), tool, args, confirmed };
+                        let answer = match link {
+                            Ok(link) => link.request(&request).await.map_err(error_text),
+                            Err(error) => Err(error),
+                        };
+                        let result = match answer {
+                            Ok(Message::UiToolResult { result }) => Ok(result),
+                            Ok(Message::UiToolError { code, .. }) if code == "tool-not-found" => {
+                                Err(ToolError::NotFound { available: Vec::new() })
+                            }
+                            Ok(Message::UiToolError { message, .. } | Message::Error { message }) => {
+                                Err(ToolError::Failed(message))
+                            }
+                            Ok(other) => Err(ToolError::Failed(unexpected(&other))),
+                            Err(error) => Err(ToolError::Failed(error)),
+                        };
+                        let _ = inputs.send(Input::UiToolDone { thread_id, row_id, serial, call, result });
+                    });
+                }
+                Out::Interval { key, seconds } => {
+                    let every = Duration::from_secs_f64(seconds.max(1.0));
+                    let (inputs, ticking, ticked) = (inputs.clone(), key.clone(), thread_id.clone());
+                    let task = tokio::spawn(async move {
+                        loop {
+                            tokio::time::sleep(every).await;
+                            let tick = Input::UiTick { thread_id: ticked.clone(), key: ticking.clone() };
+                            if inputs.send(tick).is_err() {
+                                return;
+                            }
+                        }
+                    });
+                    if let Some(open) = self.open.get_mut(&thread_id) {
+                        open.ui_timers.set(key, task.abort_handle());
+                    }
+                }
+                Out::Stop { key } => {
+                    if let Some(open) = self.open.get_mut(&thread_id) {
+                        open.ui_timers.stop(&key);
+                    }
+                }
+                Out::Save { item_id, block, state } => {
+                    let Ok(link) = link.clone() else { continue };
+                    tokio::spawn(async move {
+                        if let Err(error) = link.request(&Request::SetUi { thread_id, item_id, block, state }).await {
+                            tracing::debug!("couldn't keep a program's state: {error:#}");
+                        }
+                    });
+                }
+                Out::Images { query } => {
+                    let (link, inputs) = (link.clone(), inputs.clone());
+                    tokio::spawn(async move {
+                        let request = Request::UiImages { thread_id: thread_id.clone(), query: query.clone() };
+                        let images = match link {
+                            Ok(link) => match link.request(&request).await {
+                                Ok(Message::UiImages { images }) => images,
+                                _ => Vec::new(),
+                            },
+                            Err(_) => Vec::new(),
+                        };
+                        let _ = inputs.send(Input::UiImagesFound { thread_id, query, images });
+                    });
+                }
+                Out::Route { stops } => {
+                    let (link, inputs) = (link.clone(), inputs.clone());
+                    tokio::spawn(async move {
+                        let request = Request::UiRoute { stops: stops.clone() };
+                        let points = match link {
+                            Ok(link) => match link.request(&request).await {
+                                Ok(Message::UiRoute { points }) => Some(points),
+                                _ => None,
+                            },
+                            Err(_) => None,
+                        };
+                        let _ = inputs.send(Input::UiRouted { thread_id, stops, points });
+                    });
+                }
+                Out::Highlight { language, code } => {
+                    let inputs = inputs.clone();
+                    tokio::task::spawn_blocking(move || {
+                        highlight::highlight(&language, &code);
+                        let _ = inputs.send(Input::UiHighlighted { thread_id, language, code });
+                    });
+                }
+                Out::Wake { after } => {
+                    let inputs = inputs.clone();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(after).await;
+                        let _ = inputs.send(Input::UiWake { thread_id });
+                    });
+                }
+            }
+        }
+        if sends.is_empty() {
+            return;
+        }
+        let Ok(link) = link else { return };
+        let thread_id = thread_id.to_string();
+        tokio::spawn(async move {
+            for (text, context) in sends {
+                let request = Request::Send {
+                    thread_id: Some(thread_id.clone()),
+                    new_thread: None,
+                    text,
+                    attachments: Vec::new(),
+                    now: false,
+                    context,
+                };
+                if let Err(error) = link.request(&request).await {
+                    tracing::warn!("couldn't send a program's message: {error:#}");
+                }
+            }
         });
     }
 
@@ -1689,26 +1942,19 @@ impl Core {
     /// Renders the text that streamed in since the last time, and saves it now and then.
     fn render(&mut self) {
         self.render_scheduled = false;
-        let mut events = Vec::new();
+        let mut splices = Vec::new();
         for (thread_id, open) in &mut self.open {
             for id in std::mem::take(&mut open.unrendered) {
                 let Some(splice) = open.transcript.refresh(&id) else { continue };
-                events.push(Event::Rows {
-                    thread_id: thread_id.clone(),
-                    reset: false,
-                    start: splice.start,
-                    remove: splice.remove,
-                    rows: splice.rows,
-                    earlier: open.earlier,
-                });
+                splices.push((thread_id.clone(), splice));
             }
             if open.unsaved.is_empty() || open.saved_at.elapsed() < SAVE_EVERY {
                 continue;
             }
             save_streamed(&self.cache, thread_id, open);
         }
-        for event in events {
-            self.emit(event);
+        for (thread_id, splice) in splices {
+            self.emit_rows(&thread_id, false, splice);
         }
     }
 
@@ -2456,6 +2702,14 @@ impl Core {
                 self.highlight(&thread_id, &row_ids);
                 self.reply(id, Ok(json!({})));
             }
+            Command::Ui { thread_id, row_id, node, event } => {
+                self.with_programs(&thread_id, |programs| programs.event(&row_id, &node, event));
+                self.reply(id, Ok(json!({})));
+            }
+            Command::UiConfirm { thread_id, row_id, call_id, allow } => {
+                self.with_programs(&thread_id, |programs| programs.confirm(&row_id, call_id, allow));
+                self.reply(id, Ok(json!({})));
+            }
             Command::ToggleRow { thread_id, row_id } => {
                 let splice = self.open.get_mut(&thread_id).and_then(|open| open.transcript.toggle(&row_id));
                 if let Some(splice) = splice {
@@ -2615,38 +2869,11 @@ impl Core {
         transcript.set_removed(removed.clone());
         transcript.set_agents(&agents);
         transcript.load(newest);
-        let rows = |reset, splice: Splice| Event::Rows {
-            thread_id: thread_id.to_string(),
-            reset,
-            start: splice.start,
-            remove: splice.remove,
-            rows: splice.rows,
-            earlier,
-        };
-        self.emit(rows(true, Splice { start: 0, remove: 0, rows: transcript.rows().to_vec() }));
-        if !items.is_empty()
-            && let Some(rest) = transcript.prepend(items)
-        {
-            self.emit(rows(false, rest));
-        }
-        // What the agent was last seen doing, until the server says what it does now.
-        if let Some(thread) = &thread {
-            let activity = match removed {
-                Some(_) => Activity::default(),
-                None => restored_activity(thread, self.cache.activity(thread_id)),
-            };
-            let (queued, event) = activity_changed(thread_id, &mut transcript, activity);
-            if let Some(queued) = queued {
-                self.emit(rows(false, queued));
-            }
-            self.emit(event);
-        }
-
-        self.emit(agents_event(thread_id, &agents));
+        let rows = transcript.rows().to_vec();
         let open = OpenThread {
             server_id: server_id.to_string(),
             transcript,
-            agents,
+            agents: agents.clone(),
             agent: None,
             earlier,
             live,
@@ -2654,8 +2881,32 @@ impl Core {
             unrendered: HashSet::new(),
             unsaved: HashSet::new(),
             saved_at: Instant::now(),
+            programs: Programs::default(),
+            ui_timers: UiTimers::default(),
         };
         self.open.insert(thread_id.to_string(), open);
+        self.emit_rows(thread_id, true, Splice { start: 0, remove: 0, rows });
+        let open = self.open.get_mut(thread_id).ok_or("The thread closed.")?;
+        if let Some(rest) =
+            Some(items).filter(|items| !items.is_empty()).and_then(|items| open.transcript.prepend(items))
+        {
+            self.emit_rows(thread_id, false, rest);
+        }
+        // What the agent was last seen doing, until the server says what it does now.
+        if let Some(thread) = &thread {
+            let activity = match removed {
+                Some(_) => Activity::default(),
+                None => restored_activity(thread, self.cache.activity(thread_id)),
+            };
+            let open = self.open.get_mut(thread_id).ok_or("The thread closed.")?;
+            let (queued, event) = activity_changed(thread_id, &mut open.transcript, activity);
+            if let Some(queued) = queued {
+                self.emit_rows(thread_id, false, queued);
+            }
+            self.emit(event);
+        }
+
+        self.emit(agents_event(thread_id, &agents));
         if live {
             self.emit(Event::Live { thread_id: thread_id.to_string(), live });
         }
@@ -2670,6 +2921,7 @@ impl Core {
     }
 
     fn close_thread(&mut self, thread_id: &str) {
+        self.with_programs(thread_id, Programs::flush);
         let Some(mut open) = self.open.remove(thread_id) else { return };
         save_streamed(&self.cache, thread_id, &mut open);
         let server = self.servers.iter().find(|server| server.device.public_key == open.server_id);

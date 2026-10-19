@@ -349,6 +349,42 @@ private final class Demo {
             store.rightPanel.isOpen = false
         }
 
+        // A program the agent shows streams into its reply and runs: a slider dragged and a button
+        // pressed change what it shows.
+        store.startNewThread()
+        store.setAccess(.full)
+        let program = StallMonitor()
+        send("Show the ui bill.")
+        await expect("a program streams into the reply and is drawn", within: 60) {
+            turnEnded && programViews(ProgramRowView.self).count == 1
+        }
+        results.append(responsive("a program streams", program))
+        await shoot("07-program")
+        let shown = programText
+        let using = StallMonitor()
+        if let tip = programViews(SliderView.self).first(where: { $0.label == "Tip" }) {
+            let y = tip.bounds.maxY - 8
+            tip.onDrag?(.began, CGPoint(x: tip.bounds.width * 0.6, y: y))
+            for step in 1...10 {
+                tip.onDrag?(.moved, CGPoint(x: tip.bounds.width * (0.6 + 0.04 * Double(step)), y: y))
+                await wait(0.03)
+            }
+            tip.onDrag?(.ended, CGPoint(x: tip.bounds.width, y: y))
+        }
+        await expect("dragging a program's slider changes what it shows") {
+            programNode(component: "Slider", label: "Tip")?["value"] as? Double == 30 && programText != shown
+        }
+        let dragged = programText
+        if let alex = programViews(ControlView.self).first(where: { $0.title == "Alex" }) {
+            alex.onPress?(CGPoint(x: alex.bounds.midX, y: alex.bounds.midY))
+        }
+        await expect("pressing a program's button changes what it shows") {
+            !programText.contains("Alex") && programText != dragged
+                && !programViews(ControlView.self).contains { $0.title == "Alex" }
+        }
+        results.append(responsive("a program's slider is dragged and its button pressed", using))
+        await shoot("07-program-used")
+
         // A long reply full of code, to see that the window keeps up.
         store.startNewThread()
         store.setAccess(.full)
@@ -475,6 +511,46 @@ private final class Demo {
         finish()
     }
 
+    /// The views of a kind in the open thread's transcript.
+    private func programViews<View: NSView>(_ type: View.Type) -> [View] {
+        func find(in view: NSView) -> [View] {
+            ((view as? View).map { [$0] } ?? []) + view.subviews.flatMap(find)
+        }
+        return transcriptView.map(find) ?? []
+    }
+
+    /// The tree of the open thread's latest program, as the core last sent it.
+    private var programTree: JSON? {
+        let row = store.transcript.rows.last { $0.kindName == "ui" }
+        return row.flatMap { ProgramStore.tree(rowID: $0.id) }
+    }
+
+    /// Every word the latest program shows.
+    private var programText: String {
+        func words(_ value: Any) -> [String] {
+            switch value {
+            case let text as String: [text]
+            case let node as JSON: node.keys.sorted().flatMap { words(node[$0]!) }
+            case let list as [Any]: list.flatMap(words)
+            default: []
+            }
+        }
+        return programTree.map(words)?.joined(separator: " ") ?? ""
+    }
+
+    private func programNode(component: String, label: String) -> JSON? {
+        func find(_ value: Any) -> JSON? {
+            switch value {
+            case let node as JSON:
+                if node["component"] as? String == component, node["label"] as? String == label { return node }
+                return node.values.lazy.compactMap(find).first
+            case let list as [Any]: return list.lazy.compactMap(find).first
+            default: return nil
+            }
+        }
+        return programTree.flatMap(find)
+    }
+
     private var transcriptFitsWindow: Bool {
         guard let transcript = transcriptView, let content = window?.contentView else { return false }
         let frame = transcript.convert(transcript.bounds, to: content)
@@ -570,6 +646,7 @@ extension RowModel {
         case .user: "user"
         case .prose: "prose"
         case .code: "code"
+        case .ui: "ui"
         case .tool: "tool"
         case .thinking: "thinking"
         case .media: "media"
@@ -584,6 +661,7 @@ extension RowModel {
         case .agents: "agents"
         case .queued: "queued"
         case .removed: "removed"
+        case .unknown: "unknown"
         }
     }
 }

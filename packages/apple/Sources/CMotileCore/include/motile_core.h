@@ -22,6 +22,10 @@ char *motile_ui_layout(const char *input_json);
 // `motile_free_string`.
 char *motile_ui_map(const char *input_json);
 
+// Builds the page an HtmlView or a YouTube shows (a `web::PageRequest`) and answers with its
+// `web::Page`, on any thread. Free the answer with `motile_free_string`.
+char *motile_ui_page(const char *input_json);
+
 // Frees a string the core answered with.
 void motile_free_string(char *string);
 

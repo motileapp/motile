@@ -160,15 +160,13 @@ fn charts_follow_the_references_rules() {
     assert_eq!(ticks, ["$0", "$1B", "$2B", "$3B", "$4B", "$5B"]);
     assert_eq!(scene.hits[2].tip.rows[1].value, "$1.31B");
     assert_eq!(scene.label.as_deref(), Some("bar chart of Photography, Inspection by year"));
-    let rounded: Vec<f32> = scene
+    let square = scene.items.iter().filter(|item| matches!(item, Item::Rect { rx, .. } if *rx == 0.0)).count();
+    let tops = scene
         .items
         .iter()
-        .filter_map(|item| match item {
-            Item::Rect { rx, .. } => Some(*rx),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(rounded, [0.0, 4.0, 0.0, 4.0, 0.0, 4.0, 0.0, 4.0]);
+        .filter(|item| matches!(item, Item::Path { paint, .. } if paint.fill.is_some() && paint.stroke.is_none()))
+        .count();
+    assert_eq!((square, tops), (4, 4), "each stack is a square segment under a top rounded only at its top");
 
     let many = canvas::layout("Chart", &chart("line-many"), 390.0, 14.0);
     let labels =
@@ -185,6 +183,20 @@ fn charts_follow_the_references_rules() {
     let narrow = canvas::layout("Chart", &chart("pie"), 300.0, 14.0);
     assert_eq!(narrow.width, 186.0);
     assert!(!narrow.legend.unwrap().beside);
+}
+
+#[test]
+fn chart_labels_stay_inside_the_scene_at_phone_widths() {
+    for name in CHARTS {
+        for width in [300.0, 390.0] {
+            let scene = canvas::layout("Chart", &chart(name), width, 14.0);
+            for item in &scene.items {
+                let Item::Text(text) = item else { continue };
+                let (left, right) = paint::text_span(text);
+                assert!(left >= 0.0 && right <= scene.width, "{name} at {width}: {:?} spans {left}…{right}", text.text);
+            }
+        }
+    }
 }
 
 #[test]
@@ -391,4 +403,47 @@ fn layout_reads_and_writes_json() {
 fn chart_of(input: &str) -> Map {
     let value = Value::from_json_str(input).unwrap();
     value.get("props").unwrap().as_object().unwrap().clone()
+}
+
+/// The cases every client's painter is compared with, in `fixtures/canvas/reference`: each scene as
+/// JSON and as the reference painter paints it in both appearances, and `cases.json`, which names
+/// them with the hit to light and the boxes of their labels, outside which the pictures must agree.
+#[test]
+fn client_references_match() {
+    let mut cases = Vec::new();
+    for name in CHARTS {
+        let props = chart(name);
+        cases.push((format!("chart-{name}-390"), canvas::layout("Chart", &props, 390.0, 14.0), false));
+        cases.push((format!("chart-{name}-720"), canvas::layout("Chart", &props, 720.0, 14.0), true));
+    }
+    for name in ["shapes", "bike", "paths"] {
+        let props = svg(name);
+        cases.push((format!("svg-{name}-390"), canvas::layout("Svg", &props, 390.0, 14.0), false));
+        cases.push((format!("svg-{name}-720"), canvas::layout("Svg", &props, 720.0, 14.0), false));
+    }
+    for (name, tex) in [("integral", FORMULAS[4]), ("matrix", FORMULAS[6]), ("chemistry", FORMULAS[14])] {
+        cases.push((format!("math-{name}"), canvas::math::layout(tex, false, 14.0), false));
+    }
+    cases.push(("math-error".into(), canvas::layout("Math", &props(r#"{"tex": "\\frac{1}{"}"#), 400.0, 14.0), false));
+
+    let manifest: Vec<String> = cases
+        .iter()
+        .map(|(name, scene, hovered)| {
+            let hover = (*hovered && !scene.hits.is_empty()).then_some(scene.hits.len() / 2);
+            golden(&format!("reference/{name}.json"), &json(scene));
+            for theme in [Theme::Dark, Theme::Light] {
+                golden_png(&format!("reference/{name}"), scene, theme, hover);
+            }
+            let masks: Vec<[f64; 4]> = scene
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Text(text) => Some(paint::text_box(text).map(|v| (f64::from(v) * 100.0).round() / 100.0)),
+                    _ => None,
+                })
+                .collect();
+            serde_json::json!({"name": name, "hover": hover, "scale": 2, "masks": masks}).to_string()
+        })
+        .collect();
+    golden("reference/cases.json", &format!("[\n{}\n]\n", manifest.join(",\n")));
 }

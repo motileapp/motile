@@ -1,0 +1,443 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "component": "Col",
+      "children": [
+        {
+          "id": "children/0/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 2
+          },
+          "component": "Title",
+          "text": {
+            "text": "Should you switch doors?",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_lg",
+          "color": "foreground"
+        },
+        {
+          "id": "children/0/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "One car. Two goats. A surprisingly good reason to switch.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "align": "stretch",
+      "spacing": [
+        0.0,
+        4.0
+      ]
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "a11y": {
+            "role": "button",
+            "label": "Door 1 🚪 Closed",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/1/children/0/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Door 1",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "muted-foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/1/children/0/children/0/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 1
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "🚪",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "title3xl",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/1/children/0/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Closed",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "caption",
+                  "color": "muted-foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 20.0,
+          "background": {
+            "wash": "warning"
+          },
+          "inner_surface": true,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/1",
+          "a11y": {
+            "role": "button",
+            "label": "Door 2 🚪 Closed",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/1/children/1/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Door 2",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "muted-foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/1/children/1/children/0/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 1
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "🚪",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "title3xl",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/1/children/1/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Closed",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "caption",
+                  "color": "muted-foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 20.0,
+          "background": {
+            "wash": "warning"
+          },
+          "inner_surface": true,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        },
+        {
+          "id": "children/1/children/2",
+          "a11y": {
+            "role": "button",
+            "label": "Door 3 🚪 Closed",
+            "on": false
+          },
+          "component": "Pressable",
+          "children": [
+            {
+              "id": "children/1/children/2/children/0",
+              "component": "Col",
+              "children": [
+                {
+                  "id": "children/1/children/2/children/0/children/0",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Door 3",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "small",
+                  "color": "muted-foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                },
+                {
+                  "id": "children/1/children/2/children/0/children/1",
+                  "a11y": {
+                    "role": "heading",
+                    "level": 1
+                  },
+                  "component": "Title",
+                  "text": {
+                    "text": "🚪",
+                    "runs": [],
+                    "links": []
+                  },
+                  "style": "title3xl",
+                  "color": "foreground"
+                },
+                {
+                  "id": "children/1/children/2/children/0/children/2",
+                  "a11y": {
+                    "role": "text"
+                  },
+                  "component": "Text",
+                  "text": {
+                    "text": "Closed",
+                    "runs": [],
+                    "links": []
+                  },
+                  "inlines": [],
+                  "style": "caption",
+                  "color": "muted-foreground",
+                  "weight": "medium",
+                  "italic": false,
+                  "strike": false,
+                  "digits": false,
+                  "max_lines": null
+                }
+              ],
+              "align": "center",
+              "spacing": [
+                0.0,
+                4.0,
+                4.0
+              ]
+            }
+          ],
+          "padding": 20.0,
+          "background": {
+            "wash": "warning"
+          },
+          "inner_surface": true,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "selected": false,
+          "ring": false,
+          "disabled": null
+        }
+      ],
+      "columns": 3,
+      "min_child_width": null,
+      "gap": 12.0
+    },
+    {
+      "id": "children/2",
+      "component": "Box",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "heading",
+            "level": 3
+          },
+          "component": "Title",
+          "text": {
+            "text": "Start by choosing a door.",
+            "runs": [],
+            "links": []
+          },
+          "style": "title_md",
+          "color": "foreground"
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "text"
+          },
+          "component": "Text",
+          "text": {
+            "text": "The host knows where the car is and will open another door with a goat behind it.",
+            "runs": [],
+            "links": []
+          },
+          "inlines": [],
+          "style": "small",
+          "color": "muted-foreground",
+          "weight": "regular",
+          "italic": false,
+          "strike": false,
+          "digits": false,
+          "max_lines": null
+        }
+      ],
+      "direction": "col",
+      "gap": 4.0,
+      "spacing": [
+        0.0,
+        4.0
+      ],
+      "sizing": [],
+      "padding": 16.0,
+      "background": {
+        "wash": "foreground"
+      },
+      "inner_surface": true,
+      "radius": {
+        "kind": "lg",
+        "points": 12.0
+      },
+      "border": false,
+      "width": null,
+      "height": null,
+      "flex": null,
+      "align": "stretch",
+      "justify": "start",
+      "wrap": false
+    },
+    {
+      "id": "children/3",
+      "component": "Row",
+      "children": [
+        {
+          "id": "children/3/children/3",
+          "a11y": {
+            "role": "button",
+            "label": "Simulate 1,000 games"
+          },
+          "component": "Button",
+          "label": "Simulate 1,000 games",
+          "variant": "ghost",
+          "tint": null,
+          "size": "regular",
+          "icon": {
+            "name": "dices",
+            "glyph": ""
+          },
+          "block": false,
+          "disabled": null
+        }
+      ],
+      "gap": 8.0,
+      "align": "center",
+      "justify": "start",
+      "wrap": true,
+      "sizing": [
+        {
+          "basis": "content",
+          "length": null,
+          "grow": 0.0,
+          "shrink": false
+        }
+      ]
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": 20.0,
+  "spacing": [
+    0.0,
+    16.0,
+    16.0,
+    16.0
+  ]
+}

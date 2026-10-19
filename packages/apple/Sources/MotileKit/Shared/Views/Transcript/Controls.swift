@@ -96,7 +96,9 @@ class ControlView: FlippedView {
     let size: ControlSize
     var variant: ButtonVariant { didSet { paint() } }
     var title: String? { didSet { paint(); relayout() } }
-    var symbol: Symbol? { didSet { mark.isHidden = symbol == nil; symbol.map { mark.show($0, size: size.symbol) }; relayout() } }
+    var symbol: Symbol? { didSet { showMark() } }
+    /// A Lucide icon by its character in the font, which the apps' own `Symbol` may not have.
+    var glyph: String? { didSet { showMark() } }
     var tint: PlatformColor? { didSet { paint() } }
     var selected = false { didSet { paint() } }
     var surface = Surface.background { didSet { paint() } }
@@ -141,9 +143,8 @@ class ControlView: FlippedView {
         chevron.image = .symbol(.chevronDown, size: size.textSize, trimmed: true)
         chevron.tint = Theme.mutedStrongerForeground
         chevron.isHidden = true
-        mark.isHidden = symbol == nil
-        symbol.map { mark.show($0, size: size.symbol) }
         for view in [face, mark, words, chevron] as [PlatformView] { addSubview(view) }
+        showMark()
         focusable = true
         onPress = { [weak self] _ in self?.press() }
         onHover = { [weak self] point in self?.light(point != nil) }
@@ -154,6 +155,18 @@ class ControlView: FlippedView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     static func font(_ size: ControlSize) -> PlatformFont { .ui(size.textSize, weight: .medium) }
+
+    private var hasMark: Bool { symbol != nil || glyph != nil }
+
+    private func showMark() {
+        mark.isHidden = !hasMark
+        if let symbol {
+            mark.show(symbol, size: size.symbol)
+        } else if let glyph {
+            mark.image = .lucide(glyph, side: size.symbolSide)
+        }
+        relayout()
+    }
 
     private var wordless: Bool { (title ?? "").isEmpty && !opens }
 
@@ -167,7 +180,7 @@ class ControlView: FlippedView {
         return max(size.height, ceil(width))
     }
 
-    var naturalWidth: CGFloat { Self.width(title: title, symbol: symbol != nil, size: size, opens: opens) }
+    var naturalWidth: CGFloat { Self.width(title: title, symbol: hasMark, size: size, opens: opens) }
 
     override var focusShape: (rect: CGRect, radius: CGFloat) { (face.frame, size.radius) }
 
@@ -199,11 +212,11 @@ class ControlView: FlippedView {
         let text = words.text
         let textWidth = ControlText.width(text)
         let chevronWidth = opens ? chevron.image?.size.width ?? 0 : 0
-        let leading = size.padding - (symbol == nil ? 0 : size.symbolOutset)
+        let leading = size.padding - (hasMark ? size.symbolOutset : 0)
         let trailing = size.padding - (opens ? size.chevronOutset : 0)
-        let content = (symbol == nil ? 0 : side + size.gap) + textWidth + (opens ? size.gap + chevronWidth : 0)
+        let content = (hasMark ? side + size.gap : 0) + textWidth + (opens ? size.gap + chevronWidth : 0)
         var x = opens || !fills ? leading : max(leading, ((bounds.width - content) / 2).rounded())
-        if symbol != nil {
+        if hasMark {
             mark.frame = CGRect(x: x, y: top + ((height - side) / 2).rounded(), width: side, height: side)
             x += side + size.gap
         }
