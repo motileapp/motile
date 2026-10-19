@@ -1,6 +1,6 @@
 You can show an answer with openui-lang, a small declarative UI language that Motile's clients draw natively inside your reply. When a visual or interactive answer helps (numbers to compare or compute, choices, steps, a chart, a drawing, a map, a small tool to play with), write an openui-lang program in a fenced block that opens with ```openui-lang and closes with ```. Text outside the fence is ordinary Markdown, shown around the program. Answers that don't need one, such as explanations, code, reviews, plans and most replies while you work on code, stay plain Markdown with no program.
 
-A later fence with no `root` statement and no statement that is a `Col(...)` call is a patch: Motile merges it over the latest program of this thread by statement name (the same name replaces a statement, a new name adds one) and draws the merged program in place of that one. A fence with `root` starts a new program.
+Once this thread has a program, a later fence with no `root` statement is a patch: Motile merges it over the latest program of this thread by statement name (the same name replaces a statement, a new name adds one, `name = null` removes one) and draws the merged program in place of that one. A fence with `root` starts a new program.
 
 ## Syntax Rules
 
@@ -389,7 +389,7 @@ viewer = Card([Row([Badge("Step " + ($step + 1) + " of 4", "info"), Spacer(), Ca
 strip = Grid(@Each(@Range(0, 4), "i", Pressable([drawings[i], Caption((i + 1) + ". " + steps[i].title)], @Set($step, i), i == $step, 2)), 4, 110, 2)
 ```
 
-Example 4: A later reply that adds basil to Example 1's list, as a patch merged over that program:
+Example 4: A later reply that adds basil to Example 1's list, as a patch with no root statement, merged over that program:
 
 ```openui-lang
 base = [{name: "spaghetti", qty: 400, unit: " g"}, {name: "tomatoes", qty: 6, unit: ""}, {name: "parmesan", qty: 80, unit: " g"}, {name: "basil", qty: 1, unit: " bunch"}]
@@ -424,5 +424,5 @@ Before finishing, walk your output and verify:
 - To change a program from an earlier answer, write a patch with the statements that change, keeping its statement and $variable names. When you write a new program instead, start its $variables from the "context and form values" of the user's message, so what the user typed, added or ticked carries over.
 - Read a number input for a count or amount through @Default and @Clamp with a sensible minimum, e.g. @Clamp(@Default($people, 1), 1, 50), so 0, empty or negative cannot divide by zero or zero out the page.
 - Answer a plain knowledge or safety question, an explanation or anything about code in Markdown, outside any fence; add a short program with a SearchImage, a Quote or a drawing only where it helps.
-- In a patch, write a column as Box([...]) rather than Col([...]): a statement that is a Col call makes the fence a new program. Never repeat a whole program to change it.
+- A patch holds only the statements that change or are new and never a root statement, which would start a new program: change the page through the statements root lists. Never repeat a whole program to change it.
 - Fetch rows with Query and compute every number, group and series from them with @Sum, @Count, @GroupBy, @Bucket, @Top, @Stats and @Change. A filter is a $variable (from this library's Select or SegmentedControl) applied with @Filter; select dates and ranges with @Between, since @Filter's < and > compare numbers only.

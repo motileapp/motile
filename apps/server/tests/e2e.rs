@@ -4219,6 +4219,54 @@ async fn a_program_keeps_its_state_and_a_message_tells_the_agent_what_it_sent() 
 }
 
 #[tokio::test]
+async fn a_program_with_errors_goes_back_to_its_agent_until_a_patch_fixes_it() {
+    let (harness, connection, _list) = with_children().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Show a broken ui").await;
+
+    let fixed = transcript_once(&connection, &thread_id, |transcript| transcript.turn_ends().len() == 2).await;
+    use motile_protocol::wire::NoticeEvent::ProgramErrors;
+    assert_eq!(notices(&fixed), [("Program errors".to_string(), ProgramErrors)]);
+    let told = harness.recorded_prompts();
+    let asked = told.last().unwrap();
+    assert!(asked.starts_with("Motile's clients can't draw all of what you showed:"), "{told:?}");
+    assert!(asked.contains("- unknown-component in `chart` (BarChart): Unknown component \"BarChart\". Hint:"));
+    assert!(asked.contains("- missing-required in `note` (Badge)"), "{asked}");
+    let patch = fixed.texts().last().unwrap().to_string();
+    assert!(patch.starts_with("```openui-lang\nchart = Chart(\"bar\""), "{patch}");
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let settled = finished_transcript(&connection, &thread_id).await;
+    assert_eq!((settled.turn_ends().len(), notices(&settled).len()), (2, 1), "the patch fixed it");
+    assert_eq!(harness.recorded_prompts().len(), 2);
+}
+
+#[tokio::test]
+async fn an_agent_checks_a_program_before_it_shows_it() {
+    let (harness, connection, _list) = with_children().await;
+    let new_thread = full_access(&harness, &connection, Agent::Codex).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    finished_transcript(&connection, &thread_id).await;
+    let started = harness.recorded_requests("thread/start");
+    let server = &started.last().unwrap()["config"]["mcp_servers"]["motile"];
+    let url = server["url"].as_str().unwrap();
+    let token = server["http_headers"]["Authorization"].as_str().unwrap().strip_prefix("Bearer ").unwrap();
+
+    let program = json!({"program": "```openui-lang\nroot = Col([t, gone])\nt = Title()\n```"});
+    let (said, failed) = call_tool(url, token, "check_ui", program).await;
+    let checked: serde_json::Value = serde_json::from_str(&said).unwrap();
+    assert!(!failed, "{said}");
+    assert_eq!(
+        (&checked["valid"], &checked["patch"], &checked["unresolved"]),
+        (&json!(false), &json!(false), &json!(["gone"]))
+    );
+    assert_eq!(checked["errors"][0]["code"], "missing-required", "{said}");
+    assert_eq!(checked["errors"][0]["statementId"], "t", "{said}");
+    let (said, _) = call_tool(url, token, "check_ui", json!({"program": "root = Col([Title(\"Hi\")])"})).await;
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&said).unwrap()["valid"], true, "{said}");
+}
+
+#[tokio::test]
 async fn a_programs_tools_read_the_threads_folder_and_run_only_what_its_access_allows() {
     let harness = Harness::start(fixture(Agent::Claude), "0").await;
     let connection = harness.connect().await;

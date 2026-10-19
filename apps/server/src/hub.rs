@@ -18,11 +18,11 @@ use anyhow::{Context, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::wire::{
-    AccountSkills, Activity, Agent, AgentAccount, AgentLimits, Approval, BranchInstructions, CONTINUE_PROMPT,
-    ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus,
-    HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread, OriginUsage, Project,
-    PullRequest, PullRequestAction, Queued, RunsOn, ServerInfo, ServerUpdate, SkillMention, Subagent, Thread,
-    ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
+    AccountSkills, Activity, Agent, AgentAccount, AgentLimits, AgentNotice, Approval, BranchInstructions,
+    CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind, GitAction, GitHubState,
+    GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread,
+    NoticeEvent, OriginUsage, Project, PullRequest, PullRequestAction, Queued, RunsOn, ServerInfo, ServerUpdate,
+    SkillMention, Subagent, Thread, ThreadChange, ToolCall, ToolStatus, TurnChanges, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use serde_json::Value;
@@ -3586,6 +3586,9 @@ impl Hub {
     }
 
     async fn after_turn(self: &Arc<Self>, live: &mut Live) {
+        if let Err(error) = self.send_back_programs(live) {
+            tracing::error!(thread_id = live.stored.thread.id, "couldn't send programs back to be fixed: {error:#}");
+        }
         if std::mem::take(&mut live.title_needs_refinement) && live.stored.title_source == TitleSource::Placeholder {
             tokio::spawn(self.clone().title_from_transcript(live.stored.thread.id.clone()));
         }
@@ -3598,6 +3601,25 @@ impl Hub {
         let (hub, path) = (self.clone(), live.stored.thread.cwd.clone());
         self.announce_projects(&projects);
         tokio::spawn(async move { hub.read_git(&path, false).await });
+    }
+
+    /// Asks the agent to fix the programs of the turn that just ended that the clients can't draw
+    /// whole, unless the usage limit ended it.
+    fn send_back_programs(self: &Arc<Self>, live: &mut Live) -> anyhow::Result<()> {
+        if live.limited() {
+            return Ok(());
+        }
+        live.flush(&self.store)?;
+        let thread = &live.stored.thread;
+        let Some(repair) = ui::repair(&self.store.program_items(&thread.id)?) else { return Ok(()) };
+        let notice = AgentNotice {
+            thread_id: thread.id.clone(),
+            title: "Program errors".to_string(),
+            event: NoticeEvent::ProgramErrors,
+            agent: thread.agent,
+            summary: Some(repair.summary),
+        };
+        self.tell(live, notice, repair.text)
     }
 }
 

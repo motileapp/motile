@@ -23,8 +23,9 @@ const SHOWING_MEDIA: &str = "You can show the user an image or a video by embedd
      so that it shows before it plays. Any other file embedded the same way, like \
      ![The report](/path/to/report.pdf), is sent to the user to download; send a folder as an archive.";
 
-/// Told to an agent when it starts: where it runs, and that it shows or sends what it made instead
-/// of naming a file. Claude Code knows its own model and effort; Codex is told them.
+/// Told to an agent when it starts: where it runs, that it shows or sends what it made instead of
+/// naming a file, and how it shows a program. Claude Code knows its own model and effort; Codex is
+/// told them.
 pub fn instructions(turn: &Turn) -> String {
     let harness = match turn.agent {
         Agent::Claude => "Claude Code",
@@ -44,8 +45,16 @@ pub fn instructions(turn: &Turn) -> String {
     if turn.mcp.is_some() {
         text += STARTING_AGENTS;
     }
+    text += "\n\n";
+    text += &crate::ui::PROMPT;
+    if turn.mcp.is_some() {
+        text += CHECKING_PROGRAMS;
+    }
     text
 }
+
+const CHECKING_PROGRAMS: &str =
+    "\n- Before you send a program you aren't sure of, check it with the motile tool check_ui.";
 
 /// How the agents start agents on the server's other accounts.
 const STARTING_AGENTS: &str = "\n\nYou can start agents on the other accounts of the user's server, other Claude Code \

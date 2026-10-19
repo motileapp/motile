@@ -732,11 +732,15 @@ impl Hub {
         Ok(Some((notice, text)))
     }
 
-    /// Tells the thread's agent of an agent it started: at once while it works, in a turn of its
-    /// own when it doesn't, and after the turn it is about to start otherwise.
     async fn notify(self: &Arc<Self>, thread_id: &str, notice: AgentNotice, text: String) -> anyhow::Result<()> {
         let mut threads = self.threads.lock().await;
         let Some(live) = threads.get_mut(thread_id) else { return Ok(()) };
+        self.tell(live, notice, text)
+    }
+
+    /// Tells the thread's agent what the notice is about: at once while it works, in a turn of its
+    /// own when it doesn't, and after the turn it is about to start otherwise.
+    pub(super) fn tell(self: &Arc<Self>, live: &mut Live, notice: AgentNotice, text: String) -> anyhow::Result<()> {
         let queued = Queued {
             id: new_id(),
             text,
