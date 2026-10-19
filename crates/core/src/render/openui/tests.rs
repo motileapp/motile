@@ -576,3 +576,16 @@ fn a_program_that_nests_too_deep_shows_an_error_instead_of_running_out_of_stack(
     }
     assert_eq!(errors[4], Vec::<String>::new());
 }
+
+#[test]
+fn a_query_never_runs_a_command() {
+    let program = "root = Col([Text(\"Ran: \" + ran.stdout)])\nran = Query(\"run\", {command: \"touch made\"}, {stdout: \"\"}, 5)";
+    for full_access in [true, false] {
+        let mut thread = Thread::of(program);
+        thread.programs.full_access = full_access;
+        let ui = thread.ui(PROGRAM);
+        let asked = thread.outs.iter().any(|out| matches!(out, Out::Confirm { .. }));
+        assert!(calls(&thread.outs).is_empty() && !asked, "{:?}", thread.outs);
+        assert!(ui.errors.iter().any(|error| error.contains("only from a click")), "{:?}", ui.errors);
+    }
+}

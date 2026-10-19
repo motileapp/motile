@@ -27,6 +27,7 @@ const SAVES_KEPT: usize = 8;
 const RUN: &str = "run";
 const OLD_SERVER: &str = "Your server needs an update to run this.";
 const REFUSED: &str = "The user didn't allow the command.";
+const NOT_CLICKED: &str = "run runs only from a click, through Mutation and @Run.";
 const CONTEXT: &str = "context and form values = ";
 
 /// What the user did to a node of a program.
@@ -462,6 +463,11 @@ impl Programs {
                 if self.limited {
                     hosted.env.rewind();
                     pending.push(hosted.runtime.tool_result(call.id, Err(ToolError::Failed(OLD_SERVER.into()))));
+                    continue;
+                }
+                if call.tool == RUN && !call.mutation {
+                    hosted.env.rewind();
+                    pending.push(hosted.runtime.tool_result(call.id, Err(ToolError::Failed(NOT_CLICKED.into()))));
                     continue;
                 }
                 let args = call.args.to_json();

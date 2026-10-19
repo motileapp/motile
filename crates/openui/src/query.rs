@@ -16,6 +16,8 @@ pub struct ToolCall {
     pub id: u64,
     pub tool: String,
     pub args: Value,
+    /// A `Mutation` makes it, which only a click runs; a `Query` fetches by itself.
+    pub mutation: bool,
 }
 
 /// An interval for the host to keep, every `seconds`, until it is cancelled.
@@ -260,7 +262,7 @@ impl Queries {
         let Some(query) = self.queries.get_mut(statement) else { return };
         query.loading = true;
         let key = query.key.clone();
-        requests.calls.push(ToolCall { id, tool: query.tool.clone(), args: call_args(&query.args) });
+        requests.calls.push(ToolCall { id, tool: query.tool.clone(), args: call_args(&query.args), mutation: false });
         self.cache.entry(key.clone()).or_default().in_flight = true;
         self.pending.insert(id, Pending::Query { statement: statement.to_owned(), key });
     }
@@ -324,7 +326,7 @@ impl Queries {
         let id = self.id();
         let mutation = self.mutations.get_mut(statement).expect("the mutation");
         mutation.result = status("loading", Value::Null, Value::Null);
-        requests.calls.push(ToolCall { id, tool, args: call_args(&args) });
+        requests.calls.push(ToolCall { id, tool, args: call_args(&args), mutation: true });
         self.pending.insert(id, Pending::Mutation { statement: statement.to_owned() });
         self.touch(statement);
         Some(id)
