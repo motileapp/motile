@@ -45,7 +45,7 @@ impl Pass<'_, '_> {
 
     pub(super) fn image(&mut self, element: &Element, cx: Cx) -> UiKind {
         let alt = string(element, "alt").trim().to_owned();
-        let src = str_of(element, "src").and_then(text::web_url);
+        let src = str_of(element, "src").and_then(text::https_url);
         let photos = match src.is_none() || self.widgets().failed {
             true => self.photo_search(&alt),
             false => Photos { state: PhotoState::Idle, media: Vec::new() },
