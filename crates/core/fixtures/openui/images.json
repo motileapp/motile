@@ -1,0 +1,303 @@
+{
+  "id": "",
+  "a11y": {
+    "role": "group"
+  },
+  "component": "Card",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Golden hour in San Francisco",
+        "runs": [],
+        "links": []
+      },
+      "style": "card_title",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/1/children/0",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/1/children/0/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Golden Gate Bridge from Battery East"
+              },
+              "component": "Image",
+              "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bf/Golden_Gate_Bridge_as_seen_from_Battery_East.jpg/960px-Golden_Gate_Bridge_as_seen_from_Battery_East.jpg",
+              "alt": "Golden Gate Bridge from Battery East",
+              "aspect_ratio": 1.5,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/1/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Working src",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/1/children/0/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Loads the given URL",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/1/children/1",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/1/children/1/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Alcatraz Island"
+              },
+              "component": "SearchImage",
+              "query": "Alcatraz Island",
+              "aspect_ratio": 1.5,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/1/children/1/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "No src",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/1/children/1/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Found by searching the query",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/1/children/2",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/1/children/2/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "Palace of Fine Arts"
+              },
+              "component": "Image",
+              "src": "https://example.invalid/palace.jpg",
+              "alt": "Palace of Fine Arts",
+              "aspect_ratio": 1.5,
+              "radius": {
+                "kind": "lg",
+                "points": 12.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/1/children/2/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Broken src",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/1/children/2/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Falls back to search",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        },
+        {
+          "id": "children/1/children/3",
+          "component": "Col",
+          "children": [
+            {
+              "id": "children/1/children/3/children/0",
+              "a11y": {
+                "role": "image",
+                "label": "qzxv unfindable subject 0000"
+              },
+              "component": "Image",
+              "src": "https://example.invalid/none.jpg",
+              "alt": "qzxv unfindable subject 0000",
+              "aspect_ratio": 1.5,
+              "radius": {
+                "kind": "xl",
+                "points": 16.0
+              },
+              "fit": "cover",
+              "photos": {
+                "state": "waiting",
+                "media": []
+              }
+            },
+            {
+              "id": "children/1/children/3/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Nothing found",
+                "runs": [],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "semibold",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            },
+            {
+              "id": "children/1/children/3/children/2",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Quiet placeholder",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            }
+          ],
+          "align": "stretch",
+          "spacing": [
+            0.0,
+            8.0,
+            8.0
+          ]
+        }
+      ],
+      "columns": 4,
+      "min_child_width": 150.0,
+      "gap": 12.0
+    }
+  ],
+  "soft": false,
+  "nested": false,
+  "padding": null,
+  "spacing": [
+    0.0,
+    12.0
+  ]
+}

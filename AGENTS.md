@@ -246,6 +246,14 @@ for tests.
   many servers share it, and a row for each window with when it starts over and its pace.
 - `render/`: turns transcripts into rows ready to draw: `rows.rs` (the row list and its
   splices), `markdown.rs`, `highlight.rs`, `diff.rs`, `agents.rs`.
+- `render/openui/tree.rs`: the tree a client draws for an OpenUI program, a `UiNode` for each
+  component with its props final for drawing (`crates/openui/LAYOUT.md`): colours, points, text
+  runs, the context rules. `tree/` resolves an evaluated program into it, reusing the components
+  that didn't change; the canvas components carry the input of `canvas/`'s layout. Its golden
+  trees are `fixtures/openui`, one for each program of the repo's `fixtures/openui`
+  (`OPENUI_BLESS=1` rewrites them). `scripts/ui-types.sh` writes its Swift and Kotlin copies
+  (`examples/ui_types.rs`), and `scripts/lucide-names.mjs` the Lucide names its icons take
+  (`tree/lucide.rs`). Run them after changing the types or the font.
 - `api.rs`: the JSON the client and the core exchange.
 - `examples/drive.rs` drives the core from a terminal; `examples/seed.rs` makes the dev app's
   account, project and threads.
@@ -450,7 +458,9 @@ redone for its versions in `patches/crates`; the script refuses a patch that `Ca
 - Do not edit generated code: `Cargo.lock`, `pnpm-lock.yaml`, `apps/web/src/routeTree.gen.ts`,
   and what `pnpm tokens` writes from `packages/theme/tokens.json`: `tokens.css`, `theme.css`,
   `Tokens.swift`, `apps/gpui/src/tokens.rs`, the Android app's `Tokens.kt` and its
-  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json`.
+  `res/values*/tokens.xml`, and `packages/theme/map-style-*.json`. Also what
+  `scripts/ui-types.sh` writes, `UiNodes.swift` and `UiNodes.kt`, and what
+  `scripts/lucide-names.mjs` writes, `crates/core/src/render/openui/tree/lucide.rs`.
   The shadcn components in `src/components/ui` are ours once added: they are rewritten on the
   design tokens and edited like any view. Never edit an applied migration in
   `apps/auth/migrations` or `apps/server/migrations`, add a new one.

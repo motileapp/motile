@@ -1,0 +1,353 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 2
+      },
+      "component": "Title",
+      "text": {
+        "text": "A slow Saturday in Lisbon",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_lg",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Start by the river, climb into Alfama for lunch, and end the day at a miradouro with the city below you.",
+        "runs": [
+          [
+            31,
+            6,
+            1
+          ],
+          [
+            70,
+            9,
+            2
+          ]
+        ],
+        "links": []
+      },
+      "inlines": [],
+      "style": "body",
+      "color": "foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/2/children/0",
+          "a11y": {
+            "role": "image",
+            "label": "Belém Tower Lisbon"
+          },
+          "component": "SearchImage",
+          "query": "Belém Tower Lisbon",
+          "aspect_ratio": 1.5,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/2/children/1",
+          "a11y": {
+            "role": "image",
+            "label": "Alfama Lisbon"
+          },
+          "component": "SearchImage",
+          "query": "Alfama Lisbon",
+          "aspect_ratio": 1.5,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        },
+        {
+          "id": "children/2/children/2",
+          "a11y": {
+            "role": "image",
+            "label": "Miradouro da Senhora do Monte"
+          },
+          "component": "SearchImage",
+          "query": "Miradouro da Senhora do Monte",
+          "aspect_ratio": 1.5,
+          "radius": {
+            "kind": "lg",
+            "points": 12.0
+          },
+          "fit": "cover",
+          "photos": {
+            "state": "waiting",
+            "media": []
+          }
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 100.0,
+      "gap": 8.0
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "Before you go",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/4",
+      "component": "Markdown",
+      "blocks": [
+        {
+          "kind": "prose",
+          "prose": {
+            "text": "•\tTrams 28 and 12 get crowded after 10 AM.\n•\tWear shoes with grip: the cobbles are polished smooth.\n•\tMost museums close on Mondays.",
+            "runs": [
+              [
+                124,
+                7,
+                1
+              ]
+            ],
+            "links": [],
+            "paras": [
+              {
+                "start": 0,
+                "len": 43,
+                "kind": "list_item",
+                "depth": 1,
+                "marker": true,
+                "quote": 0
+              },
+              {
+                "start": 43,
+                "len": 57,
+                "kind": "list_item",
+                "depth": 1,
+                "marker": true,
+                "quote": 0
+              },
+              {
+                "start": 100,
+                "len": 32,
+                "kind": "list_item",
+                "depth": 1,
+                "marker": true,
+                "quote": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "children/5",
+      "component": "Grid",
+      "children": [
+        {
+          "id": "children/5/children/0",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/5/children/0/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Walking",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/0/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "6.4 km",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/5/children/1",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/5/children/1/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Day pass",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/1/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "€6.80",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        },
+        {
+          "id": "children/5/children/2",
+          "a11y": {
+            "role": "group"
+          },
+          "component": "Card",
+          "children": [
+            {
+              "id": "children/5/children/2/children/0",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Caption",
+              "text": {
+                "text": "Sunset",
+                "runs": [],
+                "links": []
+              },
+              "style": "caption",
+              "color": "muted-foreground"
+            },
+            {
+              "id": "children/5/children/2/children/1",
+              "a11y": {
+                "role": "heading",
+                "level": 2
+              },
+              "component": "Title",
+              "text": {
+                "text": "7:42 PM",
+                "runs": [],
+                "links": []
+              },
+              "style": "card_heading",
+              "color": "foreground"
+            }
+          ],
+          "soft": false,
+          "nested": false,
+          "padding": 16.0,
+          "spacing": [
+            0.0,
+            4.0
+          ]
+        }
+      ],
+      "columns": 3,
+      "min_child_width": 150.0,
+      "gap": 12.0
+    },
+    {
+      "id": "children/6",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Times are estimates, not live data.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "caption",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    8.0,
+    24.0,
+    24.0,
+    12.0,
+    24.0,
+    24.0
+  ]
+}

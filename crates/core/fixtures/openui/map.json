@@ -1,0 +1,208 @@
+{
+  "id": "",
+  "component": "Col",
+  "children": [
+    {
+      "id": "children/0",
+      "a11y": {
+        "role": "heading",
+        "level": 3
+      },
+      "component": "Title",
+      "text": {
+        "text": "San Francisco, your way",
+        "runs": [],
+        "links": []
+      },
+      "style": "title_md",
+      "color": "foreground"
+    },
+    {
+      "id": "children/1",
+      "a11y": {
+        "role": "text"
+      },
+      "component": "Text",
+      "text": {
+        "text": "Tap a pin to choose where to start.",
+        "runs": [],
+        "links": []
+      },
+      "inlines": [],
+      "style": "small",
+      "color": "muted-foreground",
+      "weight": "regular",
+      "italic": false,
+      "strike": false,
+      "digits": false,
+      "max_lines": null
+    },
+    {
+      "id": "children/2",
+      "a11y": {
+        "role": "region",
+        "label": "Map"
+      },
+      "component": "Map",
+      "pins": [
+        {
+          "key": "Ferry Building",
+          "label": "Ferry Building",
+          "lat": 37.7955,
+          "lng": -122.3937,
+          "category": "Food",
+          "icon": "☕",
+          "number": 1,
+          "selected": true,
+          "visible": true
+        },
+        {
+          "key": "Coit Tower",
+          "label": "Coit Tower",
+          "lat": 37.8024,
+          "lng": -122.4058,
+          "category": "Views",
+          "icon": null,
+          "number": 2,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Palace of Fine Arts",
+          "label": "Palace of Fine Arts",
+          "lat": 37.8029,
+          "lng": -122.4484,
+          "category": "Landmarks",
+          "icon": "🏛️",
+          "number": 3,
+          "selected": false,
+          "visible": true
+        },
+        {
+          "key": "Golden Gate Bridge",
+          "label": "Golden Gate Bridge",
+          "lat": 37.8199,
+          "lng": -122.4783,
+          "category": "Views",
+          "icon": "🌉",
+          "number": 4,
+          "selected": false,
+          "visible": true
+        }
+      ],
+      "route": "loading",
+      "line": [
+        [
+          37.7955,
+          -122.3937
+        ],
+        [
+          37.8024,
+          -122.4058
+        ],
+        [
+          37.8029,
+          -122.4484
+        ],
+        [
+          37.8199,
+          -122.4783
+        ]
+      ],
+      "selected": "Ferry Building",
+      "height": 400.0,
+      "categories": [
+        "Food",
+        "Views",
+        "Landmarks"
+      ],
+      "filter": null,
+      "note": "Drag to explore and use + and − to zoom. Select a place to highlight it. The line joins the places in order. Street routing is loading or unavailable."
+    },
+    {
+      "id": "children/3",
+      "a11y": {
+        "role": "group"
+      },
+      "component": "Card",
+      "children": [
+        {
+          "id": "children/3/children/0",
+          "component": "Row",
+          "children": [
+            {
+              "id": "children/3/children/0/children/0",
+              "a11y": {
+                "role": "hidden"
+              },
+              "component": "Icon",
+              "icon": {
+                "name": "map-pin",
+                "glyph": ""
+              },
+              "size": 14.0,
+              "color": "foreground"
+            },
+            {
+              "id": "children/3/children/0/children/1",
+              "a11y": {
+                "role": "text"
+              },
+              "component": "Text",
+              "text": {
+                "text": "Starting at Ferry Building",
+                "runs": [
+                  [
+                    12,
+                    14,
+                    1
+                  ]
+                ],
+                "links": []
+              },
+              "inlines": [],
+              "style": "small",
+              "color": "foreground",
+              "weight": "regular",
+              "italic": false,
+              "strike": false,
+              "digits": false,
+              "max_lines": null
+            }
+          ],
+          "gap": 8.0,
+          "align": "center",
+          "justify": "start",
+          "wrap": false,
+          "sizing": [
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            },
+            {
+              "basis": "content",
+              "length": null,
+              "grow": 0.0,
+              "shrink": true
+            }
+          ]
+        }
+      ],
+      "soft": true,
+      "nested": false,
+      "padding": 12.0,
+      "spacing": [
+        0.0
+      ]
+    }
+  ],
+  "align": "stretch",
+  "spacing": [
+    0.0,
+    8.0,
+    24.0,
+    24.0
+  ]
+}
