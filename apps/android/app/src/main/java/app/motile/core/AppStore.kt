@@ -267,6 +267,12 @@ class AppStore(private val context: Context) {
         private set
 
     // The open thread
+    /** The open thread and the one whose agent started it, kept apart from `threads` so that what shows them changes with them alone, not with every thread. */
+    var selectedThread by mutableStateOf<ThreadInfo?>(null)
+        private set
+    var parentThread by mutableStateOf<ThreadInfo?>(null)
+        private set
+
     /** Always a draft or a thread; `loadPreferences` opens the first draft. */
     private var selectionState by mutableStateOf<Selection>(Selection.Draft(""))
     var selection: Selection
@@ -742,12 +748,6 @@ class AppStore(private val context: Context) {
     private fun changeList(done: Boolean, change: (MutableList<ThreadInfo>) -> Unit) {
         if (done) doneThreads = doneThreads.toMutableList().also(change) else activeThreads = activeThreads.toMutableList().also(change)
     }
-
-    /** The open thread and the one whose agent started it, kept apart from `threads` so that what shows them changes with them alone, not with every thread. */
-    var selectedThread by mutableStateOf<ThreadInfo?>(null)
-        private set
-    var parentThread by mutableStateOf<ThreadInfo?>(null)
-        private set
 
     /** Keeps `selectedThread` and `parentThread` as the threads have them, assigned only when they change. */
     private fun showSelectedThread() {
