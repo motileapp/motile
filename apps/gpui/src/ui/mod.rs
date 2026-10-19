@@ -3,14 +3,17 @@
 
 pub mod agent_avatar;
 pub mod control;
+pub mod date_field;
 pub mod icons;
 pub mod logos;
 pub mod menu;
 pub mod modal;
 pub mod motion;
 pub mod parts;
+pub mod pick;
 pub mod rich_text;
 pub mod skill_chip;
+pub mod slider;
 
 use std::rc::Rc;
 
@@ -19,11 +22,19 @@ use gpui_kit::*;
 
 use crate::theme::{Layer, Opacity, Radius, Surface, colors};
 pub use agent_avatar::{AgentAvatar, AgentAvatars};
+#[allow(unused_imports, reason = "for the OpenUI components still to be written")]
+pub use control::Select;
 pub use control::{
     ActionButton, ActionMenu, Chip, InputField, InputVariant, Segmented, Spinner, Switch, TextArea, Variant,
     card_default, text_area_state,
 };
+#[allow(unused_imports, reason = "for the OpenUI components still to be written")]
+pub use date_field::DateField;
 pub use parts::{CommandBox, FadingScroll, KeyCaps, PickMark, dropdown_card};
+#[allow(unused_imports, reason = "for the OpenUI components still to be written")]
+pub use pick::{OptionCard, PickRow};
+#[allow(unused_imports, reason = "for the OpenUI components still to be written")]
+pub use slider::Slider;
 
 pub type OnClick = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -184,6 +195,33 @@ impl Highlight {
 pub fn hover_state(id: &ElementId, window: &mut Window, cx: &mut App) -> Entity<bool> {
     window.use_keyed_state(ElementId::NamedChild(std::sync::Arc::new(id.clone()), "hovered".into()), cx, |_, _| false)
 }
+
+/// The focus handle of the control `id` names, kept from frame to frame, which Tab reaches.
+pub fn focus_state(id: &ElementId, window: &mut Window, cx: &mut App) -> FocusHandle {
+    let key = ElementId::NamedChild(std::sync::Arc::new(id.clone()), "focus".into());
+    window.use_keyed_state(key, cx, |_, cx| cx.focus_handle().tab_stop(true)).read(cx).clone()
+}
+
+/// Whether the control has the keys and was reached by them, so that it shows its focus ring.
+pub fn focus_shown(focus: &FocusHandle, window: &Window) -> bool {
+    focus.is_focused(window) && window.last_input_was_keyboard()
+}
+
+/// The focus ring around a shape of `radius` that fills its parent: 2 wide in the ring colour,
+/// just outside it.
+pub fn focus_ring(radius: f32, cx: &App) -> Div {
+    div()
+        .absolute()
+        .top(px(-FOCUS_RING))
+        .left(px(-FOCUS_RING))
+        .right(px(-FOCUS_RING))
+        .bottom(px(-FOCUS_RING))
+        .rounded(px(radius + FOCUS_RING))
+        .border(px(FOCUS_RING))
+        .border_color(colors(cx).ring)
+}
+
+const FOCUS_RING: f32 = 2.;
 
 /// The `on_hover` of the element whose `hover_state` this is.
 pub fn track_hover(state: &Entity<bool>) -> impl Fn(&bool, &mut Window, &mut App) + 'static {

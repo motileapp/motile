@@ -10,6 +10,8 @@ enum ButtonVariant {
     case outline
     /// What can't be taken back.
     case danger
+    /// What went well, or is done.
+    case success
     /// What the user is asked to let happen.
     case warning
     /// Nothing until the pointer is over it: the buttons of bars and rows.
@@ -48,11 +50,12 @@ struct ControlLook {
     var tint: Color?
 
     var foreground: Color {
-        if let tint, variant == .ghost || variant == .secondary { return tint }
+        if let tint, takesTint { return tint }
         switch variant {
         case .secondary, .outline: return .themeForeground
         case .primary: return .themePrimaryForeground
         case .danger: return .themeDestructiveForeground
+        case .success: return .themeSuccessForeground
         case .warning: return .themeWarningForeground
         case .ghost: return selected || lit ? .themeForeground : .themeMutedForeground
         case .link, .accent: return .themePrimary
@@ -67,6 +70,7 @@ struct ControlLook {
         case .secondary: AnyShapeStyle(surface.color(selected || lit ? .controlLit : .control))
         case .outline: AnyShapeStyle(selected || lit ? surface.color(.control) : Color.themeBackground)
         case .danger: filled(.themeDestructive)
+        case .success: filled(.themeSuccess)
         case .warning: filled(.themeWarning)
         case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
         case .link: lit ? AnyShapeStyle(Color.themePrimary.wash()) : AnyShapeStyle(Color.clear)
@@ -103,6 +107,54 @@ struct ControlLook {
             .overlay {
                 if variant == .outline { shape.strokeBorder(surface.border, lineWidth: 1) }
             }
+    }
+}
+
+extension ControlLook {
+    /// Whether a tint colours its words and symbol.
+    var takesTint: Bool { variant == .ghost || variant == .secondary || variant == .outline }
+
+    /// The colour of its words and symbol without a tint, for the views the transcript draws itself.
+    var platformForeground: PlatformColor {
+        switch variant {
+        case .secondary, .outline: return Theme.foreground
+        case .primary: return Theme.primaryForeground
+        case .danger: return Theme.destructiveForeground
+        case .success: return Theme.successForeground
+        case .warning: return Theme.warningForeground
+        case .ghost: return selected || lit ? Theme.foreground : Theme.mutedForeground
+        case .link, .accent: return Theme.primary
+        case .overlay: return Theme.foregroundOverPicture
+        }
+    }
+
+    var platformFill: PlatformColor {
+        let filled = { (color: PlatformColor) in lit ? Theme.thinned(color, .lit) : color }
+        switch variant {
+        case .primary: return filled(Theme.primary)
+        case .secondary: return surface.platform(selected || lit ? .controlLit : .control)
+        case .outline: return selected || lit ? surface.platform(.control) : Theme.background
+        case .danger: return filled(Theme.destructive)
+        case .success: return filled(Theme.success)
+        case .warning: return filled(Theme.warning)
+        case .ghost: return selected ? surface.platform(.controlLit) : lit ? platformGhostLit : .clear
+        case .link: return lit ? Theme.primaryTint : .clear
+        case .accent: return lit ? Theme.primaryTintStronger : Theme.primaryTint
+        case .overlay: return lit ? Theme.controlLitOverPicture : Theme.controlOverPicture
+        }
+    }
+
+    var platformBorder: PlatformColor? {
+        variant == .outline ? surface.platformBorder : nil
+    }
+
+    private var platformGhostLit: PlatformColor {
+        switch row {
+        case .rowSelected, .controlLit: surface.platform(.controlLitOnSelected)
+        case .row, .control: surface.platform(.controlLit)
+        case .chip: Theme.borderAccent
+        default: surface.platform(.control)
+        }
     }
 }
 

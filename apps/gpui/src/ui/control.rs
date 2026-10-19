@@ -27,6 +27,8 @@ pub enum Variant {
     Outline,
     /// What can't be taken back.
     Danger,
+    /// What went well, or is done.
+    Success,
     /// What the user is asked to let happen.
     Warning,
     /// Nothing until the pointer is over it: the buttons of bars and rows.
@@ -81,7 +83,7 @@ impl Look {
 
     pub fn foreground(&self, lit: bool, c: &Colors) -> Hsla {
         if let Some(tint) = self.tint
-            && matches!(self.variant, Variant::Ghost | Variant::Secondary)
+            && matches!(self.variant, Variant::Ghost | Variant::Secondary | Variant::Outline)
         {
             return tint;
         }
@@ -89,6 +91,7 @@ impl Look {
             Variant::Secondary | Variant::Outline => c.foreground,
             Variant::Primary => c.primary_foreground,
             Variant::Danger => c.destructive_foreground,
+            Variant::Success => c.success_foreground,
             Variant::Warning => c.warning_foreground,
             Variant::Ghost => {
                 if self.selected || lit {
@@ -117,6 +120,7 @@ impl Look {
                 }
             }
             Variant::Danger => filled(c.destructive),
+            Variant::Success => filled(c.success),
             Variant::Warning => filled(c.warning),
             Variant::Ghost => {
                 if self.selected {
@@ -229,6 +233,10 @@ pub struct ControlLabel {
     /// the foreground.
     pub tinted: Option<SharedString>,
     pub tint: Option<Hsla>,
+    /// Its words stand for what isn't chosen yet, in the placeholder colour.
+    pub placeholder: bool,
+    /// When it fills, its words are at the start and its chevron at the end.
+    pub spread: bool,
 }
 
 impl ControlLabel {
@@ -249,6 +257,8 @@ impl ControlLabel {
             tabular: false,
             tinted: None,
             tint: None,
+            placeholder: false,
+            spread: false,
         }
     }
 
@@ -315,6 +325,8 @@ impl ControlLabel {
         let middle = self.middle;
         let tabular = self.tabular;
         let tinted = self.tinted.clone().zip(self.tint);
+        let placeholder = self.placeholder;
+        let spread = self.fills && self.spread;
         let words = |title: Option<SharedString>,
                      tinted: Option<(SharedString, Hsla)>,
                      spins: bool,
@@ -354,6 +366,7 @@ impl ControlLabel {
                             .map(|text| if middle { text.text_ellipsis_middle() } else { text.text_ellipsis() })
                             .when(tabular, |text| text.font_features(crate::ui::tabular_numbers()))
                             .when(hidden, |text| text.opacity(0.))
+                            .when(placeholder, |text| text.text_color(c.muted_stronger_foreground))
                             .map(|text| match tinted {
                                 Some((tinted, tint)) => {
                                     text.text_color(c.foreground).child(tinted_dotted(&title, &tinted, tint, c))
@@ -384,6 +397,7 @@ impl ControlLabel {
                 let stack = div()
                     .relative()
                     .min_w_0()
+                    .when(spread, |stack| stack.flex_1())
                     .child(
                         words(self.title.clone(), tinted, spins, self.icon, text_hidden)
                             .when(waiting_title.is_some(), |w| w.opacity(0.)),
@@ -586,6 +600,10 @@ impl ActionButton {
         self.variant(Variant::Danger)
     }
 
+    pub fn success(self) -> Self {
+        self.variant(Variant::Success)
+    }
+
     pub fn link(self) -> Self {
         self.variant(Variant::Link)
     }
@@ -643,6 +661,18 @@ impl ActionButton {
     /// It opens something to choose from, and shows a chevron for it.
     pub fn opens(mut self, opens: bool) -> Self {
         self.label.chevron = opens;
+        self
+    }
+
+    /// Its words stand for what isn't chosen yet, in the placeholder colour.
+    pub fn placeholder(mut self, placeholder: bool) -> Self {
+        self.label.placeholder = placeholder;
+        self
+    }
+
+    /// When it fills, its words are at the start and its chevron at the end.
+    pub fn spread(mut self, spread: bool) -> Self {
+        self.label.spread = spread;
         self
     }
 
@@ -863,10 +893,12 @@ impl RenderOnce for ActionMenu {
         let anchor = self.anchor.clone();
         let opens = self.anchor.clone();
         let build = self.build;
+        let fills = self.button.label.fills;
         let _ = window;
         div()
             .relative()
             .flex_shrink_0()
+            .when(fills, |menu| menu.w_full())
             .child(anchor.track())
             .children(self.shortcut.map(crate::keyboard::target))
             .child(self.button.on_click(move |_, window, cx| {
@@ -876,6 +908,97 @@ impl RenderOnce for ActionMenu {
                 }
                 menu.show_under(&opens, 4., window, cx);
             }))
+    }
+}
+
+/// One of a few options, as a secondary button that fills its width: the chosen one's title, or
+/// the placeholder in its colour, at the start and the chevron at the end. A press opens the
+/// options under it, with a check by the chosen one.
+#[derive(IntoElement)]
+pub struct Select {
+    id: ElementId,
+    options: Vec<SharedString>,
+    selected: Option<usize>,
+    placeholder: SharedString,
+    size: ControlSize,
+    surface: Surface,
+    disabled: bool,
+    on_select: Option<OnSelect>,
+}
+
+impl Select {
+    pub fn new(id: impl Into<ElementId>, options: Vec<SharedString>, selected: Option<usize>) -> Self {
+        Self {
+            id: id.into(),
+            options,
+            selected,
+            placeholder: "Choose".into(),
+            size: ControlSize::Regular,
+            surface: Surface::Background,
+            disabled: false,
+            on_select: None,
+        }
+    }
+
+    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.placeholder = placeholder.into();
+        self
+    }
+
+    pub fn size(mut self, size: ControlSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn surface(mut self, surface: Surface) -> Self {
+        self.surface = surface;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn on_select(mut self, handler: impl Fn(usize, &mut Window, &mut App) + 'static) -> Self {
+        self.on_select = Some(Rc::new(handler));
+        self
+    }
+}
+
+impl RenderOnce for Select {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let chosen = self.selected.and_then(|index| self.options.get(index)).cloned();
+        let title = chosen.clone().unwrap_or_else(|| self.placeholder.clone());
+        let (options, selected, on_select) = (self.options, self.selected, self.on_select);
+        let menu = ActionMenu::new(self.id.clone(), title.clone(), move |_, _| {
+            options.iter().enumerate().fold(Menu::new(), |menu, (index, option)| {
+                let on_select = on_select.clone();
+                menu.checked(selected == Some(index), option.clone(), move |window, cx| {
+                    let Some(on_select) = &on_select else { return };
+                    on_select(index, window, cx)
+                })
+            })
+        })
+        .button(|button| {
+            button
+                .variant(Variant::Secondary)
+                .size(self.size)
+                .surface(self.surface)
+                .fills(true)
+                .alignment(Alignment::Leading)
+                .spread(true)
+                .truncates(true)
+                .placeholder(chosen.is_none())
+                .disabled(self.disabled)
+        });
+        div()
+            .id(ElementId::NamedChild(std::sync::Arc::new(self.id), "select".into()))
+            .w_full()
+            .min_w_0()
+            .role(Role::ComboBox)
+            .aria_label(title)
+            .child(menu)
     }
 }
 
@@ -1281,7 +1404,7 @@ pub enum InputVariant {
 
 /// The fill of a field: the input colour, or on a card, which is as dark as input, the card's
 /// accent.
-fn field_fill(surface: Surface, c: &Colors) -> Hsla {
+pub fn field_fill(surface: Surface, c: &Colors) -> Hsla {
     if surface == Surface::Card { surface.layer(Layer::Box, c) } else { c.input }
 }
 

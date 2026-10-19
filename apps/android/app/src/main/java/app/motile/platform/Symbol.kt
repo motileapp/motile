@@ -17,6 +17,7 @@ enum class Symbol(val character: String?) {
     Box("\uE061"),
     Braces("\uE36A"),
     Brain("\uE3C6"),
+    Calendar("\uE063"),
     Camera("\uE064"),
     ChartColumn("\uE2A3"),
     Check("\uE06C"),
