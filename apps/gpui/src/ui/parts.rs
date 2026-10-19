@@ -345,7 +345,7 @@ pub struct PickMark {
 }
 
 impl PickMark {
-    const SIZE: f32 = 16.;
+    pub const SIZE: f32 = 16.;
 
     pub fn new(id: impl Into<ElementId>, picked: bool, multiple: bool) -> Self {
         Self { id: id.into(), picked, multiple }

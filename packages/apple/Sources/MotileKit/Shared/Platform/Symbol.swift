@@ -14,6 +14,7 @@ enum Symbol: String {
     case box = "\u{e061}"
     case braces = "\u{e36a}"
     case brain = "\u{e3c6}"
+    case calendar = "\u{e063}"
     case camera = "\u{e064}"
     case chartColumn = "\u{e2a3}"
     case check = "\u{e06c}"

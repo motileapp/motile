@@ -11,7 +11,7 @@ enum InputVariant {
 
 /// A line to type in, as tall as a button of its size, with a symbol before it when it has one
 /// and a button that empties it when it is `clearable`, as Esc does while it has text. A `secure`
-/// one shows dots for what is typed.
+/// one shows dots for what is typed, a `numeric` one asks for the keypad of numbers.
 struct InputField: View {
     private let placeholder: String
     @Binding private var text: String
@@ -20,13 +20,14 @@ struct InputField: View {
     private let clearable: Bool
     private let monospaced: Bool
     private let secure: Bool
+    private let numeric: Bool
     private let variant: InputVariant
     private let focus: FocusState<Bool>.Binding?
     @FocusState private var ownFocus: Bool
 
     init(
         _ placeholder: String, text: Binding<String>, icon: Symbol? = nil, variant: InputVariant = .filled, size: ControlSize = .regular,
-        clearable: Bool = false, monospaced: Bool = false, secure: Bool = false, focus: FocusState<Bool>.Binding? = nil
+        clearable: Bool = false, monospaced: Bool = false, secure: Bool = false, numeric: Bool = false, focus: FocusState<Bool>.Binding? = nil
     ) {
         self.placeholder = placeholder
         _text = text
@@ -36,6 +37,7 @@ struct InputField: View {
         self.clearable = clearable
         self.monospaced = monospaced
         self.secure = secure
+        self.numeric = numeric
         self.focus = focus
     }
 
@@ -55,6 +57,7 @@ struct InputField: View {
                 .textFieldStyle(.plain)
                 .font(.ui(size: size.textSize + 0.5, design: monospaced ? .monospaced : .default))
                 .focused(focus ?? $ownFocus)
+                .numberKeypad(numeric)
                 .onEscape(clearable && !text.isEmpty ? { text = "" } : nil)
             if clearable, !text.isEmpty {
                 ActionButton(icon: .x, help: "Clear", size: .small) { text = "" }
@@ -81,6 +84,16 @@ extension InputField {
         } else {
             TextField("", text: $text).placeholder(placeholder, shown: text.isEmpty)
         }
+    }
+}
+
+extension View {
+    @ViewBuilder fileprivate func numberKeypad(_ shown: Bool) -> some View {
+        #if os(iOS)
+        if shown { keyboardType(.decimalPad) } else { self }
+        #else
+        self
+        #endif
     }
 }
 
